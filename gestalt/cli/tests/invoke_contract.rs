@@ -172,7 +172,7 @@ fn test_invoke_with_connection_and_instance() {
     let _catalog_mock = json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/integrations/test_svc/operations?_connection=workspace&_instance=team-a",
         StatusCode::OK
     )
     .with_body(catalog_body())
@@ -216,7 +216,7 @@ fn test_invoke_with_connection_and_instance() {
     let _secondary_catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/other_svc/operations",
+        "/api/v1/integrations/other_svc/operations?_connection=workspace&_instance=team-a",
         StatusCode::OK
     )
     .with_body(single_operation_catalog("check_status"))
@@ -256,6 +256,39 @@ fn test_invoke_with_connection_and_instance() {
     assert!(err.contains(
         "Connect it first with `gestalt plugins connect other_svc --connection workspace --instance team-a`"
     ));
+}
+
+#[test]
+fn test_cli_lists_operations_with_connection_and_instance() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations?_connection=workspace&_instance=team-a",
+        StatusCode::OK
+    )
+    .with_body(single_operation_catalog("do_thing"))
+    .create();
+
+    let mut cmd = cli_command(home.path());
+    cmd.env("GESTALT_API_KEY", TEST_TOKEN).args([
+        "--url",
+        &server.url(),
+        "plugins",
+        "invoke",
+        "--connection",
+        "workspace",
+        "--instance",
+        "team-a",
+        "test_svc",
+    ]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("do_thing"));
+
+    catalog_mock.assert();
 }
 
 #[test]

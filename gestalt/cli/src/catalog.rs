@@ -107,8 +107,27 @@ fn is_valid_operation_query(query: &str) -> bool {
     })
 }
 
-pub fn fetch_catalog(client: &ApiClient, plugin: &str) -> Result<OperationsCatalog> {
-    let path = format!("/api/v1/integrations/{}/operations", plugin);
+pub fn fetch_catalog(
+    client: &ApiClient,
+    plugin: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+) -> Result<OperationsCatalog> {
+    let mut params = Vec::new();
+    if let Some(connection) = connection {
+        params.push(("_connection", connection));
+    }
+    if let Some(instance) = instance {
+        params.push(("_instance", instance));
+    }
+
+    let path = if params.is_empty() {
+        format!("/api/v1/integrations/{plugin}/operations")
+    } else {
+        let query =
+            serde_urlencoded::to_string(params).context("failed to encode catalog selectors")?;
+        format!("/api/v1/integrations/{plugin}/operations?{query}")
+    };
     let resp = client.get(&path)?;
     let operations: Vec<CatalogOperation> =
         serde_json::from_value(resp).context("failed to parse operations response")?;

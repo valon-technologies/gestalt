@@ -5,7 +5,7 @@ use crate::catalog;
 use crate::output::{self, Format};
 
 pub fn describe(client: &ApiClient, plugin: &str, operation: &str, format: Format) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, plugin)?;
+    let cat = catalog::fetch_catalog(client, plugin, None, None)?;
 
     let op = match cat.find_operation(operation) {
         Some(op) => op,
