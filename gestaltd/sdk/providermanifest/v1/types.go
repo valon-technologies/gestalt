@@ -59,22 +59,15 @@ type Spec struct {
 	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty" yaml:"responseMapping,omitempty"`
 	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 	Requires          []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
-	UI                *OwnedUIRef                           `json:"ui,omitempty" yaml:"ui,omitempty"`
+	UI                *OwnedUI                              `json:"ui,omitempty" yaml:"ui,omitempty"`
 
 	// WebUI-specific fields
 	AssetRoot string       `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
 	Routes    []WebUIRoute `json:"routes,omitempty" yaml:"routes,omitempty"`
 }
 
-type OwnedUIRef struct {
-	Ref     string      `json:"ref,omitempty" yaml:"ref,omitempty"`
-	Version string      `json:"version,omitempty" yaml:"version,omitempty"`
-	Path    string      `json:"path,omitempty" yaml:"path,omitempty"`
-	Auth    *SourceAuth `json:"auth,omitempty" yaml:"auth,omitempty"`
-}
-
-type SourceAuth struct {
-	Token string `json:"token,omitempty" yaml:"token,omitempty"`
+type OwnedUI struct {
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
 }
 
 func (s *Spec) IsDeclarative() bool {

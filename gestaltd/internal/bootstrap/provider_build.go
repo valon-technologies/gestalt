@@ -963,15 +963,15 @@ func isRelationalIndexedDBEntry(entry *config.ProviderEntry) bool {
 	if entry == nil {
 		return false
 	}
+	if entry.ResolvedManifest != nil {
+		return strings.HasSuffix(strings.TrimSpace(entry.ResolvedManifest.Source), "/indexeddb/relationaldb")
+	}
 	if metadataURL := strings.TrimSpace(entry.SourceMetadataURL()); metadataURL != "" {
 		parsed, err := url.Parse(metadataURL)
 		if err == nil {
 			path := filepath.ToSlash(parsed.Path)
 			return strings.Contains(path, "/indexeddb/relationaldb/") && strings.HasSuffix(path, "/provider-release.yaml")
 		}
-	}
-	if ref := strings.TrimSpace(entry.SourceRef()); ref != "" {
-		return strings.HasSuffix(ref, "/indexeddb/relationaldb")
 	}
 	if path := strings.TrimSpace(entry.SourcePath()); path != "" {
 		path = filepath.ToSlash(path)

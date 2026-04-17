@@ -90,19 +90,14 @@ type ServerProvidersConfig struct {
 }
 
 // ProviderSource supports handwritten config in three forms via custom UnmarshalYAML:
-//   - Builtin:  source: "name"                             -> ProviderSource{Builtin: "name"}
-//   - Metadata: source: "https://.../provider-release.yaml" -> ProviderSource{metadataURL: "..."}
-//   - Local:    source: {path} or source: "./manifest.yaml" -> ProviderSource{Path: "..."}
-//
-// Ref/version fields remain for internal runtime-managed flows and older lock/runtime
-// representations, but apiVersion v3 config validation rejects handwritten source.ref/version.
+//   - Builtin:  source: "name"                               -> ProviderSource{Builtin: "name"}
+//   - Metadata: source: "https://.../provider-release.yaml"  -> ProviderSource{metadataURL: "..."}
+//   - Local:    source: {path} or source: "./manifest.yaml"  -> ProviderSource{Path: "..."}
 type ProviderSource struct {
 	Builtin     string         `yaml:"-"`
 	scalar      string         `yaml:"-"`
 	metadataURL string         `yaml:"-"`
 	unsupported string         `yaml:"-"`
-	Ref         string         `yaml:"ref,omitempty"`
-	Version     string         `yaml:"version,omitempty"`
 	Path        string         `yaml:"path,omitempty"`
 	Auth        *SourceAuthDef `yaml:"auth,omitempty"`
 }
@@ -110,8 +105,35 @@ type ProviderSource struct {
 func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
 	*s = ProviderSource{}
 	if value.Kind == yaml.ScalarNode {
-		s.scalar = strings.TrimSpace(value.Value)
+		scalar := strings.TrimSpace(value.Value)
+		switch {
+		case looksLikeMetadataURL(scalar):
+			s.metadataURL = scalar
+		case looksLikeUnsupportedScalarSource(scalar):
+			s.unsupported = scalar
+		default:
+			s.scalar = scalar
+		}
 		return nil
+	}
+	if value.Kind == yaml.MappingNode {
+		hasRef := false
+		hasVersion := false
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			key := strings.TrimSpace(value.Content[i].Value)
+			switch key {
+			case "ref":
+				hasRef = true
+			case "version":
+				hasVersion = true
+			}
+		}
+		if hasRef {
+			return fmt.Errorf("source.ref/source.version are no longer supported; use source: <provider-release.yaml URL>")
+		}
+		if hasVersion {
+			return fmt.Errorf("source.version is no longer supported; use source: <provider-release.yaml URL>")
+		}
 	}
 	type raw ProviderSource
 	return value.Decode((*raw)(s))
@@ -121,10 +143,10 @@ func (s ProviderSource) MarshalYAML() (any, error) {
 	if s.Builtin != "" {
 		return s.Builtin, nil
 	}
-	if s.metadataURL != "" && s.Ref == "" && s.Version == "" && s.Path == "" {
+	if s.metadataURL != "" && s.Path == "" {
 		return s.metadataURL, nil
 	}
-	if s.scalar != "" && s.Ref == "" && s.Version == "" && s.Path == "" {
+	if s.scalar != "" && s.Path == "" {
 		return s.scalar, nil
 	}
 	type raw ProviderSource
@@ -132,12 +154,15 @@ func (s ProviderSource) MarshalYAML() (any, error) {
 }
 
 func (s ProviderSource) IsBuiltin() bool     { return s.Builtin != "" }
-func (s ProviderSource) IsManaged() bool     { return s.Ref != "" }
 func (s ProviderSource) IsMetadataURL() bool { return s.metadataURL != "" }
 func (s ProviderSource) IsLocal() bool       { return s.Path != "" }
 func (s ProviderSource) MetadataURL() string { return s.metadataURL }
 func (s ProviderSource) UnsupportedURL() string {
 	return s.unsupported
+}
+
+func NewMetadataSource(rawURL string) ProviderSource {
+	return ProviderSource{metadataURL: strings.TrimSpace(rawURL)}
 }
 
 // ProviderEntry is the universal configuration for any provider.
@@ -275,28 +300,16 @@ type UIEntry struct {
 	OwnerPlugin   string `yaml:"-"`
 }
 
-func (e *ProviderEntry) HasManagedSource() bool {
-	return e != nil && e.Source.IsManaged()
-}
-
 func (e *ProviderEntry) HasMetadataSource() bool {
 	return e != nil && e.Source.IsMetadataURL()
 }
 
 func (e *ProviderEntry) HasRemoteSource() bool {
-	return e != nil && (e.Source.IsManaged() || e.Source.IsMetadataURL())
+	return e != nil && e.Source.IsMetadataURL()
 }
 
 func (e *ProviderEntry) HasLocalSource() bool {
 	return e != nil && e.Source.IsLocal()
-}
-
-func (e *ProviderEntry) SourceRef() string {
-	return e.Source.Ref
-}
-
-func (e *ProviderEntry) SourceVersion() string {
-	return e.Source.Version
 }
 
 func (e *ProviderEntry) SourceMetadataURL() string {
@@ -309,9 +322,6 @@ func (e *ProviderEntry) SourceMetadataURL() string {
 func (e *ProviderEntry) SourceRemoteLocation() string {
 	if e == nil {
 		return ""
-	}
-	if e.Source.IsManaged() {
-		return e.Source.Ref
 	}
 	if e.Source.IsMetadataURL() {
 		return e.Source.MetadataURL()
@@ -791,11 +801,11 @@ func NormalizeCompatibility(cfg *Config) error {
 	return applyPluginMountBindings(cfg)
 }
 
-func OverlayManagedPluginConfig(path string, cfg *Config) error {
-	return OverlayManagedPluginConfigPaths([]string{path}, cfg)
+func OverlayRemotePluginConfig(path string, cfg *Config) error {
+	return OverlayRemotePluginConfigPaths([]string{path}, cfg)
 }
 
-func OverlayManagedPluginConfigPaths(paths []string, cfg *Config) error {
+func OverlayRemotePluginConfigPaths(paths []string, cfg *Config) error {
 	root, err := loadMergedConfigRoot(paths, os.LookupEnv, envMissingPreserve, "")
 	if err != nil {
 		return err
@@ -807,7 +817,7 @@ func OverlayManagedPluginConfigPaths(paths []string, cfg *Config) error {
 		if entry == nil || !entry.HasRemoteSource() {
 			continue
 		}
-		if err := overlayManagedEntryConfigNode(mappingValueNode(pluginsNode, name), entry, "plugin "+strconv.Quote(name)); err != nil {
+		if err := overlayRemoteEntryConfigNode(mappingValueNode(pluginsNode, name), entry, "plugin "+strconv.Quote(name)); err != nil {
 			return err
 		}
 	}
@@ -830,7 +840,7 @@ func OverlayManagedPluginConfigPaths(paths []string, cfg *Config) error {
 				continue
 			}
 			subject := fmt.Sprintf("%s %q", collection.kind, name)
-			if err := overlayManagedEntryConfigNode(mappingValueNode(kindNode, name), entry, subject); err != nil {
+			if err := overlayRemoteEntryConfigNode(mappingValueNode(kindNode, name), entry, subject); err != nil {
 				return err
 			}
 		}
@@ -840,7 +850,7 @@ func OverlayManagedPluginConfigPaths(paths []string, cfg *Config) error {
 		if entry == nil || !entry.HasRemoteSource() {
 			continue
 		}
-		if err := overlayManagedEntryConfigNode(mappingValueNode(s3Node, name), entry, "s3 "+strconv.Quote(name)); err != nil {
+		if err := overlayRemoteEntryConfigNode(mappingValueNode(s3Node, name), entry, "s3 "+strconv.Quote(name)); err != nil {
 			return err
 		}
 	}
@@ -849,7 +859,7 @@ func OverlayManagedPluginConfigPaths(paths []string, cfg *Config) error {
 		if entry == nil || !entry.HasRemoteSource() {
 			continue
 		}
-		if err := overlayManagedEntryConfigNode(mappingValueNode(uiNode, name), &entry.ProviderEntry, "ui "+strconv.Quote(name)); err != nil {
+		if err := overlayRemoteEntryConfigNode(mappingValueNode(uiNode, name), &entry.ProviderEntry, "ui "+strconv.Quote(name)); err != nil {
 			return err
 		}
 	}
@@ -864,7 +874,7 @@ const (
 	envMissingPreserve
 )
 
-func overlayManagedEntryConfigNode(raw *yaml.Node, entry *ProviderEntry, subject string) error {
+func overlayRemoteEntryConfigNode(raw *yaml.Node, entry *ProviderEntry, subject string) error {
 	if entry == nil || !entry.HasRemoteSource() || raw == nil {
 		return nil
 	}
@@ -1561,7 +1571,7 @@ func normalizeProviderSource(kind string, source *ProviderSource, useV3Classific
 		return
 	}
 	source.scalar = strings.TrimSpace(source.scalar)
-	if source.Builtin != "" || source.Ref != "" || source.Path != "" || source.metadataURL != "" {
+	if source.Builtin != "" || source.Path != "" || source.metadataURL != "" {
 		source.scalar = ""
 		return
 	}
@@ -1671,7 +1681,7 @@ func applyDefaultBuiltinProviderEntries(entries map[string]*ProviderEntry, defau
 		}
 	}
 	for _, entry := range entries {
-		if entry == nil || entry.Source.IsBuiltin() || entry.Source.IsManaged() || entry.Source.IsMetadataURL() || entry.Source.IsLocal() || entry.Source.UnsupportedURL() != "" {
+		if entry == nil || entry.Source.IsBuiltin() || entry.Source.IsMetadataURL() || entry.Source.IsLocal() || entry.Source.UnsupportedURL() != "" {
 			continue
 		}
 		entry.Source.Builtin = builtin

@@ -4718,10 +4718,7 @@ func TestListIntegrations_HidesIdentityConnectionsFromUserFacingMetadata(t *test
 		StubIntegration: coretesting.StubIntegration{N: "launchdarkly", DN: "LaunchDarkly"},
 	}
 	plugin := &config.ProviderEntry{
-		Source: config.ProviderSource{
-			Ref:     "github.com/acme/plugins/launchdarkly",
-			Version: "1.0.0",
-		},
+		Source: config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-launchdarkly/v1.0.0/provider-release.yaml"),
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Spec: &providermanifestv1.Spec{
 				DefaultConnection: "default",
@@ -4875,10 +4872,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 
 		stub := &coretesting.StubIntegration{N: "example", DN: "Example"}
 		plugin := &config.ProviderEntry{
-			Source: config.ProviderSource{
-				Ref:     "github.com/acme/plugins/example",
-				Version: "1.0.0",
-			},
+			Source: config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-example/v1.0.0/provider-release.yaml"),
 			Auth: &config.ConnectionAuthDef{
 				Type: providermanifestv1.AuthTypeManual,
 				Credentials: []config.CredentialFieldDef{
@@ -5028,10 +5022,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 
 		stub := &coretesting.StubIntegration{N: "example", DN: "Example"}
 		plugin := &config.ProviderEntry{
-			Source: config.ProviderSource{
-				Ref:     "github.com/acme/plugins/example",
-				Version: "1.0.0",
-			},
+			Source: config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-example/v1.0.0/provider-release.yaml"),
 			Auth: &config.ConnectionAuthDef{
 				Type: providermanifestv1.AuthTypeManual,
 				Credentials: []config.CredentialFieldDef{
@@ -5216,10 +5207,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 
 		stub := &stubNonOAuthProvider{name: "clickhouse"}
 		plugin := &config.ProviderEntry{
-			Source: config.ProviderSource{
-				Ref:     "github.com/acme/plugins/clickhouse",
-				Version: "1.0.0",
-			},
+			Source:    config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-clickhouse/v1.0.0/provider-release.yaml"),
 			MountPath: "/clickhouse",
 			ResolvedManifest: &providermanifestv1.Manifest{
 				Spec: &providermanifestv1.Spec{
@@ -5283,10 +5271,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 
 		stub := &stubNonOAuthProvider{name: "clickhouse"}
 		plugin := &config.ProviderEntry{
-			Source: config.ProviderSource{
-				Ref:     "github.com/acme/plugins/clickhouse",
-				Version: "1.0.0",
-			},
+			Source: config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-clickhouse/v1.0.0/provider-release.yaml"),
 			ResolvedManifest: &providermanifestv1.Manifest{
 				Spec: &providermanifestv1.Spec{
 					Surfaces: &providermanifestv1.ProviderSurfaces{
@@ -5359,10 +5344,7 @@ func TestListIntegrations_ConnectionInfosHideOAuthConnectionsWithoutHandler(t *t
 
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 	plugin := &config.ProviderEntry{
-		Source: config.ProviderSource{
-			Ref:     "github.com/acme/plugins/slack",
-			Version: "1.0.0",
-		},
+		Source: config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-slack/v1.0.0/provider-release.yaml"),
 		Connections: map[string]*config.ConnectionDef{
 			"default": {},
 		},

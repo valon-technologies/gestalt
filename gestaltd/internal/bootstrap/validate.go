@@ -150,7 +150,7 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 }
 
 func buildProviderForValidation(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (*ProviderBuildResult, error) {
-	if entry == nil || !entry.HasManagedSource() || !entry.HasResolvedManifest() {
+	if entry == nil || !entry.HasRemoteSource() || !entry.HasResolvedManifest() {
 		return buildProvider(ctx, name, entry, deps)
 	}
 	prov, err := newPreparedProviderStub(name, entry)

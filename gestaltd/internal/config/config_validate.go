@@ -38,8 +38,8 @@ func CanonicalizeStructure(cfg *Config) error {
 	if err := NormalizeCompatibility(cfg); err != nil {
 		return err
 	}
-	pluginOwnedUIRefs := pluginOwnedUIRefs(cfg)
-	if err := normalizeMountedUIPaths(cfg, pluginOwnedUIRefs); err != nil {
+	pluginOwnedUIBindings := pluginOwnedUIBindings(cfg)
+	if err := normalizeMountedUIPaths(cfg, pluginOwnedUIBindings); err != nil {
 		return err
 	}
 	return nil
@@ -48,7 +48,7 @@ func CanonicalizeStructure(cfg *Config) error {
 // ValidateCanonicalStructure checks config shape assuming canonicalization has
 // already run on the config.
 func ValidateCanonicalStructure(cfg *Config) error {
-	pluginOwnedUIRefs := pluginOwnedUIRefs(cfg)
+	pluginOwnedUIBindings := pluginOwnedUIBindings(cfg)
 	if err := validateAuthorizationPolicies(cfg); err != nil {
 		return err
 	}
@@ -101,13 +101,13 @@ func ValidateCanonicalStructure(cfg *Config) error {
 			return err
 		}
 		if entry.Path == "" {
-			if _, ok := pluginOwnedUIRefs[name]; ok {
+			if _, ok := pluginOwnedUIBindings[name]; ok {
 				continue
 			}
 			return fmt.Errorf("config validation: ui.%s.path is required", name)
 		}
 	}
-	if err := validateMountedUICollisions(cfg, pluginOwnedUIRefs); err != nil {
+	if err := validateMountedUICollisions(cfg, pluginOwnedUIBindings); err != nil {
 		return err
 	}
 
@@ -270,12 +270,6 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 	if src.IsMetadataURL() {
 		modeCount++
 	}
-	if src.IsManaged() {
-		return fmt.Errorf("config validation: %s %q source.ref/source.version are no longer supported; use source: <provider-release.yaml URL>", kind, name)
-	}
-	if src.Version != "" {
-		return fmt.Errorf("config validation: %s %q source.version is no longer supported; use source: <provider-release.yaml URL>", kind, name)
-	}
 	if modeCount == 0 {
 		return fmt.Errorf("config validation: %s %q source.path or metadata URL is required", kind, name)
 	}
@@ -324,7 +318,7 @@ func validateConfigSecretRefs(cfg *Config) error {
 }
 
 // ValidateResolvedStructure checks integration fields whose support depends on
-// resolved managed plugin manifests.
+// resolved remote plugin manifests.
 func ValidateResolvedStructure(cfg *Config) error {
 	for name, entry := range cfg.Plugins {
 		if entry == nil {
@@ -922,13 +916,13 @@ func cacheSocketEnv(name string) string {
 	}
 	return b.String()
 }
-func normalizeMountedUIPaths(cfg *Config, pluginOwnedUIRefs map[string]struct{}) error {
+func normalizeMountedUIPaths(cfg *Config, pluginOwnedUIBindings map[string]struct{}) error {
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil {
 			continue
 		}
 		if strings.TrimSpace(entry.Path) == "" {
-			if _, ok := pluginOwnedUIRefs[name]; ok {
+			if _, ok := pluginOwnedUIBindings[name]; ok {
 				continue
 			}
 			return fmt.Errorf("config validation: ui.%s.path: path is required", name)
@@ -960,7 +954,7 @@ func normalizeMountedUIPath(path string) (string, error) {
 	return path, nil
 }
 
-func validateMountedUICollisions(cfg *Config, pluginOwnedUIRefs map[string]struct{}) error {
+func validateMountedUICollisions(cfg *Config, pluginOwnedUIBindings map[string]struct{}) error {
 	reserved := []string{
 		"/api",
 		"/api/v1",
@@ -996,7 +990,7 @@ func validateMountedUICollisions(cfg *Config, pluginOwnedUIRefs map[string]struc
 		if entry == nil || strings.TrimSpace(entry.UI) != "" || strings.TrimSpace(entry.MountPath) == "" {
 			continue
 		}
-		if _, ok := pluginOwnedUIRefs[name]; ok {
+		if _, ok := pluginOwnedUIBindings[name]; ok {
 			if ui := cfg.Providers.UI[name]; ui != nil && mountedUIPathsMatch(ui.Path, entry.MountPath) {
 				continue
 			}
@@ -1052,7 +1046,7 @@ func mountedUIPathsMatch(uiPath, mountPath string) bool {
 	return uiPath == normalizedMountPath
 }
 
-func pluginOwnedUIRefs(cfg *Config) map[string]struct{} {
+func pluginOwnedUIBindings(cfg *Config) map[string]struct{} {
 	refs := make(map[string]struct{}, len(cfg.Plugins))
 	for name, entry := range cfg.Plugins {
 		if entry == nil || strings.TrimSpace(entry.UI) != "" || strings.TrimSpace(entry.MountPath) == "" {

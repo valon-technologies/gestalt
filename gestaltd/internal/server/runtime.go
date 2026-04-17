@@ -238,8 +238,8 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 			toolPrefixes[name] = entry.MCPToolPrefix
 			continue
 		}
-		if entry.HasManagedSource() {
-			if src, err := pluginsource.Parse(entry.SourceRef()); err == nil {
+		if entry.ResolvedManifest != nil {
+			if src, err := pluginsource.Parse(strings.TrimSpace(entry.ResolvedManifest.Source)); err == nil {
 				toolPrefixes[name] = src.PluginName() + "_"
 			}
 		}

@@ -321,7 +321,10 @@ func TestE2EValidateConfigPathPrecedence(t *testing.T) {
 
 			cmd := exec.Command(gestaltdBin, args...)
 			cmd.Dir = workdir
-			cmd.Env = append(os.Environ(), "HOME="+home)
+			cmd.Env = append(os.Environ(),
+				"HOME="+home,
+				"GOTELEMETRY=off",
+			)
 			if tc.env != nil {
 				cmd.Env = append(cmd.Env, tc.env(t, root, home, workdir)...)
 			}
@@ -1143,6 +1146,7 @@ func TestE2EDefaultServeAutoGeneratesLocalConfig(t *testing.T) {
 	cmd.Dir = workdir
 	cmd.Env = []string{
 		"HOME=" + home,
+		"GOTELEMETRY=off",
 		"GESTALT_PROVIDERS_DIR=" + providersDir,
 		"PATH=" + os.Getenv("PATH"),
 	}
