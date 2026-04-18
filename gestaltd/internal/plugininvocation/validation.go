@@ -3,7 +3,9 @@ package plugininvocation
 import (
 	"context"
 	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -20,6 +22,30 @@ type resolvedDependencyCatalog struct {
 	catalog     *catalog.Catalog
 	sessionOnly bool
 	err         error
+}
+
+func ValidateEffectiveCatalog(ctx context.Context, name string, entry *config.ProviderEntry) error {
+	if entry == nil {
+		return nil
+	}
+	_, _, err := resolveStaticCatalog(ctx, name, entry)
+	return err
+}
+
+func ValidateEffectiveCatalogs(ctx context.Context, cfg *config.Config) error {
+	if cfg == nil {
+		return nil
+	}
+	for _, name := range slices.Sorted(maps.Keys(cfg.Plugins)) {
+		entry := cfg.Plugins[name]
+		if entry == nil {
+			continue
+		}
+		if err := ValidateEffectiveCatalog(ctx, name, entry); err != nil {
+			return fmt.Errorf("config validation: plugins.%s: %w", name, err)
+		}
+	}
+	return nil
 }
 
 func ValidateDependencies(ctx context.Context, cfg *config.Config) error {

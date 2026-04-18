@@ -172,6 +172,9 @@ func (l *Lifecycle) initAtPaths(configPaths []string, state StatePaths) (*Lockfi
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, nil, initPaths{}, err
 	}
+	if err := plugininvocation.ValidateEffectiveCatalogs(context.Background(), cfg); err != nil {
+		return nil, nil, initPaths{}, err
+	}
 	if err := plugininvocation.ValidateDependencies(context.Background(), cfg); err != nil {
 		return nil, nil, initPaths{}, err
 	}

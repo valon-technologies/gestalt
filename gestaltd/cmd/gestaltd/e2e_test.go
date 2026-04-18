@@ -507,6 +507,72 @@ plugins:
 	}
 }
 
+func TestE2EValidateRejectsHybridExecutableDuplicateEffectiveOperation(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, filepath.Join(dir, "target"))
+	manifestPath := componentProviderManifestPath(t, pluginDir)
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read source manifest: %v", err)
+	}
+	if manifest.Spec == nil {
+		manifest.Spec = &providermanifestv1.Spec{}
+	}
+	manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
+		OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
+	}
+	manifest.Spec.AllowedOperations = map[string]*providermanifestv1.ManifestOperationOverride{
+		"external_echo": {Alias: "echo"},
+	}
+	writeManifestFile(t, pluginDir, manifest)
+	if err := os.WriteFile(filepath.Join(pluginDir, "openapi.yaml"), []byte(`openapi: "3.1.0"
+info:
+  title: Hybrid Duplicate
+  version: "1.0.0"
+paths:
+  /external-echo:
+    get:
+      operationId: external_echo
+      responses:
+        "200":
+          description: OK
+`), 0o644); err != nil {
+		t.Fatalf("write OpenAPI document: %v", err)
+	}
+
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`server:
+  encryptionKey: test-key
+  providers:
+    indexeddb: sqlite
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: %s
+      config:
+        path: %q
+plugins:
+  target:
+    source:
+      path: %s
+`, indexedDBManifest, filepath.Join(dir, "gestalt.db"), manifestPath)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected validate to fail, got success:\n%s", out)
+	}
+	if !strings.Contains(string(out), `duplicate operation \"echo\" across static and API catalogs`) {
+		t.Fatalf("expected validate output to mention duplicate effective operation, got: %s", out)
+	}
+}
+
 func setupPluginDir(t *testing.T, baseDir string) string {
 	t.Helper()
 	return setupPluginDirWithVersion(t, baseDir, "0.0.1-alpha.1")
