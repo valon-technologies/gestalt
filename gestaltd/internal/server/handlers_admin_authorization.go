@@ -177,12 +177,17 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 		return
 	}
 
-	membership, err := s.pluginAuthorizations.UpsertPluginAuthorization(r.Context(), &coredata.PluginAuthorizationMembership{
-		Plugin: plugin,
-		UserID: user.ID,
-		Email:  user.Email,
-		Role:   req.Role,
-	})
+	var membership *coredata.PluginAuthorizationMembership
+	if s.authorizationProvider != nil {
+		membership, err = s.upsertProviderPluginAuthorization(r.Context(), user, plugin, req.Role)
+	} else {
+		membership, err = s.pluginAuthorizations.UpsertPluginAuthorization(r.Context(), &coredata.PluginAuthorizationMembership{
+			Plugin: plugin,
+			UserID: user.ID,
+			Email:  user.Email,
+			Role:   req.Role,
+		})
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to persist authorization member")
 		return
@@ -234,8 +239,14 @@ func (s *Server) deleteAdminAuthorizationPluginMember(w http.ResponseWriter, r *
 		return
 	}
 
-	if err := s.pluginAuthorizations.DeletePluginAuthorization(r.Context(), plugin, userID); err != nil {
-		if errors.Is(err, core.ErrNotFound) {
+	var deleteErr error
+	if s.authorizationProvider != nil {
+		deleteErr = s.deleteProviderPluginAuthorization(r.Context(), plugin, userID)
+	} else {
+		deleteErr = s.pluginAuthorizations.DeletePluginAuthorization(r.Context(), plugin, userID)
+	}
+	if deleteErr != nil {
+		if errors.Is(deleteErr, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "authorization member not found")
 			return
 		}
@@ -307,11 +318,16 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 		return
 	}
 
-	membership, err := s.adminAuthorizations.UpsertAdminAuthorization(r.Context(), &coredata.AdminAuthorizationMembership{
-		UserID: user.ID,
-		Email:  user.Email,
-		Role:   req.Role,
-	})
+	var membership *coredata.AdminAuthorizationMembership
+	if s.authorizationProvider != nil {
+		membership, err = s.upsertProviderAdminAuthorization(r.Context(), user, req.Role)
+	} else {
+		membership, err = s.adminAuthorizations.UpsertAdminAuthorization(r.Context(), &coredata.AdminAuthorizationMembership{
+			UserID: user.ID,
+			Email:  user.Email,
+			Role:   req.Role,
+		})
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to persist admin member")
 		return
@@ -360,8 +376,14 @@ func (s *Server) deleteAdminAuthorizationAdminMember(w http.ResponseWriter, r *h
 		return
 	}
 
-	if err := s.adminAuthorizations.DeleteAdminAuthorization(r.Context(), userID); err != nil {
-		if errors.Is(err, core.ErrNotFound) {
+	var deleteErr error
+	if s.authorizationProvider != nil {
+		deleteErr = s.deleteProviderAdminAuthorization(r.Context(), userID)
+	} else {
+		deleteErr = s.adminAuthorizations.DeleteAdminAuthorization(r.Context(), userID)
+	}
+	if deleteErr != nil {
+		if errors.Is(deleteErr, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "admin member not found")
 			return
 		}

@@ -142,11 +142,11 @@ func (a *ProviderBackedAuthorizer) ReloadDynamic(ctx context.Context) error {
 	if err != nil {
 		return errors.Join(reloadErr, err)
 	}
-	desired, roles, err := a.buildDesiredRelationships(modelID)
+	existing, err := a.readAllRelationships(ctx, modelID)
 	if err != nil {
 		return errors.Join(reloadErr, err)
 	}
-	existing, err := a.readAllRelationships(ctx, modelID)
+	desired, roles, err := a.buildDesiredRelationships(modelID, existing)
 	if err != nil {
 		return errors.Join(reloadErr, err)
 	}
@@ -167,6 +167,16 @@ func (a *ProviderBackedAuthorizer) ReloadDynamic(ctx context.Context) error {
 	a.state = roles
 	a.stateMu.Unlock()
 	return reloadErr
+}
+
+func (a *ProviderBackedAuthorizer) ManagedModelID(ctx context.Context) (string, error) {
+	if a == nil {
+		return "", fmt.Errorf("authorization provider is unavailable")
+	}
+	if a.provider == nil {
+		return "", fmt.Errorf("authorization provider is unavailable")
+	}
+	return a.ensureModel(ctx)
 }
 
 func (a *ProviderBackedAuthorizer) pollLoop(ctx context.Context, done chan struct{}) {
@@ -607,7 +617,7 @@ func (a *ProviderBackedAuthorizer) readAllRelationships(ctx context.Context, mod
 	}
 }
 
-func (a *ProviderBackedAuthorizer) buildDesiredRelationships(modelID string) (map[string]*core.Relationship, providerBackedRoleState, error) {
+func (a *ProviderBackedAuthorizer) buildDesiredRelationships(modelID string, existing map[string]*core.Relationship) (map[string]*core.Relationship, providerBackedRoleState, error) {
 	desired := map[string]*core.Relationship{}
 	state := providerBackedRoleState{
 		modelID:            modelID,
@@ -620,6 +630,30 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(modelID string) (ma
 	pluginStaticRoles := map[string]map[string]struct{}{}
 	pluginDynamicRoles := map[string]map[string]struct{}{}
 	adminDynamicRoles := map[string]struct{}{}
+
+	for _, rel := range existing {
+		if rel == nil || rel.GetResource() == nil {
+			continue
+		}
+		switch strings.TrimSpace(rel.GetResource().GetType()) {
+		case resourceTypePluginDynamic:
+			resourceID := strings.TrimSpace(rel.GetResource().GetId())
+			relation := strings.TrimSpace(rel.GetRelation())
+			if resourceID == "" || relation == "" {
+				continue
+			}
+			addDesiredRelationship(desired, rel)
+			ensureRoleSet(pluginDynamicRoles, resourceID)[relation] = struct{}{}
+		case resourceTypeAdminDynamic:
+			resourceID := strings.TrimSpace(rel.GetResource().GetId())
+			relation := strings.TrimSpace(rel.GetRelation())
+			if resourceID != resourceIDAdminDynamicGlobal || relation == "" {
+				continue
+			}
+			addDesiredRelationship(desired, rel)
+			adminDynamicRoles[relation] = struct{}{}
+		}
+	}
 
 	providersByPolicy := map[string][]string{}
 	for providerName, policyName := range a.legacy.providerPolicies {
