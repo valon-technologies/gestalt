@@ -267,8 +267,8 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		t.Fatalf("refresh error request: %v", err)
 	}
 	defer func() { _ = errorResp.Body.Close() }()
-	if errorResp.StatusCode != http.StatusBadGateway {
-		t.Fatalf("refresh error status = %d, want %d", errorResp.StatusCode, http.StatusBadGateway)
+	if errorResp.StatusCode != http.StatusPreconditionFailed {
+		t.Fatalf("refresh error status = %d, want %d", errorResp.StatusCode, http.StatusPreconditionFailed)
 	}
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
