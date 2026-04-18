@@ -2568,6 +2568,9 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	if err := svc.PluginAuthorizations.DeletePluginAuthorization(context.Background(), "sample_plugin", user.ID); err != nil {
 		t.Fatalf("DeletePluginAuthorization: %v", err)
 	}
+	if err := authz.ReloadDynamic(context.Background()); err != nil {
+		t.Fatalf("ReloadDynamic after deleting legacy plugin authorization: %v", err)
+	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
@@ -2973,6 +2976,9 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 	}
 	if err := svc.AdminAuthorizations.DeleteAdminAuthorization(context.Background(), user.ID); err != nil {
 		t.Fatalf("DeleteAdminAuthorization: %v", err)
+	}
+	if err := authz.ReloadDynamic(context.Background()); err != nil {
+		t.Fatalf("ReloadDynamic after deleting legacy admin authorization: %v", err)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)

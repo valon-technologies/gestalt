@@ -3579,6 +3579,32 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if adminAccess.Role != "admin" {
 			t.Fatalf("dynamic admin role = %q, want %q", adminAccess.Role, "admin")
 		}
+
+		if err := result.Services.PluginAuthorizations.DeletePluginAuthorization(ctx, "calendar", dynamicUser.ID); err != nil {
+			t.Fatalf("DeletePluginAuthorization: %v", err)
+		}
+		if err := result.Services.AdminAuthorizations.DeleteAdminAuthorization(ctx, dynamicUser.ID); err != nil {
+			t.Fatalf("DeleteAdminAuthorization: %v", err)
+		}
+		if err := result.Authorizer.ReloadDynamic(ctx); err != nil {
+			t.Fatalf("ReloadDynamic after deleting legacy authorizations: %v", err)
+		}
+
+		access, allowed = result.Authorizer.ResolveAccess(ctx, dynamicPrincipal, "calendar")
+		if !allowed {
+			t.Fatal("expected provider-backed plugin access to survive legacy deletion")
+		}
+		if access.Role != "editor" {
+			t.Fatalf("provider-backed plugin role after legacy deletion = %q, want %q", access.Role, "editor")
+		}
+
+		adminAccess, allowed = result.Authorizer.ResolveAdminAccess(ctx, dynamicPrincipal, "admin-policy")
+		if !allowed {
+			t.Fatal("expected provider-backed admin access to survive legacy deletion")
+		}
+		if adminAccess.Role != "admin" {
+			t.Fatalf("provider-backed admin role after legacy deletion = %q, want %q", adminAccess.Role, "admin")
+		}
 	})
 
 	t.Run("authorization provider provisions a new model when the active model is unmanaged", func(t *testing.T) {
