@@ -43,9 +43,7 @@ fn test_invoke_precondition_error_suggests_connect_command() {
         "/api/v1/auth_svc/list_items",
         StatusCode::PRECONDITION_FAILED
     )
-    .with_body(
-        r#"{"error":"no token stored for integration \"auth_svc\"; connect via OAuth first"}"#,
-    )
+    .with_body(r#"{"error":"no token stored for integration \"auth_svc\"; connect via OAuth first","code":"not_connected","integration":"auth_svc"}"#)
     .create();
 
     cli_command_for_server(home.path(), &server)
@@ -56,6 +54,63 @@ fn test_invoke_precondition_error_suggests_connect_command() {
             "failed to invoke auth_svc.list_items: plugin \"auth_svc\" is not connected. Connect it first with `gestalt plugins connect auth_svc`",
         ))
         .stderr(predicate::str::contains("OAuth first").not());
+}
+
+#[test]
+fn test_invoke_reconnect_error_suggests_reconnect_command() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/clickhouse/operations",
+        StatusCode::OK
+    )
+    .with_body(single_operation_catalog("run_query"))
+    .create();
+
+    let _invoke_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/clickhouse/run_query",
+        StatusCode::PRECONDITION_FAILED
+    )
+    .with_body(r#"{"error":"OAuth token for integration \"clickhouse\" expired or was revoked; reconnect it","code":"reconnect_required","integration":"clickhouse"}"#)
+    .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args(["plugins", "invoke", "clickhouse", "run_query"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "failed to invoke clickhouse.run_query: token for plugin \"clickhouse\" expired or was revoked. Reconnect it with `gestalt plugins connect clickhouse`",
+        ))
+        .stderr(predicate::str::contains("OAuth token for integration").not());
+}
+
+#[test]
+fn test_catalog_reconnect_error_suggests_reconnect_command() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/clickhouse/operations",
+        StatusCode::PRECONDITION_FAILED
+    )
+    .with_body(r#"{"error":"OAuth token for integration \"clickhouse\" expired or was revoked; reconnect it","code":"reconnect_required","integration":"clickhouse"}"#)
+    .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args(["plugins", "invoke", "clickhouse"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "failed to invoke clickhouse: token for plugin \"clickhouse\" expired or was revoked. Reconnect it with `gestalt plugins connect clickhouse`",
+        ))
+        .stderr(predicate::str::contains("OAuth token for integration").not());
 }
 
 #[test]

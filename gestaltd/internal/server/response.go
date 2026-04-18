@@ -7,6 +7,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 )
 
+type apiErrorResponse struct {
+	Error       string `json:"error"`
+	Code        string `json:"code,omitempty"`
+	Integration string `json:"integration,omitempty"`
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -14,7 +20,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
+	writeJSON(w, status, apiErrorResponse{Error: message})
+}
+
+func writeTypedError(w http.ResponseWriter, status int, code, integration, message string) {
+	writeJSON(w, status, apiErrorResponse{
+		Error:       message,
+		Code:        code,
+		Integration: integration,
+	})
 }
 
 func writeOperationResult(w http.ResponseWriter, result *core.OperationResult) {

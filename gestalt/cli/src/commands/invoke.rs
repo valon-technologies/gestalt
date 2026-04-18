@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 
-use crate::api::ApiClient;
+use crate::api::{ApiClient, ApiError};
 use crate::catalog::{
     self, CatalogOperation, CatalogParameter, OperationsCatalog, ResolvedOperation,
 };
@@ -23,8 +23,9 @@ pub fn run(
     options: InvokeOptions<'_>,
     format: Format,
 ) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, plugin, options.connection, options.instance)?;
     let query = segments.join(".");
+    let cat =
+        load_catalog_for_invoke(client, plugin, &query, options.connection, options.instance)?;
 
     match cat.resolve(&query)? {
         ResolvedOperation::All(ops) => {
@@ -55,7 +56,13 @@ pub fn invoke(
     options: InvokeOptions<'_>,
     format: Format,
 ) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, plugin, options.connection, options.instance)?;
+    let cat = load_catalog_for_invoke(
+        client,
+        plugin,
+        operation,
+        options.connection,
+        options.instance,
+    )?;
     execute(client, &cat, plugin, operation, params, options, format)
 }
 
@@ -99,28 +106,7 @@ fn execute(
     } else {
         client.post(&path, &serde_json::Value::Object(param_map))
     })
-    .map_err(|err| {
-        let message = err.to_string();
-        if !message.contains("no token stored for integration") {
-            return err;
-        }
-
-        let mut connect_command = format!("gestalt plugins connect {}", plugin);
-        if let Some(connection) = options.connection {
-            connect_command.push_str(" --connection ");
-            connect_command.push_str(connection);
-        }
-        if let Some(instance) = options.instance {
-            connect_command.push_str(" --instance ");
-            connect_command.push_str(instance);
-        }
-
-        anyhow::anyhow!(
-            "plugin {:?} is not connected. Connect it first with `{}`",
-            plugin,
-            connect_command,
-        )
-    })
+    .map_err(|err| rewrite_connect_error(err, plugin, options.connection, options.instance))
     .with_context(|| format!("failed to invoke {}.{}", plugin, operation))?;
 
     let output_value = match options.select {
@@ -169,6 +155,86 @@ fn warn_ignored_params(params: &[ParamEntry], reason: &str) {
     if !params.is_empty() {
         output::print_warning(&format!("parameters ignored; {}", reason));
     }
+}
+
+fn load_catalog_for_invoke(
+    client: &ApiClient,
+    plugin: &str,
+    operation: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+) -> Result<OperationsCatalog> {
+    catalog::fetch_catalog(client, plugin, connection, instance)
+        .map_err(|err| rewrite_connect_error(err, plugin, connection, instance))
+        .with_context(|| format!("failed to invoke {}", invoke_target(plugin, operation)))
+}
+
+fn rewrite_connect_error(
+    err: anyhow::Error,
+    plugin: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+) -> anyhow::Error {
+    let connect_command = connect_command(plugin, connection, instance);
+
+    match connect_error_kind(&err) {
+        Some(ConnectErrorKind::NotConnected) => anyhow::anyhow!(
+            "plugin {:?} is not connected. Connect it first with `{}`",
+            plugin,
+            connect_command,
+        ),
+        Some(ConnectErrorKind::ReconnectRequired) => anyhow::anyhow!(
+            "token for plugin {:?} expired or was revoked. Reconnect it with `{}`",
+            plugin,
+            connect_command,
+        ),
+        None => err,
+    }
+}
+
+fn connect_command(plugin: &str, connection: Option<&str>, instance: Option<&str>) -> String {
+    let mut connect_command = format!("gestalt plugins connect {}", plugin);
+    if let Some(connection) = connection {
+        connect_command.push_str(" --connection ");
+        connect_command.push_str(connection);
+    }
+    if let Some(instance) = instance {
+        connect_command.push_str(" --instance ");
+        connect_command.push_str(instance);
+    }
+    connect_command
+}
+
+fn invoke_target(plugin: &str, operation: &str) -> String {
+    if operation.is_empty() {
+        plugin.to_string()
+    } else {
+        format!("{plugin}.{operation}")
+    }
+}
+
+enum ConnectErrorKind {
+    NotConnected,
+    ReconnectRequired,
+}
+
+fn connect_error_kind(err: &anyhow::Error) -> Option<ConnectErrorKind> {
+    if let Some(api_error) = err.downcast_ref::<ApiError>() {
+        match api_error.code() {
+            Some("not_connected") => return Some(ConnectErrorKind::NotConnected),
+            Some("reconnect_required") => return Some(ConnectErrorKind::ReconnectRequired),
+            _ => {}
+        }
+    }
+
+    let message = err.to_string();
+    if message.contains("no token stored for integration") {
+        return Some(ConnectErrorKind::NotConnected);
+    }
+    if message.contains("expired or was revoked") {
+        return Some(ConnectErrorKind::ReconnectRequired);
+    }
+    None
 }
 
 fn format_parameters(params: &[CatalogParameter]) -> String {

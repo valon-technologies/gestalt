@@ -5,6 +5,7 @@ use reqwest::blocking::Client;
 use reqwest::header::{self, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 use crate::config::ConfigStore;
@@ -202,6 +203,43 @@ pub struct ApiClient {
     token: String,
     token_source: TokenSource,
 }
+
+#[derive(Debug, Clone)]
+pub struct ApiError {
+    message: String,
+    code: Option<String>,
+    integration: Option<String>,
+}
+
+impl ApiError {
+    fn new(message: String, code: Option<String>, integration: Option<String>) -> Self {
+        Self {
+            message,
+            code,
+            integration,
+        }
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    pub fn code(&self) -> Option<&str> {
+        self.code.as_deref()
+    }
+
+    pub fn integration(&self) -> Option<&str> {
+        self.integration.as_deref()
+    }
+}
+
+impl fmt::Display for ApiError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for ApiError {}
 
 impl ApiClient {
     pub fn from_env(url_override: Option<&str>) -> Result<Self> {
@@ -412,9 +450,12 @@ impl ApiClient {
 
     fn bail_on_error_response(&self, status: StatusCode, body: &str) -> Result<()> {
         if status.is_client_error() || status.is_server_error() {
-            let message = serde_json::from_str::<serde_json::Value>(body)
+            let api_error = serde_json::from_str::<serde_json::Value>(body)
                 .ok()
-                .and_then(|v| extract_error_message(&v))
+                .and_then(|v| extract_api_error(&v));
+            let message = api_error
+                .as_ref()
+                .map(|err| err.message().to_string())
                 .unwrap_or_else(|| format!("HTTP {}: {}", status.as_u16(), body));
 
             if status == StatusCode::UNAUTHORIZED && self.token_source == TokenSource::EnvVar {
@@ -434,29 +475,60 @@ impl ApiClient {
                 );
             }
 
+            if let Some(api_error) = api_error {
+                return Err(api_error.into());
+            }
+
             bail!("{}", message);
         }
         Ok(())
     }
 }
 
-fn extract_error_message(value: &serde_json::Value) -> Option<String> {
+fn extract_api_error(value: &serde_json::Value) -> Option<ApiError> {
     match value {
         serde_json::Value::Object(obj) => {
-            if let Some(message) = obj.get("error").and_then(|err| match err {
-                serde_json::Value::String(message) => Some(message.clone()),
+            let root_code = obj
+                .get("code")
+                .and_then(|code| code.as_str())
+                .map(String::from);
+            let root_integration = obj
+                .get("integration")
+                .and_then(|integration| integration.as_str())
+                .map(String::from);
+
+            if let Some(api_error) = obj.get("error").and_then(|err| match err {
+                serde_json::Value::String(message) => Some(ApiError::new(
+                    message.clone(),
+                    root_code.clone(),
+                    root_integration.clone(),
+                )),
                 serde_json::Value::Object(err_obj) => err_obj
                     .get("message")
                     .and_then(|message| message.as_str())
-                    .map(String::from),
+                    .map(|message| {
+                        ApiError::new(
+                            message.to_string(),
+                            err_obj
+                                .get("code")
+                                .and_then(|code| code.as_str())
+                                .map(String::from)
+                                .or(root_code.clone()),
+                            err_obj
+                                .get("integration")
+                                .and_then(|integration| integration.as_str())
+                                .map(String::from)
+                                .or(root_integration.clone()),
+                        )
+                    }),
                 _ => None,
             }) {
-                return Some(message);
+                return Some(api_error);
             }
 
             obj.get("message")
                 .and_then(|message| message.as_str())
-                .map(String::from)
+                .map(|message| ApiError::new(message.to_string(), root_code, root_integration))
         }
         _ => None,
     }
