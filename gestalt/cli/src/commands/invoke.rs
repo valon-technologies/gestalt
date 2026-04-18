@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 
-use crate::api::ApiClient;
+use crate::api::{ApiClient, ApiError};
 use crate::catalog::{
     self, CatalogOperation, CatalogParameter, OperationsCatalog, ResolvedOperation,
 };
@@ -175,26 +175,21 @@ fn rewrite_connect_error(
     connection: Option<&str>,
     instance: Option<&str>,
 ) -> anyhow::Error {
-    let message = err.to_string();
     let connect_command = connect_command(plugin, connection, instance);
 
-    if message.contains("no token stored for integration") {
-        return anyhow::anyhow!(
+    match connect_error_kind(&err) {
+        Some(ConnectErrorKind::NotConnected) => anyhow::anyhow!(
             "plugin {:?} is not connected. Connect it first with `{}`",
             plugin,
             connect_command,
-        );
-    }
-
-    if message.contains("expired or was revoked") {
-        return anyhow::anyhow!(
+        ),
+        Some(ConnectErrorKind::ReconnectRequired) => anyhow::anyhow!(
             "token for plugin {:?} expired or was revoked. Reconnect it with `{}`",
             plugin,
             connect_command,
-        );
+        ),
+        None => err,
     }
-
-    err
 }
 
 fn connect_command(plugin: &str, connection: Option<&str>, instance: Option<&str>) -> String {
@@ -216,6 +211,30 @@ fn invoke_target(plugin: &str, operation: &str) -> String {
     } else {
         format!("{plugin}.{operation}")
     }
+}
+
+enum ConnectErrorKind {
+    NotConnected,
+    ReconnectRequired,
+}
+
+fn connect_error_kind(err: &anyhow::Error) -> Option<ConnectErrorKind> {
+    if let Some(api_error) = err.downcast_ref::<ApiError>() {
+        match api_error.code() {
+            Some("not_connected") => return Some(ConnectErrorKind::NotConnected),
+            Some("reconnect_required") => return Some(ConnectErrorKind::ReconnectRequired),
+            _ => {}
+        }
+    }
+
+    let message = err.to_string();
+    if message.contains("no token stored for integration") {
+        return Some(ConnectErrorKind::NotConnected);
+    }
+    if message.contains("expired or was revoked") {
+        return Some(ConnectErrorKind::ReconnectRequired);
+    }
+    None
 }
 
 fn format_parameters(params: &[CatalogParameter]) -> String {

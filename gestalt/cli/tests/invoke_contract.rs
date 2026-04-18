@@ -43,9 +43,7 @@ fn test_invoke_precondition_error_suggests_connect_command() {
         "/api/v1/auth_svc/list_items",
         StatusCode::PRECONDITION_FAILED
     )
-    .with_body(
-        r#"{"error":"no token stored for integration \"auth_svc\"; connect via OAuth first"}"#,
-    )
+    .with_body(r#"{"error":"no token stored for integration \"auth_svc\"; connect via OAuth first","code":"not_connected","integration":"auth_svc"}"#)
     .create();
 
     cli_command_for_server(home.path(), &server)
@@ -78,9 +76,7 @@ fn test_invoke_reconnect_error_suggests_reconnect_command() {
         "/api/v1/clickhouse/run_query",
         StatusCode::PRECONDITION_FAILED
     )
-    .with_body(
-        r#"{"error":"OAuth token for integration \"clickhouse\" expired or was revoked; reconnect it"}"#,
-    )
+    .with_body(r#"{"error":"OAuth token for integration \"clickhouse\" expired or was revoked; reconnect it","code":"reconnect_required","integration":"clickhouse"}"#)
     .create();
 
     cli_command_for_server(home.path(), &server)
@@ -104,9 +100,7 @@ fn test_catalog_reconnect_error_suggests_reconnect_command() {
         "/api/v1/integrations/clickhouse/operations",
         StatusCode::PRECONDITION_FAILED
     )
-    .with_body(
-        r#"{"error":"OAuth token for integration \"clickhouse\" expired or was revoked; reconnect it"}"#,
-    )
+    .with_body(r#"{"error":"OAuth token for integration \"clickhouse\" expired or was revoked; reconnect it","code":"reconnect_required","integration":"clickhouse"}"#)
     .create();
 
     cli_command_for_server(home.path(), &server)

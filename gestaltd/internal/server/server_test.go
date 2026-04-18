@@ -7585,6 +7585,24 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 412, got %d: %s", resp.StatusCode, body)
 		}
+
+		var errResp struct {
+			Error       string `json:"error"`
+			Code        string `json:"code"`
+			Integration string `json:"integration"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+			t.Fatalf("decoding error response: %v", err)
+		}
+		if errResp.Error != `no token stored for integration "test-int"; connect via OAuth first` {
+			t.Fatalf("expected no-token message, got %q", errResp.Error)
+		}
+		if errResp.Code != "not_connected" {
+			t.Fatalf("expected not_connected code, got %q", errResp.Code)
+		}
+		if errResp.Integration != "test-int" {
+			t.Fatalf("expected integration test-int, got %q", errResp.Integration)
+		}
 	})
 
 	t.Run("ambiguous_instance", func(t *testing.T) {
@@ -13746,12 +13764,22 @@ func TestExecuteOperation_ReconnectRequiredMessage(t *testing.T) {
 		t.Fatalf("response body contains upstream refresh details: %s", body)
 	}
 
-	var errResp map[string]string
+	var errResp struct {
+		Error       string `json:"error"`
+		Code        string `json:"code"`
+		Integration string `json:"integration"`
+	}
 	if err := json.Unmarshal(body, &errResp); err != nil {
 		t.Fatalf("decoding error response: %v", err)
 	}
-	if errResp["error"] != `OAuth token for integration "test-int" expired or was revoked; reconnect it` {
-		t.Fatalf("expected reconnect-required message, got %q", errResp["error"])
+	if errResp.Error != `OAuth token for integration "test-int" expired or was revoked; reconnect it` {
+		t.Fatalf("expected reconnect-required message, got %q", errResp.Error)
+	}
+	if errResp.Code != "reconnect_required" {
+		t.Fatalf("expected reconnect_required code, got %q", errResp.Code)
+	}
+	if errResp.Integration != "test-int" {
+		t.Fatalf("expected integration test-int, got %q", errResp.Integration)
 	}
 }
 
