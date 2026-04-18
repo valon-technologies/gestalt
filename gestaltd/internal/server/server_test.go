@@ -11499,9 +11499,9 @@ func TestExecuteOperation_RefreshFailureEdgeCases(t *testing.T) {
 		wantUsedToken string
 	}{
 		{
-			name:          "expired token returns bad gateway",
+			name:          "expired token requires reconnect",
 			expiresAt:     time.Now().Add(-1 * time.Hour),
-			wantStatus:    http.StatusBadGateway,
+			wantStatus:    http.StatusPreconditionFailed,
 			wantUsedToken: "",
 		},
 		{
