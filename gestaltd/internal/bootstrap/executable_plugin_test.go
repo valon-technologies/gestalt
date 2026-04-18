@@ -428,6 +428,86 @@ paths:
 	}
 }
 
+func TestHybridExecutableProviderRoutesPluginOperationsThroughNamedSpecConnection(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "hybrid",
+		Operations: []catalog.CatalogOperation{
+			{ID: "echo", Method: http.MethodPost, Parameters: []catalog.CatalogParameter{{Name: "message", Type: "string", Required: true}}},
+		},
+	})
+	openapiDoc := `openapi: "3.1.0"
+info:
+  title: Hybrid
+  version: "1.0.0"
+paths:
+  /status:
+    get:
+      operationId: status
+      responses:
+        "200":
+          description: OK
+`
+	if err := os.WriteFile(filepath.Join(manifestRoot, "openapi.yaml"), []byte(openapiDoc), 0o644); err != nil {
+		t.Fatalf("WriteFile(openapi.yaml): %v", err)
+	}
+
+	manifest := newExecutableManifest("Hybrid", "Hybrid provider")
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: "ignored-for-command-mode"}
+	manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
+		OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
+	}
+	manifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
+		"default": {
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+		},
+	}
+	manifestPath := filepath.Join(manifestRoot, "manifest.yaml")
+
+	entry := &config.ProviderEntry{
+		Command:              bin,
+		Args:                 []string{"provider"},
+		ResolvedManifest:     manifest,
+		ResolvedManifestPath: manifestPath,
+	}
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"hybrid": entry,
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("hybrid")
+	if err != nil {
+		t.Fatalf("providers.Get(hybrid): %v", err)
+	}
+	if got := prov.ConnectionForOperation("echo"); got != "default" {
+		t.Fatalf("echo connection = %q, want %q", got, "default")
+	}
+	if got := prov.ConnectionForOperation("status"); got != "default" {
+		t.Fatalf("status connection = %q, want %q", got, "default")
+	}
+
+	_, operationConnections, err := buildStartupProviderSpec("hybrid", entry)
+	if err != nil {
+		t.Fatalf("buildStartupProviderSpec: %v", err)
+	}
+	if got := operationConnections["echo"]; got != "default" {
+		t.Fatalf("startup echo connection = %q, want %q", got, "default")
+	}
+	if _, ok := operationConnections["status"]; ok {
+		t.Fatalf("startup catalog unexpectedly exposed spec-loaded status operation")
+	}
+}
+
 func TestSpecLoadedDualSurfaceProviderBuildsMCPOperations(t *testing.T) {
 	t.Parallel()
 
