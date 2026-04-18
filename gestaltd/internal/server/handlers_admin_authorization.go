@@ -714,6 +714,9 @@ func (s *Server) ensureAdminDynamicAuthorizationAvailable(w http.ResponseWriter)
 }
 
 func (s *Server) ensureAdminDynamicAuthorizationWriteAvailable(w http.ResponseWriter) bool {
+	if s.authorizationProvider != nil {
+		return true
+	}
 	if s.pluginAuthorizations == nil || s.authorizer == nil || !s.authorizer.HasDynamicPluginAuthorizations() {
 		writeError(w, http.StatusServiceUnavailable, "dynamic authorization writes are unavailable")
 		return false
@@ -754,6 +757,9 @@ func (s *Server) ensureAdminDynamicAdminAvailable(w http.ResponseWriter) bool {
 }
 
 func (s *Server) ensureAdminDynamicAdminWriteAvailable(w http.ResponseWriter) bool {
+	if s.authorizationProvider != nil {
+		return true
+	}
 	if s.adminAuthorizations == nil || s.authorizer == nil || !s.authorizer.HasDynamicAdminAuthorizations() {
 		writeError(w, http.StatusServiceUnavailable, "dynamic admin authorization writes are unavailable")
 		return false

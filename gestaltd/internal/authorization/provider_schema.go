@@ -30,6 +30,10 @@ subjects:
 	ProviderModelSentinelRelation   = "managed"
 	ProviderModelSentinelSubjectID  = "gestalt:authorization"
 	ProviderModelSentinelResourceID = "__gestalt_authorization_model__"
+
+	ProviderLegacyHumanImportSentinelRelation   = "managed"
+	ProviderLegacyHumanImportSentinelSubjectID  = "gestalt:authorization"
+	ProviderLegacyHumanImportSentinelResourceID = "__gestalt_legacy_human_import_v1__"
 )
 
 const (
@@ -86,4 +90,18 @@ func IsProviderModelSentinelRelationship(rel *core.Relationship) bool {
 		rel.GetRelation() == ProviderModelSentinelRelation &&
 		rel.GetResource().GetType() == ProviderResourceTypePolicyStatic &&
 		rel.GetResource().GetId() == ProviderModelSentinelResourceID
+}
+
+func ProviderLegacyHumanImportSentinelRelationship() *core.Relationship {
+	return &core.Relationship{
+		Subject: &core.SubjectRef{
+			Type: ProviderSubjectTypeSubject,
+			Id:   ProviderLegacyHumanImportSentinelSubjectID,
+		},
+		Relation: ProviderLegacyHumanImportSentinelRelation,
+		Resource: &core.ResourceRef{
+			Type: ProviderResourceTypePolicyStatic,
+			Id:   ProviderLegacyHumanImportSentinelResourceID,
+		},
+	}
 }
