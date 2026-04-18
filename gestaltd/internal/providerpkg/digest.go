@@ -23,16 +23,19 @@ func FileSHA256(path string) (string, error) {
 	return fileSHA256(path)
 }
 
-func DirectoryDigest(dirPath string, manifest *providermanifestv1.Manifest) (string, error) {
+func DirectoryDigest(dirPath, manifestPath string, manifest *providermanifestv1.Manifest) (string, error) {
 	if manifest == nil {
 		return "", fmt.Errorf("manifest is required")
 	}
 
 	var digests []string
 
-	manifestPath, err := FindManifestFile(dirPath)
-	if err != nil {
-		return "", fmt.Errorf("digest manifest: %w", err)
+	if manifestPath == "" {
+		var err error
+		manifestPath, err = FindManifestFile(dirPath)
+		if err != nil {
+			return "", fmt.Errorf("digest manifest: %w", err)
+		}
 	}
 	manifestSum, err := FileSHA256(manifestPath)
 	if err != nil {
