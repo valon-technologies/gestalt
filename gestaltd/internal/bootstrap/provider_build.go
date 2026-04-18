@@ -9,6 +9,7 @@ import (
 	"maps"
 	"net/url"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -205,9 +206,10 @@ func operationConnectionsForCatalog(cat *catalog.Catalog, plan config.StaticConn
 		return map[string]string{}
 	}
 	operationConnections := make(map[string]string, len(cat.Operations))
+	pluginConnection := hybridPluginOperationConnection(plan, configuredSpecConnection(plan))
 	for i := range cat.Operations {
 		operation := &cat.Operations[i]
-		connection := config.PluginConnectionName
+		connection := pluginConnection
 		switch operation.Transport {
 		case catalog.TransportREST:
 			connection = plan.APIConnection()
@@ -219,6 +221,33 @@ func operationConnectionsForCatalog(cat *catalog.Catalog, plan config.StaticConn
 		}
 	}
 	return operationConnections
+}
+
+func configuredSpecConnection(plan config.StaticConnectionPlan) string {
+	if resolved, ok := plan.ConfiguredSpecSurface(); ok {
+		return resolved.ConnectionName
+	}
+	return ""
+}
+
+func hybridPluginOperationConnection(plan config.StaticConnectionPlan, specConnection string) string {
+	if explicitPluginConnection(plan) {
+		return config.PluginConnectionName
+	}
+	if specConnection != "" && specConnection != config.PluginConnectionName {
+		return specConnection
+	}
+	if fallback := plan.AuthDefaultConnection(); fallback != "" {
+		return fallback
+	}
+	return config.PluginConnectionName
+}
+
+func explicitPluginConnection(plan config.StaticConnectionPlan) bool {
+	if !reflect.DeepEqual(plan.PluginConnection(), config.ConnectionDef{}) {
+		return true
+	}
+	return plan.AuthDefaultConnection() == config.PluginConnectionName && len(plan.NamedConnectionNames()) > 0
 }
 
 func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (*ProviderBuildResult, error) {
@@ -323,7 +352,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 			pluginProv.DisplayName(),
 			pluginProv.Description(),
 			firstProviderIconSVG(pluginProv, apiProv),
-			composite.BoundProvider{Provider: pluginProv, Connection: config.PluginConnectionName},
+			composite.BoundProvider{Provider: pluginProv, Connection: hybridPluginOperationConnection(plan, plan.APIConnection())},
 			composite.BoundProvider{Provider: apiProv, Connection: plan.APIConnection()},
 		)
 		if err != nil {
@@ -368,7 +397,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 		pluginProv.DisplayName(),
 		pluginProv.Description(),
 		firstProviderIconSVG(pluginProv, specProv),
-		composite.BoundProvider{Provider: pluginProv, Connection: config.PluginConnectionName},
+		composite.BoundProvider{Provider: pluginProv, Connection: hybridPluginOperationConnection(plan, resolved.ConnectionName)},
 		composite.BoundProvider{Provider: specProv, Connection: resolved.ConnectionName},
 	)
 	if err != nil {
