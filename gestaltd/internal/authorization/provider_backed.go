@@ -79,11 +79,6 @@ func (a *ProviderBackedAuthorizer) Start(ctx context.Context) error {
 	a.legacy.started = true
 	a.legacy.lifecycleMu.Unlock()
 
-	if !a.legacy.hasDynamicSources() {
-		a.started = true
-		return nil
-	}
-
 	pollCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	a.pollCancel = cancel
@@ -146,7 +141,15 @@ func (a *ProviderBackedAuthorizer) ReloadDynamic(ctx context.Context) error {
 	if err != nil {
 		return errors.Join(reloadErr, err)
 	}
-	desired, roles, err := a.buildDesiredRelationships(modelID, existing)
+	_, legacyImported := existing[relationshipMapKey(ProviderLegacyHumanImportSentinelRelationship())]
+	importLegacy := !legacyImported && reloadErr == nil
+
+	var snapshot *dynamicSnapshot
+	if importLegacy {
+		snapshot = a.currentDynamicSnapshot()
+	}
+
+	desired, roles, err := a.buildDesiredRelationships(modelID, existing, snapshot, legacyImported || importLegacy)
 	if err != nil {
 		return errors.Join(reloadErr, err)
 	}
@@ -617,7 +620,7 @@ func (a *ProviderBackedAuthorizer) readAllRelationships(ctx context.Context, mod
 	}
 }
 
-func (a *ProviderBackedAuthorizer) buildDesiredRelationships(modelID string, existing map[string]*core.Relationship) (map[string]*core.Relationship, providerBackedRoleState, error) {
+func (a *ProviderBackedAuthorizer) buildDesiredRelationships(modelID string, existing map[string]*core.Relationship, snapshot *dynamicSnapshot, markLegacyImported bool) (map[string]*core.Relationship, providerBackedRoleState, error) {
 	desired := map[string]*core.Relationship{}
 	state := providerBackedRoleState{
 		modelID:            modelID,
@@ -626,10 +629,14 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(modelID string, exi
 		pluginDynamicRoles: map[string][]string{},
 	}
 	addDesiredRelationship(desired, ProviderModelSentinelRelationship())
+	if markLegacyImported {
+		addDesiredRelationship(desired, ProviderLegacyHumanImportSentinelRelationship())
+	}
 	policyStaticRoles := map[string]map[string]struct{}{}
 	pluginStaticRoles := map[string]map[string]struct{}{}
 	pluginDynamicRoles := map[string]map[string]struct{}{}
 	adminDynamicRoles := map[string]struct{}{}
+	existingDynamicSubjects := map[string]struct{}{}
 
 	for _, rel := range existing {
 		if rel == nil || rel.GetResource() == nil {
@@ -643,6 +650,7 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(modelID string, exi
 				continue
 			}
 			addDesiredRelationship(desired, rel)
+			existingDynamicSubjects[dynamicMembershipSubjectResourceKey(rel.GetSubject(), rel.GetResource())] = struct{}{}
 			ensureRoleSet(pluginDynamicRoles, resourceID)[relation] = struct{}{}
 		case resourceTypeAdminDynamic:
 			resourceID := strings.TrimSpace(rel.GetResource().GetId())
@@ -651,6 +659,7 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(modelID string, exi
 				continue
 			}
 			addDesiredRelationship(desired, rel)
+			existingDynamicSubjects[dynamicMembershipSubjectResourceKey(rel.GetSubject(), rel.GetResource())] = struct{}{}
 			adminDynamicRoles[relation] = struct{}{}
 		}
 	}
@@ -722,70 +731,116 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(modelID string, exi
 		}
 	}
 
-	snapshot := a.currentDynamicSnapshot()
-	for providerName, byUserID := range snapshot.byPluginUserID {
-		providerName = strings.TrimSpace(providerName)
-		if providerName == "" {
-			continue
+	if snapshot != nil {
+		type legacyPluginImport struct {
+			providerName string
+			grant        dynamicGrant
 		}
-		for userID, grant := range byUserID {
-			role := strings.TrimSpace(grant.Role)
-			userID = strings.TrimSpace(userID)
-			if userID == "" || role == "" {
+		pluginImports := map[string]legacyPluginImport{}
+		for providerName, byUserID := range snapshot.byPluginUserID {
+			providerName = strings.TrimSpace(providerName)
+			if providerName == "" {
 				continue
 			}
-			ensureRoleSet(pluginDynamicRoles, providerName)[role] = struct{}{}
-			addDesiredRelationship(desired, &core.Relationship{
-				Subject:  &core.SubjectRef{Type: subjectTypeUser, Id: userID},
-				Relation: role,
-				Resource: &core.ResourceRef{Type: resourceTypePluginDynamic, Id: providerName},
-			})
+			for _, grant := range byUserID {
+				key := strings.Join([]string{
+					providerName,
+					strings.TrimSpace(grant.UserID),
+					normalizeProviderEmail(grant.Email),
+				}, "\x00")
+				pluginImports[key] = legacyPluginImport{providerName: providerName, grant: grant}
+			}
 		}
-	}
-	for providerName, byEmail := range snapshot.byPluginEmail {
-		providerName = strings.TrimSpace(providerName)
-		if providerName == "" {
-			continue
-		}
-		for email, grant := range byEmail {
-			role := strings.TrimSpace(grant.Role)
-			email = normalizeProviderEmail(email)
-			if email == "" || role == "" {
+		for providerName, byEmail := range snapshot.byPluginEmail {
+			providerName = strings.TrimSpace(providerName)
+			if providerName == "" {
 				continue
 			}
-			ensureRoleSet(pluginDynamicRoles, providerName)[role] = struct{}{}
-			addDesiredRelationship(desired, &core.Relationship{
-				Subject:  &core.SubjectRef{Type: subjectTypeEmail, Id: email},
-				Relation: role,
-				Resource: &core.ResourceRef{Type: resourceTypePluginDynamic, Id: providerName},
-			})
+			for _, grant := range byEmail {
+				key := strings.Join([]string{
+					providerName,
+					strings.TrimSpace(grant.UserID),
+					normalizeProviderEmail(grant.Email),
+				}, "\x00")
+				pluginImports[key] = legacyPluginImport{providerName: providerName, grant: grant}
+			}
 		}
-	}
-	for userID, grant := range snapshot.adminByUserID {
-		role := strings.TrimSpace(grant.Role)
-		userID = strings.TrimSpace(userID)
-		if userID == "" || role == "" {
-			continue
+		for _, item := range pluginImports {
+			role := strings.TrimSpace(item.grant.Role)
+			userID := strings.TrimSpace(item.grant.UserID)
+			email := normalizeProviderEmail(item.grant.Email)
+			if role == "" || (userID == "" && email == "") {
+				continue
+			}
+			keys := dynamicMembershipImportKeys(userID, email, resourceTypePluginDynamic, item.providerName)
+			if dynamicMembershipKeysPresent(existingDynamicSubjects, keys...) {
+				continue
+			}
+			for _, key := range keys {
+				existingDynamicSubjects[key] = struct{}{}
+			}
+			ensureRoleSet(pluginDynamicRoles, item.providerName)[role] = struct{}{}
+			if userID != "" {
+				addDesiredRelationship(desired, &core.Relationship{
+					Subject:  &core.SubjectRef{Type: subjectTypeUser, Id: userID},
+					Relation: role,
+					Resource: &core.ResourceRef{Type: resourceTypePluginDynamic, Id: item.providerName},
+				})
+			}
+			if email != "" {
+				addDesiredRelationship(desired, &core.Relationship{
+					Subject:  &core.SubjectRef{Type: subjectTypeEmail, Id: email},
+					Relation: role,
+					Resource: &core.ResourceRef{Type: resourceTypePluginDynamic, Id: item.providerName},
+				})
+			}
 		}
-		adminDynamicRoles[role] = struct{}{}
-		addDesiredRelationship(desired, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: subjectTypeUser, Id: userID},
-			Relation: role,
-			Resource: &core.ResourceRef{Type: resourceTypeAdminDynamic, Id: resourceIDAdminDynamicGlobal},
-		})
-	}
-	for email, grant := range snapshot.adminByEmail {
-		role := strings.TrimSpace(grant.Role)
-		email = normalizeProviderEmail(email)
-		if email == "" || role == "" {
-			continue
+
+		adminImports := map[string]dynamicGrant{}
+		for _, grant := range snapshot.adminByUserID {
+			key := strings.Join([]string{
+				strings.TrimSpace(grant.UserID),
+				normalizeProviderEmail(grant.Email),
+			}, "\x00")
+			adminImports[key] = grant
 		}
-		adminDynamicRoles[role] = struct{}{}
-		addDesiredRelationship(desired, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: subjectTypeEmail, Id: email},
-			Relation: role,
-			Resource: &core.ResourceRef{Type: resourceTypeAdminDynamic, Id: resourceIDAdminDynamicGlobal},
-		})
+		for _, grant := range snapshot.adminByEmail {
+			key := strings.Join([]string{
+				strings.TrimSpace(grant.UserID),
+				normalizeProviderEmail(grant.Email),
+			}, "\x00")
+			adminImports[key] = grant
+		}
+		for _, grant := range adminImports {
+			role := strings.TrimSpace(grant.Role)
+			userID := strings.TrimSpace(grant.UserID)
+			email := normalizeProviderEmail(grant.Email)
+			if role == "" || (userID == "" && email == "") {
+				continue
+			}
+			keys := dynamicMembershipImportKeys(userID, email, resourceTypeAdminDynamic, resourceIDAdminDynamicGlobal)
+			if dynamicMembershipKeysPresent(existingDynamicSubjects, keys...) {
+				continue
+			}
+			for _, key := range keys {
+				existingDynamicSubjects[key] = struct{}{}
+			}
+			adminDynamicRoles[role] = struct{}{}
+			if userID != "" {
+				addDesiredRelationship(desired, &core.Relationship{
+					Subject:  &core.SubjectRef{Type: subjectTypeUser, Id: userID},
+					Relation: role,
+					Resource: &core.ResourceRef{Type: resourceTypeAdminDynamic, Id: resourceIDAdminDynamicGlobal},
+				})
+			}
+			if email != "" {
+				addDesiredRelationship(desired, &core.Relationship{
+					Subject:  &core.SubjectRef{Type: subjectTypeEmail, Id: email},
+					Relation: role,
+					Resource: &core.ResourceRef{Type: resourceTypeAdminDynamic, Id: resourceIDAdminDynamicGlobal},
+				})
+			}
+		}
 	}
 
 	for name, roles := range policyStaticRoles {
@@ -868,6 +923,50 @@ func roleSortKey(role string) string {
 	default:
 		return "9:" + strings.TrimSpace(role)
 	}
+}
+
+func dynamicMembershipSubjectResourceKey(subject *core.SubjectRef, resource *core.ResourceRef) string {
+	if subject == nil || resource == nil {
+		return ""
+	}
+	return dynamicMembershipKey(
+		strings.TrimSpace(subject.GetType()),
+		strings.TrimSpace(subject.GetId()),
+		strings.TrimSpace(resource.GetType()),
+		strings.TrimSpace(resource.GetId()),
+	)
+}
+
+func dynamicMembershipKey(subjectType, subjectID, resourceType, resourceID string) string {
+	return strings.Join([]string{
+		strings.TrimSpace(subjectType),
+		strings.TrimSpace(subjectID),
+		strings.TrimSpace(resourceType),
+		strings.TrimSpace(resourceID),
+	}, "\x00")
+}
+
+func dynamicMembershipImportKeys(userID, email, resourceType, resourceID string) []string {
+	keys := make([]string, 0, 2)
+	if userID = strings.TrimSpace(userID); userID != "" {
+		keys = append(keys, dynamicMembershipKey(subjectTypeUser, userID, resourceType, resourceID))
+	}
+	if email = normalizeProviderEmail(email); email != "" {
+		keys = append(keys, dynamicMembershipKey(subjectTypeEmail, email, resourceType, resourceID))
+	}
+	return keys
+}
+
+func dynamicMembershipKeysPresent(existing map[string]struct{}, keys ...string) bool {
+	for _, key := range keys {
+		if key == "" {
+			continue
+		}
+		if _, ok := existing[key]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func staticSubjectRefs(p *principal.Principal) []*core.SubjectRef {

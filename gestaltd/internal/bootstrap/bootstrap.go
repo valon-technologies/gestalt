@@ -209,6 +209,9 @@ func (r *Result) Start(ctx context.Context) error {
 			return err
 		}
 	}
+	if err := syncProviderBackedHumanCanonicalState(ctx, r.Services, r.Authorizer, r.AuthorizationProvider); err != nil {
+		return err
+	}
 	return nil
 }
 

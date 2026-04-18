@@ -2565,11 +2565,26 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find dynamic user: %v", err)
 	}
-	if err := svc.PluginAuthorizations.DeletePluginAuthorization(context.Background(), "sample_plugin", user.ID); err != nil {
-		t.Fatalf("DeletePluginAuthorization: %v", err)
+	legacyMemberships, err := svc.PluginAuthorizations.ListPluginAuthorizationsByPlugin(context.Background(), "sample_plugin")
+	if err != nil {
+		t.Fatalf("ListPluginAuthorizationsByPlugin: %v", err)
+	}
+	if len(legacyMemberships) != 0 {
+		t.Fatalf("legacy plugin authorizations = %+v, want none for provider-backed writes", legacyMemberships)
+	}
+	canonicalIdentityID, err := svc.Users.CanonicalIdentityIDForUser(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("CanonicalIdentityIDForUser(dynamic): %v", err)
+	}
+	pluginAccess, err := svc.IdentityPluginAccess.GetAccess(context.Background(), canonicalIdentityID, "sample_plugin")
+	if err != nil {
+		t.Fatalf("GetAccess(sample_plugin): %v", err)
+	}
+	if !pluginAccess.InvokeAllOperations {
+		t.Fatal("expected provider-backed plugin write to sync canonical invoke-all access")
 	}
 	if err := authz.ReloadDynamic(context.Background()); err != nil {
-		t.Fatalf("ReloadDynamic after deleting legacy plugin authorization: %v", err)
+		t.Fatalf("ReloadDynamic after provider-backed plugin write: %v", err)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", nil)
@@ -2974,11 +2989,26 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find dynamic admin user: %v", err)
 	}
-	if err := svc.AdminAuthorizations.DeleteAdminAuthorization(context.Background(), user.ID); err != nil {
-		t.Fatalf("DeleteAdminAuthorization: %v", err)
+	legacyMemberships, err := svc.AdminAuthorizations.ListAdminAuthorizations(context.Background())
+	if err != nil {
+		t.Fatalf("ListAdminAuthorizations: %v", err)
+	}
+	if len(legacyMemberships) != 0 {
+		t.Fatalf("legacy admin authorizations = %+v, want none for provider-backed writes", legacyMemberships)
+	}
+	canonicalIdentityID, err := svc.Users.CanonicalIdentityIDForUser(context.Background(), user.ID)
+	if err != nil {
+		t.Fatalf("CanonicalIdentityIDForUser(dynamic admin): %v", err)
+	}
+	roles, err := svc.WorkspaceRoles.ListByPrincipal(context.Background(), canonicalIdentityID)
+	if err != nil {
+		t.Fatalf("ListByPrincipal(dynamic admin): %v", err)
+	}
+	if len(roles) != 1 || roles[0].Role != "owner" {
+		t.Fatalf("workspace roles after provider-backed write = %+v, want [owner]", roles)
 	}
 	if err := authz.ReloadDynamic(context.Background()); err != nil {
-		t.Fatalf("ReloadDynamic after deleting legacy admin authorization: %v", err)
+		t.Fatalf("ReloadDynamic after provider-backed admin write: %v", err)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
@@ -3000,6 +3030,137 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 	if len(members) != 2 {
 		t.Fatalf("expected provider-backed merged admin members, got %d (%+v)", len(members), members)
 	}
+}
+
+func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyDynamicStores(t *testing.T) {
+	t.Parallel()
+
+	t.Run("plugin members", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		svc.PluginAuthorizations = nil
+		provider := newMemoryAuthorizationProvider("memory-authorization")
+		legacy, err := authorization.New(config.AuthorizationConfig{
+			Policies: map[string]config.HumanPolicyDef{
+				"sample_policy": {
+					Default: "deny",
+					Members: []config.HumanPolicyMemberDef{
+						{Email: "static@example.test", Role: "admin"},
+					},
+				},
+			},
+		}, map[string]*config.ProviderEntry{
+			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
+		}, nil, nil, nil)
+		if err != nil {
+			t.Fatalf("authorization.New: %v", err)
+		}
+		authz := authorization.NewProviderBacked(legacy, provider)
+		if err := authz.ReloadDynamic(context.Background()); err != nil {
+			t.Fatalf("ReloadDynamic: %v", err)
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "admin-session" {
+						return nil, fmt.Errorf("invalid token")
+					}
+					return &core.UserIdentity{Email: "static@example.test"}, nil
+				},
+			}
+			cfg.Services = svc
+			cfg.Authorizer = authz
+			cfg.AuthorizationProvider = provider
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
+			}
+			cfg.Admin = server.AdminRouteConfig{
+				AuthorizationPolicy: "sample_policy",
+				AllowedRoles:        []string{"admin"},
+			}
+			cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("admin"))
+			})
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		body := bytes.NewBufferString(`{"email":"dynamic@example.test","role":"viewer"}`)
+		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("PUT dynamic member: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			respBody, _ := io.ReadAll(resp.Body)
+			t.Fatalf("put dynamic member status = %d, want 200: %s", resp.StatusCode, respBody)
+		}
+	})
+
+	t.Run("admin members", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		svc.AdminAuthorizations = nil
+		provider := newMemoryAuthorizationProvider("memory-authorization")
+		seedUser(t, svc, "static-admin@example.test")
+		legacy := mustAuthorizer(t, config.AuthorizationConfig{
+			Policies: map[string]config.HumanPolicyDef{
+				"admin_policy": {
+					Default: "deny",
+					Members: []config.HumanPolicyMemberDef{
+						{Email: "static-admin@example.test", Role: "owner"},
+					},
+				},
+			},
+		}, nil, nil, nil)
+		authz := authorization.NewProviderBacked(legacy, provider)
+		if err := authz.ReloadDynamic(context.Background()); err != nil {
+			t.Fatalf("ReloadDynamic: %v", err)
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "admin-session" {
+						return nil, fmt.Errorf("invalid token")
+					}
+					return &core.UserIdentity{Email: "static-admin@example.test"}, nil
+				},
+			}
+			cfg.Services = svc
+			cfg.Authorizer = authz
+			cfg.AuthorizationProvider = provider
+			cfg.Admin = server.AdminRouteConfig{
+				AuthorizationPolicy: "admin_policy",
+				AllowedRoles:        []string{"owner", "operator"},
+			}
+			cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("admin"))
+			})
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		body := bytes.NewBufferString(`{"email":"dynamic-admin@example.test","role":"operator"}`)
+		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("PUT admin member: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			respBody, _ := io.ReadAll(resp.Body)
+			t.Fatalf("put admin member status = %d, want 200: %s", resp.StatusCode, respBody)
+		}
+	})
 }
 
 func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
