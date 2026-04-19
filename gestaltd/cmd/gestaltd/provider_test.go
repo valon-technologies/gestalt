@@ -107,7 +107,7 @@ func TestRun_ProviderCLIUsageAndErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			out, err := runPluginCommandResult("", tc.args...)
+			out, err := runProviderCommandResult("", tc.args...)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error for provider %v, got output: %s", tc.args, out)
@@ -129,11 +129,11 @@ func TestRun_ProviderCLIUsageAndErrors(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseRequiresVersion(t *testing.T) {
+func TestRun_ProviderReleaseRequiresVersion(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
-	out, err := runPluginCommandResult(pluginDir, "release")
+	out, err := runProviderCommandResult(pluginDir, "release")
 	if err == nil {
 		t.Fatal("expected error when --version missing")
 	}
@@ -142,7 +142,7 @@ func TestRun_PluginReleaseRequiresVersion(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseRejectsInvalidManifest(t *testing.T) {
+func TestRun_ProviderReleaseRejectsInvalidManifest(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -191,7 +191,7 @@ entrypoint:
 			}
 			writeTestFile(t, pluginDir, "manifest.yaml", []byte(tc.manifestYAML), 0644)
 
-			out, err := runPluginReleaseCommandResult(pluginDir, "--version", "0.0.1-test")
+			out, err := runProviderReleaseCommandResult(pluginDir, "--version", "0.0.1-test")
 			if err == nil {
 				t.Fatal("expected invalid manifest error")
 			}
@@ -202,7 +202,7 @@ entrypoint:
 	}
 }
 
-func TestE2EPluginReleaseBigquery(t *testing.T) {
+func TestE2EProviderReleaseBigquery(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := filepath.Join("..", "..", "..")
@@ -279,7 +279,7 @@ func TestE2EPluginReleaseBigquery(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testing.T) {
+func TestRun_ProviderReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake Python build fixture is POSIX-only")
 	}
@@ -291,7 +291,7 @@ func TestRun_PluginReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testing.
 	outputDir := t.TempDir()
 	const testVersion = "0.0.12-test"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
@@ -345,7 +345,7 @@ func TestRun_PluginReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testing.
 	}
 }
 
-func TestRun_PluginReleaseBuildsTypeScriptSourcePluginForCurrentPlatform(t *testing.T) {
+func TestRun_ProviderReleaseBuildsTypeScriptSourcePluginForCurrentPlatform(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake Bun build fixture is POSIX-only")
 	}
@@ -366,7 +366,7 @@ func TestRun_PluginReleaseBuildsTypeScriptSourcePluginForCurrentPlatform(t *test
 	outputDir := t.TempDir()
 	const testVersion = "0.0.12-ts"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
@@ -394,7 +394,7 @@ func TestRun_PluginReleaseBuildsTypeScriptSourcePluginForCurrentPlatform(t *test
 	}
 }
 
-func TestRun_PluginReleaseDefaultsSourcePluginToHostPlatform(t *testing.T) {
+func TestRun_ProviderReleaseDefaultsSourcePluginToHostPlatform(t *testing.T) {
 	t.Run("go", func(t *testing.T) {
 		t.Parallel()
 
@@ -402,7 +402,7 @@ func TestRun_PluginReleaseDefaultsSourcePluginToHostPlatform(t *testing.T) {
 		outputDir := t.TempDir()
 		const testVersion = "0.0.12-go-default"
 
-		runPluginReleaseCommand(t, pluginDir,
+		runProviderReleaseCommand(t, pluginDir,
 			"--version", testVersion,
 			"--output", outputDir,
 		)
@@ -425,7 +425,7 @@ func TestRun_PluginReleaseDefaultsSourcePluginToHostPlatform(t *testing.T) {
 		outputDir := t.TempDir()
 		const testVersion = "0.0.12-default"
 
-		runPluginReleaseCommand(t, pluginDir,
+		runProviderReleaseCommand(t, pluginDir,
 			"--version", testVersion,
 			"--output", outputDir,
 		)
@@ -437,7 +437,7 @@ func TestRun_PluginReleaseDefaultsSourcePluginToHostPlatform(t *testing.T) {
 	})
 }
 
-func TestRun_PluginReleaseBuildsRequestedPlatformSets(t *testing.T) {
+func TestRun_ProviderReleaseBuildsRequestedPlatformSets(t *testing.T) {
 	t.Run("go all", func(t *testing.T) {
 		t.Parallel()
 
@@ -445,7 +445,7 @@ func TestRun_PluginReleaseBuildsRequestedPlatformSets(t *testing.T) {
 		outputDir := t.TempDir()
 		const testVersion = "0.0.12-go-all"
 
-		runPluginReleaseCommand(t, pluginDir,
+		runProviderReleaseCommand(t, pluginDir,
 			"--version", testVersion,
 			"--platform", allPlatformsValue,
 			"--output", outputDir,
@@ -472,7 +472,7 @@ func TestRun_PluginReleaseBuildsRequestedPlatformSets(t *testing.T) {
 		outputDir := t.TempDir()
 		const testVersion = "0.0.12-python-all"
 
-		runPluginReleaseCommand(t, pluginDir,
+		runProviderReleaseCommand(t, pluginDir,
 			"--version", testVersion,
 			"--platform", allPlatformsValue,
 			"--output", outputDir,
@@ -501,7 +501,7 @@ func TestRun_PluginReleaseBuildsRequestedPlatformSets(t *testing.T) {
 		writeFakePythonReleaseInterpreter(t, crossPythonPath, otherGOOS, otherGOARCH)
 		t.Setenv(providerpkgPythonEnvVar(otherGOOS, otherGOARCH), crossPythonPath)
 
-		runPluginReleaseCommand(t, pluginDir,
+		runProviderReleaseCommand(t, pluginDir,
 			"--version", "0.0.13-test",
 			"--platform", runtime.GOOS+"/"+runtime.GOARCH+","+otherPlatform,
 			"--output", outputDir,
@@ -548,7 +548,7 @@ func TestRun_PluginReleaseBuildsRequestedPlatformSets(t *testing.T) {
 		outputDir := t.TempDir()
 		const testVersion = "0.0.12-ts-auth-all"
 
-		runPluginReleaseCommand(t, pluginDir,
+		runProviderReleaseCommand(t, pluginDir,
 			"--version", testVersion,
 			"--platform", allPlatformsValue,
 			"--output", outputDir,
@@ -565,7 +565,7 @@ func TestRun_PluginReleaseBuildsRequestedPlatformSets(t *testing.T) {
 	})
 }
 
-func TestRun_PluginReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.T) {
+func TestRun_ProviderReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake cargo test fixture is POSIX-only")
 	}
@@ -590,7 +590,7 @@ func TestRun_PluginReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.T)
 	outputDir := t.TempDir()
 	const testVersion = "0.0.12-rust-current"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 		"--output", outputDir,
@@ -651,7 +651,7 @@ func TestRun_PluginReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.T)
 	}
 }
 
-func TestRun_PluginReleaseBuildsRustSourcePluginForExplicitLinuxTarget(t *testing.T) {
+func TestRun_ProviderReleaseBuildsRustSourcePluginForExplicitLinuxTarget(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake cargo test fixture is POSIX-only")
 	}
@@ -680,7 +680,7 @@ func TestRun_PluginReleaseBuildsRustSourcePluginForExplicitLinuxTarget(t *testin
 	outputDir := t.TempDir()
 	const testVersion = "0.0.12-rust-musl"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--platform", "linux/amd64/musl",
 		"--output", outputDir,
@@ -696,7 +696,7 @@ func TestRun_PluginReleaseBuildsRustSourcePluginForExplicitLinuxTarget(t *testin
 	assertExpectedRustArtifactPlatform(t, manifest.Artifacts[0], "linux", "amd64", "musl")
 }
 
-func TestRun_PluginReleaseRejectsMissingCrossTargetInterpreterForPythonSourcePlugin(t *testing.T) {
+func TestRun_ProviderReleaseRejectsMissingCrossTargetInterpreterForPythonSourcePlugin(t *testing.T) {
 	t.Parallel()
 
 	if runtime.GOOS == "windows" {
@@ -708,7 +708,7 @@ func TestRun_PluginReleaseRejectsMissingCrossTargetInterpreterForPythonSourcePlu
 	otherGOOS, otherGOARCH := pythonReleaseOtherPlatform()
 	otherPlatform := otherGOOS + "/" + otherGOARCH
 
-	out, err := runPluginReleaseCommandResult(pluginDir,
+	out, err := runProviderReleaseCommandResult(pluginDir,
 		"--version", "0.0.13-test",
 		"--platform", otherPlatform,
 		"--output", outputDir,
@@ -721,7 +721,7 @@ func TestRun_PluginReleaseRejectsMissingCrossTargetInterpreterForPythonSourcePlu
 	}
 }
 
-func TestRun_PluginReleaseRejectsInvalidPythonProviderTarget(t *testing.T) {
+func TestRun_ProviderReleaseRejectsInvalidPythonProviderTarget(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := filepath.Join(t.TempDir(), "invalid-python-release")
@@ -754,7 +754,7 @@ plugin = "os import path\nimport os;os.system('cmd')#:attr"
 	}
 	writeTestFile(t, pluginDir, "manifest.yaml", manifestData, 0o644)
 
-	out, err := runPluginReleaseCommandResult(pluginDir, "--version", "0.0.14-test", "--output", t.TempDir())
+	out, err := runProviderReleaseCommandResult(pluginDir, "--version", "0.0.14-test", "--output", t.TempDir())
 	if err == nil {
 		t.Fatalf("expected invalid target error, got output: %s", out)
 	}
@@ -763,7 +763,7 @@ plugin = "os import path\nimport os;os.system('cmd')#:attr"
 	}
 }
 
-func TestRun_PluginReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
+func TestRun_ProviderReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
@@ -780,7 +780,7 @@ func TestRun_PluginReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 	outputDir := t.TempDir()
 	const testVersion = "0.0.15-test"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 		"--output", outputDir,
@@ -888,7 +888,7 @@ func TestRun_PluginReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseBuildsGoSourceAuthorizationProvider(t *testing.T) {
+func TestRun_ProviderReleaseBuildsGoSourceAuthorizationProvider(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
@@ -905,7 +905,7 @@ func TestRun_PluginReleaseBuildsGoSourceAuthorizationProvider(t *testing.T) {
 	outputDir := t.TempDir()
 	const testVersion = "0.0.18-test"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 		"--output", outputDir,
@@ -988,7 +988,7 @@ func TestRun_PluginReleaseBuildsGoSourceAuthorizationProvider(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
+func TestRun_ProviderReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
@@ -1005,7 +1005,7 @@ func TestRun_PluginReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 	outputDir := t.TempDir()
 	const testVersion = "0.0.19-test"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 		"--output", outputDir,
@@ -1049,7 +1049,7 @@ func TestRun_PluginReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseBuildsGoSourceWorkflowPlugin(t *testing.T) {
+func TestRun_ProviderReleaseBuildsGoSourceWorkflowPlugin(t *testing.T) {
 	t.Parallel()
 
 	const workflowReleasePluginName = "workflow-release"
@@ -1070,7 +1070,7 @@ func TestRun_PluginReleaseBuildsGoSourceWorkflowPlugin(t *testing.T) {
 	outputDir := t.TempDir()
 	const testVersion = "0.0.20-test"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 		"--output", outputDir,
@@ -1116,7 +1116,7 @@ func TestRun_PluginReleaseBuildsGoSourceWorkflowPlugin(t *testing.T) {
 }
 
 //nolint:paralleltest // Uses t.Setenv in table-driven subtests, which cannot run under parallel ancestors.
-func TestRun_PluginReleaseBuildsExecutableAuthProviders(t *testing.T) {
+func TestRun_ProviderReleaseBuildsExecutableAuthProviders(t *testing.T) {
 	goAuthFixture := func(t *testing.T) sourceComponentReleaseFixtureParams {
 		t.Helper()
 		return sourceComponentReleaseFixtureParams{
@@ -1252,7 +1252,7 @@ func TestRun_PluginReleaseBuildsExecutableAuthProviders(t *testing.T) {
 
 			pluginDir := tc.prepare(t)
 			outputDir := t.TempDir()
-			runPluginReleaseCommand(t, pluginDir,
+			runProviderReleaseCommand(t, pluginDir,
 				"--version", tc.version,
 				"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 				"--output", outputDir,
@@ -1279,14 +1279,14 @@ func TestRun_PluginReleaseBuildsExecutableAuthProviders(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseCopiesCompiledSupportFiles(t *testing.T) {
+func TestRun_ProviderReleaseCopiesCompiledSupportFiles(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 	testVersion := "0.0.2-test"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 		"--output", outputDir,
@@ -1309,14 +1309,14 @@ func TestRun_PluginReleaseCopiesCompiledSupportFiles(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseCopiesWebUISupportFiles(t *testing.T) {
+func TestRun_ProviderReleaseCopiesWebUISupportFiles(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newWebUIReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 	testVersion := "0.0.3-test"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
@@ -1357,7 +1357,7 @@ func TestRun_PluginReleaseCopiesWebUISupportFiles(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseStagesOwnedWebUIPackage(t *testing.T) {
+func TestRun_ProviderReleaseStagesOwnedWebUIPackage(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -1394,7 +1394,7 @@ func TestRun_PluginReleaseStagesOwnedWebUIPackage(t *testing.T) {
 			outputDir := t.TempDir()
 			testVersion := "0.0.3-owned-ui"
 
-			runPluginReleaseCommand(t, pluginDir,
+			runProviderReleaseCommand(t, pluginDir,
 				"--version", testVersion,
 				"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 				"--output", outputDir,
@@ -1520,7 +1520,7 @@ func TestRun_ProviderReleaseBuildsProviderSupportFilesBeforePackaging(t *testing
 	outputDir := t.TempDir()
 	const testVersion = "0.0.3-build-provider"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 		"--output", outputDir,
@@ -1548,7 +1548,7 @@ func TestRun_ProviderReleaseBuildsWebUIAssetsBeforePackaging(t *testing.T) {
 	outputDir := t.TempDir()
 	const testVersion = "0.0.3-build-webui"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
@@ -1570,7 +1570,7 @@ func TestRun_ProviderReleaseBuildsWebUIAssetsBeforePackaging(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseAllowsOverlappingSupportPaths(t *testing.T) {
+func TestRun_ProviderReleaseAllowsOverlappingSupportPaths(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := filepath.Join(t.TempDir(), "webui-overlap")
@@ -1593,7 +1593,7 @@ func TestRun_PluginReleaseAllowsOverlappingSupportPaths(t *testing.T) {
 	outputDir := t.TempDir()
 	const testVersion = "0.0.3-overlap.1"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
@@ -1607,7 +1607,7 @@ func TestRun_PluginReleaseAllowsOverlappingSupportPaths(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseTreatsGoModWithoutProviderPackageAsDeclarative(t *testing.T) {
+func TestRun_ProviderReleaseTreatsGoModWithoutProviderPackageAsDeclarative(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newWebUIReleaseFixture(t, t.TempDir())
@@ -1616,7 +1616,7 @@ func TestRun_PluginReleaseTreatsGoModWithoutProviderPackageAsDeclarative(t *test
 
 	writeTestFile(t, pluginDir, "go.mod", []byte("module example.com/webui-test\n\ngo 1.22\n"), 0644)
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
@@ -1632,14 +1632,14 @@ func TestRun_PluginReleaseTreatsGoModWithoutProviderPackageAsDeclarative(t *test
 	}
 }
 
-func TestRun_PluginReleaseWritesProviderReleaseMetadataForDeclarativePlugin(t *testing.T) {
+func TestRun_ProviderReleaseWritesProviderReleaseMetadataForDeclarativePlugin(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newDeclarativeProviderReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 	const testVersion = "0.0.4-declarative.1"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
@@ -1681,7 +1681,7 @@ func TestRun_PluginReleaseWritesProviderReleaseMetadataForDeclarativePlugin(t *t
 	}
 }
 
-func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *testing.T) {
+func TestRun_ProviderReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
@@ -1706,7 +1706,7 @@ func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *te
 	outputDir := t.TempDir()
 	const testVersion = "0.0.4-yaml.1"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
@@ -1742,7 +1742,7 @@ func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *te
 	}
 }
 
-func TestRun_PluginReleaseSupportsSourcePackageManifestFile(t *testing.T) {
+func TestRun_ProviderReleaseSupportsSourcePackageManifestFile(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
@@ -1763,7 +1763,7 @@ func TestRun_PluginReleaseSupportsSourcePackageManifestFile(t *testing.T) {
 	outputDir := t.TempDir()
 	const testVersion = "0.0.4-source.1"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
@@ -1779,17 +1779,17 @@ func TestRun_PluginReleaseSupportsSourcePackageManifestFile(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseChecksumsOnlyCurrentArchives(t *testing.T) {
+func TestRun_ProviderReleaseChecksumsOnlyCurrentArchives(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newWebUIReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", "1.0.0",
 		"--output", outputDir,
 	)
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", "1.0.1",
 		"--output", outputDir,
 	)
@@ -1806,13 +1806,13 @@ func TestRun_PluginReleaseChecksumsOnlyCurrentArchives(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseRejectsOutputInsideWebUIAssetRoot(t *testing.T) {
+func TestRun_ProviderReleaseRejectsOutputInsideWebUIAssetRoot(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newWebUIReleaseFixtureWithAssetRoot(t, t.TempDir(), "release-output")
 	outputDir := filepath.Join(pluginDir, "release-output", "nested")
 
-	out, err := runPluginReleaseCommandResult(pluginDir, "--version", "1.0.0", "--output", outputDir)
+	out, err := runProviderReleaseCommandResult(pluginDir, "--version", "1.0.0", "--output", outputDir)
 	if err == nil {
 		t.Fatalf("expected provider release to fail, got output: %s", out)
 	}
@@ -1821,7 +1821,7 @@ func TestRun_PluginReleaseRejectsOutputInsideWebUIAssetRoot(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseRejectsHybridExecutableDuplicateEffectiveOperation(t *testing.T) {
+func TestRun_ProviderReleaseRejectsHybridExecutableDuplicateEffectiveOperation(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
@@ -1861,7 +1861,7 @@ paths:
 		t.Fatalf("WriteFile openapi.yaml: %v", err)
 	}
 
-	out, err := runPluginReleaseCommandResult(pluginDir, "--version", "0.0.4-source.1", "--platform", runtime.GOOS+"/"+runtime.GOARCH, "--output", t.TempDir())
+	out, err := runProviderReleaseCommandResult(pluginDir, "--version", "0.0.4-source.1", "--platform", runtime.GOOS+"/"+runtime.GOARCH, "--output", t.TempDir())
 	if err == nil {
 		t.Fatalf("expected provider release to fail, got output: %s", out)
 	}
@@ -1870,14 +1870,14 @@ paths:
 	}
 }
 
-func TestRun_PluginReleaseCompilesProviderWithoutSourceArtifacts(t *testing.T) {
+func TestRun_ProviderReleaseCompilesProviderWithoutSourceArtifacts(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceProviderReleaseFixtureWithoutCatalog(t, t.TempDir())
 	outputDir := t.TempDir()
 	const testVersion = "0.0.4-source.1"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 		"--output", outputDir,
@@ -1905,7 +1905,7 @@ func TestRun_PluginReleaseCompilesProviderWithoutSourceArtifacts(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoint(t *testing.T) {
+func TestRun_ProviderReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoint(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -1970,7 +1970,7 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 			}
 			writeReleaseTestManifest(t, pluginDir, tc.manifest)
 
-			out, err := runPluginReleaseCommandResult(pluginDir, "--version", "0.0.1-test", "--output", t.TempDir())
+			out, err := runProviderReleaseCommandResult(pluginDir, "--version", "0.0.1-test", "--output", t.TempDir())
 			if err == nil {
 				t.Fatalf("expected missing source error, got output: %s", out)
 			}
@@ -1981,14 +1981,14 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 	}
 }
 
-func TestRun_PluginReleasePreservesPrebuiltProvider(t *testing.T) {
+func TestRun_ProviderReleasePreservesPrebuiltProvider(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newPrebuiltProviderReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 	const testVersion = "0.0.5-test"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
@@ -2036,7 +2036,7 @@ func TestRun_PluginReleasePreservesPrebuiltProvider(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleasePackagesGoModuleWithoutCmdAsSource(t *testing.T) {
+func TestRun_ProviderReleasePackagesGoModuleWithoutCmdAsSource(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newPrebuiltProviderReleaseFixture(t, t.TempDir())
@@ -2045,7 +2045,7 @@ func TestRun_PluginReleasePackagesGoModuleWithoutCmdAsSource(t *testing.T) {
 	outputDir := t.TempDir()
 	const testVersion = "0.0.6-test"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
@@ -2065,7 +2065,7 @@ func TestRun_PluginReleasePackagesGoModuleWithoutCmdAsSource(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseRejectsStaleSourceArtifactDigest(t *testing.T) {
+func TestRun_ProviderReleaseRejectsStaleSourceArtifactDigest(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newPrebuiltProviderReleaseFixture(t, t.TempDir())
@@ -2084,7 +2084,7 @@ func TestRun_PluginReleaseRejectsStaleSourceArtifactDigest(t *testing.T) {
 	}
 	writeReleaseTestManifest(t, pluginDir, manifest)
 
-	out, err := runPluginReleaseCommandResult(pluginDir, "--version", "0.0.8-test")
+	out, err := runProviderReleaseCommandResult(pluginDir, "--version", "0.0.8-test")
 	if err == nil {
 		t.Fatal("expected stale digest error")
 	}
@@ -2093,7 +2093,7 @@ func TestRun_PluginReleaseRejectsStaleSourceArtifactDigest(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseWindowsArtifactUsesExe(t *testing.T) {
+func TestRun_ProviderReleaseWindowsArtifactUsesExe(t *testing.T) {
 	t.Parallel()
 
 	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
@@ -2101,7 +2101,7 @@ func TestRun_PluginReleaseWindowsArtifactUsesExe(t *testing.T) {
 	const testVersion = "0.0.9-test"
 	const windowsPlatform = "windows/amd64"
 
-	runPluginReleaseCommand(t, pluginDir,
+	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--platform", windowsPlatform,
 		"--output", outputDir,
@@ -3406,25 +3406,25 @@ func writeReleaseBuildScript(t *testing.T, dir, rel, body string) {
 	writeTestFile(t, dir, rel, []byte("#!/bin/sh\nset -eu\n"+body), 0o755)
 }
 
-func runPluginReleaseCommand(t *testing.T, pluginDir string, args ...string) string {
+func runProviderReleaseCommand(t *testing.T, pluginDir string, args ...string) string {
 	t.Helper()
 
-	out, err := runPluginReleaseCommandResult(pluginDir, args...)
+	out, err := runProviderReleaseCommandResult(pluginDir, args...)
 	if err != nil {
 		t.Fatalf("provider release failed: %v\n%s", err, out)
 	}
 	return string(out)
 }
 
-func runPluginCommandResult(pluginDir string, args ...string) ([]byte, error) {
+func runProviderCommandResult(pluginDir string, args ...string) ([]byte, error) {
 	cmdArgs := append([]string{"provider"}, args...)
 	cmd := exec.Command(gestaltdBin, cmdArgs...)
 	cmd.Dir = pluginDir
 	return cmd.CombinedOutput()
 }
 
-func runPluginReleaseCommandResult(pluginDir string, args ...string) ([]byte, error) {
-	return runPluginCommandResult(pluginDir, append([]string{"release"}, args...)...)
+func runProviderReleaseCommandResult(pluginDir string, args ...string) ([]byte, error) {
+	return runProviderCommandResult(pluginDir, append([]string{"release"}, args...)...)
 }
 
 func extractReleasedArchive(t *testing.T, outputDir, archiveName string) string {
