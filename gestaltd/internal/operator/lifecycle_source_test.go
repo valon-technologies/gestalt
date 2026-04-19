@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -1222,16 +1223,22 @@ func TestSourcePluginMetadataURLUsesGitHubReleaseDownloadTransport(t *testing.T)
 		}
 	}
 
-	metadataPath := "/providers/alpha/provider-release.yaml"
+	githubMetadataPath := "/" + testOwner + "/" + testRepo + "/releases/download/plugin/" + testPlugin + "/" + version + "/provider-release.yaml"
+	githubMetadataURL := "https://github.com" + githubMetadataPath
 	githubArchivePath := "/" + testOwner + "/" + testRepo + "/releases/download/plugin/" + testPlugin + "/" + version + "/alpha-current.tar.gz"
 	githubArchiveURL := "https://github.com" + githubArchivePath
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath:
+		case githubMetadataPath:
 			metadataCount.Add(1)
-			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
-				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "token test-token")
 				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("metadata accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad metadata accept", http.StatusBadRequest)
 				return
 			}
 			metadata := providerReleaseMetadata{
@@ -1282,7 +1289,7 @@ func TestSourcePluginMetadataURLUsesGitHubReleaseDownloadTransport(t *testing.T)
 		"apiVersion: " + config.APIVersionV3,
 		"plugins:",
 		"  alpha:",
-		"    source: " + srv.URL + metadataPath,
+		"    source: " + githubMetadataURL,
 		"    auth:",
 		"      token: test-token",
 		"server:",
@@ -1350,6 +1357,82 @@ func TestSourcePluginMetadataURLUsesGitHubReleaseDownloadTransport(t *testing.T)
 	}
 	if cfg.Plugins["alpha"] == nil || cfg.Plugins["alpha"].ResolvedManifest == nil {
 		t.Fatal("resolved metadata plugin manifest missing after locked load")
+	}
+}
+
+func TestSourcePluginMetadataURLRejectsOversizedGitHubReleaseMetadata(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	var metadataCount atomic.Int64
+	handlerErrs := make(chan error, 2)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+
+	githubMetadataPath := "/" + testOwner + "/" + testRepo + "/releases/download/plugin/" + testPlugin + "/v" + testVersion + "/provider-release.yaml"
+	githubMetadataURL := "https://github.com" + githubMetadataPath
+	oversizedBody := bytes.Repeat([]byte("x"), providerReleaseMetadataMaxBytes+1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != githubMetadataPath {
+			http.NotFound(w, r)
+			return
+		}
+		metadataCount.Add(1)
+		if got := r.Header.Get("Authorization"); got != "token test-token" {
+			handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "token test-token")
+			http.Error(w, "bad metadata authorization", http.StatusBadRequest)
+			return
+		}
+		if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+			handlerErrs <- fmt.Errorf("metadata accept = %q, want %q", got, "application/octet-stream")
+			http.Error(w, "bad metadata accept", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write(oversizedBody)
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"apiVersion: " + config.APIVersionV3,
+		"plugins:",
+		"  alpha:",
+		"    source: " + githubMetadataURL,
+		"    auth:",
+		"      token: test-token",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle().WithHTTPClient(newGitHubRewriteClient(t, srv.URL))
+	_, err := lc.InitAtPath(configPath)
+	if err == nil {
+		t.Fatal("InitAtPath unexpectedly succeeded")
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("provider release metadata exceeds %d byte limit", providerReleaseMetadataMaxBytes)) {
+		t.Fatalf("InitAtPath error = %v, want metadata size limit", err)
+	}
+	if got := metadataCount.Load(); got != 1 {
+		t.Fatalf("metadata request count = %d, want 1", got)
 	}
 }
 

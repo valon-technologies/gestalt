@@ -30,12 +30,12 @@ func ResolveGitHubToken(token string) string {
 	return ""
 }
 
-func DownloadGitHubReleaseArchive(ctx context.Context, client *http.Client, archiveURL, token string) (*providerpkg.DownloadResult, error) {
+func DownloadGitHubReleaseAsset(ctx context.Context, client *http.Client, assetURL, token string) (*providerpkg.DownloadResult, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
 	token = ResolveGitHubToken(token)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, archiveURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, assetURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create GitHub release download request: %w", err)
 	}
@@ -44,4 +44,8 @@ func DownloadGitHubReleaseArchive(ctx context.Context, client *http.Client, arch
 		req.Header.Set(headerAuthorization, authTokenPrefix+token)
 	}
 	return providerpkg.DownloadRequest(client, req)
+}
+
+func DownloadGitHubReleaseArchive(ctx context.Context, client *http.Client, archiveURL, token string) (*providerpkg.DownloadResult, error) {
+	return DownloadGitHubReleaseAsset(ctx, client, archiveURL, token)
 }

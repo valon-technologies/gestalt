@@ -29,6 +29,8 @@ const (
 	providerReleaseRuntimeDeclarative = "declarative"
 	providerReleaseRuntimeWebUI       = "webui"
 	providerReleaseMetadataMaxBytes   = 4 << 20
+	httpAcceptHeader                  = "Accept"
+	httpAcceptOctetStream             = "application/octet-stream"
 	httpAuthorizationHeader           = "Authorization"
 	httpBearerAuthorizationPrefix     = "Bearer "
 )
@@ -129,12 +131,9 @@ func validateProviderReleaseMetadata(metadata *providerReleaseMetadata) error {
 
 func fetchProviderReleaseMetadata(ctx context.Context, client *http.Client, metadataURL, token string) (*providerReleaseMetadata, error) {
 	if !isRemoteReleaseMetadataLocation(metadataURL) {
-		data, err := os.ReadFile(metadataURL)
+		data, err := readProviderReleaseMetadataFile(metadataURL)
 		if err != nil {
-			return nil, fmt.Errorf("read provider release metadata: %w", err)
-		}
-		if len(data) > providerReleaseMetadataMaxBytes {
-			return nil, fmt.Errorf("provider release metadata exceeds %d byte limit", providerReleaseMetadataMaxBytes)
+			return nil, err
 		}
 		return decodeProviderReleaseMetadata(data)
 	}
@@ -144,6 +143,9 @@ func fetchProviderReleaseMetadata(ctx context.Context, client *http.Client, meta
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metadataURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create provider release metadata request: %w", err)
+	}
+	if usesGitHubMetadataTransport(metadataURL) {
+		req.Header.Set(httpAcceptHeader, httpAcceptOctetStream)
 	}
 	if authHeader := authorizationHeaderForSourceLocation(metadataURL, token); authHeader != "" {
 		req.Header.Set(httpAuthorizationHeader, authHeader)
@@ -164,6 +166,17 @@ func fetchProviderReleaseMetadata(ctx context.Context, client *http.Client, meta
 		return nil, fmt.Errorf("provider release metadata exceeds %d byte limit", providerReleaseMetadataMaxBytes)
 	}
 	return decodeProviderReleaseMetadata(data)
+}
+
+func readProviderReleaseMetadataFile(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read provider release metadata: %w", err)
+	}
+	if len(data) > providerReleaseMetadataMaxBytes {
+		return nil, fmt.Errorf("provider release metadata exceeds %d byte limit", providerReleaseMetadataMaxBytes)
+	}
+	return data, nil
 }
 
 func providerReleaseArchives(metadataURL string, metadata *providerReleaseMetadata) (map[string]LockArchive, error) {
