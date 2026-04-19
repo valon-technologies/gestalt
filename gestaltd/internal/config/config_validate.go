@@ -274,6 +274,9 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry, source
 	if src.IsMetadataURL() {
 		modeCount++
 	}
+	if src.IsGitHubRelease() {
+		modeCount++
+	}
 	if src.IsLocalMetadataPath() {
 		modeCount++
 	}
@@ -302,8 +305,25 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry, source
 			return fmt.Errorf("config validation: %s %q source metadata URL must be an absolute http(s) URL", kind, name)
 		}
 	}
+	if src.IsGitHubRelease() {
+		release := src.GitHubReleaseSource()
+		switch {
+		case release == nil:
+			return fmt.Errorf("config validation: %s %q githubRelease source is required", kind, name)
+		case strings.TrimSpace(release.Repo) == "":
+			return fmt.Errorf("config validation: %s %q source.githubRelease.repo is required", kind, name)
+		case strings.TrimSpace(release.Tag) == "":
+			return fmt.Errorf("config validation: %s %q source.githubRelease.tag is required", kind, name)
+		case strings.TrimSpace(release.Asset) == "":
+			return fmt.Errorf("config validation: %s %q source.githubRelease.asset is required", kind, name)
+		}
+		repoParts := strings.Split(strings.TrimSpace(release.Repo), "/")
+		if len(repoParts) != 2 || strings.TrimSpace(repoParts[0]) == "" || strings.TrimSpace(repoParts[1]) == "" {
+			return fmt.Errorf("config validation: %s %q source.githubRelease.repo must be owner/name", kind, name)
+		}
+	}
 	if auth != nil {
-		if !src.IsMetadataURL() && !src.IsLocalMetadataPath() {
+		if !src.IsMetadataURL() && !src.IsGitHubRelease() && !src.IsLocalMetadataPath() {
 			return fmt.Errorf("config validation: %s %q auth is only valid with provider-release metadata sources", kind, name)
 		}
 		if strings.TrimSpace(auth.Token) == "" {

@@ -1152,10 +1152,10 @@ func providerSourceLockLocation(entry *config.ProviderEntry, configDir string) s
 
 func resolveLockedArchiveLocation(configDir, sourceLocation, archiveRef string) (string, error) {
 	if isRemoteReleaseMetadataLocation(sourceLocation) {
-		return resolveArchiveSourceLocation(sourceLocation, archiveRef)
+		return resolveArchiveSourceLocation(sourceLocation, archiveRef, nil)
 	}
 	metadataPath := resolveLockPath(configDir, sourceLocation)
-	return resolveArchiveSourceLocation(metadataPath, archiveRef)
+	return resolveArchiveSourceLocation(metadataPath, archiveRef, nil)
 }
 
 func fingerprintLocalSourcePath(sourcePath, configDir string) string {
@@ -1553,7 +1553,7 @@ func localUILockEntryFromPreparedInstall(paths initPaths, name string, plugin *c
 
 func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKind, name, subject, destDir string, plugin *config.ProviderEntry, configDir string) (*pluginstore.InstalledPlugin, LockEntry, error) {
 	sourceLocation := plugin.SourceReleaseLocation()
-	metadata, err := fetchProviderReleaseMetadata(ctx, l.metadataHTTPClient(), sourceLocation, sourceAuthToken(plugin))
+	metadata, resolvedMetadataLocation, gitHubReleaseAssets, err := fetchProviderReleaseMetadata(ctx, l.metadataHTTPClient(), sourceLocation, sourceAuthToken(plugin))
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("%s fetch metadata %q: %w", subject, sourceLocation, err)
 	}
@@ -1561,7 +1561,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	if metadata.Kind != expectedManifestKind {
 		return nil, LockEntry{}, fmt.Errorf("%s metadata kind %q does not match expected kind %q", subject, metadata.Kind, expectedManifestKind)
 	}
-	archives, err := providerReleaseArchives(sourceLocation, metadata)
+	archives, err := providerReleaseArchives(resolvedMetadataLocation, metadata, gitHubReleaseAssets)
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("%s resolve archive metadata %q: %w", subject, sourceLocation, err)
 	}

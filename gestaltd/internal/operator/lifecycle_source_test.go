@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -34,6 +35,12 @@ const (
 	testSource  = "github.com/" + testOwner + "/" + testRepo + "/plugins/" + testPlugin
 	testBinary  = "fake-binary-content"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func sha256hex(data string) string {
 	sum := sha256.Sum256([]byte(data))
@@ -1332,6 +1339,181 @@ func TestSourcePluginMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 	}
 	if cfg.Plugins["alpha"] == nil || cfg.Plugins["alpha"].ResolvedManifest == nil {
 		t.Fatal("resolved metadata plugin manifest missing after locked load")
+	}
+}
+
+func TestSourcePluginGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	archivePath := buildV2Archive(t, dir, testSource, testVersion, testBinary)
+	currentArchiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	currentArchiveSHA := sha256.Sum256(currentArchiveData)
+
+	const (
+		repo         = "valon-technologies/toolshed"
+		tag          = "plugins/workplace-hub/v0.0.1-alpha.1"
+		metadataID   = int64(101)
+		archiveID    = int64(202)
+		metadataName = "provider-release.yaml"
+		archiveName  = "alpha-current.tar.gz"
+	)
+
+	archiveAssetURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/assets/%d", repo, archiveID)
+	logicalSource := "github-release://github.com/valon-technologies/toolshed?asset=provider-release.yaml&tag=plugins%2Fworkplace-hub%2Fv0.0.1-alpha.1"
+
+	var releaseCount atomic.Int64
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	handlerErrs := make(chan error, 8)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		escapedPath := r.URL.EscapedPath()
+		switch {
+		case escapedPath == "/repos/valon-technologies/toolshed/releases/tags/"+url.PathEscape(tag) || r.URL.Path == "/repos/valon-technologies/toolshed/releases/tags/"+tag:
+			releaseCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("release authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad release authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/vnd.github+json" {
+				handlerErrs <- fmt.Errorf("release accept = %q, want %q", got, "application/vnd.github+json")
+				http.Error(w, "bad release accept", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"assets":[{"id":%d,"name":"%s"},{"id":%d,"name":"%s"}]}`, metadataID, metadataName, archiveID, archiveName)))
+		case escapedPath == fmt.Sprintf("/repos/%s/releases/assets/%d", repo, metadataID):
+			metadataCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("metadata accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad metadata accept", http.StatusBadRequest)
+				return
+			}
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       testSource,
+				Kind:          providermanifestv1.KindPlugin,
+				Version:       testVersion,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   "./" + archiveName,
+						SHA256: hex.EncodeToString(currentArchiveSHA[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case escapedPath == fmt.Sprintf("/repos/%s/releases/assets/%d", repo, archiveID):
+			archiveCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("archive authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad archive authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("archive accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad archive accept", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(currentArchiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	baseURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse server url: %v", err)
+	}
+	serverClient := srv.Client()
+	client := &http.Client{
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			clone := req.Clone(req.Context())
+			clone.URL.Scheme = baseURL.Scheme
+			clone.URL.Host = baseURL.Host
+			clone.Host = baseURL.Host
+			return serverClient.Transport.RoundTrip(clone)
+		}),
+	}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"apiVersion: " + config.APIVersionV3,
+		"plugins:",
+		"  alpha:",
+		"    source:",
+		"      githubRelease:",
+		"        repo: " + repo,
+		"        tag: " + tag,
+		"        asset: " + metadataName,
+		"    auth:",
+		"      token: test-token",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle().WithHTTPClient(client)
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	entry, ok := lock.Providers["alpha"]
+	if !ok {
+		t.Fatal(`lock.Providers["alpha"] not found`)
+	}
+	if entry.Source != logicalSource {
+		t.Fatalf("lock source = %q, want %q", entry.Source, logicalSource)
+	}
+	if got := entry.Archives[providerpkg.CurrentPlatformString()].URL; got != archiveAssetURL {
+		t.Fatalf("current archive URL = %q, want %q", got, archiveAssetURL)
+	}
+	if got := releaseCount.Load(); got != 1 {
+		t.Fatalf("release request count = %d, want 1", got)
+	}
+	if got := metadataCount.Load(); got != 1 {
+		t.Fatalf("metadata request count = %d, want 1", got)
+	}
+	if got := archiveCount.Load(); got != 1 {
+		t.Fatalf("archive request count = %d, want 1", got)
+	}
+	if err := nextHandlerErr(); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -702,7 +702,18 @@ Every plugin uses a `source` block to declare its backing provider.
 source: https://artifacts.example.com/plugin/github/v1.2.3/provider-release.yaml
 ```
 
-For published providers, `source` points at a `provider-release.yaml` metadata URL. For local development, `source` can point directly at a provider manifest path instead.
+For published providers, `source` can point at a `provider-release.yaml`
+metadata URL directly, or it can describe a GitHub release logically:
+
+```yaml
+source:
+  githubRelease:
+    repo: valon-technologies/toolshed
+    tag: plugins/github/v1.2.3
+    asset: provider-release.yaml
+```
+
+For local development, `source` can point directly at a provider manifest path instead.
 
 For local development with a source provider package:
 

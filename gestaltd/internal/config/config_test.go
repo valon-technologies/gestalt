@@ -1088,6 +1088,61 @@ plugins:
 		}
 	})
 
+	t.Run("apiVersion preserves github release metadata sources", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    custom_tool:
+      source:
+        githubRelease:
+          repo: valon-technologies/toolshed
+          tag: plugins/custom-tool/v0.0.1-alpha.1
+          asset: provider-release.yaml
+      auth:
+        token: test-token
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		entry := cfg.Plugins["custom_tool"]
+		wantLocation := "github-release://github.com/valon-technologies/toolshed?asset=provider-release.yaml&tag=plugins%2Fcustom-tool%2Fv0.0.1-alpha.1"
+		if got := entry.SourceRemoteLocation(); got != wantLocation {
+			t.Fatalf("SourceRemoteLocation = %q, want %q", got, wantLocation)
+		}
+		release := entry.Source.GitHubReleaseSource()
+		if release == nil || release.Repo != "valon-technologies/toolshed" || release.Tag != "plugins/custom-tool/v0.0.1-alpha.1" || release.Asset != "provider-release.yaml" {
+			t.Fatalf("Source.GitHubRelease = %#v", release)
+		}
+		if entry.Source.Auth == nil || entry.Source.Auth.Token != "test-token" {
+			t.Fatalf("Source.Auth = %#v", entry.Source.Auth)
+		}
+		marshaled, err := yaml.Marshal(entry)
+		if err != nil {
+			t.Fatalf("yaml.Marshal: %v", err)
+		}
+		var roundTripped map[string]any
+		if err := yaml.Unmarshal(marshaled, &roundTripped); err != nil {
+			t.Fatalf("yaml.Unmarshal: %v", err)
+		}
+		source, ok := roundTripped["source"].(map[string]any)
+		if !ok {
+			t.Fatalf("round-tripped source = %#v", roundTripped["source"])
+		}
+		githubRelease, ok := source["githubRelease"].(map[string]any)
+		if !ok || githubRelease["repo"] != "valon-technologies/toolshed" || githubRelease["tag"] != "plugins/custom-tool/v0.0.1-alpha.1" || githubRelease["asset"] != "provider-release.yaml" {
+			t.Fatalf("round-tripped githubRelease = %#v", source["githubRelease"])
+		}
+		auth, ok := roundTripped["auth"].(map[string]any)
+		if !ok || auth["token"] != "test-token" {
+			t.Fatalf("round-tripped auth = %#v", roundTripped["auth"])
+		}
+	})
+
 	t.Run("apiVersion moves sibling auth onto local release metadata sources", func(t *testing.T) {
 		t.Parallel()
 
@@ -3215,6 +3270,51 @@ plugins:
       auth:
         token: test-token
 `,
+		},
+		{
+			name: "apiVersion github release source with sibling auth is valid",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    external:
+      source:
+        githubRelease:
+          repo: valon-technologies/toolshed
+          tag: plugins/external/v1.2.3
+          asset: provider-release.yaml
+      auth:
+        token: test-token
+`,
+		},
+		{
+			name: "apiVersion github release source requires repo",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    external:
+      source:
+        githubRelease:
+          tag: plugins/external/v1.2.3
+          asset: provider-release.yaml
+`,
+			wantErr: "source.githubRelease.repo is required",
+		},
+		{
+			name: "apiVersion github release source requires owner slash name",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    external:
+      source:
+        githubRelease:
+          repo: valon-technologies
+          tag: plugins/external/v1.2.3
+          asset: provider-release.yaml
+`,
+			wantErr: "source.githubRelease.repo must be owner/name",
 		},
 		{
 			name: "apiVersion rejects nested source auth compatibility shape",
