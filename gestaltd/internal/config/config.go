@@ -102,17 +102,25 @@ type ServerProvidersConfig struct {
 // UnmarshalYAML:
 //   - Builtin:  source: "name"                               -> ProviderSource{Builtin: "name"}
 //   - Metadata: source: "https://.../provider-release.yaml"  -> ProviderSource{metadataURL: "..."}
+//   - GitHub:   source: {githubRelease: {repo, tag, asset}}  -> ProviderSource{GitHubRelease: ...}
 //   - Local:    source: {path} or source: "./manifest.yaml"  -> ProviderSource{Path: "..."} in v3
 //   - Local:    source: {path} or source: "./dist/provider-release.yaml"
 //     -> ProviderSource{metadataPath: "..."} in v4
 type ProviderSource struct {
-	Builtin      string         `yaml:"-"`
-	scalar       string         `yaml:"-"`
-	metadataURL  string         `yaml:"-"`
-	metadataPath string         `yaml:"-"`
-	unsupported  string         `yaml:"-"`
-	Path         string         `yaml:"path,omitempty"`
-	Auth         *SourceAuthDef `yaml:"auth,omitempty"`
+	Builtin       string                  `yaml:"-"`
+	scalar        string                  `yaml:"-"`
+	metadataURL   string                  `yaml:"-"`
+	metadataPath  string                  `yaml:"-"`
+	unsupported   string                  `yaml:"-"`
+	GitHubRelease *GitHubReleaseSourceDef `yaml:"githubRelease,omitempty"`
+	Path          string                  `yaml:"path,omitempty"`
+	Auth          *SourceAuthDef          `yaml:"auth,omitempty"`
+}
+
+type GitHubReleaseSourceDef struct {
+	Repo  string `yaml:"repo,omitempty"`
+	Tag   string `yaml:"tag,omitempty"`
+	Asset string `yaml:"asset,omitempty"`
 }
 
 func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
@@ -165,6 +173,12 @@ func (s ProviderSource) MarshalYAML() (any, error) {
 	if s.metadataURL != "" && s.Path == "" && s.metadataPath == "" {
 		return s.metadataURL, nil
 	}
+	if s.GitHubRelease != nil && s.Path == "" && s.metadataPath == "" {
+		type raw struct {
+			GitHubRelease *GitHubReleaseSourceDef `yaml:"githubRelease,omitempty"`
+		}
+		return raw{GitHubRelease: cloneGitHubReleaseSourceDef(s.GitHubRelease)}, nil
+	}
 	if s.scalar != "" && s.Path == "" && s.metadataPath == "" {
 		return s.scalar, nil
 	}
@@ -178,16 +192,27 @@ func (s ProviderSource) MarshalYAML() (any, error) {
 	return raw(s), nil
 }
 
-func (s ProviderSource) IsBuiltin() bool     { return s.Builtin != "" }
-func (s ProviderSource) IsMetadataURL() bool { return s.metadataURL != "" }
-func (s ProviderSource) IsLocal() bool       { return s.Path != "" }
+func (s ProviderSource) IsBuiltin() bool       { return s.Builtin != "" }
+func (s ProviderSource) IsMetadataURL() bool   { return s.metadataURL != "" }
+func (s ProviderSource) IsGitHubRelease() bool { return s.GitHubRelease != nil }
+func (s ProviderSource) IsLocal() bool         { return s.Path != "" }
 func (s ProviderSource) IsLocalMetadataPath() bool {
 	return s.metadataPath != ""
 }
 func (s ProviderSource) MetadataURL() string  { return s.metadataURL }
 func (s ProviderSource) MetadataPath() string { return s.metadataPath }
+func (s ProviderSource) GitHubReleaseSource() *GitHubReleaseSourceDef {
+	return cloneGitHubReleaseSourceDef(s.GitHubRelease)
+}
 func (s ProviderSource) UnsupportedURL() string {
 	return s.unsupported
+}
+
+func (s ProviderSource) GitHubReleaseLocation() string {
+	if s.GitHubRelease == nil {
+		return ""
+	}
+	return s.GitHubRelease.Location()
 }
 
 func NewMetadataSource(rawURL string) ProviderSource {
@@ -196,6 +221,35 @@ func NewMetadataSource(rawURL string) ProviderSource {
 
 func NewLocalReleaseMetadataSource(rawPath string) ProviderSource {
 	return ProviderSource{metadataPath: strings.TrimSpace(rawPath)}
+}
+
+func cloneGitHubReleaseSourceDef(src *GitHubReleaseSourceDef) *GitHubReleaseSourceDef {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	cloned.Repo = strings.TrimSpace(cloned.Repo)
+	cloned.Tag = strings.TrimSpace(cloned.Tag)
+	cloned.Asset = strings.TrimSpace(cloned.Asset)
+	return &cloned
+}
+
+func (g GitHubReleaseSourceDef) Location() string {
+	repo := strings.TrimSpace(g.Repo)
+	tag := strings.TrimSpace(g.Tag)
+	asset := strings.TrimSpace(g.Asset)
+	if repo == "" || tag == "" || asset == "" {
+		return ""
+	}
+	return (&url.URL{
+		Scheme: "github-release",
+		Host:   "github.com",
+		Path:   "/" + repo,
+		RawQuery: url.Values{
+			"tag":   []string{tag},
+			"asset": []string{asset},
+		}.Encode(),
+	}).String()
 }
 
 // ProviderEntry is the universal configuration for any provider.
@@ -334,19 +388,19 @@ type UIEntry struct {
 }
 
 func (e *ProviderEntry) HasMetadataSource() bool {
-	return e != nil && e.Source.IsMetadataURL()
+	return e != nil && (e.Source.IsMetadataURL() || e.Source.IsGitHubRelease())
 }
 
 func (e *ProviderEntry) HasReleaseMetadataSource() bool {
-	return e != nil && (e.Source.IsMetadataURL() || e.Source.IsLocalMetadataPath())
+	return e != nil && (e.Source.IsMetadataURL() || e.Source.IsGitHubRelease() || e.Source.IsLocalMetadataPath())
 }
 
 func (e *ProviderEntry) HasRemoteSource() bool {
-	return e != nil && e.Source.IsMetadataURL()
+	return e != nil && (e.Source.IsMetadataURL() || e.Source.IsGitHubRelease())
 }
 
 func (e *ProviderEntry) HasRemoteReleaseSource() bool {
-	return e != nil && e.Source.IsMetadataURL()
+	return e != nil && (e.Source.IsMetadataURL() || e.Source.IsGitHubRelease())
 }
 
 func (e *ProviderEntry) HasLocalSource() bool {
@@ -371,6 +425,9 @@ func (e *ProviderEntry) SourceRemoteLocation() string {
 	if e.Source.IsMetadataURL() {
 		return e.Source.MetadataURL()
 	}
+	if e.Source.IsGitHubRelease() {
+		return e.Source.GitHubReleaseLocation()
+	}
 	return ""
 }
 
@@ -380,6 +437,9 @@ func (e *ProviderEntry) SourceReleaseLocation() string {
 	}
 	if e.Source.IsMetadataURL() {
 		return e.Source.MetadataURL()
+	}
+	if e.Source.IsGitHubRelease() {
+		return e.Source.GitHubReleaseLocation()
 	}
 	if e.Source.IsLocalMetadataPath() {
 		return e.Source.MetadataPath()
@@ -1644,7 +1704,10 @@ func normalizeProviderSource(kind string, source *ProviderSource, sourceSyntax p
 		source.metadataPath = source.Path
 		source.Path = ""
 	}
-	if source.Builtin != "" || source.Path != "" || source.metadataURL != "" || source.metadataPath != "" {
+	if source.GitHubRelease != nil {
+		source.GitHubRelease = cloneGitHubReleaseSourceDef(source.GitHubRelease)
+	}
+	if source.Builtin != "" || source.Path != "" || source.metadataURL != "" || source.metadataPath != "" || source.GitHubRelease != nil {
 		source.scalar = ""
 		return
 	}
@@ -1773,7 +1836,7 @@ func applyDefaultBuiltinProviderEntries(entries map[string]*ProviderEntry, defau
 		}
 	}
 	for _, entry := range entries {
-		if entry == nil || entry.Source.IsBuiltin() || entry.Source.IsMetadataURL() || entry.Source.IsLocalMetadataPath() || entry.Source.IsLocal() || entry.Source.UnsupportedURL() != "" {
+		if entry == nil || entry.Source.IsBuiltin() || entry.Source.IsMetadataURL() || entry.Source.IsGitHubRelease() || entry.Source.IsLocalMetadataPath() || entry.Source.IsLocal() || entry.Source.UnsupportedURL() != "" {
 			continue
 		}
 		entry.Source.Builtin = builtin

@@ -24,8 +24,12 @@ func BuildComponentRuntimeConfigNode(name, kind string, entry *ProviderEntry, pr
 		return yaml.Node{}, fmt.Errorf("%s %q provider is required", kind, name)
 	}
 	node := componentRuntimeConfig{
-		Name:         name,
-		Source:       &ProviderSource{Path: entry.Source.Path, metadataURL: entry.Source.MetadataURL()},
+		Name: name,
+		Source: &ProviderSource{
+			Path:          entry.Source.Path,
+			metadataURL:   entry.Source.MetadataURL(),
+			GitHubRelease: entry.Source.GitHubReleaseSource(),
+		},
 		Command:      entry.Command,
 		Args:         append([]string(nil), entry.Args...),
 		Env:          entry.Env,

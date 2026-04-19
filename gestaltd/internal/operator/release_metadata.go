@@ -30,9 +30,25 @@ const (
 	providerReleaseMetadataMaxBytes   = 4 << 20
 	httpAcceptHeader                  = "Accept"
 	httpAcceptOctetStream             = "application/octet-stream"
+	httpAcceptGitHubAPI               = "application/vnd.github+json"
 	httpAuthorizationHeader           = "Authorization"
 	httpBearerAuthorizationPrefix     = "Bearer "
 )
+
+type gitHubReleaseLocation struct {
+	Repo  string
+	Tag   string
+	Asset string
+}
+
+type gitHubReleaseAsset struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+type gitHubReleaseByTagResponse struct {
+	Assets []gitHubReleaseAsset `json:"assets"`
+}
 
 type providerReleaseMetadata struct {
 	Schema        string                             `yaml:"schema"`
@@ -128,37 +144,49 @@ func validateProviderReleaseMetadata(metadata *providerReleaseMetadata) error {
 	return nil
 }
 
-func fetchProviderReleaseMetadata(ctx context.Context, client *http.Client, metadataURL, token string) (*providerReleaseMetadata, error) {
-	if !isRemoteReleaseMetadataLocation(metadataURL) {
-		data, err := readProviderReleaseMetadataFile(metadataURL)
+func fetchProviderReleaseMetadata(ctx context.Context, client *http.Client, metadataLocation, token string) (*providerReleaseMetadata, string, error) {
+	resolvedMetadataLocation, err := resolveProviderReleaseMetadataLocation(ctx, client, metadataLocation, token)
+	if err != nil {
+		return nil, "", err
+	}
+	if !isRemoteReleaseMetadataLocation(resolvedMetadataLocation) {
+		data, err := readProviderReleaseMetadataFile(resolvedMetadataLocation)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		return decodeProviderReleaseMetadata(data)
+		metadata, err := decodeProviderReleaseMetadata(data)
+		if err != nil {
+			return nil, "", err
+		}
+		return metadata, resolvedMetadataLocation, nil
 	}
 	if client == nil {
 		client = http.DefaultClient
 	}
-	req, err := newAuthenticatedFetchRequest(ctx, metadataURL, token)
+	req, err := newAuthenticatedFetchRequest(ctx, resolvedMetadataLocation, token)
 	if err != nil {
-		return nil, fmt.Errorf("create provider release metadata request: %w", err)
+		return nil, "", fmt.Errorf("create provider release metadata request: %w", err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("fetch provider release metadata: %w", err)
+		return nil, "", fmt.Errorf("fetch provider release metadata: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status %d fetching provider release metadata from %s", resp.StatusCode, metadataURL)
+		return nil, "", fmt.Errorf("unexpected status %d fetching provider release metadata from %s", resp.StatusCode, resolvedMetadataLocation)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, providerReleaseMetadataMaxBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("read provider release metadata: %w", err)
+		return nil, "", fmt.Errorf("read provider release metadata: %w", err)
 	}
 	if len(data) > providerReleaseMetadataMaxBytes {
-		return nil, fmt.Errorf("provider release metadata exceeds %d byte limit", providerReleaseMetadataMaxBytes)
+		return nil, "", fmt.Errorf("provider release metadata exceeds %d byte limit", providerReleaseMetadataMaxBytes)
 	}
-	return decodeProviderReleaseMetadata(data)
+	metadata, err := decodeProviderReleaseMetadata(data)
+	if err != nil {
+		return nil, "", err
+	}
+	return metadata, resolvedMetadataLocation, nil
 }
 
 func newAuthenticatedFetchRequest(ctx context.Context, requestURL, token string) (*http.Request, error) {
@@ -182,6 +210,81 @@ func readProviderReleaseMetadataFile(path string) ([]byte, error) {
 		return nil, fmt.Errorf("provider release metadata exceeds %d byte limit", providerReleaseMetadataMaxBytes)
 	}
 	return data, nil
+}
+
+func resolveProviderReleaseMetadataLocation(ctx context.Context, client *http.Client, metadataLocation, token string) (string, error) {
+	if ref, ok, err := parseGitHubReleaseLocation(metadataLocation); err != nil {
+		return "", err
+	} else if ok {
+		return resolveGitHubReleaseAssetURL(ctx, client, ref, token)
+	}
+	return metadataLocation, nil
+}
+
+func parseGitHubReleaseLocation(location string) (gitHubReleaseLocation, bool, error) {
+	parsed, err := url.Parse(strings.TrimSpace(location))
+	if err != nil {
+		return gitHubReleaseLocation{}, false, nil
+	}
+	if parsed.Scheme != "github-release" {
+		return gitHubReleaseLocation{}, false, nil
+	}
+	repo := strings.TrimSpace(strings.TrimPrefix(parsed.EscapedPath(), "/"))
+	if repo == "" {
+		repo = strings.TrimSpace(strings.Trim(parsed.Host+parsed.Path, "/"))
+	}
+	repo, err = url.PathUnescape(repo)
+	if err != nil {
+		return gitHubReleaseLocation{}, false, fmt.Errorf("decode github release repo: %w", err)
+	}
+	tag := strings.TrimSpace(parsed.Query().Get("tag"))
+	asset := strings.TrimSpace(parsed.Query().Get("asset"))
+	if repo == "" || tag == "" || asset == "" {
+		return gitHubReleaseLocation{}, false, fmt.Errorf("github release source must include repo, tag, and asset")
+	}
+	return gitHubReleaseLocation{
+		Repo:  repo,
+		Tag:   tag,
+		Asset: asset,
+	}, true, nil
+}
+
+func resolveGitHubReleaseAssetURL(ctx context.Context, client *http.Client, ref gitHubReleaseLocation, token string) (string, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	endpoint := "https://api.github.com/repos/" + strings.TrimSpace(ref.Repo) + "/releases/tags/" + url.PathEscape(strings.TrimSpace(ref.Tag))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("create github release lookup request: %w", err)
+	}
+	req.Header.Set(httpAcceptHeader, httpAcceptGitHubAPI)
+	if token = strings.TrimSpace(token); token != "" {
+		req.Header.Set(httpAuthorizationHeader, httpBearerAuthorizationPrefix+token)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("resolve github release %s@%s: %w", ref.Repo, ref.Tag, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status %d resolving github release %s@%s", resp.StatusCode, ref.Repo, ref.Tag)
+	}
+	var release gitHubReleaseByTagResponse
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return "", fmt.Errorf("decode github release %s@%s: %w", ref.Repo, ref.Tag, err)
+	}
+	for _, asset := range release.Assets {
+		if strings.TrimSpace(asset.Name) != strings.TrimSpace(ref.Asset) {
+			continue
+		}
+		return (&url.URL{
+			Scheme: "https",
+			Host:   "api.github.com",
+			Path:   fmt.Sprintf("/repos/%s/releases/assets/%d", strings.TrimSpace(ref.Repo), asset.ID),
+		}).String(), nil
+	}
+	return "", fmt.Errorf("github release %s@%s does not contain asset %q", ref.Repo, ref.Tag, ref.Asset)
 }
 
 func providerReleaseArchives(metadataURL string, metadata *providerReleaseMetadata) (map[string]LockArchive, error) {
@@ -227,7 +330,7 @@ func localReleaseArchiveExpectedSHA(sourceLocation, resolvedKey, archiveLocation
 		return "", nil
 	}
 
-	metadata, err := fetchProviderReleaseMetadata(context.Background(), nil, sourceLocation, "")
+	metadata, resolvedMetadataLocation, err := fetchProviderReleaseMetadata(context.Background(), nil, sourceLocation, "")
 	if err != nil {
 		return "", err
 	}
@@ -235,7 +338,7 @@ func localReleaseArchiveExpectedSHA(sourceLocation, resolvedKey, archiveLocation
 	if !ok {
 		return "", fmt.Errorf("provider release metadata missing artifact for target %q", resolvedKey)
 	}
-	resolvedArchivePath, err := resolveArchiveSourceLocation(sourceLocation, artifact.Path)
+	resolvedArchivePath, err := resolveArchiveSourceLocation(resolvedMetadataLocation, artifact.Path)
 	if err != nil {
 		return "", err
 	}
