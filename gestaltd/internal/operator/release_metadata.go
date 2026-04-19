@@ -16,7 +16,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
-	ghresolver "github.com/valon-technologies/gestalt/server/internal/pluginsource/github"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
@@ -140,15 +139,9 @@ func fetchProviderReleaseMetadata(ctx context.Context, client *http.Client, meta
 	if client == nil {
 		client = http.DefaultClient
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metadataURL, nil)
+	req, err := newAuthenticatedFetchRequest(ctx, metadataURL, token)
 	if err != nil {
 		return nil, fmt.Errorf("create provider release metadata request: %w", err)
-	}
-	if usesGitHubMetadataTransport(metadataURL) {
-		req.Header.Set(httpAcceptHeader, httpAcceptOctetStream)
-	}
-	if authHeader := authorizationHeaderForSourceLocation(metadataURL, token); authHeader != "" {
-		req.Header.Set(httpAuthorizationHeader, authHeader)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -166,6 +159,18 @@ func fetchProviderReleaseMetadata(ctx context.Context, client *http.Client, meta
 		return nil, fmt.Errorf("provider release metadata exceeds %d byte limit", providerReleaseMetadataMaxBytes)
 	}
 	return decodeProviderReleaseMetadata(data)
+}
+
+func newAuthenticatedFetchRequest(ctx context.Context, requestURL, token string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set(httpAcceptHeader, httpAcceptOctetStream)
+	if token = strings.TrimSpace(token); token != "" {
+		req.Header.Set(httpAuthorizationHeader, httpBearerAuthorizationPrefix+token)
+	}
+	return req, nil
 }
 
 func readProviderReleaseMetadataFile(path string) ([]byte, error) {
@@ -283,14 +288,6 @@ func releaseRuntimeForManifest(manifest *providermanifestv1.Manifest, kind strin
 	return providerReleaseRuntimeExecutable
 }
 
-func usesGitHubReleaseDownloadTransport(archiveURL string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(archiveURL))
-	if err != nil {
-		return false
-	}
-	return strings.EqualFold(parsed.Hostname(), "github.com") && strings.Contains(parsed.Path, "/releases/download/")
-}
-
 func downloadArchiveForSource(ctx context.Context, client *http.Client, token, archiveURL string) (*providerpkg.DownloadResult, error) {
 	if !isRemoteReleaseMetadataLocation(archiveURL) {
 		return copyLocalArchiveForSource(archiveURL)
@@ -298,16 +295,9 @@ func downloadArchiveForSource(ctx context.Context, client *http.Client, token, a
 	if client == nil {
 		client = http.DefaultClient
 	}
-	token = strings.TrimSpace(token)
-	if usesGitHubReleaseDownloadTransport(archiveURL) {
-		return ghresolver.DownloadGitHubReleaseArchive(ctx, client, archiveURL, token)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, archiveURL, nil)
+	req, err := newAuthenticatedFetchRequest(ctx, archiveURL, token)
 	if err != nil {
 		return nil, fmt.Errorf("create archive download request: %w", err)
-	}
-	if token != "" {
-		req.Header.Set(httpAuthorizationHeader, httpBearerAuthorizationPrefix+token)
 	}
 	return providerpkg.DownloadRequest(client, req)
 }
@@ -404,32 +394,4 @@ func copyLocalArchiveForSource(path string) (*providerpkg.DownloadResult, error)
 		Cleanup:   removeTmp,
 		SHA256Hex: hex.EncodeToString(h.Sum(nil)),
 	}, nil
-}
-
-func authorizationHeaderForSourceLocation(sourceLocation, token string) string {
-	token = strings.TrimSpace(token)
-	if usesGitHubMetadataTransport(sourceLocation) {
-		token = ghresolver.ResolveGitHubToken(token)
-		if token == "" {
-			return ""
-		}
-		return "token " + token
-	}
-	if token == "" {
-		return ""
-	}
-	return httpBearerAuthorizationPrefix + token
-}
-
-func usesGitHubMetadataTransport(sourceLocation string) bool {
-	parsed, err := url.Parse(strings.TrimSpace(sourceLocation))
-	if err != nil {
-		return false
-	}
-	switch strings.ToLower(parsed.Hostname()) {
-	case "github.com", "api.github.com":
-		return true
-	default:
-		return false
-	}
 }

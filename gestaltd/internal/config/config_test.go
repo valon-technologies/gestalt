@@ -3286,7 +3286,7 @@ plugins:
 			wantErr: "source.path must reference provider-release.yaml metadata",
 		},
 		{
-			name: "apiVersion rejects non metadata http source",
+			name: "apiVersion accepts absolute http metadata source",
 			yaml: `
 apiVersion: gestaltd.config/v3
 providers:
@@ -3294,7 +3294,6 @@ plugins:
     external:
       source: https://example.com/providers/external/archive.tar.gz
 `,
-			wantErr: "only provider-release.yaml metadata URLs are supported for remote sources",
 		},
 		{
 			name: "apiVersion rejects git scalar source",
@@ -3341,7 +3340,7 @@ plugins:
 			wantErr: "only provider-release.yaml metadata URLs are supported for remote sources",
 		},
 		{
-			name: "apiVersion rejects unsupported telemetry source before builtin defaulting",
+			name: "apiVersion accepts absolute telemetry metadata source before builtin defaulting",
 			yaml: `
 apiVersion: gestaltd.config/v3
 providers:
@@ -3350,7 +3349,6 @@ providers:
       source: https://example.com/providers/telemetry/archive.tar.gz
 plugins:
 `,
-			wantErr: "only provider-release.yaml metadata URLs are supported for remote sources",
 		},
 		{
 			name: "plugin source with base_url override is rejected",

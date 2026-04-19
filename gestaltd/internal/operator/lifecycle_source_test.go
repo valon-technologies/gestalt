@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -35,12 +34,6 @@ const (
 	testSource  = "github.com/" + testOwner + "/" + testRepo + "/plugins/" + testPlugin
 	testBinary  = "fake-binary-content"
 )
-
-type hostRewriteTransport struct {
-	base   http.RoundTripper
-	target *url.URL
-	hosts  map[string]struct{}
-}
 
 func sha256hex(data string) string {
 	sum := sha256.Sum256([]byte(data))
@@ -300,32 +293,6 @@ func writeBootstrapSecretsManifest(t *testing.T, dir, source, version string) st
 		t.Fatalf("write bootstrap artifact: %v", err)
 	}
 	return manifestPath
-}
-
-func (t *hostRewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	clone := req.Clone(req.Context())
-	if _, ok := t.hosts[strings.ToLower(req.URL.Hostname())]; ok {
-		clone.URL.Scheme = t.target.Scheme
-		clone.URL.Host = t.target.Host
-	}
-	return t.base.RoundTrip(clone)
-}
-
-func newGitHubRewriteClient(t *testing.T, target string) *http.Client {
-	t.Helper()
-	targetURL, err := url.Parse(target)
-	if err != nil {
-		t.Fatalf("parse rewrite target URL: %v", err)
-	}
-	return &http.Client{
-		Transport: &hostRewriteTransport{
-			base:   http.DefaultTransport,
-			target: targetURL,
-			hosts: map[string]struct{}{
-				"github.com": {},
-			},
-		},
-	}
 }
 
 func TestSourcePluginMetadataURLInitAndLockedLoad(t *testing.T) {
@@ -1195,7 +1162,7 @@ func TestSourcePluginInitRejectsMetadataSourceManifestMismatch(t *testing.T) {
 	}
 }
 
-func TestSourcePluginMetadataURLUsesGitHubReleaseDownloadTransport(t *testing.T) {
+func TestSourcePluginMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1223,16 +1190,17 @@ func TestSourcePluginMetadataURLUsesGitHubReleaseDownloadTransport(t *testing.T)
 		}
 	}
 
-	githubMetadataPath := "/" + testOwner + "/" + testRepo + "/releases/download/plugin/" + testPlugin + "/" + version + "/provider-release.yaml"
-	githubMetadataURL := "https://github.com" + githubMetadataPath
-	githubArchivePath := "/" + testOwner + "/" + testRepo + "/releases/download/plugin/" + testPlugin + "/" + version + "/alpha-current.tar.gz"
-	githubArchiveURL := "https://github.com" + githubArchivePath
+	metadataPath := "/releases/assets/999"
+	archivePath := "/releases/assets/123"
+	metadataURL := ""
+	archiveURL := ""
+	var currentMu sync.RWMutex
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case githubMetadataPath:
+		case metadataPath:
 			metadataCount.Add(1)
-			if got := r.Header.Get("Authorization"); got != "token test-token" {
-				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "token test-token")
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
 				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
 				return
 			}
@@ -1241,6 +1209,9 @@ func TestSourcePluginMetadataURLUsesGitHubReleaseDownloadTransport(t *testing.T)
 				http.Error(w, "bad metadata accept", http.StatusBadRequest)
 				return
 			}
+			currentMu.RLock()
+			currentArchiveURL := archiveURL
+			currentMu.RUnlock()
 			metadata := providerReleaseMetadata{
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
@@ -1250,7 +1221,7 @@ func TestSourcePluginMetadataURLUsesGitHubReleaseDownloadTransport(t *testing.T)
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
 					providerpkg.CurrentPlatformString(): {
-						Path:   githubArchiveURL,
+						Path:   currentArchiveURL,
 						SHA256: hex.EncodeToString(currentArchiveSHA[:]),
 					},
 				},
@@ -1263,10 +1234,10 @@ func TestSourcePluginMetadataURLUsesGitHubReleaseDownloadTransport(t *testing.T)
 			}
 			w.Header().Set("Content-Type", "application/yaml")
 			_, _ = w.Write(data)
-		case githubArchivePath:
+		case archivePath:
 			archiveCount.Add(1)
-			if got := r.Header.Get("Authorization"); got != "token test-token" {
-				handlerErrs <- fmt.Errorf("archive authorization = %q, want %q", got, "token test-token")
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("archive authorization = %q, want %q", got, "Bearer test-token")
 				http.Error(w, "bad archive authorization", http.StatusBadRequest)
 				return
 			}
@@ -1282,6 +1253,10 @@ func TestSourcePluginMetadataURLUsesGitHubReleaseDownloadTransport(t *testing.T)
 		}
 	}))
 	defer srv.Close()
+	currentMu.Lock()
+	metadataURL = srv.URL + metadataPath
+	archiveURL = srv.URL + archivePath
+	currentMu.Unlock()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configPath := filepath.Join(dir, "gestalt.yaml")
@@ -1289,7 +1264,7 @@ func TestSourcePluginMetadataURLUsesGitHubReleaseDownloadTransport(t *testing.T)
 		"apiVersion: " + config.APIVersionV3,
 		"plugins:",
 		"  alpha:",
-		"    source: " + githubMetadataURL,
+		"    source: " + metadataURL,
 		"    auth:",
 		"      token: test-token",
 		"server:",
@@ -1302,7 +1277,7 @@ func TestSourcePluginMetadataURLUsesGitHubReleaseDownloadTransport(t *testing.T)
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle().WithHTTPClient(newGitHubRewriteClient(t, srv.URL))
+	lc := NewLifecycle()
 	lock, err := lc.InitAtPath(configPath)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
@@ -1320,8 +1295,8 @@ func TestSourcePluginMetadataURLUsesGitHubReleaseDownloadTransport(t *testing.T)
 	if !ok {
 		t.Fatal(`lock.Providers["alpha"] not found`)
 	}
-	if got := entry.Archives[providerpkg.CurrentPlatformString()].URL; got != githubArchiveURL {
-		t.Fatalf("current archive URL = %q, want %q", got, githubArchiveURL)
+	if got := entry.Archives[providerpkg.CurrentPlatformString()].URL; got != archiveURL {
+		t.Fatalf("current archive URL = %q, want %q", got, archiveURL)
 	}
 	if got := metadataCount.Load(); got != 1 {
 		t.Fatalf("metadata request count = %d, want 1", got)
@@ -1360,7 +1335,7 @@ func TestSourcePluginMetadataURLUsesGitHubReleaseDownloadTransport(t *testing.T)
 	}
 }
 
-func TestSourcePluginMetadataURLRejectsOversizedGitHubReleaseMetadata(t *testing.T) {
+func TestSourcePluginMetadataURLRejectsOversizedRemoteMetadata(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1377,17 +1352,16 @@ func TestSourcePluginMetadataURLRejectsOversizedGitHubReleaseMetadata(t *testing
 		}
 	}
 
-	githubMetadataPath := "/" + testOwner + "/" + testRepo + "/releases/download/plugin/" + testPlugin + "/v" + testVersion + "/provider-release.yaml"
-	githubMetadataURL := "https://github.com" + githubMetadataPath
+	metadataPath := "/releases/assets/999"
 	oversizedBody := bytes.Repeat([]byte("x"), providerReleaseMetadataMaxBytes+1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != githubMetadataPath {
+		if r.URL.Path != metadataPath {
 			http.NotFound(w, r)
 			return
 		}
 		metadataCount.Add(1)
-		if got := r.Header.Get("Authorization"); got != "token test-token" {
-			handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "token test-token")
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
 			http.Error(w, "bad metadata authorization", http.StatusBadRequest)
 			return
 		}
@@ -1407,7 +1381,7 @@ func TestSourcePluginMetadataURLRejectsOversizedGitHubReleaseMetadata(t *testing
 		"apiVersion: " + config.APIVersionV3,
 		"plugins:",
 		"  alpha:",
-		"    source: " + githubMetadataURL,
+		"    source: " + srv.URL + metadataPath,
 		"    auth:",
 		"      token: test-token",
 		"server:",
@@ -1420,7 +1394,7 @@ func TestSourcePluginMetadataURLRejectsOversizedGitHubReleaseMetadata(t *testing
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle().WithHTTPClient(newGitHubRewriteClient(t, srv.URL))
+	lc := NewLifecycle()
 	_, err := lc.InitAtPath(configPath)
 	if err == nil {
 		t.Fatal("InitAtPath unexpectedly succeeded")
@@ -1607,129 +1581,6 @@ func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.
 	}
 	if got := updatedLock.Providers["alpha"].Version; got != updatedVersion {
 		t.Fatalf("updated lock version = %q, want %q", got, updatedVersion)
-	}
-}
-
-func TestSourcePluginMetadataURLUsesGitHubTokenFallbackForMetadataAndReleaseDownloads(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("GITHUB_TOKEN", "env-fallback-token")
-
-	const packageSource = testSource
-	const version = testVersion
-
-	currentArchivePath := buildV2Archive(t, dir, packageSource, version, "metadata-github-fallback-plugin-binary")
-	currentArchiveData, err := os.ReadFile(currentArchivePath)
-	if err != nil {
-		t.Fatalf("read current archive: %v", err)
-	}
-	currentArchiveSHA := sha256.Sum256(currentArchiveData)
-
-	var metadataCount atomic.Int64
-	var archiveCount atomic.Int64
-	handlerErrs := make(chan error, 4)
-	nextHandlerErr := func() error {
-		t.Helper()
-		select {
-		case err := <-handlerErrs:
-			return err
-		default:
-			return nil
-		}
-	}
-
-	metadataPath := "/" + testOwner + "/" + testRepo + "/releases/download/plugin/" + testPlugin + "/" + version + "/provider-release.yaml"
-	metadataURL := "https://github.com" + metadataPath
-	githubArchivePath := "/" + testOwner + "/" + testRepo + "/releases/download/plugin/" + testPlugin + "/" + version + "/alpha-current.tar.gz"
-	githubArchiveURL := "https://github.com" + githubArchivePath
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case metadataPath:
-			metadataCount.Add(1)
-			if got := r.Header.Get("Authorization"); got != "token env-fallback-token" {
-				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "token env-fallback-token")
-				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
-				return
-			}
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       packageSource,
-				Kind:          providermanifestv1.KindPlugin,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
-					providerpkg.CurrentPlatformString(): {
-						Path:   githubArchiveURL,
-						SHA256: hex.EncodeToString(currentArchiveSHA[:]),
-					},
-				},
-			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
-			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
-		case githubArchivePath:
-			archiveCount.Add(1)
-			if got := r.Header.Get("Authorization"); got != "token env-fallback-token" {
-				handlerErrs <- fmt.Errorf("archive authorization = %q, want %q", got, "token env-fallback-token")
-				http.Error(w, "bad archive authorization", http.StatusBadRequest)
-				return
-			}
-			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
-				handlerErrs <- fmt.Errorf("archive accept = %q, want %q", got, "application/octet-stream")
-				http.Error(w, "bad archive accept", http.StatusBadRequest)
-				return
-			}
-			w.Header().Set("Content-Type", "application/octet-stream")
-			_, _ = w.Write(currentArchiveData)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer srv.Close()
-
-	artifactsDir := filepath.Join(dir, "prepared-artifacts")
-	configPath := filepath.Join(dir, "gestalt.yaml")
-	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
-		"plugins:",
-		"  alpha:",
-		"    source: " + metadataURL,
-		"server:",
-		"  providers:",
-		"    indexeddb: sqlite",
-		"  artifactsDir: " + artifactsDir,
-		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	}, "\n") + "\n"
-	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	lc := NewLifecycle().WithHTTPClient(newGitHubRewriteClient(t, srv.URL))
-	lock, err := lc.InitAtPath(configPath)
-	if err == nil {
-		if handlerErr := nextHandlerErr(); handlerErr != nil {
-			t.Fatal(handlerErr)
-		}
-	}
-	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
-	}
-	if handlerErr := nextHandlerErr(); handlerErr != nil {
-		t.Fatal(handlerErr)
-	}
-	if got := metadataCount.Load(); got != 1 {
-		t.Fatalf("metadata request count = %d, want 1", got)
-	}
-	if got := archiveCount.Load(); got != 1 {
-		t.Fatalf("archive request count = %d, want 1", got)
-	}
-	if got := lock.Providers["alpha"].Source; got != metadataURL {
-		t.Fatalf("entry.Source = %q, want %q", got, metadataURL)
 	}
 }
 

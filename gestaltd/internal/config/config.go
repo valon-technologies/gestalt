@@ -1696,7 +1696,7 @@ func looksLikeMetadataURL(value string) bool {
 	}
 	switch parsed.Scheme {
 	case "http", "https":
-		return parsed.Host != "" && strings.HasSuffix(parsed.Path, "/provider-release.yaml")
+		return parsed.Host != ""
 	default:
 		return false
 	}
