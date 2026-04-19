@@ -13,6 +13,7 @@ class CapturedBuildRun:
     command: list[str]
     cwd: pathlib.Path
     check: bool
+    env: dict[str, str]
     binary_name: str
     target_arch: str | None
     destination: str
@@ -37,7 +38,12 @@ class BuildTests(unittest.TestCase):
                     root.mkdir()
                     captured: CapturedBuildRun | None = None
 
-                    def fake_run(command: list[str], cwd: pathlib.Path, check: bool) -> None:
+                    def fake_run(
+                        command: list[str],
+                        cwd: pathlib.Path,
+                        env: dict[str, str],
+                        check: bool,
+                    ) -> None:
                         nonlocal captured
 
                         add_data = command[command.index("--add-data") + 1]
@@ -47,6 +53,7 @@ class BuildTests(unittest.TestCase):
                             command=command,
                             cwd=cwd,
                             check=check,
+                            env=env,
                             binary_name=command[command.index("--name") + 1],
                             target_arch=command[command.index("--target-arch") + 1] if "--target-arch" in command else None,
                             destination=destination,
@@ -78,6 +85,8 @@ class BuildTests(unittest.TestCase):
                 self.assertEqual(captured.binary_name, expected_binary_name)
                 self.assertEqual(captured.target_arch, expected_target_arch)
                 self.assertEqual(captured.destination, ".")
+                self.assertEqual(pathlib.Path(captured.env["PYINSTALLER_CONFIG_DIR"]).name, "pyinstaller-config")
+                self.assertEqual(captured.env["SOURCE_DATE_EPOCH"], "0")
                 self.assertEqual(
                     captured.bundle_config,
                     {

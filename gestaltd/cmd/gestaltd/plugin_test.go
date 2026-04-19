@@ -54,6 +54,10 @@ const (
 	rustWrapperBinaryName          = "gestalt-provider-wrapper"
 	pythonAuthReleasePluginName    = "python-auth-release"
 	pythonAuthReleaseSource        = "github.com/testowner/plugins/python-auth-release"
+	typeScriptReleasePluginName    = "ts-release"
+	typeScriptReleaseSource        = "github.com/testowner/plugins/ts-release"
+	typeScriptReleaseModule        = "./provider.ts#provider"
+	typeScriptReleaseTarget        = "plugin:./provider.ts#provider"
 	authReleaseTypeScriptModule    = "./auth.ts#auth"
 	authReleaseTypeScriptTarget    = "auth:./auth.ts#auth"
 )
@@ -291,6 +295,9 @@ func TestRun_PluginReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testing.
 		"--version", testVersion,
 		"--output", outputDir,
 	)
+	if _, err := os.Stat(filepath.Join(pluginDir, providerpkg.StaticCatalogFile)); !os.IsNotExist(err) {
+		t.Fatalf("source catalog should not persist after release, got err=%v", err)
+	}
 
 	archiveName := expectedPythonArchiveName(testVersion, runtime.GOOS, runtime.GOARCH)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
@@ -335,6 +342,55 @@ func TestRun_PluginReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testing.
 	}
 	if !strings.Contains(result.Body, "Hi, Ada!") {
 		t.Fatalf("body = %q, want greeting", result.Body)
+	}
+}
+
+func TestRun_PluginReleaseBuildsTypeScriptSourcePluginForCurrentPlatform(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Bun build fixture is POSIX-only")
+	}
+
+	t.Setenv("PATH", pathWithoutGo(t))
+
+	pluginDir := newTypeScriptSourceReleaseFixture(t, t.TempDir())
+	bunPath := writeFakeTypeScriptProviderReleaseBun(
+		t,
+		filepath.Join(pluginDir, "fake-bun"),
+		typeScriptReleasePluginName,
+		typeScriptReleaseTarget,
+		runtime.GOOS,
+		runtime.GOARCH,
+	)
+	t.Setenv("GESTALT_BUN", bunPath)
+
+	outputDir := t.TempDir()
+	const testVersion = "0.0.12-ts"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+	if _, err := os.Stat(filepath.Join(pluginDir, providerpkg.StaticCatalogFile)); !os.IsNotExist(err) {
+		t.Fatalf("source catalog should not persist after release, got err=%v", err)
+	}
+
+	archiveName := platformArchiveNameForTest(typeScriptReleasePluginName, testVersion, runtime.GOOS, runtime.GOARCH)
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+
+	binaryName := releaseBinaryName(typeScriptReleasePluginName, runtime.GOOS)
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != binaryName {
+		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoint, binaryName)
+	}
+	catalogData, err := os.ReadFile(filepath.Join(extractDir, providerpkg.StaticCatalogFile))
+	if err != nil {
+		t.Fatalf("read generated catalog: %v", err)
+	}
+	if !strings.Contains(string(catalogData), "id: greet") {
+		t.Fatalf("unexpected generated catalog: %s", catalogData)
 	}
 }
 
@@ -465,6 +521,45 @@ func TestRun_PluginReleaseBuildsRequestedPlatformSets(t *testing.T) {
 			}
 			if _, err := os.Stat(filepath.Join(extractDir, binaryName)); err != nil {
 				t.Fatalf("expected %s in archive: %v", binaryName, err)
+			}
+		})
+	})
+
+	t.Run("typescript auth all", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("fake Bun build fixture is POSIX-only")
+		}
+
+		builtBinary := buildGoSourceAuthBinary(t)
+		t.Setenv("PATH", pathWithoutGo(t))
+
+		pluginDir := newTypeScriptSourceAuthReleaseFixture(t, t.TempDir())
+		defaultPlatforms := defaultReleasePlatformsForTest(t)
+		bunPath := writeFakeTypeScriptComponentReleaseBunForPlatforms(
+			t,
+			filepath.Join(pluginDir, "fake-bun"),
+			authReleaseTypeScriptTarget,
+			authReleasePluginName,
+			defaultPlatforms,
+			builtBinary,
+		)
+		t.Setenv("GESTALT_BUN", bunPath)
+
+		outputDir := t.TempDir()
+		const testVersion = "0.0.12-ts-auth-all"
+
+		runPluginReleaseCommand(t, pluginDir,
+			"--version", testVersion,
+			"--platform", allPlatformsValue,
+			"--output", outputDir,
+		)
+
+		assertReleasePlatforms(t, outputDir, defaultPlatforms, func(platform releasePlatform) string {
+			return platformArchiveNameForTest(authReleasePluginName, testVersion, platform.GOOS, platform.GOARCH)
+		}, func(t *testing.T, artifact providermanifestv1.Artifact, platform releasePlatform) {
+			assertExpectedScriptArtifactPlatform(t, artifact, platform.GOOS, platform.GOARCH)
+			if artifact.Path != releaseBinaryName(authReleasePluginName, artifact.OS) {
+				t.Fatalf("artifacts = %+v, want path %q", artifact, releaseBinaryName(authReleasePluginName, artifact.OS))
 			}
 		})
 	})
@@ -2168,6 +2263,20 @@ auth = "provider:auth_provider"
 
 func writeFakeTypeScriptComponentReleaseBun(t *testing.T, path, expectedTarget, expectedPluginName, expectedGOOS, expectedGOARCH, builtBinaryPath string) string {
 	t.Helper()
+	return writeFakeTypeScriptComponentReleaseBunForPlatforms(t, path, expectedTarget, expectedPluginName, []releasePlatform{{
+		GOOS:   expectedGOOS,
+		GOARCH: expectedGOARCH,
+	}}, builtBinaryPath)
+}
+
+func writeFakeTypeScriptComponentReleaseBunForPlatforms(t *testing.T, path, expectedTarget, expectedPluginName string, expectedPlatforms []releasePlatform, builtBinaryPath string) string {
+	t.Helper()
+
+	allowedCases := make([]string, 0, len(expectedPlatforms))
+	for _, platform := range expectedPlatforms {
+		allowedCases = append(allowedCases, fmt.Sprintf("%s/%s", platform.GOOS, platform.GOARCH))
+	}
+	allowedPlatformCase := strings.Join(allowedCases, "|") + ")"
 
 	script := `#!/bin/sh
 set -eu
@@ -2216,6 +2325,113 @@ case "$entry_base" in
       echo "unexpected plugin name: $name" >&2
       exit 1
     fi
+    case "$goos/$goarch" in
+      ` + allowedPlatformCase + `
+        ;;
+      *)
+        echo "unexpected target platform: $goos/$goarch" >&2
+        exit 1
+        ;;
+    esac
+    output_dir="${output%/*}"
+    if [ "$output_dir" = "$output" ]; then
+      output_dir="."
+    fi
+    mkdir -p "$output_dir"
+    cp "` + builtBinaryPath + `" "$output"
+    chmod +x "$output"
+    exit 0
+    ;;
+esac
+
+echo "unexpected fake bun entry: $entry ($*)" >&2
+exit 1
+`
+	writeTestFile(t, filepath.Dir(path), filepath.Base(path), []byte(script), 0o755)
+	return path
+}
+
+func writeFakeTypeScriptProviderReleaseBun(t *testing.T, path, expectedPluginName, expectedTarget, expectedGOOS, expectedGOARCH string) string {
+	t.Helper()
+
+	script := `#!/bin/sh
+set -eu
+
+if [ "$#" -lt 4 ] || [ "$1" != "--cwd" ]; then
+  echo "unexpected fake bun args: $*" >&2
+  exit 1
+fi
+
+cwd="$2"
+shift 2
+
+entry="$1"
+shift
+
+if [ "$#" -gt 0 ] && [ "$1" = "--" ]; then
+  shift
+fi
+
+entry_base="${entry##*/}"
+case "$entry_base" in
+  gestalt-ts-runtime|runtime.ts)
+    if [ "$#" -ne 2 ]; then
+      echo "unexpected runtime args: $*" >&2
+      exit 1
+    fi
+    root="$1"
+    target="$2"
+    if [ "$cwd" != "$root" ]; then
+      echo "unexpected runtime cwd: $cwd != $root" >&2
+      exit 1
+    fi
+    if [ "$target" != "` + typeScriptReleaseTarget + `" ]; then
+      echo "unexpected runtime target: $target" >&2
+      exit 1
+    fi
+    if [ "$target" != "` + expectedTarget + `" ]; then
+      echo "unexpected runtime target: $target" >&2
+      exit 1
+    fi
+    if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
+      echo "missing GESTALT_PLUGIN_WRITE_CATALOG" >&2
+      exit 1
+    fi
+    cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
+name: ` + typeScriptReleasePluginName + `
+operations:
+  - id: greet
+    method: GET
+EOF
+    exit 0
+    ;;
+  gestalt-ts-build|build.ts)
+    if [ "$#" -ne 6 ]; then
+      echo "unexpected build args: $*" >&2
+      exit 1
+    fi
+    source_dir="$1"
+    target="$2"
+    output="$3"
+    name="$4"
+    goos="$5"
+    goarch="$6"
+    if [ "$cwd" != "$source_dir" ]; then
+      echo "unexpected build cwd: $cwd != $source_dir" >&2
+      exit 1
+    fi
+    if [ "$target" != "` + typeScriptReleaseTarget + `" ]; then
+      echo "unexpected build target: $target" >&2
+      exit 1
+    fi
+    if [ "$target" != "` + expectedTarget + `" ]; then
+      echo "unexpected build target: $target" >&2
+      exit 1
+    fi
+    if [ "$name" != "` + expectedPluginName + `" ]; then
+      echo "unexpected plugin name: $name" >&2
+      exit 1
+    fi
     if [ "$goos" != "` + expectedGOOS + `" ] || [ "$goarch" != "` + expectedGOARCH + `" ]; then
       echo "unexpected target platform: $goos/$goarch" >&2
       exit 1
@@ -2225,7 +2441,7 @@ case "$entry_base" in
       output_dir="."
     fi
     mkdir -p "$output_dir"
-    cp "` + builtBinaryPath + `" "$output"
+    printf '#!/bin/sh\n# fake ts release binary\nexit 0\n' > "$output"
     chmod +x "$output"
     exit 0
     ;;
@@ -2709,6 +2925,37 @@ func newGoSourceReleaseFixture(t *testing.T, dir string) string {
 			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 		},
 	})
+	return pluginDir
+}
+
+func newTypeScriptSourceReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, typeScriptReleasePluginName)
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      typeScriptReleaseSource,
+		Version:     "0.0.1",
+		DisplayName: "TypeScript Release",
+		Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+		},
+	})
+	if err := os.Remove(filepath.Join(pluginDir, providerpkg.StaticCatalogFile)); err != nil {
+		t.Fatalf("Remove(%s): %v", providerpkg.StaticCatalogFile, err)
+	}
+	writeTestFile(t, pluginDir, "package.json", []byte(`{
+  "name": "ts-release",
+  "version": "0.0.1",
+  "gestalt": {
+    "provider": "`+typeScriptReleaseModule+`"
+  }
+}
+`), 0o644)
+	writeTestFile(t, pluginDir, "provider.ts", []byte("export const provider = {};\n"), 0o644)
 	return pluginDir
 }
 

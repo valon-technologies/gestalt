@@ -45,6 +45,15 @@ const PluginConnectionName = "_plugin"
 // to "plugin" to reuse the plugin's OAuth token.
 const PluginConnectionAlias = "plugin"
 const APIVersionV3 = "gestaltd.config/v3"
+const APIVersionV4 = "gestaltd.config/v4"
+
+type providerSourceSyntaxMode int
+
+const (
+	providerSourceSyntaxLegacy providerSourceSyntaxMode = iota
+	providerSourceSyntaxV3
+	providerSourceSyntaxV4
+)
 
 type Config struct {
 	APIVersion    string                    `yaml:"apiVersion,omitempty"`
@@ -89,17 +98,21 @@ type ServerProvidersConfig struct {
 	IndexedDB     string `yaml:"indexeddb,omitempty"`
 }
 
-// ProviderSource supports handwritten config in three forms via custom UnmarshalYAML:
+// ProviderSource supports handwritten config in three forms via custom
+// UnmarshalYAML:
 //   - Builtin:  source: "name"                               -> ProviderSource{Builtin: "name"}
 //   - Metadata: source: "https://.../provider-release.yaml"  -> ProviderSource{metadataURL: "..."}
-//   - Local:    source: {path} or source: "./manifest.yaml"  -> ProviderSource{Path: "..."}
+//   - Local:    source: {path} or source: "./manifest.yaml"  -> ProviderSource{Path: "..."} in v3
+//   - Local:    source: {path} or source: "./dist/provider-release.yaml"
+//     -> ProviderSource{metadataPath: "..."} in v4
 type ProviderSource struct {
-	Builtin     string         `yaml:"-"`
-	scalar      string         `yaml:"-"`
-	metadataURL string         `yaml:"-"`
-	unsupported string         `yaml:"-"`
-	Path        string         `yaml:"path,omitempty"`
-	Auth        *SourceAuthDef `yaml:"auth,omitempty"`
+	Builtin      string         `yaml:"-"`
+	scalar       string         `yaml:"-"`
+	metadataURL  string         `yaml:"-"`
+	metadataPath string         `yaml:"-"`
+	unsupported  string         `yaml:"-"`
+	Path         string         `yaml:"path,omitempty"`
+	Auth         *SourceAuthDef `yaml:"auth,omitempty"`
 }
 
 func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
@@ -149,11 +162,17 @@ func (s ProviderSource) MarshalYAML() (any, error) {
 	if s.Builtin != "" {
 		return s.Builtin, nil
 	}
-	if s.metadataURL != "" && s.Path == "" {
+	if s.metadataURL != "" && s.Path == "" && s.metadataPath == "" {
 		return s.metadataURL, nil
 	}
-	if s.scalar != "" && s.Path == "" {
+	if s.scalar != "" && s.Path == "" && s.metadataPath == "" {
 		return s.scalar, nil
+	}
+	if s.metadataPath != "" && s.Path == "" {
+		type raw struct {
+			Path string `yaml:"path,omitempty"`
+		}
+		return raw{Path: s.metadataPath}, nil
 	}
 	type raw ProviderSource
 	return raw(s), nil
@@ -162,13 +181,21 @@ func (s ProviderSource) MarshalYAML() (any, error) {
 func (s ProviderSource) IsBuiltin() bool     { return s.Builtin != "" }
 func (s ProviderSource) IsMetadataURL() bool { return s.metadataURL != "" }
 func (s ProviderSource) IsLocal() bool       { return s.Path != "" }
-func (s ProviderSource) MetadataURL() string { return s.metadataURL }
+func (s ProviderSource) IsLocalMetadataPath() bool {
+	return s.metadataPath != ""
+}
+func (s ProviderSource) MetadataURL() string  { return s.metadataURL }
+func (s ProviderSource) MetadataPath() string { return s.metadataPath }
 func (s ProviderSource) UnsupportedURL() string {
 	return s.unsupported
 }
 
 func NewMetadataSource(rawURL string) ProviderSource {
 	return ProviderSource{metadataURL: strings.TrimSpace(rawURL)}
+}
+
+func NewLocalReleaseMetadataSource(rawPath string) ProviderSource {
+	return ProviderSource{metadataPath: strings.TrimSpace(rawPath)}
 }
 
 // ProviderEntry is the universal configuration for any provider.
@@ -216,7 +243,7 @@ type ProviderEntry struct {
 
 func (e ProviderEntry) MarshalYAML() (any, error) {
 	type raw ProviderEntry
-	if e.Source.IsMetadataURL() && e.Source.Auth != nil && e.InlineSourceAuth == nil {
+	if e.HasReleaseMetadataSource() && e.Source.Auth != nil && e.InlineSourceAuth == nil {
 		auth := *e.Source.Auth
 		e.InlineSourceAuth = &auth
 		e.Source.Auth = nil
@@ -310,12 +337,24 @@ func (e *ProviderEntry) HasMetadataSource() bool {
 	return e != nil && e.Source.IsMetadataURL()
 }
 
+func (e *ProviderEntry) HasReleaseMetadataSource() bool {
+	return e != nil && (e.Source.IsMetadataURL() || e.Source.IsLocalMetadataPath())
+}
+
 func (e *ProviderEntry) HasRemoteSource() bool {
+	return e != nil && e.Source.IsMetadataURL()
+}
+
+func (e *ProviderEntry) HasRemoteReleaseSource() bool {
 	return e != nil && e.Source.IsMetadataURL()
 }
 
 func (e *ProviderEntry) HasLocalSource() bool {
 	return e != nil && e.Source.IsLocal()
+}
+
+func (e *ProviderEntry) HasLocalReleaseSource() bool {
+	return e != nil && e.Source.IsLocalMetadataPath()
 }
 
 func (e *ProviderEntry) SourceMetadataURL() string {
@@ -335,9 +374,29 @@ func (e *ProviderEntry) SourceRemoteLocation() string {
 	return ""
 }
 
+func (e *ProviderEntry) SourceReleaseLocation() string {
+	if e == nil {
+		return ""
+	}
+	if e.Source.IsMetadataURL() {
+		return e.Source.MetadataURL()
+	}
+	if e.Source.IsLocalMetadataPath() {
+		return e.Source.MetadataPath()
+	}
+	return ""
+}
+
 func (e *ProviderEntry) SourcePath() string {
 	if e.Source.IsLocal() {
 		return e.Source.Path
+	}
+	return ""
+}
+
+func (e *ProviderEntry) SourceReleasePath() string {
+	if e.Source.IsLocalMetadataPath() {
+		return e.Source.MetadataPath()
 	}
 	return ""
 }
@@ -1005,25 +1064,28 @@ func loadMergedConfigRoot(paths []string, lookup func(string) (string, bool), mo
 	}
 
 	roots := make([]yaml.Node, len(paths))
-	useV3Classification := false
+	sourceSyntax := providerSourceSyntaxLegacy
 	for i, path := range paths {
 		root, err := loadValidatedConfigRoot(path, lookup, mode, sentinelPrefix)
 		if err != nil {
 			return yaml.Node{}, err
 		}
-		usesV3, err := configRootUsesAPIVersion(root)
+		rootSyntax, err := configRootSourceSyntax(root)
 		if err != nil {
 			return yaml.Node{}, err
 		}
-		if usesV3 {
-			useV3Classification = true
+		if rootSyntax != providerSourceSyntaxLegacy {
+			if sourceSyntax != providerSourceSyntaxLegacy && sourceSyntax != rootSyntax {
+				return yaml.Node{}, fmt.Errorf("config validation: mixed apiVersion values are not supported across merged config files")
+			}
+			sourceSyntax = rootSyntax
 		}
 		roots[i] = root
 	}
 
 	var merged any
 	for i, path := range paths {
-		value, err := loadConfigValue(path, roots[i], useV3Classification)
+		value, err := loadConfigValue(path, roots[i], sourceSyntax)
 		if err != nil {
 			return yaml.Node{}, err
 		}
@@ -1050,26 +1112,27 @@ func loadMergedConfigRoot(paths []string, lookup func(string) (string, bool), mo
 	return root, nil
 }
 
-func configRootUsesAPIVersion(root yaml.Node) (bool, error) {
+func configRootSourceSyntax(root yaml.Node) (providerSourceSyntaxMode, error) {
 	doc := documentValueNode(&root)
 	if doc == nil || doc.Kind != yaml.MappingNode {
-		return false, nil
+		return providerSourceSyntaxLegacy, nil
 	}
 	node := mappingValueNode(doc, "apiVersion")
 	if node == nil {
-		return false, nil
+		return providerSourceSyntaxLegacy, nil
 	}
 	value := strings.TrimSpace(node.Value)
 	if value == "" {
-		return false, nil
+		return providerSourceSyntaxLegacy, nil
 	}
-	if !usesV3ConfigSyntax(value) {
-		return false, fmt.Errorf("config validation: unsupported apiVersion %q", value)
+	mode, err := providerSourceSyntaxForAPIVersion(value)
+	if err != nil {
+		return providerSourceSyntaxLegacy, err
 	}
-	return true, nil
+	return mode, nil
 }
 
-func loadConfigValue(path string, root yaml.Node, useV3Classification bool) (any, error) {
+func loadConfigValue(path string, root yaml.Node, sourceSyntax providerSourceSyntaxMode) (any, error) {
 	doc := documentValueNode(&root)
 	if doc == nil || doc.Kind == 0 {
 		return nil, nil
@@ -1089,7 +1152,7 @@ func loadConfigValue(path string, root yaml.Node, useV3Classification bool) (any
 		if !ok {
 			return nil, fmt.Errorf("expected mapping document")
 		}
-		resolveRelativePathsInValue(path, root, useV3Classification)
+		resolveRelativePathsInValue(path, root, sourceSyntax)
 	}
 	return normalized, nil
 }
@@ -1530,14 +1593,14 @@ func normalizeProviderSourceShapes(cfg *Config) {
 		return
 	}
 	cfg.APIVersion = strings.TrimSpace(cfg.APIVersion)
-	useV3Classification := usesV3ConfigSyntax(cfg.APIVersion)
+	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 
 	normalizeEntry := func(kind string, entry *ProviderEntry) {
 		if entry == nil {
 			return
 		}
-		normalizeProviderSource(kind, &entry.Source, useV3Classification)
-		if entry.Source.IsMetadataURL() && entry.Source.Auth == nil && entry.InlineSourceAuth != nil {
+		normalizeProviderSource(kind, &entry.Source, sourceSyntax)
+		if entry.HasReleaseMetadataSource() && entry.Source.Auth == nil && entry.InlineSourceAuth != nil {
 			auth := *entry.InlineSourceAuth
 			entry.Source.Auth = &auth
 			entry.InlineSourceAuth = nil
@@ -1572,12 +1635,16 @@ func normalizeProviderSourceShapes(cfg *Config) {
 	}
 }
 
-func normalizeProviderSource(kind string, source *ProviderSource, useV3Classification bool) {
+func normalizeProviderSource(kind string, source *ProviderSource, sourceSyntax providerSourceSyntaxMode) {
 	if source == nil {
 		return
 	}
 	source.scalar = strings.TrimSpace(source.scalar)
-	if source.Builtin != "" || source.Path != "" || source.metadataURL != "" {
+	if sourceSyntax == providerSourceSyntaxV4 && source.Path != "" && source.metadataPath == "" {
+		source.metadataPath = source.Path
+		source.Path = ""
+	}
+	if source.Builtin != "" || source.Path != "" || source.metadataURL != "" || source.metadataPath != "" {
 		source.scalar = ""
 		return
 	}
@@ -1585,7 +1652,7 @@ func normalizeProviderSource(kind string, source *ProviderSource, useV3Classific
 		return
 	}
 	switch {
-	case !useV3Classification:
+	case sourceSyntax == providerSourceSyntaxLegacy:
 		source.Builtin = source.scalar
 	case isBuiltinScalarSource(kind, source.scalar):
 		source.Builtin = source.scalar
@@ -1593,6 +1660,8 @@ func normalizeProviderSource(kind string, source *ProviderSource, useV3Classific
 		source.metadataURL = source.scalar
 	case looksLikeUnsupportedScalarSource(source.scalar):
 		source.unsupported = source.scalar
+	case sourceSyntax == providerSourceSyntaxV4:
+		source.metadataPath = source.scalar
 	default:
 		source.Path = source.scalar
 	}
@@ -1659,8 +1728,25 @@ func looksLikeUnsupportedScalarSource(value string) bool {
 	return false
 }
 
-func usesV3ConfigSyntax(apiVersion string) bool {
-	return strings.TrimSpace(apiVersion) == APIVersionV3
+func providerSourceSyntaxForAPIVersion(apiVersion string) (providerSourceSyntaxMode, error) {
+	switch strings.TrimSpace(apiVersion) {
+	case "":
+		return providerSourceSyntaxLegacy, nil
+	case APIVersionV3:
+		return providerSourceSyntaxV3, nil
+	case APIVersionV4:
+		return providerSourceSyntaxV4, nil
+	default:
+		return providerSourceSyntaxLegacy, fmt.Errorf("config validation: unsupported apiVersion %q", strings.TrimSpace(apiVersion))
+	}
+}
+
+func sourceSyntaxForConfig(apiVersion string) providerSourceSyntaxMode {
+	mode, err := providerSourceSyntaxForAPIVersion(apiVersion)
+	if err != nil {
+		return providerSourceSyntaxLegacy
+	}
+	return mode
 }
 
 func nonNilProviderEntryMap(entries map[string]*ProviderEntry) map[string]*ProviderEntry {
@@ -1687,7 +1773,7 @@ func applyDefaultBuiltinProviderEntries(entries map[string]*ProviderEntry, defau
 		}
 	}
 	for _, entry := range entries {
-		if entry == nil || entry.Source.IsBuiltin() || entry.Source.IsMetadataURL() || entry.Source.IsLocal() || entry.Source.UnsupportedURL() != "" {
+		if entry == nil || entry.Source.IsBuiltin() || entry.Source.IsMetadataURL() || entry.Source.IsLocalMetadataPath() || entry.Source.IsLocal() || entry.Source.UnsupportedURL() != "" {
 			continue
 		}
 		entry.Source.Builtin = builtin
@@ -1839,7 +1925,7 @@ func resolveBaseURL(cfg *Config) {
 	cfg.Server.Management.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Management.BaseURL), "/")
 }
 
-func resolveRelativePathsInValue(configPath string, root map[string]any, useV3Classification bool) {
+func resolveRelativePathsInValue(configPath string, root map[string]any, sourceSyntax providerSourceSyntaxMode) {
 	baseDir := filepath.Dir(configPath)
 	if absPath, err := filepath.Abs(configPath); err == nil {
 		baseDir = filepath.Dir(absPath)
@@ -1866,17 +1952,17 @@ func resolveRelativePathsInValue(configPath string, root map[string]any, useV3Cl
 			{key: "workflow", kind: string(HostProviderKindWorkflow)},
 		} {
 			for _, entry := range mapValues(nestedMap(providers, section.key)) {
-				resolveRelativePathsInEntry(section.kind, entry, baseDir, useV3Classification)
+				resolveRelativePathsInEntry(section.kind, entry, baseDir, sourceSyntax)
 			}
 		}
 	}
 
 	for _, entry := range mapValues(nestedMap(root, "plugins")) {
-		resolveRelativePathsInEntry(providermanifestv1.KindPlugin, entry, baseDir, useV3Classification)
+		resolveRelativePathsInEntry(providermanifestv1.KindPlugin, entry, baseDir, sourceSyntax)
 	}
 }
 
-func resolveRelativePathsInEntry(kind string, entry map[string]any, baseDir string, useV3Classification bool) {
+func resolveRelativePathsInEntry(kind string, entry map[string]any, baseDir string, sourceSyntax providerSourceSyntaxMode) {
 	if entry == nil {
 		return
 	}
@@ -1885,7 +1971,7 @@ func resolveRelativePathsInEntry(kind string, entry map[string]any, baseDir stri
 		resolveRelativeStringField(source, "path", baseDir)
 		return
 	}
-	if !useV3Classification {
+	if sourceSyntax == providerSourceSyntaxLegacy {
 		return
 	}
 	sourceValue, ok := entry["source"].(string)

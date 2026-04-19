@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -36,7 +38,7 @@ func runProvider(args []string) error {
 	}
 }
 
-const defaultPlatforms = "darwin/amd64,darwin/arm64,linux/amd64,linux/arm,linux/arm64"
+const defaultPlatforms = "darwin/amd64,darwin/arm64,linux/amd64,linux/arm64"
 const allPlatformsValue = "all"
 const defaultReleaseOutputDir = "dist/"
 const releaseBinaryPrefix = "gestalt-plugin-"
@@ -80,7 +82,7 @@ type providerReleaseArtifact struct {
 	SHA256 string `yaml:"sha256"`
 }
 
-func runProviderRelease(args []string) error {
+func runProviderRelease(args []string) (err error) {
 	fs := flag.NewFlagSet("gestaltd provider release", flag.ContinueOnError)
 	fs.Usage = func() { printProviderReleaseUsage(fs.Output()) }
 	version := fs.String("version", "", "semantic version string (required)")
@@ -111,6 +113,15 @@ func runProviderRelease(args []string) error {
 		return err
 	}
 	sourceDir := filepath.Dir(manifestPath)
+	catalogSnapshot, err := snapshotSourceStaticCatalog(sourceDir)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if restoreErr := catalogSnapshot.Restore(); restoreErr != nil && err == nil {
+			err = fmt.Errorf("restore synthesized static catalog state: %w", restoreErr)
+		}
+	}()
 	_, releaseManifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", manifestPath, err)
@@ -123,6 +134,9 @@ func runProviderRelease(args []string) error {
 		return fmt.Errorf("read %s after release build: %w", manifestPath, err)
 	}
 	if err := validateReleaseOutputDir(releaseManifest, sourceDir, *outputDir); err != nil {
+		return err
+	}
+	if err := providerpkg.EnsureSourceStaticCatalog(manifestPath, releaseManifest); err != nil {
 		return err
 	}
 	src, err := pluginsource.Parse(releaseManifest.Source)
@@ -184,6 +198,63 @@ func runProviderRelease(args []string) error {
 		return fmt.Errorf("write release metadata: %w", err)
 	}
 
+	return nil
+}
+
+type sourceStaticCatalogSnapshot struct {
+	path   string
+	data   []byte
+	mode   fs.FileMode
+	exists bool
+}
+
+func snapshotSourceStaticCatalog(sourceDir string) (*sourceStaticCatalogSnapshot, error) {
+	path := providerpkg.StaticCatalogPath(sourceDir)
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &sourceStaticCatalogSnapshot{path: path}, nil
+		}
+		return nil, fmt.Errorf("stat source static catalog: %w", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read source static catalog: %w", err)
+	}
+	return &sourceStaticCatalogSnapshot{
+		path:   path,
+		data:   data,
+		mode:   info.Mode().Perm(),
+		exists: true,
+	}, nil
+}
+
+func (s *sourceStaticCatalogSnapshot) Restore() error {
+	if s == nil || s.path == "" {
+		return nil
+	}
+	current, err := os.ReadFile(s.path)
+	switch {
+	case err == nil:
+		if s.exists && bytes.Equal(current, s.data) {
+			return nil
+		}
+	case os.IsNotExist(err):
+		if !s.exists {
+			return nil
+		}
+	default:
+		return fmt.Errorf("read current static catalog: %w", err)
+	}
+	if !s.exists {
+		if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove generated static catalog: %w", err)
+		}
+		return nil
+	}
+	if err := os.WriteFile(s.path, s.data, s.mode); err != nil {
+		return fmt.Errorf("restore static catalog: %w", err)
+	}
 	return nil
 }
 
@@ -533,6 +604,7 @@ func printProviderReleaseUsage(w io.Writer) {
 	writeUsageLine(w, "Pass --platform with a comma-separated os/arch[/libc] list or --platform all")
 	writeUsageLine(w, "to build multiple per-platform tar.gz archives plus a checksums file.")
 	writeUsageLine(w, "Run from the provider source directory.")
+	writeUsageLine(w, "For apiVersion v4 local deploy configs, point source.path at dist/provider-release.yaml.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --version    Semantic version string (required)")

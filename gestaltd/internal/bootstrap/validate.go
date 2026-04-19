@@ -22,10 +22,7 @@ import (
 // starting the server or running migrations. Unlike Bootstrap, provider
 // validation is strict: any provider construction failure is returned.
 func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) ([]string, error) {
-	if err := plugininvocation.ValidateEffectiveCatalogs(ctx, cfg); err != nil {
-		return nil, err
-	}
-	if err := plugininvocation.ValidateDependencies(ctx, cfg); err != nil {
+	if err := plugininvocation.ValidateEffectiveCatalogsAndDependencies(ctx, cfg); err != nil {
 		return nil, err
 	}
 
@@ -153,7 +150,7 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 }
 
 func buildProviderForValidation(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (*ProviderBuildResult, error) {
-	if entry == nil || !entry.HasRemoteSource() || !entry.HasResolvedManifest() {
+	if entry == nil || !entry.HasReleaseMetadataSource() || !entry.HasResolvedManifest() {
 		return buildProvider(ctx, name, entry, deps)
 	}
 	prov, err := newPreparedProviderStub(name, entry)

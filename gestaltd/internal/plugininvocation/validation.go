@@ -24,6 +24,32 @@ type resolvedDependencyCatalog struct {
 	err         error
 }
 
+type catalogResolutionCache struct {
+	entries map[string]resolvedDependencyCatalog
+}
+
+func newCatalogResolutionCache(size int) *catalogResolutionCache {
+	if size < 0 {
+		size = 0
+	}
+	return &catalogResolutionCache{entries: make(map[string]resolvedDependencyCatalog, size)}
+}
+
+func (c *catalogResolutionCache) resolve(ctx context.Context, name string, entry *config.ProviderEntry) resolvedDependencyCatalog {
+	if c == nil {
+		resolved := resolvedDependencyCatalog{}
+		resolved.catalog, resolved.sessionOnly, resolved.err = resolveStaticCatalog(ctx, name, entry)
+		return resolved
+	}
+	if resolved, ok := c.entries[name]; ok {
+		return resolved
+	}
+	resolved := resolvedDependencyCatalog{}
+	resolved.catalog, resolved.sessionOnly, resolved.err = resolveStaticCatalog(ctx, name, entry)
+	c.entries[name] = resolved
+	return resolved
+}
+
 func ValidateEffectiveCatalog(ctx context.Context, name string, entry *config.ProviderEntry) error {
 	if entry == nil {
 		return nil
@@ -33,6 +59,18 @@ func ValidateEffectiveCatalog(ctx context.Context, name string, entry *config.Pr
 }
 
 func ValidateEffectiveCatalogs(ctx context.Context, cfg *config.Config) error {
+	return validateEffectiveCatalogs(ctx, cfg, newCatalogResolutionCache(len(cfg.Plugins)))
+}
+
+func ValidateEffectiveCatalogsAndDependencies(ctx context.Context, cfg *config.Config) error {
+	cache := newCatalogResolutionCache(len(cfg.Plugins))
+	if err := validateEffectiveCatalogs(ctx, cfg, cache); err != nil {
+		return err
+	}
+	return validateDependencies(ctx, cfg, cache)
+}
+
+func validateEffectiveCatalogs(ctx context.Context, cfg *config.Config, cache *catalogResolutionCache) error {
 	if cfg == nil {
 		return nil
 	}
@@ -41,18 +79,22 @@ func ValidateEffectiveCatalogs(ctx context.Context, cfg *config.Config) error {
 		if entry == nil {
 			continue
 		}
-		if err := ValidateEffectiveCatalog(ctx, name, entry); err != nil {
-			return fmt.Errorf("config validation: plugins.%s: %w", name, err)
+		resolved := cache.resolve(ctx, name, entry)
+		if resolved.err != nil {
+			return fmt.Errorf("config validation: plugins.%s: %w", name, resolved.err)
 		}
 	}
 	return nil
 }
 
 func ValidateDependencies(ctx context.Context, cfg *config.Config) error {
+	return validateDependencies(ctx, cfg, newCatalogResolutionCache(len(cfg.Plugins)))
+}
+
+func validateDependencies(ctx context.Context, cfg *config.Config, cache *catalogResolutionCache) error {
 	if cfg == nil {
 		return nil
 	}
-	targetCatalogs := make(map[string]resolvedDependencyCatalog, len(cfg.Plugins))
 	for callerName, callerEntry := range cfg.Plugins {
 		if callerEntry == nil || len(callerEntry.Invokes) == 0 {
 			continue
@@ -65,11 +107,7 @@ func ValidateDependencies(ctx context.Context, cfg *config.Config) error {
 			if !ok || targetEntry == nil {
 				return fmt.Errorf("config validation: plugins.%s.invokes[%d] references unknown plugin %q", callerName, i, dependency.Plugin)
 			}
-			resolved, ok := targetCatalogs[dependency.Plugin]
-			if !ok {
-				resolved.catalog, resolved.sessionOnly, resolved.err = resolveStaticCatalog(ctx, dependency.Plugin, targetEntry)
-				targetCatalogs[dependency.Plugin] = resolved
-			}
+			resolved := cache.resolve(ctx, dependency.Plugin, targetEntry)
 			if resolved.err != nil {
 				return fmt.Errorf("config validation: plugins.%s.invokes[%d]: %w", callerName, i, resolved.err)
 			}

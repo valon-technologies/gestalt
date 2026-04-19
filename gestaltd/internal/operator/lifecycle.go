@@ -172,10 +172,7 @@ func (l *Lifecycle) initAtPaths(configPaths []string, state StatePaths) (*Lockfi
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, nil, initPaths{}, err
 	}
-	if err := plugininvocation.ValidateEffectiveCatalogs(context.Background(), cfg); err != nil {
-		return nil, nil, initPaths{}, err
-	}
-	if err := plugininvocation.ValidateDependencies(context.Background(), cfg); err != nil {
+	if err := plugininvocation.ValidateEffectiveCatalogsAndDependencies(context.Background(), cfg); err != nil {
 		return nil, nil, initPaths{}, err
 	}
 	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
@@ -258,7 +255,7 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, path
 	}
 	for name, entry := range cfg.Providers.UI {
 		if entry != nil && sourceBacked(&entry.ProviderEntry) {
-			if _, existed := existingUIEntries[name]; !existed && entry.HasLocalSource() {
+			if _, existed := existingUIEntries[name]; !existed && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
 				if plugin := cfg.Plugins[name]; plugin != nil && strings.TrimSpace(plugin.UI) == "" && strings.TrimSpace(plugin.MountPath) != "" {
 					continue
 				}
@@ -654,7 +651,7 @@ type providerFingerprintInput struct {
 }
 
 func sourceBacked(entry *config.ProviderEntry) bool {
-	return entry != nil && (entry.HasRemoteSource() || entry.HasLocalSource())
+	return entry != nil && (entry.HasRemoteSource() || entry.HasLocalSource() || entry.HasLocalReleaseSource())
 }
 
 func hostProviderCollections(cfg *config.Config) []struct {
@@ -734,29 +731,29 @@ func configHasProviderLoading(cfg *config.Config) bool {
 
 func configHasLocalProviderSources(cfg *config.Config) bool {
 	for _, entry := range cfg.Plugins {
-		if entry.HasLocalSource() {
+		if entry.HasLocalSource() || entry.HasLocalReleaseSource() {
 			return true
 		}
 	}
 	for _, collection := range hostProviderCollections(cfg) {
 		for _, entry := range collection.entries {
-			if entry != nil && entry.HasLocalSource() {
+			if entry != nil && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
 				return true
 			}
 		}
 	}
 	for _, entry := range cfg.Providers.UI {
-		if entry != nil && entry.HasLocalSource() {
+		if entry != nil && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
 			return true
 		}
 	}
 	for _, def := range cfg.Providers.IndexedDB {
-		if def != nil && def.HasLocalSource() {
+		if def != nil && (def.HasLocalSource() || def.HasLocalReleaseSource()) {
 			return true
 		}
 	}
 	for _, def := range cfg.Providers.S3 {
-		if def != nil && def.HasLocalSource() {
+		if def != nil && (def.HasLocalSource() || def.HasLocalReleaseSource()) {
 			return true
 		}
 	}
@@ -1111,11 +1108,17 @@ func ProviderFingerprint(name string, entry *config.ProviderEntry, configDir str
 
 	input := providerFingerprintInput{
 		Name:   name,
-		Source: entry.SourceRemoteLocation(),
+		Source: providerSourceLockLocation(entry, configDir),
 	}
 	if entry.HasLocalSource() {
 		input.Path = fingerprintLocalSourcePath(entry.SourcePath(), configDir)
 		digest, err := fingerprintLocalSourceDigest(entry.SourcePath())
+		if err != nil {
+			return "", err
+		}
+		input.Digest = digest
+	} else if entry.HasLocalReleaseSource() {
+		digest, err := fingerprintLocalReleaseMetadataDigest(entry.SourceReleasePath())
 		if err != nil {
 			return "", err
 		}
@@ -1132,6 +1135,27 @@ func ProviderFingerprint(name string, entry *config.ProviderEntry, configDir str
 
 func NamedUIProviderFingerprint(name string, entry *config.ProviderEntry, configDir string) (string, error) {
 	return ProviderFingerprint("ui:"+name, entry, configDir)
+}
+
+func providerSourceLockLocation(entry *config.ProviderEntry, configDir string) string {
+	if entry == nil {
+		return ""
+	}
+	if entry.HasRemoteSource() {
+		return entry.SourceRemoteLocation()
+	}
+	if entry.HasLocalReleaseSource() {
+		return fingerprintLocalSourcePath(entry.SourceReleasePath(), configDir)
+	}
+	return ""
+}
+
+func resolveLockedArchiveLocation(configDir, sourceLocation, archiveRef string) (string, error) {
+	if isRemoteReleaseMetadataLocation(sourceLocation) {
+		return resolveArchiveSourceLocation(sourceLocation, archiveRef)
+	}
+	metadataPath := resolveLockPath(configDir, sourceLocation)
+	return resolveArchiveSourceLocation(metadataPath, archiveRef)
 }
 
 func fingerprintLocalSourcePath(sourcePath, configDir string) string {
@@ -1177,6 +1201,68 @@ func fingerprintLocalSourceDigest(sourcePath string) (string, error) {
 		return "", err
 	}
 	return providerpkg.DirectoryDigest(sourceDir, manifestPath, manifest)
+}
+
+func fingerprintLocalReleaseMetadataDigest(sourcePath string) (string, error) {
+	payload, err := normalizedLocalReleaseMetadataFingerprintPayloadFromFile(sourcePath)
+	if err != nil {
+		return "", err
+	}
+	if digest, ok, err := fingerprintLocalReleaseSourceTreeDigest(sourcePath); err != nil {
+		return "", err
+	} else if ok {
+		input := struct {
+			SourceDigest string          `json:"sourceDigest"`
+			Metadata     json.RawMessage `json:"metadata"`
+		}{
+			SourceDigest: digest,
+			Metadata:     payload,
+		}
+		data, err := json.Marshal(input)
+		if err != nil {
+			return "", err
+		}
+		sum := sha256.Sum256(data)
+		return hex.EncodeToString(sum[:]), nil
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func fingerprintLocalReleaseSourceTreeDigest(sourcePath string) (string, bool, error) {
+	cleaned := filepath.Clean(sourcePath)
+	if filepath.Base(cleaned) != "provider-release.yaml" {
+		return "", false, nil
+	}
+	distDir := filepath.Dir(cleaned)
+	if filepath.Base(distDir) != "dist" {
+		return "", false, nil
+	}
+	sourceDir := filepath.Dir(distDir)
+
+	var manifestPath string
+	for _, name := range providerpkg.ManifestFiles {
+		candidate := filepath.Join(sourceDir, name)
+		if _, err := os.Stat(candidate); err == nil {
+			manifestPath = candidate
+			break
+		} else if !os.IsNotExist(err) {
+			return "", false, err
+		}
+	}
+	if manifestPath == "" {
+		return "", false, nil
+	}
+
+	_, manifest, err := providerpkg.PrepareSourceManifest(manifestPath)
+	if err != nil {
+		return "", false, err
+	}
+	digest, err := providerpkg.DirectoryDigest(sourceDir, manifestPath, manifest)
+	if err != nil {
+		return "", false, err
+	}
+	return digest, true, nil
 }
 
 func archivePolicyKind(kind string) string {
@@ -1256,7 +1342,7 @@ func lockEntryMatches(paths initPaths, kind, name string, providerEntry *config.
 	if err != nil || entry.Fingerprint != fingerprint {
 		return false
 	}
-	if entry.Source != providerEntry.SourceRemoteLocation() {
+	if entry.Source != providerSourceLockLocation(providerEntry, paths.configDir) {
 		return false
 	}
 	if len(entry.Archives) > 0 {
@@ -1465,8 +1551,8 @@ func localUILockEntryFromPreparedInstall(paths initPaths, name string, plugin *c
 	}, nil
 }
 
-func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKind, name, subject, destDir string, plugin *config.ProviderEntry) (*pluginstore.InstalledPlugin, LockEntry, error) {
-	sourceLocation := plugin.SourceMetadataURL()
+func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKind, name, subject, destDir string, plugin *config.ProviderEntry, configDir string) (*pluginstore.InstalledPlugin, LockEntry, error) {
+	sourceLocation := plugin.SourceReleaseLocation()
 	metadata, err := fetchProviderReleaseMetadata(ctx, l.metadataHTTPClient(), sourceLocation, sourceAuthToken(plugin))
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("%s fetch metadata %q: %w", subject, sourceLocation, err)
@@ -1483,7 +1569,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 		Package:  metadata.Package,
 		Kind:     metadata.Kind,
 		Runtime:  metadata.Runtime,
-		Source:   sourceLocation,
+		Source:   providerSourceLockLocation(plugin, configDir),
 		Version:  metadata.Version,
 		Archives: archives,
 	}
@@ -1493,7 +1579,11 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	if !ok || archive.URL == "" {
 		return nil, LockEntry{}, fmt.Errorf("no archive for platform %s for %s; publish an explicit %s target or a generic package where allowed", currentPlatform, subject, currentPlatform)
 	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archive.URL)
+	archiveLocation, err := resolveLockedArchiveLocation(configDir, entry.Source, archive.URL)
+	if err != nil {
+		return nil, LockEntry{}, fmt.Errorf("resolve archive for %s: %w", subject, err)
+	}
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archiveLocation)
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("download metadata source package for %s: %w", subject, err)
 	}
@@ -1575,17 +1665,17 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 		return localLockEntryFromPreparedInstall(paths, kind, name, plugin, install)
 	}
 
-	sourceLocation := plugin.SourceRemoteLocation()
+	sourceLocation := plugin.SourceReleaseLocation()
 	var (
 		installed *pluginstore.InstalledPlugin
 		entry     LockEntry
 		err       error
 	)
 	subject := fmt.Sprintf("%s %q", kind, name)
-	if !plugin.HasMetadataSource() {
-		return LockEntry{}, fmt.Errorf("%s %q source %q: only metadata URL and local path sources are supported", kind, name, sourceLocation)
+	if !plugin.HasReleaseMetadataSource() {
+		return LockEntry{}, fmt.Errorf("%s %q source %q: only provider-release metadata sources and local manifest paths are supported", kind, name, sourceLocation)
 	}
-	installed, entry, err = l.installMetadataSourcePackage(ctx, kind, name, subject, destDir, plugin)
+	installed, entry, err = l.installMetadataSourcePackage(ctx, kind, name, subject, destDir, plugin, paths.configDir)
 	if err != nil {
 		return LockEntry{}, err
 	}
@@ -1630,17 +1720,17 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 		return localLockEntryFromPreparedInstall(paths, providermanifestv1.KindPlugin, name, plugin, install)
 	}
 
-	sourceLocation := plugin.SourceRemoteLocation()
+	sourceLocation := plugin.SourceReleaseLocation()
 	destDir := providerDestDir(paths, name)
 	var (
 		installed *pluginstore.InstalledPlugin
 		entry     LockProviderEntry
 		err       error
 	)
-	if !plugin.HasMetadataSource() {
-		return LockProviderEntry{}, fmt.Errorf("provider %q source %q: only metadata URL and local path sources are supported", name, sourceLocation)
+	if !plugin.HasReleaseMetadataSource() {
+		return LockProviderEntry{}, fmt.Errorf("provider %q source %q: only provider-release metadata sources and local manifest paths are supported", name, sourceLocation)
 	}
-	installed, entry, err = l.installMetadataSourcePackage(ctx, providermanifestv1.KindPlugin, name, fmt.Sprintf("provider %q", name), destDir, plugin)
+	installed, entry, err = l.installMetadataSourcePackage(ctx, providermanifestv1.KindPlugin, name, fmt.Sprintf("provider %q", name), destDir, plugin, paths.configDir)
 	if err != nil {
 		return LockProviderEntry{}, err
 	}
@@ -1699,17 +1789,17 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths init
 		entry.Fingerprint = fingerprint
 		return entry, nil
 	}
-	expectedPackage := plugin.SourceRemoteLocation()
+	expectedPackage := plugin.SourceReleaseLocation()
 
 	var (
 		installed *pluginstore.InstalledPlugin
 		entry     LockUIEntry
 		opErr     error
 	)
-	if !plugin.HasMetadataSource() {
-		return LockUIEntry{}, fmt.Errorf("%s source %q: only metadata URL and local path sources are supported", subject, expectedPackage)
+	if !plugin.HasReleaseMetadataSource() {
+		return LockUIEntry{}, fmt.Errorf("%s source %q: only provider-release metadata sources and local manifest paths are supported", subject, expectedPackage)
 	}
-	installed, entry, opErr = l.installMetadataSourcePackage(ctx, providermanifestv1.KindWebUI, name, subject, destDir, plugin)
+	installed, entry, opErr = l.installMetadataSourcePackage(ctx, providermanifestv1.KindWebUI, name, subject, destDir, plugin, paths.configDir)
 	if opErr != nil {
 		return LockUIEntry{}, opErr
 	}
@@ -2039,7 +2129,7 @@ func validateSynthesizedPluginUIEntry(pluginName string, existing, expected *con
 	if existing == nil || expected == nil {
 		return nil
 	}
-	if current := strings.TrimSpace(existing.SourceRemoteLocation()); current != "" {
+	if current := strings.TrimSpace(existing.SourceReleaseLocation()); current != "" {
 		return fmt.Errorf("config validation: plugins.%s owned ui conflicts with providers.ui.%s.source", pluginName, pluginName)
 	}
 	if current := strings.TrimSpace(existing.Source.Path); current != "" && !equivalentProviderManifestPath(current, expected.Source.Path) {
@@ -2175,7 +2265,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 	if err != nil {
 		return fmt.Errorf("fingerprinting provider %q: %w", name, err)
 	}
-	if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRemoteLocation() {
+	if entry.Fingerprint != fingerprint || entry.Source != providerSourceLockLocation(plugin, paths.configDir) {
 		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init %s`", name, paths.configFlags)
 	}
 
@@ -2232,7 +2322,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 	if err != nil {
 		return fmt.Errorf("fingerprinting %s %q provider: %w", kind, name, err)
 	}
-	if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRemoteLocation() {
+	if entry.Fingerprint != fingerprint || entry.Source != providerSourceLockLocation(plugin, paths.configDir) {
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init %s`", kind, name, paths.configFlags)
 	}
 
@@ -2354,17 +2444,33 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 	if !ok || archive.URL == "" {
 		return fmt.Errorf("no archive for platform %s for provider %q; run `gestaltd init %s`", platform, name, paths.configFlags)
 	}
-	if locked && archive.SHA256 == "" {
+	archiveLocation, err := resolveLockedArchiveLocation(paths.configDir, entry.Source, archive.URL)
+	if err != nil {
+		return fmt.Errorf("resolve locked source provider for provider %q: %w", name, err)
+	}
+	if locked && archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
 		return fmt.Errorf("no verified hash for platform %s for provider %q; run `gestaltd init %s`", platform, name, formatPlatformInitFlags(paths, platform))
 	}
-
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archive.URL)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archiveLocation)
 	if err != nil {
 		return fmt.Errorf("download locked source provider for provider %q: %w", name, err)
 	}
 	defer download.Cleanup()
 	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
 		return fmt.Errorf("locked source provider digest mismatch for provider %q: got %s, want %s", name, download.SHA256Hex, archive.SHA256)
+	}
+	if archive.SHA256 == "" {
+		sourceLocation := entry.Source
+		if !isRemoteReleaseMetadataLocation(sourceLocation) {
+			sourceLocation = resolveLockPath(paths.configDir, sourceLocation)
+		}
+		expectedSHA, err := localReleaseArchiveExpectedSHA(sourceLocation, resolvedKey, archiveLocation)
+		if err != nil {
+			return fmt.Errorf("load local archive metadata for provider %q: %w", name, err)
+		}
+		if expectedSHA != "" && download.SHA256Hex != expectedSHA {
+			return fmt.Errorf("locked source provider digest mismatch for provider %q: got %s, want %s", name, download.SHA256Hex, expectedSHA)
+		}
 	}
 
 	destDir := providerDestDir(paths, name)
@@ -2394,17 +2500,33 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	if !ok || archive.URL == "" {
 		return fmt.Errorf("no archive for platform %s for %s %q; run `gestaltd init %s`", platform, kind, name, paths.configFlags)
 	}
-	if locked && archive.SHA256 == "" {
+	archiveLocation, err := resolveLockedArchiveLocation(paths.configDir, entry.Source, archive.URL)
+	if err != nil {
+		return fmt.Errorf("resolve locked source provider for %s %q: %w", kind, name, err)
+	}
+	if locked && archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
 		return fmt.Errorf("no verified hash for platform %s for %s %q; run `gestaltd init %s`", platform, kind, name, formatPlatformInitFlags(paths, platform))
 	}
-
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archive.URL)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archiveLocation)
 	if err != nil {
 		return fmt.Errorf("download locked source provider for %s %q: %w", kind, name, err)
 	}
 	defer download.Cleanup()
 	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
 		return fmt.Errorf("locked source provider digest mismatch for %s %q: got %s, want %s", kind, name, download.SHA256Hex, archive.SHA256)
+	}
+	if archive.SHA256 == "" {
+		sourceLocation := entry.Source
+		if !isRemoteReleaseMetadataLocation(sourceLocation) {
+			sourceLocation = resolveLockPath(paths.configDir, sourceLocation)
+		}
+		expectedSHA, err := localReleaseArchiveExpectedSHA(sourceLocation, resolvedKey, archiveLocation)
+		if err != nil {
+			return fmt.Errorf("load local archive metadata for %s %q: %w", kind, name, err)
+		}
+		if expectedSHA != "" && download.SHA256Hex != expectedSHA {
+			return fmt.Errorf("locked source provider digest mismatch for %s %q: got %s, want %s", kind, name, download.SHA256Hex, expectedSHA)
+		}
 	}
 
 	if destDir == "" {
@@ -2435,21 +2557,37 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 
 func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initPaths, plugin *config.ProviderEntry, entry LockUIEntry, destDir string, locked bool) error {
 	platform := providerpkg.CurrentPlatformString()
-	archive, _, ok := resolveArchiveForPlatform(entry, platform)
+	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
 		return fmt.Errorf("no archive for platform %s for ui provider; run `gestaltd init %s`", platform, paths.configFlags)
 	}
-	if locked && archive.SHA256 == "" {
+	archiveLocation, err := resolveLockedArchiveLocation(paths.configDir, entry.Source, archive.URL)
+	if err != nil {
+		return fmt.Errorf("resolve locked source for ui provider: %w", err)
+	}
+	if locked && archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
 		return fmt.Errorf("no verified hash for platform %s for ui provider; run `gestaltd init %s`", platform, formatPlatformInitFlags(paths, platform))
 	}
-
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archive.URL)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archiveLocation)
 	if err != nil {
 		return fmt.Errorf("download locked source for ui provider: %w", err)
 	}
 	defer download.Cleanup()
 	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
 		return fmt.Errorf("locked source digest mismatch for ui provider: got %s, want %s", download.SHA256Hex, archive.SHA256)
+	}
+	if archive.SHA256 == "" {
+		sourceLocation := entry.Source
+		if !isRemoteReleaseMetadataLocation(sourceLocation) {
+			sourceLocation = resolveLockPath(paths.configDir, sourceLocation)
+		}
+		expectedSHA, err := localReleaseArchiveExpectedSHA(sourceLocation, resolvedKey, archiveLocation)
+		if err != nil {
+			return fmt.Errorf("load local archive metadata for ui provider: %w", err)
+		}
+		if expectedSHA != "" && download.SHA256Hex != expectedSHA {
+			return fmt.Errorf("locked source digest mismatch for ui provider: got %s, want %s", download.SHA256Hex, expectedSHA)
+		}
 	}
 
 	if err := os.RemoveAll(destDir); err != nil {
@@ -2515,8 +2653,15 @@ func (l *Lifecycle) hashArchiveEntry(ctx context.Context, kind, name string, ent
 	if err := validateLockedArchivePolicy(archivePolicySubject(kind, name), policyKind, manifest, *entry, platformKey, resolvedKey); err != nil {
 		return err
 	}
+	archiveLocation, err := resolveLockedArchiveLocation(paths.configDir, entry.Source, archive.URL)
+	if err != nil {
+		return fmt.Errorf("resolve archive for platform %s, source %s: %w", platformKey, entry.Source, err)
+	}
+	if !archiveReferenceNeedsIntegrityHash(archiveLocation) {
+		return nil
+	}
 	token := tokenForSource[entry.Source]
-	dl, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), token, archive.URL)
+	dl, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), token, archiveLocation)
 	if err != nil {
 		return fmt.Errorf("download archive for platform %s, source %s: %w", platformKey, entry.Source, err)
 	}
