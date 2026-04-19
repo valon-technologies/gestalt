@@ -951,6 +951,32 @@ plugins:
 		}
 	})
 
+	t.Run("apiVersion v4 classifies scalar local provider-release metadata sources", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v4
+providers:
+plugins:
+    custom_tool:
+      source: ./dist/provider-release.yaml
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.APIVersion != APIVersionV4 {
+			t.Fatalf("APIVersion = %q, want %q", cfg.APIVersion, APIVersionV4)
+		}
+		if got := cfg.Plugins["custom_tool"].SourceReleasePath(); got != filepath.Join(filepath.Dir(path), "dist", "provider-release.yaml") {
+			t.Fatalf("unexpected plugin release metadata path: %q", got)
+		}
+		if got := cfg.Plugins["custom_tool"].SourcePath(); got != "" {
+			t.Fatalf("SourcePath() = %q, want empty for v4 local release metadata", got)
+		}
+	})
+
 	t.Run("apiVersion classifies scalar workflow sources", func(t *testing.T) {
 		t.Parallel()
 
@@ -1059,6 +1085,52 @@ plugins:
 		auth, ok = plugin["auth"].(map[string]any)
 		if !ok || auth["token"] != "test-token" {
 			t.Fatalf("config round-tripped auth = %#v", plugin["auth"])
+		}
+	})
+
+	t.Run("apiVersion moves sibling auth onto local release metadata sources", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v4
+providers:
+plugins:
+    custom_tool:
+      source: ./plugins/custom_tool/dist/provider-release.yaml
+      auth:
+        token: test-token
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		entry := cfg.Plugins["custom_tool"]
+		wantPath := filepath.Join(filepath.Dir(path), "plugins", "custom_tool", "dist", "provider-release.yaml")
+		if got := entry.SourceReleasePath(); got != wantPath {
+			t.Fatalf("SourceReleasePath = %q, want %q", got, wantPath)
+		}
+		if entry.Source.Auth == nil || entry.Source.Auth.Token != "test-token" {
+			t.Fatalf("Source.Auth = %#v", entry.Source.Auth)
+		}
+		if entry.InlineSourceAuth != nil {
+			t.Fatalf("InlineSourceAuth = %#v, want nil", entry.InlineSourceAuth)
+		}
+		marshaled, err := yaml.Marshal(entry)
+		if err != nil {
+			t.Fatalf("yaml.Marshal: %v", err)
+		}
+		var roundTripped map[string]any
+		if err := yaml.Unmarshal(marshaled, &roundTripped); err != nil {
+			t.Fatalf("yaml.Unmarshal: %v", err)
+		}
+		source, ok := roundTripped["source"].(map[string]any)
+		if !ok || source["path"] != wantPath {
+			t.Fatalf("round-tripped source = %#v", roundTripped["source"])
+		}
+		auth, ok := roundTripped["auth"].(map[string]any)
+		if !ok || auth["token"] != "test-token" {
+			t.Fatalf("round-tripped auth = %#v", roundTripped["auth"])
 		}
 	})
 
@@ -3168,7 +3240,50 @@ plugins:
       auth:
         token: test-token
 `,
-			wantErr: "auth is only valid with metadata URL sources",
+			wantErr: "auth is only valid with provider-release metadata sources",
+		},
+		{
+			name: "apiVersion v4 local provider-release metadata is valid",
+			yaml: `
+apiVersion: gestaltd.config/v4
+providers:
+plugins:
+    external:
+      source: ./plugins/dummy/dist/provider-release.yaml
+`,
+		},
+		{
+			name: "apiVersion v4 local provider-release metadata allows current-directory file",
+			yaml: `
+apiVersion: gestaltd.config/v4
+providers:
+plugins:
+    external:
+      source: provider-release.yaml
+`,
+		},
+		{
+			name: "apiVersion v4 local provider-release metadata accepts sibling auth",
+			yaml: `
+apiVersion: gestaltd.config/v4
+providers:
+plugins:
+    external:
+      source: ./plugins/dummy/dist/provider-release.yaml
+      auth:
+        token: test-token
+`,
+		},
+		{
+			name: "apiVersion v4 rejects local source manifests",
+			yaml: `
+apiVersion: gestaltd.config/v4
+providers:
+plugins:
+    external:
+      source: ./plugins/dummy/manifest.yaml
+`,
+			wantErr: "source.path must reference provider-release.yaml metadata",
 		},
 		{
 			name: "apiVersion rejects non metadata http source",

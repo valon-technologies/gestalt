@@ -2611,68 +2611,87 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testing.T) {
 	t.Parallel()
 
-	cfg := validConfig()
-	cfg.Plugins = map[string]*config.ProviderEntry{
-		"roadmap": {
-			Source:         config.NewMetadataSource("https://example.invalid/github-com-example-roadmap/v0.0.1/provider-release.yaml"),
-			ConnectionMode: providermanifestv1.ConnectionModeIdentity,
-			Workflow: &config.PluginWorkflowConfig{
-				Provider:   "temporal",
-				Operations: []string{"sync"},
-			},
-			ResolvedManifest: &providermanifestv1.Manifest{
-				DisplayName: "Roadmap",
-				Description: "Managed roadmap plugin",
-				Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: "roadmap"},
-				Spec: &providermanifestv1.Spec{
-					Surfaces: &providermanifestv1.ProviderSurfaces{
-						REST: &providermanifestv1.RESTSurface{
-							BaseURL: "https://example.invalid",
-							Operations: []providermanifestv1.ProviderOperation{
-								{Name: "sync", Method: http.MethodPost, Path: "/sync"},
+	for _, tc := range []struct {
+		name   string
+		source config.ProviderSource
+	}{
+		{
+			name:   "remote release metadata",
+			source: config.NewMetadataSource("https://example.invalid/github-com-example-roadmap/v0.0.1/provider-release.yaml"),
+		},
+		{
+			name:   "local release metadata",
+			source: config.NewLocalReleaseMetadataSource(filepath.Join(t.TempDir(), "roadmap", "dist", "provider-release.yaml")),
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := validConfig()
+			cfg.Plugins = map[string]*config.ProviderEntry{
+				"roadmap": {
+					Source:         tc.source,
+					ConnectionMode: providermanifestv1.ConnectionModeIdentity,
+					Workflow: &config.PluginWorkflowConfig{
+						Provider:   "temporal",
+						Operations: []string{"sync"},
+					},
+					ResolvedManifest: &providermanifestv1.Manifest{
+						DisplayName: "Roadmap",
+						Description: "Managed roadmap plugin",
+						Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: "roadmap"},
+						Spec: &providermanifestv1.Spec{
+							Surfaces: &providermanifestv1.ProviderSurfaces{
+								REST: &providermanifestv1.RESTSurface{
+									BaseURL: "https://example.invalid",
+									Operations: []providermanifestv1.ProviderOperation{
+										{Name: "sync", Method: http.MethodPost, Path: "/sync"},
+									},
+								},
 							},
 						},
 					},
 				},
-			},
-		},
-	}
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
+			}
+			cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+				"temporal": {Source: config.ProviderSource{Path: "stub"}},
+			}
 
-	factories := validFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
-		if name != "temporal" {
-			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
-		}
-		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			UserID:      principal.IdentityPrincipal,
-			Integration: "roadmap",
-			Connection:  config.PluginConnectionName,
-			Instance:    "default",
-			AccessToken: "workflow-validate-token",
-		}); err != nil {
-			return nil, fmt.Errorf("store identity token: %w", err)
-		}
-		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			PluginName: "roadmap",
-			Target: &proto.BoundWorkflowTarget{
-				PluginName: "roadmap",
-				Operation:  "sync",
-			},
+			factories := validFactories()
+			factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+				if name != "temporal" {
+					return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
+				}
+				if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+					UserID:      principal.IdentityPrincipal,
+					Integration: "roadmap",
+					Connection:  config.PluginConnectionName,
+					Instance:    "default",
+					AccessToken: "workflow-validate-token",
+				}); err != nil {
+					return nil, fmt.Errorf("store identity token: %w", err)
+				}
+				resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
+					PluginName: "roadmap",
+					Target: &proto.BoundWorkflowTarget{
+						PluginName: "roadmap",
+						Operation:  "sync",
+					},
+				})
+				if err != nil {
+					return nil, fmt.Errorf("startup callback: %w", err)
+				}
+				if resp.GetStatus() != http.StatusAccepted || resp.GetBody() != `{}` {
+					return nil, fmt.Errorf("startup callback response = %#v", resp)
+				}
+				return &stubWorkflowProvider{}, nil
+			}
+
+			if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
+				t.Fatalf("Validate: %v", err)
+			}
 		})
-		if err != nil {
-			return nil, fmt.Errorf("startup callback: %w", err)
-		}
-		if resp.GetStatus() != http.StatusAccepted || resp.GetBody() != `{}` {
-			return nil, fmt.Errorf("startup callback response = %#v", resp)
-		}
-		return &stubWorkflowProvider{}, nil
-	}
-
-	if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
-		t.Fatalf("Validate: %v", err)
 	}
 }
 

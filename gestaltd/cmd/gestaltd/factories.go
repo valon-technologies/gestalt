@@ -88,7 +88,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	factories.Telemetry["stdout"] = telemetrystdout.Factory
 	factories.Telemetry["otlp"] = telemetryotlp.Factory
 	factories.Audit = func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error) {
-		if cfg.Source.IsMetadataURL() || cfg.Source.IsLocal() {
+		if cfg.HasReleaseMetadataSource() || cfg.HasLocalSource() {
 			return nil, nil, fmt.Errorf("provider-based audit providers are not yet supported")
 		}
 		switch cfg.Source.Builtin {

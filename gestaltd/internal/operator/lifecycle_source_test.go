@@ -103,6 +103,21 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 	return archivePath
 }
 
+func writeProviderReleaseMetadataFile(t *testing.T, path string, metadata providerReleaseMetadata) {
+	t.Helper()
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create metadata dir: %v", err)
+	}
+	data, err := yaml.Marshal(metadata)
+	if err != nil {
+		t.Fatalf("marshal metadata: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+}
+
 func buildExecutableArchive(t *testing.T, dir, srcDirName, source, version, kind, binaryName, binaryContent string) string {
 	t.Helper()
 
@@ -315,252 +330,441 @@ func newGitHubRewriteClient(t *testing.T, target string) *http.Client {
 func TestSourcePluginMetadataURLInitAndLockedLoad(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	packageSource := "github.com/acme/tools/alpha"
-	version := "1.2.3"
-	currentArchivePath := buildV2Archive(t, dir, packageSource, version, "metadata-url-plugin-binary")
-	currentArchiveData, err := os.ReadFile(currentArchivePath)
-	if err != nil {
-		t.Fatalf("read current archive: %v", err)
-	}
-	currentArchiveSHA := sha256.Sum256(currentArchiveData)
-
-	extraPlatform := struct {
-		goos   string
-		goarch string
+	for _, tc := range []struct {
+		name               string
+		apiVersion         string
+		localSource        bool
+		remoteArchives     bool
+		tamperLocalArchive bool
 	}{
-		goos:   "linux",
-		goarch: "amd64",
-	}
-	for _, candidate := range []struct {
-		goos   string
-		goarch string
-	}{
-		{goos: "linux", goarch: "amd64"},
-		{goos: "linux", goarch: "arm64"},
-		{goos: "darwin", goarch: "amd64"},
-		{goos: "darwin", goarch: "arm64"},
+		{name: "remote metadata url", apiVersion: config.APIVersionV3},
+		{name: "local metadata file", apiVersion: config.APIVersionV4, localSource: true},
+		{name: "local metadata file with remote archives", apiVersion: config.APIVersionV4, localSource: true, remoteArchives: true},
+		{name: "local metadata file rejects tampered archive", apiVersion: config.APIVersionV4, localSource: true, tamperLocalArchive: true},
 	} {
-		if candidate.goos != runtime.GOOS || candidate.goarch != runtime.GOARCH {
-			extraPlatform = candidate
-			break
-		}
-	}
-	extraPlatformKey := providerpkg.PlatformString(extraPlatform.goos, extraPlatform.goarch)
-	extraArchiveData := []byte("metadata-extra-platform-archive")
-	extraArchiveSHA := sha256.Sum256(extraArchiveData)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	var metadataCount atomic.Int64
-	var currentArchiveCount atomic.Int64
-	var extraArchiveCount atomic.Int64
-	handlerErrs := make(chan error, 4)
-	nextHandlerErr := func() error {
-		t.Helper()
-		select {
-		case err := <-handlerErrs:
-			return err
-		default:
-			return nil
-		}
-	}
-	metadataPath := "/providers/alpha/provider-release.yaml"
-	currentArchivePathURL := "/providers/alpha/alpha-current.tar.gz"
-	extraArchivePathURL := "/providers/alpha/alpha-extra.tar.gz"
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case metadataPath:
-			metadataCount.Add(1)
-			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
-				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
-				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
-				return
-			}
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       packageSource,
-				Kind:          providermanifestv1.KindPlugin,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
-					providerpkg.CurrentPlatformString(): {
-						Path:   filepath.Base(currentArchivePathURL),
-						SHA256: hex.EncodeToString(currentArchiveSHA[:]),
-					},
-					extraPlatformKey: {
-						Path:   filepath.Base(extraArchivePathURL),
-						SHA256: hex.EncodeToString(extraArchiveSHA[:]),
-					},
-				},
-			}
-			data, err := yaml.Marshal(metadata)
+			dir := t.TempDir()
+			packageSource := "github.com/acme/tools/alpha"
+			version := "1.2.3"
+			currentArchivePath := buildV2Archive(t, dir, packageSource, version, "metadata-url-plugin-binary")
+			currentArchiveData, err := os.ReadFile(currentArchivePath)
 			if err != nil {
-				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				t.Fatalf("read current archive: %v", err)
+			}
+			currentArchiveSHA := sha256.Sum256(currentArchiveData)
+
+			extraPlatform := struct {
+				goos   string
+				goarch string
+			}{
+				goos:   "linux",
+				goarch: "amd64",
+			}
+			for _, candidate := range []struct {
+				goos   string
+				goarch string
+			}{
+				{goos: "linux", goarch: "amd64"},
+				{goos: "linux", goarch: "arm64"},
+				{goos: "darwin", goarch: "amd64"},
+				{goos: "darwin", goarch: "arm64"},
+			} {
+				if candidate.goos != runtime.GOOS || candidate.goarch != runtime.GOARCH {
+					extraPlatform = candidate
+					break
+				}
+			}
+			extraPlatformKey := providerpkg.PlatformString(extraPlatform.goos, extraPlatform.goarch)
+			extraArchiveData := []byte("metadata-extra-platform-archive")
+			extraArchiveSHA := sha256.Sum256(extraArchiveData)
+
+			var metadataCount atomic.Int64
+			var currentArchiveCount atomic.Int64
+			var extraArchiveCount atomic.Int64
+			handlerErrs := make(chan error, 4)
+			nextHandlerErr := func() error {
+				t.Helper()
+				select {
+				case err := <-handlerErrs:
+					return err
+				default:
+					return nil
+				}
+			}
+
+			metadataPath := "/providers/alpha/provider-release.yaml"
+			currentArchivePathURL := "/providers/alpha/alpha-current.tar.gz"
+			extraArchivePathURL := "/providers/alpha/alpha-extra.tar.gz"
+			sourceValue := ""
+			wantSource := ""
+			wantCurrentArchiveURL := ""
+			wantExtraArchiveURL := ""
+			localCurrentArchivePath := ""
+			var srv *httptest.Server
+
+			if tc.localSource {
+				metadataRelPath := filepath.ToSlash(filepath.Join("providers", "alpha", "provider-release.yaml"))
+				metadataAbsPath := filepath.Join(dir, filepath.FromSlash(metadataRelPath))
+				metadataDir := filepath.Dir(metadataAbsPath)
+				if err := os.MkdirAll(metadataDir, 0o755); err != nil {
+					t.Fatalf("create metadata dir: %v", err)
+				}
+				currentArchiveName := "alpha-current.tar.gz"
+				extraArchiveName := "alpha-extra.tar.gz"
+				currentArtifactPath := currentArchiveName
+				extraArtifactPath := extraArchiveName
+				localCurrentArchivePath = filepath.Join(metadataDir, currentArchiveName)
+				if tc.remoteArchives {
+					srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						switch r.URL.Path {
+						case currentArchivePathURL:
+							currentArchiveCount.Add(1)
+							if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+								handlerErrs <- fmt.Errorf("current archive authorization = %q, want %q", got, "Bearer test-token")
+								http.Error(w, "bad archive authorization", http.StatusBadRequest)
+								return
+							}
+							w.Header().Set("Content-Type", "application/octet-stream")
+							_, _ = w.Write(currentArchiveData)
+						case extraArchivePathURL:
+							extraArchiveCount.Add(1)
+							if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+								handlerErrs <- fmt.Errorf("extra archive authorization = %q, want %q", got, "Bearer test-token")
+								http.Error(w, "bad archive authorization", http.StatusBadRequest)
+								return
+							}
+							w.Header().Set("Content-Type", "application/octet-stream")
+							_, _ = w.Write(extraArchiveData)
+						default:
+							http.NotFound(w, r)
+						}
+					}))
+					defer srv.Close()
+					currentArtifactPath = srv.URL + currentArchivePathURL
+					extraArtifactPath = srv.URL + extraArchivePathURL
+				} else {
+					if err := os.WriteFile(filepath.Join(metadataDir, currentArchiveName), currentArchiveData, 0o644); err != nil {
+						t.Fatalf("write current archive: %v", err)
+					}
+					if err := os.WriteFile(filepath.Join(metadataDir, extraArchiveName), extraArchiveData, 0o644); err != nil {
+						t.Fatalf("write extra archive: %v", err)
+					}
+				}
+				writeProviderReleaseMetadataFile(t, metadataAbsPath, providerReleaseMetadata{
+					Schema:        providerReleaseSchemaName,
+					SchemaVersion: providerReleaseSchemaVersion,
+					Package:       packageSource,
+					Kind:          providermanifestv1.KindPlugin,
+					Version:       version,
+					Runtime:       providerReleaseRuntimeExecutable,
+					Artifacts: map[string]providerReleaseArtifact{
+						providerpkg.CurrentPlatformString(): {
+							Path:   currentArtifactPath,
+							SHA256: hex.EncodeToString(currentArchiveSHA[:]),
+						},
+						extraPlatformKey: {
+							Path:   extraArtifactPath,
+							SHA256: hex.EncodeToString(extraArchiveSHA[:]),
+						},
+					},
+				})
+				sourceValue = "./" + metadataRelPath
+				wantSource = metadataRelPath
+				if tc.remoteArchives {
+					wantCurrentArchiveURL = srv.URL + currentArchivePathURL
+					wantExtraArchiveURL = srv.URL + extraArchivePathURL
+				} else {
+					wantCurrentArchiveURL = currentArchiveName
+					wantExtraArchiveURL = extraArchiveName
+				}
+			} else {
+				srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					switch r.URL.Path {
+					case metadataPath:
+						metadataCount.Add(1)
+						if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+							handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
+							http.Error(w, "bad metadata authorization", http.StatusBadRequest)
+							return
+						}
+						metadata := providerReleaseMetadata{
+							Schema:        providerReleaseSchemaName,
+							SchemaVersion: providerReleaseSchemaVersion,
+							Package:       packageSource,
+							Kind:          providermanifestv1.KindPlugin,
+							Version:       version,
+							Runtime:       providerReleaseRuntimeExecutable,
+							Artifacts: map[string]providerReleaseArtifact{
+								providerpkg.CurrentPlatformString(): {
+									Path:   filepath.Base(currentArchivePathURL),
+									SHA256: hex.EncodeToString(currentArchiveSHA[:]),
+								},
+								extraPlatformKey: {
+									Path:   filepath.Base(extraArchivePathURL),
+									SHA256: hex.EncodeToString(extraArchiveSHA[:]),
+								},
+							},
+						}
+						data, err := yaml.Marshal(metadata)
+						if err != nil {
+							handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+							http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+							return
+						}
+						w.Header().Set("Content-Type", "application/yaml")
+						_, _ = w.Write(data)
+					case currentArchivePathURL:
+						currentArchiveCount.Add(1)
+						if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+							handlerErrs <- fmt.Errorf("current archive authorization = %q, want %q", got, "Bearer test-token")
+							http.Error(w, "bad archive authorization", http.StatusBadRequest)
+							return
+						}
+						w.Header().Set("Content-Type", "application/octet-stream")
+						_, _ = w.Write(currentArchiveData)
+					case extraArchivePathURL:
+						extraArchiveCount.Add(1)
+						if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+							handlerErrs <- fmt.Errorf("extra archive authorization = %q, want %q", got, "Bearer test-token")
+							http.Error(w, "bad archive authorization", http.StatusBadRequest)
+							return
+						}
+						w.Header().Set("Content-Type", "application/octet-stream")
+						_, _ = w.Write(extraArchiveData)
+					default:
+						http.NotFound(w, r)
+					}
+				}))
+				defer srv.Close()
+				sourceValue = srv.URL + metadataPath + "?download=1"
+				wantSource = sourceValue
+				wantCurrentArchiveURL = srv.URL + currentArchivePathURL
+				wantExtraArchiveURL = srv.URL + extraArchivePathURL
+			}
+
+			artifactsDir := filepath.Join(dir, "prepared-artifacts")
+			configPath := filepath.Join(dir, "gestalt.yaml")
+			configLines := []string{
+				"apiVersion: " + tc.apiVersion,
+			}
+			if tc.localSource {
+				indexedDBSource := "github.com/acme/tools/indexeddb-sqlite"
+				indexedDBVersion := "0.0.1"
+				indexedDBArchivePath := buildExecutableArchive(t, dir, "indexeddb-src", indexedDBSource, indexedDBVersion, providermanifestv1.KindIndexedDB, "indexeddb", "indexeddb-release-binary")
+				indexedDBArchiveData, err := os.ReadFile(indexedDBArchivePath)
+				if err != nil {
+					t.Fatalf("read indexeddb archive: %v", err)
+				}
+				indexedDBArchiveSum := sha256.Sum256(indexedDBArchiveData)
+				indexedDBRelPath := filepath.ToSlash(filepath.Join("providers", "indexeddb", "provider-release.yaml"))
+				indexedDBAbsPath := filepath.Join(dir, filepath.FromSlash(indexedDBRelPath))
+				indexedDBDir := filepath.Dir(indexedDBAbsPath)
+				if err := os.MkdirAll(indexedDBDir, 0o755); err != nil {
+					t.Fatalf("create indexeddb metadata dir: %v", err)
+				}
+				indexedDBArchiveName := "indexeddb-current.tar.gz"
+				if err := os.WriteFile(filepath.Join(indexedDBDir, indexedDBArchiveName), indexedDBArchiveData, 0o644); err != nil {
+					t.Fatalf("write indexeddb archive: %v", err)
+				}
+				writeProviderReleaseMetadataFile(t, indexedDBAbsPath, providerReleaseMetadata{
+					Schema:        providerReleaseSchemaName,
+					SchemaVersion: providerReleaseSchemaVersion,
+					Package:       indexedDBSource,
+					Kind:          providermanifestv1.KindIndexedDB,
+					Version:       indexedDBVersion,
+					Runtime:       providerReleaseRuntimeExecutable,
+					Artifacts: map[string]providerReleaseArtifact{
+						providerpkg.CurrentPlatformString(): {
+							Path:   indexedDBArchiveName,
+							SHA256: hex.EncodeToString(indexedDBArchiveSum[:]),
+						},
+					},
+				})
+				configLines = append(configLines,
+					"providers:",
+					"  indexeddb:",
+					"    sqlite:",
+					"      source: ./"+indexedDBRelPath,
+					"      config:",
+					"        path: "+filepath.Join(dir, "data.db"),
+				)
+			} else {
+				configLines = append(configLines, strings.Split(strings.TrimSuffix(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), "\n"), "\n")...)
+			}
+			configLines = append(configLines,
+				"plugins:",
+				"  alpha:",
+				"    source: "+sourceValue,
+			)
+			if !tc.localSource || tc.remoteArchives {
+				configLines = append(configLines,
+					"    auth:",
+					"      token: test-token",
+				)
+			}
+			configLines = append(configLines,
+				"server:",
+				"  providers:",
+				"    indexeddb: sqlite",
+				"  artifactsDir: "+artifactsDir,
+				"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			)
+			configYAML := strings.Join(configLines, "\n") + "\n"
+			if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+
+			lc := NewLifecycle()
+			lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH, LibC string }{
+				{GOOS: extraPlatform.goos, GOARCH: extraPlatform.goarch},
+			})
+			if err == nil {
+				if handlerErr := nextHandlerErr(); handlerErr != nil {
+					t.Fatal(handlerErr)
+				}
+			}
+			if err != nil {
+				t.Fatalf("InitAtPathWithPlatforms: %v", err)
+			}
+			if handlerErr := nextHandlerErr(); handlerErr != nil {
+				t.Fatal(handlerErr)
+			}
+
+			entry, ok := lock.Providers["alpha"]
+			if !ok {
+				t.Fatal(`lock.Providers["alpha"] not found`)
+			}
+			if entry.Source != wantSource {
+				t.Fatalf("entry.Source = %q, want %q", entry.Source, wantSource)
+			}
+			if entry.Package != packageSource {
+				t.Fatalf("entry.Package = %q, want %q", entry.Package, packageSource)
+			}
+			if entry.Kind != providermanifestv1.KindPlugin {
+				t.Fatalf("entry.Kind = %q, want %q", entry.Kind, providermanifestv1.KindPlugin)
+			}
+			if entry.Runtime != providerReleaseRuntimeExecutable {
+				t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerReleaseRuntimeExecutable)
+			}
+			if entry.Version != version {
+				t.Fatalf("entry.Version = %q, want %q", entry.Version, version)
+			}
+			if got := entry.Archives[providerpkg.CurrentPlatformString()].URL; got != wantCurrentArchiveURL {
+				t.Fatalf("current archive URL = %q, want %q", got, wantCurrentArchiveURL)
+			}
+			wantCurrentSHA := hex.EncodeToString(currentArchiveSHA[:])
+			wantExtraSHA := hex.EncodeToString(extraArchiveSHA[:])
+			if got := entry.Archives[providerpkg.CurrentPlatformString()].SHA256; got != wantCurrentSHA {
+				t.Fatalf("current platform SHA256 = %q, want %q", got, wantCurrentSHA)
+			}
+			if got := entry.Archives[extraPlatformKey].SHA256; got != wantExtraSHA {
+				t.Fatalf("extra platform SHA256 = %q, want %q", got, wantExtraSHA)
+			}
+			if !tc.localSource {
+				if got := metadataCount.Load(); got != 1 {
+					t.Fatalf("metadata request count = %d, want 1", got)
+				}
+				if got := currentArchiveCount.Load(); got != 1 {
+					t.Fatalf("current archive request count = %d, want 1", got)
+				}
+				if got := extraArchiveCount.Load(); got != 0 {
+					t.Fatalf("extra archive request count = %d, want 0", got)
+				}
+			}
+
+			lockData, err := os.ReadFile(filepath.Join(dir, InitLockfileName))
+			if err != nil {
+				t.Fatalf("ReadFile lockfile: %v", err)
+			}
+			var diskLock providerLockfile
+			if err := json.Unmarshal(lockData, &diskLock); err != nil {
+				t.Fatalf("Unmarshal lockfile: %v", err)
+			}
+			diskEntry, ok := diskLock.Providers.Plugin["alpha"]
+			if !ok {
+				t.Fatal(`disk lock providers.plugin["alpha"] not found`)
+			}
+			if diskEntry.Package != packageSource {
+				t.Fatalf("disk lock package = %q, want %q", diskEntry.Package, packageSource)
+			}
+			if diskEntry.Source != wantSource {
+				t.Fatalf("disk lock source = %q, want %q", diskEntry.Source, wantSource)
+			}
+			if diskEntry.Runtime != providerReleaseRuntimeExecutable {
+				t.Fatalf("disk lock runtime = %q, want %q", diskEntry.Runtime, providerReleaseRuntimeExecutable)
+			}
+			if diskEntry.Kind != providermanifestv1.KindPlugin {
+				t.Fatalf("disk lock kind = %q, want %q", diskEntry.Kind, providermanifestv1.KindPlugin)
+			}
+			if got := diskEntry.Archives[providerpkg.CurrentPlatformString()].SHA256; got != wantCurrentSHA {
+				t.Fatalf("disk lock current SHA256 = %q, want %q", got, wantCurrentSHA)
+			}
+			if got := diskEntry.Archives[extraPlatformKey].SHA256; got != wantExtraSHA {
+				t.Fatalf("disk lock extra SHA256 = %q, want %q", got, wantExtraSHA)
+			}
+			if got := diskEntry.Archives[extraPlatformKey].URL; got != wantExtraArchiveURL {
+				t.Fatalf("disk lock extra archive URL = %q, want %q", got, wantExtraArchiveURL)
+			}
+
+			pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
+			if err := os.RemoveAll(pluginRoot); err != nil {
+				t.Fatalf("RemoveAll plugin root: %v", err)
+			}
+			if tc.tamperLocalArchive {
+				if err := os.WriteFile(localCurrentArchivePath, []byte("tampered-local-archive"), 0o644); err != nil {
+					t.Fatalf("write tampered archive: %v", err)
+				}
+			}
+
+			metadataBefore := metadataCount.Load()
+			currentBefore := currentArchiveCount.Load()
+			cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+			if tc.tamperLocalArchive {
+				if handlerErr := nextHandlerErr(); handlerErr != nil {
+					t.Fatal(handlerErr)
+				}
+				if err == nil || !strings.Contains(err.Error(), "digest mismatch") {
+					t.Fatalf("LoadForExecutionAtPath(locked=true) error = %v, want digest mismatch", err)
+				}
 				return
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
-		case currentArchivePathURL:
-			currentArchiveCount.Add(1)
-			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
-				handlerErrs <- fmt.Errorf("current archive authorization = %q, want %q", got, "Bearer test-token")
-				http.Error(w, "bad archive authorization", http.StatusBadRequest)
-				return
+			if err != nil {
+				if handlerErr := nextHandlerErr(); handlerErr != nil {
+					t.Fatal(handlerErr)
+				}
+				t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 			}
-			w.Header().Set("Content-Type", "application/octet-stream")
-			_, _ = w.Write(currentArchiveData)
-		case extraArchivePathURL:
-			extraArchiveCount.Add(1)
-			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
-				handlerErrs <- fmt.Errorf("extra archive authorization = %q, want %q", got, "Bearer test-token")
-				http.Error(w, "bad archive authorization", http.StatusBadRequest)
-				return
+			if handlerErr := nextHandlerErr(); handlerErr != nil {
+				t.Fatal(handlerErr)
 			}
-			w.Header().Set("Content-Type", "application/octet-stream")
-			_, _ = w.Write(extraArchiveData)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer srv.Close()
-
-	artifactsDir := filepath.Join(dir, "prepared-artifacts")
-	configPath := filepath.Join(dir, "gestalt.yaml")
-	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
-		"apiVersion: " + config.APIVersionV3,
-		"plugins:",
-		"  alpha:",
-		"    source: " + srv.URL + metadataPath + "?download=1",
-		"    auth:",
-		"      token: test-token",
-		"server:",
-		"  providers:",
-		"    indexeddb: sqlite",
-		"  artifactsDir: " + artifactsDir,
-		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	}, "\n") + "\n"
-	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	lc := NewLifecycle()
-	lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH, LibC string }{
-		{GOOS: extraPlatform.goos, GOARCH: extraPlatform.goarch},
-	})
-	if err == nil {
-		if handlerErr := nextHandlerErr(); handlerErr != nil {
-			t.Fatal(handlerErr)
-		}
-	}
-	if err != nil {
-		t.Fatalf("InitAtPathWithPlatforms: %v", err)
-	}
-	if handlerErr := nextHandlerErr(); handlerErr != nil {
-		t.Fatal(handlerErr)
-	}
-
-	entry, ok := lock.Providers["alpha"]
-	if !ok {
-		t.Fatal(`lock.Providers["alpha"] not found`)
-	}
-	if entry.Source != srv.URL+metadataPath+"?download=1" {
-		t.Fatalf("entry.Source = %q, want %q", entry.Source, srv.URL+metadataPath+"?download=1")
-	}
-	if entry.Package != packageSource {
-		t.Fatalf("entry.Package = %q, want %q", entry.Package, packageSource)
-	}
-	if entry.Kind != providermanifestv1.KindPlugin {
-		t.Fatalf("entry.Kind = %q, want %q", entry.Kind, providermanifestv1.KindPlugin)
-	}
-	if entry.Runtime != providerReleaseRuntimeExecutable {
-		t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerReleaseRuntimeExecutable)
-	}
-	if entry.Version != version {
-		t.Fatalf("entry.Version = %q, want %q", entry.Version, version)
-	}
-	if got := entry.Archives[providerpkg.CurrentPlatformString()].URL; got != srv.URL+currentArchivePathURL {
-		t.Fatalf("current archive URL = %q, want %q", got, srv.URL+currentArchivePathURL)
-	}
-	if got := entry.Archives[extraPlatformKey].SHA256; got != hex.EncodeToString(extraArchiveSHA[:]) {
-		t.Fatalf("extra platform SHA256 = %q, want %q", got, hex.EncodeToString(extraArchiveSHA[:]))
-	}
-	if got := metadataCount.Load(); got != 1 {
-		t.Fatalf("metadata request count = %d, want 1", got)
-	}
-	if got := currentArchiveCount.Load(); got != 1 {
-		t.Fatalf("current archive request count = %d, want 1", got)
-	}
-	if got := extraArchiveCount.Load(); got != 0 {
-		t.Fatalf("extra archive request count = %d, want 0", got)
-	}
-
-	lockData, err := os.ReadFile(filepath.Join(dir, InitLockfileName))
-	if err != nil {
-		t.Fatalf("ReadFile lockfile: %v", err)
-	}
-	var diskLock providerLockfile
-	if err := json.Unmarshal(lockData, &diskLock); err != nil {
-		t.Fatalf("Unmarshal lockfile: %v", err)
-	}
-	diskEntry, ok := diskLock.Providers.Plugin["alpha"]
-	if !ok {
-		t.Fatal(`disk lock providers.plugin["alpha"] not found`)
-	}
-	if diskEntry.Package != packageSource {
-		t.Fatalf("disk lock package = %q, want %q", diskEntry.Package, packageSource)
-	}
-	if diskEntry.Source != srv.URL+metadataPath+"?download=1" {
-		t.Fatalf("disk lock source = %q, want %q", diskEntry.Source, srv.URL+metadataPath+"?download=1")
-	}
-	if diskEntry.Runtime != providerReleaseRuntimeExecutable {
-		t.Fatalf("disk lock runtime = %q, want %q", diskEntry.Runtime, providerReleaseRuntimeExecutable)
-	}
-	if diskEntry.Kind != providermanifestv1.KindPlugin {
-		t.Fatalf("disk lock kind = %q, want %q", diskEntry.Kind, providermanifestv1.KindPlugin)
-	}
-	if got := diskEntry.Archives[extraPlatformKey].URL; got != srv.URL+extraArchivePathURL {
-		t.Fatalf("disk lock extra archive URL = %q, want %q", got, srv.URL+extraArchivePathURL)
-	}
-
-	pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
-	if err := os.RemoveAll(pluginRoot); err != nil {
-		t.Fatalf("RemoveAll plugin root: %v", err)
-	}
-
-	metadataBefore := metadataCount.Load()
-	currentBefore := currentArchiveCount.Load()
-	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
-	if err != nil {
-		if handlerErr := nextHandlerErr(); handlerErr != nil {
-			t.Fatal(handlerErr)
-		}
-		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
-	}
-	if handlerErr := nextHandlerErr(); handlerErr != nil {
-		t.Fatal(handlerErr)
-	}
-	if got := metadataCount.Load(); got != metadataBefore {
-		t.Fatalf("metadata request count during locked load = %d, want %d", got, metadataBefore)
-	}
-	if got := currentArchiveCount.Load() - currentBefore; got != 1 {
-		t.Fatalf("current archive request count during locked load = %d, want 1", got)
-	}
-	if got := extraArchiveCount.Load(); got != 0 {
-		t.Fatalf("extra archive request count after locked load = %d, want 0", got)
-	}
-	if cfg.Plugins["alpha"] == nil {
-		t.Fatal(`cfg.Plugins["alpha"] = nil`)
-	}
-	if cfg.Plugins["alpha"].ResolvedManifest == nil {
-		t.Fatal(`cfg.Plugins["alpha"].ResolvedManifest = nil`)
-	}
-	if cfg.Plugins["alpha"].ResolvedManifest.Source != packageSource {
-		t.Fatalf("ResolvedManifest.Source = %q, want %q", cfg.Plugins["alpha"].ResolvedManifest.Source, packageSource)
-	}
-	executablePath := resolveLockPath(artifactsDir, entry.Executable)
-	if cfg.Plugins["alpha"].Command != executablePath {
-		t.Fatalf("plugin command = %q, want %q", cfg.Plugins["alpha"].Command, executablePath)
+			if !tc.localSource || tc.remoteArchives {
+				if got := metadataCount.Load(); got != metadataBefore {
+					t.Fatalf("metadata request count during locked load = %d, want %d", got, metadataBefore)
+				}
+				if got := currentArchiveCount.Load() - currentBefore; got != 1 {
+					t.Fatalf("current archive request count during locked load = %d, want 1", got)
+				}
+				if got := extraArchiveCount.Load(); got != 0 {
+					t.Fatalf("extra archive request count after locked load = %d, want 0", got)
+				}
+			}
+			if cfg.Plugins["alpha"] == nil {
+				t.Fatal(`cfg.Plugins["alpha"] = nil`)
+			}
+			if cfg.Plugins["alpha"].ResolvedManifest == nil {
+				t.Fatal(`cfg.Plugins["alpha"].ResolvedManifest = nil`)
+			}
+			if cfg.Plugins["alpha"].ResolvedManifest.Source != packageSource {
+				t.Fatalf("ResolvedManifest.Source = %q, want %q", cfg.Plugins["alpha"].ResolvedManifest.Source, packageSource)
+			}
+			executablePath := resolveLockPath(artifactsDir, entry.Executable)
+			if cfg.Plugins["alpha"].Command != executablePath {
+				t.Fatalf("plugin command = %q, want %q", cfg.Plugins["alpha"].Command, executablePath)
+			}
+		})
 	}
 }
 
@@ -2145,103 +2349,192 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 func TestManagedCacheSourcesInitAtPathWithPlatformsHashesExtraPlatformArchives(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	cacheSource := "github.com/acme/tools/cache-session"
-	version := "1.0.0"
+	for _, tc := range []struct {
+		name        string
+		apiVersion  string
+		localSource bool
+	}{
+		{name: "remote metadata url", apiVersion: config.APIVersionV3},
+		{name: "local metadata file", apiVersion: config.APIVersionV4, localSource: true},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	extraPlatform := struct{ GOOS, GOARCH, LibC string }{GOOS: "linux", GOARCH: "amd64"}
-	if runtime.GOOS == extraPlatform.GOOS && runtime.GOARCH == extraPlatform.GOARCH {
-		extraPlatform = struct{ GOOS, GOARCH, LibC string }{GOOS: "darwin", GOARCH: "arm64"}
-	}
-	extraPlatformKey := providerpkg.PlatformString(extraPlatform.GOOS, extraPlatform.GOARCH)
-	currentArchivePath := buildExecutableArchive(t, dir, "cache-src", cacheSource, version, providermanifestv1.KindCache, "cache-plugin", "fake-cache-binary")
-	currentArchiveData, err := os.ReadFile(currentArchivePath)
-	if err != nil {
-		t.Fatalf("read current archive: %v", err)
-	}
-	currentArchiveSum := sha256.Sum256(currentArchiveData)
-	extraArchivePathURL := "/providers/cache/cache-extra.tar.gz"
-	currentArchivePathURL := "/providers/cache/cache-current.tar.gz"
-	metadataPath := "/providers/cache/provider-release.yaml"
-	extraArchiveData := []byte("fake-cache-extra-platform-archive")
-	extraArchiveSum := sha256.Sum256(extraArchiveData)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case metadataPath:
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       cacheSource,
-				Kind:          providermanifestv1.KindCache,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
-					providerpkg.CurrentPlatformString(): {
-						Path:   filepath.Base(currentArchivePathURL),
-						SHA256: hex.EncodeToString(currentArchiveSum[:]),
-					},
-					extraPlatformKey: {
-						Path:   filepath.Base(extraArchivePathURL),
-						SHA256: hex.EncodeToString(extraArchiveSum[:]),
-					},
-				},
+			dir := t.TempDir()
+			cacheSource := "github.com/acme/tools/cache-session"
+			version := "1.0.0"
+
+			extraPlatform := struct{ GOOS, GOARCH, LibC string }{GOOS: "linux", GOARCH: "amd64"}
+			if runtime.GOOS == extraPlatform.GOOS && runtime.GOARCH == extraPlatform.GOARCH {
+				extraPlatform = struct{ GOOS, GOARCH, LibC string }{GOOS: "darwin", GOARCH: "arm64"}
 			}
-			data, err := yaml.Marshal(metadata)
+			extraPlatformKey := providerpkg.PlatformString(extraPlatform.GOOS, extraPlatform.GOARCH)
+			currentArchivePath := buildExecutableArchive(t, dir, "cache-src", cacheSource, version, providermanifestv1.KindCache, "cache-plugin", "fake-cache-binary")
+			currentArchiveData, err := os.ReadFile(currentArchivePath)
 			if err != nil {
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+				t.Fatalf("read current archive: %v", err)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
-		case currentArchivePathURL:
-			w.Header().Set("Content-Type", "application/octet-stream")
-			_, _ = w.Write(currentArchiveData)
-		case extraArchivePathURL:
-			w.Header().Set("Content-Type", "application/octet-stream")
-			_, _ = w.Write(extraArchiveData)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer srv.Close()
+			currentArchiveSum := sha256.Sum256(currentArchiveData)
+			extraArchivePathURL := "/providers/cache/cache-extra.tar.gz"
+			currentArchivePathURL := "/providers/cache/cache-current.tar.gz"
+			metadataPath := "/providers/cache/provider-release.yaml"
+			extraArchiveData := []byte("fake-cache-extra-platform-archive")
+			extraArchiveSum := sha256.Sum256(extraArchiveData)
 
-	artifactsDir := filepath.Join(dir, "prepared-artifacts")
-	configYAML := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + strings.Join([]string{
-		"  cache:",
-		"    session:",
-		"      source: " + srv.URL + metadataPath,
-		"server:",
-		"  providers:",
-		"    indexeddb: sqlite",
-		"  artifactsDir: " + artifactsDir,
-		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	}, "\n") + "\n"
+			sourceValue := ""
+			wantSource := ""
+			wantExtraArchiveURL := ""
+			var client *http.Client
+			var srv *httptest.Server
 
-	configPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+			if tc.localSource {
+				metadataRelPath := filepath.ToSlash(filepath.Join("providers", "cache", "provider-release.yaml"))
+				metadataAbsPath := filepath.Join(dir, filepath.FromSlash(metadataRelPath))
+				metadataDir := filepath.Dir(metadataAbsPath)
+				if err := os.MkdirAll(metadataDir, 0o755); err != nil {
+					t.Fatalf("create metadata dir: %v", err)
+				}
+				currentArchiveName := "cache-current.tar.gz"
+				extraArchiveName := "cache-extra.tar.gz"
+				if err := os.WriteFile(filepath.Join(metadataDir, currentArchiveName), currentArchiveData, 0o644); err != nil {
+					t.Fatalf("write current archive: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(metadataDir, extraArchiveName), extraArchiveData, 0o644); err != nil {
+					t.Fatalf("write extra archive: %v", err)
+				}
+				writeProviderReleaseMetadataFile(t, metadataAbsPath, providerReleaseMetadata{
+					Schema:        providerReleaseSchemaName,
+					SchemaVersion: providerReleaseSchemaVersion,
+					Package:       cacheSource,
+					Kind:          providermanifestv1.KindCache,
+					Version:       version,
+					Runtime:       providerReleaseRuntimeExecutable,
+					Artifacts: map[string]providerReleaseArtifact{
+						providerpkg.CurrentPlatformString(): {
+							Path:   currentArchiveName,
+							SHA256: hex.EncodeToString(currentArchiveSum[:]),
+						},
+						extraPlatformKey: {
+							Path:   extraArchiveName,
+							SHA256: hex.EncodeToString(extraArchiveSum[:]),
+						},
+					},
+				})
+				sourceValue = "./" + metadataRelPath
+				wantSource = metadataRelPath
+				wantExtraArchiveURL = extraArchiveName
+			} else {
+				srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					switch r.URL.Path {
+					case metadataPath:
+						metadata := providerReleaseMetadata{
+							Schema:        providerReleaseSchemaName,
+							SchemaVersion: providerReleaseSchemaVersion,
+							Package:       cacheSource,
+							Kind:          providermanifestv1.KindCache,
+							Version:       version,
+							Runtime:       providerReleaseRuntimeExecutable,
+							Artifacts: map[string]providerReleaseArtifact{
+								providerpkg.CurrentPlatformString(): {
+									Path:   filepath.Base(currentArchivePathURL),
+									SHA256: hex.EncodeToString(currentArchiveSum[:]),
+								},
+								extraPlatformKey: {
+									Path:   filepath.Base(extraArchivePathURL),
+									SHA256: hex.EncodeToString(extraArchiveSum[:]),
+								},
+							},
+						}
+						data, err := yaml.Marshal(metadata)
+						if err != nil {
+							http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+							return
+						}
+						w.Header().Set("Content-Type", "application/yaml")
+						_, _ = w.Write(data)
+					case currentArchivePathURL:
+						w.Header().Set("Content-Type", "application/octet-stream")
+						_, _ = w.Write(currentArchiveData)
+					case extraArchivePathURL:
+						w.Header().Set("Content-Type", "application/octet-stream")
+						_, _ = w.Write(extraArchiveData)
+					default:
+						http.NotFound(w, r)
+					}
+				}))
+				defer srv.Close()
+				client = srv.Client()
+				sourceValue = srv.URL + metadataPath
+				wantSource = sourceValue
+				wantExtraArchiveURL = srv.URL + extraArchivePathURL
+			}
 
-	lc := NewLifecycle().WithHTTPClient(srv.Client())
-	lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH, LibC string }{extraPlatform})
-	if err != nil {
-		t.Fatalf("InitAtPathWithPlatforms: %v", err)
-	}
+			artifactsDir := filepath.Join(dir, "prepared-artifacts")
+			configLines := []string{
+				"apiVersion: " + tc.apiVersion,
+				"providers:",
+				"  cache:",
+				"    session:",
+				"      source: " + sourceValue,
+				"server:",
+				"  providers:",
+				"    indexeddb: sqlite",
+				"  artifactsDir: " + artifactsDir,
+				"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			}
+			configYAML := strings.Join(configLines, "\n") + "\n"
 
-	entry, ok := lock.Caches["session"]
-	if !ok {
-		t.Fatal(`lock.Caches["session"] not found`)
-	}
-	if got := entry.Archives[extraPlatformKey].SHA256; got != hex.EncodeToString(extraArchiveSum[:]) {
-		t.Fatalf("lock extra-platform SHA256 = %q, want %q", got, hex.EncodeToString(extraArchiveSum[:]))
-	}
+			configPath := filepath.Join(dir, "gestalt.yaml")
+			if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
 
-	readBack, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
-	if err != nil {
-		t.Fatalf("ReadLockfile: %v", err)
-	}
-	if got := readBack.Caches["session"].Archives[extraPlatformKey].SHA256; got != hex.EncodeToString(extraArchiveSum[:]) {
-		t.Fatalf("readBack extra-platform SHA256 = %q, want %q", got, hex.EncodeToString(extraArchiveSum[:]))
+			lc := NewLifecycle()
+			if client != nil {
+				lc = lc.WithHTTPClient(client)
+			}
+			lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH, LibC string }{extraPlatform})
+			if err != nil {
+				t.Fatalf("InitAtPathWithPlatforms: %v", err)
+			}
+
+			entry, ok := lock.Caches["session"]
+			if !ok {
+				t.Fatal(`lock.Caches["session"] not found`)
+			}
+			if entry.Source != wantSource {
+				t.Fatalf("lock source = %q, want %q", entry.Source, wantSource)
+			}
+			wantCurrentSHA := hex.EncodeToString(currentArchiveSum[:])
+			wantExtraSHA := hex.EncodeToString(extraArchiveSum[:])
+			if got := entry.Archives[providerpkg.CurrentPlatformString()].SHA256; got != wantCurrentSHA {
+				t.Fatalf("lock current-platform SHA256 = %q, want %q", got, wantCurrentSHA)
+			}
+			if got := entry.Archives[extraPlatformKey].SHA256; got != wantExtraSHA {
+				t.Fatalf("lock extra-platform SHA256 = %q, want %q", got, wantExtraSHA)
+			}
+			if got := entry.Archives[extraPlatformKey].URL; got != wantExtraArchiveURL {
+				t.Fatalf("lock extra-platform URL = %q, want %q", got, wantExtraArchiveURL)
+			}
+
+			readBack, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+			if err != nil {
+				t.Fatalf("ReadLockfile: %v", err)
+			}
+			if got := readBack.Caches["session"].Source; got != wantSource {
+				t.Fatalf("readBack source = %q, want %q", got, wantSource)
+			}
+			if got := readBack.Caches["session"].Archives[providerpkg.CurrentPlatformString()].SHA256; got != wantCurrentSHA {
+				t.Fatalf("readBack current-platform SHA256 = %q, want %q", got, wantCurrentSHA)
+			}
+			if got := readBack.Caches["session"].Archives[extraPlatformKey].SHA256; got != wantExtraSHA {
+				t.Fatalf("readBack extra-platform SHA256 = %q, want %q", got, wantExtraSHA)
+			}
+			if got := readBack.Caches["session"].Archives[extraPlatformKey].URL; got != wantExtraArchiveURL {
+				t.Fatalf("readBack extra-platform URL = %q, want %q", got, wantExtraArchiveURL)
+			}
+		})
 	}
 }
 

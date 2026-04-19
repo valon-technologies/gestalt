@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
@@ -150,6 +151,7 @@ func CreatePackageFromDir(sourceDir, outputPath string) (err error) {
 	defer joinCloseError(&err, fmt.Sprintf("close package %q", outputPath), out)
 
 	gzw := gzip.NewWriter(out)
+	gzw.ModTime = time.Unix(0, 0)
 	defer joinCloseError(&err, "close gzip stream", gzw)
 
 	tw := tar.NewWriter(gzw)
@@ -186,6 +188,13 @@ func CreatePackageFromDir(sourceDir, outputPath string) (err error) {
 			return fmt.Errorf("build tar header for %s: %w", rel, err)
 		}
 		hdr.Name = rel
+		hdr.ModTime = time.Unix(0, 0)
+		hdr.AccessTime = time.Unix(0, 0)
+		hdr.ChangeTime = time.Unix(0, 0)
+		hdr.Uid = 0
+		hdr.Gid = 0
+		hdr.Uname = ""
+		hdr.Gname = ""
 		if err := tw.WriteHeader(hdr); err != nil {
 			return fmt.Errorf("write tar header for %s: %w", rel, err)
 		}

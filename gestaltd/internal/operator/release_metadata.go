@@ -3,10 +3,15 @@ package operator
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -123,6 +128,16 @@ func validateProviderReleaseMetadata(metadata *providerReleaseMetadata) error {
 }
 
 func fetchProviderReleaseMetadata(ctx context.Context, client *http.Client, metadataURL, token string) (*providerReleaseMetadata, error) {
+	if !isRemoteReleaseMetadataLocation(metadataURL) {
+		data, err := os.ReadFile(metadataURL)
+		if err != nil {
+			return nil, fmt.Errorf("read provider release metadata: %w", err)
+		}
+		if len(data) > providerReleaseMetadataMaxBytes {
+			return nil, fmt.Errorf("provider release metadata exceeds %d byte limit", providerReleaseMetadataMaxBytes)
+		}
+		return decodeProviderReleaseMetadata(data)
+	}
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -155,22 +170,61 @@ func providerReleaseArchives(metadataURL string, metadata *providerReleaseMetada
 	if metadata == nil {
 		return nil, fmt.Errorf("provider release metadata is required")
 	}
-	baseURL, err := url.Parse(metadataURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse provider release metadata URL: %w", err)
-	}
 	archives := make(map[string]LockArchive, len(metadata.Artifacts))
 	for target, artifact := range metadata.Artifacts {
-		artifactURL, err := url.Parse(strings.TrimSpace(artifact.Path))
+		archiveRef, err := archiveReferenceForLock(metadataURL, artifact.Path)
 		if err != nil {
-			return nil, fmt.Errorf("parse provider release artifact path for target %q: %w", target, err)
+			return nil, fmt.Errorf("resolve provider release artifact path for target %q: %w", target, err)
 		}
 		archives[target] = LockArchive{
-			URL:    baseURL.ResolveReference(artifactURL).String(),
+			URL:    archiveRef,
 			SHA256: strings.TrimSpace(artifact.SHA256),
 		}
 	}
 	return archives, nil
+}
+
+func archiveReferenceNeedsIntegrityHash(archiveRef string) bool {
+	return isRemoteReleaseMetadataLocation(archiveRef)
+}
+
+func normalizedLocalReleaseMetadataFingerprintPayload(data []byte) ([]byte, error) {
+	metadata, err := decodeProviderReleaseMetadata(data)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(metadata)
+}
+
+func normalizedLocalReleaseMetadataFingerprintPayloadFromFile(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return normalizedLocalReleaseMetadataFingerprintPayload(data)
+}
+
+func localReleaseArchiveExpectedSHA(sourceLocation, resolvedKey, archiveLocation string) (string, error) {
+	if isRemoteReleaseMetadataLocation(sourceLocation) || archiveReferenceNeedsIntegrityHash(archiveLocation) {
+		return "", nil
+	}
+
+	metadata, err := fetchProviderReleaseMetadata(context.Background(), nil, sourceLocation, "")
+	if err != nil {
+		return "", err
+	}
+	artifact, ok := metadata.Artifacts[resolvedKey]
+	if !ok {
+		return "", fmt.Errorf("provider release metadata missing artifact for target %q", resolvedKey)
+	}
+	resolvedArchivePath, err := resolveArchiveSourceLocation(sourceLocation, artifact.Path)
+	if err != nil {
+		return "", err
+	}
+	if filepath.Clean(resolvedArchivePath) != filepath.Clean(archiveLocation) {
+		return "", fmt.Errorf("provider release metadata target %q resolved to %s, want %s", resolvedKey, resolvedArchivePath, archiveLocation)
+	}
+	return strings.TrimSpace(artifact.SHA256), nil
 }
 
 func lockEntryPackage(entry LockEntry) string {
@@ -225,6 +279,9 @@ func usesGitHubReleaseDownloadTransport(archiveURL string) bool {
 }
 
 func downloadArchiveForSource(ctx context.Context, client *http.Client, token, archiveURL string) (*providerpkg.DownloadResult, error) {
+	if !isRemoteReleaseMetadataLocation(archiveURL) {
+		return copyLocalArchiveForSource(archiveURL)
+	}
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -240,6 +297,100 @@ func downloadArchiveForSource(ctx context.Context, client *http.Client, token, a
 		req.Header.Set(httpAuthorizationHeader, httpBearerAuthorizationPrefix+token)
 	}
 	return providerpkg.DownloadRequest(client, req)
+}
+
+func isRemoteReleaseMetadataLocation(location string) bool {
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(location))
+	if err != nil {
+		return false
+	}
+	switch parsed.Scheme {
+	case "http", "https":
+		return parsed.Host != ""
+	default:
+		return false
+	}
+}
+
+func archiveReferenceForLock(metadataLocation, artifactPath string) (string, error) {
+	resolved, err := resolveArchiveSourceLocation(metadataLocation, artifactPath)
+	if err != nil {
+		return "", err
+	}
+	if isRemoteReleaseMetadataLocation(metadataLocation) || isRemoteReleaseMetadataLocation(resolved) {
+		return resolved, nil
+	}
+	baseDir := filepath.Dir(metadataLocation)
+	rel, err := filepath.Rel(baseDir, resolved)
+	if err != nil {
+		return "", fmt.Errorf("relativize local release archive path: %w", err)
+	}
+	return filepath.ToSlash(filepath.Clean(rel)), nil
+}
+
+func resolveArchiveSourceLocation(metadataLocation, archiveRef string) (string, error) {
+	archiveRef = strings.TrimSpace(archiveRef)
+	if archiveRef == "" {
+		return "", fmt.Errorf("archive reference is required")
+	}
+	if isRemoteReleaseMetadataLocation(metadataLocation) {
+		baseURL, err := url.Parse(metadataLocation)
+		if err != nil {
+			return "", fmt.Errorf("parse provider release metadata URL: %w", err)
+		}
+		artifactURL, err := url.Parse(archiveRef)
+		if err != nil {
+			return "", fmt.Errorf("parse provider release artifact path: %w", err)
+		}
+		return baseURL.ResolveReference(artifactURL).String(), nil
+	}
+	if isRemoteReleaseMetadataLocation(archiveRef) {
+		return archiveRef, nil
+	}
+	baseDir := filepath.Dir(metadataLocation)
+	if filepath.IsAbs(archiveRef) {
+		return filepath.Clean(archiveRef), nil
+	}
+	return filepath.Clean(filepath.Join(baseDir, filepath.FromSlash(archiveRef))), nil
+}
+
+func copyLocalArchiveForSource(path string) (*providerpkg.DownloadResult, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("stat local archive: %w", err)
+	}
+	if info.Size() > providerpkg.MaxPackageBytes {
+		return nil, fmt.Errorf("download exceeds %d byte limit", providerpkg.MaxPackageBytes)
+	}
+	src, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open local archive: %w", err)
+	}
+	defer func() { _ = src.Close() }()
+
+	tmp, err := os.CreateTemp("", "gestalt-plugin-*.tar.gz")
+	if err != nil {
+		return nil, fmt.Errorf("create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	removeTmp := func() { _ = os.Remove(tmpPath) }
+
+	h := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(tmp, h), io.LimitReader(src, providerpkg.MaxPackageBytes+1)); err != nil {
+		_ = tmp.Close()
+		removeTmp()
+		return nil, fmt.Errorf("copy local archive: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		removeTmp()
+		return nil, fmt.Errorf("close temp file: %w", err)
+	}
+
+	return &providerpkg.DownloadResult{
+		LocalPath: tmpPath,
+		Cleanup:   removeTmp,
+		SHA256Hex: hex.EncodeToString(h.Sum(nil)),
+	}, nil
 }
 
 func authorizationHeaderForSourceLocation(sourceLocation, token string) string {

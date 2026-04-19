@@ -68,6 +68,10 @@ def build_plugin_binary(args: BuildArgs) -> None:
             runtime_kind=args.runtime_kind,
         )
 
+        env = os.environ.copy()
+        env["PYINSTALLER_CONFIG_DIR"] = str(work_path / "pyinstaller-config")
+        env["SOURCE_DATE_EPOCH"] = "0"
+
         subprocess.run(
             _pyinstaller_command(
                 root_path=root_path,
@@ -78,6 +82,7 @@ def build_plugin_binary(args: BuildArgs) -> None:
                 target_goarch=args.goarch,
             ),
             cwd=root_path,
+            env=env,
             check=True,
         )
 

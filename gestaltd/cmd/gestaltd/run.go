@@ -208,10 +208,10 @@ func providerEntryLabel(entry *config.ProviderEntry) string {
 	switch {
 	case entry == nil:
 		return "(not set)"
-	case entry.Source.IsMetadataURL():
-		return entry.Source.MetadataURL()
-	case entry.Source.IsLocal():
-		return entry.Source.Path
+	case entry.HasReleaseMetadataSource():
+		return entry.SourceReleaseLocation()
+	case entry.HasLocalSource():
+		return entry.SourcePath()
 	case entry.Source.IsBuiltin():
 		return entry.Source.Builtin
 	default:

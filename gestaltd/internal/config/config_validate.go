@@ -5,6 +5,8 @@ import (
 	"maps"
 	"net"
 	"net/url"
+	"path"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -49,6 +51,7 @@ func CanonicalizeStructure(cfg *Config) error {
 // already run on the config.
 func ValidateCanonicalStructure(cfg *Config) error {
 	pluginOwnedUIBindings := pluginOwnedUIBindings(cfg)
+	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	if err := validateAuthorizationPolicies(cfg); err != nil {
 		return err
 	}
@@ -77,7 +80,7 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		{HostProviderKindTelemetry, cfg.Providers.Telemetry},
 		{HostProviderKindAudit, cfg.Providers.Audit},
 	} {
-		if err := validateHostProviderEntries(collection.kind, collection.entries); err != nil {
+		if err := validateHostProviderEntries(collection.kind, collection.entries, sourceSyntax); err != nil {
 			return err
 		}
 		if _, _, err := cfg.SelectedHostProvider(collection.kind); err != nil {
@@ -94,7 +97,7 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		if entry.Source.IsBuiltin() {
 			return fmt.Errorf("config validation: ui %q does not support builtin providers; use a provider source reference", name)
 		}
-		if err := validateProviderEntrySource("ui", name, &entry.ProviderEntry); err != nil {
+		if err := validateProviderEntrySource("ui", name, &entry.ProviderEntry, sourceSyntax); err != nil {
 			return err
 		}
 		if err := validateAuthorizationPolicyReference(cfg, "ui", name, entry.AuthorizationPolicy); err != nil {
@@ -130,7 +133,7 @@ func ValidateCanonicalStructure(cfg *Config) error {
 
 	// Validate plugins
 	for name, entry := range cfg.Plugins {
-		if err := validatePlugin(cfg, name, entry); err != nil {
+		if err := validatePlugin(cfg, name, entry, sourceSyntax); err != nil {
 			return err
 		}
 	}
@@ -143,14 +146,14 @@ func validateAPIVersion(cfg *Config) error {
 	}
 	apiVersion := strings.TrimSpace(cfg.APIVersion)
 	switch apiVersion {
-	case "", APIVersionV3:
+	case "", APIVersionV3, APIVersionV4:
 		return nil
 	default:
 		return fmt.Errorf("config validation: unsupported apiVersion %q", apiVersion)
 	}
 }
 
-func validateHostProviderEntries(kind HostProviderKind, entries map[string]*ProviderEntry) error {
+func validateHostProviderEntries(kind HostProviderKind, entries map[string]*ProviderEntry, sourceSyntax providerSourceSyntaxMode) error {
 	for name, entry := range entries {
 		if entry == nil {
 			return fmt.Errorf("config validation: providers.%s.%s is required", kind, name)
@@ -163,19 +166,19 @@ func validateHostProviderEntries(kind HostProviderKind, entries map[string]*Prov
 			if entry.Source.IsBuiltin() {
 				return fmt.Errorf("config validation: auth provider %q does not support builtin providers; use a provider source reference or omit auth", name)
 			}
-			if err := validateProviderEntrySource("auth", name, entry); err != nil {
+			if err := validateProviderEntrySource("auth", name, entry, sourceSyntax); err != nil {
 				return err
 			}
 		case HostProviderKindAuthorization:
 			if entry.Source.IsBuiltin() {
 				return fmt.Errorf("config validation: authorization provider %q does not support builtin providers; use a provider source reference or omit authorization", name)
 			}
-			if err := validateProviderEntrySource("authorization", name, entry); err != nil {
+			if err := validateProviderEntrySource("authorization", name, entry, sourceSyntax); err != nil {
 				return err
 			}
 		case HostProviderKindSecrets, HostProviderKindTelemetry:
 			if !entry.Source.IsBuiltin() {
-				if err := validateProviderEntrySource(string(kind), name, entry); err != nil {
+				if err := validateProviderEntrySource(string(kind), name, entry, sourceSyntax); err != nil {
 					return err
 				}
 			}
@@ -185,7 +188,7 @@ func validateHostProviderEntries(kind HostProviderKind, entries map[string]*Prov
 					return err
 				}
 			} else {
-				if err := validateProviderEntrySource("audit", name, entry); err != nil {
+				if err := validateProviderEntrySource("audit", name, entry, sourceSyntax); err != nil {
 					return err
 				}
 			}
@@ -243,7 +246,7 @@ func validateBuiltinAudit(entry *ProviderEntry) error {
 	}
 }
 
-func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error {
+func validateProviderEntrySource(kind, name string, entry *ProviderEntry, sourceSyntax providerSourceSyntaxMode) error {
 	if entry == nil {
 		return nil
 	}
@@ -271,11 +274,28 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 	if src.IsMetadataURL() {
 		modeCount++
 	}
+	if src.IsLocalMetadataPath() {
+		modeCount++
+	}
 	if modeCount == 0 {
+		if sourceSyntax == providerSourceSyntaxV4 {
+			return fmt.Errorf("config validation: %s %q source.path or provider-release metadata URL is required", kind, name)
+		}
 		return fmt.Errorf("config validation: %s %q source.path or metadata URL is required", kind, name)
 	}
 	if modeCount > 1 {
+		if sourceSyntax == providerSourceSyntaxV4 {
+			return fmt.Errorf("config validation: %s %q local and remote provider-release metadata sources are mutually exclusive", kind, name)
+		}
 		return fmt.Errorf("config validation: %s %q source.path and metadata URL sources are mutually exclusive", kind, name)
+	}
+	if src.IsLocal() && sourceSyntax == providerSourceSyntaxV4 {
+		return fmt.Errorf("config validation: %s %q apiVersion v4 source.path must reference provider-release.yaml metadata, not a source manifest", kind, name)
+	}
+	if src.IsLocalMetadataPath() {
+		if path.Base(filepath.ToSlash(src.MetadataPath())) != "provider-release.yaml" {
+			return fmt.Errorf("config validation: %s %q source.path must reference provider-release.yaml metadata", kind, name)
+		}
 	}
 	if src.IsMetadataURL() {
 		if parsed, err := url.ParseRequestURI(src.MetadataURL()); err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || !strings.HasSuffix(parsed.Path, "/provider-release.yaml") {
@@ -283,8 +303,8 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 		}
 	}
 	if auth != nil {
-		if !src.IsMetadataURL() {
-			return fmt.Errorf("config validation: %s %q auth is only valid with metadata URL sources", kind, name)
+		if !src.IsMetadataURL() && !src.IsLocalMetadataPath() {
+			return fmt.Errorf("config validation: %s %q auth is only valid with provider-release metadata sources", kind, name)
 		}
 		if strings.TrimSpace(auth.Token) == "" {
 			return fmt.Errorf("config validation: %s %q auth.token is required when auth is set", kind, name)
@@ -357,7 +377,7 @@ func ValidateRuntime(cfg *Config) error {
 	return nil
 }
 
-func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
+func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax providerSourceSyntaxMode) error {
 	if entry == nil {
 		return fmt.Errorf("config validation: plugin %q requires a source", name)
 	}
@@ -392,7 +412,7 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry.UI != "" && entry.MountPath == "" {
 		return fmt.Errorf("config validation: plugins.%s.ui requires plugins.%s.mountPath", name, name)
 	}
-	if err := validateProviderEntrySource("plugin", name, entry); err != nil {
+	if err := validateProviderEntrySource("plugin", name, entry, sourceSyntax); err != nil {
 		return err
 	}
 	if err := validatePluginIndexedDBConfig(cfg, name, entry); err != nil {
@@ -414,6 +434,7 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 }
 
 func validateDatastoreConfig(cfg *Config) error {
+	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	for name, entry := range cfg.Providers.IndexedDB {
 		if entry == nil {
 			return fmt.Errorf("config validation: providers.indexeddb.%s is required", name)
@@ -421,7 +442,7 @@ func validateDatastoreConfig(cfg *Config) error {
 		if err := validatePluginOnlyProviderFields("providers.indexeddb."+name, entry); err != nil {
 			return err
 		}
-		if err := validateProviderEntrySource("indexeddb", name, entry); err != nil {
+		if err := validateProviderEntrySource("indexeddb", name, entry, sourceSyntax); err != nil {
 			return err
 		}
 	}
@@ -432,6 +453,7 @@ func validateDatastoreConfig(cfg *Config) error {
 }
 
 func validateCacheConfig(cfg *Config) error {
+	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	for name, entry := range cfg.Providers.Cache {
 		if entry == nil {
 			return fmt.Errorf("config validation: providers.cache.%s is required", name)
@@ -442,7 +464,7 @@ func validateCacheConfig(cfg *Config) error {
 		if err := validatePluginOnlyProviderFields("providers.cache."+name, entry); err != nil {
 			return err
 		}
-		if err := validateProviderEntrySource("cache", name, entry); err != nil {
+		if err := validateProviderEntrySource("cache", name, entry, sourceSyntax); err != nil {
 			return err
 		}
 	}
@@ -450,6 +472,7 @@ func validateCacheConfig(cfg *Config) error {
 }
 
 func validateS3Config(cfg *Config) error {
+	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	for name, entry := range cfg.Providers.S3 {
 		if entry == nil {
 			return fmt.Errorf("config validation: providers.s3.%s is required", name)
@@ -457,7 +480,7 @@ func validateS3Config(cfg *Config) error {
 		if err := validatePluginOnlyProviderFields("providers.s3."+name, entry); err != nil {
 			return err
 		}
-		if err := validateProviderEntrySource("s3", name, entry); err != nil {
+		if err := validateProviderEntrySource("s3", name, entry, sourceSyntax); err != nil {
 			return err
 		}
 	}
@@ -465,6 +488,7 @@ func validateS3Config(cfg *Config) error {
 }
 
 func validateWorkflowConfig(cfg *Config) error {
+	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	defaults := make([]string, 0, len(cfg.Providers.Workflow))
 	for name, entry := range cfg.Providers.Workflow {
 		if entry == nil {
@@ -483,7 +507,7 @@ func validateWorkflowConfig(cfg *Config) error {
 		if err := validateWorkflowProviderFields(cfg, name, entry); err != nil {
 			return err
 		}
-		if err := validateProviderEntrySource("workflow", name, entry); err != nil {
+		if err := validateProviderEntrySource("workflow", name, entry, sourceSyntax); err != nil {
 			return err
 		}
 	}
