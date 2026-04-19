@@ -144,12 +144,6 @@ func runProviderRelease(args []string) (err error) {
 		return fmt.Errorf("invalid source in manifest: %w", err)
 	}
 	pluginName := src.PluginName()
-	if err := plugininvocation.ValidateEffectiveCatalog(context.Background(), pluginName, &config.ProviderEntry{
-		ResolvedManifestPath: manifestPath,
-		ResolvedManifest:     releaseManifest,
-	}); err != nil {
-		return err
-	}
 
 	if err := os.MkdirAll(*outputDir, 0755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)

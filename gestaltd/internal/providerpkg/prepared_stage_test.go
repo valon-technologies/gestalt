@@ -60,4 +60,46 @@ func TestStageSourcePreparedInstallDir_BuildsHostBinaryWhenSourcePackageExists(t
 	if string(data) == "stale-binary" {
 		t.Fatalf("staged binary reused stale checked-in artifact")
 	}
+
+	catalogData, err := os.ReadFile(filepath.Join(stagingDir, StaticCatalogFile))
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", filepath.Join(stagingDir, StaticCatalogFile), err)
+	}
+	if len(catalogData) == 0 {
+		t.Fatal("staged catalog.yaml is empty")
+	}
+}
+
+func TestStagePreparedInstallDir_WithBuildKindCopiesGeneratedCatalog(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	testutil.CopyExampleProviderPlugin(t, root)
+
+	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      "github.com/test/plugins/provider",
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Example Provider",
+		Spec:        &providermanifestv1.Spec{},
+	}))
+
+	stagingDir := filepath.Join(t.TempDir(), "prepared")
+	_, err := StagePreparedInstallDir(manifestPath, stagingDir, StagePreparedInstallOptions{
+		BuildKind:  providermanifestv1.KindPlugin,
+		PluginName: "prepared-stage-test",
+		GOOS:       runtime.GOOS,
+		GOARCH:     runtime.GOARCH,
+	})
+	if err != nil {
+		t.Fatalf("StagePreparedInstallDir: %v", err)
+	}
+
+	catalogData, err := os.ReadFile(filepath.Join(stagingDir, StaticCatalogFile))
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", filepath.Join(stagingDir, StaticCatalogFile), err)
+	}
+	if len(catalogData) == 0 {
+		t.Fatal("staged catalog.yaml is empty")
+	}
 }
