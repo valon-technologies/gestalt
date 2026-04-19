@@ -298,8 +298,8 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry, source
 		}
 	}
 	if src.IsMetadataURL() {
-		if parsed, err := url.ParseRequestURI(src.MetadataURL()); err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || !strings.HasSuffix(parsed.Path, "/provider-release.yaml") {
-			return fmt.Errorf("config validation: %s %q source metadata URL must be an absolute http(s) provider-release.yaml URL", kind, name)
+		if parsed, err := url.ParseRequestURI(src.MetadataURL()); err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return fmt.Errorf("config validation: %s %q source metadata URL must be an absolute http(s) URL", kind, name)
 		}
 	}
 	if auth != nil {
