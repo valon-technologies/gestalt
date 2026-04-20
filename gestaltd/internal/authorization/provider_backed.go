@@ -2,6 +2,7 @@ package authorization
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -42,7 +43,13 @@ var _ RuntimeAuthorizer = (*ProviderBackedAuthorizer)(nil)
 
 const providerBackedReloadInterval = 5 * time.Second
 
-func NewProviderBacked(legacy *Authorizer, provider core.AuthorizationProvider) *ProviderBackedAuthorizer {
+func NewProviderBacked(legacy *Authorizer, provider core.AuthorizationProvider) (*ProviderBackedAuthorizer, error) {
+	if legacy == nil {
+		return nil, errors.New("legacy authorizer is required")
+	}
+	if provider == nil {
+		return nil, errors.New("authorization provider is required")
+	}
 	return &ProviderBackedAuthorizer{
 		legacy:   legacy,
 		provider: provider,
@@ -51,7 +58,7 @@ func NewProviderBacked(legacy *Authorizer, provider core.AuthorizationProvider) 
 			pluginStaticRoles:  map[string][]string{},
 			pluginDynamicRoles: map[string][]string{},
 		},
-	}
+	}, nil
 }
 
 func (a *ProviderBackedAuthorizer) Start(ctx context.Context) error {
@@ -60,9 +67,6 @@ func (a *ProviderBackedAuthorizer) Start(ctx context.Context) error {
 	}
 	if a.legacy == nil {
 		return nil
-	}
-	if a.provider == nil {
-		return a.legacy.Start(ctx)
 	}
 
 	a.lifecycleMu.Lock()
@@ -92,9 +96,6 @@ func (a *ProviderBackedAuthorizer) Close() error {
 	if a.legacy == nil {
 		return nil
 	}
-	if a.provider == nil {
-		return a.legacy.Close()
-	}
 
 	a.lifecycleMu.Lock()
 	if a.closed {
@@ -123,9 +124,6 @@ func (a *ProviderBackedAuthorizer) ReloadDynamic(ctx context.Context) error {
 	}
 	if a.legacy == nil {
 		return nil
-	}
-	if a.provider == nil {
-		return a.legacy.ReloadDynamic(ctx)
 	}
 
 	sourceModelID, err := a.sourceModelID(ctx)
@@ -230,7 +228,7 @@ func (a *ProviderBackedAuthorizer) AllowProvider(ctx context.Context, p *princip
 	if a.legacy == nil {
 		return true
 	}
-	if a.provider == nil || a.legacy.IsWorkload(p) || a.legacy.isManagedIdentityPrincipal(p) {
+	if a.legacy.IsWorkload(p) || a.legacy.isManagedIdentityPrincipal(p) {
 		return a.legacy.AllowProvider(ctx, p, provider)
 	}
 	_, allowed := a.ResolveAccess(ctx, p, provider)
@@ -244,7 +242,7 @@ func (a *ProviderBackedAuthorizer) AllowOperation(ctx context.Context, p *princi
 	if a.legacy == nil {
 		return true
 	}
-	if a.provider == nil || a.legacy.IsWorkload(p) || a.legacy.isManagedIdentityPrincipal(p) {
+	if a.legacy.IsWorkload(p) || a.legacy.isManagedIdentityPrincipal(p) {
 		return a.legacy.AllowOperation(ctx, p, provider, operation)
 	}
 	return a.AllowProvider(ctx, p, provider)
@@ -263,9 +261,6 @@ func (a *ProviderBackedAuthorizer) ResolveAccess(ctx context.Context, p *princip
 	}
 	if a.legacy == nil {
 		return AccessContext{}, true
-	}
-	if a.provider == nil {
-		return a.legacy.ResolveAccess(ctx, p, provider)
 	}
 	if a.legacy.isManagedIdentityPrincipal(p) || a.legacy.IsWorkload(p) {
 		return a.legacy.ResolveAccess(ctx, p, provider)
@@ -308,9 +303,6 @@ func (a *ProviderBackedAuthorizer) ResolvePolicyAccess(ctx context.Context, p *p
 	if a.legacy == nil {
 		return AccessContext{}, true
 	}
-	if a.provider == nil {
-		return a.legacy.ResolvePolicyAccess(ctx, p, policyName)
-	}
 	if a.legacy.IsWorkload(p) {
 		return a.legacy.ResolvePolicyAccess(ctx, p, policyName)
 	}
@@ -350,9 +342,6 @@ func (a *ProviderBackedAuthorizer) ResolveAdminAccess(ctx context.Context, p *pr
 	}
 	if a.legacy == nil {
 		return AccessContext{}, true
-	}
-	if a.provider == nil {
-		return a.legacy.ResolveAdminAccess(ctx, p, policyName)
 	}
 	if a.legacy.IsWorkload(p) {
 		return a.legacy.ResolveAdminAccess(ctx, p, policyName)
@@ -407,7 +396,7 @@ func (a *ProviderBackedAuthorizer) AllowCatalogOperation(ctx context.Context, p 
 	if a.legacy == nil {
 		return true
 	}
-	if a.provider == nil || a.legacy.IsWorkload(p) || a.legacy.isManagedIdentityPrincipal(p) {
+	if a.legacy.IsWorkload(p) || a.legacy.isManagedIdentityPrincipal(p) {
 		return a.legacy.AllowCatalogOperation(ctx, p, provider, op)
 	}
 

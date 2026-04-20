@@ -896,7 +896,10 @@ func mustAuthorizer(t *testing.T, cfg config.AuthorizationConfig, providers *reg
 
 func mustProviderBackedAuthorizer(t *testing.T, legacy *authorization.Authorizer, provider *memoryAuthorizationProvider) *authorization.ProviderBackedAuthorizer {
 	t.Helper()
-	authz := authorization.NewProviderBacked(legacy, provider)
+	authz, err := authorization.NewProviderBacked(legacy, provider)
+	if err != nil {
+		t.Fatalf("NewProviderBacked: %v", err)
+	}
 	if err := authz.ReloadDynamic(context.Background()); err != nil {
 		t.Fatalf("ReloadDynamic: %v", err)
 	}
@@ -3071,10 +3074,7 @@ func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyHumanAuthStores(t *testi
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
-		authz := authorization.NewProviderBacked(legacy, provider)
-		if err := authz.ReloadDynamic(context.Background()); err != nil {
-			t.Fatalf("ReloadDynamic: %v", err)
-		}
+		authz := mustProviderBackedAuthorizer(t, legacy, provider)
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Auth = &coretesting.StubAuthProvider{
@@ -3133,10 +3133,7 @@ func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyHumanAuthStores(t *testi
 				},
 			},
 		}, nil, nil, nil)
-		authz := authorization.NewProviderBacked(legacy, provider)
-		if err := authz.ReloadDynamic(context.Background()); err != nil {
-			t.Fatalf("ReloadDynamic: %v", err)
-		}
+		authz := mustProviderBackedAuthorizer(t, legacy, provider)
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Auth = &coretesting.StubAuthProvider{

@@ -667,7 +667,11 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}()
 	var authz authorization.RuntimeAuthorizer = legacyAuthz
 	if prepared.AuthorizationProvider != nil {
-		authz = authorization.NewProviderBacked(legacyAuthz, prepared.AuthorizationProvider)
+		authz, err = authorization.NewProviderBacked(legacyAuthz, prepared.AuthorizationProvider)
+		if err != nil {
+			prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+			return nil, err
+		}
 	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.Tokens,
 		invocation.WithAuthorizer(authz),
