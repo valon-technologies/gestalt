@@ -524,7 +524,6 @@ type HumanPolicyDef struct {
 
 type HumanPolicyMemberDef struct {
 	SubjectID string `yaml:"subjectID,omitempty"`
-	Email     string `yaml:"email,omitempty"`
 	Role      string `yaml:"role"`
 }
 

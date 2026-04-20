@@ -171,7 +171,7 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
 		return
 	}
-	if access, ok := s.authorizer.StaticRoleForProviderIdentity(plugin, principal.UserSubjectID(user.ID), user.ID, user.Email); ok && access.Role != "" {
+	if access, ok := s.authorizer.StaticRoleForProviderIdentity(plugin, principal.UserSubjectID(user.ID), user.ID); ok && access.Role != "" {
 		writeError(w, http.StatusConflict, "user already has static authorization for this plugin")
 		return
 	}
@@ -295,7 +295,7 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
 		return
 	}
-	if access, ok := s.authorizer.StaticRoleForPolicyIdentity(s.adminRoute.AuthorizationPolicy, principal.UserSubjectID(user.ID), user.ID, user.Email); ok && access.Role != "" {
+	if access, ok := s.authorizer.StaticRoleForPolicyIdentity(s.adminRoute.AuthorizationPolicy, principal.UserSubjectID(user.ID), user.ID); ok && access.Role != "" {
 		writeError(w, http.StatusConflict, "user already has static admin authorization")
 		return
 	}
@@ -401,10 +401,7 @@ func (s *Server) adminAuthorizationMemberRows(ctx context.Context, plugin string
 	if s.authorizer == nil || s.authorizationProvider == nil {
 		return nil, errAdminAuthorizationUnavailable
 	}
-	staticRows, err := s.adminAuthorizationStaticRows(ctx, plugin)
-	if err != nil {
-		return nil, err
-	}
+	staticRows := s.adminAuthorizationStaticRows(plugin)
 	dynamicRows, err := s.providerPluginAuthorizationRows(ctx, plugin)
 	if err != nil {
 		return nil, err
@@ -449,10 +446,7 @@ func (s *Server) adminAuthorizationAdminRows(ctx context.Context) ([]adminAuthor
 	if s.authorizer == nil || s.authorizationProvider == nil {
 		return nil, errAdminAuthorizationUnavailable
 	}
-	staticRows, err := s.adminAuthorizationStaticAdminRows(ctx)
-	if err != nil {
-		return nil, err
-	}
+	staticRows := s.adminAuthorizationStaticAdminRows()
 	dynamicRows, err := s.providerAdminAuthorizationRows(ctx)
 	if err != nil {
 		return nil, err
@@ -493,55 +487,36 @@ func (s *Server) adminAuthorizationAdminRows(ctx context.Context) ([]adminAuthor
 	return rows, nil
 }
 
-func (s *Server) adminAuthorizationStaticRows(ctx context.Context, plugin string) ([]adminAuthorizationMemberRow, error) {
+func (s *Server) adminAuthorizationStaticRows(plugin string) []adminAuthorizationMemberRow {
 	_, members, ok := s.authorizer.StaticMembersForProvider(plugin)
 	if !ok {
-		return nil, nil
+		return nil
 	}
-	return s.adminAuthorizationRowsFromStaticMembers(ctx, plugin, members)
+	return s.adminAuthorizationRowsFromStaticMembers(plugin, members)
 }
 
-func (s *Server) adminAuthorizationStaticAdminRows(ctx context.Context) ([]adminAuthorizationMemberRow, error) {
+func (s *Server) adminAuthorizationStaticAdminRows() []adminAuthorizationMemberRow {
 	members, ok := s.authorizer.StaticMembersForPolicy(s.adminRoute.AuthorizationPolicy)
 	if !ok {
-		return nil, nil
+		return nil
 	}
-	return s.adminAuthorizationRowsFromStaticMembers(ctx, "", members)
+	return s.adminAuthorizationRowsFromStaticMembers("", members)
 }
 
-func (s *Server) adminAuthorizationRowsFromStaticMembers(ctx context.Context, plugin string, members []authorization.StaticHumanMember) ([]adminAuthorizationMemberRow, error) {
+func (s *Server) adminAuthorizationRowsFromStaticMembers(plugin string, members []authorization.StaticHumanMember) []adminAuthorizationMemberRow {
 	rows := make([]adminAuthorizationMemberRow, 0, len(members))
 	for _, member := range members {
-		row := adminAuthorizationMemberRow{
-			Plugin:    plugin,
-			Role:      member.Role,
-			Source:    "static",
-			Effective: true,
-			Mutable:   false,
-		}
-		switch {
-		case member.Email != "":
-			user, err := s.users.FindUserByEmail(ctx, member.Email)
-			switch {
-			case err == nil:
-				row.SelectorKind = "subject_id"
-				row.SelectorValue = adminAuthorizationUserSubjectID(user.ID)
-			case errors.Is(err, core.ErrNotFound):
-				row.SelectorKind = "email"
-				row.SelectorValue = member.Email
-			case err != nil:
-				return nil, err
-			}
-		case strings.HasPrefix(member.SubjectID, string(principal.KindUser)+":"):
-			row.SelectorKind = "subject_id"
-			row.SelectorValue = member.SubjectID
-		default:
-			row.SelectorKind = "subject_id"
-			row.SelectorValue = member.SubjectID
-		}
-		rows = append(rows, row)
+		rows = append(rows, adminAuthorizationMemberRow{
+			Plugin:        plugin,
+			Role:          member.Role,
+			Source:        "static",
+			Effective:     true,
+			Mutable:       false,
+			SelectorKind:  "subject_id",
+			SelectorValue: member.SubjectID,
+		})
 	}
-	return rows, nil
+	return rows
 }
 
 func (s *Server) reloadAuthorizationState(ctx context.Context) error {

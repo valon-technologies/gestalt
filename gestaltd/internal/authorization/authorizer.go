@@ -9,7 +9,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 )
@@ -52,12 +51,10 @@ type HumanPolicy struct {
 	ID               string
 	DefaultAllow     bool
 	RolesBySubjectID map[string]string
-	RolesByEmail     map[string]string
 }
 
 type StaticHumanMember struct {
 	SubjectID string
-	Email     string
 	Role      string
 }
 
@@ -83,16 +80,11 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 			ID:               policyID,
 			DefaultAllow:     strings.EqualFold(strings.TrimSpace(def.Default), "allow"),
 			RolesBySubjectID: make(map[string]string, len(def.Members)),
-			RolesByEmail:     make(map[string]string, len(def.Members)),
 		}
 		for _, member := range def.Members {
 			role := strings.TrimSpace(member.Role)
 			if subjectID := strings.TrimSpace(member.SubjectID); subjectID != "" {
 				policy.RolesBySubjectID[subjectID] = role
-				continue
-			}
-			if email := normalizeEmail(member.Email); email != "" {
-				policy.RolesByEmail[email] = role
 			}
 		}
 		a.policies[policyID] = policy
@@ -287,7 +279,7 @@ func (a *Authorizer) PolicyNameForProvider(provider string) string {
 	return strings.TrimSpace(a.providerPolicies[provider])
 }
 
-func (a *Authorizer) StaticRoleForPolicyIdentity(policyName, subjectID, userID, email string) (AccessContext, bool) {
+func (a *Authorizer) StaticRoleForPolicyIdentity(policyName, subjectID, userID string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, false
 	}
@@ -300,19 +292,19 @@ func (a *Authorizer) StaticRoleForPolicyIdentity(policyName, subjectID, userID, 
 		return AccessContext{}, false
 	}
 	access := AccessContext{Policy: policyName}
-	if role, ok := policy.staticRoleForIdentity(subjectID, userID, email); ok {
+	if role, ok := policy.staticRoleForIdentity(subjectID, userID); ok {
 		access.Role = role
 		return access, true
 	}
 	return access, false
 }
 
-func (a *Authorizer) StaticRoleForProviderIdentity(provider, subjectID, userID, email string) (AccessContext, bool) {
+func (a *Authorizer) StaticRoleForProviderIdentity(provider, subjectID, userID string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, false
 	}
 	policyName := a.PolicyNameForProvider(provider)
-	return a.StaticRoleForPolicyIdentity(policyName, subjectID, userID, email)
+	return a.StaticRoleForPolicyIdentity(policyName, subjectID, userID)
 }
 
 func (a *Authorizer) StaticMembersForPolicy(policyName string) ([]StaticHumanMember, bool) {
@@ -327,17 +319,11 @@ func (a *Authorizer) StaticMembersForPolicy(policyName string) ([]StaticHumanMem
 	if policy == nil {
 		return nil, false
 	}
-	members := make([]StaticHumanMember, 0, len(policy.RolesBySubjectID)+len(policy.RolesByEmail))
+	members := make([]StaticHumanMember, 0, len(policy.RolesBySubjectID))
 	for subjectID, role := range policy.RolesBySubjectID {
 		members = append(members, StaticHumanMember{
 			SubjectID: subjectID,
 			Role:      role,
-		})
-	}
-	for email, role := range policy.RolesByEmail {
-		members = append(members, StaticHumanMember{
-			Email: email,
-			Role:  role,
 		})
 	}
 	return members, true
@@ -456,14 +442,10 @@ func (p *HumanPolicy) roleForPrincipal(pr *principal.Principal) (string, bool) {
 	if p == nil || pr == nil {
 		return "", false
 	}
-	email := ""
-	if pr.Identity != nil {
-		email = pr.Identity.Email
-	}
-	return p.staticRoleForIdentity(pr.SubjectID, pr.UserID, email)
+	return p.staticRoleForIdentity(pr.SubjectID, pr.UserID)
 }
 
-func (p *HumanPolicy) staticRoleForIdentity(subjectID, userID, email string) (string, bool) {
+func (p *HumanPolicy) staticRoleForIdentity(subjectID, userID string) (string, bool) {
 	if p == nil {
 		return "", false
 	}
@@ -474,11 +456,6 @@ func (p *HumanPolicy) staticRoleForIdentity(subjectID, userID, email string) (st
 	}
 	if userID = strings.TrimSpace(userID); userID != "" {
 		if role, ok := p.RolesBySubjectID[principal.UserSubjectID(userID)]; ok {
-			return role, true
-		}
-	}
-	if email = normalizeEmail(email); email != "" {
-		if role, ok := p.RolesByEmail[email]; ok {
 			return role, true
 		}
 	}
@@ -543,10 +520,6 @@ func normalizeAllowedOperations(ops []string) map[string]struct{} {
 		allowed[name] = struct{}{}
 	}
 	return allowed
-}
-
-func normalizeEmail(email string) string {
-	return emailutil.Normalize(email)
 }
 
 func (a *Authorizer) isManagedIdentityPrincipal(p *principal.Principal) bool {

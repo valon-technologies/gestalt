@@ -531,12 +531,11 @@ func TestValidateStructureRejectsDuplicateAuthorizationPolicyMembers(t *testing.
 			want: "subjectID duplicates",
 		},
 		{
-			name: "duplicate email after normalization",
+			name: "missing subject id",
 			members: []HumanPolicyMemberDef{
-				{Email: "Viewer@Test.local", Role: "viewer"},
-				{Email: " viewer@test.local ", Role: "admin"},
+				{Role: "viewer"},
 			},
-			want: "email duplicates",
+			want: "subjectID is required",
 		},
 	}
 
@@ -1477,7 +1476,7 @@ authorization:
     roadmap_policy:
       default: deny
       members:
-        - email: viewer@example.test
+        - subjectID: user:viewer-user
           role: viewer
 server:
   providers:

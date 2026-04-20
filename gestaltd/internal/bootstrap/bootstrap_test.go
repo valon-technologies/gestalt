@@ -273,13 +273,13 @@ func bootstrapManagedAuthorizationModel(policyRoles, pluginStaticRoles, pluginDy
 		authorization.ProviderResourceTypePolicyStatic,
 		nil,
 		policyRoles,
-		[]string{authorization.ProviderSubjectTypeSubject, authorization.ProviderSubjectTypeEmail},
+		[]string{authorization.ProviderSubjectTypeSubject},
 	))
 	model.ResourceTypes = appendIfAuthorizationResourceType(model.ResourceTypes, bootstrapAuthorizationResourceType(
 		authorization.ProviderResourceTypePluginStatic,
 		nil,
 		pluginStaticRoles,
-		[]string{authorization.ProviderSubjectTypeSubject, authorization.ProviderSubjectTypeEmail},
+		[]string{authorization.ProviderSubjectTypeSubject},
 	))
 	model.ResourceTypes = appendIfAuthorizationResourceType(model.ResourceTypes, bootstrapAuthorizationResourceType(
 		authorization.ProviderResourceTypePluginDynamic,
@@ -291,7 +291,7 @@ func bootstrapManagedAuthorizationModel(policyRoles, pluginStaticRoles, pluginDy
 		authorization.ProviderResourceTypeAdminPolicyStatic,
 		nil,
 		policyRoles,
-		[]string{authorization.ProviderSubjectTypeSubject, authorization.ProviderSubjectTypeEmail},
+		[]string{authorization.ProviderSubjectTypeSubject},
 	))
 	model.ResourceTypes = appendIfAuthorizationResourceType(model.ResourceTypes, bootstrapAuthorizationResourceType(
 		authorization.ProviderResourceTypeAdminDynamic,
@@ -3654,13 +3654,13 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				"calendar-policy": {
 					Default: "deny",
 					Members: []config.HumanPolicyMemberDef{
-						{Email: "static@example.test", Role: "viewer"},
+						{SubjectID: "user:static-viewer", Role: "viewer"},
 					},
 				},
 				"admin-policy": {
 					Default: "deny",
 					Members: []config.HumanPolicyMemberDef{
-						{Email: "seed-admin@example.test", Role: "admin"},
+						{SubjectID: "user:seed-admin", Role: "admin"},
 					},
 				},
 			},
@@ -3749,8 +3749,10 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		staticPrincipal := &principal.Principal{
-			Identity: &core.UserIdentity{Email: "static@example.test"},
-			Kind:     principal.KindUser,
+			SubjectID: "user:static-viewer",
+			UserID:    "static-viewer",
+			Identity:  &core.UserIdentity{Email: "static@example.test"},
+			Kind:      principal.KindUser,
 		}
 		access, allowed := result.Authorizer.ResolveAccess(ctx, staticPrincipal, "calendar")
 		if !allowed {
@@ -4063,7 +4065,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				"calendar-policy": {
 					Default: "deny",
 					Members: []config.HumanPolicyMemberDef{
-						{Email: "static@example.test", Role: "viewer"},
+						{SubjectID: "user:static-viewer", Role: "viewer"},
 					},
 				},
 			},
@@ -4131,7 +4133,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				"calendar-policy": {
 					Default: "deny",
 					Members: []config.HumanPolicyMemberDef{
-						{Email: "static@example.test", Role: "viewer"},
+						{SubjectID: "user:static-viewer", Role: "viewer"},
 					},
 				},
 			},
@@ -4171,8 +4173,10 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		provider.mu.Unlock()
 
 		staticPrincipal := &principal.Principal{
-			Identity: &core.UserIdentity{Email: "static@example.test"},
-			Kind:     principal.KindUser,
+			SubjectID: "user:static-viewer",
+			UserID:    "static-viewer",
+			Identity:  &core.UserIdentity{Email: "static@example.test"},
+			Kind:      principal.KindUser,
 		}
 		access, allowed := result.Authorizer.ResolveAccess(ctx, staticPrincipal, "calendar")
 		if allowed {
