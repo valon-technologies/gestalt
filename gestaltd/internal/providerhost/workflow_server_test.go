@@ -33,10 +33,12 @@ type workflowProviderFunc struct {
 	startRun           func(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error)
 	getRun             func(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error)
 	upsertSchedule     func(context.Context, coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error)
+	getSchedule        func(context.Context, coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error)
 	deleteSchedule     func(context.Context, coreworkflow.DeleteScheduleRequest) error
 	pauseSchedule      func(context.Context, coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error)
 	resumeSchedule     func(context.Context, coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error)
 	upsertEventTrigger func(context.Context, coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error)
+	getEventTrigger    func(context.Context, coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error)
 	deleteEventTrigger func(context.Context, coreworkflow.DeleteEventTriggerRequest) error
 	pauseEventTrigger  func(context.Context, coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error)
 	resumeEventTrigger func(context.Context, coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error)
@@ -71,7 +73,10 @@ func (p workflowProviderFunc) UpsertSchedule(ctx context.Context, req coreworkfl
 	return &coreworkflow.Schedule{}, nil
 }
 
-func (p workflowProviderFunc) GetSchedule(context.Context, coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
+func (p workflowProviderFunc) GetSchedule(ctx context.Context, req coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
+	if p.getSchedule != nil {
+		return p.getSchedule(ctx, req)
+	}
 	return &coreworkflow.Schedule{}, nil
 }
 
@@ -107,7 +112,10 @@ func (p workflowProviderFunc) UpsertEventTrigger(ctx context.Context, req corewo
 	return &coreworkflow.EventTrigger{}, nil
 }
 
-func (p workflowProviderFunc) GetEventTrigger(context.Context, coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+func (p workflowProviderFunc) GetEventTrigger(ctx context.Context, req coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	if p.getEventTrigger != nil {
+		return p.getEventTrigger(ctx, req)
+	}
 	return &coreworkflow.EventTrigger{}, nil
 }
 
@@ -159,19 +167,36 @@ func (p *recordingWorkflowProvider) StartRun(_ context.Context, req coreworkflow
 }
 
 func (p *recordingWorkflowProvider) GetRun(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
-	return &coreworkflow.Run{}, nil
+	return &coreworkflow.Run{
+		ID:     "run-1",
+		Status: coreworkflow.RunStatusRunning,
+		Target: coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "refresh",
+		},
+	}, nil
 }
 
 func (p *recordingWorkflowProvider) ListRuns(_ context.Context, req coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
 	p.listRunsReq = req
-	return []*coreworkflow.Run{{
-		ID:     "run-1",
-		Status: coreworkflow.RunStatusRunning,
-		Target: coreworkflow.Target{
-			PluginName: req.PluginName,
-			Operation:  "refresh",
+	return []*coreworkflow.Run{
+		{
+			ID:     "run-1",
+			Status: coreworkflow.RunStatusRunning,
+			Target: coreworkflow.Target{
+				PluginName: "roadmap",
+				Operation:  "refresh",
+			},
 		},
-	}}, nil
+		{
+			ID:     "run-foreign",
+			Status: coreworkflow.RunStatusRunning,
+			Target: coreworkflow.Target{
+				PluginName: "analytics",
+				Operation:  "refresh",
+			},
+		},
+	}, nil
 }
 
 func (p *recordingWorkflowProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
@@ -193,20 +218,39 @@ func (p *recordingWorkflowProvider) UpsertSchedule(_ context.Context, req corewo
 }
 
 func (p *recordingWorkflowProvider) GetSchedule(context.Context, coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
-	return &coreworkflow.Schedule{}, nil
-}
-
-func (p *recordingWorkflowProvider) ListSchedules(_ context.Context, req coreworkflow.ListSchedulesRequest) ([]*coreworkflow.Schedule, error) {
-	p.listSchedulesReq = req
-	return []*coreworkflow.Schedule{{
+	return &coreworkflow.Schedule{
 		ID:       "sched-1",
 		Cron:     "*/5 * * * *",
 		Timezone: "UTC",
 		Target: coreworkflow.Target{
-			PluginName: req.PluginName,
+			PluginName: "roadmap",
 			Operation:  "refresh",
 		},
-	}}, nil
+	}, nil
+}
+
+func (p *recordingWorkflowProvider) ListSchedules(_ context.Context, req coreworkflow.ListSchedulesRequest) ([]*coreworkflow.Schedule, error) {
+	p.listSchedulesReq = req
+	return []*coreworkflow.Schedule{
+		{
+			ID:       "sched-1",
+			Cron:     "*/5 * * * *",
+			Timezone: "UTC",
+			Target: coreworkflow.Target{
+				PluginName: "roadmap",
+				Operation:  "refresh",
+			},
+		},
+		{
+			ID:       "sched-foreign",
+			Cron:     "*/5 * * * *",
+			Timezone: "UTC",
+			Target: coreworkflow.Target{
+				PluginName: "analytics",
+				Operation:  "refresh",
+			},
+		},
+	}, nil
 }
 
 func (p *recordingWorkflowProvider) DeleteSchedule(context.Context, coreworkflow.DeleteScheduleRequest) error {
@@ -233,21 +277,42 @@ func (p *recordingWorkflowProvider) UpsertEventTrigger(_ context.Context, req co
 }
 
 func (p *recordingWorkflowProvider) GetEventTrigger(context.Context, coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	return &coreworkflow.EventTrigger{}, nil
-}
-
-func (p *recordingWorkflowProvider) ListEventTriggers(_ context.Context, req coreworkflow.ListEventTriggersRequest) ([]*coreworkflow.EventTrigger, error) {
-	p.listEventTriggersReq = req
-	return []*coreworkflow.EventTrigger{{
+	return &coreworkflow.EventTrigger{
 		ID: "trigger-1",
 		Match: coreworkflow.EventMatch{
 			Type: "roadmap.task.updated",
 		},
 		Target: coreworkflow.Target{
-			PluginName: req.PluginName,
+			PluginName: "roadmap",
 			Operation:  "refresh",
 		},
-	}}, nil
+	}, nil
+}
+
+func (p *recordingWorkflowProvider) ListEventTriggers(_ context.Context, req coreworkflow.ListEventTriggersRequest) ([]*coreworkflow.EventTrigger, error) {
+	p.listEventTriggersReq = req
+	return []*coreworkflow.EventTrigger{
+		{
+			ID: "trigger-1",
+			Match: coreworkflow.EventMatch{
+				Type: "roadmap.task.updated",
+			},
+			Target: coreworkflow.Target{
+				PluginName: "roadmap",
+				Operation:  "refresh",
+			},
+		},
+		{
+			ID: "trigger-foreign",
+			Match: coreworkflow.EventMatch{
+				Type: "roadmap.task.updated",
+			},
+			Target: coreworkflow.Target{
+				PluginName: "analytics",
+				Operation:  "refresh",
+			},
+		},
+	}, nil
 }
 
 func (p *recordingWorkflowProvider) DeleteEventTrigger(context.Context, coreworkflow.DeleteEventTriggerRequest) error {
@@ -343,6 +408,269 @@ func TestWorkflowServerStartRunScopesTargetToPlugin(t *testing.T) {
 	}
 	if resp.GetCreatedBy().GetSubjectId() != principal.UserSubjectID("user-123") || resp.GetCreatedBy().GetDisplayName() != "Ada" {
 		t.Fatalf("response createdBy = %#v", resp.GetCreatedBy())
+	}
+}
+
+func TestWorkflowServerNamespacesScheduleIDsPerPlugin(t *testing.T) {
+	t.Parallel()
+
+	schedules := map[string]*coreworkflow.Schedule{}
+	provider := workflowProviderFunc{
+		upsertSchedule: func(_ context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
+			value := &coreworkflow.Schedule{
+				ID:       req.ScheduleID,
+				Cron:     req.Cron,
+				Timezone: req.Timezone,
+				Target:   req.Target,
+				Paused:   req.Paused,
+			}
+			schedules[req.ScheduleID] = value
+			return value, nil
+		},
+		getSchedule: func(_ context.Context, req coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
+			value, ok := schedules[req.ScheduleID]
+			if !ok {
+				return nil, status.Error(codes.NotFound, "missing schedule")
+			}
+			return value, nil
+		},
+		deleteSchedule: func(_ context.Context, req coreworkflow.DeleteScheduleRequest) error {
+			delete(schedules, req.ScheduleID)
+			return nil
+		},
+		pauseSchedule: func(_ context.Context, req coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
+			value, ok := schedules[req.ScheduleID]
+			if !ok {
+				return nil, status.Error(codes.NotFound, "missing schedule")
+			}
+			cloned := *value
+			cloned.Paused = true
+			schedules[req.ScheduleID] = &cloned
+			return &cloned, nil
+		},
+	}
+
+	roadmap := NewWorkflowServer("roadmap", staticWorkflowResolver(provider, map[string]struct{}{"refresh": {}}, nil, nil, nil))
+	analytics := NewWorkflowServer("analytics", staticWorkflowResolver(provider, map[string]struct{}{"refresh": {}}, nil, nil, nil))
+
+	for _, tc := range []struct {
+		server *WorkflowServer
+		plugin string
+	}{
+		{server: roadmap, plugin: "roadmap"},
+		{server: analytics, plugin: "analytics"},
+	} {
+		_, err := tc.server.UpsertSchedule(context.Background(), &proto.UpsertWorkflowScheduleRequest{
+			ScheduleId: "nightly",
+			Cron:       "*/5 * * * *",
+			Timezone:   "UTC",
+			Target:     &proto.WorkflowTarget{Operation: "refresh"},
+		})
+		if err != nil {
+			t.Fatalf("UpsertSchedule(%s): %v", tc.plugin, err)
+		}
+	}
+
+	roadmapID := scopedWorkflowObjectID("roadmap", "nightly")
+	analyticsID := scopedWorkflowObjectID("analytics", "nightly")
+	if len(schedules) != 2 {
+		t.Fatalf("stored schedules = %#v", schedules)
+	}
+	if _, ok := schedules[roadmapID]; !ok {
+		t.Fatalf("missing roadmap scoped schedule %q", roadmapID)
+	}
+	if _, ok := schedules[analyticsID]; !ok {
+		t.Fatalf("missing analytics scoped schedule %q", analyticsID)
+	}
+
+	got, err := roadmap.GetSchedule(context.Background(), &proto.GetWorkflowScheduleRequest{ScheduleId: "nightly"})
+	if err != nil {
+		t.Fatalf("GetSchedule(roadmap): %v", err)
+	}
+	if got.GetId() != "nightly" {
+		t.Fatalf("GetSchedule id = %q, want nightly", got.GetId())
+	}
+
+	paused, err := roadmap.PauseSchedule(context.Background(), &proto.PauseWorkflowScheduleRequest{ScheduleId: "nightly"})
+	if err != nil {
+		t.Fatalf("PauseSchedule(roadmap): %v", err)
+	}
+	if !paused.GetPaused() {
+		t.Fatalf("PauseSchedule response = %#v", paused)
+	}
+	if schedules[analyticsID].Paused {
+		t.Fatalf("analytics schedule was mutated by roadmap pause: %#v", schedules[analyticsID])
+	}
+
+	if _, err := roadmap.DeleteSchedule(context.Background(), &proto.DeleteWorkflowScheduleRequest{ScheduleId: "nightly"}); err != nil {
+		t.Fatalf("DeleteSchedule(roadmap): %v", err)
+	}
+	if _, ok := schedules[roadmapID]; ok {
+		t.Fatalf("roadmap schedule still present after delete: %#v", schedules)
+	}
+	if _, ok := schedules[analyticsID]; !ok {
+		t.Fatalf("analytics schedule missing after roadmap delete: %#v", schedules)
+	}
+}
+
+func TestWorkflowServerNamespacesEventTriggerIDsPerPlugin(t *testing.T) {
+	t.Parallel()
+
+	triggers := map[string]*coreworkflow.EventTrigger{}
+	provider := workflowProviderFunc{
+		upsertEventTrigger: func(_ context.Context, req coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+			value := &coreworkflow.EventTrigger{
+				ID:     req.TriggerID,
+				Match:  req.Match,
+				Target: req.Target,
+				Paused: req.Paused,
+			}
+			triggers[req.TriggerID] = value
+			return value, nil
+		},
+		getEventTrigger: func(_ context.Context, req coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+			value, ok := triggers[req.TriggerID]
+			if !ok {
+				return nil, status.Error(codes.NotFound, "missing event trigger")
+			}
+			return value, nil
+		},
+		deleteEventTrigger: func(_ context.Context, req coreworkflow.DeleteEventTriggerRequest) error {
+			delete(triggers, req.TriggerID)
+			return nil
+		},
+		pauseEventTrigger: func(_ context.Context, req coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+			value, ok := triggers[req.TriggerID]
+			if !ok {
+				return nil, status.Error(codes.NotFound, "missing event trigger")
+			}
+			cloned := *value
+			cloned.Paused = true
+			triggers[req.TriggerID] = &cloned
+			return &cloned, nil
+		},
+	}
+
+	roadmap := NewWorkflowServer("roadmap", staticWorkflowResolver(provider, map[string]struct{}{"refresh": {}}, nil, nil, nil))
+	analytics := NewWorkflowServer("analytics", staticWorkflowResolver(provider, map[string]struct{}{"refresh": {}}, nil, nil, nil))
+
+	for _, tc := range []struct {
+		server *WorkflowServer
+		plugin string
+	}{
+		{server: roadmap, plugin: "roadmap"},
+		{server: analytics, plugin: "analytics"},
+	} {
+		_, err := tc.server.UpsertEventTrigger(context.Background(), &proto.UpsertWorkflowEventTriggerRequest{
+			TriggerId: "trigger-1",
+			Match:     &proto.WorkflowEventMatch{Type: "entity.updated"},
+			Target:    &proto.WorkflowTarget{Operation: "refresh"},
+		})
+		if err != nil {
+			t.Fatalf("UpsertEventTrigger(%s): %v", tc.plugin, err)
+		}
+	}
+
+	roadmapID := scopedWorkflowObjectID("roadmap", "trigger-1")
+	analyticsID := scopedWorkflowObjectID("analytics", "trigger-1")
+	if len(triggers) != 2 {
+		t.Fatalf("stored triggers = %#v", triggers)
+	}
+	if _, ok := triggers[roadmapID]; !ok {
+		t.Fatalf("missing roadmap scoped trigger %q", roadmapID)
+	}
+	if _, ok := triggers[analyticsID]; !ok {
+		t.Fatalf("missing analytics scoped trigger %q", analyticsID)
+	}
+
+	got, err := roadmap.GetEventTrigger(context.Background(), &proto.GetWorkflowEventTriggerRequest{TriggerId: "trigger-1"})
+	if err != nil {
+		t.Fatalf("GetEventTrigger(roadmap): %v", err)
+	}
+	if got.GetId() != "trigger-1" {
+		t.Fatalf("GetEventTrigger id = %q, want trigger-1", got.GetId())
+	}
+
+	paused, err := roadmap.PauseEventTrigger(context.Background(), &proto.PauseWorkflowEventTriggerRequest{TriggerId: "trigger-1"})
+	if err != nil {
+		t.Fatalf("PauseEventTrigger(roadmap): %v", err)
+	}
+	if !paused.GetPaused() {
+		t.Fatalf("PauseEventTrigger response = %#v", paused)
+	}
+	if triggers[analyticsID].Paused {
+		t.Fatalf("analytics trigger was mutated by roadmap pause: %#v", triggers[analyticsID])
+	}
+
+	if _, err := roadmap.DeleteEventTrigger(context.Background(), &proto.DeleteWorkflowEventTriggerRequest{TriggerId: "trigger-1"}); err != nil {
+		t.Fatalf("DeleteEventTrigger(roadmap): %v", err)
+	}
+	if _, ok := triggers[roadmapID]; ok {
+		t.Fatalf("roadmap trigger still present after delete: %#v", triggers)
+	}
+	if _, ok := triggers[analyticsID]; !ok {
+		t.Fatalf("analytics trigger missing after roadmap delete: %#v", triggers)
+	}
+}
+
+func TestWorkflowServerFallsBackToBareScheduleIDsForScopedReads(t *testing.T) {
+	t.Parallel()
+
+	provider := workflowProviderFunc{
+		getSchedule: func(_ context.Context, req coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
+			if req.ScheduleID != "legacy-nightly" {
+				return nil, status.Error(codes.NotFound, "missing schedule")
+			}
+			return &coreworkflow.Schedule{
+				ID:       "legacy-nightly",
+				Cron:     "*/5 * * * *",
+				Timezone: "UTC",
+				Target: coreworkflow.Target{
+					PluginName: "roadmap",
+					Operation:  "refresh",
+				},
+			}, nil
+		},
+	}
+	srv := NewWorkflowServer("roadmap", staticWorkflowResolver(provider, map[string]struct{}{"refresh": {}}, nil, nil, nil))
+
+	got, err := srv.GetSchedule(context.Background(), &proto.GetWorkflowScheduleRequest{ScheduleId: "legacy-nightly"})
+	if err != nil {
+		t.Fatalf("GetSchedule: %v", err)
+	}
+	if got.GetId() != "legacy-nightly" {
+		t.Fatalf("GetSchedule id = %q, want legacy-nightly", got.GetId())
+	}
+}
+
+func TestWorkflowServerFallsBackToBareEventTriggerIDsForScopedReads(t *testing.T) {
+	t.Parallel()
+
+	provider := workflowProviderFunc{
+		getEventTrigger: func(_ context.Context, req coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+			if req.TriggerID != "legacy-trigger" {
+				return nil, status.Error(codes.NotFound, "missing trigger")
+			}
+			return &coreworkflow.EventTrigger{
+				ID: "legacy-trigger",
+				Match: coreworkflow.EventMatch{
+					Type: "entity.updated",
+				},
+				Target: coreworkflow.Target{
+					PluginName: "roadmap",
+					Operation:  "refresh",
+				},
+			}, nil
+		},
+	}
+	srv := NewWorkflowServer("roadmap", staticWorkflowResolver(provider, map[string]struct{}{"refresh": {}}, nil, nil, nil))
+
+	got, err := srv.GetEventTrigger(context.Background(), &proto.GetWorkflowEventTriggerRequest{TriggerId: "legacy-trigger"})
+	if err != nil {
+		t.Fatalf("GetEventTrigger: %v", err)
+	}
+	if got.GetId() != "legacy-trigger" {
+		t.Fatalf("GetEventTrigger id = %q, want legacy-trigger", got.GetId())
 	}
 }
 
@@ -468,8 +796,8 @@ func TestWorkflowServerAllowsUserScheduleIDsThatOnlyShareCfgPrefix(t *testing.T)
 	if !provider.upsertScheduleCalled {
 		t.Fatal("provider UpsertSchedule was not called")
 	}
-	if provider.upsertScheduleReq.ScheduleID != "cfg_backup" {
-		t.Fatalf("schedule id = %q, want cfg_backup", provider.upsertScheduleReq.ScheduleID)
+	if provider.upsertScheduleReq.ScheduleID != scopedWorkflowObjectID("roadmap", "cfg_backup") {
+		t.Fatalf("schedule id = %q, want %q", provider.upsertScheduleReq.ScheduleID, scopedWorkflowObjectID("roadmap", "cfg_backup"))
 	}
 	if provider.upsertScheduleReq.Target.Connection != "analytics" || provider.upsertScheduleReq.Target.Instance != "tenant-a" {
 		t.Fatalf("schedule target selectors = %#v", provider.upsertScheduleReq.Target)
@@ -571,8 +899,8 @@ func TestWorkflowServerAllowsUserEventTriggerIDsThatOnlyShareCfgPrefix(t *testin
 	if err != nil {
 		t.Fatalf("UpsertEventTrigger: %v", err)
 	}
-	if provider.upsertEventTriggerReq.TriggerID != "cfg_backup" {
-		t.Fatalf("trigger id = %q, want cfg_backup", provider.upsertEventTriggerReq.TriggerID)
+	if provider.upsertEventTriggerReq.TriggerID != scopedWorkflowObjectID("roadmap", "cfg_backup") {
+		t.Fatalf("trigger id = %q, want %q", provider.upsertEventTriggerReq.TriggerID, scopedWorkflowObjectID("roadmap", "cfg_backup"))
 	}
 }
 
@@ -758,13 +1086,13 @@ func TestWorkflowServerListCallsScopeToPlugin(t *testing.T) {
 		t.Fatalf("ListEventTriggers: %v", err)
 	}
 
-	for name, got := range map[string]string{
-		"runs":      provider.listRunsReq.PluginName,
-		"schedules": provider.listSchedulesReq.PluginName,
-		"triggers":  provider.listEventTriggersReq.PluginName,
+	for name, got := range map[string]any{
+		"runs":      provider.listRunsReq,
+		"schedules": provider.listSchedulesReq,
+		"triggers":  provider.listEventTriggersReq,
 	} {
-		if got != "roadmap" {
-			t.Fatalf("%s plugin scope = %q, want %q", name, got, "roadmap")
+		if !reflect.DeepEqual(got, reflect.New(reflect.TypeOf(got)).Elem().Interface()) {
+			t.Fatalf("%s list request = %#v, want zero-value global request", name, got)
 		}
 	}
 	if len(runs.GetRuns()) != 1 || runs.GetRuns()[0].GetTarget().GetOperation() != "refresh" {
@@ -806,7 +1134,6 @@ func TestWorkflowHostServerForwardsInvokeRequest(t *testing.T) {
 			Instance:   " tenant-a ",
 		},
 		RunId:        "run-123",
-		PluginName:   " roadmap ",
 		ExecutionRef: "exec-ref-123",
 		Trigger: &proto.WorkflowRunTrigger{
 			Kind: &proto.WorkflowRunTrigger_Schedule{
@@ -844,9 +1171,6 @@ func TestWorkflowHostServerForwardsInvokeRequest(t *testing.T) {
 	if !reflect.DeepEqual(got.Metadata, map[string]any{"attempt": float64(2)}) {
 		t.Fatalf("metadata = %#v", got.Metadata)
 	}
-	if got.PluginName != "roadmap" {
-		t.Fatalf("plugin name = %q, want %q", got.PluginName, "roadmap")
-	}
 	if got.ExecutionRef != "exec-ref-123" {
 		t.Fatalf("execution ref = %q, want %q", got.ExecutionRef, "exec-ref-123")
 	}
@@ -864,27 +1188,38 @@ func TestWorkflowHostServerForwardsInvokeRequest(t *testing.T) {
 	}
 }
 
-func TestWorkflowHostServerRejectsCrossPluginInvokeRequest(t *testing.T) {
+func TestWorkflowHostServerAllowsCrossPluginTargetsWhenAuthorized(t *testing.T) {
 	t.Parallel()
 
+	called := false
 	srv := NewWorkflowHostServer(
 		"temporal",
-		func(context.Context, coreworkflow.InvokeOperationRequest) (*coreworkflow.InvokeOperationResponse, error) {
-			t.Fatal("invoke should not be called for cross-plugin targets")
-			return nil, nil
+		func(_ context.Context, req coreworkflow.InvokeOperationRequest) (*coreworkflow.InvokeOperationResponse, error) {
+			called = true
+			if req.Target.PluginName != "analytics" || req.Target.Operation != "refresh" {
+				t.Fatalf("target = %#v", req.Target)
+			}
+			return &coreworkflow.InvokeOperationResponse{Status: 202}, nil
 		},
-		func(string, string, string) bool { return true },
+		func(providerName, pluginName, operation string) bool {
+			return providerName == "temporal" && pluginName == "analytics" && operation == "refresh"
+		},
 	)
 
-	_, err := srv.InvokeOperation(context.Background(), &proto.InvokeWorkflowOperationRequest{
-		PluginName: "roadmap",
+	resp, err := srv.InvokeOperation(context.Background(), &proto.InvokeWorkflowOperationRequest{
 		Target: &proto.BoundWorkflowTarget{
 			PluginName: "analytics",
 			Operation:  "refresh",
 		},
 	})
-	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("status code = %v, want %v", status.Code(err), codes.PermissionDenied)
+	if err != nil {
+		t.Fatalf("InvokeOperation: %v", err)
+	}
+	if !called {
+		t.Fatal("invoke was not called")
+	}
+	if resp.GetStatus() != 202 {
+		t.Fatalf("status = %d, want 202", resp.GetStatus())
 	}
 }
 
@@ -901,7 +1236,6 @@ func TestWorkflowHostServerRejectsDisallowedOperations(t *testing.T) {
 	)
 
 	_, err := srv.InvokeOperation(context.Background(), &proto.InvokeWorkflowOperationRequest{
-		PluginName: "roadmap",
 		Target: &proto.BoundWorkflowTarget{
 			PluginName: "roadmap",
 			Operation:  "blocked",
@@ -924,7 +1258,6 @@ func TestWorkflowHostServerMapsInvocationErrors(t *testing.T) {
 	)
 
 	_, err := srv.InvokeOperation(context.Background(), &proto.InvokeWorkflowOperationRequest{
-		PluginName: "roadmap",
 		Target: &proto.BoundWorkflowTarget{
 			PluginName: "roadmap",
 			Operation:  "missing",
@@ -947,7 +1280,6 @@ func TestWorkflowHostServerMapsInternalInvocationErrors(t *testing.T) {
 	)
 
 	_, err := srv.InvokeOperation(context.Background(), &proto.InvokeWorkflowOperationRequest{
-		PluginName: "roadmap",
 		Target: &proto.BoundWorkflowTarget{
 			PluginName: "roadmap",
 			Operation:  "sync",

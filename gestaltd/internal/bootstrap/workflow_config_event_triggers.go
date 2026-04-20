@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 )
 
 const workflowConfigEventTriggerStateStore = "workflow_config_event_triggers"
@@ -70,9 +71,9 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		if err != nil {
 			return fmt.Errorf("bootstrap: cleanup workflow event trigger %q for plugin %q requires provider %q: %w", prev.TriggerID, prev.PluginName, prev.ProviderName, err)
 		}
-		if err := provider.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{
-			PluginName: prev.PluginName,
-			TriggerID:  prev.TriggerID,
+		providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", prev.PluginName)
+		if err := provider.DeleteEventTrigger(providerCtx, coreworkflow.DeleteEventTriggerRequest{
+			TriggerID: prev.TriggerID,
 		}); err != nil {
 			if isWorkflowObjectNotFound(err) {
 				if err := store.Delete(ctx, rowID); err != nil {
@@ -108,10 +109,10 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 			rowID := workflowConfigEventTriggerStateID(pluginName, triggerKey)
 			desiredEntry := desired[rowID]
 			prev, owned := previous[rowID]
+			providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
 			if !owned || prev.ProviderName != desiredEntry.state.ProviderName {
-				existing, err := provider.GetEventTrigger(ctx, coreworkflow.GetEventTriggerRequest{
-					PluginName: pluginName,
-					TriggerID:  desiredEntry.state.TriggerID,
+				existing, err := provider.GetEventTrigger(providerCtx, coreworkflow.GetEventTriggerRequest{
+					TriggerID: desiredEntry.state.TriggerID,
 				})
 				switch {
 				case err == nil:
@@ -124,7 +125,7 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 					return fmt.Errorf("bootstrap: get workflow event trigger %q for plugin %q: %w", desiredEntry.state.TriggerID, pluginName, err)
 				}
 			}
-			if _, err := provider.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{
+			if _, err := provider.UpsertEventTrigger(providerCtx, coreworkflow.UpsertEventTriggerRequest{
 				TriggerID:   desiredEntry.state.TriggerID,
 				Match:       workflowConfigEventTriggerMatch(trigger),
 				Target:      workflowConfigEventTriggerTarget(pluginName, trigger),
@@ -138,9 +139,9 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 				if err != nil {
 					return fmt.Errorf("bootstrap: cleanup workflow event trigger %q for plugin %q requires provider %q: %w", prev.TriggerID, prev.PluginName, prev.ProviderName, err)
 				}
-				if err := oldProvider.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{
-					PluginName: prev.PluginName,
-					TriggerID:  prev.TriggerID,
+				oldProviderCtx := invocation.WithWorkflowContextString(ctx, "plugin", prev.PluginName)
+				if err := oldProvider.DeleteEventTrigger(oldProviderCtx, coreworkflow.DeleteEventTriggerRequest{
+					TriggerID: prev.TriggerID,
 				}); err != nil && !isWorkflowObjectNotFound(err) {
 					return fmt.Errorf("bootstrap: delete workflow event trigger %q for plugin %q: %w", prev.TriggerID, prev.PluginName, err)
 				}

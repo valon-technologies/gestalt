@@ -36,6 +36,7 @@ import {
   captureChildStderr,
   createUnixGrpcClient,
   fixturePath,
+  hostCompileTarget,
   hostTarget,
   makeTempDir,
   removeTempDir,
@@ -84,6 +85,7 @@ test("build arg parsing validates required arguments", () => {
 
 test("buildProviderBinary compiles a runnable auth provider executable", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
+  const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gestalt-typescript-build-test-");
   const outputPath = join(tempDir, `fixture-provider${executableSuffix}`);
   const socketPath = join(tempDir, "provider.sock");
@@ -97,6 +99,7 @@ test("buildProviderBinary compiles a runnable auth provider executable", async (
       providerName: "fixture-built",
       goos,
       goarch,
+      compileTarget,
     });
 
     expect(existsSync(outputPath)).toBe(true);
@@ -150,6 +153,7 @@ test("buildProviderBinary compiles a runnable auth provider executable", async (
 
 test("buildProviderBinary compiles a runnable plugin provider executable", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
+  const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gts-integration-");
 
   try {
@@ -166,6 +170,7 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
         providerName: `fixture-${label}`,
         goos,
         goarch,
+        compileTarget,
       });
 
       expect(existsSync(outputPath)).toBe(true);
@@ -354,6 +359,7 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
 
 test("buildProviderBinary compiles a plugin provider executable without an explicit export name", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
+  const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gts-integration-fallback-");
   const outputPath = join(tempDir, `fixture-fallback${executableSuffix}`);
   const socketPath = join(tempDir, "provider.sock");
@@ -367,6 +373,7 @@ test("buildProviderBinary compiles a plugin provider executable without an expli
       providerName: "fixture-fallback",
       goos,
       goarch,
+      compileTarget,
     });
 
     expect(existsSync(outputPath)).toBe(true);
@@ -419,6 +426,7 @@ test("buildProviderBinary compiles a plugin provider executable without an expli
 
 test("buildProviderBinary falls through null exports to the next plugin candidate", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
+  const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gts-integration-null-export-");
   const outputPath = join(tempDir, `fixture-null-export${executableSuffix}`);
   const socketPath = join(tempDir, "provider.sock");
@@ -432,6 +440,7 @@ test("buildProviderBinary falls through null exports to the next plugin candidat
       providerName: "fixture-null-export",
       goos,
       goarch,
+      compileTarget,
     });
 
     expect(existsSync(outputPath)).toBe(true);
@@ -478,6 +487,7 @@ test("buildProviderBinary falls through null exports to the next plugin candidat
 
 test("buildProviderBinary compiles a runnable cache provider executable", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
+  const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gts-cache-");
   const outputPath = join(tempDir, `fixture-cache${executableSuffix}`);
   const socketPath = join(tempDir, "p.sock");
@@ -495,6 +505,7 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
       providerName: "fixture-cache-built",
       goos,
       goarch,
+      compileTarget,
     });
 
     expect(existsSync(outputPath)).toBe(true);
@@ -612,6 +623,7 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
 
 test("buildProviderBinary compiles a runnable secrets provider executable", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
+  const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gts-secrets-");
   const outputPath = join(tempDir, `fixture-secrets${executableSuffix}`);
   const socketPath = join(tempDir, "provider.sock");
@@ -625,6 +637,7 @@ test("buildProviderBinary compiles a runnable secrets provider executable", asyn
       providerName: "fixture-secrets-built",
       goos,
       goarch,
+      compileTarget,
     });
 
     expect(existsSync(outputPath)).toBe(true);
@@ -699,6 +712,7 @@ test("buildProviderBinary compiles a runnable secrets provider executable", asyn
 
 test("buildProviderBinary compiles a runnable s3 provider executable", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
+  const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gestalt-typescript-s3-build-test-");
   const outputPath = join(tempDir, `fixture-s3${executableSuffix}`);
   const socketPath = join(tempDir, "provider.sock");
@@ -712,6 +726,7 @@ test("buildProviderBinary compiles a runnable s3 provider executable", async () 
       providerName: "fixture-s3",
       goos,
       goarch,
+      compileTarget,
     });
 
     expect(existsSync(outputPath)).toBe(true);
@@ -781,6 +796,7 @@ test("buildProviderBinary compiles a runnable s3 provider executable", async () 
 
 test("buildProviderBinary compiles a runnable workflow provider executable", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
+  const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gts-workflow-");
   const outputPath = join(tempDir, `fixture-workflow${executableSuffix}`);
   const socketPath = join(tempDir, "provider.sock");
@@ -794,6 +810,7 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
       providerName: "fixture-workflow",
       goos,
       goarch,
+      compileTarget,
     });
 
     expect(existsSync(outputPath)).toBe(true);
@@ -826,7 +843,6 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
 
     const run = await workflow.startRun(
       create(StartWorkflowProviderRunRequestSchema, {
-        pluginName: "roadmap",
         target: {
           pluginName: "roadmap",
           operation: "sync",

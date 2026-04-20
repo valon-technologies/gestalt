@@ -1656,7 +1656,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
 	if len(recorder.deletedSchedules) != 1 {
 		t.Fatalf("deleted schedules = %d, want 1", len(recorder.deletedSchedules))
 	}
-	if recorder.deletedSchedules[0].ScheduleID != staleID || recorder.deletedSchedules[0].PluginName != "roadmap" {
+	if recorder.deletedSchedules[0].ScheduleID != staleID {
 		t.Fatalf("delete request = %#v", recorder.deletedSchedules[0])
 	}
 	if len(recorder.upsertedSchedules) != 0 {
@@ -2456,7 +2456,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowEventTriggers(t *testing.T) {
 	if len(recorder.deletedEventTriggers) != 1 {
 		t.Fatalf("deleted event triggers = %d, want 1", len(recorder.deletedEventTriggers))
 	}
-	if recorder.deletedEventTriggers[0].TriggerID != staleID || recorder.deletedEventTriggers[0].PluginName != "roadmap" {
+	if recorder.deletedEventTriggers[0].TriggerID != staleID {
 		t.Fatalf("delete request = %#v", recorder.deletedEventTriggers[0])
 	}
 	if len(recorder.upsertedEventTriggers) != 0 {
@@ -2888,7 +2888,6 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 			return nil, fmt.Errorf("store identity token: %w", err)
 		}
 		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			PluginName: "roadmap",
 			Target: &proto.BoundWorkflowTarget{
 				PluginName: "roadmap",
 				Operation:  "sync",
@@ -2943,7 +2942,6 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 			return nil, fmt.Errorf("store identity token: %w", err)
 		}
 		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			PluginName: "roadmap",
 			Target: &proto.BoundWorkflowTarget{
 				PluginName: "roadmap",
 				Operation:  "sync",
@@ -3031,7 +3029,6 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 					return nil, fmt.Errorf("store identity token: %w", err)
 				}
 				resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-					PluginName: "roadmap",
 					Target: &proto.BoundWorkflowTarget{
 						PluginName: "roadmap",
 						Operation:  "sync",
@@ -3128,7 +3125,6 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 		}
 		resp, err := deps.WorkflowRuntime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 			ProviderName: name,
-			PluginName:   "roadmap",
 			Target: coreworkflow.Target{
 				PluginName: "roadmap",
 				Operation:  "sync",

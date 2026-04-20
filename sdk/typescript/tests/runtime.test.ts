@@ -984,7 +984,6 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
   const run = await (workflow.startRun as any)(
     create(StartWorkflowProviderRunRequestSchema, {
       idempotencyKey: "req-1",
-      pluginName: "roadmap",
       createdBy: {
         subjectId: "user:user-123",
         subjectKind: "user",
@@ -1010,7 +1009,6 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
       scheduleId: "nightly",
       cron: "*/5 * * * *",
       timezone: "UTC",
-      pluginName: "roadmap",
       requestedBy: {
         subjectId: "workload:planner",
         subjectKind: "workload",
@@ -1032,7 +1030,6 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
       scheduleId: "nightly",
       cron: "0 * * * *",
       timezone: "UTC",
-      pluginName: "roadmap",
       requestedBy: {
         subjectId: "user:user-999",
         subjectKind: "user",

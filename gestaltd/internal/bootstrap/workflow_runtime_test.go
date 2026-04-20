@@ -227,7 +227,6 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 
 	resp, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
-		PluginName:   "roadmap",
 		RunID:        "run-123",
 		Target: coreworkflow.Target{
 			PluginName: "roadmap",
@@ -381,7 +380,6 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 
 	resp, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
-		PluginName:   "roadmap",
 		ExecutionRef: "exec-ref-123",
 		Target: coreworkflow.Target{
 			PluginName: "roadmap",
@@ -454,7 +452,6 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredWorkloadPrincipal(t *testing
 
 	if _, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
-		PluginName:   "roadmap",
 		ExecutionRef: "exec-ref-workload",
 		Target: coreworkflow.Target{
 			PluginName: "roadmap",
@@ -556,7 +553,6 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 
 	_, err = runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
-		PluginName:   "roadmap",
 		ExecutionRef: "exec-ref-denied",
 		Target: coreworkflow.Target{
 			PluginName: "roadmap",
@@ -634,7 +630,6 @@ func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *tes
 
 	_, err := runtime.Invoke(ctx, coreworkflow.InvokeOperationRequest{
 		ProviderName: "basic",
-		PluginName:   "roadmap",
 		RunID:        "run-123",
 		Target: coreworkflow.Target{
 			PluginName: "roadmap",
@@ -676,7 +671,6 @@ func TestWorkflowRuntimeInvokeExecutionRefLookupInfrastructureErrorIsInternal(t 
 
 	_, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 		ProviderName: "basic",
-		PluginName:   "roadmap",
 		ExecutionRef: "exec-ref-123",
 		Target: coreworkflow.Target{
 			PluginName: "roadmap",

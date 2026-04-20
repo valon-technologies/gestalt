@@ -104,6 +104,27 @@ func WithWorkflowContext(ctx context.Context, workflow map[string]any) context.C
 	return context.WithValue(ctx, workflowCtxKey{}, workflow)
 }
 
+func WithWorkflowContextString(ctx context.Context, key, value string) context.Context {
+	key = strings.TrimSpace(key)
+	value = strings.TrimSpace(value)
+	if key == "" || value == "" {
+		return ctx
+	}
+	workflow := WorkflowContextFromContext(ctx)
+	if len(workflow) == 0 {
+		return WithWorkflowContext(ctx, map[string]any{key: value})
+	}
+	if strings.TrimSpace(WorkflowContextString(workflow, key)) == value {
+		return ctx
+	}
+	updated := make(map[string]any, len(workflow)+1)
+	for currentKey, currentValue := range workflow {
+		updated[currentKey] = currentValue
+	}
+	updated[key] = value
+	return WithWorkflowContext(ctx, updated)
+}
+
 func WorkflowContextFromContext(ctx context.Context) map[string]any {
 	workflow, _ := ctx.Value(workflowCtxKey{}).(map[string]any)
 	return workflow

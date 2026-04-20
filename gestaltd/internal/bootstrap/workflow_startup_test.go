@@ -266,7 +266,6 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 			return nil, fmt.Errorf("store identity token: %w", err)
 		}
 		resp, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			PluginName: "roadmap",
 			Target: &proto.BoundWorkflowTarget{
 				PluginName: "roadmap",
 				Operation:  "status",
@@ -502,7 +501,6 @@ func TestBootstrapFailsWorkflowStartupDependencyCycles(t *testing.T) {
 			return nil, fmt.Errorf("store identity token: %w", err)
 		}
 		_, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			PluginName: "roadmap",
 			Target: &proto.BoundWorkflowTarget{
 				PluginName: "roadmap",
 				Operation:  "status",

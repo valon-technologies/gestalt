@@ -2,8 +2,11 @@ package providerhost
 
 import (
 	"context"
+	"errors"
+	"strings"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -33,6 +36,7 @@ func NewWorkflowServer(pluginName string, resolver workflowProviderResolver) *Wo
 }
 
 func (s *WorkflowServer) StartRun(ctx context.Context, req *proto.StartWorkflowRunRequest) (*proto.WorkflowRun, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, allowed, _, err := s.resolve()
 	if err != nil {
 		return nil, err
@@ -53,31 +57,38 @@ func (s *WorkflowServer) StartRun(ctx context.Context, req *proto.StartWorkflowR
 }
 
 func (s *WorkflowServer) GetRun(ctx context.Context, req *proto.GetWorkflowRunRequest) (*proto.WorkflowRun, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
 	run, err := provider.GetRun(ctx, coreworkflow.GetRunRequest{
-		PluginName: s.pluginName,
-		RunID:      req.GetRunId(),
+		RunID: req.GetRunId(),
 	})
 	if err != nil {
+		return nil, workflowServerError("workflow get run", err)
+	}
+	if err := requireWorkflowTargetScope(s.pluginName, run.Target, "run", req.GetRunId()); err != nil {
 		return nil, workflowServerError("workflow get run", err)
 	}
 	return workflowRunToScopedPluginProto(s.pluginName, run)
 }
 
 func (s *WorkflowServer) ListRuns(ctx context.Context, _ *proto.ListWorkflowRunsRequest) (*proto.ListWorkflowRunsResponse, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
-	runs, err := provider.ListRuns(ctx, coreworkflow.ListRunsRequest{PluginName: s.pluginName})
+	runs, err := provider.ListRuns(ctx, coreworkflow.ListRunsRequest{})
 	if err != nil {
 		return nil, workflowServerError("workflow list runs", err)
 	}
 	resp := &proto.ListWorkflowRunsResponse{Runs: make([]*proto.WorkflowRun, 0, len(runs))}
 	for _, run := range runs {
+		if !workflowTargetInScope(s.pluginName, run.Target) {
+			continue
+		}
 		value, err := workflowRunToScopedPluginProto(s.pluginName, run)
 		if err != nil {
 			return nil, workflowServerError("workflow list runs", err)
@@ -88,14 +99,21 @@ func (s *WorkflowServer) ListRuns(ctx context.Context, _ *proto.ListWorkflowRuns
 }
 
 func (s *WorkflowServer) CancelRun(ctx context.Context, req *proto.CancelWorkflowRunRequest) (*proto.WorkflowRun, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
+	existing, err := provider.GetRun(ctx, coreworkflow.GetRunRequest{RunID: req.GetRunId()})
+	if err != nil {
+		return nil, workflowServerError("workflow cancel run", err)
+	}
+	if err := requireWorkflowTargetScope(s.pluginName, existing.Target, "run", req.GetRunId()); err != nil {
+		return nil, workflowServerError("workflow cancel run", err)
+	}
 	run, err := provider.CancelRun(ctx, coreworkflow.CancelRunRequest{
-		PluginName: s.pluginName,
-		RunID:      req.GetRunId(),
-		Reason:     req.GetReason(),
+		RunID:  req.GetRunId(),
+		Reason: req.GetReason(),
 	})
 	if err != nil {
 		return nil, workflowServerError("workflow cancel run", err)
@@ -104,6 +122,7 @@ func (s *WorkflowServer) CancelRun(ctx context.Context, req *proto.CancelWorkflo
 }
 
 func (s *WorkflowServer) UpsertSchedule(ctx context.Context, req *proto.UpsertWorkflowScheduleRequest) (*proto.WorkflowSchedule, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, allowed, managedIDs, err := s.resolve()
 	if err != nil {
 		return nil, err
@@ -116,7 +135,7 @@ func (s *WorkflowServer) UpsertSchedule(ctx context.Context, req *proto.UpsertWo
 		return nil, err
 	}
 	value, err := provider.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{
-		ScheduleID:  req.GetScheduleId(),
+		ScheduleID:  scopedWorkflowObjectID(s.pluginName, req.GetScheduleId()),
 		Cron:        req.GetCron(),
 		Timezone:    req.GetTimezone(),
 		Target:      target,
@@ -130,31 +149,36 @@ func (s *WorkflowServer) UpsertSchedule(ctx context.Context, req *proto.UpsertWo
 }
 
 func (s *WorkflowServer) GetSchedule(ctx context.Context, req *proto.GetWorkflowScheduleRequest) (*proto.WorkflowSchedule, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
-	value, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{
-		PluginName: s.pluginName,
-		ScheduleID: req.GetScheduleId(),
-	})
+	value, _, err := getScopedWorkflowSchedule(ctx, provider, s.pluginName, req.GetScheduleId())
 	if err != nil {
+		return nil, workflowServerError("workflow get schedule", err)
+	}
+	if err := requireWorkflowTargetScope(s.pluginName, value.Target, "schedule", req.GetScheduleId()); err != nil {
 		return nil, workflowServerError("workflow get schedule", err)
 	}
 	return workflowScheduleToScopedPluginProto(s.pluginName, value)
 }
 
 func (s *WorkflowServer) ListSchedules(ctx context.Context, _ *proto.ListWorkflowSchedulesRequest) (*proto.ListWorkflowSchedulesResponse, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
-	values, err := provider.ListSchedules(ctx, coreworkflow.ListSchedulesRequest{PluginName: s.pluginName})
+	values, err := provider.ListSchedules(ctx, coreworkflow.ListSchedulesRequest{})
 	if err != nil {
 		return nil, workflowServerError("workflow list schedules", err)
 	}
 	resp := &proto.ListWorkflowSchedulesResponse{Schedules: make([]*proto.WorkflowSchedule, 0, len(values))}
 	for _, value := range values {
+		if !workflowTargetInScope(s.pluginName, value.Target) {
+			continue
+		}
 		pbValue, err := workflowScheduleToScopedPluginProto(s.pluginName, value)
 		if err != nil {
 			return nil, workflowServerError("workflow list schedules", err)
@@ -165,6 +189,7 @@ func (s *WorkflowServer) ListSchedules(ctx context.Context, _ *proto.ListWorkflo
 }
 
 func (s *WorkflowServer) DeleteSchedule(ctx context.Context, req *proto.DeleteWorkflowScheduleRequest) (*emptypb.Empty, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, _, managedIDs, err := s.resolve()
 	if err != nil {
 		return nil, err
@@ -172,9 +197,15 @@ func (s *WorkflowServer) DeleteSchedule(ctx context.Context, req *proto.DeleteWo
 	if err := rejectManagedWorkflowObjectID("schedule", req.GetScheduleId(), "schedules", managedIDs.Schedules); err != nil {
 		return nil, err
 	}
+	existing, scheduleID, err := getScopedWorkflowSchedule(ctx, provider, s.pluginName, req.GetScheduleId())
+	if err != nil {
+		return nil, workflowServerError("workflow delete schedule", err)
+	}
+	if err := requireWorkflowTargetScope(s.pluginName, existing.Target, "schedule", req.GetScheduleId()); err != nil {
+		return nil, workflowServerError("workflow delete schedule", err)
+	}
 	if err := provider.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{
-		PluginName: s.pluginName,
-		ScheduleID: req.GetScheduleId(),
+		ScheduleID: scheduleID,
 	}); err != nil {
 		return nil, workflowServerError("workflow delete schedule", err)
 	}
@@ -182,6 +213,7 @@ func (s *WorkflowServer) DeleteSchedule(ctx context.Context, req *proto.DeleteWo
 }
 
 func (s *WorkflowServer) PauseSchedule(ctx context.Context, req *proto.PauseWorkflowScheduleRequest) (*proto.WorkflowSchedule, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, _, managedIDs, err := s.resolve()
 	if err != nil {
 		return nil, err
@@ -189,9 +221,15 @@ func (s *WorkflowServer) PauseSchedule(ctx context.Context, req *proto.PauseWork
 	if err := rejectManagedWorkflowObjectID("schedule", req.GetScheduleId(), "schedules", managedIDs.Schedules); err != nil {
 		return nil, err
 	}
+	existing, scheduleID, err := getScopedWorkflowSchedule(ctx, provider, s.pluginName, req.GetScheduleId())
+	if err != nil {
+		return nil, workflowServerError("workflow pause schedule", err)
+	}
+	if err := requireWorkflowTargetScope(s.pluginName, existing.Target, "schedule", req.GetScheduleId()); err != nil {
+		return nil, workflowServerError("workflow pause schedule", err)
+	}
 	value, err := provider.PauseSchedule(ctx, coreworkflow.PauseScheduleRequest{
-		PluginName: s.pluginName,
-		ScheduleID: req.GetScheduleId(),
+		ScheduleID: scheduleID,
 	})
 	if err != nil {
 		return nil, workflowServerError("workflow pause schedule", err)
@@ -200,6 +238,7 @@ func (s *WorkflowServer) PauseSchedule(ctx context.Context, req *proto.PauseWork
 }
 
 func (s *WorkflowServer) ResumeSchedule(ctx context.Context, req *proto.ResumeWorkflowScheduleRequest) (*proto.WorkflowSchedule, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, _, managedIDs, err := s.resolve()
 	if err != nil {
 		return nil, err
@@ -207,9 +246,15 @@ func (s *WorkflowServer) ResumeSchedule(ctx context.Context, req *proto.ResumeWo
 	if err := rejectManagedWorkflowObjectID("schedule", req.GetScheduleId(), "schedules", managedIDs.Schedules); err != nil {
 		return nil, err
 	}
+	existing, scheduleID, err := getScopedWorkflowSchedule(ctx, provider, s.pluginName, req.GetScheduleId())
+	if err != nil {
+		return nil, workflowServerError("workflow resume schedule", err)
+	}
+	if err := requireWorkflowTargetScope(s.pluginName, existing.Target, "schedule", req.GetScheduleId()); err != nil {
+		return nil, workflowServerError("workflow resume schedule", err)
+	}
 	value, err := provider.ResumeSchedule(ctx, coreworkflow.ResumeScheduleRequest{
-		PluginName: s.pluginName,
-		ScheduleID: req.GetScheduleId(),
+		ScheduleID: scheduleID,
 	})
 	if err != nil {
 		return nil, workflowServerError("workflow resume schedule", err)
@@ -218,6 +263,7 @@ func (s *WorkflowServer) ResumeSchedule(ctx context.Context, req *proto.ResumeWo
 }
 
 func (s *WorkflowServer) UpsertEventTrigger(ctx context.Context, req *proto.UpsertWorkflowEventTriggerRequest) (*proto.WorkflowEventTrigger, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, allowed, managedIDs, err := s.resolve()
 	if err != nil {
 		return nil, err
@@ -230,7 +276,7 @@ func (s *WorkflowServer) UpsertEventTrigger(ctx context.Context, req *proto.Upse
 		return nil, err
 	}
 	value, err := provider.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{
-		TriggerID:   req.GetTriggerId(),
+		TriggerID:   scopedWorkflowObjectID(s.pluginName, req.GetTriggerId()),
 		Match:       workflowEventMatchFromProto(req.GetMatch()),
 		Target:      target,
 		Paused:      req.GetPaused(),
@@ -243,31 +289,36 @@ func (s *WorkflowServer) UpsertEventTrigger(ctx context.Context, req *proto.Upse
 }
 
 func (s *WorkflowServer) GetEventTrigger(ctx context.Context, req *proto.GetWorkflowEventTriggerRequest) (*proto.WorkflowEventTrigger, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
-	value, err := provider.GetEventTrigger(ctx, coreworkflow.GetEventTriggerRequest{
-		PluginName: s.pluginName,
-		TriggerID:  req.GetTriggerId(),
-	})
+	value, _, err := getScopedWorkflowEventTrigger(ctx, provider, s.pluginName, req.GetTriggerId())
 	if err != nil {
+		return nil, workflowServerError("workflow get event trigger", err)
+	}
+	if err := requireWorkflowTargetScope(s.pluginName, value.Target, "event trigger", req.GetTriggerId()); err != nil {
 		return nil, workflowServerError("workflow get event trigger", err)
 	}
 	return workflowEventTriggerToScopedPluginProto(s.pluginName, value)
 }
 
 func (s *WorkflowServer) ListEventTriggers(ctx context.Context, _ *proto.ListWorkflowEventTriggersRequest) (*proto.ListWorkflowEventTriggersResponse, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
-	values, err := provider.ListEventTriggers(ctx, coreworkflow.ListEventTriggersRequest{PluginName: s.pluginName})
+	values, err := provider.ListEventTriggers(ctx, coreworkflow.ListEventTriggersRequest{})
 	if err != nil {
 		return nil, workflowServerError("workflow list event triggers", err)
 	}
 	resp := &proto.ListWorkflowEventTriggersResponse{Triggers: make([]*proto.WorkflowEventTrigger, 0, len(values))}
 	for _, value := range values {
+		if !workflowTargetInScope(s.pluginName, value.Target) {
+			continue
+		}
 		pbValue, err := workflowEventTriggerToScopedPluginProto(s.pluginName, value)
 		if err != nil {
 			return nil, workflowServerError("workflow list event triggers", err)
@@ -278,6 +329,7 @@ func (s *WorkflowServer) ListEventTriggers(ctx context.Context, _ *proto.ListWor
 }
 
 func (s *WorkflowServer) DeleteEventTrigger(ctx context.Context, req *proto.DeleteWorkflowEventTriggerRequest) (*emptypb.Empty, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, _, managedIDs, err := s.resolve()
 	if err != nil {
 		return nil, err
@@ -285,9 +337,15 @@ func (s *WorkflowServer) DeleteEventTrigger(ctx context.Context, req *proto.Dele
 	if err := rejectManagedWorkflowObjectID("event trigger", req.GetTriggerId(), "event triggers", managedIDs.EventTriggers); err != nil {
 		return nil, err
 	}
+	existing, triggerID, err := getScopedWorkflowEventTrigger(ctx, provider, s.pluginName, req.GetTriggerId())
+	if err != nil {
+		return nil, workflowServerError("workflow delete event trigger", err)
+	}
+	if err := requireWorkflowTargetScope(s.pluginName, existing.Target, "event trigger", req.GetTriggerId()); err != nil {
+		return nil, workflowServerError("workflow delete event trigger", err)
+	}
 	if err := provider.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{
-		PluginName: s.pluginName,
-		TriggerID:  req.GetTriggerId(),
+		TriggerID: triggerID,
 	}); err != nil {
 		return nil, workflowServerError("workflow delete event trigger", err)
 	}
@@ -295,6 +353,7 @@ func (s *WorkflowServer) DeleteEventTrigger(ctx context.Context, req *proto.Dele
 }
 
 func (s *WorkflowServer) PauseEventTrigger(ctx context.Context, req *proto.PauseWorkflowEventTriggerRequest) (*proto.WorkflowEventTrigger, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, _, managedIDs, err := s.resolve()
 	if err != nil {
 		return nil, err
@@ -302,9 +361,15 @@ func (s *WorkflowServer) PauseEventTrigger(ctx context.Context, req *proto.Pause
 	if err := rejectManagedWorkflowObjectID("event trigger", req.GetTriggerId(), "event triggers", managedIDs.EventTriggers); err != nil {
 		return nil, err
 	}
+	existing, triggerID, err := getScopedWorkflowEventTrigger(ctx, provider, s.pluginName, req.GetTriggerId())
+	if err != nil {
+		return nil, workflowServerError("workflow pause event trigger", err)
+	}
+	if err := requireWorkflowTargetScope(s.pluginName, existing.Target, "event trigger", req.GetTriggerId()); err != nil {
+		return nil, workflowServerError("workflow pause event trigger", err)
+	}
 	value, err := provider.PauseEventTrigger(ctx, coreworkflow.PauseEventTriggerRequest{
-		PluginName: s.pluginName,
-		TriggerID:  req.GetTriggerId(),
+		TriggerID: triggerID,
 	})
 	if err != nil {
 		return nil, workflowServerError("workflow pause event trigger", err)
@@ -313,6 +378,7 @@ func (s *WorkflowServer) PauseEventTrigger(ctx context.Context, req *proto.Pause
 }
 
 func (s *WorkflowServer) ResumeEventTrigger(ctx context.Context, req *proto.ResumeWorkflowEventTriggerRequest) (*proto.WorkflowEventTrigger, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, _, managedIDs, err := s.resolve()
 	if err != nil {
 		return nil, err
@@ -320,9 +386,15 @@ func (s *WorkflowServer) ResumeEventTrigger(ctx context.Context, req *proto.Resu
 	if err := rejectManagedWorkflowObjectID("event trigger", req.GetTriggerId(), "event triggers", managedIDs.EventTriggers); err != nil {
 		return nil, err
 	}
+	existing, triggerID, err := getScopedWorkflowEventTrigger(ctx, provider, s.pluginName, req.GetTriggerId())
+	if err != nil {
+		return nil, workflowServerError("workflow resume event trigger", err)
+	}
+	if err := requireWorkflowTargetScope(s.pluginName, existing.Target, "event trigger", req.GetTriggerId()); err != nil {
+		return nil, workflowServerError("workflow resume event trigger", err)
+	}
 	value, err := provider.ResumeEventTrigger(ctx, coreworkflow.ResumeEventTriggerRequest{
-		PluginName: s.pluginName,
-		TriggerID:  req.GetTriggerId(),
+		TriggerID: triggerID,
 	})
 	if err != nil {
 		return nil, workflowServerError("workflow resume event trigger", err)
@@ -331,6 +403,7 @@ func (s *WorkflowServer) ResumeEventTrigger(ctx context.Context, req *proto.Resu
 }
 
 func (s *WorkflowServer) PublishEvent(ctx context.Context, req *proto.PublishWorkflowEventRequest) (*emptypb.Empty, error) {
+	ctx = workflowScopeContext(ctx, s.pluginName)
 	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
@@ -392,6 +465,10 @@ func workflowActorFromWorkflowContext(ctx context.Context) (coreworkflow.Actor, 
 	return actor, !isEmptyWorkflowActor(actor)
 }
 
+func workflowScopeContext(ctx context.Context, pluginName string) context.Context {
+	return invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
+}
+
 func isEmptyWorkflowActor(actor coreworkflow.Actor) bool {
 	return actor.SubjectID == "" &&
 		actor.SubjectKind == "" &&
@@ -416,7 +493,9 @@ func workflowScheduleToScopedPluginProto(pluginName string, schedule *coreworkfl
 	if err := validateWorkflowTargetScope(pluginName, schedule.Target, "schedule", schedule.ID); err != nil {
 		return nil, err
 	}
-	return workflowScheduleToPluginProto(schedule)
+	cloned := *schedule
+	cloned.ID = unscopedWorkflowObjectID(pluginName, schedule.ID)
+	return workflowScheduleToPluginProto(&cloned)
 }
 
 func workflowEventTriggerToScopedPluginProto(pluginName string, trigger *coreworkflow.EventTrigger) (*proto.WorkflowEventTrigger, error) {
@@ -426,20 +505,87 @@ func workflowEventTriggerToScopedPluginProto(pluginName string, trigger *corewor
 	if err := validateWorkflowTargetScope(pluginName, trigger.Target, "event trigger", trigger.ID); err != nil {
 		return nil, err
 	}
-	return workflowEventTriggerToPluginProto(trigger)
+	cloned := *trigger
+	cloned.ID = unscopedWorkflowObjectID(pluginName, trigger.ID)
+	return workflowEventTriggerToPluginProto(&cloned)
 }
 
 func validateWorkflowTargetScope(pluginName string, target coreworkflow.Target, objectKind, objectID string) error {
-	if pluginName == "" {
-		return nil
-	}
-	if target.PluginName == pluginName {
+	if workflowTargetInScope(pluginName, target) {
 		return nil
 	}
 	if objectID == "" {
 		return status.Errorf(codes.Internal, "workflow %s target plugin %q does not match scoped plugin %q", objectKind, target.PluginName, pluginName)
 	}
 	return status.Errorf(codes.Internal, "workflow %s %q target plugin %q does not match scoped plugin %q", objectKind, objectID, target.PluginName, pluginName)
+}
+
+func requireWorkflowTargetScope(pluginName string, target coreworkflow.Target, objectKind, objectID string) error {
+	if workflowTargetInScope(pluginName, target) {
+		return nil
+	}
+	if objectID == "" {
+		return status.Errorf(codes.NotFound, "workflow %s not found", objectKind)
+	}
+	return status.Errorf(codes.NotFound, "workflow %s %q not found", objectKind, objectID)
+}
+
+func workflowTargetInScope(pluginName string, target coreworkflow.Target) bool {
+	if pluginName == "" {
+		return true
+	}
+	return target.PluginName == pluginName
+}
+
+func getScopedWorkflowSchedule(ctx context.Context, provider coreworkflow.Provider, pluginName, scheduleID string) (*coreworkflow.Schedule, string, error) {
+	for _, candidate := range workflowScopedObjectIDs(pluginName, scheduleID) {
+		value, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{ScheduleID: candidate})
+		if err == nil {
+			return value, candidate, nil
+		}
+		if !errors.Is(err, core.ErrNotFound) && status.Code(err) != codes.NotFound {
+			return nil, "", err
+		}
+	}
+	return nil, "", status.Errorf(codes.NotFound, "workflow schedule %q not found", scheduleID)
+}
+
+func getScopedWorkflowEventTrigger(ctx context.Context, provider coreworkflow.Provider, pluginName, triggerID string) (*coreworkflow.EventTrigger, string, error) {
+	for _, candidate := range workflowScopedObjectIDs(pluginName, triggerID) {
+		value, err := provider.GetEventTrigger(ctx, coreworkflow.GetEventTriggerRequest{TriggerID: candidate})
+		if err == nil {
+			return value, candidate, nil
+		}
+		if !errors.Is(err, core.ErrNotFound) && status.Code(err) != codes.NotFound {
+			return nil, "", err
+		}
+	}
+	return nil, "", status.Errorf(codes.NotFound, "workflow event trigger %q not found", triggerID)
+}
+
+func workflowScopedObjectIDs(pluginName, objectID string) []string {
+	scoped := scopedWorkflowObjectID(pluginName, objectID)
+	if scoped == objectID {
+		return []string{objectID}
+	}
+	return []string{scoped, strings.TrimSpace(objectID)}
+}
+
+func scopedWorkflowObjectID(pluginName, objectID string) string {
+	objectID = strings.TrimSpace(objectID)
+	if pluginName == "" || objectID == "" {
+		return objectID
+	}
+	return "plugin$" + pluginName + "$" + objectID
+}
+
+func unscopedWorkflowObjectID(pluginName, objectID string) string {
+	pluginName = strings.TrimSpace(pluginName)
+	if pluginName == "" {
+		return objectID
+	}
+	prefix := "plugin$" + pluginName + "$"
+	return strings.TrimPrefix(objectID, prefix)
 }
 
 func (s *WorkflowServer) resolve() (coreworkflow.Provider, map[string]struct{}, WorkflowManagedIDs, error) {
