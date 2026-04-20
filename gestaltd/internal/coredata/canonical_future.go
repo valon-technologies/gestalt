@@ -180,6 +180,18 @@ func (s *ExternalCredentialService) GetCredential(ctx context.Context, identityI
 	return recordToExternalCredential(rec), nil
 }
 
+func (s *ExternalCredentialService) ListByIdentityConnection(ctx context.Context, identityID, plugin, connection string) ([]*core.ExternalCredential, error) {
+	recs, err := s.store.Index("by_identity_connection").GetAll(ctx, nil, strings.TrimSpace(identityID), strings.TrimSpace(plugin), strings.TrimSpace(connection))
+	if err != nil {
+		return nil, fmt.Errorf("list external credentials: %w", err)
+	}
+	out := make([]*core.ExternalCredential, 0, len(recs))
+	for _, rec := range recs {
+		out = append(out, recordToExternalCredential(rec))
+	}
+	return out, nil
+}
+
 func encodeLegacyCredentialPayload(accessTokenEncrypted, refreshTokenEncrypted string) (string, error) {
 	payload := map[string]string{
 		"access_token_encrypted":  accessTokenEncrypted,

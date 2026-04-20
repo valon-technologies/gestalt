@@ -310,7 +310,7 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	var auditBuf bytes.Buffer
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 
-	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeIdentity)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
@@ -331,7 +331,7 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, stub)
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
 				Providers: map[string]config.WorkloadProviderDef{
@@ -349,15 +349,15 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	}
 
 	svc := coretesting.NewStubServices(t)
-	if err := svc.Tokens.StoreToken(t.Context(), &core.IntegrationToken{
+	if err := svc.Tokens.StoreIdentityToken(t.Context(), &core.IntegrationToken{
 		ID:          "identity-audit-token",
-		UserID:      principal.IdentityPrincipal,
+		IdentityID:  "triage-bot",
 		Integration: "audit-workload-prov",
 		Connection:  "workspace",
 		Instance:    "team-a",
 		AccessToken: "identity-token",
 	}); err != nil {
-		t.Fatalf("StoreToken: %v", err)
+		t.Fatalf("StoreIdentityToken: %v", err)
 	}
 
 	broker := invocation.NewBroker(providers, svc.Users, svc.Tokens, invocation.WithAuthorizer(authz))
@@ -397,17 +397,17 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 		t.Fatalf("failed to parse audit JSON: %v\nraw: %s", err, auditBuf.String())
 	}
 
-	if record["subject_id"] != "workload:triage-bot" {
-		t.Fatalf("expected workload subject_id, got %v", record["subject_id"])
+	if record["subject_id"] != "identity:triage-bot" {
+		t.Fatalf("expected identity subject_id, got %v", record["subject_id"])
 	}
-	if record["subject_kind"] != "workload" {
-		t.Fatalf("expected subject_kind=workload, got %v", record["subject_kind"])
+	if record["subject_kind"] != "identity" {
+		t.Fatalf("expected subject_kind=identity, got %v", record["subject_kind"])
 	}
 	if record["credential_mode"] != "identity" {
 		t.Fatalf("expected credential_mode=identity, got %v", record["credential_mode"])
 	}
-	if record["credential_subject_id"] != "identity:__identity__" {
-		t.Fatalf("expected credential_subject_id identity principal, got %v", record["credential_subject_id"])
+	if record["credential_subject_id"] != "identity:triage-bot" {
+		t.Fatalf("expected credential_subject_id triage-bot, got %v", record["credential_subject_id"])
 	}
 	if record["credential_connection"] != "workspace" {
 		t.Fatalf("expected credential_connection=workspace, got %v", record["credential_connection"])

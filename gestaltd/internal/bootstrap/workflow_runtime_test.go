@@ -265,7 +265,7 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	if resp.Status != http.StatusAccepted || resp.Body != `{"ok":true}` {
 		t.Fatalf("response = %#v", resp)
 	}
-	if gotPrincipal == nil || gotPrincipal.SubjectID != principal.WorkloadSubjectID("workflow.roadmap") {
+	if gotPrincipal == nil || gotPrincipal.SubjectID != principal.IdentitySubjectID("workflow.roadmap") {
 		t.Fatalf("principal = %#v", gotPrincipal)
 	}
 	if gotProvider != "roadmap" {

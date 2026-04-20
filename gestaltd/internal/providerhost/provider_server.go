@@ -112,16 +112,19 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 	switch subject.GetKind() {
 	case string(principal.KindUser):
 		p.Kind = principal.KindUser
-	case string(principal.KindWorkload):
-		p.Kind = principal.KindWorkload
+	case string(principal.KindIdentity):
+		p.Kind = principal.KindIdentity
 	}
-	if strings.HasPrefix(subject.GetId(), "user:") {
+	switch {
+	case strings.HasPrefix(subject.GetId(), "user:"):
 		p.UserID = strings.TrimPrefix(subject.GetId(), "user:")
 		if p.Kind == "" {
 			p.Kind = principal.KindUser
 		}
-	} else if strings.HasPrefix(subject.GetId(), "workload:") && p.Kind == "" {
-		p.Kind = principal.KindWorkload
+	case strings.HasPrefix(subject.GetId(), "identity:") && p.Kind == "":
+		p.Kind = principal.KindIdentity
+	case strings.HasPrefix(subject.GetId(), "managed_identity:") && p.Kind == "":
+		p.Kind = principal.KindIdentity
 	}
 	if p.Kind == principal.KindUser && subject.GetDisplayName() != "" {
 		p.Identity = &core.UserIdentity{
@@ -140,8 +143,8 @@ func sourceFromString(raw string) principal.Source {
 		return principal.SourceSession
 	case principal.SourceAPIToken.String():
 		return principal.SourceAPIToken
-	case principal.SourceWorkloadToken.String():
-		return principal.SourceWorkloadToken
+	case principal.SourceIdentityToken.String():
+		return principal.SourceIdentityToken
 	case principal.SourceEnv.String():
 		return principal.SourceEnv
 	default:

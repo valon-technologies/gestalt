@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
@@ -33,32 +34,32 @@ func (s *Server) providerAccessContextWithContext(ctx context.Context, p *princi
 	return access
 }
 
-func (s *Server) workloadBinding(p *principal.Principal, provider string) (authorization.CredentialBinding, bool) {
+func (s *Server) identityBinding(p *principal.Principal, provider string) (authorization.CredentialBinding, bool) {
 	if s.authorizer == nil {
 		return authorization.CredentialBinding{}, false
 	}
 	return s.authorizer.Binding(p, provider)
 }
 
-func rejectWorkloadSelectors(w http.ResponseWriter, p *principal.Principal, connection, instance string) error {
-	if p == nil || p.Kind != principal.KindWorkload {
+func rejectHeadlessSelectors(w http.ResponseWriter, p *principal.Principal, connection, instance string) error {
+	if p == nil || p.HasUserContext() {
 		return nil
 	}
 	if connection == "" && instance == "" {
 		return nil
 	}
-	writeError(w, http.StatusForbidden, errWorkloadSelector.Error())
-	return errWorkloadSelector
+	writeError(w, http.StatusForbidden, errHeadlessSelector.Error())
+	return errHeadlessSelector
 }
 
-func (s *Server) workloadBindingSelectors(p *principal.Principal, provider, connection, instance string) (string, string) {
+func (s *Server) identityBindingSelectors(p *principal.Principal, provider, connection, instance string) (string, string) {
 	resolveConnection := func(connection string) string {
 		return s.sessionCatalogConnections(provider, nil, connection)[0]
 	}
-	if p == nil || p.Kind != principal.KindWorkload {
+	if p == nil || p.HasUserContext() {
 		return resolveConnection(connection), instance
 	}
-	binding, ok := s.workloadBinding(p, provider)
+	binding, ok := s.identityBinding(p, provider)
 	if !ok {
 		return resolveConnection(connection), instance
 	}
@@ -71,12 +72,15 @@ func (s *Server) workloadBindingSelectors(p *principal.Principal, provider, conn
 	return resolveConnection(connection), instance
 }
 
-func (s *Server) workloadBindingConnected(ctx context.Context, binding authorization.CredentialBinding, provider string) (bool, error) {
+func (s *Server) identityBindingConnected(ctx context.Context, binding authorization.CredentialBinding, provider string) (bool, error) {
 	switch binding.Mode {
 	case core.ConnectionModeNone:
 		return true, nil
 	case core.ConnectionModeIdentity:
-		_, err := s.tokens.Token(ctx, binding.CredentialOwnerID, provider, binding.Connection, binding.Instance)
+		if strings.TrimSpace(binding.CredentialOwnerID) == "" {
+			return false, errors.New("identity binding missing owner identity")
+		}
+		_, err := s.tokens.IdentityToken(ctx, binding.CredentialOwnerID, provider, binding.Connection, binding.Instance)
 		switch {
 		case err == nil:
 			return true, nil

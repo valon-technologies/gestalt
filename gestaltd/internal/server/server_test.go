@@ -873,16 +873,24 @@ func seedLegacyUserRecord(t *testing.T, svc *coredata.Services, id, email string
 	}
 }
 
-func seedIdentityToken(t *testing.T, svc *coredata.Services, integration, connection, instance, accessToken string) {
+func seedIdentityOwnedToken(t *testing.T, svc *coredata.Services, identityID, integration, connection, instance, accessToken string) {
 	t.Helper()
-	seedToken(t, svc, &core.IntegrationToken{
-		ID:          integration + "-" + connection + "-" + instance,
-		UserID:      principal.IdentityPrincipal,
+	if err := svc.Tokens.StoreIdentityToken(t.Context(), &core.IntegrationToken{
+		ID:          integration + "-" + connection + "-" + instance + "-" + identityID,
+		IdentityID:  identityID,
 		Integration: integration,
 		Connection:  connection,
 		Instance:    instance,
 		AccessToken: accessToken,
-	})
+	}); err != nil {
+		t.Fatalf("StoreIdentityToken: %v", err)
+	}
+}
+
+func seedSessionIdentityToken(t *testing.T, svc *coredata.Services, email, integration, connection, instance, accessToken string) {
+	t.Helper()
+	user := seedUser(t, svc, email)
+	seedIdentityOwnedToken(t, svc, user.ID, integration, connection, instance, accessToken)
 }
 
 func mustAuthorizer(t *testing.T, cfg config.AuthorizationConfig, providers *registry.ProviderMap[core.Provider], pluginDefs map[string]*config.ProviderEntry, defaultConnections map[string]string) *authorization.Authorizer {
@@ -4586,10 +4594,10 @@ func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 	}
 }
 
-func TestAuthMiddleware_ValidWorkloadToken(t *testing.T) {
+func TestAuthMiddleware_ValidIdentityToken(t *testing.T) {
 	t.Parallel()
 
-	plaintext, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	plaintext, _, err := principal.GenerateToken(principal.TokenTypeIdentity)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
@@ -4600,7 +4608,7 @@ func TestAuthMiddleware_ValidWorkloadToken(t *testing.T) {
 	}
 	providers := testutil.NewProviderRegistry(t, stub)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"weather-bot": {
 				Token: plaintext,
 				Providers: map[string]config.WorkloadProviderDef{
@@ -5076,16 +5084,16 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 	}
 }
 
-func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordances(t *testing.T) {
+func TestIdentityTokenAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordances(t *testing.T) {
 	t.Parallel()
 
-	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeIdentity)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, "svc", "workspace", "default", "identity-svc-token")
+	seedIdentityOwnedToken(t, svc, "triage-bot", "svc", "workspace", "default", "identity-svc-token")
 
 	svcProvider := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{N: "svc", DN: "Service", ConnMode: core.ConnectionModeIdentity},
@@ -5109,7 +5117,7 @@ func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordan
 	}
 	providers := testutil.NewProviderRegistry(t, svcProvider, weatherProvider, mcpOnlyProvider, secretProvider)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
 				Providers: map[string]config.WorkloadProviderDef{
@@ -5216,14 +5224,14 @@ func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordan
 
 	if resp.StatusCode != http.StatusInternalServerError {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 500 when workload binding lookup fails, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected 500 when identity binding lookup fails, got %d: %s", resp.StatusCode, body)
 	}
 }
 
-func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testing.T) {
+func TestIdentityTokenAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testing.T) {
 	t.Parallel()
 
-	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeIdentity)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
@@ -5237,7 +5245,7 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 	}
 	providers := testutil.NewProviderRegistry(t, provider)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
 				Providers: map[string]config.WorkloadProviderDef{
@@ -5313,18 +5321,18 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 	if auditRecord["allowed"] != false {
 		t.Fatalf("expected denied audit record, got %v", auditRecord["allowed"])
 	}
-	if auditRecord["auth_source"] != "workload_token" {
-		t.Fatalf("expected workload auth_source, got %v", auditRecord["auth_source"])
+	if auditRecord["auth_source"] != "identity_token" {
+		t.Fatalf("expected identity auth_source, got %v", auditRecord["auth_source"])
 	}
-	if auditRecord["subject_id"] != "workload:triage-bot" {
-		t.Fatalf("expected workload subject_id, got %v", auditRecord["subject_id"])
+	if auditRecord["subject_id"] != "identity:triage-bot" {
+		t.Fatalf("expected identity subject_id, got %v", auditRecord["subject_id"])
 	}
-	if auditRecord["error"] != "workload callers may not override connection or instance bindings" {
+	if auditRecord["error"] != "identity-token callers may not override connection or instance bindings" {
 		t.Fatalf("unexpected audit error: %v", auditRecord["error"])
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, "svc-session", "workspace", "team-a", "session-bound-token")
+	seedIdentityOwnedToken(t, svc, "triage-bot", "svc-session", "workspace", "team-a", "session-bound-token")
 
 	var sessionCatalogToken string
 	sessionProvider := &stubIntegrationWithSessionCatalog{
@@ -5343,7 +5351,7 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 	}
 	sessionProviders := testutil.NewProviderRegistry(t, sessionProvider)
 	sessionAuthz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
 				Providers: map[string]config.WorkloadProviderDef{
@@ -8314,16 +8322,16 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 
 }
 
-func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelectors(t *testing.T) {
+func TestIdentityTokenAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelectors(t *testing.T) {
 	t.Parallel()
 
-	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeIdentity)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, "svc", "workspace", "team-a", "identity-bound-token")
+	seedIdentityOwnedToken(t, svc, "triage-bot", "svc", "workspace", "team-a", "identity-bound-token")
 
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
@@ -8340,7 +8348,7 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 	}
 	providers := testutil.NewProviderRegistry(t, stub)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
 				Providers: map[string]config.WorkloadProviderDef{
@@ -8445,13 +8453,13 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 	if selectorAudit["allowed"] != false {
 		t.Fatalf("expected selector audit allowed=false, got %v", selectorAudit["allowed"])
 	}
-	if selectorAudit["auth_source"] != "workload_token" {
-		t.Fatalf("expected selector audit auth_source workload_token, got %v", selectorAudit["auth_source"])
+	if selectorAudit["auth_source"] != "identity_token" {
+		t.Fatalf("expected selector audit auth_source identity_token, got %v", selectorAudit["auth_source"])
 	}
-	if selectorAudit["subject_id"] != "workload:triage-bot" {
-		t.Fatalf("expected selector audit subject_id workload:triage-bot, got %v", selectorAudit["subject_id"])
+	if selectorAudit["subject_id"] != "identity:triage-bot" {
+		t.Fatalf("expected selector audit subject_id identity:triage-bot, got %v", selectorAudit["subject_id"])
 	}
-	if selectorAudit["error"] != "workload callers may not override connection or instance bindings" {
+	if selectorAudit["error"] != "identity-token callers may not override connection or instance bindings" {
 		t.Fatalf("unexpected selector audit error: %v", selectorAudit["error"])
 	}
 }
@@ -8860,10 +8868,10 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 	}
 }
 
-func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns412(t *testing.T) {
+func TestIdentityTokenAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns412(t *testing.T) {
 	t.Parallel()
 
-	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeIdentity)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
@@ -8880,7 +8888,7 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns
 	}
 	providers := testutil.NewProviderRegistry(t, stub)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
 				Providers: map[string]config.WorkloadProviderDef{
@@ -8924,11 +8932,11 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns
 	if err := json.Unmarshal(auditBuf.Bytes(), &record); err != nil {
 		t.Fatalf("failed to parse audit JSON: %v\nraw: %s", err, auditBuf.String())
 	}
-	if record["subject_id"] != "workload:triage-bot" {
-		t.Fatalf("expected workload subject_id, got %v", record["subject_id"])
+	if record["subject_id"] != "identity:triage-bot" {
+		t.Fatalf("expected identity subject_id, got %v", record["subject_id"])
 	}
-	if record["credential_subject_id"] != "identity:__identity__" {
-		t.Fatalf("expected credential_subject_id identity principal, got %v", record["credential_subject_id"])
+	if record["credential_subject_id"] != "identity:triage-bot" {
+		t.Fatalf("expected credential_subject_id triage-bot, got %v", record["credential_subject_id"])
 	}
 	if record["credential_connection"] != "workspace" {
 		t.Fatalf("expected credential_connection=workspace, got %v", record["credential_connection"])
@@ -8938,10 +8946,10 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns
 	}
 }
 
-func TestWorkloadAuthorization_HumanRoutesReturn403(t *testing.T) {
+func TestIdentityTokenAuthorization_HumanRoutesReturn403(t *testing.T) {
 	t.Parallel()
 
-	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeIdentity)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
@@ -8952,7 +8960,7 @@ func TestWorkloadAuthorization_HumanRoutesReturn403(t *testing.T) {
 	}
 	providers := testutil.NewProviderRegistry(t, stub)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
 				Providers: map[string]config.WorkloadProviderDef{
@@ -13639,11 +13647,11 @@ func TestMCPEndpoint_WorkloadAuthorizationAndAudit(t *testing.T) {
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, "clickhouse", "default", "default", "identity-token")
+	seedIdentityOwnedToken(t, svc, "triage-bot", "clickhouse", "default", "default", "identity-token")
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{
@@ -13760,20 +13768,20 @@ func TestMCPEndpoint_WorkloadAuthorizationAndAudit(t *testing.T) {
 	if auditRecord["allowed"] != false {
 		t.Fatalf("expected audit allowed=false, got %v", auditRecord["allowed"])
 	}
-	if auditRecord["auth_source"] != "workload_token" {
-		t.Fatalf("expected audit auth_source workload_token, got %v", auditRecord["auth_source"])
+	if auditRecord["auth_source"] != "identity_token" {
+		t.Fatalf("expected audit auth_source identity_token, got %v", auditRecord["auth_source"])
 	}
-	if auditRecord["subject_id"] != "workload:triage-bot" {
-		t.Fatalf("expected subject_id workload:triage-bot, got %v", auditRecord["subject_id"])
+	if auditRecord["subject_id"] != "identity:triage-bot" {
+		t.Fatalf("expected subject_id identity:triage-bot, got %v", auditRecord["subject_id"])
 	}
-	if auditRecord["subject_kind"] != "workload" {
-		t.Fatalf("expected subject_kind workload, got %v", auditRecord["subject_kind"])
+	if auditRecord["subject_kind"] != "identity" {
+		t.Fatalf("expected subject_kind identity, got %v", auditRecord["subject_kind"])
 	}
 	if auditRecord["credential_mode"] != "identity" {
 		t.Fatalf("expected credential_mode identity, got %v", auditRecord["credential_mode"])
 	}
-	if auditRecord["credential_subject_id"] != "identity:__identity__" {
-		t.Fatalf("expected credential_subject_id identity:__identity__, got %v", auditRecord["credential_subject_id"])
+	if auditRecord["credential_subject_id"] != "identity:triage-bot" {
+		t.Fatalf("expected credential_subject_id identity:triage-bot, got %v", auditRecord["credential_subject_id"])
 	}
 	if auditRecord["credential_connection"] != "default" {
 		t.Fatalf("expected credential_connection default, got %v", auditRecord["credential_connection"])
@@ -14209,6 +14217,11 @@ func (s *stubHostIssuedSessionAuth) SessionTokenTTL() time.Duration {
 func TestCookieAuth(t *testing.T) {
 	t.Parallel()
 
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeIdentity)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
 	stub := &coretesting.StubAuthProvider{
 		N: "test",
 		ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
@@ -14225,6 +14238,12 @@ func TestCookieAuth(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = stub
+		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{
+			IdentityTokens: map[string]config.WorkloadDef{
+				"triage-bot": {Token: workloadToken},
+			},
+		}, nil, nil, nil)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -14264,6 +14283,20 @@ func TestCookieAuth(t *testing.T) {
 
 	if fallbackResp.StatusCode == http.StatusUnauthorized {
 		t.Fatal("valid Authorization header should have passed middleware after invalid cookie")
+	}
+
+	// A non-human token in the cookie slot should be ignored the same way as an invalid cookie.
+	reqWithWorkloadCookie, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	reqWithWorkloadCookie.AddCookie(&http.Cookie{Name: "session_token", Value: workloadToken})
+	reqWithWorkloadCookie.Header.Set("Authorization", "Bearer valid-header-token")
+	workloadFallbackResp, err := http.DefaultClient.Do(reqWithWorkloadCookie)
+	if err != nil {
+		t.Fatalf("request with workload cookie fallback: %v", err)
+	}
+	defer func() { _ = workloadFallbackResp.Body.Close() }()
+
+	if workloadFallbackResp.StatusCode == http.StatusUnauthorized {
+		t.Fatal("valid Authorization header should have passed middleware after workload cookie")
 	}
 }
 
@@ -14588,10 +14621,7 @@ func TestExecuteOperation_ConnectionModeIdentity(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
-	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: principal.IdentityPrincipal, Integration: "svc",
-		Connection: "", Instance: "default", AccessToken: "identity-tok",
-	})
+	seedSessionIdentityToken(t, svc, "user@example.com", "svc", config.PluginConnectionName, "default", "identity-tok")
 
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
@@ -14605,12 +14635,23 @@ func TestExecuteOperation_ConnectionModeIdentity(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "user@example.com"}, nil
+			},
+		}
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"svc": config.PluginConnectionName}
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -14640,10 +14681,16 @@ func TestExecuteOperation_ConnectionModeUserDoesNotFallbackToIdentity(t *testing
 		t.Fatalf("GenerateToken: %v", err)
 	}
 	seedAPIToken(t, svc, apiToken, hashed, "api-user")
-	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-identity", UserID: principal.IdentityPrincipal, Integration: "svc",
-		Connection: "", Instance: "default", AccessToken: "identity-tok",
-	})
+	if err := svc.Tokens.StoreIdentityToken(t.Context(), &core.IntegrationToken{
+		ID:          "tok-identity",
+		IdentityID:  principal.IdentityPrincipal,
+		Integration: "svc",
+		Connection:  config.PluginConnectionName,
+		Instance:    "default",
+		AccessToken: "identity-tok",
+	}); err != nil {
+		t.Fatalf("StoreIdentityToken: %v", err)
+	}
 
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
@@ -14659,6 +14706,7 @@ func TestExecuteOperation_ConnectionModeUserDoesNotFallbackToIdentity(t *testing
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"svc": config.PluginConnectionName}
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -16591,6 +16639,7 @@ func TestManagedIdentityTokens_RoleMatrix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
+	var auditBuf bytes.Buffer
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -16611,6 +16660,7 @@ func TestManagedIdentityTokens_RoleMatrix(t *testing.T) {
 		cfg.Providers = providers
 		cfg.Services = svc
 		cfg.Authorizer = authz
+		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -16940,6 +16990,24 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 		},
 		ops: []core.Operation{{Name: "query", Method: http.MethodGet}},
 	}
+	deltaStub := &stubManualProviderWithCapabilities{
+		stubManualProvider: stubManualProvider{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "delta",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: serverTestCatalog("delta", []catalog.CatalogOperation{
+					{ID: "inspect", Method: http.MethodGet, Path: "/inspect", Transport: catalog.TransportREST},
+				}),
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				},
+			},
+		},
+		credentialFields: []core.CredentialFieldDef{{Name: "api_token", Label: "API Token"}},
+		connectionParams: map[string]core.ConnectionParamDef{
+			"region": {Description: "Optional region"},
+		},
+	}
 	gammaStub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "gamma",
@@ -16950,11 +17018,12 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 		},
 		ops: []core.Operation{{Name: "query", Method: http.MethodGet}},
 	}
-	providers := testutil.NewProviderRegistry(t, alphaStub, betaStub, gammaStub)
+	providers := testutil.NewProviderRegistry(t, alphaStub, betaStub, deltaStub, gammaStub)
 	authz, err := authorization.New(config.AuthorizationConfig{}, nil, providers, nil)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
+	var auditBuf bytes.Buffer
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -16969,6 +17038,7 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 		cfg.Providers = providers
 		cfg.Services = svc
 		cfg.Authorizer = authz
+		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -16978,6 +17048,7 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 	doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Invoke Bot"}`, http.StatusCreated, &createResp)
 	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/alpha", "admin-session", `{"operations":["read"]}`, http.StatusOK, nil)
 	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/beta", "admin-session", `{"operations":["query"]}`, http.StatusOK, nil)
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/delta", "admin-session", `{"operations":["inspect"]}`, http.StatusOK, nil)
 
 	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/gamma", bytes.NewBufferString(`{"operations":["query"]}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -17019,7 +17090,7 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 		http.MethodPost,
 		ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens",
 		"admin-session",
-		`{"name":"invoke-token","permissions":[{"plugin":"alpha","operations":["read"]},{"plugin":"beta","operations":["query"]}]}`,
+		`{"name":"invoke-token","permissions":[{"plugin":"alpha","operations":["read"]},{"plugin":"beta","operations":["query"]},{"plugin":"delta","operations":["inspect"]}]}`,
 		http.StatusCreated,
 		&createTokenResp,
 	)
@@ -17047,8 +17118,77 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 	if status := call("/api/v1/beta/query"); status != http.StatusOK {
 		t.Fatalf("beta/query status = %d, want 200", status)
 	}
+	if status := call("/api/v1/delta/inspect"); status != http.StatusOK {
+		t.Fatalf("delta/inspect status = %d, want 200", status)
+	}
 	if status := call("/api/v1/gamma/query"); status != http.StatusForbidden {
 		t.Fatalf("gamma/query status = %d, want 403", status)
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	if len(lines) == 0 {
+		t.Fatal("expected managed identity audit record")
+	}
+	var auditRecord map[string]any
+	if err := json.Unmarshal(lines[len(lines)-1], &auditRecord); err != nil {
+		t.Fatalf("parsing managed identity audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["subject_id"] != "identity:"+createResp.ID {
+		t.Fatalf("expected managed identity subject_id, got %v", auditRecord["subject_id"])
+	}
+	if auditRecord["subject_kind"] != "identity" {
+		t.Fatalf("expected managed identity subject_kind identity, got %v", auditRecord["subject_kind"])
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("Authorization", "Bearer "+createTokenResp.Token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("list integrations with managed identity token: %v", err)
+	}
+	type listedIntegration struct {
+		Name             string `json:"name"`
+		AuthTypes        []string
+		Connections      []struct{}          `json:"connections"`
+		CredentialFields []struct{}          `json:"credentialFields"`
+		ConnectionParams map[string]struct{} `json:"connectionParams"`
+	}
+	var integrations []listedIntegration
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		_ = resp.Body.Close()
+		t.Fatalf("decode integrations: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list integrations status = %d, want 200", resp.StatusCode)
+	}
+	var deltaInfo *listedIntegration
+	for i := range integrations {
+		if integrations[i].Name == "delta" {
+			deltaInfo = &integrations[i]
+			break
+		}
+	}
+	if deltaInfo == nil {
+		t.Fatalf("expected delta integration in %+v", integrations)
+	}
+	if len(deltaInfo.AuthTypes) != 0 || len(deltaInfo.Connections) != 0 || len(deltaInfo.CredentialFields) != 0 || len(deltaInfo.ConnectionParams) != 0 {
+		t.Fatalf("managed identity integration info should hide connection affordances: %+v", *deltaInfo)
+	}
+
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+createTokenResp.Token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("logout with managed identity token: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("logout status = %d, want 403: %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), "non-user callers are not allowed on this route") {
+		t.Fatalf("logout body = %q, want non-user route rejection", string(body))
 	}
 
 	doJSONRequestAndDecode(t, http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", "", http.StatusOK, nil)

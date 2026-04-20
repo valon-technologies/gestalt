@@ -8,17 +8,16 @@ import (
 )
 
 // RuntimeAuthorizer is the internal authorization interface used by gestaltd
-// request paths. It keeps workload execution binding concerns local while
-// allowing human authorization decisions to come from a backing provider.
+// request paths. It keeps identity-token execution binding concerns local while
+// allowing user-context authorization decisions to come from a backing provider.
 type RuntimeAuthorizer interface {
-	principal.WorkloadTokenResolver
+	principal.IdentityTokenResolver
 
 	Start(ctx context.Context) error
 	Close() error
 
 	ReloadAuthorizationState(ctx context.Context) error
 
-	IsWorkload(p *principal.Principal) bool
 	AllowProvider(ctx context.Context, p *principal.Principal, provider string) bool
 	AllowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool
 	Binding(p *principal.Principal, provider string) (CredentialBinding, bool)

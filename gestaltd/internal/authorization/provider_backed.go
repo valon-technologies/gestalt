@@ -195,25 +195,18 @@ func (a *ProviderBackedAuthorizer) pollLoop(ctx context.Context, done chan struc
 	}
 }
 
-func (a *ProviderBackedAuthorizer) ResolveWorkloadToken(token string) (*principal.ResolvedWorkload, bool) {
+func (a *ProviderBackedAuthorizer) ResolveIdentityToken(token string) (*principal.ResolvedIdentityToken, bool) {
 	if a == nil {
 		return nil, false
 	}
-	return a.base.ResolveWorkloadToken(token)
-}
-
-func (a *ProviderBackedAuthorizer) IsWorkload(p *principal.Principal) bool {
-	if a == nil {
-		return false
-	}
-	return a.base.IsWorkload(p)
+	return a.base.ResolveIdentityToken(token)
 }
 
 func (a *ProviderBackedAuthorizer) AllowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
 	if a == nil {
 		return true
 	}
-	if a.base.IsWorkload(p) || a.base.isManagedIdentityPrincipal(p) {
+	if p != nil && !p.HasUserContext() {
 		return a.base.AllowProvider(ctx, p, provider)
 	}
 	_, allowed := a.ResolveAccess(ctx, p, provider)
@@ -224,7 +217,7 @@ func (a *ProviderBackedAuthorizer) AllowOperation(ctx context.Context, p *princi
 	if a == nil {
 		return true
 	}
-	if a.base.IsWorkload(p) || a.base.isManagedIdentityPrincipal(p) {
+	if p != nil && !p.HasUserContext() {
 		return a.base.AllowOperation(ctx, p, provider, operation)
 	}
 	return a.AllowProvider(ctx, p, provider)
@@ -241,7 +234,7 @@ func (a *ProviderBackedAuthorizer) ResolveAccess(ctx context.Context, p *princip
 	if a == nil {
 		return AccessContext{}, true
 	}
-	if a.base.isManagedIdentityPrincipal(p) || a.base.IsWorkload(p) {
+	if p != nil && !p.HasUserContext() {
 		return a.base.ResolveAccess(ctx, p, provider)
 	}
 
@@ -279,7 +272,7 @@ func (a *ProviderBackedAuthorizer) ResolvePolicyAccess(ctx context.Context, p *p
 	if a == nil {
 		return AccessContext{}, true
 	}
-	if a.base.IsWorkload(p) {
+	if p != nil && !p.HasUserContext() {
 		return a.base.ResolvePolicyAccess(ctx, p, policyName)
 	}
 	policyName = strings.TrimSpace(policyName)
@@ -316,7 +309,7 @@ func (a *ProviderBackedAuthorizer) ResolveAdminAccess(ctx context.Context, p *pr
 	if a == nil {
 		return AccessContext{}, true
 	}
-	if a.base.IsWorkload(p) {
+	if p != nil && !p.HasUserContext() {
 		return a.base.ResolveAdminAccess(ctx, p, policyName)
 	}
 	policyName = strings.TrimSpace(policyName)
@@ -366,7 +359,7 @@ func (a *ProviderBackedAuthorizer) AllowCatalogOperation(ctx context.Context, p 
 	if a == nil {
 		return true
 	}
-	if a.base.IsWorkload(p) || a.base.isManagedIdentityPrincipal(p) {
+	if p != nil && !p.HasUserContext() {
 		return a.base.AllowCatalogOperation(ctx, p, provider, op)
 	}
 

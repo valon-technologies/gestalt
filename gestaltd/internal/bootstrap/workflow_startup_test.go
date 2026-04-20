@@ -19,7 +19,6 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -256,8 +255,8 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
-		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			UserID:      principal.IdentityPrincipal,
+		if err := deps.Services.Tokens.StoreIdentityToken(context.Background(), &core.IntegrationToken{
+			IdentityID:  "workflow.roadmap",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
@@ -436,7 +435,7 @@ func TestBootstrapFailsPendingWorkflowStartupClientsOnAuthorizationErrors(t *tes
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
 	}
 	cfg.Authorization = config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"workflow.roadmap": {
 				Token: "gst_wld_conflict",
 			},
@@ -454,7 +453,7 @@ func TestBootstrapFailsPendingWorkflowStartupClientsOnAuthorizationErrors(t *tes
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `conflicts with configured workload`) {
+		if !strings.Contains(err.Error(), `conflicts with configured identity token`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	case <-time.After(15 * time.Second):
@@ -492,8 +491,8 @@ func TestBootstrapFailsWorkflowStartupDependencyCycles(t *testing.T) {
 
 	factories := workflowStartupTestFactories()
 	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps Deps) (coreworkflow.Provider, error) {
-		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			UserID:      principal.IdentityPrincipal,
+		if err := deps.Services.Tokens.StoreIdentityToken(context.Background(), &core.IntegrationToken{
+			IdentityID:  "workflow.roadmap",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",

@@ -510,14 +510,14 @@ func (r *workflowRuntime) AugmentAuthorization(cfg config.AuthorizationConfig) (
 		return cfg, nil
 	}
 	cfg.Policies = maps.Clone(cfg.Policies)
-	cfg.Workloads = maps.Clone(cfg.Workloads)
-	if cfg.Workloads == nil {
-		cfg.Workloads = map[string]config.WorkloadDef{}
+	cfg.IdentityTokens = maps.Clone(cfg.IdentityTokens)
+	if cfg.IdentityTokens == nil {
+		cfg.IdentityTokens = map[string]config.WorkloadDef{}
 	}
 	for pluginName, binding := range r.bindings {
 		workloadID := workflowWorkloadID(pluginName)
-		if _, exists := cfg.Workloads[workloadID]; exists {
-			return config.AuthorizationConfig{}, fmt.Errorf("authorization validation: managed workflow workload %q conflicts with configured workload", workloadID)
+		if _, exists := cfg.IdentityTokens[workloadID]; exists {
+			return config.AuthorizationConfig{}, fmt.Errorf("authorization validation: managed workflow identity token %q conflicts with configured identity token", workloadID)
 		}
 		allow := make([]string, 0, len(binding.operations))
 		for operation := range binding.operations {
@@ -526,10 +526,11 @@ func (r *workflowRuntime) AugmentAuthorization(cfg config.AuthorizationConfig) (
 		slices.Sort(allow)
 		token, ok := r.workloadTokens[pluginName]
 		if !ok {
-			return config.AuthorizationConfig{}, fmt.Errorf("authorization validation: managed workflow workload %q is missing a token", workloadID)
+			return config.AuthorizationConfig{}, fmt.Errorf("authorization validation: managed workflow identity token %q is missing a token", workloadID)
 		}
-		cfg.Workloads[workloadID] = config.WorkloadDef{
+		cfg.IdentityTokens[workloadID] = config.WorkloadDef{
 			DisplayName: workflowWorkloadDisplayName(pluginName),
+			IdentityID:  workloadID,
 			Token:       token,
 			Providers: map[string]config.WorkloadProviderDef{
 				pluginName: {
@@ -543,9 +544,9 @@ func (r *workflowRuntime) AugmentAuthorization(cfg config.AuthorizationConfig) (
 
 func workflowWorkloadPrincipal(pluginName string) *principal.Principal {
 	return &principal.Principal{
-		Kind:      principal.KindWorkload,
-		SubjectID: principal.WorkloadSubjectID(workflowWorkloadID(pluginName)),
-		Source:    principal.SourceWorkloadToken,
+		Kind:      principal.KindIdentity,
+		SubjectID: principal.IdentitySubjectID(workflowWorkloadID(pluginName)),
+		Source:    principal.SourceIdentityToken,
 	}
 }
 
@@ -564,7 +565,7 @@ func workflowWorkloadDisplayName(pluginName string) string {
 func workflowWorkloadToken() (string, error) {
 	var raw [16]byte
 	if _, err := rand.Read(raw[:]); err != nil {
-		return "", fmt.Errorf("generate managed workflow workload token: %w", err)
+		return "", fmt.Errorf("generate managed workflow identity token: %w", err)
 	}
 	return "gst_wld_" + hex.EncodeToString(raw[:]), nil
 }

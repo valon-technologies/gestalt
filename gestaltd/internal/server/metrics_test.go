@@ -594,7 +594,7 @@ func TestHTTPDiscoveryMetrics(t *testing.T) {
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, providerName, testDefaultConnection, "default", "identity-token")
+	seedSessionIdentityToken(t, svc, "user@example.com", providerName, testDefaultConnection, "default", "identity-token")
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.MeterProvider = metrics.Provider
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -653,7 +653,7 @@ func TestHTTPDiscoveryMetrics_FailureRecordsErrorCount(t *testing.T) {
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, providerName, testDefaultConnection, "default", "identity-token")
+	seedSessionIdentityToken(t, svc, "user@example.com", providerName, testDefaultConnection, "default", "identity-token")
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.MeterProvider = metrics.Provider
 		cfg.Auth = &coretesting.StubAuthProvider{

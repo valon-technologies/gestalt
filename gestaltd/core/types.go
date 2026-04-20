@@ -15,6 +15,7 @@ type User struct {
 
 type IntegrationToken struct {
 	ID                string
+	IdentityID        string
 	UserID            string
 	Integration       string
 	Connection        string
@@ -57,8 +58,7 @@ const (
 )
 
 const (
-	APITokenKindAPI      = "api"
-	APITokenKindWorkload = "workload"
+	APITokenKindAPI = "api"
 )
 
 type ManagedIdentity struct {

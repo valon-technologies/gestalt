@@ -219,9 +219,12 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		if access.Policy != "" || access.Role != "" {
 			ctx = WithAccessContext(ctx, access)
 		}
-		if b.authorizer.IsWorkload(p) {
+		if p != nil && !p.HasUserContext() {
 			if binding, ok := b.authorizer.Binding(p, providerName); ok {
 				SetCredentialAudit(ctx, binding.Mode, binding.CredentialSubjectID, binding.Connection, binding.Instance)
+			}
+			if !b.authorizer.AllowOperation(ctx, p, providerName, operation) {
+				return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
 			}
 		} else if !allowed {
 			return fail(fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName))
@@ -229,10 +232,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 
 	conn := ConnectionFromContext(ctx)
-	conn, instance = b.workloadSelectors(p, providerName, conn, instance)
-	if b.authorizer != nil && b.authorizer.IsWorkload(p) && !b.authorizer.AllowOperation(ctx, p, providerName, operation) {
-		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
-	}
+	conn, instance = b.identityTokenSelectors(p, providerName, conn, instance)
 
 	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
 	if err != nil {
@@ -322,8 +322,8 @@ func (b *Broker) MCPConnection(providerName string) string {
 	return b.mcpConnection(providerName)
 }
 
-func (b *Broker) workloadSelectors(p *principal.Principal, providerName, connection, instance string) (string, string) {
-	if b.authorizer == nil || !b.authorizer.IsWorkload(p) {
+func (b *Broker) identityTokenSelectors(p *principal.Principal, providerName, connection, instance string) (string, string) {
+	if b.authorizer == nil || p == nil || p.HasUserContext() {
 		return connection, instance
 	}
 	binding, ok := b.authorizer.Binding(p, providerName)
@@ -411,8 +411,10 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	if resolved != nil {
 		p = resolved
 	}
-	if b.authorizer != nil && b.authorizer.IsWorkload(p) {
-		return b.resolveWorkloadToken(ctx, prov, p, providerName, connection, instance)
+	if b.authorizer != nil && p != nil && !p.HasUserContext() {
+		if binding, ok := b.authorizer.Binding(p, providerName); ok {
+			return b.resolveIdentityBinding(ctx, prov, providerName, connection, instance, binding)
+		}
 	}
 	if resolved == nil {
 		if err := b.resolveUserPrincipal(ctx, p); err != nil {
@@ -435,7 +437,18 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 		return b.resolveUserToken(ctx, prov, p.UserID, providerName, connection, instance, core.ConnectionModeUser, principal.UserSubjectID(p.UserID))
 
 	case core.ConnectionModeIdentity:
-		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, providerName, connection, instance, core.ConnectionModeIdentity, principal.IdentitySubjectID())
+		identityID := strings.TrimSpace(p.UserID)
+		if identityID == "" {
+			return ctx, "", fmt.Errorf("%w: principal has no user ID or email", ErrUserResolution)
+		}
+		if b.users != nil {
+			canonicalIdentityID, err := b.users.CanonicalIdentityIDForUser(ctx, identityID)
+			if err != nil {
+				return ctx, "", fmt.Errorf("%w: resolving identity owner: %v", ErrUserResolution, err)
+			}
+			identityID = canonicalIdentityID
+		}
+		return b.resolveIdentityToken(ctx, prov, identityID, providerName, connection, instance, core.ConnectionModeIdentity, principal.IdentitySubjectID(identityID))
 
 	case core.ConnectionMode("either"):
 		return ctx, "", fmt.Errorf("%w: unsupported connection mode %q", ErrInternal, mode)
@@ -446,7 +459,7 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 }
 
 func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principal) error {
-	if p == nil || p.UserID != "" || p.Kind == principal.KindWorkload || p.Identity == nil || p.Identity.Email == "" {
+	if p == nil || p.UserID != "" || !p.HasUserContext() || p.Identity == nil || p.Identity.Email == "" {
 		return nil
 	}
 	if b.users == nil {
@@ -472,19 +485,11 @@ func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principa
 	return nil
 }
 
-func (b *Broker) resolveWorkloadToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName, requestedConnection, requestedInstance string) (context.Context, string, error) {
-	if b.authorizer == nil {
-		return ctx, "", fmt.Errorf("%w: no workload authorizer configured", ErrAuthorizationDenied)
-	}
-	binding, ok := b.authorizer.Binding(p, providerName)
-	if !ok {
-		return ctx, "", fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
-	}
-
+func (b *Broker) resolveIdentityBinding(ctx context.Context, prov core.Provider, providerName, requestedConnection, requestedInstance string, binding authorization.CredentialBinding) (context.Context, string, error) {
 	switch binding.Mode {
 	case core.ConnectionModeNone:
 		if requestedConnection != "" || requestedInstance != "" {
-			return ctx, "", fmt.Errorf("%w: workloads may not override connection or instance bindings", ErrAuthorizationDenied)
+			return ctx, "", fmt.Errorf("%w: identity-token callers may not override connection or instance bindings", ErrAuthorizationDenied)
 		}
 		SetCredentialAudit(ctx, binding.Mode, binding.CredentialSubjectID, binding.Connection, binding.Instance)
 		ctx = WithCredentialContext(ctx, CredentialContext{
@@ -498,13 +503,72 @@ func (b *Broker) resolveWorkloadToken(ctx context.Context, prov core.Provider, p
 		connection := binding.Connection
 		instance := binding.Instance
 		if (requestedConnection != "" && requestedConnection != binding.Connection) || (requestedInstance != "" && requestedInstance != binding.Instance) {
-			return ctx, "", fmt.Errorf("%w: workloads may not override connection or instance bindings", ErrAuthorizationDenied)
+			return ctx, "", fmt.Errorf("%w: identity-token callers may not override connection or instance bindings", ErrAuthorizationDenied)
 		}
 		SetCredentialAudit(ctx, binding.Mode, binding.CredentialSubjectID, connection, instance)
-		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, providerName, connection, instance, core.ConnectionModeIdentity, binding.CredentialSubjectID)
+		if binding.CredentialOwnerID == "" {
+			return ctx, "", fmt.Errorf("%w: identity binding missing owner identity", ErrInternal)
+		}
+		return b.resolveIdentityToken(ctx, prov, binding.CredentialOwnerID, providerName, connection, instance, core.ConnectionModeIdentity, binding.CredentialSubjectID)
 	default:
-		return ctx, "", fmt.Errorf("%w: workloads may only use identity or none providers", ErrAuthorizationDenied)
+		return ctx, "", fmt.Errorf("%w: identity-token callers may only use identity or none providers", ErrAuthorizationDenied)
 	}
+}
+
+func (b *Broker) resolveIdentityToken(ctx context.Context, prov core.Provider, identityID, providerName, connection, instance string, credentialMode core.ConnectionMode, credentialSubjectID string) (context.Context, string, error) {
+	var storedToken *core.IntegrationToken
+	var err error
+
+	if instance != "" {
+		storedToken, err = b.tokens.IdentityToken(ctx, identityID, providerName, connection, instance)
+		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				return ctx, "", fmt.Errorf("%w: no token stored for integration %q instance %q", ErrNoToken, providerName, instance)
+			}
+			return ctx, "", fmt.Errorf("%w: retrieving identity token: %v", ErrInternal, err)
+		}
+	} else {
+		tokens, listErr := b.tokens.ListIdentityTokensForConnection(ctx, identityID, providerName, connection)
+		if listErr != nil {
+			return ctx, "", fmt.Errorf("%w: listing identity tokens: %v", ErrInternal, listErr)
+		}
+		switch len(tokens) {
+		case 0:
+			return ctx, "", fmt.Errorf("%w: no token stored for integration %q", ErrNoToken, providerName)
+		case 1:
+			storedToken = tokens[0]
+		default:
+			instances := make([]string, len(tokens))
+			for i, t := range tokens {
+				instances[i] = t.Instance
+			}
+			return ctx, "", fmt.Errorf("%w: integration %q has %d connections (%v); specify which instance to use with the %q parameter",
+				ErrAmbiguousInstance, providerName, len(tokens), instances, "_instance")
+		}
+	}
+
+	if storedToken == nil {
+		return ctx, "", fmt.Errorf("%w: no token stored for integration %q", ErrNoToken, providerName)
+	}
+	SetCredentialAudit(ctx, credentialMode, credentialSubjectID, storedToken.Connection, storedToken.Instance)
+	ctx = WithCredentialContext(ctx, CredentialContext{
+		Mode:       credentialMode,
+		SubjectID:  credentialSubjectID,
+		Connection: storedToken.Connection,
+		Instance:   storedToken.Instance,
+	})
+
+	if storedToken.MetadataJSON != "" {
+		var connParams map[string]string
+		if err := json.Unmarshal([]byte(storedToken.MetadataJSON), &connParams); err != nil {
+			slog.WarnContext(ctx, "malformed metadata JSON", "provider", providerName, "error", err)
+		} else if len(connParams) > 0 {
+			ctx = core.WithConnectionParams(ctx, connParams)
+		}
+	}
+
+	accessToken, err := b.refreshTokenIfNeeded(ctx, storedToken, providerName, connection, metricutil.NormalizeConnectionMode(prov.ConnectionMode()))
+	return ctx, accessToken, err
 }
 
 func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userID, providerName, connection, instance string, credentialMode core.ConnectionMode, credentialSubjectID string) (context.Context, string, error) {
@@ -587,7 +651,11 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 		return token.AccessToken, nil
 	}
 
-	key := token.UserID + ":" + providerName + ":" + connection + ":" + token.Instance
+	tokenOwner := token.UserID
+	if token.IdentityID != "" {
+		tokenOwner = token.IdentityID
+	}
+	key := tokenOwner + ":" + providerName + ":" + connection + ":" + token.Instance
 	v, err, _ := b.refreshGroup.Do(key, func() (any, error) {
 		refreshCtx := context.WithoutCancel(ctx)
 		startedAt := time.Now()
@@ -596,13 +664,19 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 		return resp, err
 	})
 	if err != nil {
-		fresh, fetchErr := b.tokens.Token(ctx, token.UserID, token.Integration, token.Connection, token.Instance)
+		var fresh *core.IntegrationToken
+		var fetchErr error
+		if token.IdentityID != "" {
+			fresh, fetchErr = b.tokens.IdentityToken(ctx, token.IdentityID, token.Integration, token.Connection, token.Instance)
+		} else {
+			fresh, fetchErr = b.tokens.Token(ctx, token.UserID, token.Integration, token.Connection, token.Instance)
+		}
 		if fetchErr == nil && fresh != nil && fresh.AccessToken != token.AccessToken {
 			return fresh.AccessToken, nil
 		}
 		token.RefreshErrorCount++
 		token.UpdatedAt = time.Now()
-		if storeErr := b.tokens.StoreToken(ctx, token); storeErr != nil {
+		if storeErr := b.storeResolvedToken(ctx, token); storeErr != nil {
 			slog.WarnContext(ctx, "failed to persist refresh error count", "provider", providerName, "error", storeErr)
 		}
 		if time.Now().Before(*token.ExpiresAt) {
@@ -627,10 +701,17 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 	token.RefreshErrorCount = 0
 	token.UpdatedAt = now
 
-	if err := b.tokens.StoreToken(ctx, token); err != nil {
+	if err := b.storeResolvedToken(ctx, token); err != nil {
 		return "", fmt.Errorf("persisting refreshed token: %w", err)
 	}
 	return token.AccessToken, nil
+}
+
+func (b *Broker) storeResolvedToken(ctx context.Context, token *core.IntegrationToken) error {
+	if token != nil && token.IdentityID != "" {
+		return b.tokens.StoreIdentityToken(ctx, token)
+	}
+	return b.tokens.StoreToken(ctx, token)
 }
 
 func (b *Broker) resolveRefresher(integration, connection string) OAuthRefresher {

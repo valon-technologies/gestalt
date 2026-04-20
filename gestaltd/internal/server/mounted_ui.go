@@ -283,10 +283,6 @@ func (s *Server) adminMountedWebUI() MountedWebUI {
 }
 
 func (s *Server) protectedUIHandler(mounted MountedWebUI, inner http.Handler, redirectLogin protectedUILoginRedirect) http.Handler {
-	if mounted.AuthorizationPolicy == "" {
-		return inner
-	}
-
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, ok := s.authorizeProtectedUIRequest(w, r, mounted, redirectLogin)
 		if !ok {
@@ -297,6 +293,32 @@ func (s *Server) protectedUIHandler(mounted MountedWebUI, inner http.Handler, re
 }
 
 func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Request, mounted MountedWebUI, redirectLogin protectedUILoginRedirect) (context.Context, bool) {
+	if mounted.AuthorizationPolicy == "" {
+		if requestedAuthSource(r) == "" {
+			return r.Context(), true
+		}
+		p, authenticated, err := s.resolveMountedWebUIPrincipal(r)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to resolve user")
+			return nil, false
+		}
+		if !authenticated {
+			if redirectLogin != nil {
+				if err := redirectLogin(w, r); err != nil {
+					writeError(w, http.StatusInternalServerError, err.Error())
+				}
+			}
+			return nil, false
+		}
+		if p != nil && !p.HasUserContext() {
+			writeError(w, http.StatusForbidden, "non-user callers are not allowed on this route")
+			return nil, false
+		}
+		if p == nil {
+			return r.Context(), true
+		}
+		return principal.WithPrincipal(r.Context(), p), true
+	}
 	if s.authorizer == nil {
 		writeError(w, http.StatusInternalServerError, "app authorization is unavailable")
 		return nil, false
@@ -315,8 +337,8 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 		}
 		return nil, false
 	}
-	if p != nil && p.Kind == principal.KindWorkload {
-		writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
+	if p != nil && !p.HasUserContext() {
+		writeError(w, http.StatusForbidden, "non-user callers are not allowed on this route")
 		return nil, false
 	}
 

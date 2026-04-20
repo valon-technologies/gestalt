@@ -2680,8 +2680,8 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
-		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			UserID:      principal.IdentityPrincipal,
+		if err := deps.Services.Tokens.StoreIdentityToken(context.Background(), &core.IntegrationToken{
+			IdentityID:  "workflow.roadmap",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
@@ -2735,8 +2735,8 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
-		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			UserID:      principal.IdentityPrincipal,
+		if err := deps.Services.Tokens.StoreIdentityToken(context.Background(), &core.IntegrationToken{
+			IdentityID:  "workflow.roadmap",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
@@ -2823,8 +2823,8 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 				if name != "temporal" {
 					return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 				}
-				if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-					UserID:      principal.IdentityPrincipal,
+				if err := deps.Services.Tokens.StoreIdentityToken(context.Background(), &core.IntegrationToken{
+					IdentityID:  "workflow.roadmap",
 					Integration: "roadmap",
 					Connection:  config.PluginConnectionName,
 					Instance:    "default",
@@ -2919,8 +2919,8 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 		if connection == "" {
 			connection = config.PluginConnectionName
 		}
-		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			UserID:      principal.IdentityPrincipal,
+		if err := deps.Services.Tokens.StoreIdentityToken(context.Background(), &core.IntegrationToken{
+			IdentityID:  "workflow.roadmap",
 			Integration: "roadmap",
 			Connection:  connection,
 			Instance:    "default",
@@ -3640,8 +3640,8 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if result.Authorizer == nil {
 			t.Fatal("Authorizer is nil")
 		}
-		if _, ok := result.Authorizer.ResolveWorkloadToken("gst_wld_resolved-workload-token"); !ok {
-			t.Fatal("expected resolved workload token to authenticate")
+		if _, ok := result.Authorizer.ResolveIdentityToken("gst_wld_resolved-workload-token"); !ok {
+			t.Fatal("expected resolved identity token to authenticate")
 		}
 	})
 
@@ -4387,7 +4387,7 @@ func TestBootstrapWorkloadAuthorizationRejectsEitherProvider(t *testing.T) {
 
 	cfg := validConfig()
 	cfg.Authorization = config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{

@@ -39,11 +39,11 @@ const sessionCookieName = "session_token"
 const defaultSessionCookieTTL = 24 * time.Hour
 
 var (
-	errNotAuthenticated  = errors.New("not authenticated")
-	errResolveUser       = errors.New("failed to resolve user")
-	errWorkloadForbidden = errors.New("workload callers are not allowed on this route")
-	errOperationAccess   = errors.New("operation access denied")
-	errWorkloadSelector  = errors.New("workload callers may not override connection or instance bindings")
+	errNotAuthenticated = errors.New("not authenticated")
+	errResolveUser      = errors.New("failed to resolve user")
+	errNonUserForbidden = errors.New("non-user callers are not allowed on this route")
+	errOperationAccess  = errors.New("operation access denied")
+	errHeadlessSelector = errors.New("identity-token callers may not override connection or instance bindings")
 )
 
 var (
@@ -91,9 +91,9 @@ type connectionParamInfo struct {
 }
 
 func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, error) {
-	if p := PrincipalFromContext(r.Context()); p != nil && p.Kind == principal.KindWorkload {
-		writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
-		return "", errWorkloadForbidden
+	if p := PrincipalFromContext(r.Context()); p != nil && !p.HasUserContext() {
+		writeError(w, http.StatusForbidden, "non-user callers are not allowed on this route")
+		return "", errNonUserForbidden
 	}
 	user := UserFromContext(r.Context())
 	if user == nil || user.Email == "" {
@@ -128,7 +128,7 @@ func (s *Server) readinessCheck(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	p := PrincipalFromContext(r.Context())
 	connected := map[string][]instanceInfo{}
-	if p == nil || p.Kind != principal.KindWorkload {
+	if p == nil || p.HasUserContext() {
 		var err error
 		connected, err = s.userConnectedIntegrations(r)
 		if err != nil {
@@ -165,11 +165,11 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
 			info.MountedPath = strings.TrimSpace(entry.MountPath)
 		}
-		if p != nil && p.Kind == principal.KindWorkload {
-			if binding, ok := s.workloadBinding(p, name); ok {
-				bindingConnected, err := s.workloadBindingConnected(r.Context(), binding, name)
+		if p != nil && !p.HasUserContext() {
+			if binding, ok := s.identityBinding(p, name); ok {
+				bindingConnected, err := s.identityBindingConnected(r.Context(), binding, name)
 				if err != nil {
-					slog.ErrorContext(r.Context(), "checking workload integration status", "provider", name, "error", err)
+					slog.ErrorContext(r.Context(), "checking identity integration status", "provider", name, "error", err)
 					writeError(w, http.StatusInternalServerError, "failed to check integration status")
 					return
 				}
@@ -445,7 +445,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance); err != nil {
+	if err := rejectHeadlessSelectors(w, p, requestedConnection, requestedInstance); err != nil {
 		s.auditHTTPEvent(r.Context(), p, name, operation, false, err)
 		return
 	}
@@ -540,7 +540,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance); err != nil {
+	if err := rejectHeadlessSelectors(w, p, requestedConnection, requestedInstance); err != nil {
 		s.auditHTTPEvent(r.Context(), p, providerName, operationName, false, err)
 		return
 	}
@@ -594,7 +594,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("conflicting connection parameter %q in query string and JSON body", httpConnectionParam))
 		return
 	}
-	if err := rejectWorkloadSelectors(w, p, bodyConnection, bodyInstance); err != nil {
+	if err := rejectHeadlessSelectors(w, p, bodyConnection, bodyInstance); err != nil {
 		s.auditHTTPEvent(r.Context(), p, providerName, operationName, false, err)
 		return
 	}
@@ -716,7 +716,7 @@ func (s *Server) sessionCatalogConnections(providerName string, p *principal.Pri
 	if explicit != "" {
 		return []string{config.ResolveConnectionAlias(explicit)}
 	}
-	if s.authorizer != nil && s.authorizer.IsWorkload(p) {
+	if p != nil && !p.HasUserContext() {
 		return []string{""}
 	}
 
@@ -744,7 +744,7 @@ func (s *Server) boundSessionCatalogConnections(providerName string, p *principa
 	boundConnections := make([]string, 0, len(connections))
 	boundInstance := instance
 	for _, connection := range connections {
-		connection, boundInstance = s.workloadBindingSelectors(p, providerName, connection, instance)
+		connection, boundInstance = s.identityBindingSelectors(p, providerName, connection, instance)
 		boundConnections = append(boundConnections, connection)
 	}
 	return boundConnections, boundInstance
@@ -754,7 +754,7 @@ func (s *Server) boundSessionCatalogTargets(providerName string, p *principal.Pr
 	connections := s.sessionCatalogConnections(providerName, p, explicit)
 	targets := make([]invocation.CatalogResolutionTarget, 0, len(connections))
 	for _, connection := range connections {
-		boundConnection, boundInstance := s.workloadBindingSelectors(p, providerName, connection, instance)
+		boundConnection, boundInstance := s.identityBindingSelectors(p, providerName, connection, instance)
 		targets = append(targets, invocation.CatalogResolutionTarget{
 			Connection: boundConnection,
 			Instance:   boundInstance,
