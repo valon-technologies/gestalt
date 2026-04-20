@@ -85,6 +85,18 @@ func (s *WorkflowExecutionRefService) Get(ctx context.Context, id string) (*core
 	return recordToWorkflowExecutionRef(rec), nil
 }
 
+func (s *WorkflowExecutionRefService) ListBySubject(ctx context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
+	recs, err := s.store.Index("by_subject").GetAll(ctx, nil, strings.TrimSpace(subjectID))
+	if err != nil {
+		return nil, fmt.Errorf("list workflow execution refs by subject: %w", err)
+	}
+	refs := make([]*coreworkflow.ExecutionReference, 0, len(recs))
+	for _, rec := range recs {
+		refs = append(refs, recordToWorkflowExecutionRef(rec))
+	}
+	return refs, nil
+}
+
 func recordToWorkflowExecutionRef(rec indexeddb.Record) *coreworkflow.ExecutionReference {
 	return &coreworkflow.ExecutionReference{
 		ID:           recString(rec, "id"),

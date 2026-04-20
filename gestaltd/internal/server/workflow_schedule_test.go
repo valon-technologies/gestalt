@@ -113,6 +113,8 @@ type memoryWorkflowProvider struct {
 	pauseReqs     []coreworkflow.PauseScheduleRequest
 	resumeReqs    []coreworkflow.ResumeScheduleRequest
 	nextUpsertErr error
+	getErr        error
+	listErr       error
 }
 
 func newMemoryWorkflowProvider() *memoryWorkflowProvider {
@@ -164,6 +166,9 @@ func (p *memoryWorkflowProvider) UpsertSchedule(_ context.Context, req coreworkf
 }
 
 func (p *memoryWorkflowProvider) GetSchedule(_ context.Context, req coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
+	if p.getErr != nil {
+		return nil, p.getErr
+	}
 	schedule, ok := p.schedules[req.ScheduleID]
 	if !ok || schedule == nil {
 		return nil, core.ErrNotFound
@@ -172,6 +177,9 @@ func (p *memoryWorkflowProvider) GetSchedule(_ context.Context, req coreworkflow
 }
 
 func (p *memoryWorkflowProvider) ListSchedules(_ context.Context, req coreworkflow.ListSchedulesRequest) ([]*coreworkflow.Schedule, error) {
+	if p.listErr != nil {
+		return nil, p.listErr
+	}
 	out := make([]*coreworkflow.Schedule, 0, len(p.schedules))
 	for _, schedule := range p.schedules {
 		if schedule != nil {
@@ -328,8 +336,8 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`)
-	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/roadmap/workflow/schedules/", createBody)
+	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`)
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", createBody)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	createResp, err := http.DefaultClient.Do(createReq)
@@ -370,7 +378,7 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 		t.Fatalf("execution ref = %#v", ref)
 	}
 
-	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/roadmap/workflow/schedules/", nil)
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
 	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	listResp, err := http.DefaultClient.Do(listReq)
 	if err != nil {
@@ -391,8 +399,8 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 		t.Fatalf("listed target plugin = %q, want roadmap", listed[0].Target.Plugin)
 	}
 
-	updateBody := bytes.NewBufferString(`{"cron":"0 * * * *","timezone":"UTC","target":{"operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"full"}},"paused":true}`)
-	updateReq, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/roadmap/workflow/schedules/"+created.ID, updateBody)
+	updateBody := bytes.NewBufferString(`{"cron":"0 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"full"}},"paused":true}`)
+	updateReq, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/workflow/schedules/"+created.ID, updateBody)
 	updateReq.Header.Set("Content-Type", "application/json")
 	updateReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	updateResp, err := http.DefaultClient.Do(updateReq)
@@ -419,7 +427,7 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 		t.Fatalf("expected rotated execution ref to be revoked, got %#v", oldRef)
 	}
 
-	pauseReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/roadmap/workflow/schedules/"+created.ID+"/pause", nil)
+	pauseReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/"+created.ID+"/pause", nil)
 	pauseReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	pauseResp, err := http.DefaultClient.Do(pauseReq)
 	if err != nil {
@@ -430,7 +438,7 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 		t.Fatalf("expected 200, got %d", pauseResp.StatusCode)
 	}
 
-	resumeReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/roadmap/workflow/schedules/"+created.ID+"/resume", nil)
+	resumeReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/"+created.ID+"/resume", nil)
 	resumeReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	resumeResp, err := http.DefaultClient.Do(resumeReq)
 	if err != nil {
@@ -441,7 +449,7 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resumeResp.StatusCode)
 	}
 
-	deleteReq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/roadmap/workflow/schedules/"+created.ID, nil)
+	deleteReq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/workflow/schedules/"+created.ID, nil)
 	deleteReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	deleteResp, err := http.DefaultClient.Do(deleteReq)
 	if err != nil {
@@ -475,7 +483,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		ID:           "sched-ada",
 		Cron:         "*/5 * * * *",
 		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
-		ExecutionRef: "exec-ada",
+		ExecutionRef: "workflow_schedule:sched-ada:ref-ada",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
@@ -483,7 +491,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		ID:           "sched-grace",
 		Cron:         "0 * * * *",
 		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
-		ExecutionRef: "exec-grace",
+		ExecutionRef: "workflow_schedule:sched-grace:ref-grace",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
@@ -491,12 +499,12 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		ID:           "sched-analytics",
 		Cron:         "15 * * * *",
 		Target:       coreworkflow.Target{PluginName: "analytics", Operation: "sync"},
-		ExecutionRef: "exec-analytics",
+		ExecutionRef: "workflow_schedule:sched-analytics:ref-analytics",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
 	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "exec-ada",
+		ID:           "workflow_schedule:sched-ada:ref-ada",
 		ProviderName: "basic",
 		Target:       provider.schedules["sched-ada"].Target,
 		SubjectID:    principal.UserSubjectID(ada.ID),
@@ -504,7 +512,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		t.Fatalf("Put ada ref: %v", err)
 	}
 	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "exec-grace",
+		ID:           "workflow_schedule:sched-grace:ref-grace",
 		ProviderName: "basic",
 		Target:       provider.schedules["sched-grace"].Target,
 		SubjectID:    principal.UserSubjectID(grace.ID),
@@ -512,7 +520,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		t.Fatalf("Put grace ref: %v", err)
 	}
 	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "exec-analytics",
+		ID:           "workflow_schedule:sched-analytics:ref-analytics",
 		ProviderName: "basic",
 		Target:       provider.schedules["sched-analytics"].Target,
 		SubjectID:    principal.UserSubjectID(ada.ID),
@@ -562,7 +570,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/roadmap/workflow/schedules/", nil)
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
 	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	listResp, err := http.DefaultClient.Do(listReq)
 	if err != nil {
@@ -576,22 +584,27 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
 		t.Fatalf("decode list response: %v", err)
 	}
-	if len(listed) != 1 || listed[0].ID != "sched-ada" {
+	if len(listed) != 2 {
+		t.Fatalf("listed schedules = %#v", listed)
+	}
+	listedIDs := []string{listed[0].ID, listed[1].ID}
+	slices.Sort(listedIDs)
+	if !slices.Equal(listedIDs, []string{"sched-ada", "sched-analytics"}) {
 		t.Fatalf("listed schedules = %#v", listed)
 	}
 
-	getAnalyticsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/roadmap/workflow/schedules/sched-analytics", nil)
+	getAnalyticsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/sched-analytics", nil)
 	getAnalyticsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	getAnalyticsResp, err := http.DefaultClient.Do(getAnalyticsReq)
 	if err != nil {
 		t.Fatalf("get analytics request: %v", err)
 	}
 	defer func() { _ = getAnalyticsResp.Body.Close() }()
-	if getAnalyticsResp.StatusCode != http.StatusNotFound {
-		t.Fatalf("expected 404 for analytics schedule, got %d", getAnalyticsResp.StatusCode)
+	if getAnalyticsResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for analytics schedule, got %d", getAnalyticsResp.StatusCode)
 	}
 
-	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/roadmap/workflow/schedules/sched-grace", nil)
+	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/sched-grace", nil)
 	getReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	getResp, err := http.DefaultClient.Do(getReq)
 	if err != nil {
@@ -602,7 +615,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		t.Fatalf("expected 404, got %d", getResp.StatusCode)
 	}
 
-	deleteReq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/roadmap/workflow/schedules/sched-grace", nil)
+	deleteReq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/workflow/schedules/sched-grace", nil)
 	deleteReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	deleteResp, err := http.DefaultClient.Do(deleteReq)
 	if err != nil {
@@ -616,7 +629,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		t.Fatal("expected grace schedule to remain after unauthorized delete")
 	}
 	if _, ok := provider.schedules["sched-analytics"]; !ok {
-		t.Fatal("expected analytics schedule to remain hidden from roadmap route delete")
+		t.Fatal("expected analytics schedule to remain after deleting someone else's workflow")
 	}
 }
 
@@ -656,8 +669,8 @@ func TestCreateWorkflowScheduleRejectsOperationOutsideWorkflowBinding(t *testing
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"operation":"export"}}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/roadmap/workflow/schedules/", body)
+	body := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"export"}}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	resp, err := http.DefaultClient.Do(req)
@@ -697,7 +710,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 		ID:           "sched-sync",
 		Cron:         "*/5 * * * *",
 		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
-		ExecutionRef: "exec-sync",
+		ExecutionRef: "workflow_schedule:sched-sync:ref-sync",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
@@ -705,19 +718,19 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 		ID:           "sched-export",
 		Cron:         "0 * * * *",
 		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "export"},
-		ExecutionRef: "exec-export",
+		ExecutionRef: "workflow_schedule:sched-export:ref-export",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
 	for _, ref := range []*coreworkflow.ExecutionReference{
 		{
-			ID:           "exec-sync",
+			ID:           "workflow_schedule:sched-sync:ref-sync",
 			ProviderName: "basic",
 			Target:       provider.schedules["sched-sync"].Target,
 			SubjectID:    principal.UserSubjectID(user.ID),
 		},
 		{
-			ID:           "exec-export",
+			ID:           "workflow_schedule:sched-export:ref-export",
 			ProviderName: "basic",
 			Target:       provider.schedules["sched-export"].Target,
 			SubjectID:    principal.UserSubjectID(user.ID),
@@ -755,7 +768,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/roadmap/workflow/schedules/", nil)
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
 	listReq.Header.Set("Authorization", "Bearer "+plaintext)
 	listResp, err := http.DefaultClient.Do(listReq)
 	if err != nil {
@@ -773,7 +786,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 		t.Fatalf("listed schedules = %#v", listed)
 	}
 
-	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/roadmap/workflow/schedules/sched-export", nil)
+	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/sched-export", nil)
 	getReq.Header.Set("Authorization", "Bearer "+plaintext)
 	getResp, err := http.DefaultClient.Do(getReq)
 	if err != nil {
@@ -784,7 +797,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 		t.Fatalf("expected 404, got %d", getResp.StatusCode)
 	}
 
-	deleteReq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/roadmap/workflow/schedules/sched-export", nil)
+	deleteReq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/workflow/schedules/sched-export", nil)
 	deleteReq.Header.Set("Authorization", "Bearer "+plaintext)
 	deleteResp, err := http.DefaultClient.Do(deleteReq)
 	if err != nil {
@@ -797,8 +810,8 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 
 	createReq, _ := http.NewRequest(
 		http.MethodPost,
-		ts.URL+"/api/v1/roadmap/workflow/schedules/",
-		bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"operation":"export","instance":"tenant-a"}}`),
+		ts.URL+"/api/v1/workflow/schedules/",
+		bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"export","instance":"tenant-a"}}`),
 	)
 	createReq.Header.Set("Authorization", "Bearer "+plaintext)
 	createReq.Header.Set("Content-Type", "application/json")
@@ -830,12 +843,12 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 		Cron:         "*/5 * * * *",
 		Timezone:     "UTC",
 		Target:       oldTarget,
-		ExecutionRef: "exec-old",
+		ExecutionRef: "workflow_schedule:sched-ada:ref-old",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
 	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "exec-old",
+		ID:           "workflow_schedule:sched-ada:ref-old",
 		ProviderName: "basic",
 		Target:       oldTarget,
 		SubjectID:    principal.UserSubjectID(user.ID),
@@ -875,8 +888,8 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 
 	updateReq, _ := http.NewRequest(
 		http.MethodPut,
-		ts.URL+"/api/v1/roadmap/workflow/schedules/sched-ada",
-		bytes.NewBufferString(`{"cron":"*/10 * * * *","timezone":"UTC","target":{"operation":"sync","connection":"analytics","instance":"tenant-b"}}`),
+		ts.URL+"/api/v1/workflow/schedules/sched-ada",
+		bytes.NewBufferString(`{"cron":"*/10 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-b"}}`),
 	)
 	updateReq.Header.Set("Content-Type", "application/json")
 	updateReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -892,13 +905,13 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
 	}
-	if provider.schedules["sched-ada"].ExecutionRef != "exec-old" {
-		t.Fatalf("schedule execution ref = %q, want exec-old", provider.schedules["sched-ada"].ExecutionRef)
+	if provider.schedules["sched-ada"].ExecutionRef != "workflow_schedule:sched-ada:ref-old" {
+		t.Fatalf("schedule execution ref = %q, want workflow_schedule:sched-ada:ref-old", provider.schedules["sched-ada"].ExecutionRef)
 	}
 	if provider.schedules["sched-ada"].Target.Instance != "tenant-a" {
 		t.Fatalf("schedule target after failed update = %#v", provider.schedules["sched-ada"].Target)
 	}
-	oldRef, err := services.WorkflowExecutionRefs.Get(context.Background(), "exec-old")
+	oldRef, err := services.WorkflowExecutionRefs.Get(context.Background(), "workflow_schedule:sched-ada:ref-old")
 	if err != nil {
 		t.Fatalf("Get old ref: %v", err)
 	}
@@ -960,8 +973,8 @@ func TestWorkflowScheduleCreatePinsResolvedInstance(t *testing.T) {
 
 	createReq, _ := http.NewRequest(
 		http.MethodPost,
-		ts.URL+"/api/v1/roadmap/workflow/schedules/",
-		bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"operation":"sync","connection":"default"}}`),
+		ts.URL+"/api/v1/workflow/schedules/",
+		bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"default"}}`),
 	)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -987,6 +1000,181 @@ func TestWorkflowScheduleCreatePinsResolvedInstance(t *testing.T) {
 	}
 	if provider.upsertReqs[0].Target.Instance != "tenant-a" {
 		t.Fatalf("stored target = %#v, want resolved instance tenant-a", provider.upsertReqs[0].Target)
+	}
+}
+
+func TestGlobalWorkflowScheduleLookupIgnoresUnrelatedProviderFailures(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	basicProvider := newMemoryWorkflowProvider()
+	advancedProvider := newMemoryWorkflowProvider()
+	advancedProvider.getErr = errors.New("advanced down")
+	advancedProvider.listErr = errors.New("advanced down")
+
+	now := time.Now().UTC().Truncate(time.Second)
+	basicProvider.schedules["sched-ada-basic"] = &coreworkflow.Schedule{
+		ID:           "sched-ada-basic",
+		Cron:         "*/5 * * * *",
+		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		ExecutionRef: "workflow_schedule:sched-ada-basic:ref-basic",
+		CreatedAt:    &now,
+		UpdatedAt:    &now,
+	}
+	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+		ID:           "workflow_schedule:sched-ada-basic:ref-basic",
+		ProviderName: "basic",
+		Target:       basicProvider.schedules["sched-ada-basic"].Target,
+		SubjectID:    principal.UserSubjectID(user.ID),
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t,
+			&coretesting.StubIntegration{
+				N:        "roadmap",
+				ConnMode: core.ConnectionModeUser,
+				CatalogVal: &catalog.Catalog{
+					Name: "roadmap",
+					Operations: []catalog.CatalogOperation{
+						{ID: "sync", Method: http.MethodPost},
+					},
+				},
+			},
+			&coretesting.StubIntegration{
+				N:        "analytics",
+				ConnMode: core.ConnectionModeUser,
+				CatalogVal: &catalog.Catalog{
+					Name: "analytics",
+					Operations: []catalog.CatalogOperation{
+						{ID: "sync", Method: http.MethodPost},
+					},
+				},
+			},
+		)
+		cfg.Workflow = &stubWorkflowControl{
+			bindings: map[string]stubWorkflowBinding{
+				"roadmap":   {providerName: "basic", allowed: map[string]struct{}{"sync": {}}},
+				"analytics": {providerName: "advanced", allowed: map[string]struct{}{"sync": {}}},
+			},
+			providers: map[string]coreworkflow.Provider{
+				"basic":    basicProvider,
+				"advanced": advancedProvider,
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
+	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(listResp.Body)
+		t.Fatalf("expected 200, got %d: %s", listResp.StatusCode, body)
+	}
+	var listed []workflowScheduleResponse
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed) != 1 || listed[0].ID != "sched-ada-basic" {
+		t.Fatalf("listed schedules = %#v", listed)
+	}
+
+	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/sched-ada-basic", nil)
+	getReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	getResp, err := http.DefaultClient.Do(getReq)
+	if err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	defer func() { _ = getResp.Body.Close() }()
+	if getResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(getResp.Body)
+		t.Fatalf("expected 200, got %d: %s", getResp.StatusCode, body)
+	}
+}
+
+func TestGlobalWorkflowScheduleRejectsDuplicateActiveExecutionRefs(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryWorkflowProvider()
+	now := time.Now().UTC().Truncate(time.Second)
+	schedule := &coreworkflow.Schedule{
+		ID:           "sched-ada",
+		Cron:         "*/5 * * * *",
+		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		ExecutionRef: "workflow_schedule:sched-ada:active-ref-1",
+		CreatedAt:    &now,
+		UpdatedAt:    &now,
+	}
+	provider.schedules[schedule.ID] = schedule
+	for _, refID := range []string{"workflow_schedule:sched-ada:active-ref-1", "workflow_schedule:sched-ada:active-ref-2"} {
+		if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+			ID:           refID,
+			ProviderName: "basic",
+			Target:       schedule.Target,
+			SubjectID:    principal.UserSubjectID(user.ID),
+		}); err != nil {
+			t.Fatalf("Put execution ref %q: %v", refID, err)
+		}
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{
+				Name: "roadmap",
+				Operations: []catalog.CatalogOperation{
+					{ID: "sync", Method: http.MethodPost},
+				},
+			},
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			providerName: "basic",
+			allowed:      map[string]struct{}{"sync": {}},
+			provider:     provider,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/sched-ada", nil)
+	getReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	getResp, err := http.DefaultClient.Do(getReq)
+	if err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	defer func() { _ = getResp.Body.Close() }()
+	if getResp.StatusCode != http.StatusInternalServerError {
+		body, _ := io.ReadAll(getResp.Body)
+		t.Fatalf("expected 500, got %d: %s", getResp.StatusCode, body)
 	}
 }
 
@@ -1222,7 +1410,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 		ID:           "sched-ada-basic",
 		Cron:         "*/5 * * * *",
 		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
-		ExecutionRef: "exec-ada-basic",
+		ExecutionRef: "workflow_schedule:sched-ada-basic:ref-basic",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
@@ -1230,7 +1418,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 		ID:           "sched-ada-advanced",
 		Cron:         "0 * * * *",
 		Target:       coreworkflow.Target{PluginName: "analytics", Operation: "sync"},
-		ExecutionRef: "exec-ada-advanced",
+		ExecutionRef: "workflow_schedule:sched-ada-advanced:ref-advanced",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
@@ -1238,25 +1426,25 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 		ID:           "sched-grace-advanced",
 		Cron:         "15 * * * *",
 		Target:       coreworkflow.Target{PluginName: "analytics", Operation: "sync"},
-		ExecutionRef: "exec-grace-advanced",
+		ExecutionRef: "workflow_schedule:sched-grace-advanced:ref-grace-advanced",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
 	for _, ref := range []*coreworkflow.ExecutionReference{
 		{
-			ID:           "exec-ada-basic",
+			ID:           "workflow_schedule:sched-ada-basic:ref-basic",
 			ProviderName: "basic",
 			Target:       basicProvider.schedules["sched-ada-basic"].Target,
 			SubjectID:    principal.UserSubjectID(ada.ID),
 		},
 		{
-			ID:           "exec-ada-advanced",
+			ID:           "workflow_schedule:sched-ada-advanced:ref-advanced",
 			ProviderName: "advanced",
 			Target:       advancedProvider.schedules["sched-ada-advanced"].Target,
 			SubjectID:    principal.UserSubjectID(ada.ID),
 		},
 		{
-			ID:           "exec-grace-advanced",
+			ID:           "workflow_schedule:sched-grace-advanced:ref-grace-advanced",
 			ProviderName: "advanced",
 			Target:       advancedProvider.schedules["sched-grace-advanced"].Target,
 			SubjectID:    principal.UserSubjectID(grace.ID),
