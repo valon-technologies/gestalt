@@ -352,17 +352,20 @@ func workflowExecutionPrincipal(ref *coreworkflow.ExecutionReference) *principal
 		return nil
 	}
 	subjectID := strings.TrimSpace(ref.SubjectID)
-	userID := principal.UserIDFromSubjectID(subjectID)
 	permissions := principal.CompilePermissions(ref.Permissions)
 	value := &principal.Principal{
-		UserID:           userID,
 		SubjectID:        subjectID,
-		Kind:             principal.KindUser,
 		Scopes:           principal.PermissionPlugins(permissions),
 		TokenPermissions: permissions,
 	}
-	if value.UserID == "" {
-		value.Kind = ""
+	switch {
+	case principal.UserIDFromSubjectID(subjectID) != "":
+		value.UserID = principal.UserIDFromSubjectID(subjectID)
+		value.Kind = principal.KindUser
+	case strings.HasPrefix(subjectID, string(principal.KindWorkload)+":"),
+		principal.ManagedIdentityIDFromSubjectID(subjectID) != "",
+		subjectID == principal.IdentitySubjectID():
+		value.Kind = principal.KindWorkload
 	}
 	return value
 }
