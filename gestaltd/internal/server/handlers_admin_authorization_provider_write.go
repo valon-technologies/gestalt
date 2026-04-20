@@ -8,19 +8,16 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
-	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 )
 
 type providerPluginAuthorizationMembership struct {
 	Plugin string
 	UserID string
-	Email  string
 	Role   string
 }
 
 type providerAdminAuthorizationMembership struct {
 	UserID string
-	Email  string
 	Role   string
 }
 
@@ -42,7 +39,6 @@ func (s *Server) upsertProviderPluginAuthorization(ctx context.Context, user *co
 	membership := &providerPluginAuthorizationMembership{
 		Plugin: plugin,
 		UserID: user.ID,
-		Email:  user.Email,
 		Role:   role,
 	}
 	if err := s.syncProviderPluginCanonicalAccess(ctx, membership.UserID, membership.Plugin); err != nil {
@@ -109,7 +105,6 @@ func (s *Server) upsertProviderAdminAuthorization(ctx context.Context, user *cor
 	}
 	membership := &providerAdminAuthorizationMembership{
 		UserID: user.ID,
-		Email:  user.Email,
 		Role:   role,
 	}
 	if err := s.syncProviderAdminCanonicalRole(ctx, membership.UserID, membership.Role, providerRelationshipRelations(existing)); err != nil {
@@ -248,14 +243,12 @@ func (s *Server) providerDynamicRelationshipsForUser(ctx context.Context, resour
 		return nil, err
 	}
 	userID := ""
-	email := ""
 	if user != nil {
 		userID = strings.TrimSpace(user.ID)
-		email = emailutil.Normalize(user.Email)
 	}
 	out := make([]*core.Relationship, 0, len(relationships))
 	for _, rel := range relationships {
-		match, err := s.providerRelationshipMatchesUser(ctx, rel, userID, email)
+		match, err := s.providerRelationshipMatchesUser(ctx, rel, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -266,7 +259,7 @@ func (s *Server) providerDynamicRelationshipsForUser(ctx context.Context, resour
 	return out, nil
 }
 
-func (s *Server) providerRelationshipMatchesUser(ctx context.Context, rel *core.Relationship, userID, email string) (bool, error) {
+func (s *Server) providerRelationshipMatchesUser(_ context.Context, rel *core.Relationship, userID string) (bool, error) {
 	if rel == nil || rel.GetSubject() == nil {
 		return false, nil
 	}
@@ -275,26 +268,6 @@ func (s *Server) providerRelationshipMatchesUser(ctx context.Context, rel *core.
 	switch subjectType {
 	case authorization.ProviderSubjectTypeUser:
 		return userID != "" && subjectID == userID, nil
-	case authorization.ProviderSubjectTypeEmail:
-		normalized := emailutil.Normalize(subjectID)
-		if normalized == "" {
-			return false, nil
-		}
-		if email != "" && normalized == email {
-			return true, nil
-		}
-		if userID == "" || s.users == nil {
-			return false, nil
-		}
-		user, err := s.users.FindUserByEmail(ctx, normalized)
-		switch {
-		case err == nil:
-			return strings.TrimSpace(user.ID) == userID, nil
-		case errors.Is(err, core.ErrNotFound):
-			return false, nil
-		default:
-			return false, err
-		}
 	default:
 		return false, nil
 	}
@@ -305,22 +278,15 @@ func providerDynamicMembershipRelationships(resource *core.ResourceRef, user *co
 	if resource == nil || role == "" || user == nil {
 		return nil
 	}
-	writes := make([]*core.Relationship, 0, 2)
-	if userID := strings.TrimSpace(user.ID); userID != "" {
-		writes = append(writes, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeUser, Id: userID},
-			Relation: role,
-			Resource: cloneResourceRef(resource),
-		})
+	userID := strings.TrimSpace(user.ID)
+	if userID == "" {
+		return nil
 	}
-	if email := emailutil.Normalize(user.Email); email != "" {
-		writes = append(writes, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeEmail, Id: email},
-			Relation: role,
-			Resource: cloneResourceRef(resource),
-		})
-	}
-	return writes
+	return []*core.Relationship{{
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeUser, Id: userID},
+		Relation: role,
+		Resource: cloneResourceRef(resource),
+	}}
 }
 
 func relationshipKeys(rels []*core.Relationship) []*core.RelationshipKey {

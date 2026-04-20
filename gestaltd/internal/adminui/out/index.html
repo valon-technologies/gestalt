@@ -761,8 +761,9 @@
 
           <p class="metric-note controls-note">
             Dynamic grants are plugin-scoped and evaluated only after static
-            policy members. Writes are blocked for users who already have
-            static authorization on the selected plugin.
+            policy members. Writes require a canonical user subject ID and are
+            blocked when that subject already has static authorization on the
+            selected plugin.
           </p>
         </section>
 
@@ -799,9 +800,9 @@
             </p>
 
             <form id="authorization-form" class="auth-form">
-              <label class="control-group" for="authorization-email-input">
-                <span class="label-text">Email</span>
-                <input class="text-input" id="authorization-email-input" name="email" type="email" autocomplete="email" placeholder="viewer@example.test" />
+              <label class="control-group" for="authorization-subject-input">
+                <span class="label-text">Subject ID</span>
+                <input class="text-input" id="authorization-subject-input" name="subjectId" type="text" spellcheck="false" placeholder="user:usr_123" />
               </label>
 
               <label class="control-group" for="authorization-role-input">
@@ -813,7 +814,7 @@
             </form>
 
             <p class="metric-note inline-note" id="authorization-form-note">
-              Pick a plugin, then add a new dynamic member or update an existing dynamic role.
+              Pick a plugin, then add or update a dynamic grant for an existing user subject.
             </p>
           </article>
 
@@ -889,9 +890,9 @@
             </p>
 
             <form id="admin-members-form" class="auth-form">
-              <label class="control-group" for="admin-members-email-input">
-                <span class="label-text">Email</span>
-                <input class="text-input" id="admin-members-email-input" name="email" type="email" autocomplete="email" placeholder="admin@example.test" />
+              <label class="control-group" for="admin-members-subject-input">
+                <span class="label-text">Subject ID</span>
+                <input class="text-input" id="admin-members-subject-input" name="subjectId" type="text" spellcheck="false" placeholder="user:usr_123" />
               </label>
 
               <label class="control-group" for="admin-members-role-input">
@@ -903,7 +904,7 @@
             </form>
 
             <p class="metric-note inline-note" id="admin-members-form-note">
-              Add a new dynamic Gestalt admin or update an existing dynamic admin role.
+              Add or update a dynamic Gestalt admin grant for an existing user subject.
             </p>
           </article>
 
@@ -984,7 +985,7 @@
         let authLoaded = false;
         let authLoading = false;
         let authSaving = false;
-        let authDeletingUserID = "";
+        let authDeletingSubjectID = "";
         let authPendingReload = false;
         let selectedPluginName = "";
         let authMembersRequestToken = 0;
@@ -992,7 +993,7 @@
         let adminLoaded = false;
         let adminLoading = false;
         let adminSaving = false;
-        let adminDeletingUserID = "";
+        let adminDeletingSubjectID = "";
         let adminPendingReload = false;
         let adminMembersRequestToken = 0;
         let adminAvailable = true;
@@ -1053,6 +1054,16 @@
 
         function normalizePluginName(value) {
           return typeof value === "string" ? value.trim() : "";
+        }
+
+        function normalizeSubjectID(value) {
+          return typeof value === "string" ? value.trim() : "";
+        }
+
+        function rowSubjectID(row) {
+          if (!row) return "";
+          if (row.selectorKind === "subject_id" && typeof row.selectorValue === "string") return row.selectorValue.trim();
+          return "";
         }
 
         function updateURLState() {
@@ -1270,20 +1281,16 @@
           syncControlState();
         }
 
-        function normalizedEmail(value) {
-          return String(value || "").trim().toLowerCase();
-        }
-
-        function authStaticEmails() {
-          const emails = new Set();
+        function authStaticSubjectIDs() {
+          const subjectIDs = new Set();
           authMembers.forEach(function (row) {
             if (!row || row.source !== "static") return;
-            const email = normalizedEmail(row.email || (row.selectorKind === "email" ? row.selectorValue : ""));
-            if (email) {
-              emails.add(email);
+            const subjectID = rowSubjectID(row);
+            if (subjectID) {
+              subjectIDs.add(subjectID);
             }
           });
-          return emails;
+          return subjectIDs;
         }
 
         function authRoleSuggestions() {
@@ -1300,16 +1307,16 @@
           return Array.from(values).sort();
         }
 
-        function adminStaticEmails() {
-          const emails = new Set();
+        function adminStaticSubjectIDs() {
+          const subjectIDs = new Set();
           adminMembers.forEach(function (row) {
             if (!row || row.source !== "static") return;
-            const email = normalizedEmail(row.email || (row.selectorKind === "email" ? row.selectorValue : ""));
-            if (email) {
-              emails.add(email);
+            const subjectID = rowSubjectID(row);
+            if (subjectID) {
+              subjectIDs.add(subjectID);
             }
           });
-          return emails;
+          return subjectIDs;
         }
 
         function adminRoleSuggestions() {
@@ -1328,16 +1335,11 @@
 
         function principalLabel(row) {
           if (!row) return "Unknown";
-          if (row.email) return row.email;
-          if (row.selectorKind === "email") return row.selectorValue;
           return row.selectorValue || "Unknown";
         }
 
         function principalMeta(row) {
           if (!row) return "";
-          if (row.selectorKind === "user_id") return row.userId ? `user_id:${row.userId}` : "user_id";
-          if (row.selectorKind === "email") return row.userId ? `email match · user_id:${row.userId}` : "email selector";
-          if (row.selectorKind === "subject_id") return "subjectID-only static member";
           return row.selectorKind || "";
         }
 
@@ -1371,7 +1373,8 @@
             const stateClass = row.effective ? "state-effective" : "state-shadowed";
             const stateLabel = row.effective ? "Effective" : "Shadowed";
             const mutableLabel = row.mutable ? "Mutable" : "Locked";
-            const actionDisabled = !row.mutable || !row.userId || authDeletingUserID === row.userId;
+            const subjectID = rowSubjectID(row);
+            const actionDisabled = !row.mutable || !subjectID || authDeletingSubjectID === subjectID;
             tr.innerHTML =
               '<td><div class="principal-value"></div><div class="principal-meta"></div></td>' +
               '<td><code></code></td>' +
@@ -1392,12 +1395,12 @@
             if (actionDisabled) {
               button.disabled = true;
             }
-            if (row.mutable && row.userId) {
-              button.dataset.userId = row.userId;
+            if (row.mutable && subjectID) {
+              button.dataset.subjectId = subjectID;
             }
             if (!row.mutable) {
               button.textContent = "Static";
-            } else if (authDeletingUserID === row.userId) {
+            } else if (authDeletingSubjectID === subjectID) {
               button.textContent = "Removing...";
             }
             body.appendChild(tr);
@@ -1416,28 +1419,28 @@
         }
 
         function updateAuthorizationFormState() {
-          const emailInput = byId("authorization-email-input");
+          const subjectInput = byId("authorization-subject-input");
           const roleInput = byId("authorization-role-input");
           const submitButton = byId("authorization-submit-button");
           const formNote = byId("authorization-form-note");
           const pluginSelect = byId("authorization-plugin-select");
           const hasPlugin = !!selectedPluginName;
           pluginSelect.disabled = authLoading || authSaving;
-          emailInput.disabled = !hasPlugin || authLoading || authSaving;
+          subjectInput.disabled = !hasPlugin || authLoading || authSaving;
           roleInput.disabled = !hasPlugin || authLoading || authSaving;
 
-          const email = normalizedEmail(emailInput.value);
+          const subjectID = normalizeSubjectID(subjectInput.value);
           const role = String(roleInput.value || "").trim();
-          const staticConflict = email && authStaticEmails().has(email);
-          submitButton.disabled = !hasPlugin || !email || !role || staticConflict || authLoading || authSaving;
+          const staticConflict = subjectID && authStaticSubjectIDs().has(subjectID);
+          submitButton.disabled = !hasPlugin || !subjectID || !role || staticConflict || authLoading || authSaving;
           submitButton.textContent = authSaving ? "Saving..." : "Save dynamic grant";
 
           if (!hasPlugin) {
             formNote.textContent = "Pick a plugin with an authorization policy to manage members.";
           } else if (staticConflict) {
-            formNote.textContent = "This user already has static authorization on the selected plugin and cannot receive a dynamic grant.";
+            formNote.textContent = "This subject already has static authorization on the selected plugin and cannot receive a dynamic grant.";
           } else {
-            formNote.textContent = "Static rows remain read-only. Dynamic rows can be added, updated, or removed here.";
+            formNote.textContent = "Static rows remain read-only. Dynamic rows use canonical user subject IDs and can be added, updated, or removed here.";
           }
         }
 
@@ -1492,17 +1495,18 @@
         }
 
         function upsertDynamicAdminMember(row) {
-          if (!row || !row.userId) return;
+          const subjectID = rowSubjectID(row);
+          if (!row || !subjectID) return;
           const next = adminMembers.filter(function (existing) {
-            return !(existing && existing.source === "dynamic" && existing.userId === row.userId);
+            return !(existing && existing.source === "dynamic" && rowSubjectID(existing) === subjectID);
           });
           next.push(row);
           adminMembers = sortAdminMembers(next);
         }
 
-        function removeDynamicAdminMember(userID) {
+        function removeDynamicAdminMember(subjectID) {
           adminMembers = adminMembers.filter(function (row) {
-            return !(row && row.source === "dynamic" && row.userId === userID);
+            return !(row && row.source === "dynamic" && rowSubjectID(row) === subjectID);
           });
         }
 
@@ -1548,10 +1552,11 @@
             const stateClass = row.effective ? "state-effective" : "state-shadowed";
             const stateLabel = row.effective ? "Effective" : "Shadowed";
             const mutableLabel = row.mutable ? "Mutable" : "Locked";
+            const subjectID = rowSubjectID(row);
             const actionDisabled =
               !row.mutable ||
-              !row.userId ||
-              adminDeletingUserID === row.userId ||
+              !subjectID ||
+              adminDeletingSubjectID === subjectID ||
               !adminCanWrite ||
               adminLoading ||
               adminSaving;
@@ -1575,12 +1580,12 @@
             if (actionDisabled) {
               button.disabled = true;
             }
-            if (row.mutable && row.userId) {
-              button.dataset.userId = row.userId;
+            if (row.mutable && subjectID) {
+              button.dataset.subjectId = subjectID;
             }
             if (!row.mutable) {
               button.textContent = "Static";
-            } else if (adminDeletingUserID === row.userId) {
+            } else if (adminDeletingSubjectID === subjectID) {
               button.textContent = "Removing...";
             } else if (!adminCanWrite) {
               button.textContent = "Read-only";
@@ -1601,18 +1606,18 @@
         }
 
         function updateAdminMembersFormState() {
-          const emailInput = byId("admin-members-email-input");
+          const subjectInput = byId("admin-members-subject-input");
           const roleInput = byId("admin-members-role-input");
           const submitButton = byId("admin-members-submit-button");
           const formNote = byId("admin-members-form-note");
 
-          emailInput.disabled = !adminAvailable || !adminCanWrite || adminLoading || adminSaving;
+          subjectInput.disabled = !adminAvailable || !adminCanWrite || adminLoading || adminSaving;
           roleInput.disabled = !adminAvailable || !adminCanWrite || adminLoading || adminSaving;
 
-          const email = normalizedEmail(emailInput.value);
+          const subjectID = normalizeSubjectID(subjectInput.value);
           const role = String(roleInput.value || "").trim();
-          const staticConflict = email && adminStaticEmails().has(email);
-          submitButton.disabled = !adminAvailable || !adminCanWrite || !email || !role || staticConflict || adminLoading || adminSaving;
+          const staticConflict = subjectID && adminStaticSubjectIDs().has(subjectID);
+          submitButton.disabled = !adminAvailable || !adminCanWrite || !subjectID || !role || staticConflict || adminLoading || adminSaving;
           submitButton.textContent = adminSaving ? "Saving..." : "Save admin grant";
 
           if (adminLoading && !adminLoaded) {
@@ -1624,9 +1629,9 @@
           } else if (!adminCanWrite) {
             formNote.textContent = "You can inspect built-in admin memberships here, but only callers with an allowed built-in admin role can change them.";
           } else if (staticConflict) {
-            formNote.textContent = "This user already has static built-in admin authorization and cannot receive a dynamic admin grant.";
+            formNote.textContent = "This subject already has static built-in admin authorization and cannot receive a dynamic admin grant.";
           } else {
-            formNote.textContent = "Static seed admins remain read-only. Dynamic admin rows can be added, updated, or removed here.";
+            formNote.textContent = "Static seed admins remain read-only. Dynamic admin rows use canonical user subject IDs and can be added, updated, or removed here.";
           }
         }
 
@@ -1746,18 +1751,18 @@
             loadAuthorizationPlugins();
           });
 
-          byId("authorization-email-input").addEventListener("input", updateAuthorizationFormState);
+          byId("authorization-subject-input").addEventListener("input", updateAuthorizationFormState);
           byId("authorization-role-input").addEventListener("input", updateAuthorizationFormState);
 
           byId("authorization-form").addEventListener("submit", async function (event) {
             event.preventDefault();
             if (!selectedPluginName || authSaving) return;
 
-            const emailInput = byId("authorization-email-input");
+            const subjectInput = byId("authorization-subject-input");
             const roleInput = byId("authorization-role-input");
-            const email = String(emailInput.value || "").trim();
+            const subjectID = normalizeSubjectID(subjectInput.value);
             const role = String(roleInput.value || "").trim();
-            if (!email || !role) {
+            if (!subjectID || !role) {
               updateAuthorizationFormState();
               return;
             }
@@ -1774,10 +1779,10 @@
                     Accept: "application/json",
                     "Content-Type": "application/json",
                   },
-                  body: JSON.stringify({ email: email, role: role }),
+                  body: JSON.stringify({ subjectId: subjectID, role: role }),
                 },
               );
-              emailInput.value = "";
+              subjectInput.value = "";
               if (result.payload && result.payload.membership && result.payload.membership.role) {
                 roleInput.value = result.payload.membership.role;
               }
@@ -1799,15 +1804,15 @@
           byId("authorization-members-body").addEventListener("click", async function (event) {
             const target = event.target;
             if (!(target instanceof HTMLButtonElement)) return;
-            const userID = normalizePluginName(target.dataset.userId);
-            if (!userID || !selectedPluginName || authDeletingUserID || target.disabled) return;
+            const subjectID = normalizeSubjectID(target.dataset.subjectId);
+            if (!subjectID || !selectedPluginName || authDeletingSubjectID || target.disabled) return;
 
-            authDeletingUserID = userID;
+            authDeletingSubjectID = subjectID;
             renderAuthorization();
             setAuthStatus("Removing dynamic grant...", "");
             try {
               const result = await fetchJSON(
-                "/admin/api/v1/authorization/plugins/" + encodeURIComponent(selectedPluginName) + "/members/" + encodeURIComponent(userID),
+                "/admin/api/v1/authorization/plugins/" + encodeURIComponent(selectedPluginName) + "/members/" + encodeURIComponent(subjectID),
                 {
                   method: "DELETE",
                 },
@@ -1822,7 +1827,7 @@
             } catch (error) {
               setAuthStatus(error instanceof Error ? error.message : "Failed to remove dynamic grant.", "error");
             } finally {
-              authDeletingUserID = "";
+              authDeletingSubjectID = "";
               renderAuthorization();
             }
           });
@@ -1835,18 +1840,18 @@
             loadAdminMembers();
           });
 
-          byId("admin-members-email-input").addEventListener("input", updateAdminMembersFormState);
+          byId("admin-members-subject-input").addEventListener("input", updateAdminMembersFormState);
           byId("admin-members-role-input").addEventListener("input", updateAdminMembersFormState);
 
           byId("admin-members-form").addEventListener("submit", async function (event) {
             event.preventDefault();
             if (adminSaving || !adminAvailable) return;
 
-            const emailInput = byId("admin-members-email-input");
+            const subjectInput = byId("admin-members-subject-input");
             const roleInput = byId("admin-members-role-input");
-            const email = String(emailInput.value || "").trim();
+            const subjectID = normalizeSubjectID(subjectInput.value);
             const role = String(roleInput.value || "").trim();
-            if (!email || !role) {
+            if (!subjectID || !role) {
               updateAdminMembersFormState();
               return;
             }
@@ -1861,9 +1866,9 @@
                   Accept: "application/json",
                   "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ email: email, role: role }),
+                body: JSON.stringify({ subjectId: subjectID, role: role }),
               });
-              emailInput.value = "";
+              subjectInput.value = "";
               if (result.payload && result.payload.membership && result.payload.membership.role) {
                 roleInput.value = result.payload.membership.role;
               }
@@ -1887,21 +1892,21 @@
           byId("admin-members-body").addEventListener("click", async function (event) {
             const target = event.target;
             if (!(target instanceof HTMLButtonElement)) return;
-            const userID = normalizePluginName(target.dataset.userId);
-            if (!userID || adminDeletingUserID || target.disabled) return;
+            const subjectID = normalizeSubjectID(target.dataset.subjectId);
+            if (!subjectID || adminDeletingSubjectID || target.disabled) return;
 
-            adminDeletingUserID = userID;
+            adminDeletingSubjectID = subjectID;
             renderAdminMembersWorkspace();
             setAdminMembersStatus("Removing built-in admin grant...", "");
             try {
               const result = await fetchJSON(
-                "/admin/api/v1/authorization/admins/members/" + encodeURIComponent(userID),
+                "/admin/api/v1/authorization/admins/members/" + encodeURIComponent(subjectID),
                 {
                   method: "DELETE",
                 },
               );
               if (result.payload && result.payload.reloaded === false) {
-                removeDynamicAdminMember(userID);
+                removeDynamicAdminMember(subjectID);
                 markAdminMembersPendingReload("Built-in admin grant removed from storage. Use Refresh after the local authorization snapshot converges to inspect the updated access state.");
                 renderAdminMembersWorkspace();
               } else {
@@ -1912,7 +1917,7 @@
             } catch (error) {
               setAdminMembersStatus(error instanceof Error ? error.message : "Failed to remove built-in admin grant.", "error");
             } finally {
-              adminDeletingUserID = "";
+              adminDeletingSubjectID = "";
               renderAdminMembersWorkspace();
             }
           });

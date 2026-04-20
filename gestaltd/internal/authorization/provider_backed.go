@@ -775,12 +775,9 @@ func dynamicSubjectRefs(p *principal.Principal) []*core.SubjectRef {
 	if p == nil {
 		return nil
 	}
-	out := make([]*core.SubjectRef, 0, 2)
+	out := make([]*core.SubjectRef, 0, 1)
 	if userID := strings.TrimSpace(p.UserID); userID != "" {
 		out = append(out, &core.SubjectRef{Type: subjectTypeUser, Id: userID})
-	}
-	if email := normalizeProviderEmail(identityEmail(p)); email != "" {
-		out = append(out, &core.SubjectRef{Type: subjectTypeEmail, Id: email})
 	}
 	return out
 }

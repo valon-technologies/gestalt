@@ -71,7 +71,7 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
 		buildProviderAuthorizationResourceType(
 			resourceTypePluginDynamic,
-			resourceTypesForRoles(unionRoleLists(state.pluginDynamicRoles), subjectTypeUser, subjectTypeEmail),
+			resourceTypesForRoles(unionRoleLists(state.pluginDynamicRoles), subjectTypeUser),
 			unionRoleLists(state.pluginDynamicRoles),
 		),
 	)
@@ -85,7 +85,7 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
 		buildProviderAuthorizationResourceType(
 			resourceTypeAdminDynamic,
-			resourceTypesForRoles(state.adminDynamicRoles, subjectTypeUser, subjectTypeEmail),
+			resourceTypesForRoles(state.adminDynamicRoles, subjectTypeUser),
 			state.adminDynamicRoles,
 		),
 	)

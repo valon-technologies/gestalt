@@ -918,7 +918,7 @@ func seedProviderDynamicAdminMembership(t *testing.T, svc *coredata.Services, au
 		t.Fatal("seedProviderDynamicAdminMembership: provider has no active model")
 	}
 	provider.putRelationship(provider.activeModelID, &core.Relationship{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeEmail, Id: user.Email},
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeUser, Id: user.ID},
 		Relation: role,
 		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
 	})
@@ -940,7 +940,7 @@ func seedProviderPluginAuthorization(t *testing.T, svc *coredata.Services, authz
 		t.Fatal("seedProviderPluginAuthorization: provider has no active model")
 	}
 	provider.putRelationship(provider.activeModelID, &core.Relationship{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeEmail, Id: user.Email},
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeUser, Id: user.ID},
 		Relation: role,
 		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: plugin},
 	})
@@ -2455,7 +2455,8 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("plugins status = %d, want 200", resp.StatusCode)
 	}
 
-	body := bytes.NewBufferString(`{"email":"dynamic@example.test","role":"viewer"}`)
+	dynamicUser := seedUser(t, svc, "dynamic@example.test")
+	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
 	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
@@ -2466,6 +2467,22 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		t.Fatalf("put dynamic member status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+	var putPluginMembershipResp struct {
+		Membership struct {
+			SelectorKind  string `json:"selectorKind"`
+			SelectorValue string `json:"selectorValue"`
+			Role          string `json:"role"`
+		} `json:"membership"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&putPluginMembershipResp); err != nil {
+		t.Fatalf("decode plugin membership response: %v", err)
+	}
+	if putPluginMembershipResp.Membership.SelectorKind != "subject_id" {
+		t.Fatalf("plugin membership selectorKind = %q, want subject_id", putPluginMembershipResp.Membership.SelectorKind)
+	}
+	if putPluginMembershipResp.Membership.SelectorValue != principal.UserSubjectID(dynamicUser.ID) {
+		t.Fatalf("plugin membership selectorValue = %q, want canonical subject id", putPluginMembershipResp.Membership.SelectorValue)
 	}
 
 	resp, err = http.Get(ts.URL + "/admin/api/v1/authorization/plugins/sample_plugin/members")
@@ -2484,8 +2501,25 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	if len(members) != 2 {
 		t.Fatalf("expected 2 merged members, got %d (%+v)", len(members), members)
 	}
+	foundDynamicPluginMember := false
+	for _, member := range members {
+		if member["source"] != "dynamic" {
+			continue
+		}
+		foundDynamicPluginMember = true
+		if got := member["selectorKind"]; got != "subject_id" {
+			t.Fatalf("dynamic plugin member selectorKind = %v, want subject_id", got)
+		}
+		if member["selectorValue"] != principal.UserSubjectID(dynamicUser.ID) {
+			t.Fatalf("dynamic plugin member selector metadata = %+v, want canonical subject_id selectorValue", member)
+		}
+	}
+	if !foundDynamicPluginMember {
+		t.Fatalf("expected one dynamic plugin member, got %+v", members)
+	}
 
-	body = bytes.NewBufferString(`{"email":"static@example.test","role":"viewer"}`)
+	staticUser := seedUser(t, svc, "static@example.test")
+	body = bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(staticUser.ID)))
 	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
@@ -2498,11 +2532,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("put static-conflict status = %d, want 409: %s", resp.StatusCode, respBody)
 	}
 
-	user, err := svc.Users.FindUserByEmail(context.Background(), "dynamic@example.test")
-	if err != nil {
-		t.Fatalf("find dynamic user: %v", err)
-	}
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members/"+url.PathEscape(user.ID), nil)
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members/"+url.PathEscape(principal.UserSubjectID(dynamicUser.ID)), nil)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE dynamic member: %v", err)
@@ -2578,7 +2608,8 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"email":"dynamic@example.test","role":"viewer"}`)
+	dynamicUser := seedUser(t, svc, "dynamic@example.test")
+	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
 	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
@@ -2592,11 +2623,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("put dynamic member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	user, err := svc.Users.FindUserByEmail(context.Background(), "dynamic@example.test")
-	if err != nil {
-		t.Fatalf("find dynamic user: %v", err)
-	}
-	canonicalIdentityID, err := svc.Users.CanonicalIdentityIDForUser(context.Background(), user.ID)
+	canonicalIdentityID, err := svc.Users.CanonicalIdentityIDForUser(context.Background(), dynamicUser.ID)
 	if err != nil {
 		t.Fatalf("CanonicalIdentityIDForUser(dynamic): %v", err)
 	}
@@ -2711,8 +2738,8 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	if relationshipsResp.ModelID == "" {
 		t.Fatal("expected model id on relationships response")
 	}
-	if len(relationshipsResp.Relationships) != 2 {
-		t.Fatalf("expected 2 provider relationships, got %d", len(relationshipsResp.Relationships))
+	if len(relationshipsResp.Relationships) != 1 {
+		t.Fatalf("expected 1 provider relationship, got %d", len(relationshipsResp.Relationships))
 	}
 	for _, rel := range relationshipsResp.Relationships {
 		if !rel.Managed {
@@ -2838,7 +2865,8 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("admin members = %+v, want one static row", members)
 	}
 
-	body := bytes.NewBufferString(`{"email":"dynamic-admin@example.test","role":"owner"}`)
+	dynamicAdmin := seedUser(t, svc, "dynamic-admin@example.test")
+	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"owner"}`, principal.UserSubjectID(dynamicAdmin.ID)))
 	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
@@ -2850,6 +2878,22 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		t.Fatalf("put admin member status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+	var putAdminMembershipResp struct {
+		Membership struct {
+			SelectorKind  string `json:"selectorKind"`
+			SelectorValue string `json:"selectorValue"`
+			Role          string `json:"role"`
+		} `json:"membership"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&putAdminMembershipResp); err != nil {
+		t.Fatalf("decode admin membership response: %v", err)
+	}
+	if putAdminMembershipResp.Membership.SelectorKind != "subject_id" {
+		t.Fatalf("admin membership selectorKind = %q, want subject_id", putAdminMembershipResp.Membership.SelectorKind)
+	}
+	if putAdminMembershipResp.Membership.SelectorValue != principal.UserSubjectID(dynamicAdmin.ID) {
+		t.Fatalf("admin membership selectorValue = %q, want canonical subject id", putAdminMembershipResp.Membership.SelectorValue)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
@@ -2869,8 +2913,25 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	if len(members) != 2 {
 		t.Fatalf("expected 2 merged admin members, got %d (%+v)", len(members), members)
 	}
+	foundDynamicAdminMember := false
+	for _, member := range members {
+		if member["source"] != "dynamic" {
+			continue
+		}
+		foundDynamicAdminMember = true
+		if got := member["selectorKind"]; got != "subject_id" {
+			t.Fatalf("dynamic admin member selectorKind = %v, want subject_id", got)
+		}
+		if member["selectorValue"] != principal.UserSubjectID(dynamicAdmin.ID) {
+			t.Fatalf("dynamic admin member selector metadata = %+v, want canonical subject_id selectorValue", member)
+		}
+	}
+	if !foundDynamicAdminMember {
+		t.Fatalf("expected one dynamic admin member, got %+v", members)
+	}
 
-	body = bytes.NewBufferString(`{"email":"static-admin@example.test","role":"owner"}`)
+	staticAdmin := seedUser(t, svc, "static-admin@example.test")
+	body = bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"owner"}`, principal.UserSubjectID(staticAdmin.ID)))
 	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
@@ -2884,11 +2945,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("put static admin conflict status = %d, want 409: %s", resp.StatusCode, respBody)
 	}
 
-	user, err := svc.Users.FindUserByEmail(context.Background(), "dynamic-admin@example.test")
-	if err != nil {
-		t.Fatalf("find dynamic admin user: %v", err)
-	}
-	roles, err := svc.WorkspaceRoles.ListByPrincipal(ctx, user.ID)
+	roles, err := svc.WorkspaceRoles.ListByPrincipal(ctx, dynamicAdmin.ID)
 	if err != nil {
 		t.Fatalf("ListByPrincipal(dynamic admin): %v", err)
 	}
@@ -2896,7 +2953,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("workspace roles = %+v, want [owner]", roles)
 	}
 
-	body = bytes.NewBufferString(`{"email":"dynamic-admin@example.test","role":"operator"}`)
+	body = bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"operator"}`, principal.UserSubjectID(dynamicAdmin.ID)))
 	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
@@ -2910,14 +2967,14 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("put dynamic admin role change status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	roles, err = svc.WorkspaceRoles.ListByPrincipal(ctx, user.ID)
+	roles, err = svc.WorkspaceRoles.ListByPrincipal(ctx, dynamicAdmin.ID)
 	if err != nil {
 		t.Fatalf("ListByPrincipal(dynamic admin) after role change: %v", err)
 	}
 	if len(roles) != 1 || roles[0].Role != "operator" {
 		t.Fatalf("workspace roles after role change = %+v, want [operator]", roles)
 	}
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/admins/members/"+url.PathEscape(user.ID), nil)
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/admins/members/"+url.PathEscape(principal.UserSubjectID(dynamicAdmin.ID)), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -2946,7 +3003,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	if len(members) != 1 || members[0]["source"] != "static" {
 		t.Fatalf("admin members after delete = %+v, want only static row", members)
 	}
-	roles, err = svc.WorkspaceRoles.ListByPrincipal(ctx, user.ID)
+	roles, err = svc.WorkspaceRoles.ListByPrincipal(ctx, dynamicAdmin.ID)
 	if err != nil {
 		t.Fatalf("ListByPrincipal(dynamic admin) after delete: %v", err)
 	}
@@ -2997,7 +3054,8 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"email":"dynamic-admin@example.test","role":"owner"}`)
+	dynamicAdmin := seedUser(t, svc, "dynamic-admin@example.test")
+	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"owner"}`, principal.UserSubjectID(dynamicAdmin.ID)))
 	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
@@ -3011,11 +3069,7 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 		t.Fatalf("put admin member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	user, err := svc.Users.FindUserByEmail(context.Background(), "dynamic-admin@example.test")
-	if err != nil {
-		t.Fatalf("find dynamic admin user: %v", err)
-	}
-	canonicalIdentityID, err := svc.Users.CanonicalIdentityIDForUser(context.Background(), user.ID)
+	canonicalIdentityID, err := svc.Users.CanonicalIdentityIDForUser(context.Background(), dynamicAdmin.ID)
 	if err != nil {
 		t.Fatalf("CanonicalIdentityIDForUser(dynamic admin): %v", err)
 	}
@@ -3102,7 +3156,8 @@ func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyHumanAuthStores(t *testi
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		body := bytes.NewBufferString(`{"email":"dynamic@example.test","role":"viewer"}`)
+		dynamicUser := seedUser(t, svc, "dynamic@example.test")
+		body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
 		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
 		req.Header.Set("Content-Type", "application/json")
 		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
@@ -3158,7 +3213,8 @@ func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyHumanAuthStores(t *testi
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		body := bytes.NewBufferString(`{"email":"dynamic-admin@example.test","role":"operator"}`)
+		dynamicAdmin := seedUser(t, svc, "dynamic-admin@example.test")
+		body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"operator"}`, principal.UserSubjectID(dynamicAdmin.ID)))
 		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
 		req.Header.Set("Content-Type", "application/json")
 		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
@@ -3236,7 +3292,8 @@ func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
 		t.Fatalf("ops-admin can-write header = %q, want true", got)
 	}
 
-	body := bytes.NewBufferString(`{"email":"viewer@example.test","role":"ops-admin"}`)
+	viewer := seedUser(t, svc, "viewer@example.test")
+	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"ops-admin"}`, principal.UserSubjectID(viewer.ID)))
 	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ops-admin-session"})
@@ -3250,11 +3307,7 @@ func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
 		t.Fatalf("ops-admin put admin member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	user, err := svc.Users.FindUserByEmail(context.Background(), "viewer@example.test")
-	if err != nil {
-		t.Fatalf("find dynamic admin user: %v", err)
-	}
-	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/admins/members/"+url.PathEscape(user.ID), nil)
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/admins/members/"+url.PathEscape(principal.UserSubjectID(viewer.ID)), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ops-admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -3320,8 +3373,8 @@ func TestAdminAPI_PluginAuthorizationUnavailable(t *testing.T) {
 		body   string
 	}{
 		{name: "list", method: http.MethodGet, path: "/admin/api/v1/authorization/plugins/sample_plugin/members"},
-		{name: "put", method: http.MethodPut, path: "/admin/api/v1/authorization/plugins/sample_plugin/members", body: `{"email":"new-dynamic@example.test","role":"viewer"}`},
-		{name: "delete", method: http.MethodDelete, path: "/admin/api/v1/authorization/plugins/sample_plugin/members/" + url.PathEscape(dynamicUser.ID)},
+		{name: "put", method: http.MethodPut, path: "/admin/api/v1/authorization/plugins/sample_plugin/members", body: fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID))},
+		{name: "delete", method: http.MethodDelete, path: "/admin/api/v1/authorization/plugins/sample_plugin/members/" + url.PathEscape(principal.UserSubjectID(dynamicUser.ID))},
 	} {
 		reqBody := io.Reader(nil)
 		if tc.body != "" {
@@ -3396,8 +3449,8 @@ func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
 			body   string
 		}{
 			{name: "list", method: http.MethodGet, path: "/admin/api/v1/authorization/admins/members"},
-			{name: "put", method: http.MethodPut, path: "/admin/api/v1/authorization/admins/members", body: `{"email":"another-admin@example.test","role":"operator"}`},
-			{name: "delete", method: http.MethodDelete, path: "/admin/api/v1/authorization/admins/members/" + url.PathEscape(user.ID)},
+			{name: "put", method: http.MethodPut, path: "/admin/api/v1/authorization/admins/members", body: fmt.Sprintf(`{"subjectId":%q,"role":"operator"}`, principal.UserSubjectID(user.ID))},
+			{name: "delete", method: http.MethodDelete, path: "/admin/api/v1/authorization/admins/members/" + url.PathEscape(principal.UserSubjectID(user.ID))},
 		} {
 			reqBody := io.Reader(nil)
 			if tc.body != "" {
@@ -3490,7 +3543,8 @@ func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) 
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"email":"dynamic@example.test","role":"viewer"}`)
+	dynamicUser := seedUser(t, svc, "dynamic@example.test")
+	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
 	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -3546,7 +3600,8 @@ func TestAdminAPI_AdminAuthorizationPutFailureReturnsServerError(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"email":"dynamic-admin@example.test","role":"admin"}`)
+	dynamicAdmin := seedUser(t, svc, "dynamic-admin@example.test")
+	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"admin"}`, principal.UserSubjectID(dynamicAdmin.ID)))
 	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})

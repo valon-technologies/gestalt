@@ -168,12 +168,6 @@ func providerRelationshipIdentityID(ctx context.Context, users *coredata.UserSer
 	switch strings.TrimSpace(subject.GetType()) {
 	case authorization.ProviderSubjectTypeUser:
 		return users.CanonicalIdentityIDForUser(ctx, strings.TrimSpace(subject.GetId()))
-	case authorization.ProviderSubjectTypeEmail:
-		user, err := users.FindUserByEmail(ctx, strings.TrimSpace(subject.GetId()))
-		if err != nil {
-			return "", err
-		}
-		return users.CanonicalIdentityIDForUser(ctx, user.ID)
 	default:
 		return "", core.ErrNotFound
 	}

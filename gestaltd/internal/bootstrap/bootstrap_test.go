@@ -285,7 +285,7 @@ func bootstrapManagedAuthorizationModel(policyRoles, pluginStaticRoles, pluginDy
 		authorization.ProviderResourceTypePluginDynamic,
 		nil,
 		pluginDynamicRoles,
-		[]string{authorization.ProviderSubjectTypeUser, authorization.ProviderSubjectTypeEmail},
+		[]string{authorization.ProviderSubjectTypeUser},
 	))
 	model.ResourceTypes = appendIfAuthorizationResourceType(model.ResourceTypes, bootstrapAuthorizationResourceType(
 		authorization.ProviderResourceTypeAdminPolicyStatic,
@@ -297,7 +297,7 @@ func bootstrapManagedAuthorizationModel(policyRoles, pluginStaticRoles, pluginDy
 		authorization.ProviderResourceTypeAdminDynamic,
 		nil,
 		adminDynamicRoles,
-		[]string{authorization.ProviderSubjectTypeUser, authorization.ProviderSubjectTypeEmail},
+		[]string{authorization.ProviderSubjectTypeUser},
 	))
 	slices.SortFunc(model.ResourceTypes, func(left, right *core.AuthorizationModelResourceType) int {
 		return strings.Compare(left.GetName(), right.GetName())
@@ -3710,12 +3710,12 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Fatalf("FindOrCreateUser(dynamic): %v", err)
 		}
 		provider.putRelationship(existingModelID, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeEmail, Id: dynamicUser.Email},
+			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeUser, Id: dynamicUser.ID},
 			Relation: "editor",
 			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "calendar"},
 		})
 		provider.putRelationship(existingModelID, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeEmail, Id: dynamicUser.Email},
+			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeUser, Id: dynamicUser.ID},
 			Relation: "admin",
 			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
 		})
@@ -3891,12 +3891,12 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Fatalf("FindOrCreateUser(dynamic): %v", err)
 		}
 		provider.putRelationship(provider.activeModelID, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeEmail, Id: dynamicUser.Email},
+			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeUser, Id: dynamicUser.ID},
 			Relation: "editor",
 			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "calendar"},
 		})
 		provider.putRelationship(provider.activeModelID, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeEmail, Id: dynamicUser.Email},
+			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeUser, Id: dynamicUser.ID},
 			Relation: "admin",
 			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
 		})
@@ -4017,12 +4017,12 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Fatalf("FindOrCreateUser(dynamic): %v", err)
 		}
 		provider.putRelationship(existingModelID, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeEmail, Id: dynamicUser.Email},
+			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeUser, Id: dynamicUser.ID},
 			Relation: "viewer",
 			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "calendar"},
 		})
 		provider.putRelationship(existingModelID, &core.Relationship{
-			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeEmail, Id: dynamicUser.Email},
+			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeUser, Id: dynamicUser.ID},
 			Relation: "operator",
 			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
 		})

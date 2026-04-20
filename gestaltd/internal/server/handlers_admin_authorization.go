@@ -14,7 +14,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
@@ -33,14 +32,12 @@ type adminAuthorizationMemberRow struct {
 	Mutable       bool   `json:"mutable"`
 	SelectorKind  string `json:"selectorKind"`
 	SelectorValue string `json:"selectorValue"`
-	UserID        string `json:"userId,omitempty"`
-	Email         string `json:"email,omitempty"`
 	ShadowedBy    string `json:"shadowedBy,omitempty"`
 }
 
 type putAdminAuthorizationMemberRequest struct {
-	Email string `json:"email"`
-	Role  string `json:"role"`
+	SubjectID string `json:"subjectId"`
+	Role      string `json:"role"`
 }
 
 const adminAuthorizationCanWriteHeader = "X-Gestalt-Can-Write"
@@ -51,11 +48,11 @@ func (s *Server) mountAdminAuthorizationRoutes(r chi.Router) {
 	r.Get("/authorization/relationships", s.listAdminAuthorizationRelationships)
 	r.Get("/authorization/admins/members", s.listAdminAuthorizationAdminMembers)
 	r.Put("/authorization/admins/members", s.putAdminAuthorizationAdminMember)
-	r.Delete("/authorization/admins/members/{userID}", s.deleteAdminAuthorizationAdminMember)
+	r.Delete("/authorization/admins/members/{subjectID}", s.deleteAdminAuthorizationAdminMember)
 	r.Get("/authorization/plugins", s.listAdminAuthorizationPlugins)
 	r.Get("/authorization/plugins/{plugin}/members", s.listAdminAuthorizationPluginMembers)
 	r.Put("/authorization/plugins/{plugin}/members", s.putAdminAuthorizationPluginMember)
-	r.Delete("/authorization/plugins/{plugin}/members/{userID}", s.deleteAdminAuthorizationPluginMember)
+	r.Delete("/authorization/plugins/{plugin}/members/{subjectID}", s.deleteAdminAuthorizationPluginMember)
 }
 
 func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
@@ -155,16 +152,22 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if emailutil.Normalize(req.Email) == "" {
-		writeError(w, http.StatusBadRequest, "email is required")
+	userID, err := adminAuthorizationUserIDFromSubjectID(req.SubjectID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if strings.TrimSpace(req.Role) == "" {
 		writeError(w, http.StatusBadRequest, "role is required")
 		return
 	}
-	user, err := s.users.FindOrCreateUser(r.Context(), req.Email)
-	if err != nil {
+	user, err := s.users.GetUser(r.Context(), userID)
+	switch {
+	case err == nil:
+	case errors.Is(err, core.ErrNotFound):
+		writeError(w, http.StatusNotFound, "subject not found")
+		return
+	default:
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
 		return
 	}
@@ -185,10 +188,8 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 		Source:        "dynamic",
 		Effective:     true,
 		Mutable:       true,
-		SelectorKind:  "user_id",
-		SelectorValue: membership.UserID,
-		UserID:        membership.UserID,
-		Email:         membership.Email,
+		SelectorKind:  "subject_id",
+		SelectorValue: adminAuthorizationUserSubjectID(membership.UserID),
 	}
 	if err := s.reloadAuthorizationState(r.Context()); err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]any{
@@ -216,9 +217,9 @@ func (s *Server) deleteAdminAuthorizationPluginMember(w http.ResponseWriter, r *
 	if !s.ensureAdminDynamicAuthorizationAvailable(w) {
 		return
 	}
-	userID := strings.TrimSpace(chi.URLParam(r, "userID"))
-	if userID == "" {
-		writeError(w, http.StatusBadRequest, "userID is required")
+	userID, err := adminAuthorizationUserIDFromSubjectID(strings.TrimSpace(chi.URLParam(r, "subjectID")))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -275,16 +276,22 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if emailutil.Normalize(req.Email) == "" {
-		writeError(w, http.StatusBadRequest, "email is required")
+	userID, err := adminAuthorizationUserIDFromSubjectID(req.SubjectID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if strings.TrimSpace(req.Role) == "" {
 		writeError(w, http.StatusBadRequest, "role is required")
 		return
 	}
-	user, err := s.users.FindOrCreateUser(r.Context(), req.Email)
-	if err != nil {
+	user, err := s.users.GetUser(r.Context(), userID)
+	switch {
+	case err == nil:
+	case errors.Is(err, core.ErrNotFound):
+		writeError(w, http.StatusNotFound, "subject not found")
+		return
+	default:
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
 		return
 	}
@@ -304,10 +311,8 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 		Source:        "dynamic",
 		Effective:     true,
 		Mutable:       true,
-		SelectorKind:  "user_id",
-		SelectorValue: membership.UserID,
-		UserID:        membership.UserID,
-		Email:         membership.Email,
+		SelectorKind:  "subject_id",
+		SelectorValue: adminAuthorizationUserSubjectID(membership.UserID),
 	}
 	if err := s.reloadAuthorizationState(r.Context()); err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]any{
@@ -333,9 +338,9 @@ func (s *Server) deleteAdminAuthorizationAdminMember(w http.ResponseWriter, r *h
 	if !s.ensureAdminAuthorizationWriteAccess(w, r) {
 		return
 	}
-	userID := strings.TrimSpace(chi.URLParam(r, "userID"))
-	if userID == "" {
-		writeError(w, http.StatusBadRequest, "userID is required")
+	userID, err := adminAuthorizationUserIDFromSubjectID(strings.TrimSpace(chi.URLParam(r, "subjectID")))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -405,27 +410,20 @@ func (s *Server) adminAuthorizationMemberRows(ctx context.Context, plugin string
 		return nil, err
 	}
 
-	staticByUserID := make(map[string]string, len(staticRows))
-	staticByEmail := make(map[string]string, len(staticRows))
+	staticBySubjectID := make(map[string]string, len(staticRows))
 	rows := make([]adminAuthorizationMemberRow, 0, len(staticRows)+len(dynamicRows))
 	for i := range staticRows {
 		row := &staticRows[i]
 		rows = append(rows, *row)
 		key := row.adminAuthorizationRowKey()
-		if row.UserID != "" {
-			staticByUserID[row.UserID] = key
-		}
-		if email := normalizedRowEmail(*row); email != "" {
-			staticByEmail[email] = key
+		if subjectID := adminAuthorizationRowSubjectID(*row); subjectID != "" {
+			staticBySubjectID[subjectID] = key
 		}
 	}
 
 	for i := range dynamicRows {
 		row := dynamicRows[i]
-		if shadow, ok := staticByUserID[row.UserID]; ok {
-			row.Effective = false
-			row.ShadowedBy = shadow
-		} else if shadow, ok := staticByEmail[normalizedRowEmail(row)]; ok {
+		if shadow, ok := staticBySubjectID[adminAuthorizationRowSubjectID(row)]; ok {
 			row.Effective = false
 			row.ShadowedBy = shadow
 		}
@@ -460,27 +458,20 @@ func (s *Server) adminAuthorizationAdminRows(ctx context.Context) ([]adminAuthor
 		return nil, err
 	}
 
-	staticByUserID := make(map[string]string, len(staticRows))
-	staticByEmail := make(map[string]string, len(staticRows))
+	staticBySubjectID := make(map[string]string, len(staticRows))
 	rows := make([]adminAuthorizationMemberRow, 0, len(staticRows)+len(dynamicRows))
 	for i := range staticRows {
 		row := &staticRows[i]
 		rows = append(rows, *row)
 		key := row.adminAuthorizationRowKey()
-		if row.UserID != "" {
-			staticByUserID[row.UserID] = key
-		}
-		if email := normalizedRowEmail(*row); email != "" {
-			staticByEmail[email] = key
+		if subjectID := adminAuthorizationRowSubjectID(*row); subjectID != "" {
+			staticBySubjectID[subjectID] = key
 		}
 	}
 
 	for i := range dynamicRows {
 		row := dynamicRows[i]
-		if shadow, ok := staticByUserID[row.UserID]; ok {
-			row.Effective = false
-			row.ShadowedBy = shadow
-		} else if shadow, ok := staticByEmail[normalizedRowEmail(row)]; ok {
+		if shadow, ok := staticBySubjectID[adminAuthorizationRowSubjectID(row)]; ok {
 			row.Effective = false
 			row.ShadowedBy = shadow
 		}
@@ -530,31 +521,20 @@ func (s *Server) adminAuthorizationRowsFromStaticMembers(ctx context.Context, pl
 		}
 		switch {
 		case member.Email != "":
-			row.SelectorKind = "email"
-			row.SelectorValue = member.Email
 			user, err := s.users.FindUserByEmail(ctx, member.Email)
 			switch {
 			case err == nil:
-				row.UserID = user.ID
-				row.Email = user.Email
+				row.SelectorKind = "subject_id"
+				row.SelectorValue = adminAuthorizationUserSubjectID(user.ID)
 			case errors.Is(err, core.ErrNotFound):
-				row.Email = member.Email
+				row.SelectorKind = "email"
+				row.SelectorValue = member.Email
 			case err != nil:
 				return nil, err
 			}
 		case strings.HasPrefix(member.SubjectID, string(principal.KindUser)+":"):
-			userID := strings.TrimPrefix(member.SubjectID, string(principal.KindUser)+":")
-			row.SelectorKind = "user_id"
-			row.SelectorValue = userID
-			row.UserID = userID
-			user, err := s.users.GetUser(ctx, userID)
-			switch {
-			case err == nil:
-				row.Email = user.Email
-			case errors.Is(err, core.ErrNotFound):
-			case err != nil:
-				return nil, err
-			}
+			row.SelectorKind = "subject_id"
+			row.SelectorValue = member.SubjectID
 		default:
 			row.SelectorKind = "subject_id"
 			row.SelectorValue = member.SubjectID
@@ -592,14 +572,31 @@ func (r adminAuthorizationMemberRow) adminAuthorizationRowKey() string {
 	return r.Source + ":" + r.SelectorKind + ":" + r.SelectorValue
 }
 
-func normalizedRowEmail(row adminAuthorizationMemberRow) string {
-	if row.Email != "" {
-		return strings.ToLower(strings.TrimSpace(row.Email))
-	}
-	if row.SelectorKind == "email" {
-		return strings.ToLower(strings.TrimSpace(row.SelectorValue))
+func adminAuthorizationUserSubjectID(userID string) string {
+	return principal.UserSubjectID(strings.TrimSpace(userID))
+}
+
+func adminAuthorizationRowSubjectID(row adminAuthorizationMemberRow) string {
+	if row.SelectorKind == "subject_id" {
+		return strings.TrimSpace(row.SelectorValue)
 	}
 	return ""
+}
+
+func adminAuthorizationUserIDFromSubjectID(subjectID string) (string, error) {
+	subjectID = strings.TrimSpace(subjectID)
+	if subjectID == "" {
+		return "", errors.New("subjectID is required")
+	}
+	prefix := string(principal.KindUser) + ":"
+	if !strings.HasPrefix(subjectID, prefix) {
+		return "", errors.New("subjectID must use user:<id>")
+	}
+	userID := strings.TrimSpace(strings.TrimPrefix(subjectID, prefix))
+	if userID == "" {
+		return "", errors.New("subjectID must use user:<id>")
+	}
+	return userID, nil
 }
 
 var (

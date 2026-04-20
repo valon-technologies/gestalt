@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -204,7 +203,7 @@ func (s *Server) adminAuthorizationRowsFromProviderRelationships(ctx context.Con
 		}
 		key := adminAuthorizationDynamicRowDedupeKey(row)
 		if idx, exists := indexByKey[key]; exists {
-			rows[idx] = mergeAdminAuthorizationDynamicRows(rows[idx], row)
+			rows[idx] = row
 			continue
 		}
 		indexByKey[key] = len(rows)
@@ -235,38 +234,8 @@ func (s *Server) adminAuthorizationDynamicRowFromProviderRelationship(ctx contex
 		if userID == "" {
 			return adminAuthorizationMemberRow{}, false, nil
 		}
-		row.SelectorKind = "user_id"
-		row.SelectorValue = userID
-		row.UserID = userID
-		if s.users != nil {
-			user, err := s.users.GetUser(ctx, userID)
-			switch {
-			case err == nil:
-				row.Email = user.Email
-			case errors.Is(err, core.ErrNotFound):
-			case err != nil:
-				return adminAuthorizationMemberRow{}, false, err
-			}
-		}
-	case authorization.ProviderSubjectTypeEmail:
-		email := strings.TrimSpace(rel.GetSubject().GetId())
-		if email == "" {
-			return adminAuthorizationMemberRow{}, false, nil
-		}
-		row.SelectorKind = "email"
-		row.SelectorValue = email
-		row.Email = email
-		if s.users != nil {
-			user, err := s.users.FindUserByEmail(ctx, email)
-			switch {
-			case err == nil:
-				row.UserID = user.ID
-				row.Email = user.Email
-			case errors.Is(err, core.ErrNotFound):
-			case err != nil:
-				return adminAuthorizationMemberRow{}, false, err
-			}
-		}
+		row.SelectorKind = "subject_id"
+		row.SelectorValue = adminAuthorizationUserSubjectID(userID)
 	default:
 		return adminAuthorizationMemberRow{}, false, nil
 	}
@@ -376,33 +345,5 @@ func adminAuthorizationRelationshipFromProvider(rel *core.Relationship) adminAut
 }
 
 func adminAuthorizationDynamicRowDedupeKey(row adminAuthorizationMemberRow) string {
-	if email := normalizedRowEmail(row); email != "" {
-		return strings.Join([]string{row.Plugin, row.Role, "email", email}, "\x00")
-	}
-	if row.UserID != "" {
-		return strings.Join([]string{row.Plugin, row.Role, "user_id", row.UserID}, "\x00")
-	}
 	return strings.Join([]string{row.Plugin, row.Role, row.SelectorKind, row.SelectorValue}, "\x00")
-}
-
-func mergeAdminAuthorizationDynamicRows(current, next adminAuthorizationMemberRow) adminAuthorizationMemberRow {
-	if current.SelectorKind == "user_id" && next.SelectorKind != "user_id" {
-		if current.Email == "" {
-			current.Email = next.Email
-		}
-		return current
-	}
-	if next.SelectorKind == "user_id" && current.SelectorKind != "user_id" {
-		if next.Email == "" {
-			next.Email = current.Email
-		}
-		return next
-	}
-	if current.UserID == "" {
-		current.UserID = next.UserID
-	}
-	if current.Email == "" {
-		current.Email = next.Email
-	}
-	return current
 }
