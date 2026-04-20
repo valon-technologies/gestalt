@@ -63,6 +63,12 @@ pub enum Commands {
         #[command(subcommand)]
         command: IdentityCommands,
     },
+
+    /// Manage workflow resources (schedules)
+    Workflows {
+        #[command(subcommand)]
+        command: WorkflowCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -359,6 +365,138 @@ pub enum IdentityTokenCommands {
         /// Token ID
         id: String,
     },
+}
+
+#[derive(Subcommand)]
+pub enum WorkflowCommands {
+    /// Manage workflow schedules
+    Schedules {
+        #[command(subcommand)]
+        command: WorkflowScheduleCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum WorkflowScheduleCommands {
+    /// List workflow schedules
+    List {
+        /// Filter schedules by target plugin
+        #[arg(long)]
+        plugin: Option<String>,
+    },
+    /// Show a single workflow schedule
+    Get {
+        /// Schedule ID
+        id: String,
+    },
+    /// Create a workflow schedule
+    Create(WorkflowScheduleCreateArgs),
+    /// Update an existing workflow schedule
+    Update(WorkflowScheduleUpdateArgs),
+    /// Delete a workflow schedule
+    Delete {
+        /// Schedule ID
+        id: String,
+    },
+    /// Pause a workflow schedule
+    Pause {
+        /// Schedule ID
+        id: String,
+    },
+    /// Resume a paused workflow schedule
+    Resume {
+        /// Schedule ID
+        id: String,
+    },
+}
+
+#[derive(Args)]
+pub struct WorkflowScheduleCreateArgs {
+    /// Cron expression (e.g. "0 */5 * * *")
+    #[arg(long)]
+    pub cron: String,
+
+    /// Target plugin (e.g. "slack", "github")
+    #[arg(long)]
+    pub plugin: String,
+
+    /// Target operation (e.g. "chat.postMessage")
+    #[arg(long)]
+    pub operation: String,
+
+    /// IANA timezone for the cron expression
+    #[arg(long)]
+    pub timezone: Option<String>,
+
+    /// Select a named connection
+    #[arg(long)]
+    pub connection: Option<String>,
+
+    /// Select a stored connection instance
+    #[arg(long)]
+    pub instance: Option<String>,
+
+    /// Create the schedule in paused state
+    #[arg(long)]
+    pub paused: bool,
+
+    /// Target input parameters as key=value or key:=json
+    #[arg(short = 'p', long = "param", value_parser = params::parse_param_entry)]
+    pub params: Vec<params::ParamEntry>,
+
+    /// Load target input from a JSON file (use "-" for stdin)
+    #[arg(long = "input-file")]
+    pub input_file: Option<String>,
+}
+
+#[derive(Args)]
+pub struct WorkflowScheduleUpdateArgs {
+    /// Schedule ID
+    pub id: String,
+
+    /// Cron expression (leave unset to keep existing)
+    #[arg(long)]
+    pub cron: Option<String>,
+
+    /// Target plugin (leave unset to keep existing)
+    #[arg(long)]
+    pub plugin: Option<String>,
+
+    /// Target operation (leave unset to keep existing)
+    #[arg(long)]
+    pub operation: Option<String>,
+
+    /// IANA timezone (leave unset to keep existing; pass empty string to clear)
+    #[arg(long)]
+    pub timezone: Option<String>,
+
+    /// Named connection (leave unset to keep existing; pass empty string to clear)
+    #[arg(long)]
+    pub connection: Option<String>,
+
+    /// Stored connection instance (leave unset to keep existing; pass empty string to clear)
+    #[arg(long)]
+    pub instance: Option<String>,
+
+    /// Mark the schedule as paused
+    #[arg(long, conflicts_with = "unpaused", action = clap::ArgAction::SetTrue)]
+    pub paused: bool,
+
+    /// Mark the schedule as not paused
+    #[arg(long = "no-paused", action = clap::ArgAction::SetTrue)]
+    pub unpaused: bool,
+
+    /// Replace target input with these key=value / key:=json entries
+    #[arg(short = 'p', long = "param", value_parser = params::parse_param_entry)]
+    pub params: Vec<params::ParamEntry>,
+
+    /// Replace target input with the contents of this JSON file ("-" for stdin)
+    #[arg(long = "input-file")]
+    pub input_file: Option<String>,
+
+    /// Clear the target input instead of keeping the existing value
+    #[arg(long = "clear-input", conflicts_with_all = ["params", "input_file"])]
+    pub clear_input: bool,
 }
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]

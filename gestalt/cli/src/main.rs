@@ -3,7 +3,7 @@ use gestalt::api::{self, ApiClient};
 use gestalt::cli::{
     AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs, IdentityCommands,
     IdentityGrantCommands, IdentityMemberCommands, IdentityTokenCommands, InvokeArgs,
-    PluginCommands, TokenCommands,
+    PluginCommands, TokenCommands, WorkflowCommands, WorkflowScheduleCommands,
 };
 use gestalt::commands;
 use gestalt::output;
@@ -122,6 +122,34 @@ fn run() -> anyhow::Result<()> {
                     ),
                     IdentityTokenCommands::Revoke { identity, id } => {
                         commands::identities::revoke_token(&client, &identity, &id, format)
+                    }
+                },
+            }
+        }
+        Commands::Workflows { command } => {
+            let client = ApiClient::from_env(url)?;
+            match command {
+                WorkflowCommands::Schedules { command } => match command {
+                    WorkflowScheduleCommands::List { plugin } => {
+                        commands::workflows::list(&client, plugin.as_deref(), format)
+                    }
+                    WorkflowScheduleCommands::Get { id } => {
+                        commands::workflows::get(&client, &id, format)
+                    }
+                    WorkflowScheduleCommands::Create(args) => {
+                        commands::workflows::create(&client, &args, format)
+                    }
+                    WorkflowScheduleCommands::Update(args) => {
+                        commands::workflows::update(&client, &args, format)
+                    }
+                    WorkflowScheduleCommands::Delete { id } => {
+                        commands::workflows::delete(&client, &id, format)
+                    }
+                    WorkflowScheduleCommands::Pause { id } => {
+                        commands::workflows::pause(&client, &id, format)
+                    }
+                    WorkflowScheduleCommands::Resume { id } => {
+                        commands::workflows::resume(&client, &id, format)
                     }
                 },
             }

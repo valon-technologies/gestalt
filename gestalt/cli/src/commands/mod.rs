@@ -6,3 +6,4 @@ pub mod init;
 pub mod invoke;
 pub mod plugins;
 pub mod tokens;
+pub mod workflows;
