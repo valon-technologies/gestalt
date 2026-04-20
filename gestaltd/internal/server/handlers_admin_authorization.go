@@ -406,40 +406,7 @@ func (s *Server) adminAuthorizationMemberRows(ctx context.Context, plugin string
 	if err != nil {
 		return nil, err
 	}
-
-	staticBySubjectID := make(map[string]string, len(staticRows))
-	rows := make([]adminAuthorizationMemberRow, 0, len(staticRows)+len(dynamicRows))
-	for i := range staticRows {
-		row := &staticRows[i]
-		rows = append(rows, *row)
-		key := row.adminAuthorizationRowKey()
-		if subjectID := adminAuthorizationRowSubjectID(*row); subjectID != "" {
-			staticBySubjectID[subjectID] = key
-		}
-	}
-
-	for i := range dynamicRows {
-		row := dynamicRows[i]
-		if shadow, ok := staticBySubjectID[adminAuthorizationRowSubjectID(row)]; ok {
-			row.Effective = false
-			row.ShadowedBy = shadow
-		}
-		rows = append(rows, row)
-	}
-
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].Source != rows[j].Source {
-			return rows[i].Source < rows[j].Source
-		}
-		if rows[i].SelectorKind != rows[j].SelectorKind {
-			return rows[i].SelectorKind < rows[j].SelectorKind
-		}
-		if rows[i].SelectorValue != rows[j].SelectorValue {
-			return rows[i].SelectorValue < rows[j].SelectorValue
-		}
-		return rows[i].Role < rows[j].Role
-	})
-	return rows, nil
+	return mergeAdminAuthorizationRows(staticRows, dynamicRows), nil
 }
 
 func (s *Server) adminAuthorizationAdminRows(ctx context.Context) ([]adminAuthorizationMemberRow, error) {
@@ -451,40 +418,7 @@ func (s *Server) adminAuthorizationAdminRows(ctx context.Context) ([]adminAuthor
 	if err != nil {
 		return nil, err
 	}
-
-	staticBySubjectID := make(map[string]string, len(staticRows))
-	rows := make([]adminAuthorizationMemberRow, 0, len(staticRows)+len(dynamicRows))
-	for i := range staticRows {
-		row := &staticRows[i]
-		rows = append(rows, *row)
-		key := row.adminAuthorizationRowKey()
-		if subjectID := adminAuthorizationRowSubjectID(*row); subjectID != "" {
-			staticBySubjectID[subjectID] = key
-		}
-	}
-
-	for i := range dynamicRows {
-		row := dynamicRows[i]
-		if shadow, ok := staticBySubjectID[adminAuthorizationRowSubjectID(row)]; ok {
-			row.Effective = false
-			row.ShadowedBy = shadow
-		}
-		rows = append(rows, row)
-	}
-
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].Source != rows[j].Source {
-			return rows[i].Source < rows[j].Source
-		}
-		if rows[i].SelectorKind != rows[j].SelectorKind {
-			return rows[i].SelectorKind < rows[j].SelectorKind
-		}
-		if rows[i].SelectorValue != rows[j].SelectorValue {
-			return rows[i].SelectorValue < rows[j].SelectorValue
-		}
-		return rows[i].Role < rows[j].Role
-	})
-	return rows, nil
+	return mergeAdminAuthorizationRows(staticRows, dynamicRows), nil
 }
 
 func (s *Server) adminAuthorizationStaticRows(plugin string) []adminAuthorizationMemberRow {
@@ -516,6 +450,37 @@ func (s *Server) adminAuthorizationRowsFromStaticMembers(plugin string, members 
 			SelectorValue: member.SubjectID,
 		})
 	}
+	return rows
+}
+
+func mergeAdminAuthorizationRows(staticRows, dynamicRows []adminAuthorizationMemberRow) []adminAuthorizationMemberRow {
+	staticBySubjectID := make(map[string]string, len(staticRows))
+	rows := make([]adminAuthorizationMemberRow, 0, len(staticRows)+len(dynamicRows))
+	for i := range staticRows {
+		row := &staticRows[i]
+		rows = append(rows, *row)
+		staticBySubjectID[adminAuthorizationRowSubjectID(*row)] = row.adminAuthorizationRowKey()
+	}
+	for i := range dynamicRows {
+		row := dynamicRows[i]
+		if shadow, ok := staticBySubjectID[adminAuthorizationRowSubjectID(row)]; ok {
+			row.Effective = false
+			row.ShadowedBy = shadow
+		}
+		rows = append(rows, row)
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Source != rows[j].Source {
+			return rows[i].Source < rows[j].Source
+		}
+		if rows[i].SelectorKind != rows[j].SelectorKind {
+			return rows[i].SelectorKind < rows[j].SelectorKind
+		}
+		if rows[i].SelectorValue != rows[j].SelectorValue {
+			return rows[i].SelectorValue < rows[j].SelectorValue
+		}
+		return rows[i].Role < rows[j].Role
+	})
 	return rows
 }
 
@@ -552,10 +517,7 @@ func adminAuthorizationUserSubjectID(userID string) string {
 }
 
 func adminAuthorizationRowSubjectID(row adminAuthorizationMemberRow) string {
-	if row.SelectorKind == "subject_id" {
-		return strings.TrimSpace(row.SelectorValue)
-	}
-	return ""
+	return strings.TrimSpace(row.SelectorValue)
 }
 
 func adminAuthorizationUserIDFromSubjectID(subjectID string) (string, error) {
