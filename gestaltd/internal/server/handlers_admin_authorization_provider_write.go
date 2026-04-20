@@ -8,7 +8,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 )
 
@@ -16,7 +15,20 @@ type managedAuthorizationModelResolver interface {
 	ManagedModelID(ctx context.Context) (string, error)
 }
 
-func (s *Server) upsertProviderPluginAuthorization(ctx context.Context, user *core.User, plugin, role string) (*coredata.PluginAuthorizationMembership, error) {
+type providerPluginAuthorizationMembership struct {
+	Plugin string
+	UserID string
+	Email  string
+	Role   string
+}
+
+type providerAdminAuthorizationMembership struct {
+	UserID string
+	Email  string
+	Role   string
+}
+
+func (s *Server) upsertProviderPluginAuthorization(ctx context.Context, user *core.User, plugin, role string) (*providerPluginAuthorizationMembership, error) {
 	if s.authorizationProvider == nil {
 		return nil, errAdminAuthorizationUnavailable
 	}
@@ -31,7 +43,7 @@ func (s *Server) upsertProviderPluginAuthorization(ctx context.Context, user *co
 	if err != nil {
 		return nil, err
 	}
-	membership := &coredata.PluginAuthorizationMembership{
+	membership := &providerPluginAuthorizationMembership{
 		Plugin: plugin,
 		UserID: user.ID,
 		Email:  user.Email,
@@ -84,7 +96,7 @@ func (s *Server) deleteProviderPluginAuthorization(ctx context.Context, plugin, 
 	}
 }
 
-func (s *Server) upsertProviderAdminAuthorization(ctx context.Context, user *core.User, role string) (*coredata.AdminAuthorizationMembership, error) {
+func (s *Server) upsertProviderAdminAuthorization(ctx context.Context, user *core.User, role string) (*providerAdminAuthorizationMembership, error) {
 	if s.authorizationProvider == nil {
 		return nil, errAdminAuthorizationUnavailable
 	}
@@ -99,7 +111,7 @@ func (s *Server) upsertProviderAdminAuthorization(ctx context.Context, user *cor
 	if err != nil {
 		return nil, err
 	}
-	membership := &coredata.AdminAuthorizationMembership{
+	membership := &providerAdminAuthorizationMembership{
 		UserID: user.ID,
 		Email:  user.Email,
 		Role:   role,

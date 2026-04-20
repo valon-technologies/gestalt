@@ -873,26 +873,6 @@ func seedLegacyUserRecord(t *testing.T, svc *coredata.Services, id, email string
 	}
 }
 
-func seedPluginAuthorization(t *testing.T, svc *coredata.Services, authz *authorization.Authorizer, plugin, email, role string) *core.User {
-	t.Helper()
-	ctx := context.Background()
-	user := seedUser(t, svc, email)
-	if _, err := svc.PluginAuthorizations.UpsertPluginAuthorization(ctx, &coredata.PluginAuthorizationMembership{
-		Plugin: plugin,
-		UserID: user.ID,
-		Email:  user.Email,
-		Role:   role,
-	}); err != nil {
-		t.Fatalf("seedPluginAuthorization: %v", err)
-	}
-	if authz != nil {
-		if err := authz.ReloadDynamic(ctx); err != nil {
-			t.Fatalf("seedPluginAuthorization reload: %v", err)
-		}
-	}
-	return user
-}
-
 func seedIdentityToken(t *testing.T, svc *coredata.Services, integration, connection, instance, accessToken string) {
 	t.Helper()
 	seedToken(t, svc, &core.IntegrationToken{
@@ -923,26 +903,6 @@ func mustProviderBackedAuthorizer(t *testing.T, legacy *authorization.Authorizer
 	return authz
 }
 
-func seedDynamicAdminMembership(t *testing.T, svc *coredata.Services, authz *authorization.Authorizer, email, role string) *core.User {
-	t.Helper()
-	authz.SetAdminAuthorizationService(svc.AdminAuthorizations)
-	user, err := svc.Users.FindOrCreateUser(context.Background(), email)
-	if err != nil {
-		t.Fatalf("FindOrCreateUser dynamic admin: %v", err)
-	}
-	if _, err := svc.AdminAuthorizations.UpsertAdminAuthorization(context.Background(), &coredata.AdminAuthorizationMembership{
-		UserID: user.ID,
-		Email:  user.Email,
-		Role:   role,
-	}); err != nil {
-		t.Fatalf("UpsertAdminAuthorization: %v", err)
-	}
-	if err := authz.ReloadDynamic(context.Background()); err != nil {
-		t.Fatalf("ReloadDynamic: %v", err)
-	}
-	return user
-}
-
 func seedProviderDynamicAdminMembership(t *testing.T, svc *coredata.Services, authz authorization.RuntimeAuthorizer, provider *memoryAuthorizationProvider, email, role string) *core.User {
 	t.Helper()
 	user := seedUser(t, svc, email)
@@ -961,6 +921,28 @@ func seedProviderDynamicAdminMembership(t *testing.T, svc *coredata.Services, au
 	})
 	if err := authz.ReloadDynamic(context.Background()); err != nil {
 		t.Fatalf("seedProviderDynamicAdminMembership reload after write: %v", err)
+	}
+	return user
+}
+
+func seedProviderPluginAuthorization(t *testing.T, svc *coredata.Services, authz authorization.RuntimeAuthorizer, provider *memoryAuthorizationProvider, plugin, email, role string) *core.User {
+	t.Helper()
+	user := seedUser(t, svc, email)
+	if provider.activeModelID == "" {
+		if err := authz.ReloadDynamic(context.Background()); err != nil {
+			t.Fatalf("seedProviderPluginAuthorization reload: %v", err)
+		}
+	}
+	if provider.activeModelID == "" {
+		t.Fatal("seedProviderPluginAuthorization: provider has no active model")
+	}
+	provider.putRelationship(provider.activeModelID, &core.Relationship{
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeEmail, Id: user.Email},
+		Relation: role,
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: plugin},
+	})
+	if err := authz.ReloadDynamic(context.Background()); err != nil {
+		t.Fatalf("seedProviderPluginAuthorization reload after write: %v", err)
 	}
 	return user
 }
@@ -1507,7 +1489,8 @@ func TestMountedWebUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 
 	svc := coretesting.NewStubServices(t)
 	adminUser := seedUser(t, svc, "admin@example.test")
-	authz, err := authorization.New(config.AuthorizationConfig{
+	provider := newMemoryAuthorizationProvider("memory-authorization")
+	legacy, err := authorization.New(config.AuthorizationConfig{
 		Policies: map[string]config.HumanPolicyDef{
 			"sample_policy": {
 				Default: "deny",
@@ -1518,12 +1501,12 @@ func TestMountedWebUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 		},
 	}, map[string]*config.ProviderEntry{
 		"sample_portal": {AuthorizationPolicy: "sample_policy"},
-	}, nil, nil, svc.PluginAuthorizations)
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	seedPluginAuthorization(t, svc, authz, "sample_portal", "viewer@example.test", "viewer")
-	seedPluginAuthorization(t, svc, authz, "sample_portal", "admin@example.test", "viewer")
+	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_portal", "viewer@example.test", "viewer")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -2440,7 +2423,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		},
 	}, map[string]*config.ProviderEntry{
 		"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-	}, nil, nil, nil)
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -2609,13 +2592,6 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	user, err := svc.Users.FindUserByEmail(context.Background(), "dynamic@example.test")
 	if err != nil {
 		t.Fatalf("find dynamic user: %v", err)
-	}
-	legacyMemberships, err := svc.PluginAuthorizations.ListPluginAuthorizationsByPlugin(context.Background(), "sample_plugin")
-	if err != nil {
-		t.Fatalf("ListPluginAuthorizationsByPlugin: %v", err)
-	}
-	if len(legacyMemberships) != 0 {
-		t.Fatalf("legacy plugin authorizations = %+v, want none for provider-backed writes", legacyMemberships)
 	}
 	canonicalIdentityID, err := svc.Users.CanonicalIdentityIDForUser(context.Background(), user.ID)
 	if err != nil {
@@ -3036,13 +3012,6 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find dynamic admin user: %v", err)
 	}
-	legacyMemberships, err := svc.AdminAuthorizations.ListAdminAuthorizations(context.Background())
-	if err != nil {
-		t.Fatalf("ListAdminAuthorizations: %v", err)
-	}
-	if len(legacyMemberships) != 0 {
-		t.Fatalf("legacy admin authorizations = %+v, want none for provider-backed writes", legacyMemberships)
-	}
 	canonicalIdentityID, err := svc.Users.CanonicalIdentityIDForUser(context.Background(), user.ID)
 	if err != nil {
 		t.Fatalf("CanonicalIdentityIDForUser(dynamic admin): %v", err)
@@ -3079,14 +3048,13 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 	}
 }
 
-func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyDynamicStores(t *testing.T) {
+func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyHumanAuthStores(t *testing.T) {
 	t.Parallel()
 
 	t.Run("plugin members", func(t *testing.T) {
 		t.Parallel()
 
 		svc := coretesting.NewStubServices(t)
-		svc.PluginAuthorizations = nil
 		provider := newMemoryAuthorizationProvider("memory-authorization")
 		legacy, err := authorization.New(config.AuthorizationConfig{
 			Policies: map[string]config.HumanPolicyDef{
@@ -3099,7 +3067,7 @@ func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyDynamicStores(t *testing
 			},
 		}, map[string]*config.ProviderEntry{
 			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-		}, nil, nil, nil)
+		}, nil, nil)
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -3153,7 +3121,6 @@ func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyDynamicStores(t *testing
 		t.Parallel()
 
 		svc := coretesting.NewStubServices(t)
-		svc.AdminAuthorizations = nil
 		provider := newMemoryAuthorizationProvider("memory-authorization")
 		seedUser(t, svc, "static-admin@example.test")
 		legacy := mustAuthorizer(t, config.AuthorizationConfig{
@@ -3322,7 +3289,7 @@ func TestAdminAPI_PluginAuthorizationUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	dynamicUser := seedPluginAuthorization(t, svc, nil, "sample_plugin", "dynamic@example.test", "viewer")
+	dynamicUser := seedUser(t, svc, "dynamic@example.test")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -3402,13 +3369,6 @@ func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FindOrCreateUser dynamic admin: %v", err)
 		}
-		if _, err := svc.AdminAuthorizations.UpsertAdminAuthorization(context.Background(), &coredata.AdminAuthorizationMembership{
-			UserID: user.ID,
-			Email:  user.Email,
-			Role:   "operator",
-		}); err != nil {
-			t.Fatalf("UpsertAdminAuthorization: %v", err)
-		}
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Auth = &coretesting.StubAuthProvider{
@@ -3468,10 +3428,6 @@ func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
 
 		svc := coretesting.NewStubServices(t)
 		authz := mustAuthorizer(t, config.AuthorizationConfig{}, nil, nil, nil)
-		authz.SetAdminAuthorizationService(svc.AdminAuthorizations)
-		if err := authz.ReloadDynamic(context.Background()); err != nil {
-			t.Fatalf("ReloadDynamic: %v", err)
-		}
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Auth = &coretesting.StubAuthProvider{
@@ -3504,51 +3460,6 @@ func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
 		}
 	})
 
-	t.Run("static seed missing", func(t *testing.T) {
-		t.Parallel()
-
-		svc := coretesting.NewStubServices(t)
-		authz := mustAuthorizer(t, config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
-				"admin_policy": {Default: "deny"},
-			},
-		}, nil, nil, nil)
-		seedDynamicAdminMembership(t, svc, authz, "admin@example.test", "admin")
-
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Auth = &coretesting.StubAuthProvider{
-				N: "test",
-				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-					if token != "admin-session" {
-						return nil, fmt.Errorf("invalid token")
-					}
-					return &core.UserIdentity{Email: "admin@example.test"}, nil
-				},
-			}
-			cfg.Services = svc
-			cfg.Authorizer = authz
-			cfg.Admin = server.AdminRouteConfig{
-				AuthorizationPolicy: "admin_policy",
-				AllowedRoles:        []string{"admin"},
-			}
-			cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				_, _ = w.Write([]byte("admin"))
-			})
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
-		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("GET admin members without static seed: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusServiceUnavailable {
-			body, _ := io.ReadAll(resp.Body)
-			t.Fatalf("status = %d, want 503: %s", resp.StatusCode, body)
-		}
-	})
 }
 
 func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) {
@@ -3776,7 +3687,7 @@ func TestMountedWebUIAuthorizationPolicyNamedBuiltinAdminDoesNotUseAdminResolver
 			},
 		},
 	}, nil, nil, nil)
-	seedDynamicAdminMembership(t, svc, authz, "dynamic-admin@example.test", "admin")
+	seedUser(t, svc, "dynamic-admin@example.test")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -7645,15 +7556,17 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog_DynamicGrant(t *t
 	pluginDefs := map[string]*config.ProviderEntry{
 		"test-int": {AuthorizationPolicy: "sample_policy"},
 	}
-	authz, err := authorization.New(config.AuthorizationConfig{
+	legacy, err := authorization.New(config.AuthorizationConfig{
 		Policies: map[string]config.HumanPolicyDef{
 			"sample_policy": {Default: "deny"},
 		},
-	}, pluginDefs, nil, nil, svc.PluginAuthorizations)
+	}, pluginDefs, nil, nil)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	seedPluginAuthorization(t, svc, authz, "test-int", "viewer-user@test.local", "viewer")
+	provider := newMemoryAuthorizationProvider("memory-authorization")
+	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	seedProviderPluginAuthorization(t, svc, authz, provider, "test-int", "viewer-user@test.local", "viewer")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
@@ -8820,15 +8733,17 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 	pluginDefs := map[string]*config.ProviderEntry{
 		"svc": {AuthorizationPolicy: "sample_policy"},
 	}
-	authz, err := authorization.New(config.AuthorizationConfig{
+	legacy, err := authorization.New(config.AuthorizationConfig{
 		Policies: map[string]config.HumanPolicyDef{
 			"sample_policy": {Default: "deny"},
 		},
-	}, pluginDefs, nil, nil, svc.PluginAuthorizations)
+	}, pluginDefs, nil, nil)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	seedPluginAuthorization(t, svc, authz, "svc", "viewer-user@test.local", "viewer")
+	provider := newMemoryAuthorizationProvider("memory-authorization")
+	authz := mustProviderBackedAuthorizer(t, legacy, provider)
+	seedProviderPluginAuthorization(t, svc, authz, provider, "svc", "viewer-user@test.local", "viewer")
 
 	var auditBuf bytes.Buffer
 	ts := newTestServer(t, func(cfg *server.Config) {

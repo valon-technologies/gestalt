@@ -2,19 +2,13 @@ package authorization
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log/slog"
 	"regexp"
 	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
@@ -24,8 +18,6 @@ const (
 	defaultInstance  = "default"
 	defaultHumanRole = "viewer"
 )
-
-const defaultDynamicReloadInterval = 5 * time.Second
 
 var (
 	safeConnectionValue = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
@@ -69,51 +61,22 @@ type StaticHumanMember struct {
 	Role      string
 }
 
-type dynamicGrant struct {
-	UserID string
-	Email  string
-	Role   string
-}
-
-type dynamicSnapshot struct {
-	byPluginUserID map[string]map[string]dynamicGrant
-	byPluginEmail  map[string]map[string]dynamicGrant
-	adminByUserID  map[string]dynamicGrant
-	adminByEmail   map[string]dynamicGrant
-}
-
 type Authorizer struct {
 	workloadsByHash      map[string]*Workload
 	workloadsBySubjectID map[string]*Workload
 	policies             map[string]*HumanPolicy
 	providerPolicies     map[string]string
 	providerModes        map[string]core.ConnectionMode
-	dynamicService       *coredata.PluginAuthorizationService
-	adminDynamicService  *coredata.AdminAuthorizationService
-	dynamicReloadEvery   time.Duration
-	dynamic              atomic.Pointer[dynamicSnapshot]
-	lifecycleMu          sync.Mutex
-	started              bool
-	closed               bool
-	pollCancel           context.CancelFunc
-	pollDone             chan struct{}
 }
 
-func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], defaultConnections map[string]string, dynamicServices ...*coredata.PluginAuthorizationService) (*Authorizer, error) {
-	var dynamicService *coredata.PluginAuthorizationService
-	if len(dynamicServices) > 0 {
-		dynamicService = dynamicServices[0]
-	}
+func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], defaultConnections map[string]string) (*Authorizer, error) {
 	a := &Authorizer{
 		workloadsByHash:      map[string]*Workload{},
 		workloadsBySubjectID: map[string]*Workload{},
 		policies:             map[string]*HumanPolicy{},
 		providerPolicies:     map[string]string{},
 		providerModes:        map[string]core.ConnectionMode{},
-		dynamicService:       dynamicService,
-		dynamicReloadEvery:   defaultDynamicReloadInterval,
 	}
-	a.dynamic.Store(emptyDynamicSnapshot())
 
 	for policyID, def := range cfg.Policies {
 		policy := &HumanPolicy{
@@ -212,118 +175,18 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 	return a, nil
 }
 
-func (a *Authorizer) SetAdminAuthorizationService(svc *coredata.AdminAuthorizationService) {
-	if a == nil {
-		return
-	}
-	a.adminDynamicService = svc
-}
-
 func (a *Authorizer) Start(ctx context.Context) error {
-	if a == nil || !a.hasDynamicSources() {
-		return nil
-	}
-
-	a.lifecycleMu.Lock()
-	defer a.lifecycleMu.Unlock()
-	if a.closed {
-		return fmt.Errorf("authorizer already closed")
-	}
-	if a.started {
-		return nil
-	}
-	if err := a.ReloadDynamic(ctx); err != nil {
-		return err
-	}
-
-	pollCtx, cancel := context.WithCancel(ctx)
-	done := make(chan struct{})
-	a.pollCancel = cancel
-	a.pollDone = done
-	a.started = true
-	go a.pollLoop(pollCtx, done)
+	_ = ctx
 	return nil
 }
 
 func (a *Authorizer) Close() error {
-	if a == nil {
-		return nil
-	}
-
-	a.lifecycleMu.Lock()
-	if a.closed {
-		a.lifecycleMu.Unlock()
-		return nil
-	}
-	cancel := a.pollCancel
-	done := a.pollDone
-	a.pollCancel = nil
-	a.pollDone = nil
-	a.closed = true
-	a.lifecycleMu.Unlock()
-
-	if cancel != nil {
-		cancel()
-	}
-	if done != nil {
-		<-done
-	}
 	return nil
 }
 
-func (a *Authorizer) HasDynamicPluginAuthorizations() bool {
-	return a != nil && a.dynamicService != nil
-}
-
-func (a *Authorizer) HasDynamicAdminAuthorizations() bool {
-	return a != nil && a.adminDynamicService != nil
-}
-
 func (a *Authorizer) ReloadDynamic(ctx context.Context) error {
-	if a == nil || !a.hasDynamicSources() {
-		return nil
-	}
-
-	previous := a.dynamic.Load()
-	snapshot := emptyDynamicSnapshot()
-	var reloadErr error
-	if a.dynamicService != nil {
-		grants, err := a.dynamicService.ListPluginAuthorizations(ctx)
-		if err != nil {
-			copyPluginDynamicSnapshot(snapshot, previous)
-			reloadErr = errors.Join(reloadErr, fmt.Errorf("reload dynamic authorizations: %w", err))
-		} else {
-			loadPluginDynamicSnapshot(snapshot, grants)
-		}
-	}
-	if a.adminDynamicService != nil {
-		grants, err := a.adminDynamicService.ListAdminAuthorizations(ctx)
-		if err != nil {
-			copyAdminDynamicSnapshot(snapshot, previous)
-			reloadErr = errors.Join(reloadErr, fmt.Errorf("reload admin authorizations: %w", err))
-		} else {
-			loadAdminDynamicSnapshot(snapshot, grants)
-		}
-	}
-	a.dynamic.Store(snapshot)
-	return reloadErr
-}
-
-func (a *Authorizer) pollLoop(ctx context.Context, done chan struct{}) {
-	defer close(done)
-	ticker := time.NewTicker(a.dynamicReloadEvery)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := a.ReloadDynamic(ctx); err != nil {
-				slog.WarnContext(ctx, "authorization: dynamic reload failed", "error", err)
-			}
-		}
-	}
+	_ = ctx
+	return nil
 }
 
 func (a *Authorizer) ResolveWorkloadToken(token string) (*principal.ResolvedWorkload, bool) {
@@ -407,10 +270,6 @@ func (a *Authorizer) ResolveAccess(_ context.Context, p *principal.Principal, pr
 
 	access := AccessContext{Policy: policyName}
 	if role, ok := policy.roleForPrincipal(p); ok {
-		access.Role = role
-		return access, true
-	}
-	if role, ok := a.dynamicRoleForPrincipal(provider, p); ok {
 		access.Role = role
 		return access, true
 	}
@@ -542,10 +401,6 @@ func (a *Authorizer) ResolveAdminAccess(_ context.Context, p *principal.Principa
 	}
 	access := AccessContext{Policy: policyName}
 	if role, ok := policy.roleForPrincipal(p); ok {
-		access.Role = role
-		return access, true
-	}
-	if role, ok := a.dynamicAdminRoleForPrincipal(p); ok {
 		access.Role = role
 		return access, true
 	}
@@ -688,162 +543,6 @@ func normalizeAllowedOperations(ops []string) map[string]struct{} {
 		allowed[name] = struct{}{}
 	}
 	return allowed
-}
-
-func (a *Authorizer) dynamicRoleForPrincipal(provider string, p *principal.Principal) (string, bool) {
-	if a == nil || p == nil {
-		return "", false
-	}
-	snapshot := a.dynamic.Load()
-	if snapshot == nil {
-		return "", false
-	}
-	if p.UserID != "" {
-		if byUserID := snapshot.byPluginUserID[provider]; byUserID != nil {
-			if grant, ok := byUserID[p.UserID]; ok {
-				return grant.Role, true
-			}
-		}
-	}
-	email := ""
-	if p.Identity != nil {
-		email = p.Identity.Email
-	}
-	if email = normalizeEmail(email); email != "" {
-		if byEmail := snapshot.byPluginEmail[provider]; byEmail != nil {
-			if grant, ok := byEmail[email]; ok {
-				return grant.Role, true
-			}
-		}
-	}
-	return "", false
-}
-
-func (a *Authorizer) dynamicAdminRoleForPrincipal(p *principal.Principal) (string, bool) {
-	if a == nil || p == nil {
-		return "", false
-	}
-	snapshot := a.dynamic.Load()
-	if snapshot == nil {
-		return "", false
-	}
-	if p.UserID != "" {
-		if grant, ok := snapshot.adminByUserID[p.UserID]; ok {
-			return grant.Role, true
-		}
-	}
-	email := ""
-	if p.Identity != nil {
-		email = p.Identity.Email
-	}
-	if email = normalizeEmail(email); email != "" {
-		if grant, ok := snapshot.adminByEmail[email]; ok {
-			return grant.Role, true
-		}
-	}
-	return "", false
-}
-
-func (a *Authorizer) hasDynamicSources() bool {
-	return a != nil && (a.dynamicService != nil || a.adminDynamicService != nil)
-}
-
-func loadPluginDynamicSnapshot(snapshot *dynamicSnapshot, grants []*coredata.PluginAuthorizationMembership) {
-	if snapshot == nil {
-		return
-	}
-	for _, grant := range grants {
-		if grant == nil {
-			continue
-		}
-		plugin := strings.TrimSpace(grant.Plugin)
-		userID := strings.TrimSpace(grant.UserID)
-		email := normalizeEmail(grant.Email)
-		role := strings.TrimSpace(grant.Role)
-		if plugin == "" || role == "" {
-			continue
-		}
-		if userID != "" {
-			byUserID := snapshot.byPluginUserID[plugin]
-			if byUserID == nil {
-				byUserID = map[string]dynamicGrant{}
-				snapshot.byPluginUserID[plugin] = byUserID
-			}
-			byUserID[userID] = dynamicGrant{UserID: userID, Email: email, Role: role}
-		}
-		if email != "" {
-			byEmail := snapshot.byPluginEmail[plugin]
-			if byEmail == nil {
-				byEmail = map[string]dynamicGrant{}
-				snapshot.byPluginEmail[plugin] = byEmail
-			}
-			byEmail[email] = dynamicGrant{UserID: userID, Email: email, Role: role}
-		}
-	}
-}
-
-func loadAdminDynamicSnapshot(snapshot *dynamicSnapshot, grants []*coredata.AdminAuthorizationMembership) {
-	if snapshot == nil {
-		return
-	}
-	for _, grant := range grants {
-		if grant == nil {
-			continue
-		}
-		userID := strings.TrimSpace(grant.UserID)
-		email := normalizeEmail(grant.Email)
-		role := strings.TrimSpace(grant.Role)
-		if role == "" {
-			continue
-		}
-		if userID != "" {
-			snapshot.adminByUserID[userID] = dynamicGrant{UserID: userID, Email: email, Role: role}
-		}
-		if email != "" {
-			snapshot.adminByEmail[email] = dynamicGrant{UserID: userID, Email: email, Role: role}
-		}
-	}
-}
-
-func copyPluginDynamicSnapshot(dst, src *dynamicSnapshot) {
-	if dst == nil || src == nil {
-		return
-	}
-	for plugin, byUserID := range src.byPluginUserID {
-		cloned := make(map[string]dynamicGrant, len(byUserID))
-		for userID, grant := range byUserID {
-			cloned[userID] = grant
-		}
-		dst.byPluginUserID[plugin] = cloned
-	}
-	for plugin, byEmail := range src.byPluginEmail {
-		cloned := make(map[string]dynamicGrant, len(byEmail))
-		for email, grant := range byEmail {
-			cloned[email] = grant
-		}
-		dst.byPluginEmail[plugin] = cloned
-	}
-}
-
-func copyAdminDynamicSnapshot(dst, src *dynamicSnapshot) {
-	if dst == nil || src == nil {
-		return
-	}
-	for userID, grant := range src.adminByUserID {
-		dst.adminByUserID[userID] = grant
-	}
-	for email, grant := range src.adminByEmail {
-		dst.adminByEmail[email] = grant
-	}
-}
-
-func emptyDynamicSnapshot() *dynamicSnapshot {
-	return &dynamicSnapshot{
-		byPluginUserID: map[string]map[string]dynamicGrant{},
-		byPluginEmail:  map[string]map[string]dynamicGrant{},
-		adminByUserID:  map[string]dynamicGrant{},
-		adminByEmail:   map[string]dynamicGrant{},
-	}
 }
 
 func normalizeEmail(email string) string {

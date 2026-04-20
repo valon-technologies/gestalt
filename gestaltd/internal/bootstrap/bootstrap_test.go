@@ -28,7 +28,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -272,9 +271,7 @@ func bootstrapManagedAuthorizationModel(policyRoles, pluginStaticRoles, pluginDy
 	model := &core.AuthorizationModel{Version: 1}
 	model.ResourceTypes = append(model.ResourceTypes, bootstrapAuthorizationResourceType(
 		authorization.ProviderResourceTypePolicyStatic,
-		map[string][]string{
-			authorization.ProviderLegacyHumanImportSentinelRelation: {authorization.ProviderSubjectTypeSubject},
-		},
+		nil,
 		policyRoles,
 		[]string{authorization.ProviderSubjectTypeSubject, authorization.ProviderSubjectTypeEmail},
 	))
@@ -3712,21 +3709,16 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FindOrCreateUser(dynamic): %v", err)
 		}
-		if _, err := result.Services.PluginAuthorizations.UpsertPluginAuthorization(ctx, &coredata.PluginAuthorizationMembership{
-			Plugin: "calendar",
-			UserID: dynamicUser.ID,
-			Email:  dynamicUser.Email,
-			Role:   "editor",
-		}); err != nil {
-			t.Fatalf("UpsertPluginAuthorization(seed): %v", err)
-		}
-		if _, err := result.Services.AdminAuthorizations.UpsertAdminAuthorization(ctx, &coredata.AdminAuthorizationMembership{
-			UserID: dynamicUser.ID,
-			Email:  dynamicUser.Email,
-			Role:   "admin",
-		}); err != nil {
-			t.Fatalf("UpsertAdminAuthorization(seed): %v", err)
-		}
+		provider.putRelationship(existingModelID, &core.Relationship{
+			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeEmail, Id: dynamicUser.Email},
+			Relation: "editor",
+			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "calendar"},
+		})
+		provider.putRelationship(existingModelID, &core.Relationship{
+			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeEmail, Id: dynamicUser.Email},
+			Relation: "admin",
+			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
+		})
 
 		if err := result.Start(ctx); err != nil {
 			t.Fatalf("Start: %v", err)
@@ -3789,67 +3781,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if adminAccess.Role != "admin" {
 			t.Fatalf("dynamic admin role = %q, want %q", adminAccess.Role, "admin")
 		}
-
-		if _, err := result.Services.PluginAuthorizations.UpsertPluginAuthorization(ctx, &coredata.PluginAuthorizationMembership{
-			Plugin: "calendar",
-			UserID: dynamicUser.ID,
-			Email:  dynamicUser.Email,
-			Role:   "viewer",
-		}); err != nil {
-			t.Fatalf("UpsertPluginAuthorization(update): %v", err)
-		}
-		if _, err := result.Services.AdminAuthorizations.UpsertAdminAuthorization(ctx, &coredata.AdminAuthorizationMembership{
-			UserID: dynamicUser.ID,
-			Email:  dynamicUser.Email,
-			Role:   "operator",
-		}); err != nil {
-			t.Fatalf("UpsertAdminAuthorization(update): %v", err)
-		}
-		if err := result.Authorizer.ReloadDynamic(ctx); err != nil {
-			t.Fatalf("ReloadDynamic after mutating legacy authorizations: %v", err)
-		}
-
-		access, allowed = result.Authorizer.ResolveAccess(ctx, dynamicPrincipal, "calendar")
-		if !allowed {
-			t.Fatal("expected provider-backed plugin access to ignore later legacy mutations")
-		}
-		if access.Role != "editor" {
-			t.Fatalf("provider-backed plugin role after legacy mutation = %q, want %q", access.Role, "editor")
-		}
-
-		adminAccess, allowed = result.Authorizer.ResolveAdminAccess(ctx, dynamicPrincipal, "admin-policy")
-		if !allowed {
-			t.Fatal("expected provider-backed admin access to ignore later legacy mutations")
-		}
-		if adminAccess.Role != "admin" {
-			t.Fatalf("provider-backed admin role after legacy mutation = %q, want %q", adminAccess.Role, "admin")
-		}
-
-		if err := result.Services.PluginAuthorizations.DeletePluginAuthorization(ctx, "calendar", dynamicUser.ID); err != nil {
-			t.Fatalf("DeletePluginAuthorization: %v", err)
-		}
-		if err := result.Services.AdminAuthorizations.DeleteAdminAuthorization(ctx, dynamicUser.ID); err != nil {
-			t.Fatalf("DeleteAdminAuthorization: %v", err)
-		}
-		if err := result.Authorizer.ReloadDynamic(ctx); err != nil {
-			t.Fatalf("ReloadDynamic after deleting legacy authorizations: %v", err)
-		}
-
-		access, allowed = result.Authorizer.ResolveAccess(ctx, dynamicPrincipal, "calendar")
-		if !allowed {
-			t.Fatal("expected provider-backed plugin access to survive legacy deletion")
-		}
-		if access.Role != "editor" {
-			t.Fatalf("provider-backed plugin role after legacy deletion = %q, want %q", access.Role, "editor")
-		}
-
-		adminAccess, allowed = result.Authorizer.ResolveAdminAccess(ctx, dynamicPrincipal, "admin-policy")
-		if !allowed {
-			t.Fatal("expected provider-backed admin access to survive legacy deletion")
-		}
-		if adminAccess.Role != "admin" {
-			t.Fatalf("provider-backed admin role after legacy deletion = %q, want %q", adminAccess.Role, "admin")
-		}
 	})
 
 	t.Run("dynamic human authorizations require an authorization provider", func(t *testing.T) {
@@ -3883,22 +3814,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FindOrCreateUser(dynamic): %v", err)
 		}
-		if _, err := result.Services.PluginAuthorizations.UpsertPluginAuthorization(ctx, &coredata.PluginAuthorizationMembership{
-			Plugin: "calendar",
-			UserID: dynamicUser.ID,
-			Email:  dynamicUser.Email,
-			Role:   "editor",
-		}); err != nil {
-			t.Fatalf("UpsertPluginAuthorization: %v", err)
-		}
-		if _, err := result.Services.AdminAuthorizations.UpsertAdminAuthorization(ctx, &coredata.AdminAuthorizationMembership{
-			UserID: dynamicUser.ID,
-			Email:  dynamicUser.Email,
-			Role:   "admin",
-		}); err != nil {
-			t.Fatalf("UpsertAdminAuthorization: %v", err)
-		}
-
 		if err := result.Start(ctx); err != nil {
 			t.Fatalf("Start: %v", err)
 		}
@@ -4055,7 +3970,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("authorization provider migration preserves existing provider dynamic roles", func(t *testing.T) {
+	t.Run("authorization provider preserves existing provider dynamic roles", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
@@ -4112,22 +4027,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
 		})
 
-		if _, err := result.Services.PluginAuthorizations.UpsertPluginAuthorization(ctx, &coredata.PluginAuthorizationMembership{
-			Plugin: "calendar",
-			UserID: dynamicUser.ID,
-			Email:  dynamicUser.Email,
-			Role:   "editor",
-		}); err != nil {
-			t.Fatalf("UpsertPluginAuthorization: %v", err)
-		}
-		if _, err := result.Services.AdminAuthorizations.UpsertAdminAuthorization(ctx, &coredata.AdminAuthorizationMembership{
-			UserID: dynamicUser.ID,
-			Email:  dynamicUser.Email,
-			Role:   "admin",
-		}); err != nil {
-			t.Fatalf("UpsertAdminAuthorization: %v", err)
-		}
-
 		if err := result.Start(ctx); err != nil {
 			t.Fatalf("Start: %v", err)
 		}
@@ -4143,7 +4042,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Fatal("expected provider-backed plugin access to be allowed")
 		}
 		if access.Role != "viewer" {
-			t.Fatalf("provider-backed plugin role after migration = %q, want %q", access.Role, "viewer")
+			t.Fatalf("provider-backed plugin role = %q, want %q", access.Role, "viewer")
 		}
 
 		adminAccess, allowed := result.Authorizer.ResolveAdminAccess(ctx, dynamicPrincipal, "admin-policy")
@@ -4151,7 +4050,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Fatal("expected provider-backed admin access to be allowed")
 		}
 		if adminAccess.Role != "operator" {
-			t.Fatalf("provider-backed admin role after migration = %q, want %q", adminAccess.Role, "operator")
+			t.Fatalf("provider-backed admin role = %q, want %q", adminAccess.Role, "operator")
 		}
 	})
 
@@ -4223,7 +4122,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("authorization provider falls back to legacy rules when the active model drifts", func(t *testing.T) {
+	t.Run("authorization provider denies until reload heals active model drift", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
@@ -4276,17 +4175,24 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			Kind:     principal.KindUser,
 		}
 		access, allowed := result.Authorizer.ResolveAccess(ctx, staticPrincipal, "calendar")
-		if !allowed {
-			t.Fatal("expected legacy fallback access to be allowed")
+		if allowed {
+			t.Fatal("expected access to be denied while the provider active model drifts")
 		}
-		if access.Role != "viewer" {
-			t.Fatalf("legacy fallback role = %q, want %q", access.Role, "viewer")
+		if access.Role != "" {
+			t.Fatalf("role during active model drift = %q, want empty", access.Role)
 		}
 		if err := result.Authorizer.ReloadDynamic(ctx); err != nil {
 			t.Fatalf("expected reload to heal active model drift: %v", err)
 		}
 		if got := provider.activeModelID; got != managedModelID {
 			t.Fatalf("active model id after reload = %q, want %q", got, managedModelID)
+		}
+		access, allowed = result.Authorizer.ResolveAccess(ctx, staticPrincipal, "calendar")
+		if !allowed {
+			t.Fatal("expected access to recover after provider reload heals active model drift")
+		}
+		if access.Role != "viewer" {
+			t.Fatalf("role after healing active model drift = %q, want %q", access.Role, "viewer")
 		}
 	})
 
