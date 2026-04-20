@@ -6,10 +6,10 @@ asIndexPage: true
 
 Gestalt loads most integration and platform surfaces as providers instead of
 compiling them into `gestaltd`. Plugins, auth backends, IndexedDB backends,
-cache backends, S3 object stores, external secret managers, and public web UIs
-all use the same provider model: you reference a package in config, the host
-resolves it, validates it, and starts it with the permissions and request
-context it needs.
+authorization backends, workflow backends, cache backends, S3 object stores,
+external secret managers, and public web UIs all use the same provider model:
+you reference a package in config, the host resolves it, validates it, and
+starts it with the permissions and request context it needs.
 
 ## Provider kinds
 
@@ -17,10 +17,12 @@ context it needs.
 | --- | --- | --- |
 | `plugin` | Tool providers that expose operations over CLI, HTTP API, and MCP | `plugins.<name>` |
 | `auth` | Platform login backends | `providers.auth.<name>` |
+| `authorization` | Dynamic human authorization backends | `providers.authorization.<name>` |
 | `cache` | Plugin-bound cache backends | `providers.cache.<name>` |
 | `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddb.<name>` |
 | `s3` | S3-compatible object stores mounted into plugins | `providers.s3.<name>` |
 | `secrets` | Secret managers that resolve structured secret refs | `providers.secrets.<name>` |
+| `workflow` | Workflow run, schedule, and event-trigger backends | `providers.workflow.<name>` and `plugins.<name>.workflow` |
 | `webui` | Public UI bundles served under configured path prefixes | `providers.ui` |
 
 ## How providers work
@@ -50,10 +52,12 @@ The repository is organized by provider type:
 | --- | --- | --- |
 | Plugins | [`plugins/`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins) | `plugins.<name>` |
 | Auth | [`auth/`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth) | `providers.auth.<name>` |
+| Authorization | [`authorization/`](https://github.com/valon-technologies/gestalt-providers/tree/main/authorization) | `providers.authorization.<name>` |
 | Cache | [`cache/`](https://github.com/valon-technologies/gestalt-providers/tree/main/cache) | `providers.cache.<name>` |
 | IndexedDB | [`indexeddb/`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb) | `providers.indexeddb.<name>` |
 | S3 | [`s3/`](https://github.com/valon-technologies/gestalt-providers/tree/main/s3) | `providers.s3.<name>` |
 | Secrets | [`secrets/`](https://github.com/valon-technologies/gestalt-providers/tree/main/secrets) | `providers.secrets.<name>` |
+| Workflow | [`workflow/`](https://github.com/valon-technologies/gestalt-providers/tree/main/workflow) | `providers.workflow.<name>` |
 | Web UI bundles | [`web/`](https://github.com/valon-technologies/gestalt-providers/tree/main/web) | `providers.ui` |
 
 ## Using providers
@@ -125,9 +129,11 @@ release workflow now lives under [Custom Providers](/custom-providers).
 
 - [Plugins](/providers/plugins): choosing and configuring plugin providers
 - [Auth](/providers/auth): platform login providers
+- [Authorization](/providers/authorization): human authorization providers
 - [Cache](/providers/cache): plugin-bound cache backends
 - [IndexedDB](/providers/indexeddb): storage backends
 - [S3](/providers/s3): S3-compatible object store providers
 - [Secrets](/providers/secrets): built-in and external secret managers
+- [Workflow](/providers/workflow): workflow run, schedule, and event-trigger backends
 - [Web UIs](/providers/web-uis): public UI bundles
 - [Custom Providers](/custom-providers): advanced implementation and release docs
