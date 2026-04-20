@@ -29,6 +29,10 @@ type ReadRelationshipsRequest = proto.ReadRelationshipsRequest
 type ReadRelationshipsResponse = proto.ReadRelationshipsResponse
 type WriteRelationshipsRequest = proto.WriteRelationshipsRequest
 
+type AuthorizationModel = proto.AuthorizationModel
+type AuthorizationModelResourceType = proto.AuthorizationModelResourceType
+type AuthorizationModelRelation = proto.AuthorizationModelRelation
+type AuthorizationModelAction = proto.AuthorizationModelAction
 type AuthorizationModelRef = proto.AuthorizationModelRef
 type GetActiveModelResponse = proto.GetActiveModelResponse
 type ListModelsRequest = proto.ListModelsRequest

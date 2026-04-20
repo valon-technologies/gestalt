@@ -3,7 +3,9 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -53,6 +55,7 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server {
@@ -287,12 +290,36 @@ func (p *memoryAuthorizationProvider) ListModels(context.Context, *core.ListMode
 	return &core.ListModelsResponse{Models: append([]*core.AuthorizationModelRef(nil), p.models...)}, nil
 }
 
-func (p *memoryAuthorizationProvider) WriteModel(context.Context, *core.WriteModelRequest) (*core.AuthorizationModelRef, error) {
+func (p *memoryAuthorizationProvider) WriteModel(_ context.Context, req *core.WriteModelRequest) (*core.AuthorizationModelRef, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	definition := req.GetModel()
+	if definition == nil {
+		return nil, fmt.Errorf("model is required")
+	}
+	modelVersion := definition.GetVersion()
+	if modelVersion == 0 {
+		modelVersion = 1
+	}
+	modelBytes, err := gproto.MarshalOptions{Deterministic: true}.Marshal(definition)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(modelBytes)
+	modelID := "model-" + hex.EncodeToString(sum[:])
+	for _, existing := range p.models {
+		if existing.GetId() == modelID {
+			p.activeModelID = modelID
+			if p.relsByModel[modelID] == nil {
+				p.relsByModel[modelID] = map[string]*core.Relationship{}
+			}
+			return existing, nil
+		}
+	}
 	model := &core.AuthorizationModelRef{
-		Id:      fmt.Sprintf("model-%d", len(p.models)+1),
-		Version: "v1",
+		Id:      modelID,
+		Version: fmt.Sprintf("%d", modelVersion),
 	}
 	p.models = append(p.models, model)
 	p.activeModelID = model.GetId()
@@ -2650,8 +2677,18 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
 		t.Fatalf("decoding models response: %v", err)
 	}
-	if len(modelsResp.Models) != 1 || modelsResp.Models[0].ID == "" {
-		t.Fatalf("models response = %+v, want one active model", modelsResp.Models)
+	if len(modelsResp.Models) == 0 {
+		t.Fatal("expected at least one authorization model")
+	}
+	foundActiveModel := false
+	for _, model := range modelsResp.Models {
+		if model.ID == providerSummary.ActiveModelID {
+			foundActiveModel = true
+			break
+		}
+	}
+	if !foundActiveModel {
+		t.Fatalf("models response = %+v, want active model %q to be listed", modelsResp.Models, providerSummary.ActiveModelID)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/relationships?resourceType=plugin_dynamic&resourceId=sample_plugin", nil)

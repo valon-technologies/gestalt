@@ -129,6 +129,27 @@ message WriteRelationshipsRequest {
   string model_id = 3;
 }
 
+message AuthorizationModel {
+  int32 version = 1;
+  repeated AuthorizationModelResourceType resource_types = 2;
+}
+
+message AuthorizationModelResourceType {
+  string name = 1;
+  repeated AuthorizationModelRelation relations = 2;
+  repeated AuthorizationModelAction actions = 3;
+}
+
+message AuthorizationModelRelation {
+  string name = 1;
+  repeated string subject_types = 2;
+}
+
+message AuthorizationModelAction {
+  string name = 1;
+  repeated string relations = 2;
+}
+
 message AuthorizationModelRef {
   string id = 1;
   string version = 2;
@@ -150,7 +171,7 @@ message ListModelsResponse {
 }
 
 message WriteModelRequest {
-  string schema = 1;
+  AuthorizationModel model = 1;
 }
 
 service AuthorizationProvider {

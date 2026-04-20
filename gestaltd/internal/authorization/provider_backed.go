@@ -133,15 +133,18 @@ func (a *ProviderBackedAuthorizer) ReloadDynamic(ctx context.Context) error {
 
 	reloadErr := a.legacy.ReloadDynamic(ctx)
 
-	modelID, err := a.ensureModel(ctx)
+	sourceModelID, err := a.sourceModelID(ctx)
 	if err != nil {
 		return errors.Join(reloadErr, err)
 	}
-	existing, err := a.readAllRelationships(ctx, modelID)
-	if err != nil {
-		return errors.Join(reloadErr, err)
+	sourceExisting := map[string]*core.Relationship{}
+	if sourceModelID != "" {
+		sourceExisting, err = a.readAllRelationships(ctx, sourceModelID)
+		if err != nil {
+			return errors.Join(reloadErr, err)
+		}
 	}
-	_, legacyImported := existing[relationshipMapKey(ProviderLegacyHumanImportSentinelRelationship())]
+	_, legacyImported := sourceExisting[relationshipMapKey(ProviderLegacyHumanImportSentinelRelationship())]
 	importLegacy := !legacyImported && reloadErr == nil
 
 	var snapshot *dynamicSnapshot
@@ -149,12 +152,28 @@ func (a *ProviderBackedAuthorizer) ReloadDynamic(ctx context.Context) error {
 		snapshot = a.currentDynamicSnapshot()
 	}
 
-	desired, roles, err := a.buildDesiredRelationships(modelID, existing, snapshot, legacyImported || importLegacy)
+	desired, roles, err := a.buildDesiredRelationships(sourceExisting, snapshot, legacyImported || importLegacy)
 	if err != nil {
 		return errors.Join(reloadErr, err)
 	}
+	model, err := a.provider.WriteModel(ctx, &core.WriteModelRequest{Model: buildProviderAuthorizationModel(roles)})
+	if err != nil {
+		return errors.Join(reloadErr, fmt.Errorf("write authorization model: %w", err))
+	}
+	if model == nil || strings.TrimSpace(model.GetId()) == "" {
+		return errors.Join(reloadErr, fmt.Errorf("write authorization model: missing model id"))
+	}
+	modelID := strings.TrimSpace(model.GetId())
 
-	writes, deletes := diffRelationships(existing, desired)
+	targetExisting := sourceExisting
+	if modelID != sourceModelID {
+		targetExisting, err = a.readAllRelationships(ctx, modelID)
+		if err != nil {
+			return errors.Join(reloadErr, err)
+		}
+	}
+
+	writes, deletes := diffRelationships(targetExisting, desired)
 	if len(writes) > 0 || len(deletes) > 0 {
 		if err := a.provider.WriteRelationships(ctx, &core.WriteRelationshipsRequest{
 			Writes:  writes,
@@ -179,7 +198,11 @@ func (a *ProviderBackedAuthorizer) ManagedModelID(ctx context.Context) (string, 
 	if a.provider == nil {
 		return "", fmt.Errorf("authorization provider is unavailable")
 	}
-	return a.ensureModel(ctx)
+	state := a.currentState()
+	if modelID := strings.TrimSpace(state.modelID); modelID != "" {
+		return modelID, nil
+	}
+	return a.sourceModelID(ctx)
 }
 
 func (a *ProviderBackedAuthorizer) pollLoop(ctx context.Context, done chan struct{}) {
@@ -545,54 +568,19 @@ func (a *ProviderBackedAuthorizer) resolveRoleVariants(ctx context.Context, subj
 	return "", false, nil
 }
 
-func (a *ProviderBackedAuthorizer) ensureModel(ctx context.Context) (string, error) {
+func (a *ProviderBackedAuthorizer) sourceModelID(ctx context.Context) (string, error) {
 	state := a.currentState()
-	expectedModelID := strings.TrimSpace(state.modelID)
+	if expectedModelID := strings.TrimSpace(state.modelID); expectedModelID != "" {
+		return expectedModelID, nil
+	}
 	active, err := a.provider.GetActiveModel(ctx)
 	if err != nil {
 		return "", fmt.Errorf("get active authorization model: %w", err)
 	}
-	activeModelID := ""
 	if model := active.GetModel(); model != nil {
-		activeModelID = strings.TrimSpace(model.GetId())
+		return strings.TrimSpace(model.GetId()), nil
 	}
-	if expectedModelID != "" {
-		if activeModelID == "" {
-			return "", fmt.Errorf("authorization provider lost active model %q", expectedModelID)
-		}
-		if activeModelID != expectedModelID {
-			return "", fmt.Errorf("authorization provider active model changed: expected %q, got %q", expectedModelID, activeModelID)
-		}
-		return expectedModelID, nil
-	}
-	if activeModelID != "" {
-		relationships, err := a.readAllRelationships(ctx, activeModelID)
-		if err != nil {
-			return "", err
-		}
-		if _, ok := relationships[relationshipMapKey(ProviderModelSentinelRelationship())]; ok {
-			a.stateMu.Lock()
-			if a.state.modelID == "" {
-				a.state.modelID = activeModelID
-			}
-			a.stateMu.Unlock()
-			return activeModelID, nil
-		}
-	}
-	model, err := a.provider.WriteModel(ctx, &core.WriteModelRequest{Schema: providerAuthzSchema})
-	if err != nil {
-		return "", fmt.Errorf("write authorization model: %w", err)
-	}
-	if model == nil || strings.TrimSpace(model.GetId()) == "" {
-		return "", fmt.Errorf("write authorization model: missing model id")
-	}
-	modelID := strings.TrimSpace(model.GetId())
-	a.stateMu.Lock()
-	if a.state.modelID == "" {
-		a.state.modelID = modelID
-	}
-	a.stateMu.Unlock()
-	return modelID, nil
+	return "", nil
 }
 
 func (a *ProviderBackedAuthorizer) readAllRelationships(ctx context.Context, modelID string) (map[string]*core.Relationship, error) {
@@ -620,15 +608,13 @@ func (a *ProviderBackedAuthorizer) readAllRelationships(ctx context.Context, mod
 	}
 }
 
-func (a *ProviderBackedAuthorizer) buildDesiredRelationships(modelID string, existing map[string]*core.Relationship, snapshot *dynamicSnapshot, markLegacyImported bool) (map[string]*core.Relationship, providerBackedRoleState, error) {
+func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string]*core.Relationship, snapshot *dynamicSnapshot, markLegacyImported bool) (map[string]*core.Relationship, providerBackedRoleState, error) {
 	desired := map[string]*core.Relationship{}
 	state := providerBackedRoleState{
-		modelID:            modelID,
 		policyStaticRoles:  map[string][]string{},
 		pluginStaticRoles:  map[string][]string{},
 		pluginDynamicRoles: map[string][]string{},
 	}
-	addDesiredRelationship(desired, ProviderModelSentinelRelationship())
 	if markLegacyImported {
 		addDesiredRelationship(desired, ProviderLegacyHumanImportSentinelRelationship())
 	}
