@@ -15,6 +15,10 @@ on:
         description: 'Prefix for artifact names (e.g., gestalt)'
         type: string
         default: 'gestalt'
+      version-prefix:
+        description: 'Tag prefix to strip when deriving package versions'
+        type: string
+        default: ''
       package:
         description: 'Create tar.gz + sha256 packages'
         type: boolean
@@ -135,6 +139,8 @@ jobs:
 
       - name: Package Debian artifact
         if: ${{ inputs.package-deb && matrix.platform.cross }}
+        env:
+          VERSION_PREFIX: ${{ inputs.version-prefix }}
         run: |
           case "${{ matrix.platform.suffix }}" in
             linux-x86_64) deb_arch="amd64" ;;
@@ -146,10 +152,19 @@ jobs:
               ;;
           esac
 
+          version="${GITHUB_REF_NAME}"
+          if [ -n "${VERSION_PREFIX}" ]; then
+            version="${GITHUB_REF_NAME#${VERSION_PREFIX}}"
+            if [ "${version}" = "${GITHUB_REF_NAME}" ]; then
+              echo "expected GITHUB_REF_NAME to start with ${VERSION_PREFIX}, got ${GITHUB_REF_NAME}" >&2
+              exit 1
+            fi
+          fi
+
           mkdir -p dist
           ./packaging/deb/build-gestalt-deb.sh \
             --binary "${{ inputs.working-directory }}/target/${{ matrix.platform.target }}/release/${{ inputs.binary-name }}" \
-            --version "${GITHUB_REF_NAME#gestalt/v}" \
+            --version "${version}" \
             --arch "${deb_arch}" \
             --out-dir dist
 

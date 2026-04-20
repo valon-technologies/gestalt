@@ -19,6 +19,7 @@ jobs:
       working-directory: gestalt
       binary-name: gestalt
       artifact-prefix: gestalt
+      version-prefix: 'gestalt/v'
       run-tests: true
       package: true
       package-deb: true

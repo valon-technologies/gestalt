@@ -66,8 +66,9 @@ jobs:
           )
       - name: Package
         run: |
-          tar -czvf gestaltd-${{ matrix.platform.suffix }}.tar.gz -C build gestaltd
-          shasum -a 256 gestaltd-${{ matrix.platform.suffix }}.tar.gz > gestaltd-${{ matrix.platform.suffix }}.tar.gz.sha256
+          mkdir -p dist
+          tar -czvf dist/gestaltd-${{ matrix.platform.suffix }}.tar.gz -C build gestaltd
+          shasum -a 256 dist/gestaltd-${{ matrix.platform.suffix }}.tar.gz > dist/gestaltd-${{ matrix.platform.suffix }}.tar.gz.sha256
       - name: Package Debian artifact
         if: ${{ startsWith(matrix.platform.suffix, 'linux-') }}
         run: |
@@ -91,8 +92,8 @@ jobs:
         with:
           name: gestaltd-${{ matrix.platform.suffix }}
           path: |
-            gestaltd-${{ matrix.platform.suffix }}.tar.gz
-            gestaltd-${{ matrix.platform.suffix }}.tar.gz.sha256
+            dist/gestaltd-${{ matrix.platform.suffix }}.tar.gz
+            dist/gestaltd-${{ matrix.platform.suffix }}.tar.gz.sha256
             dist/gestaltd_*.deb
             dist/gestaltd_*.deb.sha256
           if-no-files-found: error
