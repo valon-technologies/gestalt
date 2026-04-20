@@ -398,18 +398,18 @@ func (a *ProviderBackedAuthorizer) PolicyNameForProvider(provider string) string
 	return a.base.PolicyNameForProvider(provider)
 }
 
-func (a *ProviderBackedAuthorizer) StaticRoleForPolicyIdentity(policyName, subjectID, userID string) (AccessContext, bool) {
+func (a *ProviderBackedAuthorizer) StaticRoleForPolicyIdentity(policyName, subjectID string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, false
 	}
-	return a.base.StaticRoleForPolicyIdentity(policyName, subjectID, userID)
+	return a.base.StaticRoleForPolicyIdentity(policyName, subjectID)
 }
 
-func (a *ProviderBackedAuthorizer) StaticRoleForProviderIdentity(provider, subjectID, userID string) (AccessContext, bool) {
+func (a *ProviderBackedAuthorizer) StaticRoleForProviderIdentity(provider, subjectID string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, false
 	}
-	return a.base.StaticRoleForProviderIdentity(provider, subjectID, userID)
+	return a.base.StaticRoleForProviderIdentity(provider, subjectID)
 }
 
 func (a *ProviderBackedAuthorizer) StaticMembersForPolicy(policyName string) ([]StaticHumanMember, bool) {

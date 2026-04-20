@@ -171,7 +171,7 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
 		return
 	}
-	if access, ok := s.authorizer.StaticRoleForProviderIdentity(plugin, principal.UserSubjectID(user.ID), user.ID); ok && access.Role != "" {
+	if access, ok := s.authorizer.StaticRoleForProviderIdentity(plugin, principal.UserSubjectID(user.ID)); ok && access.Role != "" {
 		writeError(w, http.StatusConflict, "user already has static authorization for this plugin")
 		return
 	}
@@ -295,7 +295,7 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
 		return
 	}
-	if access, ok := s.authorizer.StaticRoleForPolicyIdentity(s.adminRoute.AuthorizationPolicy, principal.UserSubjectID(user.ID), user.ID); ok && access.Role != "" {
+	if access, ok := s.authorizer.StaticRoleForPolicyIdentity(s.adminRoute.AuthorizationPolicy, principal.UserSubjectID(user.ID)); ok && access.Role != "" {
 		writeError(w, http.StatusConflict, "user already has static admin authorization")
 		return
 	}

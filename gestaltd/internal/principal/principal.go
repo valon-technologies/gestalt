@@ -316,10 +316,31 @@ func clonePermissionOps(src map[string]struct{}) map[string]struct{} {
 type contextKey struct{}
 
 func WithPrincipal(ctx context.Context, p *Principal) context.Context {
-	return context.WithValue(ctx, contextKey{}, p)
+	return context.WithValue(ctx, contextKey{}, Canonicalize(p))
 }
 
 func FromContext(ctx context.Context) *Principal {
 	p, _ := ctx.Value(contextKey{}).(*Principal)
+	return Canonicalize(p)
+}
+
+func Canonicalize(p *Principal) *Principal {
+	if p == nil {
+		return nil
+	}
+	if p.UserID == "" && p.SubjectID != "" {
+		if userID := UserIDFromSubjectID(p.SubjectID); userID != "" {
+			p.UserID = userID
+			if p.Kind == "" {
+				p.Kind = KindUser
+			}
+		}
+	}
+	if p.SubjectID == "" && p.UserID != "" {
+		p.SubjectID = UserSubjectID(p.UserID)
+		if p.Kind == "" {
+			p.Kind = KindUser
+		}
+	}
 	return p
 }
