@@ -654,7 +654,11 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
 	}
-	legacyAuthz, err := authorization.New(authzCfg, cfg.Plugins, providers, connMaps.DefaultConnection, prepared.Services.PluginAuthorizations)
+	var dynamicPluginServices []*coredata.PluginAuthorizationService
+	if prepared.AuthorizationProvider != nil && prepared.Services != nil && prepared.Services.PluginAuthorizations != nil {
+		dynamicPluginServices = append(dynamicPluginServices, prepared.Services.PluginAuthorizations)
+	}
+	legacyAuthz, err := authorization.New(authzCfg, cfg.Plugins, providers, connMaps.DefaultConnection, dynamicPluginServices...)
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
@@ -665,9 +669,11 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			_ = legacyAuthz.Close()
 		}
 	}()
-	legacyAuthz.SetAdminAuthorizationService(prepared.Services.AdminAuthorizations)
 	var authz authorization.RuntimeAuthorizer = legacyAuthz
 	if prepared.AuthorizationProvider != nil {
+		if prepared.Services != nil {
+			legacyAuthz.SetAdminAuthorizationService(prepared.Services.AdminAuthorizations)
+		}
 		authz = authorization.NewProviderBacked(legacyAuthz, prepared.AuthorizationProvider)
 	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.Tokens,

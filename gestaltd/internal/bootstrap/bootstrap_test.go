@@ -3069,6 +3069,23 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
+	t.Run("with authorization provider configured", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Providers.Authorization = map[string]*config.ProviderEntry{
+			"indexeddb": {Source: config.ProviderSource{Path: "stub"}},
+		}
+		cfg.Server.Providers.Authorization = "indexeddb"
+
+		factories := validFactories()
+		factories.Authorization = stubAuthorizationFactory("test-authorization")
+
+		if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
+			t.Fatalf("Validate with authorization provider: %v", err)
+		}
+	})
+
 	t.Run("rejects invalid plugin invokes dependency", func(t *testing.T) {
 		t.Parallel()
 
@@ -3835,7 +3852,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("legacy human dynamic authorizations still work without authorization provider", func(t *testing.T) {
+	t.Run("dynamic human authorizations require an authorization provider", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
@@ -3893,19 +3910,19 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			Kind:      principal.KindUser,
 		}
 		access, allowed := result.Authorizer.ResolveAccess(ctx, dynamicPrincipal, "calendar")
-		if !allowed {
-			t.Fatal("expected legacy dynamic plugin access to be allowed")
+		if allowed {
+			t.Fatal("expected dynamic plugin access to be denied without authorization provider")
 		}
-		if access.Role != "editor" {
-			t.Fatalf("legacy dynamic plugin role = %q, want %q", access.Role, "editor")
+		if access.Role != "" {
+			t.Fatalf("dynamic plugin role without authorization provider = %q, want empty", access.Role)
 		}
 
 		adminAccess, allowed := result.Authorizer.ResolveAdminAccess(ctx, dynamicPrincipal, "admin-policy")
-		if !allowed {
-			t.Fatal("expected legacy dynamic admin access to be allowed")
+		if allowed {
+			t.Fatal("expected dynamic admin access to be denied without authorization provider")
 		}
-		if adminAccess.Role != "admin" {
-			t.Fatalf("legacy dynamic admin role = %q, want %q", adminAccess.Role, "admin")
+		if adminAccess.Role != "" {
+			t.Fatalf("dynamic admin role without authorization provider = %q, want empty", adminAccess.Role)
 		}
 	})
 
