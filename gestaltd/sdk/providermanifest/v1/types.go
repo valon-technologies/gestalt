@@ -1,7 +1,14 @@
 package providermanifestv1
 
 import (
+	"bytes"
 	_ "embed"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -45,13 +52,14 @@ type Spec struct {
 	ConfigSchemaPath string `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
 
 	// Plugin-specific fields
-	Auth              *ProviderAuth                         `json:"auth,omitempty" yaml:"auth,omitempty"`
-	ConnectionMode    ConnectionMode                        `json:"connectionMode,omitempty" yaml:"connectionMode,omitempty"`
+	RouteAuth         *RouteAuthRef                         `json:"-" yaml:"-"`
+	Auth              *ProviderAuth                         `json:"-" yaml:"-"`
+	ConnectionMode    ConnectionMode                        `json:"-" yaml:"-"`
 	MCP               bool                                  `json:"mcp,omitempty" yaml:"mcp,omitempty"`
 	Headers           map[string]string                     `json:"headers,omitempty" yaml:"headers,omitempty"`
 	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
-	Discovery         *ProviderDiscovery                    `json:"discovery,omitempty" yaml:"discovery,omitempty"`
-	ConnectionParams  map[string]ProviderConnectionParam    `json:"connectionParams,omitempty" yaml:"connectionParams,omitempty"`
+	Discovery         *ProviderDiscovery                    `json:"-" yaml:"-"`
+	ConnectionParams  map[string]ProviderConnectionParam    `json:"-" yaml:"-"`
 	Surfaces          *ProviderSurfaces                     `json:"surfaces,omitempty" yaml:"surfaces,omitempty"`
 	AllowedOperations map[string]*ManifestOperationOverride `json:"allowedOperations,omitempty" yaml:"allowedOperations,omitempty"`
 	DefaultConnection string                                `json:"defaultConnection,omitempty" yaml:"defaultConnection,omitempty"`
@@ -64,6 +72,12 @@ type Spec struct {
 	// WebUI-specific fields
 	AssetRoot string       `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
 	Routes    []WebUIRoute `json:"routes,omitempty" yaml:"routes,omitempty"`
+
+	compatDefaultConnection bool
+}
+
+type RouteAuthRef struct {
+	Provider string `json:"provider,omitempty" yaml:"provider,omitempty"`
 }
 
 type OwnedUI struct {
@@ -162,6 +176,57 @@ func (s *Spec) SurfaceConnectionName(surface string) string {
 		}
 	}
 	return ""
+}
+
+func (s *Spec) NormalizeLegacyConnections() error {
+	if s == nil {
+		return nil
+	}
+
+	legacyPresent := !s.compatDefaultConnection && (s.Auth != nil || s.ConnectionMode != "" || s.Discovery != nil || len(s.ConnectionParams) > 0)
+	if legacyPresent {
+		if s.Connections == nil {
+			s.Connections = make(map[string]*ManifestConnectionDef, 1)
+		}
+		if _, exists := s.Connections["default"]; exists {
+			return fmt.Errorf("legacy top-level connection fields may not be combined with spec.connections.default")
+		}
+		s.Connections["default"] = &ManifestConnectionDef{
+			Mode:      s.ConnectionMode,
+			Auth:      s.Auth,
+			Params:    s.ConnectionParams,
+			Discovery: s.Discovery,
+		}
+	}
+
+	s.syncDefaultConnectionCompatibility()
+	return nil
+}
+
+func (s *Spec) syncDefaultConnectionCompatibility() {
+	if s == nil {
+		return
+	}
+
+	s.compatDefaultConnection = false
+	s.Auth = nil
+	s.ConnectionMode = ""
+	s.Discovery = nil
+	s.ConnectionParams = nil
+
+	if s.Connections == nil {
+		return
+	}
+	def, ok := s.Connections["default"]
+	if !ok || def == nil {
+		return
+	}
+
+	s.compatDefaultConnection = true
+	s.Auth = def.Auth
+	s.ConnectionMode = def.Mode
+	s.Discovery = def.Discovery
+	s.ConnectionParams = def.Params
 }
 
 func (m *Manifest) IsHybridProvider() bool {
@@ -373,6 +438,427 @@ type Entrypoint struct {
 	ArtifactPath string   `json:"artifactPath" yaml:"artifactPath"`
 	Args         []string `json:"args,omitempty" yaml:"args,omitempty"`
 }
+
+type specJSONWire struct {
+	ConfigSchemaPath  string                                `json:"configSchemaPath,omitempty"`
+	Auth              json.RawMessage                       `json:"auth,omitempty"`
+	ConnectionMode    ConnectionMode                        `json:"connectionMode,omitempty"`
+	MCP               bool                                  `json:"mcp,omitempty"`
+	Headers           map[string]string                     `json:"headers,omitempty"`
+	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty"`
+	Discovery         *ProviderDiscovery                    `json:"discovery,omitempty"`
+	ConnectionParams  map[string]ProviderConnectionParam    `json:"connectionParams,omitempty"`
+	Surfaces          *ProviderSurfaces                     `json:"surfaces,omitempty"`
+	AllowedOperations map[string]*ManifestOperationOverride `json:"allowedOperations,omitempty"`
+	DefaultConnection string                                `json:"defaultConnection,omitempty"`
+	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty"`
+	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty"`
+	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty"`
+	Requires          []string                              `json:"requires,omitempty"`
+	UI                *OwnedUI                              `json:"ui,omitempty"`
+	AssetRoot         string                                `json:"assetRoot,omitempty"`
+	Routes            []WebUIRoute                          `json:"routes,omitempty"`
+}
+
+type specYAMLWire struct {
+	ConfigSchemaPath  string                                `yaml:"configSchemaPath,omitempty"`
+	Auth              any                                   `yaml:"auth,omitempty"`
+	ConnectionMode    ConnectionMode                        `yaml:"connectionMode,omitempty"`
+	MCP               bool                                  `yaml:"mcp,omitempty"`
+	Headers           map[string]string                     `yaml:"headers,omitempty"`
+	ManagedParameters []ManagedParameter                    `yaml:"managedParameters,omitempty"`
+	Discovery         *ProviderDiscovery                    `yaml:"discovery,omitempty"`
+	ConnectionParams  map[string]ProviderConnectionParam    `yaml:"connectionParams,omitempty"`
+	Surfaces          *ProviderSurfaces                     `yaml:"surfaces,omitempty"`
+	AllowedOperations map[string]*ManifestOperationOverride `yaml:"allowedOperations,omitempty"`
+	DefaultConnection string                                `yaml:"defaultConnection,omitempty"`
+	Connections       map[string]*ManifestConnectionDef     `yaml:"connections,omitempty"`
+	ResponseMapping   *ManifestResponseMapping              `yaml:"responseMapping,omitempty"`
+	Pagination        *ManifestPaginationConfig             `yaml:"pagination,omitempty"`
+	Requires          []string                              `yaml:"requires,omitempty"`
+	UI                *OwnedUI                              `yaml:"ui,omitempty"`
+	AssetRoot         string                                `yaml:"assetRoot,omitempty"`
+	Routes            []WebUIRoute                          `yaml:"routes,omitempty"`
+}
+
+type specWire struct {
+	ConfigSchemaPath  string                                `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
+	Auth              *RouteAuthRef                         `json:"auth,omitempty" yaml:"auth,omitempty"`
+	MCP               bool                                  `json:"mcp,omitempty" yaml:"mcp,omitempty"`
+	Headers           map[string]string                     `json:"headers,omitempty" yaml:"headers,omitempty"`
+	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
+	Surfaces          *ProviderSurfaces                     `json:"surfaces,omitempty" yaml:"surfaces,omitempty"`
+	AllowedOperations map[string]*ManifestOperationOverride `json:"allowedOperations,omitempty" yaml:"allowedOperations,omitempty"`
+	DefaultConnection string                                `json:"defaultConnection,omitempty" yaml:"defaultConnection,omitempty"`
+	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty" yaml:"connections,omitempty"`
+	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty" yaml:"responseMapping,omitempty"`
+	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
+	Requires          []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
+	UI                *OwnedUI                              `json:"ui,omitempty" yaml:"ui,omitempty"`
+	AssetRoot         string                                `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
+	Routes            []WebUIRoute                          `json:"routes,omitempty" yaml:"routes,omitempty"`
+}
+
+func (s *Spec) UnmarshalJSON(data []byte) error {
+	if err := validateJSONWireObjectFields(data, specWireFields); err != nil {
+		return err
+	}
+
+	var raw specJSONWire
+	if err := decodeJSONKnownFields(data, &raw); err != nil {
+		return err
+	}
+
+	spec := Spec{
+		ConfigSchemaPath:  raw.ConfigSchemaPath,
+		ConnectionMode:    raw.ConnectionMode,
+		MCP:               raw.MCP,
+		Headers:           raw.Headers,
+		ManagedParameters: raw.ManagedParameters,
+		Discovery:         raw.Discovery,
+		ConnectionParams:  raw.ConnectionParams,
+		Surfaces:          raw.Surfaces,
+		AllowedOperations: raw.AllowedOperations,
+		DefaultConnection: raw.DefaultConnection,
+		Connections:       raw.Connections,
+		ResponseMapping:   raw.ResponseMapping,
+		Pagination:        raw.Pagination,
+		Requires:          raw.Requires,
+		UI:                raw.UI,
+		AssetRoot:         raw.AssetRoot,
+		Routes:            raw.Routes,
+	}
+
+	routeAuth, legacyAuth, err := decodeSpecAuthJSON(raw.Auth)
+	if err != nil {
+		return err
+	}
+	spec.RouteAuth = routeAuth
+	spec.Auth = legacyAuth
+	if err := spec.NormalizeLegacyConnections(); err != nil {
+		return err
+	}
+
+	*s = spec
+	return nil
+}
+
+func (s Spec) MarshalJSON() ([]byte, error) {
+	wire, err := s.canonicalWire()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(wire)
+}
+
+func (s *Spec) UnmarshalYAML(value *yaml.Node) error {
+	if value == nil {
+		*s = Spec{}
+		return nil
+	}
+	if value.Kind != yaml.MappingNode {
+		return fmt.Errorf("spec must be a mapping")
+	}
+	if err := validateYAMLWireObjectFields(value, specWireFields, "spec"); err != nil {
+		return err
+	}
+	authNode := yamlMappingValue(value, "auth")
+
+	var raw specYAMLWire
+	if err := decodeYAMLKnownFields(value, &raw); err != nil {
+		return err
+	}
+
+	spec := Spec{
+		ConfigSchemaPath:  raw.ConfigSchemaPath,
+		ConnectionMode:    raw.ConnectionMode,
+		MCP:               raw.MCP,
+		Headers:           raw.Headers,
+		ManagedParameters: raw.ManagedParameters,
+		Discovery:         raw.Discovery,
+		ConnectionParams:  raw.ConnectionParams,
+		Surfaces:          raw.Surfaces,
+		AllowedOperations: raw.AllowedOperations,
+		DefaultConnection: raw.DefaultConnection,
+		Connections:       raw.Connections,
+		ResponseMapping:   raw.ResponseMapping,
+		Pagination:        raw.Pagination,
+		Requires:          raw.Requires,
+		UI:                raw.UI,
+		AssetRoot:         raw.AssetRoot,
+		Routes:            raw.Routes,
+	}
+
+	routeAuth, legacyAuth, err := decodeSpecAuthYAML(authNode)
+	if err != nil {
+		return err
+	}
+	spec.RouteAuth = routeAuth
+	spec.Auth = legacyAuth
+	if err := spec.NormalizeLegacyConnections(); err != nil {
+		return err
+	}
+
+	*s = spec
+	return nil
+}
+
+func (s *Spec) MarshalYAML() (any, error) {
+	if s == nil {
+		return nil, nil
+	}
+	return s.canonicalWire()
+}
+
+func (s Spec) canonicalWire() (specWire, error) {
+	normalized := s
+	normalized.Connections = cloneManifestConnections(normalized.Connections)
+	if err := normalized.NormalizeLegacyConnections(); err != nil {
+		return specWire{}, err
+	}
+	return specWire{
+		ConfigSchemaPath:  normalized.ConfigSchemaPath,
+		Auth:              normalized.RouteAuth,
+		MCP:               normalized.MCP,
+		Headers:           normalized.Headers,
+		ManagedParameters: normalized.ManagedParameters,
+		Surfaces:          normalized.Surfaces,
+		AllowedOperations: normalized.AllowedOperations,
+		DefaultConnection: normalized.DefaultConnection,
+		Connections:       normalized.Connections,
+		ResponseMapping:   normalized.ResponseMapping,
+		Pagination:        normalized.Pagination,
+		Requires:          normalized.Requires,
+		UI:                normalized.UI,
+		AssetRoot:         normalized.AssetRoot,
+		Routes:            normalized.Routes,
+	}, nil
+}
+
+func cloneManifestConnections(src map[string]*ManifestConnectionDef) map[string]*ManifestConnectionDef {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]*ManifestConnectionDef, len(src))
+	for name, def := range src {
+		if def == nil {
+			cloned[name] = nil
+			continue
+		}
+		copyDef := *def
+		cloned[name] = &copyDef
+	}
+	return cloned
+}
+
+func decodeSpecAuthJSON(data json.RawMessage) (*RouteAuthRef, *ProviderAuth, error) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil, nil, nil
+	}
+	if err := validateJSONWireObjectFields(trimmed, specAuthWireFields); err != nil {
+		return nil, nil, err
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(trimmed, &fields); err != nil {
+		return nil, nil, err
+	}
+
+	hasRoute := false
+	hasLegacy := false
+	for name := range fields {
+		if _, ok := routeAuthWireFields[name]; ok {
+			hasRoute = true
+		}
+		if _, ok := providerAuthWireFields[name]; ok {
+			hasLegacy = true
+		}
+	}
+	if hasRoute && hasLegacy {
+		return nil, nil, fmt.Errorf("spec.auth is ambiguous; use either auth.provider for route auth or legacy connection auth fields, not both")
+	}
+	if !hasRoute && !hasLegacy {
+		return &RouteAuthRef{}, nil, nil
+	}
+	if hasRoute {
+		var routeAuth RouteAuthRef
+		if err := decodeJSONKnownFields(trimmed, &routeAuth); err != nil {
+			return nil, nil, err
+		}
+		return &routeAuth, nil, nil
+	}
+
+	var auth ProviderAuth
+	if err := decodeJSONKnownFields(trimmed, &auth); err != nil {
+		return nil, nil, err
+	}
+	return nil, &auth, nil
+}
+
+func decodeSpecAuthYAML(node *yaml.Node) (*RouteAuthRef, *ProviderAuth, error) {
+	if node == nil {
+		return nil, nil, nil
+	}
+	if node.Kind == yaml.DocumentNode && len(node.Content) == 1 {
+		node = node.Content[0]
+	}
+	if node.Kind == yaml.ScalarNode && (node.Tag == "!!null" || strings.TrimSpace(node.Value) == "") {
+		return nil, nil, nil
+	}
+	if node.Kind != yaml.MappingNode {
+		return nil, nil, fmt.Errorf("spec.auth must be a mapping")
+	}
+	if err := validateYAMLWireObjectFields(node, specAuthWireFields, "spec.auth"); err != nil {
+		return nil, nil, err
+	}
+
+	hasRoute := false
+	hasLegacy := false
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		name := node.Content[i].Value
+		if _, ok := routeAuthWireFields[name]; ok {
+			hasRoute = true
+		}
+		if _, ok := providerAuthWireFields[name]; ok {
+			hasLegacy = true
+		}
+	}
+	if hasRoute && hasLegacy {
+		return nil, nil, fmt.Errorf("spec.auth is ambiguous; use either auth.provider for route auth or legacy connection auth fields, not both")
+	}
+	if !hasRoute && !hasLegacy {
+		return &RouteAuthRef{}, nil, nil
+	}
+	if hasRoute {
+		var routeAuth RouteAuthRef
+		if err := decodeYAMLKnownFields(node, &routeAuth); err != nil {
+			return nil, nil, err
+		}
+		return &routeAuth, nil, nil
+	}
+
+	var auth ProviderAuth
+	if err := decodeYAMLKnownFields(node, &auth); err != nil {
+		return nil, nil, err
+	}
+	return nil, &auth, nil
+}
+
+func decodeJSONKnownFields(data []byte, out any) error {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(out); err != nil {
+		return err
+	}
+	return nil
+}
+
+func decodeYAMLKnownFields(node *yaml.Node, out any) error {
+	data, err := yaml.Marshal(node)
+	if err != nil {
+		return err
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(out); err != nil && err != io.EOF {
+		return err
+	}
+	return nil
+}
+
+func validateJSONWireObjectFields(data []byte, allowed map[string]struct{}) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for name := range fields {
+		if _, ok := allowed[name]; !ok {
+			return fmt.Errorf("json: unknown field %q", name)
+		}
+	}
+	return nil
+}
+
+func validateYAMLWireObjectFields(node *yaml.Node, allowed map[string]struct{}, subject string) error {
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		name := node.Content[i].Value
+		if _, ok := allowed[name]; !ok {
+			return fmt.Errorf("%s.%s is not supported", subject, name)
+		}
+	}
+	return nil
+}
+
+func yamlMappingValue(node *yaml.Node, key string) *yaml.Node {
+	if node == nil {
+		return nil
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			return node.Content[i+1]
+		}
+	}
+	return nil
+}
+
+var specWireFields = map[string]struct{}{
+	"configSchemaPath":  {},
+	"auth":              {},
+	"connectionMode":    {},
+	"mcp":               {},
+	"headers":           {},
+	"managedParameters": {},
+	"discovery":         {},
+	"connectionParams":  {},
+	"surfaces":          {},
+	"allowedOperations": {},
+	"defaultConnection": {},
+	"connections":       {},
+	"responseMapping":   {},
+	"pagination":        {},
+	"requires":          {},
+	"ui":                {},
+	"assetRoot":         {},
+	"routes":            {},
+}
+
+var routeAuthWireFields = map[string]struct{}{
+	"provider": {},
+}
+
+var providerAuthWireFields = map[string]struct{}{
+	"type":                {},
+	"authorizationUrl":    {},
+	"tokenUrl":            {},
+	"clientId":            {},
+	"clientSecret":        {},
+	"scopes":              {},
+	"pkce":                {},
+	"clientAuth":          {},
+	"tokenExchange":       {},
+	"accessTokenPath":     {},
+	"scopeParam":          {},
+	"scopeSeparator":      {},
+	"authorizationParams": {},
+	"tokenParams":         {},
+	"refreshParams":       {},
+	"acceptHeader":        {},
+	"tokenMetadata":       {},
+	"credentials":         {},
+	"authMapping":         {},
+}
+
+var specAuthWireFields = func() map[string]struct{} {
+	fields := make(map[string]struct{}, len(routeAuthWireFields)+len(providerAuthWireFields))
+	for name := range routeAuthWireFields {
+		fields[name] = struct{}{}
+	}
+	for name := range providerAuthWireFields {
+		fields[name] = struct{}{}
+	}
+	return fields
+}()
 
 //go:embed manifest.jsonschema.json
 var ManifestJSONSchema []byte
