@@ -69,6 +69,9 @@ func buildProvidersAsync(
 	var connMu sync.Mutex
 
 	for _, builtin := range factories.Builtins {
+		if err := validateProviderConnectionMode(builtin.Name(), builtin.ConnectionMode()); err != nil {
+			return nil, nil, nil, nil, fmt.Errorf("bootstrap: builtin provider %q: %w", builtin.Name(), err)
+		}
 		if err := reg.Providers.Register(builtin.Name(), builtin); errors.Is(err, core.ErrAlreadyRegistered) {
 			continue
 		} else if err != nil {
@@ -115,6 +118,18 @@ func buildProvidersAsync(
 					proxy.fail(err)
 					reg.Providers.Remove(name)
 				}
+				slog.Warn("skipping provider", "provider", name, "error", err)
+				return
+			}
+			if err := validateProviderConnectionMode(name, result.Provider.ConnectionMode()); err != nil {
+				errMu.Lock()
+				buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", name, err))
+				errMu.Unlock()
+				if proxy != nil {
+					proxy.fail(err)
+					reg.Providers.Remove(name)
+				}
+				closeIfPossible(result.Provider)
 				slog.Warn("skipping provider", "provider", name, "error", err)
 				return
 			}
@@ -165,6 +180,15 @@ func buildProvidersAsync(
 		return append([]error(nil), buildErrs...)
 	}
 	return &reg.Providers, ready, resolver, errResolver, nil
+}
+
+func validateProviderConnectionMode(provider string, mode core.ConnectionMode) error {
+	switch mode {
+	case core.ConnectionModeNone, core.ConnectionModeUser, core.ConnectionModeIdentity:
+		return nil
+	default:
+		return fmt.Errorf("unsupported connection mode %q for provider %q", mode, provider)
+	}
 }
 
 func buildStartupProviderSpec(name string, entry *config.ProviderEntry) (providerhost.StaticProviderSpec, map[string]string, error) {

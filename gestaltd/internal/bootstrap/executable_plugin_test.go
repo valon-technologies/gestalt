@@ -1052,7 +1052,7 @@ func TestPluginManifestNamedOAuthKeepsProviderTokenMode(t *testing.T) {
 	}
 }
 
-func TestPreparedProviderStub_UsesManifestConnectionPlanMode(t *testing.T) {
+func TestPreparedProviderStub_RejectsMixedConnectionModes(t *testing.T) {
 	t.Parallel()
 
 	cfg := &config.Config{
@@ -1076,17 +1076,12 @@ func TestPreparedProviderStub_UsesManifestConnectionPlanMode(t *testing.T) {
 	}
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{})
-	if err != nil {
-		t.Fatalf("buildProvidersStrict: %v", err)
+	if err == nil {
+		defer func() { _ = CloseProviders(providers) }()
+		t.Fatal("expected mixed connection mode error, got nil")
 	}
-	defer func() { _ = CloseProviders(providers) }()
-
-	prov, err := providers.Get("echoauth")
-	if err != nil {
-		t.Fatalf("providers.Get(echoauth): %v", err)
-	}
-	if prov.ConnectionMode() != core.ConnectionModeEither {
-		t.Fatalf("ConnectionMode = %q, want %q", prov.ConnectionMode(), core.ConnectionModeEither)
+	if !strings.Contains(err.Error(), `plugins may not mix "user" and "identity" connection modes across connections`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

@@ -105,8 +105,7 @@
           "enum": [
             "none",
             "user",
-            "identity",
-            "either"
+            "identity"
           ]
         },
         "headers": {
@@ -208,8 +207,7 @@
           "enum": [
             "none",
             "user",
-            "identity",
-            "either"
+            "identity"
           ]
         },
         "auth": {

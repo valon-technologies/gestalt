@@ -76,6 +76,10 @@ func BuildStaticConnectionPlan(plugin *ProviderEntry, manifestPlugin *providerma
 		plan.surfaces[surface] = resolved
 	}
 
+	if err := plan.validateConnectionModes(); err != nil {
+		return StaticConnectionPlan{}, err
+	}
+
 	return plan, nil
 }
 
@@ -165,9 +169,6 @@ func (plan StaticConnectionPlan) ConnectionMode() core.ConnectionMode {
 			needUser = true
 		case core.ConnectionModeIdentity:
 			needIdentity = true
-		case core.ConnectionModeEither:
-			needUser = true
-			needIdentity = true
 		}
 	}
 
@@ -177,8 +178,6 @@ func (plan StaticConnectionPlan) ConnectionMode() core.ConnectionMode {
 	}
 
 	switch {
-	case needUser && needIdentity:
-		return core.ConnectionModeEither
 	case needUser:
 		return core.ConnectionModeUser
 	case needIdentity:
@@ -186,6 +185,39 @@ func (plan StaticConnectionPlan) ConnectionMode() core.ConnectionMode {
 	default:
 		return core.ConnectionModeNone
 	}
+}
+
+func (plan StaticConnectionPlan) validateConnectionModes() error {
+	needUser := false
+	needIdentity := false
+
+	addMode := func(scope string, mode core.ConnectionMode) error {
+		switch mode {
+		case "", core.ConnectionModeNone:
+			return nil
+		case core.ConnectionModeUser:
+			needUser = true
+			return nil
+		case core.ConnectionModeIdentity:
+			needIdentity = true
+			return nil
+		default:
+			return fmt.Errorf("%s uses unsupported connection mode %q", scope, mode)
+		}
+	}
+
+	if err := addMode("plugin connection", connectionModeForConnection(plan.pluginConnection)); err != nil {
+		return err
+	}
+	for _, name := range plan.NamedConnectionNames() {
+		if err := addMode(fmt.Sprintf("connection %q", name), connectionModeForConnection(plan.namedConnections[name])); err != nil {
+			return err
+		}
+	}
+	if needUser && needIdentity {
+		return fmt.Errorf("plugins may not mix %q and %q connection modes across connections", core.ConnectionModeUser, core.ConnectionModeIdentity)
+	}
+	return nil
 }
 
 func (plan StaticConnectionPlan) fallbackConnection() string {

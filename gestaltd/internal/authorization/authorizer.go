@@ -526,7 +526,7 @@ func buildBinding(mode core.ConnectionMode, workloadID, provider string, def con
 				Instance:            instance,
 			},
 		}, nil
-	case core.ConnectionModeUser, core.ConnectionModeEither, "":
+	case core.ConnectionModeUser, core.ConnectionMode("either"), "":
 		return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q uses unsupported connection mode %q in v1", workloadID, provider, mode)
 	default:
 		return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q uses unknown connection mode %q", workloadID, provider, mode)

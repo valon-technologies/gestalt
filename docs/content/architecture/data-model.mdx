@@ -108,7 +108,6 @@ The `_connection` and `_instance` selectors in the [HTTP API](/reference/http-ap
 - **`none`**: No credentials stored. Operations run without upstream auth.
 - **`user`**: Each user connects individually. Tokens keyed by `user_id`.
 - **`identity`**: Single shared credential for the deployment, stored with a fixed internal user ID.
-- **`either`**: Prefers user token, falls back to identity.
 
 Renaming a `plugins` key in config is a breaking change. Stored tokens reference the old name.
 
