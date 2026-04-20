@@ -14,7 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -56,79 +55,40 @@ type workflowScheduleInfo struct {
 	NextRunAt *time.Time                 `json:"nextRunAt,omitempty"`
 }
 
-func (s *Server) listWorkflowSchedules(w http.ResponseWriter, r *http.Request) {
-	pluginName := strings.TrimSpace(chi.URLParam(r, "integration"))
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
-	if !ok {
-		return
-	}
-	providerName, provider, _, ok := s.resolveWorkflowScheduleProvider(w, pluginName)
-	if !ok {
-		return
-	}
-	if !s.allowProviderContext(r.Context(), p, pluginName) {
-		writeError(w, http.StatusForbidden, errOperationAccess.Error())
-		return
-	}
-
-	schedules, err := provider.ListSchedules(r.Context(), coreworkflow.ListSchedulesRequest{})
-	if err != nil {
-		s.writeWorkflowScheduleProviderError(w, pluginName, "", err)
-		return
-	}
-
-	out := make([]workflowScheduleInfo, 0, len(schedules))
-	for _, schedule := range schedules {
-		if strings.TrimSpace(schedule.Target.PluginName) != pluginName {
-			continue
-		}
-		owned, ref, err := s.workflowScheduleOwner(r.Context(), p, schedule)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to resolve workflow schedule owner")
-			return
-		}
-		if !owned || !workflowScheduleMatchesExecutionRef("", schedule, ref) || !s.allowWorkflowScheduleTarget(r.Context(), p, schedule.Target) {
-			continue
-		}
-		out = append(out, workflowScheduleInfoFromCore(schedule, providerName))
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].CreatedAt != nil && out[j].CreatedAt != nil && !out[i].CreatedAt.Equal(*out[j].CreatedAt) {
-			return out[i].CreatedAt.Before(*out[j].CreatedAt)
-		}
-		return out[i].ID < out[j].ID
-	})
-	writeJSON(w, http.StatusOK, out)
-}
-
 func (s *Server) listGlobalWorkflowSchedules(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.resolveWorkflowScheduleActor(w, r)
 	if !ok {
 		return
 	}
-	providerNames, providers, ok := s.resolveGlobalWorkflowScheduleProviders(w)
+	refs, ok := s.listOwnedWorkflowScheduleExecutionRefs(r.Context(), w, p)
 	if !ok {
 		return
 	}
 	out := make([]workflowScheduleInfo, 0)
-	for _, providerName := range providerNames {
-		provider := providers[providerName]
-		schedules, err := provider.ListSchedules(r.Context(), coreworkflow.ListSchedulesRequest{})
-		if err != nil {
-			s.writeWorkflowScheduleProviderError(w, "", "", err)
+	for _, ref := range refs {
+		if !s.allowWorkflowScheduleTarget(r.Context(), p, ref.Target) {
+			continue
+		}
+		scheduleID := workflowScheduleIDFromExecutionRefID(ref.ID)
+		if scheduleID == "" {
+			continue
+		}
+		provider, ok := s.resolveWorkflowScheduleProviderByName(w, ref.ProviderName)
+		if !ok {
 			return
 		}
-		for _, schedule := range schedules {
-			owned, ref, err := s.workflowScheduleOwner(r.Context(), p, schedule)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, "failed to resolve workflow schedule owner")
-				return
-			}
-			if !owned || !workflowScheduleMatchesExecutionRef(providerName, schedule, ref) || !s.allowWorkflowScheduleTarget(r.Context(), p, schedule.Target) {
+		schedule, err := provider.GetSchedule(r.Context(), coreworkflow.GetScheduleRequest{ScheduleID: scheduleID})
+		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
 				continue
 			}
-			out = append(out, workflowScheduleInfoFromCore(schedule, providerName))
+			s.writeWorkflowScheduleProviderError(w, strings.TrimSpace(ref.Target.PluginName), scheduleID, err)
+			return
 		}
+		if !workflowScheduleMatchesExecutionRef(ref.ProviderName, schedule, ref) {
+			continue
+		}
+		out = append(out, workflowScheduleInfoFromCore(schedule, strings.TrimSpace(ref.ProviderName)))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].CreatedAt != nil && out[j].CreatedAt != nil && !out[i].CreatedAt.Equal(*out[j].CreatedAt) {
@@ -140,7 +100,6 @@ func (s *Server) listGlobalWorkflowSchedules(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
-	routePluginName := strings.TrimSpace(chi.URLParam(r, "integration"))
 	p, ok := s.resolveWorkflowScheduleActor(w, r)
 	if !ok {
 		return
@@ -151,8 +110,9 @@ func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	pluginName, ok := s.resolveWorkflowScheduleTargetPlugin(w, routePluginName, req.Target.Plugin)
-	if !ok {
+	pluginName := strings.TrimSpace(req.Target.Plugin)
+	if pluginName == "" {
+		writeError(w, http.StatusBadRequest, "workflow target plugin is required")
 		return
 	}
 	providerName, provider, allowed, ok := s.resolveWorkflowScheduleProvider(w, pluginName)
@@ -191,23 +151,6 @@ func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusCreated, workflowScheduleInfoFromCore(schedule, providerName))
 }
 
-func (s *Server) getWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
-	pluginName := strings.TrimSpace(chi.URLParam(r, "integration"))
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
-	if !ok {
-		return
-	}
-	providerName, provider, _, ok := s.resolveWorkflowScheduleProvider(w, pluginName)
-	if !ok {
-		return
-	}
-	schedule, _, ok := s.requireOwnedWorkflowSchedule(r.Context(), w, provider, pluginName, chi.URLParam(r, "scheduleID"), p)
-	if !ok {
-		return
-	}
-	writeJSON(w, http.StatusOK, workflowScheduleInfoFromCore(schedule, providerName))
-}
-
 func (s *Server) getGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.resolveWorkflowScheduleActor(w, r)
 	if !ok {
@@ -216,64 +159,6 @@ func (s *Server) getGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Reques
 	schedule, _, providerName, _, ok := s.requireOwnedWorkflowScheduleGlobal(r.Context(), w, chi.URLParam(r, "scheduleID"), p)
 	if !ok {
 		return
-	}
-	writeJSON(w, http.StatusOK, workflowScheduleInfoFromCore(schedule, providerName))
-}
-
-func (s *Server) updateWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
-	routePluginName := strings.TrimSpace(chi.URLParam(r, "integration"))
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
-	if !ok {
-		return
-	}
-
-	var req workflowScheduleUpsertRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	pluginName, ok := s.resolveWorkflowScheduleTargetPlugin(w, routePluginName, req.Target.Plugin)
-	if !ok {
-		return
-	}
-	providerName, provider, allowed, ok := s.resolveWorkflowScheduleProvider(w, pluginName)
-	if !ok {
-		return
-	}
-	scheduleID := chi.URLParam(r, "scheduleID")
-	existing, ref, ok := s.requireOwnedWorkflowSchedule(r.Context(), w, provider, pluginName, scheduleID, p)
-	if !ok {
-		return
-	}
-	target, err := s.resolveWorkflowScheduleTarget(r.Context(), pluginName, allowed, p, req.Target)
-	if err != nil {
-		s.writeWorkflowScheduleTargetError(w, r, pluginName, strings.TrimSpace(req.Target.Operation), err)
-		return
-	}
-
-	executionRefID := workflowScheduleExecutionRefID(strings.TrimSpace(existing.ID))
-	nextRef, err := s.putWorkflowExecutionRef(r.Context(), executionRefID, providerName, target, p)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to store workflow execution reference")
-		return
-	}
-
-	schedule, err := provider.UpsertSchedule(r.Context(), coreworkflow.UpsertScheduleRequest{
-		ScheduleID:   strings.TrimSpace(existing.ID),
-		Cron:         strings.TrimSpace(req.Cron),
-		Timezone:     strings.TrimSpace(req.Timezone),
-		Target:       target,
-		Paused:       req.Paused,
-		RequestedBy:  workflowActorFromPrincipal(p),
-		ExecutionRef: executionRefID,
-	})
-	if err != nil {
-		s.revokeWorkflowExecutionRef(r.Context(), nextRef)
-		s.writeWorkflowScheduleProviderError(w, pluginName, strings.TrimSpace(existing.ID), err)
-		return
-	}
-	if ref != nil && ref.ID != "" && ref.ID != executionRefID {
-		s.revokeWorkflowExecutionRef(r.Context(), ref)
 	}
 	writeJSON(w, http.StatusOK, workflowScheduleInfoFromCore(schedule, providerName))
 }
@@ -294,8 +179,9 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	pluginName, ok := s.resolveWorkflowScheduleTargetPlugin(w, "", req.Target.Plugin)
-	if !ok {
+	pluginName := strings.TrimSpace(req.Target.Plugin)
+	if pluginName == "" {
+		writeError(w, http.StatusBadRequest, "workflow target plugin is required")
 		return
 	}
 	nextProviderName, nextProvider, allowed, ok := s.resolveWorkflowScheduleProvider(w, pluginName)
@@ -346,32 +232,6 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, workflowScheduleInfoFromCore(schedule, nextProviderName))
 }
 
-func (s *Server) deleteWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
-	pluginName := strings.TrimSpace(chi.URLParam(r, "integration"))
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
-	if !ok {
-		return
-	}
-	_, provider, _, ok := s.resolveWorkflowScheduleProvider(w, pluginName)
-	if !ok {
-		return
-	}
-	schedule, ref, ok := s.requireOwnedWorkflowSchedule(r.Context(), w, provider, pluginName, chi.URLParam(r, "scheduleID"), p)
-	if !ok {
-		return
-	}
-	if err := provider.DeleteSchedule(r.Context(), coreworkflow.DeleteScheduleRequest{
-		ScheduleID: strings.TrimSpace(schedule.ID),
-	}); err != nil {
-		s.writeWorkflowScheduleProviderError(w, pluginName, strings.TrimSpace(schedule.ID), err)
-		return
-	}
-	if ref != nil && ref.ID != "" {
-		s.revokeWorkflowExecutionRef(r.Context(), ref)
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
-}
-
 func (s *Server) deleteGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.resolveWorkflowScheduleActor(w, r)
 	if !ok {
@@ -393,30 +253,6 @@ func (s *Server) deleteGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-func (s *Server) pauseWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
-	pluginName := strings.TrimSpace(chi.URLParam(r, "integration"))
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
-	if !ok {
-		return
-	}
-	providerName, provider, _, ok := s.resolveWorkflowScheduleProvider(w, pluginName)
-	if !ok {
-		return
-	}
-	schedule, _, ok := s.requireOwnedWorkflowSchedule(r.Context(), w, provider, pluginName, chi.URLParam(r, "scheduleID"), p)
-	if !ok {
-		return
-	}
-	value, err := provider.PauseSchedule(r.Context(), coreworkflow.PauseScheduleRequest{
-		ScheduleID: strings.TrimSpace(schedule.ID),
-	})
-	if err != nil {
-		s.writeWorkflowScheduleProviderError(w, pluginName, strings.TrimSpace(schedule.ID), err)
-		return
-	}
-	writeJSON(w, http.StatusOK, workflowScheduleInfoFromCore(value, providerName))
-}
-
 func (s *Server) pauseGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.resolveWorkflowScheduleActor(w, r)
 	if !ok {
@@ -431,30 +267,6 @@ func (s *Server) pauseGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Requ
 	})
 	if err != nil {
 		s.writeWorkflowScheduleProviderError(w, strings.TrimSpace(schedule.Target.PluginName), strings.TrimSpace(schedule.ID), err)
-		return
-	}
-	writeJSON(w, http.StatusOK, workflowScheduleInfoFromCore(value, providerName))
-}
-
-func (s *Server) resumeWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
-	pluginName := strings.TrimSpace(chi.URLParam(r, "integration"))
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
-	if !ok {
-		return
-	}
-	providerName, provider, _, ok := s.resolveWorkflowScheduleProvider(w, pluginName)
-	if !ok {
-		return
-	}
-	schedule, _, ok := s.requireOwnedWorkflowSchedule(r.Context(), w, provider, pluginName, chi.URLParam(r, "scheduleID"), p)
-	if !ok {
-		return
-	}
-	value, err := provider.ResumeSchedule(r.Context(), coreworkflow.ResumeScheduleRequest{
-		ScheduleID: strings.TrimSpace(schedule.ID),
-	})
-	if err != nil {
-		s.writeWorkflowScheduleProviderError(w, pluginName, strings.TrimSpace(schedule.ID), err)
 		return
 	}
 	writeJSON(w, http.StatusOK, workflowScheduleInfoFromCore(value, providerName))
@@ -513,43 +325,17 @@ func (s *Server) resolveWorkflowScheduleProvider(w http.ResponseWriter, pluginNa
 	return providerName, provider, allowed, true
 }
 
-func (s *Server) resolveGlobalWorkflowScheduleProviders(w http.ResponseWriter) ([]string, map[string]coreworkflow.Provider, bool) {
+func (s *Server) resolveWorkflowScheduleProviderByName(w http.ResponseWriter, providerName string) (coreworkflow.Provider, bool) {
 	if s.workflow == nil {
 		writeError(w, http.StatusPreconditionFailed, "workflow is not configured")
-		return nil, nil, false
+		return nil, false
 	}
-	providerNames := s.workflow.ProviderNames()
-	if len(providerNames) == 0 {
-		writeError(w, http.StatusPreconditionFailed, "workflow is not configured")
-		return nil, nil, false
+	provider, err := s.workflow.ResolveProvider(strings.TrimSpace(providerName))
+	if err != nil {
+		writeError(w, http.StatusPreconditionFailed, err.Error())
+		return nil, false
 	}
-	providers := make(map[string]coreworkflow.Provider, len(providerNames))
-	for _, providerName := range providerNames {
-		provider, err := s.workflow.ResolveProvider(providerName)
-		if err != nil {
-			writeError(w, http.StatusPreconditionFailed, err.Error())
-			return nil, nil, false
-		}
-		providers[providerName] = provider
-	}
-	return providerNames, providers, true
-}
-
-func (s *Server) resolveWorkflowScheduleTargetPlugin(w http.ResponseWriter, routePluginName, requestPluginName string) (string, bool) {
-	routePluginName = strings.TrimSpace(routePluginName)
-	requestPluginName = strings.TrimSpace(requestPluginName)
-	switch {
-	case routePluginName != "" && requestPluginName != "" && routePluginName != requestPluginName:
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("workflow target plugin %q does not match route integration %q", requestPluginName, routePluginName))
-		return "", false
-	case routePluginName != "":
-		return routePluginName, true
-	case requestPluginName == "":
-		writeError(w, http.StatusBadRequest, "workflow target plugin is required")
-		return "", false
-	default:
-		return requestPluginName, true
-	}
+	return provider, true
 }
 
 func (s *Server) resolveWorkflowScheduleTarget(
@@ -630,54 +416,6 @@ func (s *Server) resolveWorkflowScheduleTarget(
 	}, nil
 }
 
-func (s *Server) requireOwnedWorkflowSchedule(
-	ctx context.Context,
-	w http.ResponseWriter,
-	provider coreworkflow.Provider,
-	pluginName string,
-	scheduleID string,
-	p *principal.Principal,
-) (*coreworkflow.Schedule, *coreworkflow.ExecutionReference, bool) {
-	scheduleID = strings.TrimSpace(scheduleID)
-	if scheduleID == "" {
-		writeError(w, http.StatusBadRequest, "scheduleID is required")
-		return nil, nil, false
-	}
-	if !s.allowProviderContext(ctx, p, pluginName) {
-		writeError(w, http.StatusForbidden, errOperationAccess.Error())
-		return nil, nil, false
-	}
-	schedule, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{
-		ScheduleID: scheduleID,
-	})
-	if err != nil {
-		s.writeWorkflowScheduleProviderError(w, pluginName, scheduleID, err)
-		return nil, nil, false
-	}
-	owned, ref, err := s.workflowScheduleOwner(ctx, p, schedule)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to resolve workflow schedule owner")
-		return nil, nil, false
-	}
-	if !owned {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow schedule %q not found", scheduleID))
-		return nil, nil, false
-	}
-	if !workflowScheduleMatchesExecutionRef("", schedule, ref) {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow schedule %q not found", scheduleID))
-		return nil, nil, false
-	}
-	if strings.TrimSpace(schedule.Target.PluginName) != pluginName {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow schedule %q not found", scheduleID))
-		return nil, nil, false
-	}
-	if !s.allowWorkflowScheduleTarget(ctx, p, schedule.Target) {
-		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow schedule %q not found", scheduleID))
-		return nil, nil, false
-	}
-	return schedule, ref, true
-}
-
 func (s *Server) requireOwnedWorkflowScheduleGlobal(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -689,67 +427,77 @@ func (s *Server) requireOwnedWorkflowScheduleGlobal(
 		writeError(w, http.StatusBadRequest, "scheduleID is required")
 		return nil, nil, "", nil, false
 	}
-	providerNames, providers, ok := s.resolveGlobalWorkflowScheduleProviders(w)
+	ref, ok := s.findOwnedWorkflowScheduleExecutionRef(ctx, w, scheduleID, p)
 	if !ok {
 		return nil, nil, "", nil, false
 	}
-	var (
-		foundSchedule     *coreworkflow.Schedule
-		foundRef          *coreworkflow.ExecutionReference
-		foundProviderName string
-		foundProvider     coreworkflow.Provider
-	)
-	for _, providerName := range providerNames {
-		provider := providers[providerName]
-		schedule, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{
-			ScheduleID: scheduleID,
-		})
-		if err != nil {
-			if errors.Is(err, core.ErrNotFound) {
-				continue
-			}
-			s.writeWorkflowScheduleProviderError(w, "", scheduleID, err)
-			return nil, nil, "", nil, false
-		}
-		owned, ref, err := s.workflowScheduleOwner(ctx, p, schedule)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to resolve workflow schedule owner")
-			return nil, nil, "", nil, false
-		}
-		if !owned || !workflowScheduleMatchesExecutionRef(providerName, schedule, ref) || !s.allowWorkflowScheduleTarget(ctx, p, schedule.Target) {
-			continue
-		}
-		if foundSchedule != nil {
-			writeError(w, http.StatusInternalServerError, fmt.Sprintf("workflow schedule %q matched multiple workflow providers", scheduleID))
-			return nil, nil, "", nil, false
-		}
-		foundSchedule = schedule
-		foundRef = ref
-		foundProviderName = providerName
-		foundProvider = provider
-	}
-	if foundSchedule == nil {
+	if !s.allowWorkflowScheduleTarget(ctx, p, ref.Target) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow schedule %q not found", scheduleID))
 		return nil, nil, "", nil, false
 	}
-	return foundSchedule, foundRef, foundProviderName, foundProvider, true
+	provider, ok := s.resolveWorkflowScheduleProviderByName(w, ref.ProviderName)
+	if !ok {
+		return nil, nil, "", nil, false
+	}
+	schedule, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{ScheduleID: scheduleID})
+	if err != nil {
+		s.writeWorkflowScheduleProviderError(w, strings.TrimSpace(ref.Target.PluginName), scheduleID, err)
+		return nil, nil, "", nil, false
+	}
+	if !workflowScheduleMatchesExecutionRef(ref.ProviderName, schedule, ref) {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow schedule %q not found", scheduleID))
+		return nil, nil, "", nil, false
+	}
+	return schedule, ref, strings.TrimSpace(ref.ProviderName), provider, true
 }
 
-func (s *Server) workflowScheduleOwner(ctx context.Context, p *principal.Principal, schedule *coreworkflow.Schedule) (bool, *coreworkflow.ExecutionReference, error) {
-	if schedule == nil || strings.TrimSpace(schedule.ExecutionRef) == "" {
-		return false, nil, nil
-	}
+func (s *Server) listOwnedWorkflowScheduleExecutionRefs(ctx context.Context, w http.ResponseWriter, p *principal.Principal) ([]*coreworkflow.ExecutionReference, bool) {
 	if s.workflowExecutionRefs == nil {
-		return false, nil, fmt.Errorf("workflow execution refs are not configured")
+		writeError(w, http.StatusPreconditionFailed, "workflow execution refs are not configured")
+		return nil, false
 	}
-	ref, err := s.workflowExecutionRefs.Get(ctx, schedule.ExecutionRef)
+	refs, err := s.workflowExecutionRefs.ListBySubject(ctx, strings.TrimSpace(p.SubjectID))
 	if err != nil {
-		if err == indexeddb.ErrNotFound {
-			return false, nil, nil
-		}
-		return false, nil, err
+		writeError(w, http.StatusInternalServerError, "failed to resolve workflow schedule owner")
+		return nil, false
 	}
-	return workflowExecutionRefOwnedBy(ref, p), ref, nil
+	out := make([]*coreworkflow.ExecutionReference, 0, len(refs))
+	for _, ref := range refs {
+		if !workflowExecutionRefActive(ref) || !workflowExecutionRefOwnedBy(ref, p) {
+			continue
+		}
+		out = append(out, ref)
+	}
+	return out, true
+}
+
+func (s *Server) findOwnedWorkflowScheduleExecutionRef(
+	ctx context.Context,
+	w http.ResponseWriter,
+	scheduleID string,
+	p *principal.Principal,
+) (*coreworkflow.ExecutionReference, bool) {
+	refs, ok := s.listOwnedWorkflowScheduleExecutionRefs(ctx, w, p)
+	if !ok {
+		return nil, false
+	}
+	prefix := workflowScheduleExecutionRefPrefix(scheduleID)
+	var match *coreworkflow.ExecutionReference
+	for _, ref := range refs {
+		if !strings.HasPrefix(strings.TrimSpace(ref.ID), prefix) {
+			continue
+		}
+		if match != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("workflow schedule %q matched multiple execution references", scheduleID))
+			return nil, false
+		}
+		match = ref
+	}
+	if match == nil {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow schedule %q not found", scheduleID))
+		return nil, false
+	}
+	return match, true
 }
 
 func (s *Server) allowWorkflowScheduleTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) bool {
@@ -771,6 +519,12 @@ func workflowExecutionRefOwnedBy(ref *coreworkflow.ExecutionReference, p *princi
 	subjectID := strings.TrimSpace(p.SubjectID)
 	return subjectID != "" && strings.TrimSpace(ref.SubjectID) == subjectID
 }
+
+func workflowExecutionRefActive(ref *coreworkflow.ExecutionReference) bool {
+	return ref != nil && (ref.RevokedAt == nil || ref.RevokedAt.IsZero())
+}
+
+const workflowScheduleExecutionRefBasePrefix = "workflow_schedule:"
 
 func workflowScheduleMatchesExecutionRef(providerName string, schedule *coreworkflow.Schedule, ref *coreworkflow.ExecutionReference) bool {
 	if schedule == nil || ref == nil {
@@ -813,7 +567,24 @@ func (s *Server) putWorkflowExecutionRef(
 }
 
 func workflowScheduleExecutionRefID(scheduleID string) string {
-	return "workflow_schedule:" + strings.TrimSpace(scheduleID) + ":" + uuid.NewString()
+	return workflowScheduleExecutionRefPrefix(scheduleID) + uuid.NewString()
+}
+
+func workflowScheduleExecutionRefPrefix(scheduleID string) string {
+	return workflowScheduleExecutionRefBasePrefix + strings.TrimSpace(scheduleID) + ":"
+}
+
+func workflowScheduleIDFromExecutionRefID(executionRefID string) string {
+	trimmed := strings.TrimSpace(executionRefID)
+	if !strings.HasPrefix(trimmed, workflowScheduleExecutionRefBasePrefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(trimmed, workflowScheduleExecutionRefBasePrefix)
+	lastColon := strings.LastIndex(rest, ":")
+	if lastColon <= 0 {
+		return ""
+	}
+	return rest[:lastColon]
 }
 
 func workflowActorFromPrincipal(p *principal.Principal) coreworkflow.Actor {
