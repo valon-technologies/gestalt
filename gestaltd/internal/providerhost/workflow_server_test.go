@@ -935,6 +935,29 @@ func TestWorkflowHostServerMapsInvocationErrors(t *testing.T) {
 	}
 }
 
+func TestWorkflowHostServerMapsInternalInvocationErrors(t *testing.T) {
+	t.Parallel()
+
+	srv := NewWorkflowHostServer(
+		"temporal",
+		func(context.Context, coreworkflow.InvokeOperationRequest) (*coreworkflow.InvokeOperationResponse, error) {
+			return nil, invocation.ErrInternal
+		},
+		func(string, string, string) bool { return true },
+	)
+
+	_, err := srv.InvokeOperation(context.Background(), &proto.InvokeWorkflowOperationRequest{
+		PluginName: "roadmap",
+		Target: &proto.BoundWorkflowTarget{
+			PluginName: "roadmap",
+			Operation:  "sync",
+		},
+	})
+	if status.Code(err) != codes.Internal {
+		t.Fatalf("status code = %v, want %v", status.Code(err), codes.Internal)
+	}
+}
+
 func TestWorkflowServerPublishEventScopesPlugin(t *testing.T) {
 	t.Parallel()
 

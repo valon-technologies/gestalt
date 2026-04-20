@@ -56,6 +56,21 @@ func (s Source) String() string {
 	}
 }
 
+func ParseSource(value string) Source {
+	switch strings.TrimSpace(value) {
+	case SourceSession.String():
+		return SourceSession
+	case SourceAPIToken.String():
+		return SourceAPIToken
+	case SourceWorkloadToken.String():
+		return SourceWorkloadToken
+	case SourceEnv.String():
+		return SourceEnv
+	default:
+		return SourceUnknown
+	}
+}
+
 func (p *Principal) AuthSource() string {
 	if p == nil {
 		return ""
@@ -71,6 +86,13 @@ func UserSubjectID(userID string) string {
 		return ""
 	}
 	return string(KindUser) + ":" + userID
+}
+
+func UserIDFromSubjectID(subjectID string) string {
+	if !strings.HasPrefix(subjectID, string(KindUser)+":") {
+		return ""
+	}
+	return strings.TrimPrefix(subjectID, string(KindUser)+":")
 }
 
 func WorkloadSubjectID(workloadID string) string {

@@ -23,6 +23,7 @@ type Services struct {
 	IdentityPluginAccess     *IdentityPluginAccessService
 	APITokenAccess           *APITokenAccessService
 	ExternalCredentials      *ExternalCredentialService
+	WorkflowExecutionRefs    *WorkflowExecutionRefService
 	DB                       indexeddb.IndexedDB
 }
 
@@ -70,6 +71,9 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := ds.CreateObjectStore(ctx, StoreExternalCredentials, ExternalCredentialsSchema); err != nil {
 		return nil, fmt.Errorf("create external_credentials store: %w", err)
 	}
+	if err := ds.CreateObjectStore(ctx, StoreWorkflowExecutionRefs, WorkflowExecutionRefsSchema); err != nil {
+		return nil, fmt.Errorf("create workflow_execution_refs store: %w", err)
+	}
 
 	identities := NewIdentityService(ds)
 	authBindings := NewIdentityAuthBindingService(ds)
@@ -79,6 +83,7 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	identityPluginAccess := NewIdentityPluginAccessService(ds)
 	apiTokenAccess := NewAPITokenAccessService(ds)
 	externalCredentials := NewExternalCredentialService(ds)
+	workflowExecutionRefs := NewWorkflowExecutionRefService(ds)
 
 	users := NewUserService(ds, identities, authBindings)
 	if err := users.BackfillNormalizedEmails(ctx); err != nil {
@@ -127,6 +132,7 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 		IdentityPluginAccess:     identityPluginAccess,
 		APITokenAccess:           apiTokenAccess,
 		ExternalCredentials:      externalCredentials,
+		WorkflowExecutionRefs:    workflowExecutionRefs,
 		DB:                       ds,
 	}, nil
 }

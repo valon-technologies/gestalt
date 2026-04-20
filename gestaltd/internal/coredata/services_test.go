@@ -14,8 +14,10 @@ import (
 	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
 const testEncryptionKey = "0123456789abcdef0123456789abcdef"
@@ -1526,6 +1528,61 @@ func TestAPITokenService(t *testing.T) {
 		}
 		if token.ID == "" {
 			t.Error("ID should be auto-generated")
+		}
+	})
+}
+
+func TestWorkflowExecutionRefService(t *testing.T) {
+	t.Parallel()
+
+	t.Run("PutGet_round_trips_permissions", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestServices(t)
+		ctx := context.Background()
+
+		ref, err := svc.WorkflowExecutionRefs.Put(ctx, &coreworkflow.ExecutionReference{
+			ID:           "exec-ref-123",
+			ProviderName: "basic",
+			Target: coreworkflow.Target{
+				PluginName: "roadmap",
+				Operation:  "sync",
+			},
+			SubjectID:   principal.UserSubjectID("user-123"),
+			Permissions: []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}},
+		})
+		if err != nil {
+			t.Fatalf("Put: %v", err)
+		}
+		if ref.SubjectID != principal.UserSubjectID("user-123") {
+			t.Fatalf("SubjectID = %q, want %q", ref.SubjectID, principal.UserSubjectID("user-123"))
+		}
+
+		got, err := svc.WorkflowExecutionRefs.Get(ctx, "exec-ref-123")
+		if err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+		want := []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}}
+		if !reflect.DeepEqual(got.Permissions, want) {
+			t.Fatalf("Permissions = %#v, want %#v", got.Permissions, want)
+		}
+	})
+
+	t.Run("Put_rejects_non_user_subject", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestServices(t)
+		ctx := context.Background()
+
+		_, err := svc.WorkflowExecutionRefs.Put(ctx, &coreworkflow.ExecutionReference{
+			ID:           "exec-ref-bad",
+			ProviderName: "basic",
+			Target: coreworkflow.Target{
+				PluginName: "roadmap",
+				Operation:  "sync",
+			},
+			SubjectID: principal.ManagedIdentitySubjectID("managed-123"),
+		})
+		if err == nil {
+			t.Fatal("expected Put to reject non-user subject_id")
 		}
 	})
 }
