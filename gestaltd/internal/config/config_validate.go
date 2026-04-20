@@ -434,6 +434,9 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 	if err := validateProviderEntrySource("plugin", name, entry, sourceSyntax); err != nil {
 		return err
 	}
+	if err := validatePluginRouteAuth(cfg, name, entry); err != nil {
+		return err
+	}
 	if err := validatePluginIndexedDBConfig(cfg, name, entry); err != nil {
 		return err
 	}
@@ -447,6 +450,30 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 		return err
 	}
 	return validateManifestBackedIntegration(name, entry)
+}
+
+func validatePluginRouteAuth(cfg *Config, name string, entry *ProviderEntry) error {
+	if entry == nil || entry.RouteAuth == nil {
+		return nil
+	}
+	entry.RouteAuth.Provider = strings.TrimSpace(entry.RouteAuth.Provider)
+	if entry.RouteAuth.Provider == "" {
+		return fmt.Errorf("config validation: plugins.%s.auth.provider is required", name)
+	}
+	if entry.RouteAuth.Provider == "server" {
+		_, authProvider, err := cfg.SelectedAuthProvider()
+		if err != nil {
+			return err
+		}
+		if authProvider == nil {
+			return fmt.Errorf("config validation: plugins.%s.auth.provider %q requires a configured platform auth provider", name, entry.RouteAuth.Provider)
+		}
+		return nil
+	}
+	if _, ok := cfg.Providers.Auth[entry.RouteAuth.Provider]; !ok {
+		return fmt.Errorf("config validation: plugins.%s.auth.provider references unknown auth provider %q", name, entry.RouteAuth.Provider)
+	}
+	return nil
 }
 
 func validateDatastoreConfig(cfg *Config) error {
@@ -539,6 +566,9 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 		return nil
 	}
 	subject := "providers.workflow." + name
+	if entry.RouteAuth != nil {
+		return fmt.Errorf("config validation: %s.auth is only supported on plugins.*; use %s.source.auth for source auth", subject, subject)
+	}
 	if strings.TrimSpace(entry.MountPath) != "" {
 		return fmt.Errorf("config validation: %s.mountPath is only supported on plugins.*", subject)
 	}
@@ -583,6 +613,9 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
+	}
+	if entry.RouteAuth != nil {
+		return fmt.Errorf("config validation: %s.auth is only supported on plugins.*; use %s.source.auth for source auth", subject, subject)
 	}
 	if strings.TrimSpace(entry.MountPath) != "" {
 		return fmt.Errorf("config validation: %s.mountPath is only supported on plugins.*", subject)

@@ -254,8 +254,8 @@ Both `google` and `oidc` use the same ProviderEntry shape under `providers.auth.
 | Field | Description |
 | --- | --- |
 | `default` | Marks this named auth entry as the default selection when `server.providers.auth` is omitted. |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the auth provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
@@ -332,8 +332,8 @@ The exact config fields depend on the selected authorization provider package. T
 | Field | Description |
 | --- | --- |
 | `default` | Marks this named authorization entry as the default selection when `server.providers.authorization` is omitted. |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the authorization provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
@@ -394,8 +394,8 @@ allowlist logical stores exposed through that binding.
 | Field | Description |
 | --- | --- |
 | `default` | Marks this named workflow entry as the default selection when a plugin omits `plugins.<name>.workflow.provider`. |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the workflow provider. |
 | `indexeddb` | Optional host IndexedDB binding for the workflow provider, including `provider`, optional `db`, and optional `objectStores`. |
 | `env` | Extra environment variables passed to the provider process. |
@@ -427,8 +427,8 @@ First-party cache providers are published at
 
 | Field | Description |
 | --- | --- |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Arbitrary provider-specific config passed through to the cache provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
@@ -770,6 +770,8 @@ plugins:
 | `mountPath` | Optional public path prefix for a plugin-backed mounted UI. When set, Gestalt mounts either `plugins.<name>.ui` or the plugin manifest's `spec.ui`. |
 | `ui` | Optional UI key from `providers.ui` used with `mountPath`. Omit it to mount the plugin manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#pluginssource) below. |
+| `source.auth` | Optional metadata-fetch auth for release sources. Use this for `source.url`, `source.githubRelease`, or local `provider-release.yaml` metadata. |
+| `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.auth`. In this Phase 1 schema/validation change, the field is parsed and validated only; runtime enforcement lands in a later phase. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
@@ -788,6 +790,33 @@ Every plugin uses a `source` block to declare its backing provider.
 ```yaml
 source: https://artifacts.example.com/plugin/github/v1.2.3/provider-release.yaml
 ```
+
+Canonical metadata-source auth lives under `source.auth`. For direct metadata URLs:
+
+```yaml
+source:
+  url: https://artifacts.example.com/plugin/github/v1.2.3/provider-release.yaml
+  auth:
+    token: ${PLUGIN_RELEASE_TOKEN}
+```
+
+For one compatibility release, a token-only sibling `auth` block is still
+accepted as deprecated source auth on release-backed sources. `plugins.<name>.auth`
+is otherwise reserved for plugin route auth overrides.
+
+Plugin route auth overrides are declared separately:
+
+```yaml
+apiVersion: gestaltd.config/v4
+plugins:
+  slack_bot:
+    source: ./dist/provider-release.yaml
+    auth:
+      provider: server
+```
+
+This field is schema/validation-only in this phase. It does not change runtime
+route authentication behavior yet.
 
 For published providers, `source` can point at a `provider-release.yaml`
 metadata URL directly, or it can describe a GitHub release logically:
@@ -854,8 +883,9 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
 
 | Field | Description |
 | --- | --- |
-| `source` | A local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | A local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs, `source.githubRelease`, and local `provider-release.yaml` metadata. |
+| `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either `server` or a named `providers.auth` entry. In this Phase 1 schema/validation change, it is not enforced at runtime yet. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
@@ -1069,8 +1099,8 @@ When `authorizationPolicy` is set on a mounted UI, the referenced web UI manifes
 | --- | --- |
 | `path` | Direct mount prefix for this UI when not bound through `plugins.<name>.mountPath`. |
 | `authorizationPolicy` | Direct policy binding for this UI when not bound through `plugins.<name>.mountPath`. |
-| `source` | A local UI manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | A local UI manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Optional UI-provider config validated against the bundle schema when present. |
 
 ## Validation rules
