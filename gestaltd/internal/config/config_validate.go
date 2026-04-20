@@ -14,6 +14,7 @@ import (
 	"time"
 
 	cronv3 "github.com/robfig/cron/v3"
+	"github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/telemetryutil"
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/providerenv"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
@@ -210,8 +211,8 @@ func validateBuiltinAudit(entry *ProviderEntry) error {
 			return nil
 		}
 		var stdoutCfg struct {
-			Level  string `yaml:"level"`
-			Format string `yaml:"format"`
+			Level  string                  `yaml:"level"`
+			Format telemetryutil.LogFormat `yaml:"format"`
 		}
 		if err := entry.Config.Decode(&stdoutCfg); err != nil {
 			return fmt.Errorf("config validation: stdout audit: parsing config: %w", err)
@@ -222,22 +223,15 @@ func validateBuiltinAudit(entry *ProviderEntry) error {
 			return nil
 		}
 		var otlpCfg struct {
-			Protocol string `yaml:"protocol"`
+			Protocol telemetryutil.Protocol `yaml:"protocol"`
 			Logs     struct {
-				Exporter string `yaml:"exporter"`
+				Exporter telemetryutil.LogExporter `yaml:"exporter"`
 			} `yaml:"logs"`
 		}
 		if err := entry.Config.Decode(&otlpCfg); err != nil {
 			return fmt.Errorf("config validation: otlp audit: parsing config: %w", err)
 		}
-		if otlpCfg.Protocol != "" {
-			switch strings.ToLower(otlpCfg.Protocol) {
-			case "grpc", "http":
-			default:
-				return fmt.Errorf("config validation: otlp audit: unknown protocol %q (expected \"grpc\" or \"http\")", otlpCfg.Protocol)
-			}
-		}
-		if otlpCfg.Logs.Exporter != "" && !strings.EqualFold(otlpCfg.Logs.Exporter, "otlp") {
+		if otlpCfg.Logs.Exporter != "" && otlpCfg.Logs.Exporter != telemetryutil.LogExporterOTLP {
 			return fmt.Errorf("config validation: otlp audit: logs.exporter must be %q", "otlp")
 		}
 		return nil

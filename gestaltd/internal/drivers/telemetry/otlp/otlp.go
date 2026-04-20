@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -36,15 +35,15 @@ import (
 var _ core.TelemetryProvider = (*Provider)(nil)
 
 type yamlConfig struct {
-	Endpoint           string            `yaml:"endpoint"`
-	Protocol           string            `yaml:"protocol"`
-	ServiceName        string            `yaml:"serviceName"`
-	Insecure           bool              `yaml:"insecure"`
-	Headers            map[string]string `yaml:"headers"`
-	ResourceAttributes map[string]string `yaml:"resourceAttributes"`
-	Traces             tracesConfig      `yaml:"traces"`
-	Metrics            metricsConfig     `yaml:"metrics"`
-	Logs               logsConfig        `yaml:"logs"`
+	Endpoint           string                 `yaml:"endpoint"`
+	Protocol           telemetryutil.Protocol `yaml:"protocol"`
+	ServiceName        string                 `yaml:"serviceName"`
+	Insecure           bool                   `yaml:"insecure"`
+	Headers            map[string]string      `yaml:"headers"`
+	ResourceAttributes map[string]string      `yaml:"resourceAttributes"`
+	Traces             tracesConfig           `yaml:"traces"`
+	Metrics            metricsConfig          `yaml:"metrics"`
+	Logs               logsConfig             `yaml:"logs"`
 }
 
 type tracesConfig struct {
@@ -57,18 +56,18 @@ type metricsConfig struct {
 }
 
 type logsConfig struct {
-	Level    string `yaml:"level"`
-	Exporter string `yaml:"exporter"`
-	Format   string `yaml:"format"`
+	Level    string                    `yaml:"level"`
+	Exporter telemetryutil.LogExporter `yaml:"exporter"`
+	Format   telemetryutil.LogFormat   `yaml:"format"`
 }
 
 const (
-	defaultProtocol    = "grpc"
+	defaultProtocol    = telemetryutil.ProtocolGRPC
 	defaultServiceName = "gestaltd"
 	defaultInterval    = 60 * time.Second
 	defaultLogLevel    = "info"
-	defaultLogExporter = "otlp"
-	defaultLogFormat   = "text"
+	defaultLogExporter = telemetryutil.LogExporterOTLP
+	defaultLogFormat   = telemetryutil.LogFormatText
 )
 
 type Provider struct {
@@ -82,11 +81,11 @@ type Provider struct {
 func New(ctx context.Context, cfg yamlConfig) (*Provider, error) {
 	applyConfigDefaults(&cfg)
 
-	switch strings.ToLower(cfg.Protocol) {
-	case "grpc", "http":
-	default:
-		return nil, fmt.Errorf("otlp telemetry: unknown protocol %q (expected \"grpc\" or \"http\")", cfg.Protocol)
+	protocol, err := telemetryutil.ParseProtocol(string(cfg.Protocol))
+	if err != nil {
+		return nil, fmt.Errorf("otlp telemetry: %w", err)
 	}
+	cfg.Protocol = protocol
 
 	res := telemetryutil.BuildResource(cfg.ServiceName, cfg.ResourceAttributes)
 
@@ -166,8 +165,8 @@ func buildTracerProvider(ctx context.Context, cfg yamlConfig, res *resource.Reso
 	var exporter sdktrace.SpanExporter
 	var err error
 
-	switch strings.ToLower(cfg.Protocol) {
-	case "http":
+	switch cfg.Protocol {
+	case telemetryutil.ProtocolHTTP:
 		opts := []otlptracehttp.Option{}
 		if cfg.Endpoint != "" {
 			opts = append(opts, otlptracehttp.WithEndpoint(cfg.Endpoint))
@@ -211,8 +210,8 @@ func buildMeterProvider(ctx context.Context, cfg yamlConfig, res *resource.Resou
 	}
 
 	var exporter sdkmetric.Exporter
-	switch strings.ToLower(cfg.Protocol) {
-	case "http":
+	switch cfg.Protocol {
+	case telemetryutil.ProtocolHTTP:
 		opts := []otlpmetrichttp.Option{}
 		if cfg.Endpoint != "" {
 			opts = append(opts, otlpmetrichttp.WithEndpoint(cfg.Endpoint))
@@ -248,8 +247,14 @@ func buildMeterProvider(ctx context.Context, cfg yamlConfig, res *resource.Resou
 }
 
 func buildLogger(ctx context.Context, cfg yamlConfig, res *resource.Resource) (*slog.Logger, *sdklog.LoggerProvider, error) {
-	switch strings.ToLower(cfg.Logs.Exporter) {
-	case "otlp":
+	exporter, err := telemetryutil.ParseLogExporter(string(cfg.Logs.Exporter))
+	if err != nil {
+		return nil, nil, err
+	}
+	cfg.Logs.Exporter = exporter
+
+	switch cfg.Logs.Exporter {
+	case telemetryutil.LogExporterOTLP:
 		lp, err := buildLoggerProvider(ctx, cfg, res)
 		if err != nil {
 			return nil, nil, err
@@ -262,7 +267,7 @@ func buildLogger(ctx context.Context, cfg yamlConfig, res *resource.Resource) (*
 		logger = slog.New(levelFilterHandler{level: level, inner: logger.Handler()})
 		return logger, lp, nil
 
-	case "stdout":
+	case telemetryutil.LogExporterStdout:
 		return telemetrystdout.NewLogger(cfg.Logs.Level, cfg.Logs.Format), nil, nil
 
 	default:
@@ -279,8 +284,8 @@ func buildLoggerProvider(ctx context.Context, cfg yamlConfig, res *resource.Reso
 	var exporter sdklog.Exporter
 	var err error
 
-	switch strings.ToLower(cfg.Protocol) {
-	case "http":
+	switch cfg.Protocol {
+	case telemetryutil.ProtocolHTTP:
 		opts := []otlploghttp.Option{}
 		if cfg.Endpoint != "" {
 			opts = append(opts, otlploghttp.WithEndpoint(cfg.Endpoint))
@@ -360,7 +365,7 @@ func NewAuditLogger(ctx context.Context, node yaml.Node) (*slog.Logger, func(con
 		return nil, nil, err
 	}
 	applyConfigDefaults(&cfg)
-	if !strings.EqualFold(cfg.Logs.Exporter, "otlp") {
+	if cfg.Logs.Exporter != "" && cfg.Logs.Exporter != telemetryutil.LogExporterOTLP {
 		return nil, nil, fmt.Errorf("otlp audit: logs.exporter must be %q", "otlp")
 	}
 

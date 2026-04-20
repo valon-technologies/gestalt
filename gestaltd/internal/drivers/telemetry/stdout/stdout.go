@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"strings"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -23,11 +22,11 @@ import (
 var _ core.TelemetryProvider = (*Provider)(nil)
 
 type yamlConfig struct {
-	Level              string                 `yaml:"level"`
-	Format             string                 `yaml:"format"`
-	ServiceName        string                 `yaml:"serviceName"`
-	ResourceAttributes map[string]string      `yaml:"resourceAttributes"`
-	Metrics            metricspipeline.Config `yaml:"metrics"`
+	Level              string                  `yaml:"level"`
+	Format             telemetryutil.LogFormat `yaml:"format"`
+	ServiceName        string                  `yaml:"serviceName"`
+	ResourceAttributes map[string]string       `yaml:"resourceAttributes"`
+	Metrics            metricspipeline.Config  `yaml:"metrics"`
 }
 
 type Provider struct {
@@ -37,13 +36,14 @@ type Provider struct {
 	prometheus http.Handler
 }
 
-func NewLogger(levelName, format string) *slog.Logger {
+func NewLogger(levelName string, format telemetryutil.LogFormat) *slog.Logger {
 	level := telemetryutil.ParseLevel(levelName)
 	opts := &slog.HandlerOptions{Level: level}
+	format = telemetryutil.NormalizeLogFormat(string(format))
 
 	var handler slog.Handler
-	switch strings.ToLower(format) {
-	case "json":
+	switch format {
+	case telemetryutil.LogFormatJSON:
 		handler = slog.NewJSONHandler(os.Stdout, opts)
 	default:
 		handler = slog.NewTextHandler(os.Stdout, opts)

@@ -22,6 +22,7 @@ import (
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	telemetryotlp "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/otlp"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
+	"github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/telemetryutil"
 	workflowprovider "github.com/valon-technologies/gestalt/server/internal/drivers/workflow/provider"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
@@ -98,8 +99,8 @@ func buildFactories() *bootstrap.FactoryRegistry {
 			return invocation.NewLoggerAuditSink(telemetrynoop.New().Logger()), nil, nil
 		case "stdout":
 			var stdoutCfg struct {
-				Level  string `yaml:"level"`
-				Format string `yaml:"format"`
+				Level  string                  `yaml:"level"`
+				Format telemetryutil.LogFormat `yaml:"format"`
 			}
 			if cfg.Config.Kind != 0 {
 				if err := cfg.Config.Decode(&stdoutCfg); err != nil {
