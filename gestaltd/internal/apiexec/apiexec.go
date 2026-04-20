@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 )
 
@@ -43,10 +44,11 @@ var (
 )
 
 type UpstreamHTTPError struct {
-	Status  int
-	Headers http.Header
-	Body    string
-	Cause   error
+	Status            int
+	Headers           http.Header
+	Body              string
+	Cause             error
+	retryAfterSeconds int
 }
 
 func (e *UpstreamHTTPError) Error() string {
@@ -66,6 +68,19 @@ func (e *UpstreamHTTPError) Unwrap() error {
 	return e.Cause
 }
 
+func (e *UpstreamHTTPError) retryError() error {
+	if e == nil || !retryableStatusCodes[e.Status] {
+		return nil
+	}
+	if e.retryAfterSeconds > 0 {
+		return &retryableRequestError{
+			cause:             e,
+			retryAfterSeconds: e.retryAfterSeconds,
+		}
+	}
+	return e
+}
+
 type UpstreamOperationError struct {
 	Message string
 }
@@ -75,6 +90,28 @@ func (e *UpstreamOperationError) Error() string {
 		return "upstream operation failed"
 	}
 	return e.Message
+}
+
+type retryableRequestError struct {
+	cause             error
+	retryAfterSeconds int
+}
+
+func (e *retryableRequestError) Error() string {
+	if e == nil || e.cause == nil {
+		return ""
+	}
+	return e.cause.Error()
+}
+
+func (e *retryableRequestError) Unwrap() []error {
+	if e == nil || e.cause == nil {
+		return nil
+	}
+	if e.retryAfterSeconds <= 0 {
+		return []error{e.cause}
+	}
+	return []error{e.cause, backoff.RetryAfter(e.retryAfterSeconds)}
 }
 
 // ResponseChecker validates a response body beyond the default HTTP status check.
@@ -166,35 +203,41 @@ func Do(ctx context.Context, client *http.Client, req Request) (*core.OperationR
 		maxRetries = 0
 	}
 
-	var lastErr error
-	for attempt := range maxRetries + 1 {
-		if attempt > 0 {
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-		}
-
-		result, statusCode, retryAfter, retryable, err := doOnce(ctx, client, req, fullURL, bodyBytes, contentType, params)
+	result, err := backoff.Retry(ctx, func() (*core.OperationResult, error) {
+		result, err := doOnce(
+			ctx,
+			client,
+			req,
+			fullURL,
+			bodyBytes,
+			contentType,
+			params,
+		)
 		if err == nil {
 			return result, nil
 		}
-		lastErr = err
 
-		if !retryable || attempt >= maxRetries {
-			break
+		var upstreamErr *UpstreamHTTPError
+		if errors.As(err, &upstreamErr) {
+			if retryErr := upstreamErr.retryError(); retryErr != nil {
+				return nil, retryErr
+			}
 		}
 
-		delay := retryDelay(statusCode, retryAfter, attempt)
-		timer := time.NewTimer(delay)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return nil, ctx.Err()
-		case <-timer.C:
+		return nil, backoff.Permanent(err)
+	},
+		backoff.WithBackOff(newRetryBackOff()),
+		backoff.WithMaxElapsedTime(0),
+		backoff.WithMaxTries(uint(maxRetries+1)),
+	)
+	if err != nil {
+		var permanent *backoff.PermanentError
+		if errors.As(err, &permanent) {
+			err = permanent.Unwrap()
 		}
+		return nil, err
 	}
-
-	return nil, lastErr
+	return result, nil
 }
 
 func doOnce(
@@ -205,7 +248,7 @@ func doOnce(
 	bodyBytes []byte,
 	contentType string,
 	params map[string]any,
-) (*core.OperationResult, int, string, bool, error) {
+) (*core.OperationResult, error) {
 	var httpReq *http.Request
 	var err error
 
@@ -213,13 +256,13 @@ func doOnce(
 	case http.MethodPost, http.MethodPut, http.MethodPatch:
 		httpReq, err = http.NewRequestWithContext(ctx, req.Method, fullURL, bytes.NewReader(bodyBytes))
 		if err != nil {
-			return nil, 0, "", false, fmt.Errorf("creating request: %w", err)
+			return nil, fmt.Errorf("creating request: %w", err)
 		}
 		httpReq.Header.Set("Content-Type", contentType)
 	default:
 		httpReq, err = http.NewRequestWithContext(ctx, req.Method, fullURL, nil)
 		if err != nil {
-			return nil, 0, "", false, fmt.Errorf("creating request: %w", err)
+			return nil, fmt.Errorf("creating request: %w", err)
 		}
 		if len(params) > 0 {
 			q := httpReq.URL.Query()
@@ -247,40 +290,41 @@ func doOnce(
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, 0, "", false, fmt.Errorf("%w: %w", ErrUpstreamTimedOut, err)
+			return nil, fmt.Errorf("%w: %w", ErrUpstreamTimedOut, err)
 		}
 		var urlErr *url.Error
 		if errors.As(err, &urlErr) && urlErr.Timeout() {
-			return nil, 0, "", false, fmt.Errorf("%w: %w", ErrUpstreamTimedOut, err)
+			return nil, fmt.Errorf("%w: %w", ErrUpstreamTimedOut, err)
 		}
-		return nil, 0, "", false, fmt.Errorf("%w: %w", ErrUpstreamUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", ErrUpstreamUnavailable, err)
 	}
 
-	retryAfter := resp.Header.Get("Retry-After")
+	retryAfterSeconds := parseRetryAfterSeconds(resp.Header.Get("Retry-After"))
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
 	_ = resp.Body.Close()
 	if err != nil {
-		return nil, 0, "", false, fmt.Errorf("%w: %w", ErrUpstreamResponseRead, err)
+		return nil, fmt.Errorf("%w: %w", ErrUpstreamResponseRead, err)
 	}
 
 	if req.CheckResponse != nil {
 		if err := req.CheckResponse(resp.StatusCode, respBody); err != nil {
 			if resp.StatusCode >= http.StatusBadRequest {
-				return nil, resp.StatusCode, retryAfter, retryableStatusCodes[resp.StatusCode], &UpstreamHTTPError{
-					Status:  resp.StatusCode,
-					Headers: resp.Header.Clone(),
-					Body:    string(respBody),
-					Cause:   err,
+				return nil, &UpstreamHTTPError{
+					Status:            resp.StatusCode,
+					Headers:           resp.Header.Clone(),
+					Body:              string(respBody),
+					Cause:             err,
+					retryAfterSeconds: retryAfterSeconds,
 				}
 			}
-			return nil, resp.StatusCode, retryAfter, retryableStatusCodes[resp.StatusCode], err
+			return nil, err
 		}
 	} else if resp.StatusCode >= http.StatusBadRequest {
-		retryable := retryableStatusCodes[resp.StatusCode]
-		return nil, resp.StatusCode, retryAfter, retryable, &UpstreamHTTPError{
-			Status:  resp.StatusCode,
-			Headers: resp.Header.Clone(),
-			Body:    string(respBody),
+		return nil, &UpstreamHTTPError{
+			Status:            resp.StatusCode,
+			Headers:           resp.Header.Clone(),
+			Body:              string(respBody),
+			retryAfterSeconds: retryAfterSeconds,
 		}
 	}
 
@@ -288,19 +332,24 @@ func doOnce(
 		Status:  resp.StatusCode,
 		Headers: resp.Header,
 		Body:    string(respBody),
-	}, resp.StatusCode, retryAfter, false, nil
+	}, nil
 }
 
-// retryDelay returns the delay before the next retry attempt. It honors the
-// Retry-After header when present (integer seconds form only), otherwise
-// falls back to exponential backoff.
-func retryDelay(_ int, retryAfter string, attempt int) time.Duration {
-	if retryAfter != "" {
-		if seconds, err := strconv.Atoi(retryAfter); err == nil && seconds > 0 {
-			return time.Duration(seconds) * time.Second
-		}
+func newRetryBackOff() backoff.BackOff {
+	policy := backoff.NewExponentialBackOff()
+	policy.InitialInterval = baseRetryDelay
+	policy.RandomizationFactor = 0
+	policy.Multiplier = 2
+	policy.MaxInterval = 24 * time.Hour
+	return policy
+}
+
+func parseRetryAfterSeconds(value string) int {
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds <= 0 {
+		return 0
 	}
-	return baseRetryDelay * (1 << attempt)
+	return seconds
 }
 
 // GraphQLRequest describes a GraphQL API call.
