@@ -306,6 +306,9 @@ func workflowInvocationContext(req coreworkflow.InvokeOperationRequest) map[stri
 	if createdBy := workflowActorContext(req.CreatedBy); len(createdBy) > 0 {
 		ctxValue["createdBy"] = createdBy
 	}
+	if executionRef := strings.TrimSpace(req.ExecutionRef); executionRef != "" {
+		ctxValue["executionRef"] = executionRef
+	}
 	return ctxValue
 }
 
@@ -316,6 +319,12 @@ func workflowTargetContext(target coreworkflow.Target) map[string]any {
 	}
 	if operation := strings.TrimSpace(target.Operation); operation != "" {
 		value["operation"] = operation
+	}
+	if connection := strings.TrimSpace(target.Connection); connection != "" {
+		value["connection"] = connection
+	}
+	if instance := strings.TrimSpace(target.Instance); instance != "" {
+		value["instance"] = instance
 	}
 	if target.Input != nil {
 		value["input"] = maps.Clone(target.Input)

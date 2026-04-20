@@ -1089,6 +1089,7 @@ test("integration provider request context includes workflow metadata", async ()
         workflow: {
           runId: "run-123",
           provider: "temporal",
+          executionRef: "exec-ref-123",
           createdBy: {
             subjectId: "user:user-123",
             subjectKind: "user",
@@ -1098,6 +1099,8 @@ test("integration provider request context includes workflow metadata", async ()
           target: {
             pluginName: "demo",
             operation: "sync",
+            connection: "analytics",
+            instance: "tenant-a",
           },
           trigger: {
             kind: "event",
@@ -1125,6 +1128,7 @@ test("integration provider request context includes workflow metadata", async ()
     workflow: {
       runId: "run-123",
       provider: "temporal",
+      executionRef: "exec-ref-123",
       createdBy: {
         subjectId: "user:user-123",
         subjectKind: "user",
@@ -1134,6 +1138,8 @@ test("integration provider request context includes workflow metadata", async ()
       target: {
         pluginName: "demo",
         operation: "sync",
+        connection: "analytics",
+        instance: "tenant-a",
       },
       trigger: {
         kind: "event",

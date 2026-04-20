@@ -149,9 +149,12 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 		ProviderName: "temporal",
 		PluginName:   "roadmap",
 		RunID:        "run-123",
+		ExecutionRef: "exec-ref-123",
 		Target: coreworkflow.Target{
 			PluginName: "roadmap",
 			Operation:  "sync",
+			Connection: "analytics",
+			Instance:   "tenant-a",
 			Input: map[string]any{
 				"mode":   "full",
 				"source": "scheduled",
@@ -218,9 +221,18 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	if !ok || createdBy["subjectId"] != principal.UserSubjectID("user-123") || createdBy["authSource"] != principal.SourceAPIToken.String() {
 		t.Fatalf("workflow createdBy = %#v", roundTripProvider.workflowContext["createdBy"])
 	}
+	if got := roundTripProvider.workflowContext["executionRef"]; got != "exec-ref-123" {
+		t.Fatalf("workflow executionRef = %#v, want %q", got, "exec-ref-123")
+	}
 	target, ok := roundTripProvider.workflowContext["target"].(map[string]any)
 	if !ok || target["pluginName"] != "roadmap" || target["operation"] != "sync" {
 		t.Fatalf("workflow target = %#v", roundTripProvider.workflowContext["target"])
+	}
+	if got := target["connection"]; got != "analytics" {
+		t.Fatalf("workflow target connection = %#v, want %q", got, "analytics")
+	}
+	if got := target["instance"]; got != "tenant-a" {
+		t.Fatalf("workflow target instance = %#v, want %q", got, "tenant-a")
 	}
 	trigger, ok := roundTripProvider.workflowContext["trigger"].(map[string]any)
 	if !ok || trigger["kind"] != "schedule" || trigger["scheduleId"] != "sched-1" {

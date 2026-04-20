@@ -147,10 +147,11 @@ func (p *recordingWorkflowProvider) StartRun(_ context.Context, req coreworkflow
 	p.startRunCalled = true
 	p.startRunReq = req
 	return &coreworkflow.Run{
-		ID:        "run-1",
-		Status:    coreworkflow.RunStatusPending,
-		Target:    req.Target,
-		CreatedBy: req.CreatedBy,
+		ID:           "run-1",
+		Status:       coreworkflow.RunStatusPending,
+		Target:       req.Target,
+		CreatedBy:    req.CreatedBy,
+		ExecutionRef: req.ExecutionRef,
 		Trigger: coreworkflow.RunTrigger{
 			Manual: true,
 		},
@@ -181,12 +182,13 @@ func (p *recordingWorkflowProvider) UpsertSchedule(_ context.Context, req corewo
 	p.upsertScheduleCalled = true
 	p.upsertScheduleReq = req
 	return &coreworkflow.Schedule{
-		ID:        req.ScheduleID,
-		Cron:      req.Cron,
-		Timezone:  req.Timezone,
-		Target:    req.Target,
-		Paused:    req.Paused,
-		CreatedBy: req.RequestedBy,
+		ID:           req.ScheduleID,
+		Cron:         req.Cron,
+		Timezone:     req.Timezone,
+		Target:       req.Target,
+		Paused:       req.Paused,
+		ExecutionRef: req.ExecutionRef,
+		CreatedBy:    req.RequestedBy,
 	}, nil
 }
 
@@ -299,8 +301,10 @@ func TestWorkflowServerStartRunScopesTargetToPlugin(t *testing.T) {
 
 	resp, err := srv.StartRun(ctx, &proto.StartWorkflowRunRequest{
 		Target: &proto.WorkflowTarget{
-			Operation: "refresh",
-			Input:     mustStruct(t, map[string]any{"taskId": "task-123", "full": true}),
+			Operation:  "refresh",
+			Input:      mustStruct(t, map[string]any{"taskId": "task-123", "full": true}),
+			Connection: "analytics",
+			Instance:   "tenant-a",
 		},
 		IdempotencyKey: "idem-1",
 	})
@@ -316,6 +320,9 @@ func TestWorkflowServerStartRunScopesTargetToPlugin(t *testing.T) {
 	if provider.startRunReq.Target.Operation != "refresh" {
 		t.Fatalf("target operation = %q, want %q", provider.startRunReq.Target.Operation, "refresh")
 	}
+	if provider.startRunReq.Target.Connection != "analytics" || provider.startRunReq.Target.Instance != "tenant-a" {
+		t.Fatalf("target selectors = %#v", provider.startRunReq.Target)
+	}
 	if !reflect.DeepEqual(provider.startRunReq.Target.Input, map[string]any{"taskId": "task-123", "full": true}) {
 		t.Fatalf("target input = %#v", provider.startRunReq.Target.Input)
 	}
@@ -330,6 +337,9 @@ func TestWorkflowServerStartRunScopesTargetToPlugin(t *testing.T) {
 	}
 	if got := resp.GetTarget().GetInput().AsMap(); !reflect.DeepEqual(got, map[string]any{"taskId": "task-123", "full": true}) {
 		t.Fatalf("response input = %#v", got)
+	}
+	if resp.GetTarget().GetConnection() != "analytics" || resp.GetTarget().GetInstance() != "tenant-a" {
+		t.Fatalf("response target selectors = %#v", resp.GetTarget())
 	}
 	if resp.GetCreatedBy().GetSubjectId() != principal.UserSubjectID("user-123") || resp.GetCreatedBy().GetDisplayName() != "Ada" {
 		t.Fatalf("response createdBy = %#v", resp.GetCreatedBy())
@@ -446,7 +456,11 @@ func TestWorkflowServerAllowsUserScheduleIDsThatOnlyShareCfgPrefix(t *testing.T)
 		ScheduleId: "cfg_backup",
 		Cron:       "*/5 * * * *",
 		Timezone:   "UTC",
-		Target:     &proto.WorkflowTarget{Operation: "refresh"},
+		Target: &proto.WorkflowTarget{
+			Operation:  "refresh",
+			Connection: "analytics",
+			Instance:   "tenant-a",
+		},
 	})
 	if err != nil {
 		t.Fatalf("UpsertSchedule: %v", err)
@@ -456,6 +470,9 @@ func TestWorkflowServerAllowsUserScheduleIDsThatOnlyShareCfgPrefix(t *testing.T)
 	}
 	if provider.upsertScheduleReq.ScheduleID != "cfg_backup" {
 		t.Fatalf("schedule id = %q, want cfg_backup", provider.upsertScheduleReq.ScheduleID)
+	}
+	if provider.upsertScheduleReq.Target.Connection != "analytics" || provider.upsertScheduleReq.Target.Instance != "tenant-a" {
+		t.Fatalf("schedule target selectors = %#v", provider.upsertScheduleReq.Target)
 	}
 }
 
@@ -785,9 +802,12 @@ func TestWorkflowHostServerForwardsInvokeRequest(t *testing.T) {
 			PluginName: " roadmap ",
 			Operation:  " refresh ",
 			Input:      mustStruct(t, map[string]any{"taskId": "task-123"}),
+			Connection: " analytics ",
+			Instance:   " tenant-a ",
 		},
-		RunId:      "run-123",
-		PluginName: " roadmap ",
+		RunId:        "run-123",
+		PluginName:   " roadmap ",
+		ExecutionRef: "exec-ref-123",
 		Trigger: &proto.WorkflowRunTrigger{
 			Kind: &proto.WorkflowRunTrigger_Schedule{
 				Schedule: &proto.WorkflowScheduleTrigger{
@@ -812,6 +832,9 @@ func TestWorkflowHostServerForwardsInvokeRequest(t *testing.T) {
 	if got.Target.PluginName != "roadmap" || got.Target.Operation != "refresh" {
 		t.Fatalf("target = %#v", got.Target)
 	}
+	if got.Target.Connection != "analytics" || got.Target.Instance != "tenant-a" {
+		t.Fatalf("target selectors = %#v", got.Target)
+	}
 	if !reflect.DeepEqual(got.Target.Input, map[string]any{"taskId": "task-123"}) {
 		t.Fatalf("target input = %#v", got.Target.Input)
 	}
@@ -823,6 +846,9 @@ func TestWorkflowHostServerForwardsInvokeRequest(t *testing.T) {
 	}
 	if got.PluginName != "roadmap" {
 		t.Fatalf("plugin name = %q, want %q", got.PluginName, "roadmap")
+	}
+	if got.ExecutionRef != "exec-ref-123" {
+		t.Fatalf("execution ref = %q, want %q", got.ExecutionRef, "exec-ref-123")
 	}
 	if got.CreatedBy.SubjectID != principal.UserSubjectID("user-123") || got.CreatedBy.DisplayName != "Ada" {
 		t.Fatalf("createdBy = %#v", got.CreatedBy)

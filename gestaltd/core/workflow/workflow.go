@@ -27,6 +27,8 @@ type Actor struct {
 type Target struct {
 	PluginName string
 	Operation  string
+	Connection string
+	Instance   string
 	Input      map[string]any
 }
 
@@ -69,6 +71,7 @@ type Run struct {
 	Status        RunStatus
 	Target        Target
 	Trigger       RunTrigger
+	ExecutionRef  string
 	CreatedBy     Actor
 	CreatedAt     *time.Time
 	StartedAt     *time.Time
@@ -78,15 +81,16 @@ type Run struct {
 }
 
 type Schedule struct {
-	ID        string
-	Cron      string
-	Timezone  string
-	Target    Target
-	Paused    bool
-	CreatedBy Actor
-	CreatedAt *time.Time
-	UpdatedAt *time.Time
-	NextRunAt *time.Time
+	ID           string
+	Cron         string
+	Timezone     string
+	Target       Target
+	Paused       bool
+	ExecutionRef string
+	CreatedBy    Actor
+	CreatedAt    *time.Time
+	UpdatedAt    *time.Time
+	NextRunAt    *time.Time
 }
 
 type EventTrigger struct {
@@ -103,6 +107,7 @@ type StartRunRequest struct {
 	Target         Target
 	IdempotencyKey string
 	CreatedBy      Actor
+	ExecutionRef   string
 }
 
 type GetRunRequest struct {
@@ -121,12 +126,13 @@ type CancelRunRequest struct {
 }
 
 type UpsertScheduleRequest struct {
-	ScheduleID  string
-	Cron        string
-	Timezone    string
-	Target      Target
-	Paused      bool
-	RequestedBy Actor
+	ScheduleID   string
+	Cron         string
+	Timezone     string
+	Target       Target
+	Paused       bool
+	RequestedBy  Actor
+	ExecutionRef string
 }
 
 type ListSchedulesRequest struct {
@@ -199,6 +205,7 @@ type InvokeOperationRequest struct {
 	Input        map[string]any
 	Metadata     map[string]any
 	CreatedBy    Actor
+	ExecutionRef string
 }
 
 type InvokeOperationResponse struct {
