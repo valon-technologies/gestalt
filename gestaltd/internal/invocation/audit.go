@@ -89,6 +89,8 @@ func BuildAuditEntry(ctx context.Context, p *principal.Principal, source, provid
 	ctx, meta := ensureMeta(ctx)
 	if p == nil {
 		p = principal.FromContext(ctx)
+	} else {
+		p = principal.Canonicalized(p)
 	}
 	return ctx, buildAuditEntry(ctx, p, source, providerName, operation, meta)
 }

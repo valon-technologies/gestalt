@@ -463,9 +463,7 @@ func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principa
 	if p.Kind == "" {
 		p.Kind = principal.KindUser
 	}
-	if p.SubjectID == "" {
-		p.SubjectID = principal.UserSubjectID(dbUser.ID)
-	}
+	principal.Canonicalize(p)
 	if p.Identity != nil && p.Identity.DisplayName == "" {
 		p.Identity.DisplayName = dbUser.DisplayName
 	}

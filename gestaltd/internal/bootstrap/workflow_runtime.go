@@ -351,23 +351,12 @@ func workflowExecutionPrincipal(ref *coreworkflow.ExecutionReference) *principal
 	if ref == nil {
 		return nil
 	}
-	subjectID := strings.TrimSpace(ref.SubjectID)
 	permissions := principal.CompilePermissions(ref.Permissions)
-	value := &principal.Principal{
-		SubjectID:        subjectID,
+	return principal.Canonicalize(&principal.Principal{
+		SubjectID:        strings.TrimSpace(ref.SubjectID),
 		Scopes:           principal.PermissionPlugins(permissions),
 		TokenPermissions: permissions,
-	}
-	switch {
-	case principal.UserIDFromSubjectID(subjectID) != "":
-		value.UserID = principal.UserIDFromSubjectID(subjectID)
-		value.Kind = principal.KindUser
-	case strings.HasPrefix(subjectID, string(principal.KindWorkload)+":"),
-		principal.ManagedIdentityIDFromSubjectID(subjectID) != "",
-		subjectID == principal.IdentitySubjectID():
-		value.Kind = principal.KindWorkload
-	}
-	return value
+	})
 }
 
 func workflowInvocationParams(req coreworkflow.InvokeOperationRequest) map[string]any {

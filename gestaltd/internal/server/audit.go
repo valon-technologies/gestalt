@@ -46,12 +46,7 @@ func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Princi
 		p.Kind = principal.KindUser
 	}
 	if p.UserID != "" {
-		if p.SubjectID == "" {
-			clone := *p
-			clone.SubjectID = principal.UserSubjectID(p.UserID)
-			return &clone, nil
-		}
-		return p, nil
+		return principal.Canonicalized(p), nil
 	}
 	if p.Identity == nil || p.Identity.Email == "" {
 		return p, nil
@@ -68,8 +63,7 @@ func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Princi
 	clone := *p
 	clone.UserID = dbUser.ID
 	clone.Kind = principal.KindUser
-	clone.SubjectID = principal.UserSubjectID(dbUser.ID)
-	return &clone, nil
+	return principal.Canonicalize(&clone), nil
 }
 
 func auditSourceForRequest(r *http.Request) string {
@@ -105,11 +99,8 @@ func (s *Server) auditEventWithUserIDAndTarget(ctx context.Context, userID, auth
 		return
 	}
 
-	ctx, entry := invocation.BuildAuditEntry(ctx, nil, source, provider, operation)
-	entry.UserID = userID
+	ctx, entry := invocation.BuildAuditEntry(ctx, &principal.Principal{UserID: userID}, source, provider, operation)
 	entry.AuthSource = authSource
-	entry.SubjectID = principal.UserSubjectID(userID)
-	entry.SubjectKind = string(principal.KindUser)
 	populateAuditEntry(&entry, allowed, err, target, auditAuthorization{})
 	s.auditSink.Log(ctx, entry)
 }
