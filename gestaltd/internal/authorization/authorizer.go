@@ -279,7 +279,7 @@ func (a *Authorizer) PolicyNameForProvider(provider string) string {
 	return strings.TrimSpace(a.providerPolicies[provider])
 }
 
-func (a *Authorizer) StaticRoleForPolicyIdentity(policyName, subjectID, userID string) (AccessContext, bool) {
+func (a *Authorizer) StaticRoleForPolicyIdentity(policyName, subjectID string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, false
 	}
@@ -292,19 +292,19 @@ func (a *Authorizer) StaticRoleForPolicyIdentity(policyName, subjectID, userID s
 		return AccessContext{}, false
 	}
 	access := AccessContext{Policy: policyName}
-	if role, ok := policy.staticRoleForIdentity(subjectID, userID); ok {
+	if role, ok := policy.staticRoleForIdentity(subjectID); ok {
 		access.Role = role
 		return access, true
 	}
 	return access, false
 }
 
-func (a *Authorizer) StaticRoleForProviderIdentity(provider, subjectID, userID string) (AccessContext, bool) {
+func (a *Authorizer) StaticRoleForProviderIdentity(provider, subjectID string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, false
 	}
 	policyName := a.PolicyNameForProvider(provider)
-	return a.StaticRoleForPolicyIdentity(policyName, subjectID, userID)
+	return a.StaticRoleForPolicyIdentity(policyName, subjectID)
 }
 
 func (a *Authorizer) StaticMembersForPolicy(policyName string) ([]StaticHumanMember, bool) {
@@ -442,20 +442,15 @@ func (p *HumanPolicy) roleForPrincipal(pr *principal.Principal) (string, bool) {
 	if p == nil || pr == nil {
 		return "", false
 	}
-	return p.staticRoleForIdentity(pr.SubjectID, pr.UserID)
+	return p.staticRoleForIdentity(principal.Canonicalize(pr).SubjectID)
 }
 
-func (p *HumanPolicy) staticRoleForIdentity(subjectID, userID string) (string, bool) {
+func (p *HumanPolicy) staticRoleForIdentity(subjectID string) (string, bool) {
 	if p == nil {
 		return "", false
 	}
 	if subjectID = strings.TrimSpace(subjectID); subjectID != "" {
 		if role, ok := p.RolesBySubjectID[subjectID]; ok {
-			return role, true
-		}
-	}
-	if userID = strings.TrimSpace(userID); userID != "" {
-		if role, ok := p.RolesBySubjectID[principal.UserSubjectID(userID)]; ok {
 			return role, true
 		}
 	}
