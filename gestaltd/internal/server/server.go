@@ -70,8 +70,6 @@ type Server struct {
 	managedIdentities     *coredata.ManagedIdentityService
 	identityMemberships   *coredata.ManagedIdentityMembershipService
 	identityGrants        *coredata.ManagedIdentityGrantService
-	pluginAuthorizations  *coredata.PluginAuthorizationService
-	adminAuthorizations   *coredata.AdminAuthorizationService
 	workspaceRoles        *coredata.WorkspaceRoleService
 	identityPluginAccess  *coredata.IdentityPluginAccessService
 	authorizationProvider core.AuthorizationProvider
@@ -190,8 +188,6 @@ func New(cfg Config) (*Server, error) {
 	managedIdentities := cfg.Services.ManagedIdentities
 	identityMemberships := cfg.Services.IdentityMemberships
 	identityGrants := cfg.Services.IdentityGrants
-	pluginAuthorizations := cfg.Services.PluginAuthorizations
-	adminAuthorizations := cfg.Services.AdminAuthorizations
 	workspaceRoles := cfg.Services.WorkspaceRoles
 	identityPluginAccess := cfg.Services.IdentityPluginAccess
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, managedIdentities, identityGrants, cfg.Authorizer)
@@ -212,8 +208,6 @@ func New(cfg Config) (*Server, error) {
 		managedIdentities:     managedIdentities,
 		identityMemberships:   identityMemberships,
 		identityGrants:        identityGrants,
-		pluginAuthorizations:  pluginAuthorizations,
-		adminAuthorizations:   adminAuthorizations,
 		workspaceRoles:        workspaceRoles,
 		identityPluginAccess:  identityPluginAccess,
 		authorizationProvider: cfg.AuthorizationProvider,

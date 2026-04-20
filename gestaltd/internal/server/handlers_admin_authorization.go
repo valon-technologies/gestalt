@@ -14,7 +14,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -150,9 +149,6 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 	if !s.ensureAdminDynamicAuthorizationAvailable(w) {
 		return
 	}
-	if !s.ensureAdminDynamicAuthorizationWriteAvailable(w) {
-		return
-	}
 
 	var req putAdminAuthorizationMemberRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -177,17 +173,7 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 		return
 	}
 
-	var membership *coredata.PluginAuthorizationMembership
-	if s.authorizationProvider != nil {
-		membership, err = s.upsertProviderPluginAuthorization(r.Context(), user, plugin, req.Role)
-	} else {
-		membership, err = s.pluginAuthorizations.UpsertPluginAuthorization(r.Context(), &coredata.PluginAuthorizationMembership{
-			Plugin: plugin,
-			UserID: user.ID,
-			Email:  user.Email,
-			Role:   req.Role,
-		})
-	}
+	membership, err := s.upsertProviderPluginAuthorization(r.Context(), user, plugin, req.Role)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to persist authorization member")
 		return
@@ -230,21 +216,13 @@ func (s *Server) deleteAdminAuthorizationPluginMember(w http.ResponseWriter, r *
 	if !s.ensureAdminDynamicAuthorizationAvailable(w) {
 		return
 	}
-	if !s.ensureAdminDynamicAuthorizationWriteAvailable(w) {
-		return
-	}
 	userID := strings.TrimSpace(chi.URLParam(r, "userID"))
 	if userID == "" {
 		writeError(w, http.StatusBadRequest, "userID is required")
 		return
 	}
 
-	var deleteErr error
-	if s.authorizationProvider != nil {
-		deleteErr = s.deleteProviderPluginAuthorization(r.Context(), plugin, userID)
-	} else {
-		deleteErr = s.pluginAuthorizations.DeletePluginAuthorization(r.Context(), plugin, userID)
-	}
+	deleteErr := s.deleteProviderPluginAuthorization(r.Context(), plugin, userID)
 	if deleteErr != nil {
 		if errors.Is(deleteErr, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "authorization member not found")
@@ -288,9 +266,6 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 	if !s.ensureAdminDynamicAdminAvailable(w) {
 		return
 	}
-	if !s.ensureAdminDynamicAdminWriteAvailable(w) {
-		return
-	}
 	if !s.ensureAdminAuthorizationWriteAccess(w, r) {
 		return
 	}
@@ -318,16 +293,7 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 		return
 	}
 
-	var membership *coredata.AdminAuthorizationMembership
-	if s.authorizationProvider != nil {
-		membership, err = s.upsertProviderAdminAuthorization(r.Context(), user, req.Role)
-	} else {
-		membership, err = s.adminAuthorizations.UpsertAdminAuthorization(r.Context(), &coredata.AdminAuthorizationMembership{
-			UserID: user.ID,
-			Email:  user.Email,
-			Role:   req.Role,
-		})
-	}
+	membership, err := s.upsertProviderAdminAuthorization(r.Context(), user, req.Role)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to persist admin member")
 		return
@@ -364,9 +330,6 @@ func (s *Server) deleteAdminAuthorizationAdminMember(w http.ResponseWriter, r *h
 	if !s.ensureAdminDynamicAdminAvailable(w) {
 		return
 	}
-	if !s.ensureAdminDynamicAdminWriteAvailable(w) {
-		return
-	}
 	if !s.ensureAdminAuthorizationWriteAccess(w, r) {
 		return
 	}
@@ -376,12 +339,7 @@ func (s *Server) deleteAdminAuthorizationAdminMember(w http.ResponseWriter, r *h
 		return
 	}
 
-	var deleteErr error
-	if s.authorizationProvider != nil {
-		deleteErr = s.deleteProviderAdminAuthorization(r.Context(), userID)
-	} else {
-		deleteErr = s.adminAuthorizations.DeleteAdminAuthorization(r.Context(), userID)
-	}
+	deleteErr := s.deleteProviderAdminAuthorization(r.Context(), userID)
 	if deleteErr != nil {
 		if errors.Is(deleteErr, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "admin member not found")
@@ -435,40 +393,16 @@ func (s *Server) writeAdminAuthorizationPluginError(w http.ResponseWriter, err e
 }
 
 func (s *Server) adminAuthorizationMemberRows(ctx context.Context, plugin string) ([]adminAuthorizationMemberRow, error) {
-	if s.authorizer == nil || (!s.authorizer.HasDynamicPluginAuthorizations() && s.authorizationProvider == nil) {
+	if s.authorizer == nil || s.authorizationProvider == nil {
 		return nil, errAdminAuthorizationUnavailable
 	}
 	staticRows, err := s.adminAuthorizationStaticRows(ctx, plugin)
 	if err != nil {
 		return nil, err
 	}
-	dynamicRows := make([]adminAuthorizationMemberRow, 0)
-	if s.authorizationProvider != nil {
-		dynamicRows, err = s.providerPluginAuthorizationRows(ctx, plugin)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		dynamicMemberships, listErr := s.pluginAuthorizations.ListPluginAuthorizationsByPlugin(ctx, plugin)
-		if listErr != nil {
-			return nil, listErr
-		}
-		for _, membership := range dynamicMemberships {
-			if membership == nil {
-				continue
-			}
-			dynamicRows = append(dynamicRows, adminAuthorizationMemberRow{
-				Plugin:        membership.Plugin,
-				Role:          membership.Role,
-				Source:        "dynamic",
-				Effective:     true,
-				Mutable:       true,
-				SelectorKind:  "user_id",
-				SelectorValue: membership.UserID,
-				UserID:        membership.UserID,
-				Email:         membership.Email,
-			})
-		}
+	dynamicRows, err := s.providerPluginAuthorizationRows(ctx, plugin)
+	if err != nil {
+		return nil, err
 	}
 
 	staticByUserID := make(map[string]string, len(staticRows))
@@ -514,39 +448,16 @@ func (s *Server) adminAuthorizationMemberRows(ctx context.Context, plugin string
 }
 
 func (s *Server) adminAuthorizationAdminRows(ctx context.Context) ([]adminAuthorizationMemberRow, error) {
-	if s.authorizer == nil || (!s.authorizer.HasDynamicAdminAuthorizations() && s.authorizationProvider == nil) {
+	if s.authorizer == nil || s.authorizationProvider == nil {
 		return nil, errAdminAuthorizationUnavailable
 	}
 	staticRows, err := s.adminAuthorizationStaticAdminRows(ctx)
 	if err != nil {
 		return nil, err
 	}
-	dynamicRows := make([]adminAuthorizationMemberRow, 0)
-	if s.authorizationProvider != nil {
-		dynamicRows, err = s.providerAdminAuthorizationRows(ctx)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		dynamicMemberships, listErr := s.adminAuthorizations.ListAdminAuthorizations(ctx)
-		if listErr != nil {
-			return nil, listErr
-		}
-		for _, membership := range dynamicMemberships {
-			if membership == nil {
-				continue
-			}
-			dynamicRows = append(dynamicRows, adminAuthorizationMemberRow{
-				Role:          membership.Role,
-				Source:        "dynamic",
-				Effective:     true,
-				Mutable:       true,
-				SelectorKind:  "user_id",
-				SelectorValue: membership.UserID,
-				UserID:        membership.UserID,
-				Email:         membership.Email,
-			})
-		}
+	dynamicRows, err := s.providerAdminAuthorizationRows(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	staticByUserID := make(map[string]string, len(staticRows))
@@ -699,26 +610,8 @@ var (
 )
 
 func (s *Server) ensureAdminDynamicAuthorizationAvailable(w http.ResponseWriter) bool {
-	if s.authorizer == nil {
-		writeError(w, http.StatusServiceUnavailable, "dynamic authorization is unavailable")
-		return false
-	}
-	if s.authorizationProvider != nil {
-		return true
-	}
-	if s.pluginAuthorizations == nil || !s.authorizer.HasDynamicPluginAuthorizations() {
-		writeError(w, http.StatusServiceUnavailable, "dynamic authorization is unavailable")
-		return false
-	}
-	return true
-}
-
-func (s *Server) ensureAdminDynamicAuthorizationWriteAvailable(w http.ResponseWriter) bool {
-	if s.authorizationProvider != nil {
-		return true
-	}
-	if s.pluginAuthorizations == nil || s.authorizer == nil || !s.authorizer.HasDynamicPluginAuthorizations() {
-		writeError(w, http.StatusServiceUnavailable, "dynamic authorization writes are unavailable")
+	if s.authorizer == nil || s.authorizationProvider == nil {
+		writeError(w, http.StatusServiceUnavailable, "dynamic authorization requires an authorization provider")
 		return false
 	}
 	return true
@@ -733,8 +626,8 @@ func (s *Server) ensureAdminDynamicAdminAvailable(w http.ResponseWriter) bool {
 		writeError(w, http.StatusServiceUnavailable, "dynamic admin authorization is unavailable")
 		return false
 	}
-	if s.authorizationProvider == nil && (s.adminAuthorizations == nil || !s.authorizer.HasDynamicAdminAuthorizations()) {
-		writeError(w, http.StatusServiceUnavailable, "dynamic admin authorization is unavailable")
+	if s.authorizationProvider == nil {
+		writeError(w, http.StatusServiceUnavailable, "dynamic admin authorization requires an authorization provider")
 		return false
 	}
 	members, ok := s.authorizer.StaticMembersForPolicy(s.adminRoute.AuthorizationPolicy)
@@ -751,17 +644,6 @@ func (s *Server) ensureAdminDynamicAdminAvailable(w http.ResponseWriter) bool {
 	}
 	if !hasSeedAdmin {
 		writeError(w, http.StatusServiceUnavailable, "dynamic admin authorization requires at least one static admin member")
-		return false
-	}
-	return true
-}
-
-func (s *Server) ensureAdminDynamicAdminWriteAvailable(w http.ResponseWriter) bool {
-	if s.authorizationProvider != nil {
-		return true
-	}
-	if s.adminAuthorizations == nil || s.authorizer == nil || !s.authorizer.HasDynamicAdminAuthorizations() {
-		writeError(w, http.StatusServiceUnavailable, "dynamic admin authorization writes are unavailable")
 		return false
 	}
 	return true
