@@ -1,0 +1,28 @@
+#!/bin/sh
+
+set -eu
+
+case "$1" in
+  configure)
+    if ! getent group gestaltd >/dev/null 2>&1; then
+      addgroup --system gestaltd
+    fi
+    if ! id gestaltd >/dev/null 2>&1; then
+      adduser \
+        --system \
+        --ingroup gestaltd \
+        --home /var/lib/gestaltd \
+        --no-create-home \
+        --shell /usr/sbin/nologin \
+        gestaltd
+    fi
+    install -d -o root -g root -m 0755 /etc/gestaltd
+    install -d -o gestaltd -g gestaltd -m 0750 /var/lib/gestaltd
+    install -d -o gestaltd -g gestaltd -m 0750 /var/lib/gestaltd/artifacts
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl daemon-reload >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
+
+exit 0

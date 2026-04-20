@@ -19,6 +19,10 @@ on:
         description: 'Create tar.gz + sha256 packages'
         type: boolean
         default: false
+      package-deb:
+        description: 'Create Debian packages for Linux targets'
+        type: boolean
+        default: false
       run-tests:
         description: 'Run tests on native targets'
         type: boolean
@@ -129,6 +133,26 @@ jobs:
           tar -czvf ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.tar.gz ${{ inputs.binary-name }}
           shasum -a 256 ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.tar.gz > ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.tar.gz.sha256
 
+      - name: Package Debian artifact
+        if: ${{ inputs.package-deb && matrix.platform.cross }}
+        run: |
+          case "${{ matrix.platform.suffix }}" in
+            linux-x86_64) deb_arch="amd64" ;;
+            linux-arm64) deb_arch="arm64" ;;
+            linux-armv7) deb_arch="armhf" ;;
+            *)
+              echo "unsupported Debian package target: ${{ matrix.platform.suffix }}" >&2
+              exit 1
+              ;;
+          esac
+
+          mkdir -p dist
+          ./packaging/deb/build-gestalt-deb.sh \
+            --binary "${{ inputs.working-directory }}/target/${{ matrix.platform.target }}/release/${{ inputs.binary-name }}" \
+            --version "${GITHUB_REF_NAME#gestalt/v}" \
+            --arch "${deb_arch}" \
+            --out-dir dist
+
       - name: Package binary (Windows)
         if: ${{ inputs.package && matrix.platform.windows }}
         shell: pwsh
@@ -147,6 +171,7 @@ jobs:
           name: ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}
           path: |
             dist/${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.tar.gz*
+            dist/${{ inputs.artifact-prefix }}_*.deb*
             dist/${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}.zip*
           if-no-files-found: error
 

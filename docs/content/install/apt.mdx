@@ -1,0 +1,84 @@
+# Apt (Debian/Ubuntu)
+
+Gestalt publishes Debian packages for Ubuntu and Debian through the official apt repository hosted at:
+
+```text
+https://valon-technologies.github.io/gestalt/apt
+```
+
+Supported architectures:
+
+- `amd64`
+- `arm64`
+- `armhf`
+
+Current Gestalt releases are alpha builds. Until the first stable release is published, use the `*-preview` suites described below.
+
+## Add the signing key
+
+```sh
+sudo apt update
+sudo apt install curl gpg
+curl -fsSL https://valon-technologies.github.io/gestalt/apt/gpg.asc \
+  | sudo gpg --dearmor -o /usr/share/keyrings/gestalt-archive-keyring.gpg
+```
+
+## Add the repository
+
+### Stable suites
+
+Use these once stable Gestalt releases are available:
+
+```sh
+codename="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gestalt-archive-keyring.gpg] https://valon-technologies.github.io/gestalt/apt ${codename} main" \
+  | sudo tee /etc/apt/sources.list.d/gestalt.list
+```
+
+### Preview suites
+
+Use these for the current alpha releases:
+
+```sh
+codename="$(. /etc/os-release && echo "${VERSION_CODENAME}")"
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/gestalt-archive-keyring.gpg] https://valon-technologies.github.io/gestalt/apt ${codename}-preview main" \
+  | sudo tee /etc/apt/sources.list.d/gestalt.list
+```
+
+## Install
+
+`apt` and `apt-get` use the same repository. After the repo is configured, either command works.
+
+```sh
+sudo apt update
+sudo apt install gestaltd gestalt
+```
+
+## Verify
+
+```sh
+gestaltd version
+gestalt --version
+```
+
+## Configure the server service
+
+The `gestaltd` package installs a `systemd` unit, creates the `gestaltd` system user, and prepares `/var/lib/gestaltd`, but it does not generate a live config or auto-start the daemon.
+
+Create a config from the packaged example:
+
+```sh
+sudo install -d -m 0755 /etc/gestaltd
+sudo cp /usr/share/doc/gestaltd/examples/config.yaml /etc/gestaltd/config.yaml
+sudo editor /etc/gestaltd/config.yaml
+```
+
+At minimum, replace the placeholder `server.encryptionKey` before starting the service.
+
+Then enable the daemon:
+
+```sh
+sudo systemctl enable --now gestaltd
+```
+
+For a local developer quick start, running `gestaltd` directly can still be simpler because it auto-generates `~/.gestaltd/config.yaml` when no config exists. See [Getting Started](/getting-started).

@@ -68,12 +68,33 @@ jobs:
         run: |
           tar -czvf gestaltd-${{ matrix.platform.suffix }}.tar.gz -C build gestaltd
           shasum -a 256 gestaltd-${{ matrix.platform.suffix }}.tar.gz > gestaltd-${{ matrix.platform.suffix }}.tar.gz.sha256
+      - name: Package Debian artifact
+        if: ${{ startsWith(matrix.platform.suffix, 'linux-') }}
+        run: |
+          case "${{ matrix.platform.suffix }}" in
+            linux-x86_64) deb_arch="amd64" ;;
+            linux-arm64) deb_arch="arm64" ;;
+            linux-armv7) deb_arch="armhf" ;;
+            *)
+              echo "unsupported Debian package target: ${{ matrix.platform.suffix }}" >&2
+              exit 1
+              ;;
+          esac
+
+          mkdir -p dist
+          ./packaging/deb/build-gestaltd-deb.sh \
+            --binary build/gestaltd \
+            --version "${{ steps.version.outputs.version }}" \
+            --arch "${deb_arch}" \
+            --out-dir dist
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: gestaltd-${{ matrix.platform.suffix }}
           path: |
             gestaltd-${{ matrix.platform.suffix }}.tar.gz
             gestaltd-${{ matrix.platform.suffix }}.tar.gz.sha256
+            dist/gestaltd_*.deb
+            dist/gestaltd_*.deb.sha256
           if-no-files-found: error
 
   release:
@@ -90,6 +111,7 @@ jobs:
         Self-hosted integration gateway for Gestalt with the embedded client UI, admin UI, HTTP API, and optional MCP endpoint.
       install-markdown: |
         - Homebrew: `brew upgrade gestaltd`
+        - Apt (Debian/Ubuntu): [APT install instructions](https://gestaltd.ai/install/apt)
         - Docker: `docker pull valontechnologies/gestaltd:${version}`
         - Docs: [Deployment guide](https://gestaltd.ai/deploy)
       exclude-subject-patterns: |

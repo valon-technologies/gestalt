@@ -1,0 +1,13 @@
+#!/bin/sh
+
+set -eu
+
+case "$1" in
+  remove|purge|upgrade|failed-upgrade|disappear)
+    if command -v systemctl >/dev/null 2>&1; then
+      systemctl daemon-reload >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
+
+exit 0

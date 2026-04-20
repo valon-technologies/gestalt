@@ -6,11 +6,13 @@ on:
       - main
     paths:
       - 'gestalt/**'
+      - 'packaging/deb/**'
       - '.github/workflows/build-gestalt-cli.yml'
       - '.github/workflows/rust-build-matrix.yml'
   pull_request:
     paths:
       - 'gestalt/**'
+      - 'packaging/deb/**'
       - '.github/workflows/build-gestalt-cli.yml'
       - '.github/workflows/rust-build-matrix.yml'
 

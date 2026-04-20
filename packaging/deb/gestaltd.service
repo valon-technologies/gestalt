@@ -1,0 +1,16 @@
+[Unit]
+Description=Gestalt server daemon
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/gestaltd/config.yaml
+
+[Service]
+User=gestaltd
+Group=gestaltd
+WorkingDirectory=/var/lib/gestaltd
+ExecStart=/usr/bin/gestaltd serve --config /etc/gestaltd/config.yaml --artifacts-dir /var/lib/gestaltd/artifacts --lockfile /var/lib/gestaltd/gestalt.lock.json
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

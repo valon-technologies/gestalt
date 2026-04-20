@@ -1,0 +1,113 @@
+name: Build APT Packages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'gestalt/**'
+      - 'gestaltd/**'
+      - 'packaging/deb/**'
+      - '.github/scripts/rebuild-apt-repo.sh'
+      - '.github/workflows/build-apt-packages.yml'
+      - '.github/workflows/publish-apt-repo.yml'
+      - '.github/workflows/release-gestalt-cli.yml'
+      - '.github/workflows/release-gestaltd.yml'
+      - '.github/workflows/rust-build-matrix.yml'
+  pull_request:
+    paths:
+      - 'gestalt/**'
+      - 'gestaltd/**'
+      - 'packaging/deb/**'
+      - '.github/scripts/rebuild-apt-repo.sh'
+      - '.github/workflows/build-apt-packages.yml'
+      - '.github/workflows/publish-apt-repo.yml'
+      - '.github/workflows/release-gestalt-cli.yml'
+      - '.github/workflows/release-gestaltd.yml'
+      - '.github/workflows/rust-build-matrix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package Debian artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
+
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+
+      - name: Install packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev systemd
+
+      - name: Verify packaging script syntax
+        run: |
+          bash -n ./.github/scripts/rebuild-apt-repo.sh
+          bash -n ./packaging/deb/lib.sh
+          bash -n ./packaging/deb/build-gestalt-deb.sh
+          bash -n ./packaging/deb/build-gestaltd-deb.sh
+
+      - name: Build CLI binary
+        working-directory: gestalt
+        run: cargo build --release
+
+      - name: Build server binary
+        run: |
+          mkdir -p dist
+          go build -ldflags "-X main.version=0.0.0-dev.0" -o dist/gestaltd ./gestaltd/cmd/gestaltd
+          cp gestalt/target/release/gestalt dist/gestalt
+
+      - name: Package Debian artifacts
+        run: |
+          ./packaging/deb/build-gestalt-deb.sh \
+            --binary dist/gestalt \
+            --version 0.0.0-dev.0 \
+            --arch amd64 \
+            --out-dir dist
+
+          ./packaging/deb/build-gestaltd-deb.sh \
+            --binary dist/gestaltd \
+            --version 0.0.0-dev.0 \
+            --arch amd64 \
+            --out-dir dist
+
+      - name: Smoke test via apt
+        run: |
+          repo_dir="$(mktemp -d)"
+          trap 'rm -rf "${repo_dir}"' EXIT
+          cp dist/*.deb "${repo_dir}/"
+          dpkg-scanpackages "${repo_dir}" /dev/null > "${repo_dir}/Packages"
+          gzip -9fk "${repo_dir}/Packages"
+
+          echo "deb [trusted=yes] file:${repo_dir} ./" | sudo tee /etc/apt/sources.list.d/gestalt-local.list
+          sudo apt-get update
+          sudo apt-get install -y gestalt gestaltd
+
+          gestalt --version
+          gestaltd version
+          id gestaltd
+          test -f /lib/systemd/system/gestaltd.service
+          test -f /usr/share/doc/gestaltd/examples/config.yaml
+          systemd-analyze verify /lib/systemd/system/gestaltd.service
+
+      - name: Upload package artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: apt-packages-amd64
+          path: |
+            dist/*.deb
+            dist/*.deb.sha256
+          if-no-files-found: error

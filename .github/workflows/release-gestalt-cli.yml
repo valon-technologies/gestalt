@@ -21,6 +21,7 @@ jobs:
       artifact-prefix: gestalt
       run-tests: true
       package: true
+      package-deb: true
 
   release:
     name: Publish Release
@@ -36,6 +37,7 @@ jobs:
         Command-line client for authenticating with Gestalt, connecting integrations, invoking operations, and managing API tokens from the terminal.
       install-markdown: |
         - Homebrew: `brew upgrade gestalt`
+        - Apt (Debian/Ubuntu): [APT install instructions](https://gestaltd.ai/install/apt)
         - Docker: `docker pull valontechnologies/gestalt:${version}`
         - Docs: [CLI reference](https://gestaltd.ai/reference/cli)
       exclude-subject-patterns: |

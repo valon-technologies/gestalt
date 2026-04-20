@@ -1,0 +1,61 @@
+name: Publish APT Repository
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: apt-repository
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'gestalt/v') || startsWith(github.event.release.tag_name, 'gestaltd/v') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/configure-pages@v5
+
+      - name: Install repository tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gnupg jq reprepro
+
+      - name: Import signing key
+        env:
+          APT_REPO_GPG_PRIVATE_KEY: ${{ secrets.APT_REPO_GPG_PRIVATE_KEY }}
+        run: |
+          printf '%s' "${APT_REPO_GPG_PRIVATE_KEY}" | gpg --batch --import
+
+      - name: Rebuild apt repository
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APT_GPG_KEY_ID: ${{ secrets.APT_REPO_GPG_KEY_ID }}
+        run: ./.github/scripts/rebuild-apt-repo.sh --site-dir _site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    if: ${{ needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
