@@ -721,11 +721,12 @@ func roleSortKey(role string) string {
 }
 
 func staticSubjectRefs(p *principal.Principal) []*core.SubjectRef {
+	p = principal.Canonicalized(p)
 	if p == nil {
 		return nil
 	}
-	out := make([]*core.SubjectRef, 0, 3)
-	seen := make(map[string]struct{}, 3)
+	out := make([]*core.SubjectRef, 0, 1)
+	seen := make(map[string]struct{}, 1)
 	appendSubject := func(kind, id string) {
 		id = strings.TrimSpace(id)
 		if id == "" {
@@ -739,7 +740,6 @@ func staticSubjectRefs(p *principal.Principal) []*core.SubjectRef {
 		out = append(out, &core.SubjectRef{Type: kind, Id: id})
 	}
 	appendSubject(subjectTypeSubject, p.SubjectID)
-	appendSubject(subjectTypeSubject, principal.UserSubjectID(p.UserID))
 	return out
 }
 

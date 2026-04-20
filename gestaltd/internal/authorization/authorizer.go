@@ -442,7 +442,7 @@ func (p *HumanPolicy) roleForPrincipal(pr *principal.Principal) (string, bool) {
 	if p == nil || pr == nil {
 		return "", false
 	}
-	return p.staticRoleForIdentity(principal.Canonicalize(pr).SubjectID)
+	return p.staticRoleForIdentity(principal.Canonicalized(pr).SubjectID)
 }
 
 func (p *HumanPolicy) staticRoleForIdentity(subjectID string) (string, bool) {

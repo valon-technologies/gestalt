@@ -9,6 +9,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
 const (
@@ -235,7 +236,7 @@ func (s *Server) adminAuthorizationDynamicRowFromProviderRelationship(ctx contex
 			return adminAuthorizationMemberRow{}, false, nil
 		}
 		row.SelectorKind = "subject_id"
-		row.SelectorValue = adminAuthorizationUserSubjectID(userID)
+		row.SelectorValue = principal.UserSubjectID(userID)
 	default:
 		return adminAuthorizationMemberRow{}, false, nil
 	}

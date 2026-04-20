@@ -189,7 +189,7 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 		Effective:     true,
 		Mutable:       true,
 		SelectorKind:  "subject_id",
-		SelectorValue: adminAuthorizationUserSubjectID(membership.UserID),
+		SelectorValue: principal.UserSubjectID(strings.TrimSpace(membership.UserID)),
 	}
 	if err := s.reloadAuthorizationState(r.Context()); err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]any{
@@ -312,7 +312,7 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 		Effective:     true,
 		Mutable:       true,
 		SelectorKind:  "subject_id",
-		SelectorValue: adminAuthorizationUserSubjectID(membership.UserID),
+		SelectorValue: principal.UserSubjectID(strings.TrimSpace(membership.UserID)),
 	}
 	if err := s.reloadAuthorizationState(r.Context()); err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]any{
@@ -512,10 +512,6 @@ func (r adminAuthorizationMemberRow) adminAuthorizationRowKey() string {
 	return r.Source + ":" + r.SelectorKind + ":" + r.SelectorValue
 }
 
-func adminAuthorizationUserSubjectID(userID string) string {
-	return principal.UserSubjectID(strings.TrimSpace(userID))
-}
-
 func adminAuthorizationRowSubjectID(row adminAuthorizationMemberRow) string {
 	return strings.TrimSpace(row.SelectorValue)
 }
@@ -525,11 +521,7 @@ func adminAuthorizationUserIDFromSubjectID(subjectID string) (string, error) {
 	if subjectID == "" {
 		return "", errors.New("subjectID is required")
 	}
-	prefix := string(principal.KindUser) + ":"
-	if !strings.HasPrefix(subjectID, prefix) {
-		return "", errors.New("subjectID must use user:<id>")
-	}
-	userID := strings.TrimSpace(strings.TrimPrefix(subjectID, prefix))
+	userID := strings.TrimSpace(principal.UserIDFromSubjectID(subjectID))
 	if userID == "" {
 		return "", errors.New("subjectID must use user:<id>")
 	}
