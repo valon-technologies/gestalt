@@ -654,7 +654,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
 	}
-	legacyAuthz, err := authorization.New(authzCfg, cfg.Plugins, providers, connMaps.DefaultConnection)
+	baseAuthz, err := authorization.New(authzCfg, cfg.Plugins, providers, connMaps.DefaultConnection)
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
@@ -662,12 +662,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeAuthz := true
 	defer func() {
 		if closeAuthz {
-			_ = legacyAuthz.Close()
+			_ = baseAuthz.Close()
 		}
 	}()
-	var authz authorization.RuntimeAuthorizer = legacyAuthz
+	var authz authorization.RuntimeAuthorizer = baseAuthz
 	if prepared.AuthorizationProvider != nil {
-		authz, err = authorization.NewProviderBacked(legacyAuthz, prepared.AuthorizationProvider)
+		authz, err = authorization.NewProviderBacked(baseAuthz, prepared.AuthorizationProvider)
 		if err != nil {
 			prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 			return nil, err

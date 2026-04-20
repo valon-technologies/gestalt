@@ -894,9 +894,9 @@ func mustAuthorizer(t *testing.T, cfg config.AuthorizationConfig, providers *reg
 	return authz
 }
 
-func mustProviderBackedAuthorizer(t *testing.T, legacy *authorization.Authorizer, provider *memoryAuthorizationProvider) *authorization.ProviderBackedAuthorizer {
+func mustProviderBackedAuthorizer(t *testing.T, base *authorization.Authorizer, provider *memoryAuthorizationProvider) *authorization.ProviderBackedAuthorizer {
 	t.Helper()
-	authz, err := authorization.NewProviderBacked(legacy, provider)
+	authz, err := authorization.NewProviderBacked(base, provider)
 	if err != nil {
 		t.Fatalf("NewProviderBacked: %v", err)
 	}
