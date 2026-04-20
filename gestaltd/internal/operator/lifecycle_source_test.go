@@ -1395,7 +1395,7 @@ func TestSourcePluginGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(fmt.Sprintf(`{"assets":[{"id":%d,"name":"%s"},{"id":%d,"name":"%s"}]}`, metadataID, metadataName, archiveID, archiveName)))
+			_, _ = fmt.Fprintf(w, `{"assets":[{"id":%d,"name":"%s"},{"id":%d,"name":"%s"}]}`, metadataID, metadataName, archiveID, archiveName)
 		case escapedPath == fmt.Sprintf("/repos/%s/releases/assets/%d", repo, metadataID):
 			metadataCount.Add(1)
 			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {

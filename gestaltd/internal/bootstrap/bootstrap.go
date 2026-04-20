@@ -225,6 +225,9 @@ func (r *Result) Close(ctx context.Context) error {
 	if r.closed {
 		return nil
 	}
+	if r.ProvidersReady != nil {
+		<-r.ProvidersReady
+	}
 
 	var errs []error
 	errs = append(errs,

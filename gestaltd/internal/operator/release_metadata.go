@@ -225,7 +225,7 @@ func resolveProviderReleaseMetadataLocation(ctx context.Context, client *http.Cl
 func parseGitHubReleaseLocation(location string) (gitHubReleaseLocation, bool, error) {
 	parsed, err := url.Parse(strings.TrimSpace(location))
 	if err != nil {
-		return gitHubReleaseLocation{}, false, nil
+		return gitHubReleaseLocation{}, false, err
 	}
 	if parsed.Scheme != "github-release" {
 		return gitHubReleaseLocation{}, false, nil
