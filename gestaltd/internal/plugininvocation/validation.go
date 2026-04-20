@@ -275,7 +275,7 @@ func loadConfiguredAPICatalog(ctx context.Context, name string, entry *config.Pr
 		case config.SpecSurfaceOpenAPI:
 			def, err = openapi.LoadDefinition(ctx, name, url, allowed)
 		case config.SpecSurfaceGraphQL:
-			def, err = graphql.LoadDefinition(ctx, name, url, allowed)
+			def, err = graphql.LoadDefinition(ctx, name, url, allowed, spec.GraphQLOperationSelections())
 		}
 		if err != nil {
 			return nil, fmt.Errorf("plugin %q %s catalog: %w", name, surface, err)

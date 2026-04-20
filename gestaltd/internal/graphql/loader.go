@@ -9,7 +9,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 )
 
-func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[string]*config.OperationOverride) (*provider.Definition, error) {
+func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[string]*config.OperationOverride, selectionOverrides map[string]string) (*provider.Definition, error) {
 	schema, err := introspect(ctx, endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("introspecting %s: %w", endpoint, err)
@@ -21,8 +21,8 @@ func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[s
 	}
 
 	def.Operations = make(map[string]provider.OperationDef)
-	addOperations(schema, def, schema.QueryType, false, allowedOps)
-	addOperations(schema, def, schema.MutationType, true, allowedOps)
+	addOperations(schema, def, schema.QueryType, false, allowedOps, selectionOverrides)
+	addOperations(schema, def, schema.MutationType, true, allowedOps, selectionOverrides)
 
 	if len(def.Operations) == 0 {
 		return nil, fmt.Errorf("no operations found for %s", endpoint)
@@ -31,7 +31,7 @@ func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[s
 	return def, nil
 }
 
-func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isMutation bool, allowedOps map[string]*config.OperationOverride) {
+func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isMutation bool, allowedOps map[string]*config.OperationOverride, selectionOverrides map[string]string) {
 	if root == nil {
 		return
 	}
@@ -64,7 +64,7 @@ func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isM
 			allowedRoles = override.AllowedRoles
 		}
 
-		query := generateQuery(schema, field, isMutation)
+		query := generateQuery(schema, field, isMutation, selectionOverrides[field.Name])
 
 		opDef := provider.OperationDef{
 			Description:  provider.TruncateDescription(desc),

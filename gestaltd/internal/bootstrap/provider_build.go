@@ -622,7 +622,7 @@ func loadSpecDefinition(ctx context.Context, name string, resolved config.Resolv
 	case config.SpecSurfaceOpenAPI:
 		return openapi.LoadDefinition(ctx, name, resolved.URL, allowedOperations)
 	case config.SpecSurfaceGraphQL:
-		return graphql.LoadDefinition(ctx, name, resolved.URL, allowedOperations)
+		return graphql.LoadDefinition(ctx, name, resolved.URL, allowedOperations, resolved.GraphQLSelections)
 	default:
 		return nil, fmt.Errorf("unsupported spec definition surface %q", resolved.Surface)
 	}

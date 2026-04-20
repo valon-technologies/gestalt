@@ -111,6 +111,13 @@ func (s *Spec) GraphQLURL() string {
 	return s.Surfaces.GraphQL.URL
 }
 
+func (s *Spec) GraphQLOperationSelections() map[string]string {
+	if s == nil || s.Surfaces == nil || s.Surfaces.GraphQL == nil {
+		return nil
+	}
+	return s.Surfaces.GraphQL.OperationSelections
+}
+
 func (s *Spec) MCPURL() string {
 	if s == nil || s.Surfaces == nil || s.Surfaces.MCP == nil {
 		return ""
@@ -185,8 +192,9 @@ type OpenAPISurface struct {
 }
 
 type GraphQLSurface struct {
-	Connection string `json:"connection,omitempty" yaml:"connection,omitempty"`
-	URL        string `json:"url" yaml:"url"`
+	Connection          string            `json:"connection,omitempty" yaml:"connection,omitempty"`
+	URL                 string            `json:"url" yaml:"url"`
+	OperationSelections map[string]string `json:"operationSelections,omitempty" yaml:"operationSelections,omitempty"`
 }
 
 type MCPSurface struct {

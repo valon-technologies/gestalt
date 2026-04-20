@@ -7,7 +7,7 @@ import (
 
 const defaultMaxDepth = 2
 
-func generateQuery(schema *Schema, field Field, isMutation bool) string {
+func generateQuery(schema *Schema, field Field, isMutation bool, selectionOverride string) string {
 	var b strings.Builder
 
 	if isMutation {
@@ -41,7 +41,12 @@ func generateQuery(schema *Schema, field Field, isMutation bool) string {
 		b.WriteByte(')')
 	}
 
-	selectionSet := buildSelectionSet(schema, field.Type, defaultMaxDepth, nil)
+	var selectionSet string
+	if trimmed := strings.TrimSpace(selectionOverride); trimmed != "" {
+		selectionSet = "{ " + trimmed + " }"
+	} else {
+		selectionSet = buildSelectionSet(schema, field.Type, defaultMaxDepth, nil)
+	}
 	if selectionSet != "" {
 		b.WriteString(" ")
 		b.WriteString(selectionSet)

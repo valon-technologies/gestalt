@@ -26,7 +26,7 @@ func TestGenerateQuerySimple(t *testing.T) {
 		Type: TypeRef{Kind: "OBJECT", Name: strPtr("Team")},
 	}
 
-	query := generateQuery(schema, field, false)
+	query := generateQuery(schema, field, false, "")
 
 	if !strings.HasPrefix(query, "query(") {
 		t.Errorf("should start with query(: %s", query)
@@ -62,7 +62,7 @@ func TestGenerateQueryMutation(t *testing.T) {
 		Type: TypeRef{Kind: "OBJECT", Name: strPtr("Result")},
 	}
 
-	query := generateQuery(schema, field, true)
+	query := generateQuery(schema, field, true, "")
 
 	if !strings.HasPrefix(query, "mutation(") {
 		t.Errorf("should start with mutation(: %s", query)
@@ -87,7 +87,7 @@ func TestGenerateQueryNoArgs(t *testing.T) {
 		Type: TypeRef{Kind: "OBJECT", Name: strPtr("User")},
 	}
 
-	query := generateQuery(schema, field, false)
+	query := generateQuery(schema, field, false, "")
 
 	if !strings.HasPrefix(query, "query { viewer") {
 		t.Errorf("should be simple query: %s", query)
@@ -123,7 +123,7 @@ func TestConnectionTypeDetection(t *testing.T) {
 		Type: TypeRef{Kind: "OBJECT", Name: strPtr("IssueConnection")},
 	}
 
-	query := generateQuery(schema, field, false)
+	query := generateQuery(schema, field, false, "")
 
 	if !strings.Contains(query, "nodes { id title }") {
 		t.Errorf("should unwrap connection nodes: %s", query)
@@ -162,7 +162,7 @@ func TestSelectionSetDepthLimit(t *testing.T) {
 		Type: TypeRef{Kind: "OBJECT", Name: strPtr("A")},
 	}
 
-	query := generateQuery(schema, field, false)
+	query := generateQuery(schema, field, false, "")
 
 	if !strings.Contains(query, "value") {
 		t.Errorf("depth 2 should include C.value: %s", query)
@@ -190,7 +190,7 @@ func TestSelectionSetCyclePrevention(t *testing.T) {
 		Type: TypeRef{Kind: "OBJECT", Name: strPtr("Node")},
 	}
 
-	query := generateQuery(schema, field, false)
+	query := generateQuery(schema, field, false, "")
 
 	if strings.Count(query, "parent") > 1 {
 		t.Errorf("should not recurse into self-referential type: %s", query)

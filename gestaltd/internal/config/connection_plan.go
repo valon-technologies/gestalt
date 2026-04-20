@@ -18,10 +18,11 @@ type StaticConnectionPlan struct {
 }
 
 type ResolvedSpecSurface struct {
-	Surface        SpecSurface
-	URL            string
-	ConnectionName string
-	Connection     ConnectionDef
+	Surface           SpecSurface
+	URL               string
+	ConnectionName    string
+	Connection        ConnectionDef
+	GraphQLSelections map[string]string
 }
 
 func BuildStaticConnectionPlan(plugin *ProviderEntry, manifestPlugin *providermanifestv1.Spec) (StaticConnectionPlan, error) {
@@ -67,6 +68,9 @@ func BuildStaticConnectionPlan(plugin *ProviderEntry, manifestPlugin *providerma
 			Surface:        surface,
 			URL:            url,
 			ConnectionName: plan.resolveSurfaceConnectionName(ManifestProviderSurfaceConnectionName(manifestPlugin, surface)),
+		}
+		if surface == SpecSurfaceGraphQL {
+			resolved.GraphQLSelections = manifestPlugin.GraphQLOperationSelections()
 		}
 		conn, err := plan.connectionDef(resolved.ConnectionName)
 		if err != nil {
