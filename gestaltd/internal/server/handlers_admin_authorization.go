@@ -190,7 +190,7 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 		UserID:        membership.UserID,
 		Email:         membership.Email,
 	}
-	if err := s.reloadDynamicAuthorizations(r.Context()); err != nil {
+	if err := s.reloadAuthorizationState(r.Context()); err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]any{
 			"status":     "persisted_pending_reload",
 			"persisted":  true,
@@ -232,7 +232,7 @@ func (s *Server) deleteAdminAuthorizationPluginMember(w http.ResponseWriter, r *
 		return
 	}
 
-	if err := s.reloadDynamicAuthorizations(r.Context()); err != nil {
+	if err := s.reloadAuthorizationState(r.Context()); err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]any{
 			"status":    "persisted_pending_reload",
 			"persisted": true,
@@ -309,7 +309,7 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 		UserID:        membership.UserID,
 		Email:         membership.Email,
 	}
-	if err := s.reloadDynamicAuthorizations(r.Context()); err != nil {
+	if err := s.reloadAuthorizationState(r.Context()); err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]any{
 			"status":     "persisted_pending_reload",
 			"persisted":  true,
@@ -349,7 +349,7 @@ func (s *Server) deleteAdminAuthorizationAdminMember(w http.ResponseWriter, r *h
 		return
 	}
 
-	if err := s.reloadDynamicAuthorizations(r.Context()); err != nil {
+	if err := s.reloadAuthorizationState(r.Context()); err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]any{
 			"status":    "persisted_pending_reload",
 			"persisted": true,
@@ -564,14 +564,14 @@ func (s *Server) adminAuthorizationRowsFromStaticMembers(ctx context.Context, pl
 	return rows, nil
 }
 
-func (s *Server) reloadDynamicAuthorizations(ctx context.Context) error {
+func (s *Server) reloadAuthorizationState(ctx context.Context) error {
 	if s.authorizer == nil {
 		return nil
 	}
 
 	var lastErr error
 	for i := 0; i < 3; i++ {
-		if err := s.authorizer.ReloadDynamic(ctx); err == nil {
+		if err := s.authorizer.ReloadAuthorizationState(ctx); err == nil {
 			return nil
 		} else {
 			lastErr = err

@@ -4181,8 +4181,8 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if access.Role != "" {
 			t.Fatalf("role during active model drift = %q, want empty", access.Role)
 		}
-		if err := result.Authorizer.ReloadDynamic(ctx); err != nil {
-			t.Fatalf("expected reload to heal active model drift: %v", err)
+		if err := result.Authorizer.ReloadAuthorizationState(ctx); err != nil {
+			t.Fatalf("expected authorization state reload to heal active model drift: %v", err)
 		}
 		if got := provider.activeModelID; got != managedModelID {
 			t.Fatalf("active model id after reload = %q, want %q", got, managedModelID)

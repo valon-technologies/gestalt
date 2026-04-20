@@ -11,10 +11,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 )
 
-type managedAuthorizationModelResolver interface {
-	ManagedModelID(ctx context.Context) (string, error)
-}
-
 type providerPluginAuthorizationMembership struct {
 	Plugin string
 	UserID string
@@ -227,7 +223,7 @@ func (s *Server) managedAuthorizationModelID(ctx context.Context) (string, error
 	if s.authorizationProvider == nil {
 		return "", errAdminAuthorizationUnavailable
 	}
-	if resolver, ok := s.authorizer.(managedAuthorizationModelResolver); ok {
+	if resolver, ok := s.authorizer.(authorization.ManagedAuthorizationModelResolver); ok {
 		return resolver.ManagedModelID(ctx)
 	}
 	active, err := s.authorizationProvider.GetActiveModel(ctx)

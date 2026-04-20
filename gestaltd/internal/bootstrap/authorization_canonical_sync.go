@@ -14,10 +14,6 @@ import (
 
 const providerCanonicalSyncReadPageSize = 500
 
-type managedAuthorizationModelResolver interface {
-	ManagedModelID(ctx context.Context) (string, error)
-}
-
 func syncProviderBackedHumanCanonicalState(ctx context.Context, services *coredata.Services, authorizer authorization.RuntimeAuthorizer, provider core.AuthorizationProvider) error {
 	if services == nil || provider == nil || services.Users == nil {
 		return nil
@@ -127,7 +123,7 @@ func syncProviderBackedHumanCanonicalState(ctx context.Context, services *coreda
 }
 
 func providerBackedModelID(ctx context.Context, authorizer authorization.RuntimeAuthorizer, provider core.AuthorizationProvider) (string, error) {
-	if resolver, ok := authorizer.(managedAuthorizationModelResolver); ok {
+	if resolver, ok := authorizer.(authorization.ManagedAuthorizationModelResolver); ok {
 		modelID, err := resolver.ManagedModelID(ctx)
 		if err != nil {
 			return "", err
