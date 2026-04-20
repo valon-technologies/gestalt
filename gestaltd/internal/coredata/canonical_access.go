@@ -171,6 +171,24 @@ func (s *WorkspaceRoleService) ListByIdentity(ctx context.Context, identityID st
 	return out, nil
 }
 
+func (s *WorkspaceRoleService) ListAll(ctx context.Context) ([]*core.WorkspaceRole, error) {
+	recs, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list workspace roles: %w", err)
+	}
+	out := make([]*core.WorkspaceRole, 0, len(recs))
+	for _, rec := range recs {
+		out = append(out, recordToWorkspaceRole(rec))
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].IdentityID != out[j].IdentityID {
+			return out[i].IdentityID < out[j].IdentityID
+		}
+		return out[i].Role < out[j].Role
+	})
+	return out, nil
+}
+
 func (s *WorkspaceRoleService) ListByPrincipal(ctx context.Context, identityID string) ([]*core.WorkspaceRole, error) {
 	return s.ListByIdentity(ctx, identityID)
 }
@@ -276,6 +294,28 @@ func (s *IdentityPluginAccessService) ListByIdentity(ctx context.Context, identi
 		out = append(out, access)
 	}
 	sort.Slice(out, func(i, j int) bool {
+		return out[i].Plugin < out[j].Plugin
+	})
+	return out, nil
+}
+
+func (s *IdentityPluginAccessService) ListAll(ctx context.Context) ([]*core.IdentityPluginAccess, error) {
+	recs, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list identity plugin access: %w", err)
+	}
+	out := make([]*core.IdentityPluginAccess, 0, len(recs))
+	for _, rec := range recs {
+		access, err := recordToIdentityPluginAccess(rec)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, access)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].IdentityID != out[j].IdentityID {
+			return out[i].IdentityID < out[j].IdentityID
+		}
 		return out[i].Plugin < out[j].Plugin
 	})
 	return out, nil
