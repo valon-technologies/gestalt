@@ -459,11 +459,11 @@ func mergeAdminAuthorizationRows(staticRows, dynamicRows []adminAuthorizationMem
 	for i := range staticRows {
 		row := &staticRows[i]
 		rows = append(rows, *row)
-		staticBySubjectID[adminAuthorizationRowSubjectID(*row)] = row.adminAuthorizationRowKey()
+		staticBySubjectID[strings.TrimSpace(row.SelectorValue)] = row.adminAuthorizationRowKey()
 	}
 	for i := range dynamicRows {
 		row := dynamicRows[i]
-		if shadow, ok := staticBySubjectID[adminAuthorizationRowSubjectID(row)]; ok {
+		if shadow, ok := staticBySubjectID[strings.TrimSpace(row.SelectorValue)]; ok {
 			row.Effective = false
 			row.ShadowedBy = shadow
 		}
@@ -510,10 +510,6 @@ func (s *Server) reloadAuthorizationState(ctx context.Context) error {
 
 func (r adminAuthorizationMemberRow) adminAuthorizationRowKey() string {
 	return r.Source + ":" + r.SelectorKind + ":" + r.SelectorValue
-}
-
-func adminAuthorizationRowSubjectID(row adminAuthorizationMemberRow) string {
-	return strings.TrimSpace(row.SelectorValue)
 }
 
 func adminAuthorizationUserIDFromSubjectID(subjectID string) (string, error) {
