@@ -376,13 +376,6 @@ func (p *memoryAuthorizationProvider) putRelationship(modelID string, rel *core.
 	p.relsByModel[modelID][bootstrapRelationshipKey(rel.GetSubject(), rel.GetRelation(), rel.GetResource())] = cloneRelationship(rel)
 }
 
-func (p *memoryAuthorizationProvider) hasRelationship(modelID, key string) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	_, ok := p.relsByModel[modelID][key]
-	return ok
-}
-
 func cloneRelationship(rel *core.Relationship) *core.Relationship {
 	if rel == nil {
 		return nil
@@ -3708,14 +3701,14 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			Email:  dynamicUser.Email,
 			Role:   "editor",
 		}); err != nil {
-			t.Fatalf("UpsertPluginAuthorization: %v", err)
+			t.Fatalf("UpsertPluginAuthorization(seed): %v", err)
 		}
 		if _, err := result.Services.AdminAuthorizations.UpsertAdminAuthorization(ctx, &coredata.AdminAuthorizationMembership{
 			UserID: dynamicUser.ID,
 			Email:  dynamicUser.Email,
 			Role:   "admin",
 		}); err != nil {
-			t.Fatalf("UpsertAdminAuthorization: %v", err)
+			t.Fatalf("UpsertAdminAuthorization(seed): %v", err)
 		}
 
 		if err := result.Start(ctx); err != nil {
@@ -3729,6 +3722,21 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 		if _, ok := provider.relsByModel[existingModelID][unmanagedKey]; !ok {
 			t.Fatal("expected unrelated provider relationship to be preserved")
+		}
+		if err := result.Services.ManagedIdentities.CreateIdentity(ctx, &core.ManagedIdentity{
+			ID:          "svc-bot",
+			DisplayName: "Service Bot",
+		}); err != nil {
+			t.Fatalf("CreateIdentity: %v", err)
+		}
+		if _, err := result.Services.IdentityGrants.UpsertGrant(ctx, &core.ManagedIdentityGrant{
+			IdentityID: "svc-bot",
+			Plugin:     "calendar",
+		}); err != nil {
+			t.Fatalf("UpsertGrant: %v", err)
+		}
+		if _, err := result.Services.IdentityPluginAccess.GetAccess(ctx, "svc-bot", "calendar"); err != nil {
+			t.Fatalf("GetAccess managed identity after start: %v", err)
 		}
 
 		staticPrincipal := &principal.Principal{
@@ -3827,6 +3835,80 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
+	t.Run("legacy human dynamic authorizations still work without authorization provider", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Authorization = config.AuthorizationConfig{
+			Policies: map[string]config.HumanPolicyDef{
+				"calendar-policy": {Default: "deny"},
+				"admin-policy":    {Default: "deny"},
+			},
+		}
+		cfg.Server.Admin.AuthorizationPolicy = "admin-policy"
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"calendar": {
+				AuthorizationPolicy: "calendar-policy",
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{},
+				},
+			},
+		}
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		t.Cleanup(func() { _ = result.Close(context.Background()) })
+		<-result.ProvidersReady
+
+		dynamicUser, err := result.Services.Users.FindOrCreateUser(ctx, "dynamic@example.test")
+		if err != nil {
+			t.Fatalf("FindOrCreateUser(dynamic): %v", err)
+		}
+		if _, err := result.Services.PluginAuthorizations.UpsertPluginAuthorization(ctx, &coredata.PluginAuthorizationMembership{
+			Plugin: "calendar",
+			UserID: dynamicUser.ID,
+			Email:  dynamicUser.Email,
+			Role:   "editor",
+		}); err != nil {
+			t.Fatalf("UpsertPluginAuthorization: %v", err)
+		}
+		if _, err := result.Services.AdminAuthorizations.UpsertAdminAuthorization(ctx, &coredata.AdminAuthorizationMembership{
+			UserID: dynamicUser.ID,
+			Email:  dynamicUser.Email,
+			Role:   "admin",
+		}); err != nil {
+			t.Fatalf("UpsertAdminAuthorization: %v", err)
+		}
+
+		if err := result.Start(ctx); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+
+		dynamicPrincipal := &principal.Principal{
+			UserID:    dynamicUser.ID,
+			SubjectID: principal.UserSubjectID(dynamicUser.ID),
+			Identity:  &core.UserIdentity{Email: dynamicUser.Email},
+			Kind:      principal.KindUser,
+		}
+		access, allowed := result.Authorizer.ResolveAccess(ctx, dynamicPrincipal, "calendar")
+		if !allowed {
+			t.Fatal("expected legacy dynamic plugin access to be allowed")
+		}
+		if access.Role != "editor" {
+			t.Fatalf("legacy dynamic plugin role = %q, want %q", access.Role, "editor")
+		}
+
+		adminAccess, allowed := result.Authorizer.ResolveAdminAccess(ctx, dynamicPrincipal, "admin-policy")
+		if !allowed {
+			t.Fatal("expected legacy dynamic admin access to be allowed")
+		}
+		if adminAccess.Role != "admin" {
+			t.Fatalf("legacy dynamic admin role = %q, want %q", adminAccess.Role, "admin")
+		}
+	})
+
 	t.Run("authorization provider rehydrates human canonical state on restart", func(t *testing.T) {
 		t.Parallel()
 
@@ -3876,30 +3958,29 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FindOrCreateUser(dynamic): %v", err)
 		}
-		if _, err := result.Services.PluginAuthorizations.UpsertPluginAuthorization(ctx, &coredata.PluginAuthorizationMembership{
-			Plugin: "calendar",
-			UserID: dynamicUser.ID,
-			Email:  dynamicUser.Email,
-			Role:   "editor",
-		}); err != nil {
-			t.Fatalf("UpsertPluginAuthorization: %v", err)
-		}
-		if _, err := result.Services.AdminAuthorizations.UpsertAdminAuthorization(ctx, &coredata.AdminAuthorizationMembership{
-			UserID: dynamicUser.ID,
-			Email:  dynamicUser.Email,
-			Role:   "admin",
-		}); err != nil {
-			t.Fatalf("UpsertAdminAuthorization: %v", err)
-		}
+		provider.putRelationship(provider.activeModelID, &core.Relationship{
+			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeEmail, Id: dynamicUser.Email},
+			Relation: "editor",
+			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "calendar"},
+		})
+		provider.putRelationship(provider.activeModelID, &core.Relationship{
+			Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeEmail, Id: dynamicUser.Email},
+			Relation: "admin",
+			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
+		})
 		if err := result.Start(ctx); err != nil {
 			t.Fatalf("Start(first): %v", err)
 		}
 
-		if err := result.Services.PluginAuthorizations.DeletePluginAuthorization(ctx, "calendar", dynamicUser.ID); err != nil {
-			t.Fatalf("DeletePluginAuthorization: %v", err)
+		canonicalIdentityID, err := result.Services.Users.CanonicalIdentityIDForUser(ctx, dynamicUser.ID)
+		if err != nil {
+			t.Fatalf("CanonicalIdentityIDForUser(first): %v", err)
 		}
-		if err := result.Services.AdminAuthorizations.DeleteAdminAuthorization(ctx, dynamicUser.ID); err != nil {
-			t.Fatalf("DeleteAdminAuthorization: %v", err)
+		if err := result.Services.IdentityPluginAccess.DeleteAccess(ctx, canonicalIdentityID, "calendar"); err != nil {
+			t.Fatalf("DeleteAccess(calendar): %v", err)
+		}
+		if err := result.Services.WorkspaceRoles.DeleteRole(ctx, canonicalIdentityID, "admin"); err != nil {
+			t.Fatalf("DeleteRole(admin): %v", err)
 		}
 		if err := result.Close(context.Background()); err != nil {
 			t.Fatalf("Close(first): %v", err)
@@ -3937,7 +4018,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Fatalf("provider-backed admin role after restart = %q, want %q", adminAccess.Role, "admin")
 		}
 
-		canonicalIdentityID, err := result.Services.Users.CanonicalIdentityIDForUser(ctx, dynamicUser.ID)
+		canonicalIdentityID, err = result.Services.Users.CanonicalIdentityIDForUser(ctx, dynamicUser.ID)
 		if err != nil {
 			t.Fatalf("CanonicalIdentityIDForUser: %v", err)
 		}

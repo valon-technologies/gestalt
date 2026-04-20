@@ -132,9 +132,7 @@ func buildProviderAuthorizationResourceType(name string, relations map[string][]
 	for relation := range relations {
 		relationNames = append(relationNames, relation)
 	}
-	slices.SortFunc(relationNames, func(left, right string) int {
-		return strings.Compare(left, right)
-	})
+	slices.SortFunc(relationNames, strings.Compare)
 	for _, relation := range relationNames {
 		resourceType.Relations = append(resourceType.Relations, &core.AuthorizationModelRelation{
 			Name:         relation,

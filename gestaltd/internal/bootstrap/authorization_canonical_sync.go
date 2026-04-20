@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -75,40 +76,40 @@ func syncProviderBackedHumanCanonicalState(ctx context.Context, services *coreda
 		}
 	}
 
-	if services.PluginAuthorizations != nil {
-		memberships, err := services.PluginAuthorizations.ListPluginAuthorizations(ctx)
+	if services.IdentityPluginAccess != nil {
+		accesses, err := services.IdentityPluginAccess.ListAll(ctx)
 		if err != nil {
-			return fmt.Errorf("list legacy plugin authorizations for canonical sync: %w", err)
+			return fmt.Errorf("list canonical plugin access for provider sync: %w", err)
 		}
-		for _, membership := range memberships {
-			identityID, err := legacyMembershipIdentityID(ctx, services.Users, membership.UserID, membership.Email)
-			switch {
-			case err == nil:
-				if identityID != "" {
-					candidateIdentityIDs[identityID] = struct{}{}
-				}
-			case errors.Is(err, core.ErrNotFound):
-			default:
+		for _, access := range accesses {
+			if access == nil {
+				continue
+			}
+			identityID, err := humanCanonicalIdentityID(ctx, services, access.IdentityID)
+			if err != nil {
 				return err
+			}
+			if identityID != "" {
+				candidateIdentityIDs[identityID] = struct{}{}
 			}
 		}
 	}
 
-	if services.AdminAuthorizations != nil {
-		memberships, err := services.AdminAuthorizations.ListAdminAuthorizations(ctx)
+	if services.WorkspaceRoles != nil {
+		roles, err := services.WorkspaceRoles.ListAll(ctx)
 		if err != nil {
-			return fmt.Errorf("list legacy admin authorizations for canonical sync: %w", err)
+			return fmt.Errorf("list canonical workspace roles for provider sync: %w", err)
 		}
-		for _, membership := range memberships {
-			identityID, err := legacyMembershipIdentityID(ctx, services.Users, membership.UserID, membership.Email)
-			switch {
-			case err == nil:
-				if identityID != "" {
-					candidateIdentityIDs[identityID] = struct{}{}
-				}
-			case errors.Is(err, core.ErrNotFound):
-			default:
+		for _, role := range roles {
+			if role == nil {
+				continue
+			}
+			identityID, err := humanCanonicalIdentityID(ctx, services, role.IdentityID)
+			if err != nil {
 				return err
+			}
+			if identityID != "" {
+				candidateIdentityIDs[identityID] = struct{}{}
 			}
 		}
 	}
@@ -182,21 +183,37 @@ func providerRelationshipIdentityID(ctx context.Context, users *coredata.UserSer
 	}
 }
 
-func legacyMembershipIdentityID(ctx context.Context, users *coredata.UserService, userID, email string) (string, error) {
-	if users == nil {
-		return "", core.ErrNotFound
+func humanCanonicalIdentityID(ctx context.Context, services *coredata.Services, identityID string) (string, error) {
+	identityID = strings.TrimSpace(identityID)
+	if identityID == "" || services == nil || services.Identities == nil {
+		return "", nil
 	}
-	if userID = strings.TrimSpace(userID); userID != "" {
-		return users.CanonicalIdentityIDForUser(ctx, userID)
+	identity, err := services.Identities.GetIdentity(ctx, identityID)
+	switch {
+	case err == nil:
+	case errors.Is(err, core.ErrNotFound):
+		return "", nil
+	default:
+		return "", err
 	}
-	if email = strings.TrimSpace(email); email != "" {
-		user, err := users.FindUserByEmail(ctx, email)
-		if err != nil {
-			return "", err
-		}
-		return users.CanonicalIdentityIDForUser(ctx, user.ID)
+	if identityMetadataLabel(identity.MetadataJSON) != "user" {
+		return "", nil
 	}
-	return "", core.ErrNotFound
+	return identityID, nil
+}
+
+func identityMetadataLabel(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	var payload struct {
+		Label string `json:"label"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(payload.Label)
 }
 
 func reconcileProviderPluginCanonicalAccess(ctx context.Context, svc *coredata.IdentityPluginAccessService, identityID string, desired map[string]struct{}) error {
