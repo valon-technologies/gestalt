@@ -145,7 +145,7 @@ These metrics carry low-cardinality attributes: `gestalt.provider` (the
 plugin key), `gestalt.operation` (the catalog operation id),
 `gestalt.transport` (how the operation is implemented: `plugin`, `rest`, or
 `mcp-passthrough`), and `gestalt.connection_mode` (the provider auth mode:
-`none`, `user`, `identity`, or `either`).
+`none`, `user`, or `identity`).
 
 When a request references an unknown provider or operation, `gestaltd` records
 `unknown` for the missing metric attributes instead of using raw user input.
@@ -176,7 +176,7 @@ These metrics carry low-cardinality attributes: `gestalt.provider` (the
 plugin key), `gestalt.type` (`oauth` or `manual`),
 `gestalt.action` (`start`, `complete`, or `refresh`), and
 `gestalt.connection_mode` (the provider auth mode: `none`, `user`,
-`identity`, or `either`).
+`identity`).
 
 When a request references an unknown plugin, `gestaltd` records
 `unknown` for the provider and connection mode metric attributes instead of
@@ -233,8 +233,8 @@ session catalog with stored or identity credentials.
 
 These metrics carry low-cardinality attributes: `gestalt.provider` (the plugin
 key), `gestalt.action` (currently `list_operations`), and
-`gestalt.connection_mode` (the provider auth mode: `none`, `user`, `identity`,
-or `either`). `gestaltd.discovery.error_count` increments when the
+`gestalt.connection_mode` (the provider auth mode: `none`, `user`, or
+`identity`). `gestaltd.discovery.error_count` increments when the
 credentialed session-catalog path fails, even if `gestaltd` falls back to a
 static catalog and still serves a successful HTTP response.
 

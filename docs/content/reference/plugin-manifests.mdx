@@ -66,7 +66,7 @@ The `spec` block for a `kind: plugin` manifest describes a plugin. It supports d
 | --- | --- | --- |
 | `configSchemaPath` | string | Path to a JSON/YAML schema that validates `plugins.<name>.config` in the server config. |
 | `auth` | ProviderAuth | Default connection auth when no `connections` map is defined. |
-| `connectionMode` | string | Default connection mode when no `connections` map is defined. One of `none`, `user`, `identity`, `either`. |
+| `connectionMode` | string | Default connection mode when no `connections` map is defined. One of `none`, `user`, `identity`. |
 | `mcp` | bool | When true, the plugin exposes its operations as MCP tools. |
 | `headers` | map[string]string | Static headers injected into every outbound request. |
 | `surfaces` | Surfaces | Spec-loaded and declarative REST surfaces. See [Surfaces](#surfaces). |
@@ -127,7 +127,7 @@ The `connections` map defines named connection profiles. Deployment config can o
 
 | Field | Type | Purpose |
 | --- | --- | --- |
-| `mode` | string | One of `none`, `user`, `identity`, `either`. |
+| `mode` | string | One of `none`, `user`, `identity`. |
 | `auth` | ProviderAuth | Authentication configuration for this connection. |
 | `params` | map[string]ConnectionParam | Connection parameters populated during or after connect. |
 | `discovery` | Discovery | Post-connect discovery configuration. |

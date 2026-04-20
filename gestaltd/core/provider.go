@@ -12,7 +12,6 @@ const (
 	ConnectionModeNone     ConnectionMode = "none"
 	ConnectionModeUser     ConnectionMode = "user"
 	ConnectionModeIdentity ConnectionMode = "identity"
-	ConnectionModeEither   ConnectionMode = "either"
 )
 
 type Provider interface {

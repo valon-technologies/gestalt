@@ -23,7 +23,7 @@ func (p *roundTripProvider) Configure(_ context.Context, _ string, _ map[string]
 func (p *roundTripProvider) Name() string                        { return "roundtrip" }
 func (p *roundTripProvider) DisplayName() string                 { return "Round Trip" }
 func (p *roundTripProvider) Description() string                 { return "test provider" }
-func (p *roundTripProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeEither }
+func (p *roundTripProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeUser }
 func (p *roundTripProvider) AuthTypes() []string                 { return []string{"manual"} }
 func (p *roundTripProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return map[string]core.ConnectionParamDef{
@@ -117,7 +117,7 @@ func roundTripStaticSpec() StaticProviderSpec {
 		Name:           "roundtrip",
 		DisplayName:    "Round Trip",
 		Description:    "test provider",
-		ConnectionMode: core.ConnectionModeEither,
+		ConnectionMode: core.ConnectionModeUser,
 		Catalog: &catalog.Catalog{
 			Name:        "roundtrip",
 			DisplayName: "Round Trip",
@@ -174,7 +174,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	if prov.DisplayName() != "Round Trip" {
 		t.Fatalf("unexpected display name: %q", prov.DisplayName())
 	}
-	if prov.ConnectionMode() != core.ConnectionModeEither {
+	if prov.ConnectionMode() != core.ConnectionModeUser {
 		t.Fatalf("unexpected connection mode: %q", prov.ConnectionMode())
 	}
 

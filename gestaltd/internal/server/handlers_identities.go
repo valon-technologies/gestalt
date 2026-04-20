@@ -1075,9 +1075,6 @@ func managedIdentityPluginConnectionMode(entry *config.ProviderEntry) core.Conne
 			needUser = true
 		case core.ConnectionModeIdentity:
 			needIdentity = true
-		case core.ConnectionModeEither:
-			needUser = true
-			needIdentity = true
 		}
 	}
 
@@ -1092,8 +1089,6 @@ func managedIdentityPluginConnectionMode(entry *config.ProviderEntry) core.Conne
 	}
 
 	switch {
-	case needUser && needIdentity:
-		return core.ConnectionModeEither
 	case needUser:
 		return core.ConnectionModeUser
 	case needIdentity:

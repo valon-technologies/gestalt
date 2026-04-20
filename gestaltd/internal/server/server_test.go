@@ -5502,33 +5502,22 @@ func TestListIntegrations_DerivesAuthTypesFromConnectionsWhenProviderOmitsThem(t
 func TestListIntegrations_HidesIdentityConnectionsFromUserFacingMetadata(t *testing.T) {
 	t.Parallel()
 
-	stub := &stubNilAuthTypesProvider{
+	stub := &stubManualProvider{
 		StubIntegration: coretesting.StubIntegration{N: "launchdarkly", DN: "LaunchDarkly"},
 	}
 	plugin := &config.ProviderEntry{
 		Source: config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-launchdarkly/v1.0.0/provider-release.yaml"),
 		ResolvedManifest: &providermanifestv1.Manifest{
 			Spec: &providermanifestv1.Spec{
-				DefaultConnection: "default",
 				Surfaces: &providermanifestv1.ProviderSurfaces{
 					OpenAPI: &providermanifestv1.OpenAPISurface{
 						Document:   "https://example.com/openapi.json",
-						Connection: "default",
+						Connection: config.PluginConnectionName,
 					},
 				},
-				Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-					"default": {
-						Mode: providermanifestv1.ConnectionModeUser,
-						Auth: &providermanifestv1.ProviderAuth{
-							Type: providermanifestv1.AuthTypeManual,
-						},
-					},
-					"identity": {
-						Mode: providermanifestv1.ConnectionModeIdentity,
-						Auth: &providermanifestv1.ProviderAuth{
-							Type: providermanifestv1.AuthTypeManual,
-						},
-					},
+				ConnectionMode: providermanifestv1.ConnectionModeIdentity,
+				Auth: &providermanifestv1.ProviderAuth{
+					Type: providermanifestv1.AuthTypeManual,
 				},
 			},
 		},
@@ -5571,14 +5560,8 @@ func TestListIntegrations_HidesIdentityConnectionsFromUserFacingMetadata(t *test
 	if !reflect.DeepEqual(integrations[0].AuthTypes, []string{"manual"}) {
 		t.Fatalf("auth types = %v, want [manual]", integrations[0].AuthTypes)
 	}
-	if len(integrations[0].Connections) != 1 {
-		t.Fatalf("connections = %+v, want only one user-facing connection", integrations[0].Connections)
-	}
-	if integrations[0].Connections[0].Name != "default" {
-		t.Fatalf("connection name = %q, want default", integrations[0].Connections[0].Name)
-	}
-	if !reflect.DeepEqual(integrations[0].Connections[0].AuthTypes, []string{"manual"}) {
-		t.Fatalf("connection auth types = %v, want [manual]", integrations[0].Connections[0].AuthTypes)
+	if len(integrations[0].Connections) != 0 {
+		t.Fatalf("connections = %+v, want no user-facing connections", integrations[0].Connections)
 	}
 }
 
@@ -14596,13 +14579,24 @@ func TestExecuteOperation_ConnectionModeIdentity(t *testing.T) {
 	}
 }
 
-func TestExecuteOperation_ConnectionModeEither(t *testing.T) {
+func TestExecuteOperation_ConnectionModeUserDoesNotFallbackToIdentity(t *testing.T) {
 	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	apiToken, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	seedAPIToken(t, svc, apiToken, hashed, "api-user")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-identity", UserID: principal.IdentityPrincipal, Integration: "svc",
+		Connection: "", Instance: "default", AccessToken: "identity-tok",
+	})
 
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "svc",
-			ConnMode: core.ConnectionModeEither,
+			ConnMode: core.ConnectionModeUser,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"token":%q}`, token)}, nil
 			},
@@ -14610,75 +14604,43 @@ func TestExecuteOperation_ConnectionModeEither(t *testing.T) {
 		ops: []core.Operation{{Name: "do", Method: http.MethodGet}},
 	}
 
-	t.Run("prefers user token", func(t *testing.T) {
-		t.Parallel()
-
-		svc := coretesting.NewStubServices(t)
-		apiToken, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-		if err != nil {
-			t.Fatalf("GenerateToken: %v", err)
-		}
-		seedAPIToken(t, svc, apiToken, hashed, "api-user")
-		u, _ := svc.Users.FindOrCreateUser(context.Background(), "api-user@test.local")
-		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-user", UserID: u.ID, Integration: "svc",
-			Connection: "", Instance: "default", AccessToken: "user-tok",
-		})
-		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-identity", UserID: principal.IdentityPrincipal, Integration: "svc",
-			Connection: "", Instance: "default", AccessToken: "identity-tok",
-		})
-
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
-			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.Services = svc
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
-		req.Header.Set("Authorization", "Bearer "+apiToken)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		var result map[string]any
-		_ = json.NewDecoder(resp.Body).Decode(&result)
-		if result["token"] != "user-tok" {
-			t.Fatalf("expected user-tok (preferred), got %v", result["token"])
-		}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Services = svc
 	})
+	testutil.CloseOnCleanup(t, ts)
 
-	t.Run("falls back to identity", func(t *testing.T) {
-		t.Parallel()
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
+	req.Header.Set("Authorization", "Bearer "+apiToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
 
-		svc := coretesting.NewStubServices(t)
-		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-identity", UserID: principal.IdentityPrincipal, Integration: "svc",
-			Connection: "", Instance: "default", AccessToken: "identity-tok",
-		})
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 412, got %d: %s", resp.StatusCode, body)
+	}
 
-		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Providers = testutil.NewProviderRegistry(t, stub)
-			cfg.Services = svc
-		})
-		testutil.CloseOnCleanup(t, ts)
-
-		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		var result map[string]any
-		_ = json.NewDecoder(resp.Body).Decode(&result)
-		if result["token"] != "identity-tok" {
-			t.Fatalf("expected identity-tok (fallback), got %v", result["token"])
-		}
-	})
+	var errResp struct {
+		Error       string `json:"error"`
+		Code        string `json:"code"`
+		Integration string `json:"integration"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decoding error response: %v", err)
+	}
+	if errResp.Code != "not_connected" {
+		t.Fatalf("expected not_connected code, got %q", errResp.Code)
+	}
+	if errResp.Error != `no token stored for integration "svc"; connect via OAuth first` {
+		t.Fatalf("unexpected error message: %q", errResp.Error)
+	}
+	if errResp.Integration != "svc" {
+		t.Fatalf("expected integration svc, got %q", errResp.Integration)
+	}
 }
 
 func TestConnectManual_MultiCredential(t *testing.T) {

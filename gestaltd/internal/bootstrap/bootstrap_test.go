@@ -3117,7 +3117,7 @@ func TestValidate(t *testing.T) {
 		cfg := validConfig()
 		cfg.Plugins = map[string]*config.ProviderEntry{
 			"svc": {
-				ConnectionMode: providermanifestv1.ConnectionModeEither,
+				ConnectionMode: providermanifestv1.ConnectionMode("either"),
 				Workflow: &config.PluginWorkflowConfig{
 					Provider:   "temporal",
 					Operations: []string{"run"},
@@ -4399,7 +4399,25 @@ func TestBootstrapWorkloadAuthorizationRejectsEitherProvider(t *testing.T) {
 
 	factories := validFactories()
 	factories.Builtins = []core.Provider{
-		&coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionModeEither},
+		&coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionMode("either")},
+	}
+
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBootstrapRejectsBuiltinEitherProviderWithoutAuthorizationConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	factories := validFactories()
+	factories.Builtins = []core.Provider{
+		&coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionMode("either")},
 	}
 
 	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
@@ -4423,7 +4441,7 @@ func TestBootstrapWorkflowAuthorizationRejectsEitherProvider(t *testing.T) {
 	cfg := validConfig()
 	cfg.Plugins = map[string]*config.ProviderEntry{
 		"svc": {
-			ConnectionMode: providermanifestv1.ConnectionModeEither,
+			ConnectionMode: providermanifestv1.ConnectionMode("either"),
 			Workflow: &config.PluginWorkflowConfig{
 				Provider:   "temporal",
 				Operations: []string{"run"},

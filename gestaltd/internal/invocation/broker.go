@@ -437,20 +437,8 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	case core.ConnectionModeIdentity:
 		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, providerName, connection, instance, core.ConnectionModeIdentity, principal.IdentitySubjectID())
 
-	case core.ConnectionModeEither:
-		if p.UserID != "" {
-			enrichedCtx, tok, err := b.resolveUserToken(ctx, prov, p.UserID, providerName, connection, instance, core.ConnectionModeUser, principal.UserSubjectID(p.UserID))
-			if err == nil {
-				return enrichedCtx, tok, nil
-			}
-			if errors.Is(err, ErrAmbiguousInstance) {
-				return ctx, "", err
-			}
-			if !errors.Is(err, ErrNoToken) {
-				return ctx, "", err
-			}
-		}
-		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, providerName, connection, instance, core.ConnectionModeIdentity, principal.IdentitySubjectID())
+	case core.ConnectionMode("either"):
+		return ctx, "", fmt.Errorf("%w: unsupported connection mode %q", ErrInternal, mode)
 
 	default:
 		return ctx, "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, mode)
