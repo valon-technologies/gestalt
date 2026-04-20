@@ -2,6 +2,7 @@ package providerhost
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -55,6 +56,8 @@ func workflowTargetToProto(target coreworkflow.Target) (*proto.BoundWorkflowTarg
 		PluginName: target.PluginName,
 		Operation:  target.Operation,
 		Input:      input,
+		Connection: target.Connection,
+		Instance:   target.Instance,
 	}, nil
 }
 
@@ -63,8 +66,10 @@ func workflowTargetFromProto(target *proto.BoundWorkflowTarget) coreworkflow.Tar
 		return coreworkflow.Target{}
 	}
 	return coreworkflow.Target{
-		PluginName: target.GetPluginName(),
-		Operation:  target.GetOperation(),
+		PluginName: strings.TrimSpace(target.GetPluginName()),
+		Operation:  strings.TrimSpace(target.GetOperation()),
+		Connection: strings.TrimSpace(target.GetConnection()),
+		Instance:   strings.TrimSpace(target.GetInstance()),
 		Input:      mapFromStruct(target.GetInput()),
 	}
 }
@@ -99,18 +104,22 @@ func pluginWorkflowTargetToProto(target coreworkflow.Target) (*proto.WorkflowTar
 		return nil, fmt.Errorf("workflow target input: %w", err)
 	}
 	return &proto.WorkflowTarget{
-		Operation: target.Operation,
-		Input:     input,
+		Operation:  target.Operation,
+		Input:      input,
+		Connection: target.Connection,
+		Instance:   target.Instance,
 	}, nil
 }
 
 func pluginWorkflowTargetFromProto(pluginName string, target *proto.WorkflowTarget) coreworkflow.Target {
 	if target == nil {
-		return coreworkflow.Target{PluginName: pluginName}
+		return coreworkflow.Target{PluginName: strings.TrimSpace(pluginName)}
 	}
 	return coreworkflow.Target{
-		PluginName: pluginName,
-		Operation:  target.GetOperation(),
+		PluginName: strings.TrimSpace(pluginName),
+		Operation:  strings.TrimSpace(target.GetOperation()),
+		Connection: strings.TrimSpace(target.GetConnection()),
+		Instance:   strings.TrimSpace(target.GetInstance()),
 		Input:      mapFromStruct(target.GetInput()),
 	}
 }
@@ -265,6 +274,7 @@ func workflowRunFromProto(run *proto.BoundWorkflowRun) (*coreworkflow.Run, error
 		Status:        status,
 		Target:        workflowTargetFromProto(run.GetTarget()),
 		Trigger:       trigger,
+		ExecutionRef:  run.GetExecutionRef(),
 		CreatedBy:     workflowActorFromProto(run.GetCreatedBy()),
 		CreatedAt:     timeFromProto(run.GetCreatedAt()),
 		StartedAt:     timeFromProto(run.GetStartedAt()),
@@ -305,15 +315,16 @@ func workflowScheduleFromProto(schedule *proto.BoundWorkflowSchedule) (*corework
 		return nil, nil
 	}
 	return &coreworkflow.Schedule{
-		ID:        schedule.GetId(),
-		Cron:      schedule.GetCron(),
-		Timezone:  schedule.GetTimezone(),
-		Target:    workflowTargetFromProto(schedule.GetTarget()),
-		Paused:    schedule.GetPaused(),
-		CreatedBy: workflowActorFromProto(schedule.GetCreatedBy()),
-		CreatedAt: timeFromProto(schedule.GetCreatedAt()),
-		UpdatedAt: timeFromProto(schedule.GetUpdatedAt()),
-		NextRunAt: timeFromProto(schedule.GetNextRunAt()),
+		ID:           schedule.GetId(),
+		Cron:         schedule.GetCron(),
+		Timezone:     schedule.GetTimezone(),
+		Target:       workflowTargetFromProto(schedule.GetTarget()),
+		Paused:       schedule.GetPaused(),
+		ExecutionRef: schedule.GetExecutionRef(),
+		CreatedBy:    workflowActorFromProto(schedule.GetCreatedBy()),
+		CreatedAt:    timeFromProto(schedule.GetCreatedAt()),
+		UpdatedAt:    timeFromProto(schedule.GetUpdatedAt()),
+		NextRunAt:    timeFromProto(schedule.GetNextRunAt()),
 	}, nil
 }
 
@@ -381,13 +392,14 @@ func workflowInvokeRequestFromProto(req *proto.InvokeWorkflowOperationRequest) (
 		return coreworkflow.InvokeOperationRequest{}, err
 	}
 	return coreworkflow.InvokeOperationRequest{
-		PluginName: req.GetPluginName(),
-		RunID:      req.GetRunId(),
-		Trigger:    trigger,
-		Target:     workflowTargetFromProto(req.GetTarget()),
-		Input:      mapFromStruct(req.GetInput()),
-		Metadata:   mapFromStruct(req.GetMetadata()),
-		CreatedBy:  workflowActorFromProto(req.GetCreatedBy()),
+		PluginName:   req.GetPluginName(),
+		RunID:        req.GetRunId(),
+		Trigger:      trigger,
+		Target:       workflowTargetFromProto(req.GetTarget()),
+		Input:        mapFromStruct(req.GetInput()),
+		Metadata:     mapFromStruct(req.GetMetadata()),
+		CreatedBy:    workflowActorFromProto(req.GetCreatedBy()),
+		ExecutionRef: req.GetExecutionRef(),
 	}, nil
 }
 

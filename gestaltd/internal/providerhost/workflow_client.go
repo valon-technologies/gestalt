@@ -68,6 +68,7 @@ func (r *remoteWorkflow) StartRun(ctx context.Context, req coreworkflow.StartRun
 		IdempotencyKey: req.IdempotencyKey,
 		PluginName:     req.Target.PluginName,
 		CreatedBy:      workflowActorToProto(req.CreatedBy),
+		ExecutionRef:   req.ExecutionRef,
 	})
 	if err != nil {
 		return nil, err
@@ -128,13 +129,14 @@ func (r *remoteWorkflow) UpsertSchedule(ctx context.Context, req coreworkflow.Up
 		return nil, err
 	}
 	resp, err := r.client.UpsertSchedule(ctx, &proto.UpsertWorkflowProviderScheduleRequest{
-		ScheduleId:  req.ScheduleID,
-		Cron:        req.Cron,
-		Timezone:    req.Timezone,
-		Target:      target,
-		Paused:      req.Paused,
-		PluginName:  req.Target.PluginName,
-		RequestedBy: workflowActorToProto(req.RequestedBy),
+		ScheduleId:   req.ScheduleID,
+		Cron:         req.Cron,
+		Timezone:     req.Timezone,
+		Target:       target,
+		Paused:       req.Paused,
+		PluginName:   req.Target.PluginName,
+		RequestedBy:  workflowActorToProto(req.RequestedBy),
+		ExecutionRef: req.ExecutionRef,
 	})
 	if err != nil {
 		return nil, err

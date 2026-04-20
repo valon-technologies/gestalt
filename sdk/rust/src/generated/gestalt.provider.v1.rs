@@ -5716,6 +5716,10 @@ pub struct WorkflowTarget {
     pub operation: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub input: ::core::option::Option<::prost_types::Struct>,
+    #[prost(string, tag = "3")]
+    pub connection: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub instance: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BoundWorkflowTarget {
@@ -5725,6 +5729,10 @@ pub struct BoundWorkflowTarget {
     pub operation: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
     pub input: ::core::option::Option<::prost_types::Struct>,
+    #[prost(string, tag = "4")]
+    pub connection: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub instance: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowActor {
@@ -5993,6 +6001,8 @@ pub struct BoundWorkflowRun {
     pub result_body: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "10")]
     pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "11")]
+    pub execution_ref: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BoundWorkflowSchedule {
@@ -6014,6 +6024,8 @@ pub struct BoundWorkflowSchedule {
     pub next_run_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(message, optional, tag = "9")]
     pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "10")]
+    pub execution_ref: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BoundWorkflowEventTrigger {
@@ -6042,6 +6054,8 @@ pub struct StartWorkflowProviderRunRequest {
     pub plugin_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "4")]
     pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "5")]
+    pub execution_ref: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowProviderRunRequest {
@@ -6085,6 +6099,8 @@ pub struct UpsertWorkflowProviderScheduleRequest {
     pub plugin_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "7")]
     pub requested_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "8")]
+    pub execution_ref: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowProviderScheduleRequest {
@@ -6200,6 +6216,8 @@ pub struct InvokeWorkflowOperationRequest {
     pub plugin_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "7")]
     pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "8")]
+    pub execution_ref: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct InvokeWorkflowOperationResponse {

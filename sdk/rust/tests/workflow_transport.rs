@@ -521,6 +521,8 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
                 input: Some(helpers::struct_from_json(serde_json::json!({
                     "customer_id": "cust_123"
                 }))),
+                connection: String::new(),
+                instance: String::new(),
             }),
             idempotency_key: "run-42".to_string(),
             plugin_name: "demo".to_string(),
@@ -544,6 +546,8 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
             input: Some(helpers::struct_from_json(serde_json::json!({
                 "customer_id": "cust_123"
             }))),
+            connection: String::new(),
+            instance: String::new(),
         }
     );
 
