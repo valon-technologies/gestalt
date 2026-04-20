@@ -194,6 +194,19 @@ func (r *workflowRuntime) ResolvePlugin(pluginName string) (coreworkflow.Provide
 	return provider, maps.Clone(binding.operations), nil
 }
 
+func (r *workflowRuntime) ResolveBinding(pluginName string) (string, map[string]struct{}, error) {
+	if r == nil {
+		return "", nil, fmt.Errorf("workflow runtime is not configured")
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	binding, ok := r.bindings[pluginName]
+	if !ok {
+		return "", nil, fmt.Errorf("plugin %q does not have a workflow binding", pluginName)
+	}
+	return binding.providerName, maps.Clone(binding.operations), nil
+}
+
 func (r *workflowRuntime) ResolveProvider(name string) (coreworkflow.Provider, error) {
 	if r == nil {
 		return nil, fmt.Errorf("workflow runtime is not configured")
