@@ -25,7 +25,7 @@ type providerBackedRoleState struct {
 }
 
 type ProviderBackedAuthorizer struct {
-	legacy *Authorizer
+	base *Authorizer
 
 	provider core.AuthorizationProvider
 
@@ -43,15 +43,15 @@ var _ RuntimeAuthorizer = (*ProviderBackedAuthorizer)(nil)
 
 const providerBackedReloadInterval = 5 * time.Second
 
-func NewProviderBacked(legacy *Authorizer, provider core.AuthorizationProvider) (*ProviderBackedAuthorizer, error) {
-	if legacy == nil {
-		return nil, errors.New("legacy authorizer is required")
+func NewProviderBacked(base *Authorizer, provider core.AuthorizationProvider) (*ProviderBackedAuthorizer, error) {
+	if base == nil {
+		return nil, errors.New("base authorizer is required")
 	}
 	if provider == nil {
 		return nil, errors.New("authorization provider is required")
 	}
 	return &ProviderBackedAuthorizer{
-		legacy:   legacy,
+		base:     base,
 		provider: provider,
 		state: providerBackedRoleState{
 			policyStaticRoles:  map[string][]string{},
@@ -63,9 +63,6 @@ func NewProviderBacked(legacy *Authorizer, provider core.AuthorizationProvider) 
 
 func (a *ProviderBackedAuthorizer) Start(ctx context.Context) error {
 	if a == nil {
-		return nil
-	}
-	if a.legacy == nil {
 		return nil
 	}
 
@@ -93,9 +90,6 @@ func (a *ProviderBackedAuthorizer) Close() error {
 	if a == nil {
 		return nil
 	}
-	if a.legacy == nil {
-		return nil
-	}
 
 	a.lifecycleMu.Lock()
 	if a.closed {
@@ -115,14 +109,11 @@ func (a *ProviderBackedAuthorizer) Close() error {
 	if done != nil {
 		<-done
 	}
-	return a.legacy.Close()
+	return a.base.Close()
 }
 
 func (a *ProviderBackedAuthorizer) ReloadDynamic(ctx context.Context) error {
 	if a == nil {
-		return nil
-	}
-	if a.legacy == nil {
 		return nil
 	}
 
@@ -208,28 +199,25 @@ func (a *ProviderBackedAuthorizer) pollLoop(ctx context.Context, done chan struc
 }
 
 func (a *ProviderBackedAuthorizer) ResolveWorkloadToken(token string) (*principal.ResolvedWorkload, bool) {
-	if a == nil || a.legacy == nil {
+	if a == nil {
 		return nil, false
 	}
-	return a.legacy.ResolveWorkloadToken(token)
+	return a.base.ResolveWorkloadToken(token)
 }
 
 func (a *ProviderBackedAuthorizer) IsWorkload(p *principal.Principal) bool {
-	if a == nil || a.legacy == nil {
+	if a == nil {
 		return false
 	}
-	return a.legacy.IsWorkload(p)
+	return a.base.IsWorkload(p)
 }
 
 func (a *ProviderBackedAuthorizer) AllowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
 	if a == nil {
 		return true
 	}
-	if a.legacy == nil {
-		return true
-	}
-	if a.legacy.IsWorkload(p) || a.legacy.isManagedIdentityPrincipal(p) {
-		return a.legacy.AllowProvider(ctx, p, provider)
+	if a.base.IsWorkload(p) || a.base.isManagedIdentityPrincipal(p) {
+		return a.base.AllowProvider(ctx, p, provider)
 	}
 	_, allowed := a.ResolveAccess(ctx, p, provider)
 	return allowed
@@ -239,38 +227,32 @@ func (a *ProviderBackedAuthorizer) AllowOperation(ctx context.Context, p *princi
 	if a == nil {
 		return true
 	}
-	if a.legacy == nil {
-		return true
-	}
-	if a.legacy.IsWorkload(p) || a.legacy.isManagedIdentityPrincipal(p) {
-		return a.legacy.AllowOperation(ctx, p, provider, operation)
+	if a.base.IsWorkload(p) || a.base.isManagedIdentityPrincipal(p) {
+		return a.base.AllowOperation(ctx, p, provider, operation)
 	}
 	return a.AllowProvider(ctx, p, provider)
 }
 
 func (a *ProviderBackedAuthorizer) Binding(p *principal.Principal, provider string) (CredentialBinding, bool) {
-	if a == nil || a.legacy == nil {
+	if a == nil {
 		return CredentialBinding{}, false
 	}
-	return a.legacy.Binding(p, provider)
+	return a.base.Binding(p, provider)
 }
 
 func (a *ProviderBackedAuthorizer) ResolveAccess(ctx context.Context, p *principal.Principal, provider string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, true
 	}
-	if a.legacy == nil {
-		return AccessContext{}, true
-	}
-	if a.legacy.isManagedIdentityPrincipal(p) || a.legacy.IsWorkload(p) {
-		return a.legacy.ResolveAccess(ctx, p, provider)
+	if a.base.isManagedIdentityPrincipal(p) || a.base.IsWorkload(p) {
+		return a.base.ResolveAccess(ctx, p, provider)
 	}
 
-	policyName := strings.TrimSpace(a.legacy.providerPolicies[provider])
+	policyName := strings.TrimSpace(a.base.providerPolicies[provider])
 	if policyName == "" {
 		return AccessContext{}, true
 	}
-	policy := a.legacy.policies[policyName]
+	policy := a.base.policies[policyName]
 	if policy == nil {
 		return AccessContext{}, false
 	}
@@ -300,17 +282,14 @@ func (a *ProviderBackedAuthorizer) ResolvePolicyAccess(ctx context.Context, p *p
 	if a == nil {
 		return AccessContext{}, true
 	}
-	if a.legacy == nil {
-		return AccessContext{}, true
-	}
-	if a.legacy.IsWorkload(p) {
-		return a.legacy.ResolvePolicyAccess(ctx, p, policyName)
+	if a.base.IsWorkload(p) {
+		return a.base.ResolvePolicyAccess(ctx, p, policyName)
 	}
 	policyName = strings.TrimSpace(policyName)
 	if policyName == "" {
 		return AccessContext{}, true
 	}
-	policy := a.legacy.policies[policyName]
+	policy := a.base.policies[policyName]
 	if policy == nil {
 		return AccessContext{}, false
 	}
@@ -340,17 +319,14 @@ func (a *ProviderBackedAuthorizer) ResolveAdminAccess(ctx context.Context, p *pr
 	if a == nil {
 		return AccessContext{}, true
 	}
-	if a.legacy == nil {
-		return AccessContext{}, true
-	}
-	if a.legacy.IsWorkload(p) {
-		return a.legacy.ResolveAdminAccess(ctx, p, policyName)
+	if a.base.IsWorkload(p) {
+		return a.base.ResolveAdminAccess(ctx, p, policyName)
 	}
 	policyName = strings.TrimSpace(policyName)
 	if policyName == "" {
 		return AccessContext{}, true
 	}
-	policy := a.legacy.policies[policyName]
+	policy := a.base.policies[policyName]
 	if policy == nil {
 		return AccessContext{}, false
 	}
@@ -393,11 +369,8 @@ func (a *ProviderBackedAuthorizer) AllowCatalogOperation(ctx context.Context, p 
 	if a == nil {
 		return true
 	}
-	if a.legacy == nil {
-		return true
-	}
-	if a.legacy.IsWorkload(p) || a.legacy.isManagedIdentityPrincipal(p) {
-		return a.legacy.AllowCatalogOperation(ctx, p, provider, op)
+	if a.base.IsWorkload(p) || a.base.isManagedIdentityPrincipal(p) {
+		return a.base.AllowCatalogOperation(ctx, p, provider, op)
 	}
 
 	access, allowed := a.ResolveAccess(ctx, p, provider)
@@ -408,7 +381,7 @@ func (a *ProviderBackedAuthorizer) AllowCatalogOperation(ctx context.Context, p 
 		return true
 	}
 	if access.Policy != "" && len(op.AllowedRoles) == 0 {
-		policy := a.legacy.policies[access.Policy]
+		policy := a.base.policies[access.Policy]
 		return policy != nil && policy.DefaultAllow
 	}
 	if access.Role == "" {
@@ -423,38 +396,38 @@ func (a *ProviderBackedAuthorizer) AllowCatalogOperation(ctx context.Context, p 
 }
 
 func (a *ProviderBackedAuthorizer) PolicyNameForProvider(provider string) string {
-	if a == nil || a.legacy == nil {
+	if a == nil {
 		return ""
 	}
-	return a.legacy.PolicyNameForProvider(provider)
+	return a.base.PolicyNameForProvider(provider)
 }
 
 func (a *ProviderBackedAuthorizer) StaticRoleForPolicyIdentity(policyName, subjectID, userID, email string) (AccessContext, bool) {
-	if a == nil || a.legacy == nil {
+	if a == nil {
 		return AccessContext{}, false
 	}
-	return a.legacy.StaticRoleForPolicyIdentity(policyName, subjectID, userID, email)
+	return a.base.StaticRoleForPolicyIdentity(policyName, subjectID, userID, email)
 }
 
 func (a *ProviderBackedAuthorizer) StaticRoleForProviderIdentity(provider, subjectID, userID, email string) (AccessContext, bool) {
-	if a == nil || a.legacy == nil {
+	if a == nil {
 		return AccessContext{}, false
 	}
-	return a.legacy.StaticRoleForProviderIdentity(provider, subjectID, userID, email)
+	return a.base.StaticRoleForProviderIdentity(provider, subjectID, userID, email)
 }
 
 func (a *ProviderBackedAuthorizer) StaticMembersForPolicy(policyName string) ([]StaticHumanMember, bool) {
-	if a == nil || a.legacy == nil {
+	if a == nil {
 		return nil, false
 	}
-	return a.legacy.StaticMembersForPolicy(policyName)
+	return a.base.StaticMembersForPolicy(policyName)
 }
 
 func (a *ProviderBackedAuthorizer) StaticMembersForProvider(provider string) (string, []StaticHumanMember, bool) {
-	if a == nil || a.legacy == nil {
+	if a == nil {
 		return "", nil, false
 	}
-	return a.legacy.StaticMembersForProvider(provider)
+	return a.base.StaticMembersForProvider(provider)
 }
 
 func (a *ProviderBackedAuthorizer) resolveProviderRole(ctx context.Context, provider string, p *principal.Principal) (string, bool, error) {
@@ -629,7 +602,7 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 	}
 
 	providersByPolicy := map[string][]string{}
-	for providerName, policyName := range a.legacy.providerPolicies {
+	for providerName, policyName := range a.base.providerPolicies {
 		policyName = strings.TrimSpace(policyName)
 		if policyName == "" {
 			continue
@@ -637,7 +610,7 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 		providersByPolicy[policyName] = append(providersByPolicy[policyName], providerName)
 	}
 
-	for policyName, policy := range a.legacy.policies {
+	for policyName, policy := range a.base.policies {
 		if policy == nil {
 			continue
 		}
