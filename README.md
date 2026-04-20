@@ -4,6 +4,8 @@
 
 > Gestalt is under active development. APIs and configuration may change between releases. Feedback and bug reports are welcome via [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
 
+Gestalt (/ɡəˈstält/) refers to the idea that the whole is greater than the sum of its parts.
+
 Gestalt is a self-hostable, open source platform for managing agentic tools and services, with declarative configuration and secure credential management built in.
 
 ## Why Gestalt

@@ -5,6 +5,10 @@ separate from platform login: `providers.auth.<name>` decides how users sign in
 to Gestalt, while `providers.authorization.<name>` stores authorization
 relationships and answers authorization queries for Gestalt itself.
 
+This relationship-oriented authorization model is inspired by
+[Google Zanzibar](https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/),
+Google's global authorization system.
+
 ## How authorization providers work
 
 Static shared policies still live under top-level `authorization.policies`.

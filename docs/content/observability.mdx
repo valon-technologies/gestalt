@@ -100,8 +100,8 @@ collectors can still split the stream by filtering on `log.type=audit`.
 ## Emitted Metrics
 
 The built-in metric surface covers Prometheus exporter metadata, inbound HTTP
-requests handled by `gestaltd`, broker operation execution, connection auth
-flows, platform auth actions, credentialed HTTP catalog discovery, IndexedDB operations, and outbound gRPC calls
+requests handled by `gestaltd`, broker operation execution, connection authentication
+flows, platform authentication actions, credentialed HTTP catalog discovery, IndexedDB operations, and outbound gRPC calls
 from `gestaltd` to provider processes.
 
 Gestalt documents metric names using their OpenTelemetry instrument names. The
@@ -150,57 +150,57 @@ plugin key), `gestalt.operation` (the catalog operation id),
 When a request references an unknown provider or operation, `gestaltd` records
 `unknown` for the missing metric attributes instead of using raw user input.
 
-### Connection Auth Metrics
+### Connection Authentication Metrics
 
-These metrics are recorded around plugin connection auth flows including
+These metrics are recorded around plugin connection authentication flows including
 OAuth start and completion, manual connect, and token refresh.
 
 <Tabs items={['OpenTelemetry', 'Prometheus']}>
   <Tabs.Tab>
     | Metric | Type | Meaning |
     | --- | --- | --- |
-    | `gestaltd.connection.auth.count` | Counter | Connection auth attempts |
-    | `gestaltd.connection.auth.error_count` | Counter | Failed connection auth attempts |
-    | `gestaltd.connection.auth.duration` | Histogram | Connection auth duration |
+    | `gestaltd.connection.auth.count` | Counter | Connection authentication attempts |
+    | `gestaltd.connection.auth.error_count` | Counter | Failed connection authentication attempts |
+    | `gestaltd.connection.auth.duration` | Histogram | Connection authentication duration |
   </Tabs.Tab>
   <Tabs.Tab>
     | Metric | Type | Meaning |
     | --- | --- | --- |
-    | `gestaltd_connection_auth_count_total` | Counter | Connection auth attempts |
-    | `gestaltd_connection_auth_error_count_total` | Counter | Failed connection auth attempts |
-    | `gestaltd_connection_auth_duration_seconds` | Histogram | Connection auth duration |
+    | `gestaltd_connection_auth_count_total` | Counter | Connection authentication attempts |
+    | `gestaltd_connection_auth_error_count_total` | Counter | Failed connection authentication attempts |
+    | `gestaltd_connection_auth_duration_seconds` | Histogram | Connection authentication duration |
   </Tabs.Tab>
 </Tabs>
 
 These metrics carry low-cardinality attributes: `gestalt.provider` (the
 plugin key), `gestalt.type` (`oauth` or `manual`),
 `gestalt.action` (`start`, `complete`, or `refresh`), and
-`gestalt.connection_mode` (the provider auth mode: `none`, `user`,
-only).
+`gestalt.connection_mode` (the provider authentication mode: `none`
+or `user`).
 
 When a request references an unknown plugin, `gestaltd` records
 `unknown` for the provider and connection mode metric attributes instead of
 using raw request input.
 
-### Platform Auth Metrics
+### Platform Authentication Metrics
 
-These metrics are recorded around the configured top-level auth provider used
+These metrics are recorded around the configured top-level authentication provider used
 to log into Gestalt and validate session tokens.
 
 <Tabs items={['OpenTelemetry', 'Prometheus']}>
   <Tabs.Tab>
     | Metric | Type | Meaning |
     | --- | --- | --- |
-    | `gestaltd.auth.count` | Counter | Platform auth actions |
-    | `gestaltd.auth.error_count` | Counter | Failed platform auth actions |
-    | `gestaltd.auth.duration` | Histogram | Platform auth action duration |
+    | `gestaltd.auth.count` | Counter | Platform authentication actions |
+    | `gestaltd.auth.error_count` | Counter | Failed platform authentication actions |
+    | `gestaltd.auth.duration` | Histogram | Platform authentication action duration |
   </Tabs.Tab>
   <Tabs.Tab>
     | Metric | Type | Meaning |
     | --- | --- | --- |
-    | `gestaltd_auth_count_total` | Counter | Platform auth actions |
-    | `gestaltd_auth_error_count_total` | Counter | Failed platform auth actions |
-    | `gestaltd_auth_duration_seconds` | Histogram | Platform auth action duration |
+    | `gestaltd_auth_count_total` | Counter | Platform authentication actions |
+    | `gestaltd_auth_error_count_total` | Counter | Failed platform authentication actions |
+    | `gestaltd_auth_duration_seconds` | Histogram | Platform authentication action duration |
   </Tabs.Tab>
 </Tabs>
 

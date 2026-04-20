@@ -1,28 +1,28 @@
 import { Tabs } from 'nextra/components'
 
-# Auth
+# Authentication
 
-This page covers building custom auth providers. If you only need to configure
-platform login for a deployment, use [Providers > Auth](/providers/auth).
+This page covers building custom authentication providers. If you only need to
+configure platform login for a deployment, use [Providers > Authentication](/providers/authentication).
 
-Auth providers handle platform login. When a user visits the Gestalt web UI or hits the HTTP API without a valid session, the auth provider drives the login flow, validates the callback, and returns an authenticated identity. Gestalt then issues a session cookie and manages session lifetime on its own.
+Authentication providers handle platform login. When a user visits the Gestalt web UI or hits the HTTP API without a valid session, the authentication provider drives the login flow, validates the callback, and returns an authenticated identity. Gestalt then issues a session cookie and manages session lifetime on its own.
 
-Beyond the core login flow, an auth provider can optionally validate externally issued tokens (so API clients can present a bearer token directly instead of going through the browser) and control session TTL.
+Beyond the core login flow, an authentication provider can optionally validate externally issued tokens (so API clients can present a bearer token directly instead of going through the browser) and control session TTL.
 
 The examples on this page use a Google OAuth provider as the running example.
 
 ## Manifest
 
-An auth provider manifest declares `kind: auth`. You can optionally include a `configSchemaPath` so Gestalt validates provider config at startup.
+An authentication provider manifest declares `kind: auth`. You can optionally include a `configSchemaPath` so Gestalt validates provider config at startup.
 
 ```yaml
 kind: auth
-source: github.com/your-org/auth/google
+source: github.com/your-org/authentication/google
 version: 0.0.1
-displayName: Google
+displayName: Google Authentication
 description: Authenticate users with Google OAuth.
 spec:
-  configSchemaPath: ./auth_config.json
+  configSchemaPath: ./authentication_config.json
 ```
 
 ## Interface
@@ -63,12 +63,12 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
     	cfg := &oauth2.Config{
     		ClientID:     g.clientID,
     		ClientSecret: g.clientSecret,
-    		RedirectURL:  req.CallbackURL,
+    		RedirectURL:  req.CallbackUrl,
     		Scopes:       []string{"openid", "email", "profile"},
     		Endpoint:     googleoauth.Endpoint,
     	}
     	return &gestalt.BeginLoginResponse{
-    		AuthorizationURL: cfg.AuthCodeURL(req.HostState, oauth2.AccessTypeOffline),
+    		AuthorizationUrl: cfg.AuthCodeURL(req.HostState, oauth2.AccessTypeOffline),
     	}, nil
     }
 
@@ -120,6 +120,7 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
     use std::sync::Mutex;
     use gestalt::{AuthProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest};
 
+    #[derive(Default)]
     pub struct GoogleAuth {
         client_id: Mutex<String>,
         client_secret: Mutex<String>,
@@ -199,14 +200,14 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
     });
     ```
 
-    Point `package.json` at the auth provider with `gestalt.provider`:
+    Point `package.json` at the authentication provider with `gestalt.provider`:
 
     ```json
     {
       "gestalt": {
         "provider": {
           "kind": "auth",
-          "target": "./auth.ts#provider"
+          "target": "./authentication.ts#provider"
         }
       }
     }
@@ -222,15 +223,15 @@ Two optional interfaces extend the base contract.
 
 **SessionTTLProvider** controls session lifetime. The default is 24 hours. In Go, implement the `SessionTTLProvider` interface. In Python, inherit from `gestalt.SessionTTLProvider`. In Rust, override the `session_ttl` method, which returns `None` (the 24-hour default) by default. In TypeScript, provide the optional `sessionSettings` handler to `defineAuthProvider`.
 
-## Config reference
+## Config Reference
 
-To use a Google auth provider in a Gestalt deployment, reference it as a named entry in `providers.auth`:
+To use a Google authentication provider in a Gestalt deployment, reference it as a named entry in `providers.auth`:
 
 ```yaml
 providers:
   auth:
     google:
-      source: ./google-auth/manifest.yaml
+      source: ./google-authentication/manifest.yaml
       config:
         clientId: ${GOOGLE_CLIENT_ID}
         clientSecret:
@@ -241,12 +242,13 @@ providers:
           - example.com
 ```
 
-`source: ./manifest.yaml` points at the auth provider's `manifest.yaml` during development. For production, use a published `provider-release.yaml` metadata URL. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
+`source: ./manifest.yaml` points at the authentication provider's `manifest.yaml` during development. For production, use a published `provider-release.yaml` metadata URL. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
 
 Structured secret refs like `clientSecret.secret.provider: default` are resolved through the configured secret manager before reaching the provider. Environment variable placeholders like `${GOOGLE_CLIENT_ID}` are expanded during config loading. See [Configuration](/configuration) for details on both.
 
-## What to read next
+## What To Read Next
 
 - [Secrets](/providers/secrets): configuring the secret manager that resolves structured secret refs
 - [Releasing](/custom-providers/releasing): packaging and publishing provider releases
-- [Built-in Providers](/reference/built-in-providers): first-party auth provider reference
+- [Providers > Authentication](/providers/authentication): configuring host authentication providers
+- [Built-in Providers](/reference/built-in-providers): first-party authentication provider reference

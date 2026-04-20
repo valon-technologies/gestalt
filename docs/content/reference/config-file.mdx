@@ -6,10 +6,10 @@ Every `gestaltd` deployment reads one or more YAML config files. When you pass
 multiple `--config` flags, Gestalt merges them left-to-right before validation
 and bootstrap. The top-level keys are `server` (listener, encryption, egress,
 and host-provider selection), `authorization` (shared human/workload access
-policy), `providers` (named auth, secrets, telemetry, audit, UI, indexeddb,
-authorization, workflow, cache, and s3 entries), `workflows` (config-managed
-schedules and event triggers), and `plugins` (executable integrations and
-optional plugin-backed UI mounts):
+policy), `providers` (named authentication, secrets, telemetry, audit, UI,
+indexeddb, authorization, workflow, cache, and s3 entries), `workflows`
+(config-managed schedules and event triggers), and `plugins` (executable
+integrations and optional plugin-backed UI mounts):
 
 ```yaml
 server:
@@ -113,7 +113,7 @@ server:
   apiTokenTtl: 30d
   artifactsDir: ./state
   providers:
-    auth: google
+    auth: oidc
     indexeddb: main
     authorization: indexeddb
 authorization:
@@ -185,30 +185,11 @@ When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth ro
 
 ## `providers.auth`
 
-Platform auth is optional. Omit the `providers.auth` block entirely to disable platform authentication. When auth is enabled, configure one or more named entries under `providers.auth`. If more than one entry exists, set `server.providers.auth` to pick which one the host should use.
+Platform authentication is optional. Omit the `providers.auth` block entirely to disable it. When platform authentication is enabled, configure one or more named entries under `providers.auth`. If more than one entry exists, set `server.providers.auth` to pick which one the host should use.
 
-### `google`
+### `local`
 
-```yaml
-providers:
-  auth:
-    google:
-      source: https://artifacts.example.com/auth/google/v0.0.1-alpha.1/provider-release.yaml
-      config:
-        clientId: ${GOOGLE_CLIENT_ID}
-        clientSecret:
-          secret:
-            provider: default
-            name: google-client-secret
-        redirectUrl: https://gestalt.example.com/api/v1/auth/login/callback
-        allowedDomains:
-          - example.com
-        sessionTtl: 24h
-```
-
-`clientId` and `clientSecret` are both required and identify your Google OAuth application. `redirectUrl` defaults to a path derived from `server.baseUrl` when omitted. `allowedDomains` restricts login to specific email domains. `sessionTtl` controls session token lifetime and defaults to `24h`.
-
-Google checks `email_verified` on every login. Unverified accounts are rejected.
+The `local` authentication provider is intended for single-user development on a trusted machine. It uses the same `ProviderEntry` shape as any other `providers.auth.<name>` entry, but it does not require an external identity provider configuration.
 
 ### `oidc`
 
@@ -253,14 +234,14 @@ OIDC checks `email_verified` when the claim is present. Unverified accounts are 
 
 ### `providers.auth` shape
 
-Both `google` and `oidc` use the same ProviderEntry shape under `providers.auth.<name>`. First-party auth providers are published at `github.com/valon-technologies/gestalt-providers/auth/<name>`.
+Authentication providers use the same `ProviderEntry` shape under `providers.auth.<name>`. First-party authentication providers are published under `github.com/valon-technologies/gestalt-providers/auth/`.
 
 | Field | Description |
 | --- | --- |
-| `default` | Marks this named auth entry as the default selection when `server.providers.auth` is omitted. |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
-| `config` | Provider-specific config passed into the auth provider. |
+| `default` | Marks this named authentication entry as the default selection when `server.providers.auth` is omitted. |
+| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
+| `config` | Provider-specific config passed into the authentication provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
@@ -971,13 +952,13 @@ connections:
 
 Connection `mode` determines how credentials are managed: `none` requires no credentials, and `user` stores credentials for the caller's effective subject. For humans that is typically `user:<id>`; for workloads it is `workload:<id>`; for managed identities it is the managed identity subject. All connections in a single plugin must share the same mode.
 
-#### Auth shapes
+#### Authentication Shapes
 
 Every connection `auth` block uses the same shape. `type` selects the auth strategy: `oauth2`, `manual`, `bearer`, `none`, or `mcp_oauth`.
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `type` | | Auth strategy: `oauth2`, `manual`, `bearer`, `none`, or `mcp_oauth`. |
+| `type` | | Authentication strategy: `oauth2`, `manual`, `bearer`, `none`, or `mcp_oauth`. |
 | `authorizationUrl` | | OAuth2 authorization endpoint. |
 | `tokenUrl` | | OAuth2 token endpoint. |
 | `clientId` | | OAuth2 client identifier. |
@@ -1045,9 +1026,9 @@ connections:
 | `credentials[].description` | Hint text below the label. Supports inline links via `[text](url)`. |
 | `authMapping.headers.<HEADER>.value` | Supplies a static deployer-managed value for a header. |
 | `authMapping.headers.<HEADER>.valueFrom.credentialFieldRef.name` | Reads a header value from the named manual credential field. |
-| `authMapping.basic.username` / `authMapping.basic.password` | Build the Basic auth username/password from either a static `value` or `valueFrom.credentialFieldRef.name`. |
+| `authMapping.basic.username` / `authMapping.basic.password` | Build the Basic authentication username/password from either a static `value` or `valueFrom.credentialFieldRef.name`. |
 
-For Basic auth providers that should collect only an API key while keeping the organization ID static, declare just the user-facing field and map the rest explicitly:
+For Basic authentication providers that should collect only an API key while keeping the organization ID static, declare just the user-facing field and map the rest explicitly:
 
 ```yaml
 connections:
@@ -1117,7 +1098,7 @@ plugins:
       - api.github.com
       - "*.github.com"
   my-plugin:
-    source: ./plugins/my-plugin
+    source: ./plugins/my-plugin/manifest.yaml
     allowedHosts:
       - external-api.com
 ```

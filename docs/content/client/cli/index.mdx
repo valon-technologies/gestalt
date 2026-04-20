@@ -19,11 +19,11 @@ asIndexPage: true
 | --- | --- |
 | `gestalt auth login` | Log in through the browser flow. |
 | `gestalt auth logout` | Clear local credentials. |
-| `gestalt auth status` | Show current auth state and server connectivity. |
+| `gestalt auth status` | Show current authentication state and server connectivity. |
 | `gestalt init` | Run the interactive setup wizard. |
 | `gestalt config get\|set\|unset\|list` | Manage the local client config. |
 | `gestalt plugins list` | List plugins from the server. |
-| `gestalt plugins connect NAME` | Connect a plugin through OAuth or interactive manual auth. |
+| `gestalt plugins connect NAME` | Connect a plugin through OAuth or interactive manual authentication. |
 | `gestalt plugins disconnect NAME` | Disconnect a plugin, removing stored credentials. |
 | `gestalt plugins invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
 | `gestalt plugins describe NAME OPERATION` | Show one operation's parameter contract. |
@@ -38,9 +38,9 @@ The CLI resolves the server URL in this order:
 3. project-local `.gestalt/config.json`
 4. user-local config at `~/.config/gestalt/config.json`
 
-For auth, the CLI checks `GESTALT_API_KEY` first, then stored credentials from `gestalt auth login`.
+For authentication, the CLI checks `GESTALT_API_KEY` first, then stored credentials from `gestalt auth login`.
 
-## Auth status
+## Authentication Status
 
 `gestalt auth status` reports structured connectivity information: the target server URL, where the URL came from, whether the server is reachable, whether login is supported, and what credentials are available. This is the first thing to run when debugging connection issues.
 
@@ -58,7 +58,7 @@ The CLI searches the current directory and then parent directories until it find
 
 ## Plugin connect flags
 
-`gestalt plugins connect NAME` accepts `--connection` and `--instance`. When the selected connection uses manual auth instead of OAuth, the CLI prompts for the required credential fields and connection parameters.
+`gestalt plugins connect NAME` accepts `--connection` and `--instance`. When the selected connection uses manual authentication instead of OAuth, the CLI prompts for the required credential fields and connection parameters.
 
 ## Plugin disconnect flags
 

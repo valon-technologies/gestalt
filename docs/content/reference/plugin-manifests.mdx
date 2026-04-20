@@ -4,7 +4,7 @@ import { Tabs } from 'nextra/components'
 
 Gestalt provider packages and release archives are described by a manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`. YAML is the easiest format to author by hand.
 
-Providers are the umbrella concept in Gestalt. Auth providers, cache
+Providers are the umbrella concept in Gestalt. Authentication providers, cache
 providers, indexeddb providers, S3 providers, and plugins all use this
 manifest format. The `plugin` manifest kind is reserved for providers that
 expose callable operations.
@@ -16,7 +16,7 @@ Every manifest defines exactly one provider kind, set by the `kind` field:
 | Kind | Purpose |
 | --- | --- |
 | `plugin` | Plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
-| `auth` | Platform auth provider. |
+| `auth` | Platform authentication provider. |
 | `cache` | Cache backend for plugin-bound cache bindings. |
 | `indexeddb` | Persistence backend. |
 | `s3` | S3-compatible object store backend. |
@@ -175,7 +175,7 @@ Surfaces load operation catalogs from external specifications. They are configur
 
 The `rest`/`openapi`/`graphql` surface types are mutually exclusive (use `surfaces.openapi` or `surfaces.graphql`, not both), but `surfaces.mcp` may be combined with any of them.
 
-### Auth Types
+### Authentication Types
 
 `spec.auth.provider` selects a route-auth provider for plugin HTTP operation routes. Gestalt currently enforces it on `/api/v1/integrations/{name}/operations` and `/api/v1/{integration}/{operation}` only; browser login, mounted UIs, integration OAuth helper routes, and `/mcp` still use the server-wide auth provider. Upstream auth still lives on `spec.connections.<name>.auth`, and the `auth.type` field on a connection accepts these values:
 
@@ -187,7 +187,7 @@ The `rest`/`openapi`/`graphql` surface types are mutually exclusive (use `surfac
 | `manual` | Custom credential fields. Define `credentials` to describe each field. |
 | `none` | No authentication. |
 
-Manual auth in provider manifests also supports `authMapping`, using the same `value` / `valueFrom.credentialFieldRef.name` shape as deploy config.
+Manual authentication in provider manifests also supports `authMapping`, using the same `value` / `valueFrom.credentialFieldRef.name` shape as deploy config.
 
 ```yaml
 spec:
@@ -309,21 +309,21 @@ The `params` map on a connection defines parameters that are populated during or
 | `description` | string | Describes the parameter to the user. |
 | `from` | string | Set to `discovery` to populate the value from post-connect discovery metadata. |
 
-## Auth Provider Metadata
+## Authentication Provider Metadata
 
-The `spec` block for a `kind: auth` manifest describes a platform auth provider package.
+The `spec` block for a `kind: auth` manifest describes a platform authentication provider package.
 
 | Field | Type | Purpose |
 | --- | --- | --- |
 | `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `providers.auth.<name>.config` block in the server config. |
 
-Auth providers require an executable entrypoint. Declare it under `entrypoint`.
+Authentication providers require an executable entrypoint. Declare it under `entrypoint`.
 
 ```yaml
 kind: auth
-source: github.com/valon-technologies/gestalt-providers/auth/google
+source: github.com/valon-technologies/gestalt-providers/auth/oidc
 version: 1.0.0
-displayName: Google Auth
+displayName: OIDC Authentication
 spec:
   configSchemaPath: schemas/config.schema.json
 entrypoint:
@@ -613,7 +613,7 @@ A connection using `mcp_oauth` auth requires the plugin to declare an MCP surfac
 
 When an executable plugin defines helper operations in Go, Rust, Python, or
 TypeScript, Gestalt materializes the executable catalog automatically during
-local source-plugin execution and `provider release`. Auth and indexeddb
+local source-plugin execution and `provider release`. Authentication and indexeddb
 source packages use the same release flow for Go, Rust, and TypeScript, but
 they do not generate catalogs. See [Plugins](/providers/plugins)
 for the end-to-end authoring flow.
@@ -710,7 +710,7 @@ declared in `[tool.gestalt].provider` and materialize the executable catalog
 automatically. TypeScript source providers load the target declared in
 `package.json` under `gestalt.provider`. A string target such as
 `./provider.ts#plugin` defaults to a plugin provider; auth and indexeddb
-providers use an object with `kind` and `target`. Auth and indexeddb source
+providers use an object with `kind` and `target`. Authentication and indexeddb source
 packages support the same release flow for Go, Rust, and TypeScript, but they
 do not generate catalogs. Source packages build the host-platform artifact by
 default. Pass `--platform` for an explicit `os/arch[/libc]` target list, or

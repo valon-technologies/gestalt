@@ -3,6 +3,8 @@ import ArchitectureDiagram from '../components/ArchitectureDiagram'
 
 # Gestalt
 
+Gestalt (/ɡəˈstält/) refers to the idea that the whole is greater than the sum of its parts.
+
 Gestalt is a self-hostable, open source platform for managing agentic tools
 and services, with declarative configuration and secure credential management
 built in.
@@ -15,7 +17,7 @@ built in.
 
 ## Why Gestalt
 
-Agents need tools. Tools need auth. Auth needs credential storage, encryption, token refresh, and scoped access control. Every team building with agents ends up solving the same infrastructure problems before they can ship.
+Agents need tools. Tools need authentication. Authentication needs credential storage, encryption, token refresh, and scoped access control. Every team building with agents ends up solving the same infrastructure problems before they can ship.
 
 Gestalt handles this so individual agents and applications don't have to. A single YAML config declares which tools to expose, how users authenticate, and how credentials are managed. The platform takes care of the rest.
 
@@ -26,14 +28,14 @@ Gestalt handles this so individual agents and applications don't have to. A sing
 - Credentials and connection data are encrypted at rest, on infrastructure you control. See [Security](/security).
 - A single YAML config declaratively defines which tools to expose, how users authenticate, and how credentials are managed. See [Configuration](/configuration).
 - The same operations are available over MCP, HTTP, CLI, and optional mounted web UIs for cloud agents, local coding assistants, and human operators. See [HTTP API](/reference/http-api).
-- Auth backends, datastores, secret managers, and the web UI are replaceable provider packages. Use the first-party providers or write your own in Go, Python, Rust, or TypeScript. See [Built-in Providers](/reference/built-in-providers).
+- Authentication backends, datastores, secret managers, and the web UI are replaceable provider packages. Use the first-party providers or write your own in Go, Python, Rust, or TypeScript. See [Built-in Providers](/reference/built-in-providers).
 - Deploy on any infrastructure you control with Docker, Helm, or bare containers. See [Deploy](/deploy).
 
 ## What Gestalt is not
 
 Gestalt is not a SaaS platform. It is open source and self-hostable on any infrastructure you control, giving you full ownership of your data, credentials, and deployment. Gestalt will remain free and open source; self-hosting is a first-class feature.
 
-Gestalt does not replace your existing APIs. It sits between agents and upstream services, handling auth and credential lifecycle. Your APIs stay where they are.
+Gestalt does not replace your existing APIs. It sits between agents and upstream services, handling authentication and credential lifecycle. Your APIs stay where they are.
 
 ## Start here
 
@@ -42,10 +44,10 @@ Gestalt does not replace your existing APIs. It sits between agents and upstream
     Run Gestalt locally, add a plugin, and invoke an operation in five minutes.
   </Cards.Card>
   <Cards.Card title="Configuration" href="/configuration">
-    The config model, plugin setup, auth, connections, and MCP.
+    The config model, plugin setup, authentication, connections, and MCP.
   </Cards.Card>
   <Cards.Card title="Providers" href="/providers">
-    Plugins, auth backends, datastores, and custom UIs as provider packages.
+    Plugins, authentication backends, datastores, and custom UIs as provider packages.
   </Cards.Card>
   <Cards.Card title="Security" href="/security">
     Trust boundaries, encryption, headers, and token handling.

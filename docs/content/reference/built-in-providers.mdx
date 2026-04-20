@@ -1,6 +1,6 @@
 # First-Party Providers
 
-Gestalt does not compile auth, authorization, workflow, IndexedDB, or S3
+Gestalt does not compile authentication, authorization, workflow, IndexedDB, or S3
 providers into the `gestaltd` binary. They are loaded at startup as external
 provider processes through the same runtime model that also powers plugins. The
 first-party implementations are published from
@@ -9,27 +9,30 @@ and maintained alongside the server.
 
 Two simple secrets providers (`env` and `file`), telemetry, and audit remain built into the binary. Cloud secret backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault) are available as external providers from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). See [Secrets Providers](/providers/secrets) for the full list and configuration.
 
-## Auth Providers
+## Authentication Providers
 
-Auth providers handle platform login. They are configured under `providers.auth.<name>` in your config file.
+Authentication providers handle platform login. They are configured under `providers.auth.<name>` in your config file.
 
 | Name | Purpose |
 | --- | --- |
-| `local` | Single-user auth for local development. No external identity provider required. |
-| `google` | Google OAuth 2.0 platform login. Supports `allowedDomains` restriction. |
+| `local` | Single-user authentication for local development. No external identity provider required. |
 | `oidc` | Generic OpenID Connect. Works with Okta, Auth0, Azure AD, Keycloak, and others. |
 
 ```yaml
 providers:
   auth:
-    google:
-      source: https://artifacts.example.com/auth/google/v0.0.1-alpha.1/provider-release.yaml
+    oidc:
+      source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
       config:
-        allowedDomains:
-          - example.com
+        issuerUrl: https://login.example.com
+        clientId: ${OIDC_CLIENT_ID}
+        clientSecret:
+          secret:
+            provider: default
+            name: oidc-client-secret
 ```
 
-To disable platform auth entirely, omit the `providers.auth` block.
+To disable platform authentication entirely, omit the `providers.auth` block.
 
 ## Authorization Providers
 
@@ -190,4 +193,4 @@ plugins:
 
 ## Community and Custom Providers
 
-Third-party auth providers, datastore providers, and plugins use the same provider package model as the first-party packages. Package your implementation with a provider manifest that includes the appropriate `kind` and `spec` block, publish a release with `provider-release.yaml`, and reference that metadata URL in config the same way you would reference any first-party provider.
+Third-party authentication providers, datastore providers, and plugins use the same provider package model as the first-party packages. Package your implementation with a provider manifest that includes the appropriate `kind` and `spec` block, publish a release with `provider-release.yaml`, and reference that metadata URL in config the same way you would reference any first-party provider.

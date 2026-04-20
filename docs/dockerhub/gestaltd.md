@@ -125,7 +125,7 @@ for the full config model and structured secret-ref support.
 The built-in admin UI is served at `/admin`. If you configure
 `server.management`, health and admin endpoints move to the management
 listener. If you also set `server.admin.authorizationPolicy`, Gestalt applies
-browser session auth and role checks to `/admin`; on split
+browser session authentication and role checks to `/admin`; on split
 public/management deployments, set `server.management.baseUrl` so login can
 return the browser to the management listener's built-in `/admin` route after
 callback. Use the same

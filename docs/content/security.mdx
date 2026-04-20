@@ -23,7 +23,7 @@ Access tokens, refresh tokens, pending connection state, and OAuth state paramet
 
 ## Token lifecycle
 
-**Platform sessions.** Users log in through the configured identity provider. Gestalt validates the callback, checks `email_verified`, and issues a session cookie. Sessions expire based on the auth provider's TTL (default 24 hours).
+**Platform sessions.** Users log in through the configured identity provider. Gestalt validates the callback, checks `email_verified`, and issues a session cookie. Sessions expire based on the authentication provider's TTL (default 24 hours).
 
 **API tokens.** Generated with 32 random bytes from `crypto/rand` and prefixed with `gst_api_`. The plaintext is returned once at creation time. Only the SHA-256 hash is stored. Default TTL is 30 days, configurable via `server.apiTokenTtl`.
 

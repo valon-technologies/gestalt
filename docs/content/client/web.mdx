@@ -2,7 +2,7 @@
 
 Open your Gestalt server's base URL in a browser to access the web client. For a local server, that's `http://localhost:8080`.
 
-The web UI lets you browse plugins, connect to upstream services through OAuth or manual auth, invoke operations, and manage API tokens. It uses the same HTTP API and authentication model as the CLI.
+The web UI lets you browse plugins, connect to upstream services through OAuth or manual authentication, invoke operations, and manage API tokens. It uses the same HTTP API and authentication model as the CLI.
 
 ## Dashboard
 
@@ -24,7 +24,7 @@ Create and revoke API tokens for programmatic access. Each token shows its name,
 
 ## Authentication
 
-When `providers.auth` points to a Google or OIDC auth provider, the web UI redirects to your identity provider for login. When `providers.auth` is omitted, every request is anonymous.
+When `providers.auth` points to an interactive authentication provider such as OIDC, the web UI redirects to your identity provider for login. When `providers.auth` is omitted, every request is anonymous.
 
 ## Custom UI bundles
 
