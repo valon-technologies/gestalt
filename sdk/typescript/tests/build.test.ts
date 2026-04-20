@@ -77,6 +77,8 @@ test("build arg parsing validates required arguments", () => {
   );
   expect(parseBuildArgs(["root"])).toBeUndefined();
   expect(bunTarget("darwin", "arm64")).toBe("bun-darwin-arm64");
+  expect(bunTarget("linux", "amd64")).toBe("bun-linux-x64-musl");
+  expect(bunTarget("linux", "arm64")).toBe("bun-linux-arm64-musl");
   expect(() => bunTarget("plan9", "amd64")).toThrow("unsupported Bun target for plan9/amd64");
 });
 

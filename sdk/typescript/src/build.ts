@@ -115,9 +115,9 @@ export function bunTarget(goos: string, goarch: string): string {
     case "darwin/arm64":
       return "bun-darwin-arm64";
     case "linux/amd64":
-      return "bun-linux-x64";
+      return "bun-linux-x64-musl";
     case "linux/arm64":
-      return "bun-linux-arm64";
+      return "bun-linux-arm64-musl";
     case "windows/amd64":
       return "bun-windows-x64";
     case "windows/arm64":
