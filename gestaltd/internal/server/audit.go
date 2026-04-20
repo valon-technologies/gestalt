@@ -36,17 +36,15 @@ type auditAuthorization struct {
 }
 
 func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Principal) (*principal.Principal, error) {
+	p = principal.Canonicalized(p)
 	if p == nil {
 		return nil, nil
 	}
 	if p.Kind == principal.KindWorkload {
 		return p, nil
 	}
-	if p.Kind == "" {
-		p.Kind = principal.KindUser
-	}
 	if p.UserID != "" {
-		return principal.Canonicalized(p), nil
+		return p, nil
 	}
 	if p.Identity == nil || p.Identity.Email == "" {
 		return p, nil

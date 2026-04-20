@@ -795,7 +795,11 @@ func (s *Server) putWorkflowExecutionRef(
 	if s.workflowExecutionRefs == nil {
 		return nil, fmt.Errorf("workflow execution refs are not configured")
 	}
-	subjectID := workflowExecutionRefSubjectID(p)
+	p = principal.Canonicalized(p)
+	subjectID := ""
+	if p != nil {
+		subjectID = strings.TrimSpace(p.SubjectID)
+	}
 	if subjectID == "" {
 		return nil, fmt.Errorf("workflow execution ref subject is required")
 	}
@@ -806,14 +810,6 @@ func (s *Server) putWorkflowExecutionRef(
 		SubjectID:    subjectID,
 		Permissions:  principal.PermissionsToAccessPermissions(p.TokenPermissions),
 	})
-}
-
-func workflowExecutionRefSubjectID(p *principal.Principal) string {
-	p = principal.Canonicalized(p)
-	if p == nil {
-		return ""
-	}
-	return strings.TrimSpace(p.SubjectID)
 }
 
 func workflowScheduleExecutionRefID(scheduleID string) string {
