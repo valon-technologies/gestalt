@@ -1,19 +1,11 @@
 package telemetryutil
 
-import (
-	"log/slog"
-	"strings"
-)
+import "log/slog"
 
 func ParseLevel(s string) slog.Level {
-	switch strings.ToLower(s) {
-	case "debug":
-		return slog.LevelDebug
-	case "warn":
-		return slog.LevelWarn
-	case "error":
-		return slog.LevelError
-	default:
+	var level slog.Level
+	if err := level.UnmarshalText([]byte(s)); err != nil {
 		return slog.LevelInfo
 	}
+	return level
 }
