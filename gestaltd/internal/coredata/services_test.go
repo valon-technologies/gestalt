@@ -1567,13 +1567,13 @@ func TestWorkflowExecutionRefService(t *testing.T) {
 		}
 	})
 
-	t.Run("Put_rejects_non_user_subject", func(t *testing.T) {
+	t.Run("Put_allows_non_user_subjects", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 		ctx := context.Background()
 
-		_, err := svc.WorkflowExecutionRefs.Put(ctx, &coreworkflow.ExecutionReference{
-			ID:           "exec-ref-bad",
+		ref, err := svc.WorkflowExecutionRefs.Put(ctx, &coreworkflow.ExecutionReference{
+			ID:           "exec-ref-workload",
 			ProviderName: "basic",
 			Target: coreworkflow.Target{
 				PluginName: "roadmap",
@@ -1581,8 +1581,11 @@ func TestWorkflowExecutionRefService(t *testing.T) {
 			},
 			SubjectID: principal.ManagedIdentitySubjectID("managed-123"),
 		})
-		if err == nil {
-			t.Fatal("expected Put to reject non-user subject_id")
+		if err != nil {
+			t.Fatalf("Put: %v", err)
+		}
+		if ref.SubjectID != principal.ManagedIdentitySubjectID("managed-123") {
+			t.Fatalf("SubjectID = %q, want %q", ref.SubjectID, principal.ManagedIdentitySubjectID("managed-123"))
 		}
 	})
 }

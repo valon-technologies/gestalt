@@ -416,6 +416,65 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	}
 }
 
+func TestWorkflowRuntimeInvokeExecutionRefUsesStoredWorkloadPrincipal(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+		ID:           "exec-ref-workload",
+		ProviderName: "temporal",
+		Target: coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "sync",
+		},
+		SubjectID: principal.WorkloadSubjectID("scheduler"),
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		bindings: map[string]workflowBinding{
+			"roadmap": {
+				providerName: "temporal",
+				operations: map[string]struct{}{
+					"sync": {},
+				},
+			},
+		},
+		executionRefs: services.WorkflowExecutionRefs,
+	}
+
+	var gotPrincipal *principal.Principal
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
+			gotPrincipal = p
+			return &core.OperationResult{Status: http.StatusAccepted, Body: `{"ok":true}`}, nil
+		},
+	})
+
+	if _, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		PluginName:   "roadmap",
+		ExecutionRef: "exec-ref-workload",
+		Target: coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "sync",
+		},
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+
+	if gotPrincipal == nil {
+		t.Fatal("principal = nil")
+	}
+	if gotPrincipal.Kind != principal.KindWorkload {
+		t.Fatalf("principal kind = %q, want %q", gotPrincipal.Kind, principal.KindWorkload)
+	}
+	if gotPrincipal.SubjectID != principal.WorkloadSubjectID("scheduler") {
+		t.Fatalf("subjectID = %q, want %q", gotPrincipal.SubjectID, principal.WorkloadSubjectID("scheduler"))
+	}
+}
+
 func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *testing.T) {
 	t.Parallel()
 

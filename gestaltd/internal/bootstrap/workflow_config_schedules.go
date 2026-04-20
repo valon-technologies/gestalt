@@ -10,12 +10,16 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -32,6 +36,7 @@ var workflowConfigScheduleStateSchema = indexeddb.ObjectStoreSchema{
 		{Name: "schedule_key", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "provider_name", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "schedule_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "execution_ref", Type: indexeddb.TypeString},
 		{Name: "updated_at", Type: indexeddb.TypeTime},
 	},
 }
@@ -42,6 +47,7 @@ type workflowConfigScheduleState struct {
 	ScheduleKey  string
 	ProviderName string
 	ScheduleID   string
+	ExecutionRef string
 	UpdatedAt    time.Time
 }
 
@@ -54,6 +60,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 	if cfg == nil || runtime == nil || db == nil {
 		return nil
 	}
+	executionRefs := coredata.NewWorkflowExecutionRefService(db)
 	if err := db.CreateObjectStore(ctx, workflowConfigScheduleStateStore, workflowConfigScheduleStateSchema); err != nil {
 		return fmt.Errorf("bootstrap: create workflow config schedule store: %w", err)
 	}
@@ -76,17 +83,36 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if err != nil {
 			return fmt.Errorf("bootstrap: cleanup workflow schedule %q for plugin %q requires provider %q: %w", prev.ScheduleID, prev.PluginName, prev.ProviderName, err)
 		}
+		existing, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{
+			PluginName: prev.PluginName,
+			ScheduleID: prev.ScheduleID,
+		})
+		existingExecutionRef := ""
+		switch {
+		case err == nil:
+			existingExecutionRef = workflowScheduleExecutionRef(existing, prev.ExecutionRef)
+		case isWorkflowObjectNotFound(err):
+			existingExecutionRef = strings.TrimSpace(prev.ExecutionRef)
+		default:
+			return fmt.Errorf("bootstrap: get workflow schedule %q for plugin %q: %w", prev.ScheduleID, prev.PluginName, err)
+		}
 		if err := provider.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{
 			PluginName: prev.PluginName,
 			ScheduleID: prev.ScheduleID,
 		}); err != nil {
 			if isWorkflowObjectNotFound(err) {
+				if err := workflowRevokeExecutionRefByID(ctx, executionRefs, existingExecutionRef); err != nil {
+					return fmt.Errorf("bootstrap: revoke workflow execution ref %q for schedule %q on plugin %q: %w", existingExecutionRef, prev.ScheduleID, prev.PluginName, err)
+				}
 				if err := store.Delete(ctx, rowID); err != nil {
 					return fmt.Errorf("bootstrap: delete workflow schedule state %q: %w", rowID, err)
 				}
 				continue
 			}
 			return fmt.Errorf("bootstrap: delete workflow schedule %q for plugin %q: %w", prev.ScheduleID, prev.PluginName, err)
+		}
+		if err := workflowRevokeExecutionRefByID(ctx, executionRefs, existingExecutionRef); err != nil {
+			return fmt.Errorf("bootstrap: revoke workflow execution ref %q for schedule %q on plugin %q: %w", existingExecutionRef, prev.ScheduleID, prev.PluginName, err)
 		}
 		if err := store.Delete(ctx, rowID); err != nil {
 			return fmt.Errorf("bootstrap: delete workflow schedule state %q: %w", rowID, err)
@@ -108,42 +134,81 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		}
 		for _, scheduleKey := range slices.Sorted(maps.Keys(effective.Schedules)) {
 			schedule := effective.Schedules[scheduleKey]
+			target := workflowConfigScheduleTarget(pluginName, schedule)
 			if _, ok := allowed[schedule.Operation]; !ok {
 				return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q targets disabled operation %q", scheduleKey, pluginName, schedule.Operation)
 			}
 			rowID := workflowConfigScheduleStateID(pluginName, scheduleKey)
 			desiredEntry := desired[rowID]
 			prev, owned := previous[rowID]
-			if !owned {
-				existing, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{
-					PluginName: pluginName,
-					ScheduleID: desiredEntry.state.ScheduleID,
-				})
-				switch {
-				case err == nil:
-					if !isWorkflowConfigOwnedSchedule(existing, pluginName, desiredEntry.state.ScheduleID) &&
-						!isAdoptableWorkflowSchedule(existing, pluginName, schedule, desiredEntry.state.ScheduleID) {
-						return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q conflicts with existing unmanaged schedule id %q", scheduleKey, pluginName, desiredEntry.state.ScheduleID)
-					}
-				case isWorkflowObjectNotFound(err):
-				default:
-					return fmt.Errorf("bootstrap: get workflow schedule %q for plugin %q: %w", desiredEntry.state.ScheduleID, pluginName, err)
+			existingExecutionRef := ""
+			existing, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{
+				PluginName: pluginName,
+				ScheduleID: desiredEntry.state.ScheduleID,
+			})
+			switch {
+			case err == nil:
+				if !isWorkflowConfigOwnedSchedule(existing, pluginName, desiredEntry.state.ScheduleID) &&
+					!isAdoptableWorkflowSchedule(existing, pluginName, schedule, desiredEntry.state.ScheduleID) {
+					return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q conflicts with existing unmanaged schedule id %q", scheduleKey, pluginName, desiredEntry.state.ScheduleID)
 				}
+			case isWorkflowObjectNotFound(err):
+				existing = nil
+				if owned {
+					existingExecutionRef = strings.TrimSpace(prev.ExecutionRef)
+				}
+			default:
+				return fmt.Errorf("bootstrap: get workflow schedule %q for plugin %q: %w", desiredEntry.state.ScheduleID, pluginName, err)
+			}
+			if existing != nil {
+				existingExecutionRef = workflowScheduleExecutionRef(existing, prev.ExecutionRef)
+			}
+			desiredExecutionRef := &coreworkflow.ExecutionReference{
+				ProviderName: desiredEntry.state.ProviderName,
+				Target:       target,
+				SubjectID:    principal.WorkloadSubjectID(workflowWorkloadID(pluginName)),
+				Permissions:  workflowExecutionRefPermissionsForTarget(target),
+			}
+			executionRefID, createdExecutionRef, err := workflowEnsureConfigScheduleExecutionRef(ctx, executionRefs, desiredEntry.state.ScheduleID, desiredExecutionRef, existingExecutionRef)
+			if err != nil {
+				return fmt.Errorf("bootstrap: store workflow execution ref for schedule %q on plugin %q: %w", scheduleKey, pluginName, err)
 			}
 			if _, err := provider.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{
-				ScheduleID:  desiredEntry.state.ScheduleID,
-				Cron:        schedule.Cron,
-				Timezone:    schedule.Timezone,
-				Target:      workflowConfigScheduleTarget(pluginName, schedule),
-				Paused:      schedule.Paused,
-				RequestedBy: workflowConfigActor(pluginName),
+				ScheduleID:   desiredEntry.state.ScheduleID,
+				Cron:         schedule.Cron,
+				Timezone:     schedule.Timezone,
+				Target:       target,
+				Paused:       schedule.Paused,
+				RequestedBy:  workflowConfigActor(pluginName),
+				ExecutionRef: executionRefID,
 			}); err != nil {
+				if createdExecutionRef {
+					_ = workflowRevokeExecutionRefByID(ctx, executionRefs, executionRefID)
+				}
 				return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", scheduleKey, pluginName, err)
+			}
+			if existingExecutionRef != executionRefID {
+				if err := workflowRevokeExecutionRefByID(ctx, executionRefs, existingExecutionRef); err != nil {
+					return fmt.Errorf("bootstrap: revoke workflow execution ref %q for schedule %q on plugin %q: %w", existingExecutionRef, desiredEntry.state.ScheduleID, pluginName, err)
+				}
 			}
 			if owned && prev.ProviderName != desiredEntry.state.ProviderName {
 				oldProvider, err := runtime.ResolveProvider(prev.ProviderName)
 				if err != nil {
 					return fmt.Errorf("bootstrap: cleanup workflow schedule %q for plugin %q requires provider %q: %w", prev.ScheduleID, prev.PluginName, prev.ProviderName, err)
+				}
+				oldExisting, err := oldProvider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{
+					PluginName: prev.PluginName,
+					ScheduleID: prev.ScheduleID,
+				})
+				oldExecutionRef := ""
+				switch {
+				case err == nil:
+					oldExecutionRef = workflowScheduleExecutionRef(oldExisting, prev.ExecutionRef)
+				case isWorkflowObjectNotFound(err):
+					oldExecutionRef = strings.TrimSpace(prev.ExecutionRef)
+				default:
+					return fmt.Errorf("bootstrap: get workflow schedule %q for plugin %q: %w", prev.ScheduleID, prev.PluginName, err)
 				}
 				if err := oldProvider.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{
 					PluginName: prev.PluginName,
@@ -151,7 +216,11 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 				}); err != nil && !isWorkflowObjectNotFound(err) {
 					return fmt.Errorf("bootstrap: delete workflow schedule %q for plugin %q: %w", prev.ScheduleID, prev.PluginName, err)
 				}
+				if err := workflowRevokeExecutionRefByID(ctx, executionRefs, oldExecutionRef); err != nil {
+					return fmt.Errorf("bootstrap: revoke workflow execution ref %q for schedule %q on plugin %q: %w", oldExecutionRef, prev.ScheduleID, prev.PluginName, err)
+				}
 			}
+			desiredEntry.state.ExecutionRef = executionRefID
 			if err := store.Put(ctx, desiredEntry.state.record()); err != nil {
 				return fmt.Errorf("bootstrap: store workflow schedule state %q: %w", rowID, err)
 			}
@@ -213,6 +282,7 @@ func (s workflowConfigScheduleState) record() indexeddb.Record {
 		"schedule_key":  s.ScheduleKey,
 		"provider_name": s.ProviderName,
 		"schedule_id":   s.ScheduleID,
+		"execution_ref": s.ExecutionRef,
 		"updated_at":    s.UpdatedAt,
 	}
 }
@@ -224,6 +294,7 @@ func workflowConfigScheduleStateFromRecord(rec indexeddb.Record) workflowConfigS
 		ScheduleKey:  workflowConfigScheduleRecordString(rec, "schedule_key"),
 		ProviderName: workflowConfigScheduleRecordString(rec, "provider_name"),
 		ScheduleID:   workflowConfigScheduleRecordString(rec, "schedule_id"),
+		ExecutionRef: workflowConfigScheduleRecordString(rec, "execution_ref"),
 		UpdatedAt:    workflowConfigScheduleRecordTime(rec, "updated_at"),
 	}
 }
@@ -303,4 +374,113 @@ func workflowConfigScheduleStateID(pluginName, scheduleKey string) string {
 func workflowConfigScheduleID(pluginName, scheduleKey string) string {
 	sum := sha256.Sum256([]byte(pluginName + "\x00" + scheduleKey))
 	return coreworkflow.ConfigManagedSchedulePrefix + hex.EncodeToString(sum[:])
+}
+
+func workflowConfigScheduleExecutionRefID(scheduleID string) string {
+	return "workflow_schedule:" + scheduleID + ":" + uuid.NewString()
+}
+
+func workflowScheduleExecutionRef(existing *coreworkflow.Schedule, fallback string) string {
+	if existing != nil {
+		if refID := strings.TrimSpace(existing.ExecutionRef); refID != "" {
+			return refID
+		}
+	}
+	return strings.TrimSpace(fallback)
+}
+
+func workflowEnsureConfigScheduleExecutionRef(
+	ctx context.Context,
+	service *coredata.WorkflowExecutionRefService,
+	scheduleID string,
+	desired *coreworkflow.ExecutionReference,
+	candidateIDs ...string,
+) (string, bool, error) {
+	if service == nil {
+		return "", false, fmt.Errorf("workflow execution refs are not configured")
+	}
+	for _, candidateID := range candidateIDs {
+		candidateID = strings.TrimSpace(candidateID)
+		if candidateID == "" {
+			continue
+		}
+		existing, err := service.Get(ctx, candidateID)
+		if err != nil {
+			if errors.Is(err, indexeddb.ErrNotFound) {
+				continue
+			}
+			return "", false, err
+		}
+		if workflowConfigExecutionRefMatches(existing, desired) {
+			return candidateID, false, nil
+		}
+	}
+	refID := workflowConfigScheduleExecutionRefID(scheduleID)
+	desired.ID = refID
+	if _, err := service.Put(ctx, desired); err != nil {
+		return "", false, err
+	}
+	return refID, true, nil
+}
+
+func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target) []core.AccessPermission {
+	pluginName := target.PluginName
+	operation := strings.TrimSpace(target.Operation)
+	if pluginName == "" || operation == "" {
+		return nil
+	}
+	return []core.AccessPermission{{
+		Plugin:     pluginName,
+		Operations: []string{operation},
+	}}
+}
+
+func workflowConfigExecutionRefMatches(existing, desired *coreworkflow.ExecutionReference) bool {
+	if existing == nil || desired == nil {
+		return false
+	}
+	if existing.RevokedAt != nil && !existing.RevokedAt.IsZero() {
+		return false
+	}
+	if strings.TrimSpace(existing.ProviderName) != strings.TrimSpace(desired.ProviderName) {
+		return false
+	}
+	if strings.TrimSpace(existing.SubjectID) != strings.TrimSpace(desired.SubjectID) {
+		return false
+	}
+	if strings.TrimSpace(existing.Target.PluginName) != strings.TrimSpace(desired.Target.PluginName) {
+		return false
+	}
+	if strings.TrimSpace(existing.Target.Operation) != strings.TrimSpace(desired.Target.Operation) {
+		return false
+	}
+	if strings.TrimSpace(existing.Target.Connection) != strings.TrimSpace(desired.Target.Connection) {
+		return false
+	}
+	if strings.TrimSpace(existing.Target.Instance) != strings.TrimSpace(desired.Target.Instance) {
+		return false
+	}
+	existingJSON, existingErr := json.Marshal(existing.Permissions)
+	desiredJSON, desiredErr := json.Marshal(desired.Permissions)
+	return existingErr == nil && desiredErr == nil && bytes.Equal(existingJSON, desiredJSON)
+}
+
+func workflowRevokeExecutionRefByID(ctx context.Context, service *coredata.WorkflowExecutionRefService, refID string) error {
+	if service == nil || strings.TrimSpace(refID) == "" {
+		return nil
+	}
+	ref, err := service.Get(ctx, refID)
+	if err != nil {
+		if errors.Is(err, indexeddb.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	if ref == nil || ref.RevokedAt != nil {
+		return nil
+	}
+	now := time.Now()
+	ref.RevokedAt = &now
+	_, err = service.Put(ctx, ref)
+	return err
 }

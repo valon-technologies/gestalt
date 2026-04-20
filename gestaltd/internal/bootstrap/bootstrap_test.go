@@ -493,6 +493,7 @@ type recordingWorkflowProvider struct {
 	getSchedule                *coreworkflow.Schedule
 	getScheduleErr             error
 	schedules                  map[string]*coreworkflow.Schedule
+	omitScheduleExecutionRef   bool
 	upsertedEventTriggers      []coreworkflow.UpsertEventTriggerRequest
 	listedEventTriggers        []*coreworkflow.EventTrigger
 	listEventTriggersErr       error
@@ -521,12 +522,13 @@ func (p *recordingWorkflowProvider) CancelRun(context.Context, coreworkflow.Canc
 func (p *recordingWorkflowProvider) UpsertSchedule(_ context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
 	p.upsertedSchedules = append(p.upsertedSchedules, req)
 	schedule := &coreworkflow.Schedule{
-		ID:        req.ScheduleID,
-		Cron:      req.Cron,
-		Timezone:  req.Timezone,
-		Target:    req.Target,
-		Paused:    req.Paused,
-		CreatedBy: req.RequestedBy,
+		ID:           req.ScheduleID,
+		Cron:         req.Cron,
+		Timezone:     req.Timezone,
+		Target:       req.Target,
+		Paused:       req.Paused,
+		ExecutionRef: req.ExecutionRef,
+		CreatedBy:    req.RequestedBy,
 	}
 	if p.schedules == nil {
 		p.schedules = map[string]*coreworkflow.Schedule{}
@@ -536,11 +538,11 @@ func (p *recordingWorkflowProvider) UpsertSchedule(_ context.Context, req corewo
 }
 func (p *recordingWorkflowProvider) GetSchedule(_ context.Context, req coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
 	if p.getSchedule != nil || p.getScheduleErr != nil {
-		return p.getSchedule, p.getScheduleErr
+		return p.scheduleGetResponse(p.getSchedule), p.getScheduleErr
 	}
 	if p.schedules != nil {
 		if schedule, ok := p.schedules[req.ScheduleID]; ok {
-			return schedule, nil
+			return p.scheduleGetResponse(schedule), nil
 		}
 	}
 	return nil, core.ErrNotFound
@@ -642,6 +644,17 @@ func (p *recordingWorkflowProvider) Close() error {
 		p.closed.Store(true)
 	}
 	return nil
+}
+
+func (p *recordingWorkflowProvider) scheduleGetResponse(schedule *coreworkflow.Schedule) *coreworkflow.Schedule {
+	if schedule == nil {
+		return nil
+	}
+	value := *schedule
+	if p.omitScheduleExecutionRef {
+		value.ExecutionRef = ""
+	}
+	return &value
 }
 
 type trackedIndexedDB struct {
@@ -1518,6 +1531,19 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	if got.RequestedBy.SubjectID != "config:workflow:roadmap" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", got.RequestedBy)
 	}
+	if strings.TrimSpace(got.ExecutionRef) == "" {
+		t.Fatal("execution ref = empty")
+	}
+	ref, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), got.ExecutionRef)
+	if err != nil {
+		t.Fatalf("Get execution ref: %v", err)
+	}
+	if ref.SubjectID != principal.WorkloadSubjectID("workflow.roadmap") {
+		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, principal.WorkloadSubjectID("workflow.roadmap"))
+	}
+	if len(ref.Permissions) != 1 || ref.Permissions[0].Plugin != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
+		t.Fatalf("permissions = %#v", ref.Permissions)
+	}
 }
 
 func TestValidateDoesNotApplyConfiguredWorkflowSchedules(t *testing.T) {
@@ -1603,6 +1629,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
 	if len(recorders) != 1 || len(recorders[0].upsertedSchedules) != 1 {
 		t.Fatalf("initial upserts = %#v", recorders)
 	}
+	initialExecutionRef := recorders[0].upsertedSchedules[0].ExecutionRef
 	_ = result.Close(context.Background())
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
@@ -1634,6 +1661,13 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
 	}
 	if len(recorder.upsertedSchedules) != 0 {
 		t.Fatalf("upserted schedules = %d, want 0", len(recorder.upsertedSchedules))
+	}
+	ref, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
+	if err != nil {
+		t.Fatalf("Get revoked execution ref: %v", err)
+	}
+	if ref.RevokedAt == nil || ref.RevokedAt.IsZero() {
+		t.Fatalf("revokedAt = %#v, want set", ref.RevokedAt)
 	}
 }
 
@@ -1715,6 +1749,7 @@ func TestBootstrapMovesConfiguredWorkflowSchedulesToNewProvider(t *testing.T) {
 	if len(recorders["temporal"]) != 1 || len(recorders["temporal"][0].upsertedSchedules) != 1 {
 		t.Fatalf("initial temporal recorders = %#v", recorders["temporal"])
 	}
+	initialExecutionRef := recorders["temporal"][0].upsertedSchedules[0].ExecutionRef
 	_ = result.Close(context.Background())
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
@@ -1752,6 +1787,24 @@ func TestBootstrapMovesConfiguredWorkflowSchedulesToNewProvider(t *testing.T) {
 	}
 	if len(recorders["backup"][1].upsertedSchedules) != 1 {
 		t.Fatalf("backup upserted schedules = %d, want 1", len(recorders["backup"][1].upsertedSchedules))
+	}
+	backupExecutionRef := recorders["backup"][1].upsertedSchedules[0].ExecutionRef
+	oldRef, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
+	if err != nil {
+		t.Fatalf("Get initial execution ref: %v", err)
+	}
+	if oldRef.RevokedAt == nil || oldRef.RevokedAt.IsZero() {
+		t.Fatalf("initial revokedAt = %#v, want set", oldRef.RevokedAt)
+	}
+	newRef, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), backupExecutionRef)
+	if err != nil {
+		t.Fatalf("Get backup execution ref: %v", err)
+	}
+	if newRef.ProviderName != "backup" {
+		t.Fatalf("providerName = %q, want %q", newRef.ProviderName, "backup")
+	}
+	if newRef.RevokedAt != nil {
+		t.Fatalf("backup revokedAt = %#v, want nil", newRef.RevokedAt)
 	}
 }
 
@@ -1933,6 +1986,7 @@ func TestBootstrapReAdoptsManagedSchedulesWhenOwnershipStateIsMissing(t *testing
 	if len(provider.upsertedSchedules) != 1 {
 		t.Fatalf("initial upserted schedules = %d, want 1", len(provider.upsertedSchedules))
 	}
+	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
 	provider.schedules[workflowConfigScheduleID("roadmap", "nightly_sync")].Target.Input = map[string]any{
 		"limit": float64(1),
 	}
@@ -1947,6 +2001,74 @@ func TestBootstrapReAdoptsManagedSchedulesWhenOwnershipStateIsMissing(t *testing
 
 	if len(provider.upsertedSchedules) != 2 {
 		t.Fatalf("upserted schedules = %d, want 2", len(provider.upsertedSchedules))
+	}
+	rotatedExecutionRef := provider.upsertedSchedules[1].ExecutionRef
+	if rotatedExecutionRef == initialExecutionRef {
+		t.Fatalf("execution ref = %q, want rotation from %q", rotatedExecutionRef, initialExecutionRef)
+	}
+	newRef, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), rotatedExecutionRef)
+	if err != nil {
+		t.Fatalf("Get rotated execution ref: %v", err)
+	}
+	if newRef.RevokedAt != nil {
+		t.Fatalf("rotated revokedAt = %#v, want nil", newRef.RevokedAt)
+	}
+}
+
+func TestBootstrapReusesConfiguredWorkflowExecutionRefAcrossUnchangedBootstrap(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	provider := &recordingWorkflowProvider{}
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return provider, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		Schedules: map[string]config.PluginWorkflowSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
+	_ = result.Close(context.Background())
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap replay: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(provider.upsertedSchedules) != 2 {
+		t.Fatalf("upserted schedules = %d, want 2", len(provider.upsertedSchedules))
+	}
+	reusedExecutionRef := provider.upsertedSchedules[1].ExecutionRef
+	if reusedExecutionRef != initialExecutionRef {
+		t.Fatalf("execution ref = %q, want reuse of %q", reusedExecutionRef, initialExecutionRef)
+	}
+	ref, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
+	if err != nil {
+		t.Fatalf("Get execution ref: %v", err)
+	}
+	if ref.RevokedAt != nil {
+		t.Fatalf("revokedAt = %#v, want nil", ref.RevokedAt)
 	}
 }
 
@@ -1981,6 +2103,7 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowSchedule(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Bootstrap initial: %v", err)
 	}
+	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
 	_ = result.Close(context.Background())
 	provider.schedules = map[string]*coreworkflow.Schedule{}
 
@@ -2002,6 +2125,13 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowSchedule(t *testing.T) 
 	if len(provider.deletedSchedules) != 1 {
 		t.Fatalf("deleted schedules = %d, want 1", len(provider.deletedSchedules))
 	}
+	ref, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
+	if err != nil {
+		t.Fatalf("Get revoked execution ref: %v", err)
+	}
+	if ref.RevokedAt == nil || ref.RevokedAt.IsZero() {
+		t.Fatalf("revokedAt = %#v, want set", ref.RevokedAt)
+	}
 
 	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
 	if err != nil {
@@ -2012,6 +2142,66 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowSchedule(t *testing.T) 
 
 	if len(provider.deletedSchedules) != 1 {
 		t.Fatalf("deleted schedules after replay = %d, want 1", len(provider.deletedSchedules))
+	}
+}
+
+func TestBootstrapDeletesRemovedConfiguredWorkflowSchedulesWhenProviderDropsExecutionRef(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	provider := &recordingWorkflowProvider{}
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return provider, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		Schedules: map[string]config.PluginWorkflowSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
+	_ = result.Close(context.Background())
+
+	provider.omitScheduleExecutionRef = true
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap remove schedule: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	ref, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
+	if err != nil {
+		t.Fatalf("Get revoked execution ref: %v", err)
+	}
+	if ref.RevokedAt == nil || ref.RevokedAt.IsZero() {
+		t.Fatalf("revokedAt = %#v, want set", ref.RevokedAt)
 	}
 }
 
@@ -2051,6 +2241,7 @@ func TestBootstrapIgnoresMissingOldScheduleDuringWorkflowProviderMove(t *testing
 	if err != nil {
 		t.Fatalf("Bootstrap initial: %v", err)
 	}
+	initialExecutionRef := temporal.upsertedSchedules[0].ExecutionRef
 	_ = result.Close(context.Background())
 	temporal.schedules = map[string]*coreworkflow.Schedule{}
 
@@ -2083,6 +2274,13 @@ func TestBootstrapIgnoresMissingOldScheduleDuringWorkflowProviderMove(t *testing
 	}
 	if len(temporal.deletedSchedules) == 0 {
 		t.Fatal("expected temporal cleanup delete to be attempted")
+	}
+	ref, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
+	if err != nil {
+		t.Fatalf("Get revoked execution ref: %v", err)
+	}
+	if ref.RevokedAt == nil || ref.RevokedAt.IsZero() {
+		t.Fatalf("revokedAt = %#v, want set", ref.RevokedAt)
 	}
 }
 

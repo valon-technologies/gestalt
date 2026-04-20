@@ -33,9 +33,6 @@ func (s *WorkflowExecutionRefService) Put(ctx context.Context, ref *coreworkflow
 	if id == "" || providerName == "" || targetPlugin == "" || targetOperation == "" || subjectID == "" {
 		return nil, fmt.Errorf("put workflow execution ref: id, provider_name, target.plugin_name, target.operation, and subject_id are required")
 	}
-	if workflowExecutionRefUserID(subjectID) == "" {
-		return nil, fmt.Errorf("put workflow execution ref: subject_id %q is not a user subject", subjectID)
-	}
 
 	permissionsJSON := ""
 	if len(ref.Permissions) > 0 {
@@ -115,14 +112,6 @@ func recWorkflowExecutionRefPermissions(rec indexeddb.Record) []core.AccessPermi
 		return nil
 	}
 	return permissions
-}
-
-func workflowExecutionRefUserID(subjectID string) string {
-	const prefix = "user:"
-	if !strings.HasPrefix(subjectID, prefix) {
-		return ""
-	}
-	return strings.TrimPrefix(subjectID, prefix)
 }
 
 func timeOrNil(value *time.Time) any {
