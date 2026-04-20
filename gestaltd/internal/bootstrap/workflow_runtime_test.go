@@ -471,7 +471,7 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 			"roadmap-policy": {
 				Default: "deny",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "other@example.test", Role: "viewer"},
+					{SubjectID: "user:other-user", Role: "viewer"},
 				},
 			},
 		},

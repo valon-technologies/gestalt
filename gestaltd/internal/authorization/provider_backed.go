@@ -12,7 +12,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
@@ -399,18 +398,18 @@ func (a *ProviderBackedAuthorizer) PolicyNameForProvider(provider string) string
 	return a.base.PolicyNameForProvider(provider)
 }
 
-func (a *ProviderBackedAuthorizer) StaticRoleForPolicyIdentity(policyName, subjectID, userID, email string) (AccessContext, bool) {
+func (a *ProviderBackedAuthorizer) StaticRoleForPolicyIdentity(policyName, subjectID, userID string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, false
 	}
-	return a.base.StaticRoleForPolicyIdentity(policyName, subjectID, userID, email)
+	return a.base.StaticRoleForPolicyIdentity(policyName, subjectID, userID)
 }
 
-func (a *ProviderBackedAuthorizer) StaticRoleForProviderIdentity(provider, subjectID, userID, email string) (AccessContext, bool) {
+func (a *ProviderBackedAuthorizer) StaticRoleForProviderIdentity(provider, subjectID, userID string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, false
 	}
-	return a.base.StaticRoleForProviderIdentity(provider, subjectID, userID, email)
+	return a.base.StaticRoleForProviderIdentity(provider, subjectID, userID)
 }
 
 func (a *ProviderBackedAuthorizer) StaticMembersForPolicy(policyName string) ([]StaticHumanMember, bool) {
@@ -637,32 +636,6 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 				})
 			}
 		}
-		for email, role := range policy.RolesByEmail {
-			role = strings.TrimSpace(role)
-			email = normalizeProviderEmail(email)
-			if email == "" || role == "" {
-				continue
-			}
-			policyRoleSet[role] = struct{}{}
-			addDesiredRelationship(desired, &core.Relationship{
-				Subject:  &core.SubjectRef{Type: subjectTypeEmail, Id: email},
-				Relation: role,
-				Resource: &core.ResourceRef{Type: resourceTypePolicyStatic, Id: policyName},
-			})
-			addDesiredRelationship(desired, &core.Relationship{
-				Subject:  &core.SubjectRef{Type: subjectTypeEmail, Id: email},
-				Relation: role,
-				Resource: &core.ResourceRef{Type: resourceTypeAdminPolicyStatic, Id: policyName},
-			})
-			for _, providerName := range providersByPolicy[policyName] {
-				ensureRoleSet(pluginStaticRoles, providerName)[role] = struct{}{}
-				addDesiredRelationship(desired, &core.Relationship{
-					Subject:  &core.SubjectRef{Type: subjectTypeEmail, Id: email},
-					Relation: role,
-					Resource: &core.ResourceRef{Type: resourceTypePluginStatic, Id: providerName},
-				})
-			}
-		}
 	}
 
 	for name, roles := range policyStaticRoles {
@@ -767,7 +740,6 @@ func staticSubjectRefs(p *principal.Principal) []*core.SubjectRef {
 	}
 	appendSubject(subjectTypeSubject, p.SubjectID)
 	appendSubject(subjectTypeSubject, principal.UserSubjectID(p.UserID))
-	appendSubject(subjectTypeEmail, normalizeProviderEmail(identityEmail(p)))
 	return out
 }
 
@@ -780,17 +752,6 @@ func dynamicSubjectRefs(p *principal.Principal) []*core.SubjectRef {
 		out = append(out, &core.SubjectRef{Type: subjectTypeUser, Id: userID})
 	}
 	return out
-}
-
-func identityEmail(p *principal.Principal) string {
-	if p == nil || p.Identity == nil {
-		return ""
-	}
-	return p.Identity.Email
-}
-
-func normalizeProviderEmail(email string) string {
-	return emailutil.Normalize(email)
 }
 
 func relationshipMapKey(rel *core.Relationship) string {

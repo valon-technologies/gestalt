@@ -850,6 +850,14 @@ func seedUser(t *testing.T, svc *coredata.Services, email string) *core.User {
 	return u
 }
 
+func staticPolicyUserMember(t *testing.T, svc *coredata.Services, email, role string) config.HumanPolicyMemberDef {
+	t.Helper()
+	return config.HumanPolicyMemberDef{
+		SubjectID: principal.UserSubjectID(seedUser(t, svc, email).ID),
+		Role:      role,
+	}
+}
+
 func seedLegacyUserRecord(t *testing.T, svc *coredata.Services, id, email string, createdAt time.Time) *core.User {
 	t.Helper()
 	ctx := context.Background()
@@ -1388,12 +1396,13 @@ func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUs
 		t.Fatalf("webui handler: %v", err)
 	}
 
+	svc := coretesting.NewStubServices(t)
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.HumanPolicyDef{
 			"sample_policy": {
 				Default: "allow",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "admin@example.test", Role: "admin"},
+					staticPolicyUserMember(t, svc, "admin@example.test", "admin"),
 				},
 			},
 		},
@@ -1415,6 +1424,7 @@ func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUs
 				}
 			},
 		}
+		cfg.Services = svc
 		cfg.Authorizer = legacy
 		cfg.MountedWebUIs = []server.MountedWebUI{{
 			Name:                "sample_portal",
@@ -1601,12 +1611,13 @@ func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUs
 		t.Fatalf("webui handler: %v", err)
 	}
 
+	svc := coretesting.NewStubServices(t)
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.HumanPolicyDef{
 			"sample_policy": {
 				Default: "allow",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "admin@example.test", Role: "admin"},
+					staticPolicyUserMember(t, svc, "admin@example.test", "admin"),
 				},
 			},
 		},
@@ -1626,6 +1637,7 @@ func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUs
 				}
 			},
 		}
+		cfg.Services = svc
 		cfg.Authorizer = legacy
 		cfg.MountedWebUIs = []server.MountedWebUI{{
 			Name:                "sample_portal",
@@ -1945,7 +1957,7 @@ func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing
 			"admin_policy": {
 				Default: "deny",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "host@example.com", Role: "admin"},
+					staticPolicyUserMember(t, svc, "host@example.com", "admin"),
 				},
 			},
 		},
@@ -2420,7 +2432,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 			"sample_policy": {
 				Default: "deny",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "static@example.test", Role: "admin"},
+					staticPolicyUserMember(t, svc, "static@example.test", "admin"),
 				},
 			},
 		},
@@ -2570,7 +2582,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 			"sample_policy": {
 				Default: "deny",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "static@example.test", Role: "admin"},
+					staticPolicyUserMember(t, svc, "static@example.test", "admin"),
 				},
 			},
 		},
@@ -2758,7 +2770,7 @@ func TestAdminAPI_AuthorizationProviderDebugRequiresAdminPolicy(t *testing.T) {
 			"sample_policy": {
 				Default: "deny",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "static@example.test", Role: "admin"},
+					staticPolicyUserMember(t, svc, "static@example.test", "admin"),
 				},
 			},
 		},
@@ -2814,7 +2826,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 			"admin_policy": {
 				Default: "deny",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "static-admin@example.test", Role: adminRole},
+					staticPolicyUserMember(t, svc, "static-admin@example.test", adminRole),
 				},
 			},
 		},
@@ -3024,7 +3036,7 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 			"admin_policy": {
 				Default: "deny",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "static-admin@example.test", Role: adminRole},
+					staticPolicyUserMember(t, svc, "static-admin@example.test", adminRole),
 				},
 			},
 		},
@@ -3118,7 +3130,7 @@ func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyHumanAuthStores(t *testi
 				"sample_policy": {
 					Default: "deny",
 					Members: []config.HumanPolicyMemberDef{
-						{Email: "static@example.test", Role: "admin"},
+						staticPolicyUserMember(t, svc, "static@example.test", "admin"),
 					},
 				},
 			},
@@ -3183,7 +3195,7 @@ func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyHumanAuthStores(t *testi
 				"admin_policy": {
 					Default: "deny",
 					Members: []config.HumanPolicyMemberDef{
-						{Email: "static-admin@example.test", Role: "owner"},
+						staticPolicyUserMember(t, svc, "static-admin@example.test", "owner"),
 					},
 				},
 			},
@@ -3243,7 +3255,7 @@ func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
 			"admin_policy": {
 				Default: "deny",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "static-admin@example.test", Role: adminRole},
+					staticPolicyUserMember(t, svc, "static-admin@example.test", adminRole),
 				},
 			},
 		},
@@ -3329,7 +3341,7 @@ func TestAdminAPI_PluginAuthorizationUnavailable(t *testing.T) {
 			"sample_policy": {
 				Default: "deny",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "admin@example.test", Role: "admin"},
+					staticPolicyUserMember(t, svc, "admin@example.test", "admin"),
 				},
 			},
 		},
@@ -3410,7 +3422,7 @@ func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
 				"admin_policy": {
 					Default: "deny",
 					Members: []config.HumanPolicyMemberDef{
-						{Email: "admin@example.test", Role: "admin"},
+						staticPolicyUserMember(t, svc, "admin@example.test", "admin"),
 					},
 				},
 			},
@@ -3569,7 +3581,7 @@ func TestAdminAPI_AdminAuthorizationPutFailureReturnsServerError(t *testing.T) {
 			"admin_policy": {
 				Default: "deny",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "static-admin@example.test", Role: "admin"},
+					staticPolicyUserMember(t, svc, "static-admin@example.test", "admin"),
 				},
 			},
 		},
@@ -3648,7 +3660,7 @@ func TestMountedWebUIAuthorizationPolicyRequiresExplicitRouteCoverage(t *testing
 				"sample_policy": {
 					Default: "deny",
 					Members: []config.HumanPolicyMemberDef{
-						{Email: "viewer@example.test", Role: "viewer"},
+						staticPolicyUserMember(t, svc, "viewer@example.test", "viewer"),
 					},
 				},
 			},
@@ -3731,7 +3743,7 @@ func TestMountedWebUIAuthorizationPolicyNamedBuiltinAdminDoesNotUseAdminResolver
 			"admin_policy": {
 				Default: "deny",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "static-admin@example.test", Role: "admin"},
+					staticPolicyUserMember(t, svc, "static-admin@example.test", "admin"),
 				},
 			},
 			"sample_policy": {
@@ -8504,7 +8516,7 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 			"sample_policy": {
 				Default: "deny",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "viewer-user@test.local", Role: "viewer"},
+					staticPolicyUserMember(t, svc, "viewer-user@test.local", "viewer"),
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 				},
 			},
@@ -8639,7 +8651,7 @@ func TestHumanAuthorization_ExecuteOperation_DefaultAllowTreatsAuthenticatedUser
 			"sample_policy": {
 				Default: "allow",
 				Members: []config.HumanPolicyMemberDef{
-					{Email: "admin-user@test.local", Role: "admin"},
+					staticPolicyUserMember(t, svc, "admin-user@test.local", "admin"),
 				},
 			},
 		},

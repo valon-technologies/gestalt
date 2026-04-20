@@ -1205,7 +1205,7 @@ plugins:
     roadmap_policy:
       default: deny
       members:
-        - email: viewer@example.test
+        - subjectID: user:viewer-user
           role: viewer
 `,
 			uiKey:      "roadmap",
@@ -1263,7 +1263,7 @@ plugins:
     roadmap_policy:
       default: deny
       members:
-        - email: viewer@example.test
+        - subjectID: user:viewer-user
           role: viewer
 `,
 			uiKey:       "roadmap",
@@ -1285,7 +1285,7 @@ plugins:
     roadmap_policy:
       default: deny
       members:
-        - email: viewer@example.test
+        - subjectID: user:viewer-user
           role: viewer
 `,
 			uiKey:       "roadmap",
@@ -1312,7 +1312,7 @@ plugins:
     roadmap_policy:
       default: deny
       members:
-        - email: viewer@example.test
+        - subjectID: user:viewer-user
           role: viewer
 `,
 			uiKey:       "roadmap",
@@ -2436,7 +2436,7 @@ authorization:
     sample_policy:
       default: deny
       members:
-        - email: viewer@example.test
+        - subjectID: user:viewer-user
           role: viewer
 ` + `server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

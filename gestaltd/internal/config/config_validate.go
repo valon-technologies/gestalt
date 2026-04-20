@@ -14,7 +14,6 @@ import (
 	"time"
 
 	cronv3 "github.com/robfig/cron/v3"
-	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/providerenv"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -632,31 +631,19 @@ func validateAuthorizationPolicies(cfg *Config) error {
 			return fmt.Errorf("config validation: authorization.policies.%s.default must be %q or %q", name, "allow", "deny")
 		}
 		seenSubjectIDs := make(map[string]int, len(policy.Members))
-		seenEmails := make(map[string]int, len(policy.Members))
 		for i, member := range policy.Members {
 			subjectID := strings.TrimSpace(member.SubjectID)
-			email := emailutil.Normalize(member.Email)
 			role := strings.TrimSpace(member.Role)
 			switch {
 			case role == "":
 				return fmt.Errorf("config validation: authorization.policies.%s.members[%d].role is required", name, i)
-			case subjectID == "" && email == "":
-				return fmt.Errorf("config validation: authorization.policies.%s.members[%d] must set subjectID or email", name, i)
-			case subjectID != "" && email != "":
-				return fmt.Errorf("config validation: authorization.policies.%s.members[%d] may not set both subjectID and email", name, i)
+			case subjectID == "":
+				return fmt.Errorf("config validation: authorization.policies.%s.members[%d].subjectID is required", name, i)
 			}
-			if subjectID != "" {
-				if prev, exists := seenSubjectIDs[subjectID]; exists {
-					return fmt.Errorf("config validation: authorization.policies.%s.members[%d].subjectID duplicates members[%d]", name, i, prev)
-				}
-				seenSubjectIDs[subjectID] = i
+			if prev, exists := seenSubjectIDs[subjectID]; exists {
+				return fmt.Errorf("config validation: authorization.policies.%s.members[%d].subjectID duplicates members[%d]", name, i, prev)
 			}
-			if email != "" {
-				if prev, exists := seenEmails[email]; exists {
-					return fmt.Errorf("config validation: authorization.policies.%s.members[%d].email duplicates members[%d]", name, i, prev)
-				}
-				seenEmails[email] = i
-			}
+			seenSubjectIDs[subjectID] = i
 		}
 	}
 	return nil

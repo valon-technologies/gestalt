@@ -17,7 +17,6 @@ const (
 
 	ProviderSubjectTypeSubject = "subject"
 	ProviderSubjectTypeUser    = "user"
-	ProviderSubjectTypeEmail   = "email"
 )
 
 const (
@@ -30,7 +29,6 @@ const (
 
 	subjectTypeSubject = ProviderSubjectTypeSubject
 	subjectTypeUser    = ProviderSubjectTypeUser
-	subjectTypeEmail   = ProviderSubjectTypeEmail
 )
 
 func IsManagedProviderRelationship(rel *core.Relationship) bool {
@@ -55,7 +53,7 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 	policyRoles := unionRoleLists(state.policyStaticRoles)
 	policyRelations := map[string][]string{}
 	for _, role := range policyRoles {
-		policyRelations[role] = []string{subjectTypeSubject, subjectTypeEmail}
+		policyRelations[role] = []string{subjectTypeSubject}
 	}
 	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
 		buildProviderAuthorizationResourceType(resourceTypePolicyStatic, policyRelations, policyRoles),
@@ -64,7 +62,7 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
 		buildProviderAuthorizationResourceType(
 			resourceTypePluginStatic,
-			resourceTypesForRoles(unionRoleLists(state.pluginStaticRoles), subjectTypeSubject, subjectTypeEmail),
+			resourceTypesForRoles(unionRoleLists(state.pluginStaticRoles), subjectTypeSubject),
 			unionRoleLists(state.pluginStaticRoles),
 		),
 	)
@@ -78,7 +76,7 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
 		buildProviderAuthorizationResourceType(
 			resourceTypeAdminPolicyStatic,
-			resourceTypesForRoles(policyRoles, subjectTypeSubject, subjectTypeEmail),
+			resourceTypesForRoles(policyRoles, subjectTypeSubject),
 			policyRoles,
 		),
 	)

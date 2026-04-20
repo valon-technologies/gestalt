@@ -117,7 +117,7 @@ authorization:
     support_staff:
       default: deny
       members:
-        - email: viewer@example.test
+        - subjectID: user:viewer-user
           role: viewer
         - subjectID: user:admin-user
           role: admin
@@ -154,7 +154,7 @@ authorization:
 
 `admin.authorizationPolicy` binds the built-in `/admin` route to one shared human access policy from `authorization.policies`. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
 
-`authorization.policies` configures shared human access policies. Each policy resolves a caller to exactly one role by matching either `subjectID` or `email`, then applies a `default` fallback (`allow` or `deny`) when no member matches. Plugins opt into a policy explicitly through `authorizationPolicy`.
+`authorization.policies` configures shared human access policies. Each policy resolves a caller to exactly one role by matching canonical `subjectID` values, then applies a `default` fallback (`allow` or `deny`) when no member matches. Plugins opt into a policy explicitly through `authorizationPolicy`.
 
 Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `authorizationPolicy`, operators can manage additional dynamic members for that plugin from the built-in admin UI at `/admin/?tab=members` or through `/admin/api/v1/authorization/...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for users who already have static authorization on that plugin.
 
@@ -174,7 +174,7 @@ Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `a
 | `providers.auth` / `providers.secrets` / `providers.telemetry` / `providers.audit` / `providers.indexeddb` / `providers.authorization` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
 | `admin.authorizationPolicy` | | Shared human access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
-| `authorization.policies` | | Shared human access policies resolved by `subjectID` or `email`. |
+| `authorization.policies` | | Shared human access policies resolved by canonical `subjectID`. |
 | `authorization.workloads` | | Workload bearer tokens, per-provider allowlists, and identity credential bindings. |
 
 When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener. When `server.admin.authorizationPolicy` is set, Gestalt does apply browser session auth plus role-based policy checks to `/admin` and `/admin/api/v1/*`.
@@ -1102,7 +1102,7 @@ Mounted UI bundles are served on the public listener only. The built-in admin UI
 
 `server.egress.defaultAction` must be `allow` or `deny`.
 
-`authorization.policies.<name>.default` must be `allow` or `deny` when set. Each policy member must set exactly one of `subjectID` or `email`, and every member must set a non-empty `role`.
+`authorization.policies.<name>.default` must be `allow` or `deny` when set. Each policy member must set a non-empty `subjectID` and a non-empty `role`.
 
 Server listener ports must be greater than zero. When `server.management` is configured, it must differ from `server.public`.
 

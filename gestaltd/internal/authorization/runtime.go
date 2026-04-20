@@ -29,8 +29,8 @@ type RuntimeAuthorizer interface {
 	AllowCatalogOperation(ctx context.Context, p *principal.Principal, provider string, op catalog.CatalogOperation) bool
 
 	PolicyNameForProvider(provider string) string
-	StaticRoleForPolicyIdentity(policyName, subjectID, userID, email string) (AccessContext, bool)
-	StaticRoleForProviderIdentity(provider, subjectID, userID, email string) (AccessContext, bool)
+	StaticRoleForPolicyIdentity(policyName, subjectID, userID string) (AccessContext, bool)
+	StaticRoleForProviderIdentity(provider, subjectID, userID string) (AccessContext, bool)
 	StaticMembersForPolicy(policyName string) ([]StaticHumanMember, bool)
 	StaticMembersForProvider(provider string) (string, []StaticHumanMember, bool)
 }
