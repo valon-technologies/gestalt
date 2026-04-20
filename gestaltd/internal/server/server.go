@@ -72,9 +72,11 @@ type Server struct {
 	identityGrants        *coredata.ManagedIdentityGrantService
 	workspaceRoles        *coredata.WorkspaceRoleService
 	identityPluginAccess  *coredata.IdentityPluginAccessService
+	workflowExecutionRefs *coredata.WorkflowExecutionRefService
 	authorizationProvider core.AuthorizationProvider
 	managedIdentityMu     sync.Mutex
 	providers             *registry.ProviderMap[core.Provider]
+	workflow              bootstrap.WorkflowControl
 	resolver              *principal.Resolver
 	invoker               invocation.Invoker
 	defaultConnection     map[string]string
@@ -106,6 +108,7 @@ type Config struct {
 	AuditSink             core.AuditSink
 	Services              *coredata.Services
 	Providers             *registry.ProviderMap[core.Provider]
+	Workflow              bootstrap.WorkflowControl
 	Invoker               invocation.Invoker
 	DefaultConnection     map[string]string
 	CatalogConnection     map[string]string
@@ -190,6 +193,7 @@ func New(cfg Config) (*Server, error) {
 	identityGrants := cfg.Services.IdentityGrants
 	workspaceRoles := cfg.Services.WorkspaceRoles
 	identityPluginAccess := cfg.Services.IdentityPluginAccess
+	workflowExecutionRefs := cfg.Services.WorkflowExecutionRefs
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, managedIdentities, identityGrants, cfg.Authorizer)
 
 	router := chi.NewRouter()
@@ -210,8 +214,10 @@ func New(cfg Config) (*Server, error) {
 		identityGrants:        identityGrants,
 		workspaceRoles:        workspaceRoles,
 		identityPluginAccess:  identityPluginAccess,
+		workflowExecutionRefs: workflowExecutionRefs,
 		authorizationProvider: cfg.AuthorizationProvider,
 		providers:             cfg.Providers,
+		workflow:              cfg.Workflow,
 		resolver:              resolver,
 		invoker:               cfg.Invoker,
 		defaultConnection:     cfg.DefaultConnection,

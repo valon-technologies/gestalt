@@ -65,6 +65,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		AuditSink:         result.AuditSink,
 		Services:          result.Services,
 		Providers:         result.Providers,
+		Workflow:          result.WorkflowControl,
 		Invoker:           httpInvoker,
 		DefaultConnection: connMaps.DefaultConnection,
 		// HTTP routes expose REST-visible operations, so unqualified session-catalog

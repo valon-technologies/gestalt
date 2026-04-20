@@ -183,6 +183,7 @@ type Result struct {
 	ExtraS3s              []s3store.Client
 	ExtraWorkflows        []coreworkflow.Provider
 	Providers             *registry.ProviderMap[core.Provider]
+	WorkflowControl       WorkflowControl
 	ProvidersReady        <-chan struct{}
 	Authorizer            authorization.RuntimeAuthorizer
 	ConnectionAuth        func() map[string]map[string]OAuthHandler
@@ -722,6 +723,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		ExtraS3s:              prepared.ExtraS3s,
 		ExtraWorkflows:        extraWorkflows,
 		Providers:             providers,
+		WorkflowControl:       prepared.Deps.WorkflowRuntime,
 		ProvidersReady:        providersReady,
 		Authorizer:            authz,
 		ConnectionAuth:        connAuthResolver,
