@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var Factory bootstrap.AuthorizationFactory = func(node yaml.Node, _ bootstrap.Deps) (core.AuthorizationProvider, error) {
+var Factory bootstrap.AuthorizationFactory = func(node yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (core.AuthorizationProvider, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("authorization provider: parsing config: %w", err)
@@ -36,6 +36,7 @@ var Factory bootstrap.AuthorizationFactory = func(node yaml.Node, _ bootstrap.De
 		AllowedHosts: cfg.AllowedHosts,
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      prepared.Cleanup,
+		HostServices: hostServices,
 		Name:         cfg.Name,
 	})
 }

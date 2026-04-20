@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
+	"strings"
 	"sync"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -143,7 +146,7 @@ type Deps struct {
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
-type AuthorizationFactory func(node yaml.Node, deps Deps) (core.AuthorizationProvider, error)
+type AuthorizationFactory func(node yaml.Node, hostServices []providerhost.HostService, deps Deps) (core.AuthorizationProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
 type CacheFactory func(node yaml.Node) (corecache.Cache, error)
@@ -483,11 +486,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if err != nil {
 		return nil, err
 	}
-	authzProvider, err := buildAuthorization(cfg, factories, deps)
-	if err != nil {
-		_ = closeAuth(auth)
-		return nil, err
-	}
+	var authzProvider core.AuthorizationProvider
 	closeAuthorizationOnError := true
 	defer func() {
 		if closeAuthorizationOnError {
@@ -573,6 +572,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.CacheDefs = cfg.Providers.Cache
 	deps.CacheFactory = factories.Cache
 	deps.S3 = hostS3s
+
+	authzProvider, err = buildAuthorization(cfg, factories, deps)
+	if err != nil {
+		_ = closeAuth(auth)
+		return nil, err
+	}
 
 	closeSM = false
 	shutdownTelemetry = false
@@ -942,7 +947,8 @@ func buildAuthorization(cfg *config.Config, factories *FactoryRegistry, deps Dep
 			return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
 		}
 	}
-	provider, err := factories.Authorization(node, deps)
+	hostServices := buildHostIndexedDBHostServices(deps.SelectedIndexedDBName, deps.IndexedDBs)
+	provider, err := factories.Authorization(node, hostServices, deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
 	}
@@ -969,6 +975,35 @@ func buildIndexedDB(entry *config.ProviderEntry, factories *FactoryRegistry) (in
 		return nil, fmt.Errorf("datastore provider: %w", err)
 	}
 	return ds, nil
+}
+
+func buildHostIndexedDBHostServices(selectedName string, indexeddbs map[string]indexeddb.IndexedDB) []providerhost.HostService {
+	if len(indexeddbs) == 0 {
+		return nil
+	}
+
+	hostServices := make([]providerhost.HostService, 0, len(indexeddbs)+1)
+	if selected := indexeddbs[selectedName]; strings.TrimSpace(selectedName) != "" && selected != nil {
+		hostServices = append(hostServices, indexedDBHostService(providerhost.DefaultIndexedDBSocketEnv, selectedName, selected))
+	}
+
+	for _, name := range slices.Sorted(maps.Keys(indexeddbs)) {
+		ds := indexeddbs[name]
+		if ds == nil {
+			continue
+		}
+		hostServices = append(hostServices, indexedDBHostService(providerhost.IndexedDBSocketEnv(name), name, ds))
+	}
+	return hostServices
+}
+
+func indexedDBHostService(envVar, name string, ds indexeddb.IndexedDB) providerhost.HostService {
+	return providerhost.HostService{
+		EnvVar: envVar,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, name, providerhost.IndexedDBServerOptions{}))
+		},
+	}
 }
 
 func buildCache(entry *config.ProviderEntry, factories *FactoryRegistry) (corecache.Cache, error) {

@@ -85,7 +85,7 @@ func (p *stubAuthorizationProvider) WriteModel(context.Context, *core.WriteModel
 }
 
 func stubAuthorizationFactory(name string) bootstrap.AuthorizationFactory {
-	return func(yaml.Node, bootstrap.Deps) (core.AuthorizationProvider, error) {
+	return func(yaml.Node, []providerhost.HostService, bootstrap.Deps) (core.AuthorizationProvider, error) {
 		return &stubAuthorizationProvider{name: name}, nil
 	}
 }
@@ -228,7 +228,7 @@ func (p *memoryAuthorizationProvider) WriteModel(context.Context, *core.WriteMod
 }
 
 func memoryAuthorizationFactory(provider *memoryAuthorizationProvider) bootstrap.AuthorizationFactory {
-	return func(yaml.Node, bootstrap.Deps) (core.AuthorizationProvider, error) {
+	return func(yaml.Node, []providerhost.HostService, bootstrap.Deps) (core.AuthorizationProvider, error) {
 		return provider, nil
 	}
 }
@@ -1110,6 +1110,52 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 	}
 	if got[1] != providerhost.DefaultIndexedDBSocketEnv {
 		t.Fatalf("workflow indexeddb env = %q, want %q", got[1], providerhost.DefaultIndexedDBSocketEnv)
+	}
+}
+
+func TestBootstrapPassesIndexedDBHostSocketsToAuthorizationProviders(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.IndexedDB["archive"] = &config.ProviderEntry{
+		Source: config.ProviderSource{Path: "./providers/datastore/archive"},
+	}
+	cfg.Providers.Authorization = map[string]*config.ProviderEntry{
+		"indexeddb": {
+			Source: config.ProviderSource{Path: "stub"},
+			Config: mustYAMLNode(t, map[string]any{"indexeddb": "test"}),
+		},
+	}
+	cfg.Server.Providers.Authorization = "indexeddb"
+
+	factories := validFactories()
+	var hostServices []providerhost.HostService
+	factories.Authorization = func(_ yaml.Node, services []providerhost.HostService, _ bootstrap.Deps) (core.AuthorizationProvider, error) {
+		hostServices = append([]providerhost.HostService(nil), services...)
+		return &stubAuthorizationProvider{name: "test-authorization"}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(hostServices) != 3 {
+		t.Fatalf("authorization host services = %d, want 3", len(hostServices))
+	}
+	if hostServices[0].EnvVar != providerhost.DefaultIndexedDBSocketEnv {
+		t.Fatalf("authorization default indexeddb env = %q, want %q", hostServices[0].EnvVar, providerhost.DefaultIndexedDBSocketEnv)
+	}
+	wantNamed := []string{
+		providerhost.IndexedDBSocketEnv("archive"),
+		providerhost.IndexedDBSocketEnv("test"),
+	}
+	for i, want := range wantNamed {
+		if got := hostServices[i+1].EnvVar; got != want {
+			t.Fatalf("authorization indexeddb env[%d] = %q, want %q", i, got, want)
+		}
 	}
 }
 
@@ -2876,7 +2922,7 @@ func TestResultCloseClosesAuthorizationProvider(t *testing.T) {
 
 	closed := &atomic.Bool{}
 	factories := validFactories()
-	factories.Authorization = func(yaml.Node, bootstrap.Deps) (core.AuthorizationProvider, error) {
+	factories.Authorization = func(yaml.Node, []providerhost.HostService, bootstrap.Deps) (core.AuthorizationProvider, error) {
 		return &closableAuthorizationProvider{
 			stubAuthorizationProvider: &stubAuthorizationProvider{name: "test-authorization"},
 			closed:                    closed,
