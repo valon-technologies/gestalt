@@ -333,7 +333,8 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	authz, err := authorization.New(config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
-				Token: workloadToken,
+				IdentityID: "triage-bot",
+				Token:      workloadToken,
 				Providers: map[string]config.WorkloadProviderDef{
 					"audit-workload-prov": {
 						Connection: "workspace",
@@ -349,9 +350,9 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	}
 
 	svc := coretesting.NewStubServices(t)
-	if err := svc.Tokens.StoreToken(t.Context(), &core.IntegrationToken{
+	if err := svc.Tokens.StoreIdentityToken(t.Context(), &core.IntegrationToken{
 		ID:          "identity-audit-token",
-		UserID:      principal.IdentityPrincipal,
+		IdentityID:  "triage-bot",
 		Integration: "audit-workload-prov",
 		Connection:  "workspace",
 		Instance:    "team-a",
@@ -406,7 +407,7 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	if record["credential_mode"] != "identity" {
 		t.Fatalf("expected credential_mode=identity, got %v", record["credential_mode"])
 	}
-	if record["credential_subject_id"] != "identity:__identity__" {
+	if record["credential_subject_id"] != "identity:triage-bot" {
 		t.Fatalf("expected credential_subject_id identity principal, got %v", record["credential_subject_id"])
 	}
 	if record["credential_connection"] != "workspace" {

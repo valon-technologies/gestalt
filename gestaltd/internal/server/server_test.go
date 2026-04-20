@@ -885,6 +885,20 @@ func seedIdentityToken(t *testing.T, svc *coredata.Services, integration, connec
 	})
 }
 
+func seedIdentityOwnedToken(t *testing.T, svc *coredata.Services, identityID, integration, connection, instance, accessToken string) {
+	t.Helper()
+	if err := svc.Tokens.StoreIdentityToken(t.Context(), &core.IntegrationToken{
+		ID:          integration + "-" + connection + "-" + instance + "-" + identityID,
+		IdentityID:  identityID,
+		Integration: integration,
+		Connection:  connection,
+		Instance:    instance,
+		AccessToken: accessToken,
+	}); err != nil {
+		t.Fatalf("StoreIdentityToken: %v", err)
+	}
+}
+
 func mustAuthorizer(t *testing.T, cfg config.AuthorizationConfig, providers *registry.ProviderMap[core.Provider], pluginDefs map[string]*config.ProviderEntry, defaultConnections map[string]string) *authorization.Authorizer {
 	t.Helper()
 	authz, err := authorization.New(cfg, pluginDefs, providers, defaultConnections)
@@ -5030,7 +5044,7 @@ func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordan
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, "svc", "workspace", "default", "identity-svc-token")
+	seedIdentityOwnedToken(t, svc, "triage-bot", "svc", "workspace", "default", "identity-svc-token")
 
 	svcProvider := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{N: "svc", DN: "Service", ConnMode: core.ConnectionModeIdentity},
@@ -5056,7 +5070,8 @@ func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordan
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
-				Token: workloadToken,
+				IdentityID: "triage-bot",
+				Token:      workloadToken,
 				Providers: map[string]config.WorkloadProviderDef{
 					"svc":      {Allow: []string{"run"}},
 					"weather":  {Allow: []string{"forecast"}},
@@ -5184,7 +5199,8 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
-				Token: workloadToken,
+				IdentityID: "triage-bot",
+				Token:      workloadToken,
 				Providers: map[string]config.WorkloadProviderDef{
 					"svc": {
 						Connection: "workspace",
@@ -5269,7 +5285,7 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, "svc-session", "workspace", "team-a", "session-bound-token")
+	seedIdentityOwnedToken(t, svc, "triage-bot", "svc-session", "workspace", "team-a", "session-bound-token")
 
 	var sessionCatalogToken string
 	sessionProvider := &stubIntegrationWithSessionCatalog{
@@ -5290,7 +5306,8 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 	sessionAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
-				Token: workloadToken,
+				IdentityID: "triage-bot",
+				Token:      workloadToken,
 				Providers: map[string]config.WorkloadProviderDef{
 					"svc-session": {
 						Connection: "workspace",
@@ -8268,7 +8285,7 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, "svc", "workspace", "team-a", "identity-bound-token")
+	seedIdentityOwnedToken(t, svc, "triage-bot", "svc", "workspace", "team-a", "identity-bound-token")
 
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
@@ -8287,7 +8304,8 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
-				Token: workloadToken,
+				IdentityID: "triage-bot",
+				Token:      workloadToken,
 				Providers: map[string]config.WorkloadProviderDef{
 					"svc": {
 						Connection: "workspace",
@@ -8827,7 +8845,8 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
-				Token: workloadToken,
+				IdentityID: "triage-bot",
+				Token:      workloadToken,
 				Providers: map[string]config.WorkloadProviderDef{
 					"svc": {
 						Connection: "workspace",
@@ -8872,7 +8891,7 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns
 	if record["subject_id"] != "workload:triage-bot" {
 		t.Fatalf("expected workload subject_id, got %v", record["subject_id"])
 	}
-	if record["credential_subject_id"] != "identity:__identity__" {
+	if record["credential_subject_id"] != "identity:triage-bot" {
 		t.Fatalf("expected credential_subject_id identity principal, got %v", record["credential_subject_id"])
 	}
 	if record["credential_connection"] != "workspace" {
@@ -13584,13 +13603,14 @@ func TestMCPEndpoint_WorkloadAuthorizationAndAudit(t *testing.T) {
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, "clickhouse", "default", "default", "identity-token")
+	seedIdentityOwnedToken(t, svc, "triage-bot", "clickhouse", "default", "default", "identity-token")
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
-				Token: "gst_wld_triage-bot-token",
+				IdentityID: "triage-bot",
+				Token:      "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{
 					"clickhouse": {
 						Connection: "default",
@@ -13717,8 +13737,8 @@ func TestMCPEndpoint_WorkloadAuthorizationAndAudit(t *testing.T) {
 	if auditRecord["credential_mode"] != "identity" {
 		t.Fatalf("expected credential_mode identity, got %v", auditRecord["credential_mode"])
 	}
-	if auditRecord["credential_subject_id"] != "identity:__identity__" {
-		t.Fatalf("expected credential_subject_id identity:__identity__, got %v", auditRecord["credential_subject_id"])
+	if auditRecord["credential_subject_id"] != "identity:triage-bot" {
+		t.Fatalf("expected credential_subject_id identity:triage-bot, got %v", auditRecord["credential_subject_id"])
 	}
 	if auditRecord["credential_connection"] != "default" {
 		t.Fatalf("expected credential_connection default, got %v", auditRecord["credential_connection"])

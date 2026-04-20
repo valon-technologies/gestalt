@@ -40,6 +40,7 @@ type WorkloadProviderBinding struct {
 type Workload struct {
 	ID          string
 	DisplayName string
+	IdentityID  string
 	Providers   map[string]WorkloadProviderBinding
 }
 
@@ -70,6 +71,11 @@ type Authorizer struct {
 }
 
 func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], defaultConnections map[string]string) (*Authorizer, error) {
+	var err error
+	cfg, err = config.NormalizedAuthorizationConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
 	a := &Authorizer{
 		workloadsByHash:      map[string]*Workload{},
 		workloadsBySubjectID: map[string]*Workload{},
@@ -123,26 +129,27 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 		}
 	}
 
-	if len(cfg.Workloads) == 0 {
+	if len(cfg.IdentityTokens) == 0 {
 		return a, nil
 	}
 
-	for workloadID, def := range cfg.Workloads {
+	for identityID, def := range cfg.IdentityTokens {
 		token := strings.TrimSpace(def.Token)
 		if token == "" {
-			return nil, fmt.Errorf("authorization validation: workload %q token is required", workloadID)
+			return nil, fmt.Errorf("authorization validation: identity token %q token is required", identityID)
 		}
 		if !strings.HasPrefix(token, "gst_wld_") {
-			return nil, fmt.Errorf("authorization validation: workload %q token must use gst_wld_ prefix", workloadID)
+			return nil, fmt.Errorf("authorization validation: identity token %q token must use gst_wld_ prefix", identityID)
 		}
 		tokenHash := principal.HashToken(token)
 		if _, exists := a.workloadsByHash[tokenHash]; exists {
-			return nil, fmt.Errorf("authorization validation: workload %q token duplicates another workload", workloadID)
+			return nil, fmt.Errorf("authorization validation: identity token %q token duplicates another configured identity token", identityID)
 		}
 
 		workload := &Workload{
-			ID:          workloadID,
+			ID:          identityID,
 			DisplayName: def.DisplayName,
+			IdentityID:  def.IdentityID,
 			Providers:   make(map[string]WorkloadProviderBinding, len(def.Providers)),
 		}
 
@@ -152,15 +159,15 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 				return nil, err
 			}
 			if !ok {
-				return nil, fmt.Errorf("authorization validation: workload %q references unknown provider %q", workloadID, providerName)
+				return nil, fmt.Errorf("authorization validation: identity token %q references unknown provider %q", identityID, providerName)
 			}
 
 			allow := normalizeAllowedOperations(providerDef.Allow)
 			if len(allow) == 0 {
-				return nil, fmt.Errorf("authorization validation: workload %q provider %q allow must not be empty", workloadID, providerName)
+				return nil, fmt.Errorf("authorization validation: identity token %q provider %q allow must not be empty", identityID, providerName)
 			}
 
-			binding, err := buildBinding(mode, workloadID, providerName, providerDef, defaultConnections)
+			binding, err := buildBinding(mode, identityID, workload.IdentityID, providerName, providerDef, defaultConnections)
 			if err != nil {
 				return nil, err
 			}
@@ -169,7 +176,7 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 		}
 
 		a.workloadsByHash[tokenHash] = workload
-		a.workloadsBySubjectID[principal.WorkloadSubjectID(workloadID)] = workload
+		a.workloadsBySubjectID[principal.WorkloadSubjectID(identityID)] = workload
 	}
 
 	return a, nil
@@ -485,7 +492,7 @@ func (p *HumanPolicy) staticRoleForIdentity(subjectID, userID, email string) (st
 	return "", false
 }
 
-func buildBinding(mode core.ConnectionMode, workloadID, provider string, def config.WorkloadProviderDef, defaultConnections map[string]string) (WorkloadProviderBinding, error) {
+func buildBinding(mode core.ConnectionMode, workloadID, identityID, provider string, def config.WorkloadProviderDef, defaultConnections map[string]string) (WorkloadProviderBinding, error) {
 	switch mode {
 	case core.ConnectionModeNone:
 		if strings.TrimSpace(def.Connection) != "" || strings.TrimSpace(def.Instance) != "" {
@@ -497,6 +504,13 @@ func buildBinding(mode core.ConnectionMode, workloadID, provider string, def con
 			},
 		}, nil
 	case core.ConnectionModeIdentity:
+		ownerIdentityID := strings.TrimSpace(identityID)
+		if ownerIdentityID == "" {
+			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q requires identityID for identity-mode credentials", workloadID, provider)
+		}
+		if !safeConnectionValue.MatchString(ownerIdentityID) {
+			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q identityID contains invalid characters", workloadID)
+		}
 		connection := strings.TrimSpace(def.Connection)
 		if connection == "" {
 			connection = defaultConnections[provider]
@@ -516,12 +530,11 @@ func buildBinding(mode core.ConnectionMode, workloadID, provider string, def con
 		if !safeInstanceValue.MatchString(instance) {
 			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q instance contains invalid characters", workloadID, provider)
 		}
-
 		return WorkloadProviderBinding{
 			CredentialBinding: CredentialBinding{
 				Mode:                core.ConnectionModeIdentity,
-				CredentialSubjectID: principal.IdentitySubjectID(),
-				CredentialOwnerID:   principal.IdentityPrincipal,
+				CredentialSubjectID: principal.IdentitySubjectID(ownerIdentityID),
+				CredentialOwnerID:   ownerIdentityID,
 				Connection:          connection,
 				Instance:            instance,
 			},

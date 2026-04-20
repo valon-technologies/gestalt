@@ -513,8 +513,9 @@ type EgressConfig struct {
 }
 
 type AuthorizationConfig struct {
-	Workloads map[string]WorkloadDef    `yaml:"workloads,omitempty"`
-	Policies  map[string]HumanPolicyDef `yaml:"policies,omitempty"`
+	IdentityTokens map[string]WorkloadDef    `yaml:"identityTokens,omitempty"`
+	Workloads      map[string]WorkloadDef    `yaml:"workloads,omitempty"`
+	Policies       map[string]HumanPolicyDef `yaml:"policies,omitempty"`
 }
 
 type HumanPolicyDef struct {
@@ -530,6 +531,7 @@ type HumanPolicyMemberDef struct {
 
 type WorkloadDef struct {
 	DisplayName string                         `yaml:"displayName,omitempty"`
+	IdentityID  string                         `yaml:"identityID,omitempty"`
 	Token       string                         `yaml:"token"`
 	Providers   map[string]WorkloadProviderDef `yaml:"providers,omitempty"`
 }
@@ -1848,11 +1850,19 @@ func normalizeAuthorizationConfig(cfg *Config) error {
 	if cfg == nil {
 		return nil
 	}
-	cfg.Authorization = normalizedAuthorizationConfig(cfg.Authorization)
+	normalized, err := NormalizedAuthorizationConfig(cfg.Authorization)
+	if err != nil {
+		return err
+	}
+	cfg.Authorization = normalized
 	return nil
 }
 
-func normalizedAuthorizationConfig(cfg AuthorizationConfig) AuthorizationConfig {
+func NormalizedAuthorizationConfig(cfg AuthorizationConfig) (AuthorizationConfig, error) {
+	return normalizedAuthorizationConfig(cfg)
+}
+
+func normalizedAuthorizationConfig(cfg AuthorizationConfig) (AuthorizationConfig, error) {
 	if len(cfg.Policies) == 0 {
 		cfg.Policies = nil
 	} else {
@@ -1862,16 +1872,49 @@ func normalizedAuthorizationConfig(cfg AuthorizationConfig) AuthorizationConfig 
 		}
 		cfg.Policies = policies
 	}
-	if len(cfg.Workloads) == 0 {
-		cfg.Workloads = nil
-	} else {
-		workloads := make(map[string]WorkloadDef, len(cfg.Workloads))
-		for name, workload := range cfg.Workloads {
-			workloads[name] = normalizedWorkloadDef(workload)
+	identityTokens := make(map[string]WorkloadDef, len(cfg.IdentityTokens)+len(cfg.Workloads))
+	addIdentityToken := func(source, name string, identityToken WorkloadDef) error {
+		name = strings.TrimSpace(name)
+		identityToken = normalizedWorkloadDef(identityToken)
+		identityID := strings.TrimSpace(identityToken.IdentityID)
+		switch source {
+		case "identityTokens":
+			if identityID == "" {
+				identityID = name
+			} else if identityID != name {
+				return fmt.Errorf("normalize authorization config: authorization.identityTokens.%s identityID %q must match map key", name, identityID)
+			}
+		case "workloads":
+			if identityID == "" {
+				identityID = name
+			}
+		default:
+			return fmt.Errorf("normalize authorization config: unsupported identity token source %q", source)
 		}
-		cfg.Workloads = workloads
+		identityToken.IdentityID = identityID
+		if _, exists := identityTokens[identityID]; exists {
+			return fmt.Errorf("normalize authorization config: authorization.%s.%s duplicates authorization.identityTokens.%s", source, name, identityID)
+		}
+		identityTokens[identityID] = identityToken
+		return nil
 	}
-	return cfg
+	for name, identityToken := range cfg.IdentityTokens {
+		if err := addIdentityToken("identityTokens", name, identityToken); err != nil {
+			return AuthorizationConfig{}, err
+		}
+	}
+	for name, identityToken := range cfg.Workloads {
+		if err := addIdentityToken("workloads", name, identityToken); err != nil {
+			return AuthorizationConfig{}, err
+		}
+	}
+	if len(identityTokens) == 0 {
+		cfg.IdentityTokens = nil
+	} else {
+		cfg.IdentityTokens = identityTokens
+	}
+	cfg.Workloads = nil
+	return cfg, nil
 }
 
 func normalizeAdminConfig(cfg *Config) error {
@@ -1910,6 +1953,7 @@ func normalizedHumanPolicyDef(policy HumanPolicyDef) HumanPolicyDef {
 }
 
 func normalizedWorkloadDef(workload WorkloadDef) WorkloadDef {
+	workload.IdentityID = strings.TrimSpace(workload.IdentityID)
 	if len(workload.Providers) == 0 {
 		workload.Providers = nil
 		return workload

@@ -525,7 +525,8 @@ func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing
 	authz, err := authorization.New(config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
-				Token: "gst_wld_triage-bot-token",
+				IdentityID: "triage-bot",
+				Token:      "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{
 					"clash-api": {
 						Connection: "default",

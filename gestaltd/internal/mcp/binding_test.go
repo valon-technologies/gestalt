@@ -979,7 +979,8 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
-				Token: "gst_wld_triage-bot-token",
+				IdentityID: "triage-bot",
+				Token:      "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{
 					"clickhouse": {
 						Connection: "workspace",
@@ -1686,7 +1687,8 @@ func TestNewServer_WorkloadCallToolDeniedReturnsErrorResult(t *testing.T) {
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
-				Token: "gst_wld_triage-bot-token",
+				IdentityID: "triage-bot",
+				Token:      "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{
 					"clickhouse": {
 						Allow: []string{"run_query"},
@@ -1753,7 +1755,8 @@ func TestNewServer_WorkloadCallToolDeniedForUnboundSessionOnlyProvider(t *testin
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
-				Token: "gst_wld_triage-bot-token",
+				IdentityID: "triage-bot",
+				Token:      "gst_wld_triage-bot-token",
 			},
 		},
 	}, providers)
@@ -1829,9 +1832,9 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	ctx := context.Background()
-	if err := ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
+	if err := ds.Tokens.StoreIdentityToken(ctx, &core.IntegrationToken{
 		ID:          "tok-identity",
-		UserID:      principal.IdentityPrincipal,
+		IdentityID:  "triage-bot",
 		Integration: "clickhouse",
 		Connection:  "workspace",
 		Instance:    "team-a",
@@ -1843,7 +1846,8 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
-				Token: "gst_wld_triage-bot-token",
+				IdentityID: "triage-bot",
+				Token:      "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{
 					"clickhouse": {
 						Connection: "workspace",
@@ -1922,9 +1926,9 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	ctx := context.Background()
-	if err := ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
+	if err := ds.Tokens.StoreIdentityToken(ctx, &core.IntegrationToken{
 		ID:          "tok-identity",
-		UserID:      principal.IdentityPrincipal,
+		IdentityID:  "triage-bot",
 		Integration: "sampledb",
 		Connection:  "workspace",
 		Instance:    "team-a",
@@ -1936,7 +1940,8 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
-				Token: "gst_wld_triage-bot-token",
+				IdentityID: "triage-bot",
+				Token:      "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{
 					"sampledb": {
 						Connection: "workspace",

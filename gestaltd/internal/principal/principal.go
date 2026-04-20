@@ -80,8 +80,11 @@ func WorkloadSubjectID(workloadID string) string {
 	return string(KindWorkload) + ":" + workloadID
 }
 
-func IdentitySubjectID() string {
-	return "identity:" + IdentityPrincipal
+func IdentitySubjectID(identityID string) string {
+	if identityID == "" {
+		return ""
+	}
+	return "identity:" + identityID
 }
 
 func ManagedIdentitySubjectID(identityID string) string {

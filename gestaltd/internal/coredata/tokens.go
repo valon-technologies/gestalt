@@ -2,9 +2,11 @@ package coredata
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -119,6 +121,95 @@ func (s *TokenService) ListTokensForConnection(ctx context.Context, userID, inte
 	return s.recordsToTokens(recs)
 }
 
+func (s *TokenService) IdentityToken(ctx context.Context, identityID, integration, connection, instance string) (*core.IntegrationToken, error) {
+	if s.externalCredentials == nil {
+		return nil, core.ErrNotFound
+	}
+	credential, err := s.externalCredentials.GetCredential(ctx, identityID, integration, connection, instance)
+	if err != nil {
+		return nil, err
+	}
+	return s.credentialToToken(credential)
+}
+
+func (s *TokenService) ListIdentityTokensForConnection(ctx context.Context, identityID, integration, connection string) ([]*core.IntegrationToken, error) {
+	if s.externalCredentials == nil {
+		return nil, nil
+	}
+	credentials, err := s.externalCredentials.ListByIdentityConnection(ctx, identityID, integration, connection)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*core.IntegrationToken, 0, len(credentials))
+	for _, credential := range credentials {
+		token, err := s.credentialToToken(credential)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, token)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
+			return out[i].UpdatedAt.After(out[j].UpdatedAt)
+		}
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].CreatedAt.After(out[j].CreatedAt)
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+func (s *TokenService) StoreIdentityToken(ctx context.Context, token *core.IntegrationToken) error {
+	if s.externalCredentials == nil {
+		return fmt.Errorf("store identity token: external credentials store is not configured")
+	}
+	if token == nil {
+		return fmt.Errorf("store identity token: token is required")
+	}
+	if strings.TrimSpace(token.IdentityID) == "" || strings.TrimSpace(token.Integration) == "" || strings.TrimSpace(token.Connection) == "" {
+		return fmt.Errorf("store identity token: identity_id, integration, and connection are required")
+	}
+	accessEnc, refreshEnc, err := s.enc.EncryptTokenPair(token.AccessToken, token.RefreshToken)
+	if err != nil {
+		return fmt.Errorf("encrypt token pair: %w", err)
+	}
+	payloadEncrypted, err := encodeLegacyCredentialPayload(accessEnc, refreshEnc)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	if token.ID == "" {
+		token.ID = uuid.New().String()
+	}
+	if token.CreatedAt.IsZero() {
+		token.CreatedAt = now
+	}
+	if token.UpdatedAt.IsZero() {
+		token.UpdatedAt = now
+	}
+	credential := &core.ExternalCredential{
+		ID:                token.ID,
+		IdentityID:        strings.TrimSpace(token.IdentityID),
+		Plugin:            strings.TrimSpace(token.Integration),
+		Connection:        strings.TrimSpace(token.Connection),
+		Instance:          strings.TrimSpace(token.Instance),
+		AuthType:          externalCredentialAuthType(token),
+		PayloadEncrypted:  payloadEncrypted,
+		Scopes:            token.Scopes,
+		ExpiresAt:         token.ExpiresAt,
+		LastRefreshedAt:   token.LastRefreshedAt,
+		RefreshErrorCount: token.RefreshErrorCount,
+		MetadataJSON:      token.MetadataJSON,
+		CreatedAt:         token.CreatedAt,
+		UpdatedAt:         token.UpdatedAt,
+	}
+	if _, err := s.externalCredentials.UpsertCredential(ctx, credential); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *TokenService) DeleteToken(ctx context.Context, id string) error {
 	if id == "" {
 		return s.store.Delete(ctx, id)
@@ -178,6 +269,47 @@ func (s *TokenService) recordToToken(rec indexeddb.Record) (*core.IntegrationTok
 		MetadataJSON:      recString(rec, "metadata_json"),
 		CreatedAt:         recTime(rec, "created_at"),
 		UpdatedAt:         recTime(rec, "updated_at"),
+	}, nil
+}
+
+func decodeLegacyCredentialPayload(payload string) (string, string, error) {
+	if strings.TrimSpace(payload) == "" {
+		return "", "", nil
+	}
+	var stored map[string]string
+	if err := json.Unmarshal([]byte(payload), &stored); err != nil {
+		return "", "", fmt.Errorf("decode credential payload: %w", err)
+	}
+	return stored["access_token_encrypted"], stored["refresh_token_encrypted"], nil
+}
+
+func (s *TokenService) credentialToToken(credential *core.ExternalCredential) (*core.IntegrationToken, error) {
+	if credential == nil {
+		return nil, core.ErrNotFound
+	}
+	accessEnc, refreshEnc, err := decodeLegacyCredentialPayload(credential.PayloadEncrypted)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errUnreadableStoredIntegrationToken, err)
+	}
+	access, refresh, err := s.enc.DecryptTokenPair(accessEnc, refreshEnc)
+	if err != nil {
+		return nil, fmt.Errorf("%w: decrypt token pair: %v", errUnreadableStoredIntegrationToken, err)
+	}
+	return &core.IntegrationToken{
+		ID:                credential.ID,
+		IdentityID:        credential.IdentityID,
+		Integration:       credential.Plugin,
+		Connection:        credential.Connection,
+		Instance:          credential.Instance,
+		AccessToken:       access,
+		RefreshToken:      refresh,
+		Scopes:            credential.Scopes,
+		ExpiresAt:         credential.ExpiresAt,
+		LastRefreshedAt:   credential.LastRefreshedAt,
+		RefreshErrorCount: credential.RefreshErrorCount,
+		MetadataJSON:      credential.MetadataJSON,
+		CreatedAt:         credential.CreatedAt,
+		UpdatedAt:         credential.UpdatedAt,
 	}, nil
 }
 

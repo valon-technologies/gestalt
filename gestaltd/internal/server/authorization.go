@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
@@ -76,7 +77,10 @@ func (s *Server) workloadBindingConnected(ctx context.Context, binding authoriza
 	case core.ConnectionModeNone:
 		return true, nil
 	case core.ConnectionModeIdentity:
-		_, err := s.tokens.Token(ctx, binding.CredentialOwnerID, provider, binding.Connection, binding.Instance)
+		if strings.TrimSpace(binding.CredentialOwnerID) == "" {
+			return false, errors.New("workload binding missing identity owner")
+		}
+		_, err := s.tokens.IdentityToken(ctx, binding.CredentialOwnerID, provider, binding.Connection, binding.Instance)
 		switch {
 		case err == nil:
 			return true, nil
