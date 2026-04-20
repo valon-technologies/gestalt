@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -100,7 +101,7 @@ func TestLoadDefinitionAllOps(t *testing.T) {
 	srv := startIntrospectionServer(t, newTestSchema())
 	defer srv.Close()
 
-	def, err := LoadDefinition(t.Context(), "test", srv.URL, nil)
+	def, err := LoadDefinition(t.Context(), "test", srv.URL, nil, nil)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -141,7 +142,7 @@ func TestLoadDefinitionWithAllowedOps(t *testing.T) {
 
 	def, err := LoadDefinition(t.Context(), "test", srv.URL, map[string]*config.OperationOverride{
 		"teams": {Description: "My custom description"},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -156,6 +157,33 @@ func TestLoadDefinitionWithAllowedOps(t *testing.T) {
 	}
 }
 
+func TestLoadDefinitionWithSelectionOverride(t *testing.T) {
+	t.Parallel()
+
+	srv := startIntrospectionServer(t, newTestSchema())
+	defer srv.Close()
+
+	def, err := LoadDefinition(t.Context(), "test", srv.URL, nil, map[string]string{
+		"createIssue": "success issue { id title }",
+	})
+	if err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+
+	createIssue, ok := def.Operations["createIssue"]
+	if !ok {
+		t.Fatal("createIssue missing from Operations")
+	}
+	if !strings.Contains(createIssue.Query, "{ success issue { id title } }") {
+		t.Errorf("createIssue.Query should use override selection; got: %s", createIssue.Query)
+	}
+
+	teams := def.Operations["teams"]
+	if strings.Contains(teams.Query, "success issue") {
+		t.Errorf("override should only apply to named op; teams query: %s", teams.Query)
+	}
+}
+
 func TestLoadDefinitionEmptySchemaErrors(t *testing.T) {
 	t.Parallel()
 
@@ -167,7 +195,7 @@ func TestLoadDefinitionEmptySchemaErrors(t *testing.T) {
 	})
 	defer srv.Close()
 
-	_, err := LoadDefinition(t.Context(), "test", srv.URL, nil)
+	_, err := LoadDefinition(t.Context(), "test", srv.URL, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for empty schema")
 	}

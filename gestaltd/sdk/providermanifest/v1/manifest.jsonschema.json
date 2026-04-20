@@ -462,6 +462,13 @@
         "url": {
           "type": "string",
           "minLength": 1
+        },
+        "operationSelections": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
