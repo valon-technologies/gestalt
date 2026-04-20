@@ -208,15 +208,26 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			wantSessionCatalog: "token-123|user:user-123|user|Ada|true|api_token|identity|roadmap|admin",
 		},
 		{
-			name: "workload subject",
+			name: "identity token subject",
 			principal: &principal.Principal{
 				SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 				DisplayName: "Triage Bot",
-				Kind:        principal.KindWorkload,
-				Source:      principal.SourceWorkloadToken,
+				Kind:        principal.KindIdentity,
+				Source:      principal.SourceIdentityToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|workload:triage-bot|workload|Triage Bot|false|workload_token|identity|identity:__identity__|roadmap|admin",
-			wantSessionCatalog: "token-123|workload:triage-bot|workload|Triage Bot|false|workload_token|identity|roadmap|admin",
+			wantExecuteBody:    "echo|secret-token|hi|acme|identity:triage-bot|identity|Triage Bot|false|identity_token|identity|identity:__identity__|roadmap|admin",
+			wantSessionCatalog: "token-123|identity:triage-bot|identity|Triage Bot|false|identity_token|identity|roadmap|admin",
+		},
+		{
+			name: "managed identity subject",
+			principal: &principal.Principal{
+				SubjectID:   principal.ManagedIdentitySubjectID("release-bot"),
+				DisplayName: "Release Bot",
+				Kind:        principal.KindIdentity,
+				Source:      principal.SourceAPIToken,
+			},
+			wantExecuteBody:    "echo|secret-token|hi|acme|identity:release-bot|identity|Release Bot|false|api_token|identity|identity:__identity__|roadmap|admin",
+			wantSessionCatalog: "token-123|identity:release-bot|identity|Release Bot|false|api_token|identity|roadmap|admin",
 		},
 	}
 
@@ -291,8 +302,8 @@ func TestRequestContextProto_PreservesWorkloadDisplayName(t *testing.T) {
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 		DisplayName: "Triage Bot",
-		Kind:        principal.KindWorkload,
-		Source:      principal.SourceWorkloadToken,
+		Kind:        principal.KindIdentity,
+		Source:      principal.SourceIdentityToken,
 	})
 	ctx = invocation.WithAccessContext(ctx, invocation.AccessContext{
 		Policy: "roadmap",
@@ -346,9 +357,9 @@ func TestPrincipalFromProto_WorkloadDisplayNameDoesNotCreateIdentity(t *testing.
 
 	p := principalFromProto(&proto.SubjectContext{
 		Id:          principal.WorkloadSubjectID("triage-bot"),
-		Kind:        string(principal.KindWorkload),
+		Kind:        string(principal.KindIdentity),
 		DisplayName: "Triage Bot",
-		AuthSource:  principal.SourceWorkloadToken.String(),
+		AuthSource:  principal.SourceIdentityToken.String(),
 	})
 	if p == nil {
 		t.Fatal("expected principal")
@@ -358,6 +369,29 @@ func TestPrincipalFromProto_WorkloadDisplayNameDoesNotCreateIdentity(t *testing.
 	}
 	if p.Identity != nil {
 		t.Fatalf("expected workload identity to remain nil, got %#v", p.Identity)
+	}
+}
+
+func TestPrincipalFromProto_ManagedIdentityKindRoundTrips(t *testing.T) {
+	t.Parallel()
+
+	p := principalFromProto(&proto.SubjectContext{
+		Id:          principal.ManagedIdentitySubjectID("release-bot"),
+		Kind:        string(principal.KindIdentity),
+		DisplayName: "Release Bot",
+		AuthSource:  principal.SourceAPIToken.String(),
+	})
+	if p == nil {
+		t.Fatal("expected principal")
+	}
+	if p.Kind != principal.KindIdentity {
+		t.Fatalf("kind = %q, want %q", p.Kind, principal.KindIdentity)
+	}
+	if p.DisplayName != "Release Bot" {
+		t.Fatalf("display name = %q, want %q", p.DisplayName, "Release Bot")
+	}
+	if p.Identity != nil {
+		t.Fatalf("expected managed identity principal to remain non-human, got %#v", p.Identity)
 	}
 }
 

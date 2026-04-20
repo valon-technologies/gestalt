@@ -3640,7 +3640,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if result.Authorizer == nil {
 			t.Fatal("Authorizer is nil")
 		}
-		if _, ok := result.Authorizer.ResolveWorkloadToken("gst_wld_resolved-workload-token"); !ok {
+		if _, ok := result.Authorizer.ResolveIdentityToken("gst_wld_resolved-workload-token"); !ok {
 			t.Fatal("expected resolved identity token to authenticate")
 		}
 	})
@@ -4387,7 +4387,7 @@ func TestBootstrapWorkloadAuthorizationRejectsEitherProvider(t *testing.T) {
 
 	cfg := validConfig()
 	cfg.Authorization = config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{

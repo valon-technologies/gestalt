@@ -144,7 +144,7 @@ func withSessionAccessContext(ctx context.Context, cfg Config, provName string) 
 		return ctx
 	}
 	p := principal.FromContext(ctx)
-	if p == nil || cfg.Authorizer.IsWorkload(p) {
+	if p == nil || !p.HasUserContext() {
 		return ctx
 	}
 	access, allowed := cfg.Authorizer.ResolveAccess(ctx, p, provName)
@@ -389,7 +389,7 @@ func internalSessionToolHandler(context.Context, mcpgo.CallToolRequest) (*mcpgo.
 func sessionTokenSelectors(cfg Config, p *principal.Principal, provName, instanceOverride string) (string, string) {
 	connection := cfg.MCPConnection[provName]
 	instance := normalizedSessionCatalogInstance(instanceOverride)
-	if cfg.Authorizer == nil || !cfg.Authorizer.IsWorkload(p) {
+	if cfg.Authorizer == nil || p == nil || p.HasUserContext() {
 		return connection, instance
 	}
 	if binding, ok := cfg.Authorizer.Binding(p, provName); ok {
@@ -436,6 +436,6 @@ func normalizedSessionCatalogInstance(value any) string {
 	return strings.TrimSpace(instance)
 }
 
-func workloadInstanceOverrideRequested(authz authorization.RuntimeAuthorizer, p *principal.Principal, instance string) bool {
-	return authz != nil && p != nil && authz.IsWorkload(p) && instance != ""
+func headlessInstanceOverrideRequested(authz authorization.RuntimeAuthorizer, p *principal.Principal, instance string) bool {
+	return authz != nil && p != nil && !p.HasUserContext() && instance != ""
 }

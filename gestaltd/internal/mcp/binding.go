@@ -80,7 +80,7 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 		hooks.AddBeforeCallTool(func(ctx context.Context, _ any, req *mcpgo.CallToolRequest) {
 			if provName := providerNameForTool(cfg.ToolPrefixes, dynamicProviders, req.Params.Name); provName != "" {
 				instance := normalizedSessionCatalogInstance(req.GetArguments()["_instance"])
-				if workloadInstanceOverrideRequested(cfg.Authorizer, principal.FromContext(ctx), instance) {
+				if headlessInstanceOverrideRequested(cfg.Authorizer, principal.FromContext(ctx), instance) {
 					return
 				}
 				hydrateSessionToolsForInstance(ctx, cfg, []string{provName}, staticToolNames, instance)

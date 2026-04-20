@@ -566,9 +566,9 @@ func TestWorkflowServerPrefersWorkflowCreatorForWorkflowMutations(t *testing.T) 
 	srv := NewWorkflowServer("roadmap", staticWorkflowResolver(provider, map[string]struct{}{"refresh": {}}, nil, nil, nil))
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		SubjectID:   principal.WorkloadSubjectID("planner"),
-		Kind:        principal.KindWorkload,
+		Kind:        principal.KindIdentity,
 		DisplayName: "Planner",
-		Source:      principal.SourceWorkloadToken,
+		Source:      principal.SourceIdentityToken,
 	})
 	ctx = invocation.WithWorkflowContext(ctx, map[string]any{
 		"createdBy": map[string]any{

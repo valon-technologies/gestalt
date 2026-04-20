@@ -438,9 +438,9 @@ func (r *workflowRuntime) AugmentAuthorization(cfg config.AuthorizationConfig) (
 
 func workflowWorkloadPrincipal(pluginName string) *principal.Principal {
 	return &principal.Principal{
-		Kind:      principal.KindWorkload,
-		SubjectID: principal.WorkloadSubjectID(workflowWorkloadID(pluginName)),
-		Source:    principal.SourceWorkloadToken,
+		Kind:      principal.KindIdentity,
+		SubjectID: principal.IdentitySubjectID(workflowWorkloadID(pluginName)),
+		Source:    principal.SourceIdentityToken,
 	}
 }
 
@@ -459,7 +459,7 @@ func workflowWorkloadDisplayName(pluginName string) string {
 func workflowWorkloadToken() (string, error) {
 	var raw [16]byte
 	if _, err := rand.Read(raw[:]); err != nil {
-		return "", fmt.Errorf("generate managed workflow workload token: %w", err)
+		return "", fmt.Errorf("generate managed workflow identity token: %w", err)
 	}
 	return "gst_wld_" + hex.EncodeToString(raw[:]), nil
 }

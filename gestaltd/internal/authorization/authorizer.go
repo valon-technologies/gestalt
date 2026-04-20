@@ -176,7 +176,7 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 		}
 
 		a.workloadsByHash[tokenHash] = workload
-		a.workloadsBySubjectID[principal.WorkloadSubjectID(identityID)] = workload
+		a.workloadsBySubjectID[principal.IdentitySubjectID(identityID)] = workload
 	}
 
 	return a, nil
@@ -196,7 +196,7 @@ func (a *Authorizer) ReloadAuthorizationState(ctx context.Context) error {
 	return nil
 }
 
-func (a *Authorizer) ResolveWorkloadToken(token string) (*principal.ResolvedWorkload, bool) {
+func (a *Authorizer) ResolveIdentityToken(token string) (*principal.ResolvedIdentityToken, bool) {
 	if a == nil {
 		return nil, false
 	}
@@ -204,60 +204,59 @@ func (a *Authorizer) ResolveWorkloadToken(token string) (*principal.ResolvedWork
 	if !ok || workload == nil {
 		return nil, false
 	}
-	return &principal.ResolvedWorkload{ID: workload.ID, DisplayName: workload.DisplayName}, true
-}
-
-func (a *Authorizer) IsWorkload(p *principal.Principal) bool {
-	return p != nil && p.Kind == principal.KindWorkload
+	return &principal.ResolvedIdentityToken{ID: workload.ID, DisplayName: workload.DisplayName}, true
 }
 
 func (a *Authorizer) AllowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
+	if a.isConfiguredIdentityToken(p) {
+		_, ok := a.bindingForSubject(p, provider)
+		return ok
+	}
 	if a.isManagedIdentityPrincipal(p) {
 		return a.allowManagedIdentityProvider(p, provider)
 	}
-	if !a.IsWorkload(p) {
-		_, allowed := a.ResolveAccess(ctx, p, provider)
-		return allowed
-	}
-	_, ok := a.bindingForSubject(p, provider)
-	return ok
+	_, allowed := a.ResolveAccess(ctx, p, provider)
+	return allowed
 }
 
 func (a *Authorizer) AllowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
+	if a.isConfiguredIdentityToken(p) {
+		binding, ok := a.bindingForSubject(p, provider)
+		if !ok {
+			return false
+		}
+		_, ok = binding.Allow[operation]
+		return ok
+	}
 	if a.isManagedIdentityPrincipal(p) {
 		return a.allowManagedIdentityProvider(p, provider) && principal.AllowsOperationPermission(p, provider, operation)
 	}
-	if !a.IsWorkload(p) {
-		return a.AllowProvider(ctx, p, provider)
-	}
-	binding, ok := a.bindingForSubject(p, provider)
-	if !ok {
-		return false
-	}
-	_, ok = binding.Allow[operation]
-	return ok
+	return a.AllowProvider(ctx, p, provider)
 }
 
 func (a *Authorizer) Binding(p *principal.Principal, provider string) (CredentialBinding, bool) {
+	if a.isConfiguredIdentityToken(p) {
+		binding, ok := a.bindingForSubject(p, provider)
+		if !ok {
+			return CredentialBinding{}, false
+		}
+		return binding.CredentialBinding, true
+	}
 	if a.isManagedIdentityPrincipal(p) {
 		if !a.allowManagedIdentityProvider(p, provider) {
 			return CredentialBinding{}, false
 		}
 		return CredentialBinding{Mode: core.ConnectionModeNone}, true
 	}
-	if !a.IsWorkload(p) {
-		return CredentialBinding{}, false
-	}
-	binding, ok := a.bindingForSubject(p, provider)
-	if !ok {
-		return CredentialBinding{}, false
-	}
-	return binding.CredentialBinding, true
+	return CredentialBinding{}, false
 }
 
 func (a *Authorizer) ResolveAccess(_ context.Context, p *principal.Principal, provider string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, true
+	}
+	if a.isConfiguredIdentityToken(p) {
+		return AccessContext{}, a.AllowProvider(context.Background(), p, provider)
 	}
 	if a.isManagedIdentityPrincipal(p) {
 		return AccessContext{}, a.allowManagedIdentityProvider(p, provider)
@@ -265,9 +264,6 @@ func (a *Authorizer) ResolveAccess(_ context.Context, p *principal.Principal, pr
 	policyName := strings.TrimSpace(a.providerPolicies[provider])
 	if policyName == "" {
 		return AccessContext{}, true
-	}
-	if a.IsWorkload(p) {
-		return a.ResolvePolicyAccess(context.Background(), p, policyName)
 	}
 
 	policy := a.policies[policyName]
@@ -372,7 +368,7 @@ func (a *Authorizer) ResolvePolicyAccess(_ context.Context, p *principal.Princip
 	if policyName == "" {
 		return AccessContext{}, true
 	}
-	if a.IsWorkload(p) {
+	if p != nil && !p.HasUserContext() {
 		return AccessContext{Policy: policyName}, false
 	}
 	policy := a.policies[policyName]
@@ -399,7 +395,7 @@ func (a *Authorizer) ResolveAdminAccess(_ context.Context, p *principal.Principa
 	if policyName == "" {
 		return AccessContext{}, true
 	}
-	if a.IsWorkload(p) {
+	if p != nil && !p.HasUserContext() {
 		return AccessContext{Policy: policyName}, false
 	}
 	policy := a.policies[policyName]
@@ -419,11 +415,11 @@ func (a *Authorizer) ResolveAdminAccess(_ context.Context, p *principal.Principa
 }
 
 func (a *Authorizer) AllowCatalogOperation(ctx context.Context, p *principal.Principal, provider string, op catalog.CatalogOperation) bool {
+	if a.isConfiguredIdentityToken(p) {
+		return a.AllowOperation(ctx, p, provider, op.ID)
+	}
 	if a.isManagedIdentityPrincipal(p) {
 		return a.allowManagedIdentityProvider(p, provider) && principal.AllowsOperationPermission(p, provider, op.ID)
-	}
-	if a.IsWorkload(p) {
-		return a.AllowOperation(ctx, p, provider, op.ID)
 	}
 	access, allowed := a.ResolveAccess(ctx, p, provider)
 	if !allowed {
@@ -448,7 +444,7 @@ func (a *Authorizer) AllowCatalogOperation(ctx context.Context, p *principal.Pri
 }
 
 func (a *Authorizer) bindingForSubject(p *principal.Principal, provider string) (WorkloadProviderBinding, bool) {
-	if a == nil || p == nil || p.SubjectID == "" {
+	if a == nil || !a.isConfiguredIdentityToken(p) || p.SubjectID == "" {
 		return WorkloadProviderBinding{}, false
 	}
 	workload, ok := a.workloadsBySubjectID[p.SubjectID]
@@ -496,7 +492,7 @@ func buildBinding(mode core.ConnectionMode, workloadID, identityID, provider str
 	switch mode {
 	case core.ConnectionModeNone:
 		if strings.TrimSpace(def.Connection) != "" || strings.TrimSpace(def.Instance) != "" {
-			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q does not accept connection or instance bindings", workloadID, provider)
+			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: identity token %q provider %q does not accept connection or instance bindings", workloadID, provider)
 		}
 		return WorkloadProviderBinding{
 			CredentialBinding: CredentialBinding{
@@ -506,10 +502,10 @@ func buildBinding(mode core.ConnectionMode, workloadID, identityID, provider str
 	case core.ConnectionModeIdentity:
 		ownerIdentityID := strings.TrimSpace(identityID)
 		if ownerIdentityID == "" {
-			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q requires identityID for identity-mode credentials", workloadID, provider)
+			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: identity token %q provider %q requires identity ownership for identity-mode credentials", workloadID, provider)
 		}
 		if !safeConnectionValue.MatchString(ownerIdentityID) {
-			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q identityID contains invalid characters", workloadID)
+			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: identity token %q identity ID contains invalid characters", workloadID)
 		}
 		connection := strings.TrimSpace(def.Connection)
 		if connection == "" {
@@ -517,10 +513,10 @@ func buildBinding(mode core.ConnectionMode, workloadID, identityID, provider str
 		}
 		connection = config.ResolveConnectionAlias(connection)
 		if connection == "" {
-			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q requires a bound connection", workloadID, provider)
+			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: identity token %q provider %q requires a bound connection", workloadID, provider)
 		}
 		if !safeConnectionValue.MatchString(connection) {
-			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q connection contains invalid characters", workloadID, provider)
+			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: identity token %q provider %q connection contains invalid characters", workloadID, provider)
 		}
 
 		instance := strings.TrimSpace(def.Instance)
@@ -528,7 +524,7 @@ func buildBinding(mode core.ConnectionMode, workloadID, identityID, provider str
 			instance = defaultInstance
 		}
 		if !safeInstanceValue.MatchString(instance) {
-			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q instance contains invalid characters", workloadID, provider)
+			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: identity token %q provider %q instance contains invalid characters", workloadID, provider)
 		}
 		return WorkloadProviderBinding{
 			CredentialBinding: CredentialBinding{
@@ -540,9 +536,9 @@ func buildBinding(mode core.ConnectionMode, workloadID, identityID, provider str
 			},
 		}, nil
 	case core.ConnectionModeUser, core.ConnectionMode("either"), "":
-		return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q uses unsupported connection mode %q in v1", workloadID, provider, mode)
+		return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: identity token %q provider %q uses unsupported connection mode %q in v1", workloadID, provider, mode)
 	default:
-		return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q uses unknown connection mode %q", workloadID, provider, mode)
+		return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: identity token %q provider %q uses unknown connection mode %q", workloadID, provider, mode)
 	}
 }
 
@@ -563,7 +559,11 @@ func normalizeEmail(email string) string {
 }
 
 func (a *Authorizer) isManagedIdentityPrincipal(p *principal.Principal) bool {
-	return a.IsWorkload(p) && principal.ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID)) != ""
+	return p != nil && p.Kind == principal.KindIdentity && p.Source == principal.SourceAPIToken
+}
+
+func (a *Authorizer) isConfiguredIdentityToken(p *principal.Principal) bool {
+	return p != nil && p.Kind == principal.KindIdentity && p.Source == principal.SourceIdentityToken
 }
 
 func (a *Authorizer) allowManagedIdentityProvider(p *principal.Principal, provider string) bool {

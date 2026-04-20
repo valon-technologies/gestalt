@@ -172,5 +172,5 @@ func restoreRequestSnapshotContext(ctx context.Context, snapshot requestSnapshot
 }
 
 func shouldInheritCredentialSelectors(snapshot requestSnapshot) bool {
-	return snapshot.principal == nil || snapshot.principal.Kind != principal.KindWorkload
+	return snapshot.principal == nil || snapshot.principal.HasUserContext()
 }

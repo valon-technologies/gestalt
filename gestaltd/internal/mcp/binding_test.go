@@ -140,9 +140,9 @@ func ctxWithIdentityPrincipal(email, userID string) context.Context {
 
 func ctxWithWorkloadPrincipal(workloadID string) context.Context {
 	p := &principal.Principal{
-		Kind:      principal.KindWorkload,
+		Kind:      principal.KindIdentity,
 		SubjectID: principal.WorkloadSubjectID(workloadID),
-		Source:    principal.SourceWorkloadToken,
+		Source:    principal.SourceIdentityToken,
 	}
 	return principal.WithPrincipal(context.Background(), p)
 }
@@ -977,10 +977,9 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
-				IdentityID: "triage-bot",
-				Token:      "gst_wld_triage-bot-token",
+				Token: "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{
 					"clickhouse": {
 						Connection: "workspace",
@@ -1000,8 +999,8 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 		},
 		TokenResolver: &stubTokenResolver{
 			resolveFn: func(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
-				if p == nil || p.Kind != principal.KindWorkload {
-					t.Fatalf("expected workload principal, got %+v", p)
+				if p == nil || p.Kind != principal.KindIdentity || p.Source != principal.SourceIdentityToken {
+					t.Fatalf("expected identity-token principal, got %+v", p)
 				}
 				if providerName != "clickhouse" {
 					t.Fatalf("providerName = %q, want %q", providerName, "clickhouse")
@@ -1685,10 +1684,9 @@ func TestNewServer_WorkloadCallToolDeniedReturnsErrorResult(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
-				IdentityID: "triage-bot",
-				Token:      "gst_wld_triage-bot-token",
+				Token: "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{
 					"clickhouse": {
 						Allow: []string{"run_query"},
@@ -1753,10 +1751,9 @@ func TestNewServer_WorkloadCallToolDeniedForUnboundSessionOnlyProvider(t *testin
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
-				IdentityID: "triage-bot",
-				Token:      "gst_wld_triage-bot-token",
+				Token: "gst_wld_triage-bot-token",
 			},
 		},
 	}, providers)
@@ -1844,10 +1841,9 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 	}
 
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
-				IdentityID: "triage-bot",
-				Token:      "gst_wld_triage-bot-token",
+				Token: "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{
 					"clickhouse": {
 						Connection: "workspace",
@@ -1938,10 +1934,9 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 	}
 
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
-				IdentityID: "triage-bot",
-				Token:      "gst_wld_triage-bot-token",
+				Token: "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{
 					"sampledb": {
 						Connection: "workspace",
@@ -1970,7 +1965,7 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 		t.Fatalf("expected MCP error result, got %+v", result)
 	}
 	text, ok := result.Content[0].(mcpgo.TextContent)
-	if !ok || text.Text != "workload callers may not override connection or instance bindings" {
+	if !ok || text.Text != "identity-token callers may not override connection or instance bindings" {
 		t.Fatalf("unexpected MCP error content: %+v", result.Content)
 	}
 	if called {

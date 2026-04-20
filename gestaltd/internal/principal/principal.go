@@ -14,18 +14,20 @@ const (
 	SourceUnknown Source = iota
 	SourceSession
 	SourceAPIToken
-	SourceWorkloadToken
+	SourceIdentityToken
 	SourceEnv
 )
 
+const SourceWorkloadToken Source = SourceIdentityToken
+
 const IdentityPrincipal = "__identity__"
-const managedIdentitySubjectPrefix = "managed_identity:"
+const managedIdentityLegacySubjectPrefix = "managed_identity:"
 
 type Kind string
 
 const (
 	KindUser     Kind = "user"
-	KindWorkload Kind = "workload"
+	KindIdentity Kind = "identity"
 )
 
 type Principal struct {
@@ -47,8 +49,8 @@ func (s Source) String() string {
 		return "session"
 	case SourceAPIToken:
 		return "api_token"
-	case SourceWorkloadToken:
-		return "workload_token"
+	case SourceIdentityToken:
+		return "identity_token"
 	case SourceEnv:
 		return "env"
 	default:
@@ -66,10 +68,6 @@ func (p *Principal) AuthSource() string {
 	return p.Source.String()
 }
 
-func (p *Principal) IsWorkload() bool {
-	return p != nil && p.Kind == KindWorkload
-}
-
 func (p *Principal) HasUserContext() bool {
 	if p == nil {
 		return false
@@ -79,7 +77,6 @@ func (p *Principal) HasUserContext() bool {
 	}
 	return p.Identity != nil && strings.TrimSpace(p.Identity.Email) != ""
 }
-
 func UserSubjectID(userID string) string {
 	if userID == "" {
 		return ""
@@ -88,10 +85,7 @@ func UserSubjectID(userID string) string {
 }
 
 func WorkloadSubjectID(workloadID string) string {
-	if workloadID == "" {
-		return ""
-	}
-	return string(KindWorkload) + ":" + workloadID
+	return IdentitySubjectID(workloadID)
 }
 
 func IdentitySubjectID(identityID string) string {
@@ -102,17 +96,18 @@ func IdentitySubjectID(identityID string) string {
 }
 
 func ManagedIdentitySubjectID(identityID string) string {
-	if identityID == "" {
-		return ""
-	}
-	return managedIdentitySubjectPrefix + identityID
+	return IdentitySubjectID(identityID)
 }
 
 func ManagedIdentityIDFromSubjectID(subjectID string) string {
-	if !strings.HasPrefix(subjectID, managedIdentitySubjectPrefix) {
+	switch {
+	case strings.HasPrefix(subjectID, string(KindIdentity)+":"):
+		return strings.TrimPrefix(subjectID, string(KindIdentity)+":")
+	case strings.HasPrefix(subjectID, managedIdentityLegacySubjectPrefix):
+		return strings.TrimPrefix(subjectID, managedIdentityLegacySubjectPrefix)
+	default:
 		return ""
 	}
-	return strings.TrimPrefix(subjectID, managedIdentitySubjectPrefix)
 }
 
 func CompilePermissions(perms []core.AccessPermission) PermissionSet {

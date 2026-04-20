@@ -342,8 +342,10 @@ func subjectKindForPrincipal(p *principal.Principal) string {
 	switch {
 	case strings.HasPrefix(p.SubjectID, string(principal.KindUser)+":"):
 		return string(principal.KindUser)
-	case strings.HasPrefix(p.SubjectID, string(principal.KindWorkload)+":"):
-		return string(principal.KindWorkload)
+	case strings.HasPrefix(p.SubjectID, "identity:"):
+		return string(principal.KindIdentity)
+	case strings.HasPrefix(p.SubjectID, "managed_identity:"):
+		return string(principal.KindIdentity)
 	}
 	if p.UserID != "" || p.Identity != nil {
 		return string(principal.KindUser)

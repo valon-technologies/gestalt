@@ -523,10 +523,9 @@ func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
+		IdentityTokens: map[string]config.WorkloadDef{
 			"triage-bot": {
-				IdentityID: "triage-bot",
-				Token:      "gst_wld_triage-bot-token",
+				Token: "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{
 					"clash-api": {
 						Connection: "default",
@@ -542,8 +541,9 @@ func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing
 	}
 
 	p := &principal.Principal{
-		Kind:      principal.KindWorkload,
+		Kind:      principal.KindIdentity,
 		SubjectID: principal.WorkloadSubjectID("triage-bot"),
+		Source:    principal.SourceIdentityToken,
 	}
 	cat, err := invocation.ResolveCatalog(context.Background(), prov, "clash-api", &stubTokenResolver{token: "tok_456"}, p, "default", "")
 	if err != nil {
@@ -552,7 +552,7 @@ func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing
 
 	filtered := invocation.FilterCatalogForPrincipal(context.Background(), cat, "clash-api", p, authz)
 	if len(filtered.Operations) != 2 {
-		t.Fatalf("expected 2 operations after workload filtering, got %d", len(filtered.Operations))
+		t.Fatalf("expected 2 operations after identity-token filtering, got %d", len(filtered.Operations))
 	}
 	if filtered.Operations[0].ID != "shared_op" {
 		t.Fatalf("expected first filtered op shared_op, got %q", filtered.Operations[0].ID)

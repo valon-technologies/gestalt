@@ -157,8 +157,8 @@ func TestBrokerResolveToken_WorkflowContextDoesNotBypassWorkloadIdentityBinding(
 
 	workload := &principal.Principal{
 		SubjectID: principal.WorkloadSubjectID("workflow.roadmap"),
-		Kind:      principal.KindWorkload,
-		Source:    principal.SourceWorkloadToken,
+		Kind:      principal.KindIdentity,
+		Source:    principal.SourceIdentityToken,
 	}
 	ctx := WithWorkflowContext(context.Background(), map[string]any{
 		"runId": "run-123",
@@ -168,7 +168,7 @@ func TestBrokerResolveToken_WorkflowContextDoesNotBypassWorkloadIdentityBinding(
 	if err == nil {
 		t.Fatal("expected binding override to be rejected")
 	}
-	if got, want := err.Error(), "workloads may not override connection or instance bindings"; got == "" || !strings.Contains(got, want) {
+	if got, want := err.Error(), "identity-token callers may not override connection or instance bindings"; got == "" || !strings.Contains(got, want) {
 		t.Fatalf("ResolveToken error = %q, want substring %q", got, want)
 	}
 }
@@ -250,8 +250,8 @@ func TestBrokerResolveToken_RefreshesIdentityOwnedWorkloadToken(t *testing.T) {
 
 	workload := &principal.Principal{
 		SubjectID: principal.WorkloadSubjectID("workflow.roadmap"),
-		Kind:      principal.KindWorkload,
-		Source:    principal.SourceWorkloadToken,
+		Kind:      principal.KindIdentity,
+		Source:    principal.SourceIdentityToken,
 	}
 	_, token, err := broker.ResolveToken(context.Background(), workload, "slack", "workspace", "")
 	if err != nil {
