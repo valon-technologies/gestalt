@@ -220,6 +220,29 @@ func (r *workflowRuntime) ResolveProvider(name string) (coreworkflow.Provider, e
 	return provider, nil
 }
 
+func (r *workflowRuntime) ProviderNames() []string {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	seen := make(map[string]struct{}, len(r.bindings))
+	names := make([]string, 0, len(r.bindings))
+	for _, binding := range r.bindings {
+		name := strings.TrimSpace(binding.providerName)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
+}
+
 func (r *workflowRuntime) ManagedScheduleIDs(pluginName string) map[string]struct{} {
 	if r == nil {
 		return nil

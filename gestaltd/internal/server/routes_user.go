@@ -10,6 +10,16 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 		r.Delete("/integrations/{name}", s.disconnectIntegration)
 		r.Get("/integrations/{name}/operations", s.listOperations)
 
+		r.Route("/workflow/schedules", func(r chi.Router) {
+			r.Get("/", s.listGlobalWorkflowSchedules)
+			r.Post("/", s.createWorkflowSchedule)
+			r.Get("/{scheduleID}", s.getGlobalWorkflowSchedule)
+			r.Put("/{scheduleID}", s.updateGlobalWorkflowSchedule)
+			r.Delete("/{scheduleID}", s.deleteGlobalWorkflowSchedule)
+			r.Post("/{scheduleID}/pause", s.pauseGlobalWorkflowSchedule)
+			r.Post("/{scheduleID}/resume", s.resumeGlobalWorkflowSchedule)
+		})
+
 		r.Route("/{integration}/workflow/schedules", func(r chi.Router) {
 			r.Get("/", s.listWorkflowSchedules)
 			r.Post("/", s.createWorkflowSchedule)
