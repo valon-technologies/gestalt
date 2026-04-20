@@ -111,7 +111,7 @@ func (p *memoryWorkflowProvider) UpsertSchedule(_ context.Context, req coreworkf
 
 func (p *memoryWorkflowProvider) GetSchedule(_ context.Context, req coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
 	schedule, ok := p.schedules[req.ScheduleID]
-	if !ok || schedule == nil || schedule.Target.PluginName != req.PluginName {
+	if !ok || schedule == nil {
 		return nil, core.ErrNotFound
 	}
 	return cloneWorkflowSchedule(schedule), nil
@@ -120,7 +120,7 @@ func (p *memoryWorkflowProvider) GetSchedule(_ context.Context, req coreworkflow
 func (p *memoryWorkflowProvider) ListSchedules(_ context.Context, req coreworkflow.ListSchedulesRequest) ([]*coreworkflow.Schedule, error) {
 	out := make([]*coreworkflow.Schedule, 0, len(p.schedules))
 	for _, schedule := range p.schedules {
-		if schedule != nil && schedule.Target.PluginName == req.PluginName {
+		if schedule != nil {
 			out = append(out, cloneWorkflowSchedule(schedule))
 		}
 	}
@@ -129,7 +129,7 @@ func (p *memoryWorkflowProvider) ListSchedules(_ context.Context, req coreworkfl
 
 func (p *memoryWorkflowProvider) DeleteSchedule(_ context.Context, req coreworkflow.DeleteScheduleRequest) error {
 	schedule, ok := p.schedules[req.ScheduleID]
-	if !ok || schedule == nil || schedule.Target.PluginName != req.PluginName {
+	if !ok || schedule == nil {
 		return core.ErrNotFound
 	}
 	delete(p.schedules, req.ScheduleID)
@@ -139,7 +139,7 @@ func (p *memoryWorkflowProvider) DeleteSchedule(_ context.Context, req coreworkf
 
 func (p *memoryWorkflowProvider) PauseSchedule(_ context.Context, req coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
 	schedule, ok := p.schedules[req.ScheduleID]
-	if !ok || schedule == nil || schedule.Target.PluginName != req.PluginName {
+	if !ok || schedule == nil {
 		return nil, core.ErrNotFound
 	}
 	now := time.Now().UTC().Truncate(time.Second)
@@ -151,7 +151,7 @@ func (p *memoryWorkflowProvider) PauseSchedule(_ context.Context, req coreworkfl
 
 func (p *memoryWorkflowProvider) ResumeSchedule(_ context.Context, req coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
 	schedule, ok := p.schedules[req.ScheduleID]
-	if !ok || schedule == nil || schedule.Target.PluginName != req.PluginName {
+	if !ok || schedule == nil {
 		return nil, core.ErrNotFound
 	}
 	now := time.Now().UTC().Truncate(time.Second)
@@ -426,6 +426,14 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
+	provider.schedules["sched-analytics"] = &coreworkflow.Schedule{
+		ID:           "sched-analytics",
+		Cron:         "15 * * * *",
+		Target:       coreworkflow.Target{PluginName: "analytics", Operation: "sync"},
+		ExecutionRef: "exec-analytics",
+		CreatedAt:    &now,
+		UpdatedAt:    &now,
+	}
 	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "exec-ada",
 		ProviderName: "basic",
@@ -441,6 +449,14 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		SubjectID:    principal.UserSubjectID(grace.ID),
 	}); err != nil {
 		t.Fatalf("Put grace ref: %v", err)
+	}
+	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+		ID:           "exec-analytics",
+		ProviderName: "basic",
+		Target:       provider.schedules["sched-analytics"].Target,
+		SubjectID:    principal.UserSubjectID(ada.ID),
+	}); err != nil {
+		t.Fatalf("Put analytics ref: %v", err)
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -463,6 +479,15 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 			ConnMode: core.ConnectionModeUser,
 			CatalogVal: &catalog.Catalog{
 				Name: "roadmap",
+				Operations: []catalog.CatalogOperation{
+					{ID: "sync", Method: http.MethodPost},
+				},
+			},
+		}, &coretesting.StubIntegration{
+			N:        "analytics",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{
+				Name: "analytics",
 				Operations: []catalog.CatalogOperation{
 					{ID: "sync", Method: http.MethodPost},
 				},
@@ -494,6 +519,17 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		t.Fatalf("listed schedules = %#v", listed)
 	}
 
+	getAnalyticsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/roadmap/workflow/schedules/sched-analytics", nil)
+	getAnalyticsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	getAnalyticsResp, err := http.DefaultClient.Do(getAnalyticsReq)
+	if err != nil {
+		t.Fatalf("get analytics request: %v", err)
+	}
+	defer func() { _ = getAnalyticsResp.Body.Close() }()
+	if getAnalyticsResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for analytics schedule, got %d", getAnalyticsResp.StatusCode)
+	}
+
 	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/roadmap/workflow/schedules/sched-grace", nil)
 	getReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	getResp, err := http.DefaultClient.Do(getReq)
@@ -517,6 +553,9 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	}
 	if _, ok := provider.schedules["sched-grace"]; !ok {
 		t.Fatal("expected grace schedule to remain after unauthorized delete")
+	}
+	if _, ok := provider.schedules["sched-analytics"]; !ok {
+		t.Fatal("expected analytics schedule to remain hidden from roadmap route delete")
 	}
 }
 

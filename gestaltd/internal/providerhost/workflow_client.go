@@ -66,7 +66,6 @@ func (r *remoteWorkflow) StartRun(ctx context.Context, req coreworkflow.StartRun
 	resp, err := r.client.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{
 		Target:         target,
 		IdempotencyKey: req.IdempotencyKey,
-		PluginName:     req.Target.PluginName,
 		CreatedBy:      workflowActorToProto(req.CreatedBy),
 		ExecutionRef:   req.ExecutionRef,
 	})
@@ -80,8 +79,7 @@ func (r *remoteWorkflow) GetRun(ctx context.Context, req coreworkflow.GetRunRequ
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.GetRun(ctx, &proto.GetWorkflowProviderRunRequest{
-		PluginName: req.PluginName,
-		RunId:      req.RunID,
+		RunId: req.RunID,
 	})
 	if err != nil {
 		return nil, err
@@ -92,7 +90,7 @@ func (r *remoteWorkflow) GetRun(ctx context.Context, req coreworkflow.GetRunRequ
 func (r *remoteWorkflow) ListRuns(ctx context.Context, req coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.ListRuns(ctx, &proto.ListWorkflowProviderRunsRequest{PluginName: req.PluginName})
+	resp, err := r.client.ListRuns(ctx, &proto.ListWorkflowProviderRunsRequest{})
 	if err != nil {
 		return nil, err
 	}
@@ -111,9 +109,8 @@ func (r *remoteWorkflow) CancelRun(ctx context.Context, req coreworkflow.CancelR
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.CancelRun(ctx, &proto.CancelWorkflowProviderRunRequest{
-		PluginName: req.PluginName,
-		RunId:      req.RunID,
-		Reason:     req.Reason,
+		RunId:  req.RunID,
+		Reason: req.Reason,
 	})
 	if err != nil {
 		return nil, err
@@ -134,7 +131,6 @@ func (r *remoteWorkflow) UpsertSchedule(ctx context.Context, req coreworkflow.Up
 		Timezone:     req.Timezone,
 		Target:       target,
 		Paused:       req.Paused,
-		PluginName:   req.Target.PluginName,
 		RequestedBy:  workflowActorToProto(req.RequestedBy),
 		ExecutionRef: req.ExecutionRef,
 	})
@@ -148,7 +144,6 @@ func (r *remoteWorkflow) GetSchedule(ctx context.Context, req coreworkflow.GetSc
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.GetSchedule(ctx, &proto.GetWorkflowProviderScheduleRequest{
-		PluginName: req.PluginName,
 		ScheduleId: req.ScheduleID,
 	})
 	if err != nil {
@@ -160,7 +155,7 @@ func (r *remoteWorkflow) GetSchedule(ctx context.Context, req coreworkflow.GetSc
 func (r *remoteWorkflow) ListSchedules(ctx context.Context, req coreworkflow.ListSchedulesRequest) ([]*coreworkflow.Schedule, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.ListSchedules(ctx, &proto.ListWorkflowProviderSchedulesRequest{PluginName: req.PluginName})
+	resp, err := r.client.ListSchedules(ctx, &proto.ListWorkflowProviderSchedulesRequest{})
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +174,6 @@ func (r *remoteWorkflow) DeleteSchedule(ctx context.Context, req coreworkflow.De
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	_, err := r.client.DeleteSchedule(ctx, &proto.DeleteWorkflowProviderScheduleRequest{
-		PluginName: req.PluginName,
 		ScheduleId: req.ScheduleID,
 	})
 	return err
@@ -189,7 +183,6 @@ func (r *remoteWorkflow) PauseSchedule(ctx context.Context, req coreworkflow.Pau
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.PauseSchedule(ctx, &proto.PauseWorkflowProviderScheduleRequest{
-		PluginName: req.PluginName,
 		ScheduleId: req.ScheduleID,
 	})
 	if err != nil {
@@ -202,7 +195,6 @@ func (r *remoteWorkflow) ResumeSchedule(ctx context.Context, req coreworkflow.Re
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.ResumeSchedule(ctx, &proto.ResumeWorkflowProviderScheduleRequest{
-		PluginName: req.PluginName,
 		ScheduleId: req.ScheduleID,
 	})
 	if err != nil {
@@ -223,7 +215,6 @@ func (r *remoteWorkflow) UpsertEventTrigger(ctx context.Context, req coreworkflo
 		Match:       workflowEventMatchToProto(req.Match),
 		Target:      target,
 		Paused:      req.Paused,
-		PluginName:  req.Target.PluginName,
 		RequestedBy: workflowActorToProto(req.RequestedBy),
 	})
 	if err != nil {
@@ -236,8 +227,7 @@ func (r *remoteWorkflow) GetEventTrigger(ctx context.Context, req coreworkflow.G
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.GetEventTrigger(ctx, &proto.GetWorkflowProviderEventTriggerRequest{
-		PluginName: req.PluginName,
-		TriggerId:  req.TriggerID,
+		TriggerId: req.TriggerID,
 	})
 	if err != nil {
 		return nil, err
@@ -248,7 +238,7 @@ func (r *remoteWorkflow) GetEventTrigger(ctx context.Context, req coreworkflow.G
 func (r *remoteWorkflow) ListEventTriggers(ctx context.Context, req coreworkflow.ListEventTriggersRequest) ([]*coreworkflow.EventTrigger, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.ListEventTriggers(ctx, &proto.ListWorkflowProviderEventTriggersRequest{PluginName: req.PluginName})
+	resp, err := r.client.ListEventTriggers(ctx, &proto.ListWorkflowProviderEventTriggersRequest{})
 	if err != nil {
 		return nil, err
 	}
@@ -267,8 +257,7 @@ func (r *remoteWorkflow) DeleteEventTrigger(ctx context.Context, req coreworkflo
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	_, err := r.client.DeleteEventTrigger(ctx, &proto.DeleteWorkflowProviderEventTriggerRequest{
-		PluginName: req.PluginName,
-		TriggerId:  req.TriggerID,
+		TriggerId: req.TriggerID,
 	})
 	return err
 }
@@ -277,8 +266,7 @@ func (r *remoteWorkflow) PauseEventTrigger(ctx context.Context, req coreworkflow
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.PauseEventTrigger(ctx, &proto.PauseWorkflowProviderEventTriggerRequest{
-		PluginName: req.PluginName,
-		TriggerId:  req.TriggerID,
+		TriggerId: req.TriggerID,
 	})
 	if err != nil {
 		return nil, err
@@ -290,8 +278,7 @@ func (r *remoteWorkflow) ResumeEventTrigger(ctx context.Context, req coreworkflo
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.ResumeEventTrigger(ctx, &proto.ResumeWorkflowProviderEventTriggerRequest{
-		PluginName: req.PluginName,
-		TriggerId:  req.TriggerID,
+		TriggerId: req.TriggerID,
 	})
 	if err != nil {
 		return nil, err

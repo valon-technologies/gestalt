@@ -525,7 +525,6 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
                 instance: String::new(),
             }),
             idempotency_key: "run-42".to_string(),
-            plugin_name: "demo".to_string(),
             ..Default::default()
         })
         .await
@@ -776,7 +775,6 @@ async fn workflow_clients_round_trip_over_unix_socket() {
                 ..Default::default()
             }),
             run_id: "run-42".to_string(),
-            plugin_name: "demo".to_string(),
             ..Default::default()
         })
         .await

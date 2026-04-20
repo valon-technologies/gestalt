@@ -8,6 +8,8 @@ import type { DescService } from "@bufbuild/protobuf";
 import { createClient, type Client } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
+import { bunTarget } from "../src/build.ts";
+
 export function fixturePath(...segments: string[]): string {
   return resolve(import.meta.dir, "fixtures", ...segments);
 }
@@ -37,6 +39,26 @@ export function hostTarget(): { goos: string; goarch: string; executableSuffix: 
     goarch,
     executableSuffix: goos === "windows" ? ".exe" : "",
   };
+}
+
+export function hostCompileTarget(goos: string, goarch: string): string {
+  if (goos !== "linux") {
+    return bunTarget(goos, goarch);
+  }
+  const report = process.report?.getReport?.() as
+    | { header?: { glibcVersionRuntime?: string } }
+    | undefined;
+  if (report?.header?.glibcVersionRuntime) {
+    switch (goarch) {
+      case "amd64":
+        return "bun-linux-x64";
+      case "arm64":
+        return "bun-linux-arm64";
+      default:
+        break;
+    }
+  }
+  return bunTarget(goos, goarch);
 }
 
 export async function waitForPath(path: string, timeoutMs = 5_000): Promise<void> {

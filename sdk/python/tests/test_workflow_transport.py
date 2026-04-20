@@ -246,7 +246,6 @@ class WorkflowTransportTests(unittest.TestCase):
             response = host.invoke_operation(
                 workflow_pb2.InvokeWorkflowOperationRequest(
                     run_id="run-42",
-                    plugin_name="demo",
                     target=workflow_pb2.BoundWorkflowTarget(
                         plugin_name="demo",
                         operation="sync",

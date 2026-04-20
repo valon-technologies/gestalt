@@ -266,21 +266,14 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 	if invoker == nil {
 		return nil, fmt.Errorf("workflow runtime invoker is not configured")
 	}
-	pluginName := strings.TrimSpace(req.PluginName)
-	if pluginName == "" {
-		return nil, fmt.Errorf("workflow plugin scope is required")
-	}
 	targetPluginName := strings.TrimSpace(req.Target.PluginName)
 	if targetPluginName == "" {
 		return nil, fmt.Errorf("workflow target plugin is required")
 	}
-	if targetPluginName != pluginName {
-		return nil, fmt.Errorf("workflow target plugin %q is outside scoped plugin %q", targetPluginName, pluginName)
+	if !r.Allow(req.ProviderName, targetPluginName, req.Target.Operation) {
+		return nil, fmt.Errorf("workflow target %q for plugin %q is not enabled", req.Target.Operation, targetPluginName)
 	}
-	if !r.Allow(req.ProviderName, pluginName, req.Target.Operation) {
-		return nil, fmt.Errorf("workflow target %q for plugin %q is not enabled", req.Target.Operation, pluginName)
-	}
-	principalValue := workflowWorkloadPrincipal(pluginName)
+	principalValue := workflowWorkloadPrincipal(targetPluginName)
 	target := req.Target
 	invokeConnection := ""
 	invokeInstance := ""

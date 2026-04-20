@@ -19,6 +19,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -83,8 +84,8 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if err != nil {
 			return fmt.Errorf("bootstrap: cleanup workflow schedule %q for plugin %q requires provider %q: %w", prev.ScheduleID, prev.PluginName, prev.ProviderName, err)
 		}
-		existing, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{
-			PluginName: prev.PluginName,
+		providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", prev.PluginName)
+		existing, err := provider.GetSchedule(providerCtx, coreworkflow.GetScheduleRequest{
 			ScheduleID: prev.ScheduleID,
 		})
 		existingExecutionRef := ""
@@ -96,8 +97,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		default:
 			return fmt.Errorf("bootstrap: get workflow schedule %q for plugin %q: %w", prev.ScheduleID, prev.PluginName, err)
 		}
-		if err := provider.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{
-			PluginName: prev.PluginName,
+		if err := provider.DeleteSchedule(providerCtx, coreworkflow.DeleteScheduleRequest{
 			ScheduleID: prev.ScheduleID,
 		}); err != nil {
 			if isWorkflowObjectNotFound(err) {
@@ -142,8 +142,8 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			desiredEntry := desired[rowID]
 			prev, owned := previous[rowID]
 			existingExecutionRef := ""
-			existing, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{
-				PluginName: pluginName,
+			providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
+			existing, err := provider.GetSchedule(providerCtx, coreworkflow.GetScheduleRequest{
 				ScheduleID: desiredEntry.state.ScheduleID,
 			})
 			switch {
@@ -173,7 +173,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			if err != nil {
 				return fmt.Errorf("bootstrap: store workflow execution ref for schedule %q on plugin %q: %w", scheduleKey, pluginName, err)
 			}
-			if _, err := provider.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{
+			if _, err := provider.UpsertSchedule(providerCtx, coreworkflow.UpsertScheduleRequest{
 				ScheduleID:   desiredEntry.state.ScheduleID,
 				Cron:         schedule.Cron,
 				Timezone:     schedule.Timezone,
@@ -197,8 +197,8 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 				if err != nil {
 					return fmt.Errorf("bootstrap: cleanup workflow schedule %q for plugin %q requires provider %q: %w", prev.ScheduleID, prev.PluginName, prev.ProviderName, err)
 				}
-				oldExisting, err := oldProvider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{
-					PluginName: prev.PluginName,
+				oldProviderCtx := invocation.WithWorkflowContextString(ctx, "plugin", prev.PluginName)
+				oldExisting, err := oldProvider.GetSchedule(oldProviderCtx, coreworkflow.GetScheduleRequest{
 					ScheduleID: prev.ScheduleID,
 				})
 				oldExecutionRef := ""
@@ -210,8 +210,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 				default:
 					return fmt.Errorf("bootstrap: get workflow schedule %q for plugin %q: %w", prev.ScheduleID, prev.PluginName, err)
 				}
-				if err := oldProvider.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{
-					PluginName: prev.PluginName,
+				if err := oldProvider.DeleteSchedule(oldProviderCtx, coreworkflow.DeleteScheduleRequest{
 					ScheduleID: prev.ScheduleID,
 				}); err != nil && !isWorkflowObjectNotFound(err) {
 					return fmt.Errorf("bootstrap: delete workflow schedule %q for plugin %q: %w", prev.ScheduleID, prev.PluginName, err)

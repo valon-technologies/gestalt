@@ -69,7 +69,7 @@ func (s *Server) listWorkflowSchedules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	schedules, err := provider.ListSchedules(r.Context(), coreworkflow.ListSchedulesRequest{PluginName: pluginName})
+	schedules, err := provider.ListSchedules(r.Context(), coreworkflow.ListSchedulesRequest{})
 	if err != nil {
 		s.writeWorkflowScheduleProviderError(w, pluginName, "", err)
 		return
@@ -77,6 +77,9 @@ func (s *Server) listWorkflowSchedules(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]workflowScheduleInfo, 0, len(schedules))
 	for _, schedule := range schedules {
+		if strings.TrimSpace(schedule.Target.PluginName) != pluginName {
+			continue
+		}
 		owned, _, err := s.workflowScheduleOwner(r.Context(), p, schedule)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to resolve workflow schedule owner")
@@ -230,7 +233,6 @@ func (s *Server) deleteWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := provider.DeleteSchedule(r.Context(), coreworkflow.DeleteScheduleRequest{
-		PluginName: pluginName,
 		ScheduleID: strings.TrimSpace(schedule.ID),
 	}); err != nil {
 		s.writeWorkflowScheduleProviderError(w, pluginName, strings.TrimSpace(schedule.ID), err)
@@ -257,7 +259,6 @@ func (s *Server) pauseWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	value, err := provider.PauseSchedule(r.Context(), coreworkflow.PauseScheduleRequest{
-		PluginName: pluginName,
 		ScheduleID: strings.TrimSpace(schedule.ID),
 	})
 	if err != nil {
@@ -282,7 +283,6 @@ func (s *Server) resumeWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	value, err := provider.ResumeSchedule(r.Context(), coreworkflow.ResumeScheduleRequest{
-		PluginName: pluginName,
 		ScheduleID: strings.TrimSpace(schedule.ID),
 	})
 	if err != nil {
@@ -427,7 +427,6 @@ func (s *Server) requireOwnedWorkflowSchedule(
 		return nil, nil, false
 	}
 	schedule, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{
-		PluginName: pluginName,
 		ScheduleID: scheduleID,
 	})
 	if err != nil {
@@ -440,6 +439,10 @@ func (s *Server) requireOwnedWorkflowSchedule(
 		return nil, nil, false
 	}
 	if !owned {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow schedule %q not found", scheduleID))
+		return nil, nil, false
+	}
+	if strings.TrimSpace(schedule.Target.PluginName) != pluginName {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow schedule %q not found", scheduleID))
 		return nil, nil, false
 	}

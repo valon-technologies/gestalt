@@ -392,7 +392,6 @@ func workflowInvokeRequestFromProto(req *proto.InvokeWorkflowOperationRequest) (
 		return coreworkflow.InvokeOperationRequest{}, err
 	}
 	return coreworkflow.InvokeOperationRequest{
-		PluginName:   req.GetPluginName(),
 		RunID:        req.GetRunId(),
 		Trigger:      trigger,
 		Target:       workflowTargetFromProto(req.GetTarget()),

@@ -22,6 +22,7 @@ export type BuildArgs = {
   providerName: string;
   goos: string;
   goarch: string;
+  compileTarget?: string;
 };
 
 /**
@@ -65,7 +66,13 @@ export function buildProviderBinary(args: BuildArgs): void {
 
   try {
     const wrapperPath = writeBundledWrapper(workDir, root, target, args.providerName);
-    const bunCommand = bunBuildCommand(wrapperPath, outputPath, args.goos, args.goarch);
+    const bunCommand = bunBuildCommand(
+      wrapperPath,
+      outputPath,
+      args.goos,
+      args.goarch,
+      args.compileTarget,
+    );
     const result = spawnSync(bunCommand.command, bunCommand.args, {
       cwd: root,
       stdio: "inherit",
@@ -89,6 +96,7 @@ export function bunBuildCommand(
   outputPath: string,
   goos: string,
   goarch: string,
+  compileTarget = bunTarget(goos, goarch),
 ): { command: string; args: string[] } {
   return {
     command: resolveBunExecutable(),
@@ -96,7 +104,7 @@ export function bunBuildCommand(
       "build",
       "--compile",
       "--target",
-      bunTarget(goos, goarch),
+      compileTarget,
       "--outfile",
       outputPath,
       wrapperPath,

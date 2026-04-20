@@ -46,16 +46,9 @@ func (s *WorkflowHostServer) InvokeOperation(ctx context.Context, req *proto.Inv
 	if value.Target.Operation == "" {
 		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.operation is required")
 	}
-	value.PluginName = strings.TrimSpace(req.GetPluginName())
-	if value.PluginName == "" {
-		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: plugin_name is required")
-	}
-	if value.Target.PluginName != value.PluginName {
-		return nil, status.Errorf(codes.PermissionDenied, "workflow invoke operation target plugin %q is outside scoped plugin %q", value.Target.PluginName, value.PluginName)
-	}
 	value.ProviderName = s.providerName
-	if s.allow != nil && !s.allow(s.providerName, value.PluginName, value.Target.Operation) {
-		return nil, status.Errorf(codes.PermissionDenied, "workflow invoke operation %q on plugin %q is not allowed", value.Target.Operation, value.PluginName)
+	if s.allow != nil && !s.allow(s.providerName, value.Target.PluginName, value.Target.Operation) {
+		return nil, status.Errorf(codes.PermissionDenied, "workflow invoke operation %q on plugin %q is not allowed", value.Target.Operation, value.Target.PluginName)
 	}
 	resp, err := s.invoke(ctx, value)
 	if err != nil {

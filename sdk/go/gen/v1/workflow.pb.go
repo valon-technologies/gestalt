@@ -2280,7 +2280,6 @@ type StartWorkflowProviderRunRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Target         *BoundWorkflowTarget   `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
 	IdempotencyKey string                 `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	PluginName     string                 `protobuf:"bytes,3,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	CreatedBy      *WorkflowActor         `protobuf:"bytes,4,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
 	ExecutionRef   string                 `protobuf:"bytes,5,opt,name=execution_ref,json=executionRef,proto3" json:"execution_ref,omitempty"`
 	unknownFields  protoimpl.UnknownFields
@@ -2331,13 +2330,6 @@ func (x *StartWorkflowProviderRunRequest) GetIdempotencyKey() string {
 	return ""
 }
 
-func (x *StartWorkflowProviderRunRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
-}
-
 func (x *StartWorkflowProviderRunRequest) GetCreatedBy() *WorkflowActor {
 	if x != nil {
 		return x.CreatedBy
@@ -2354,7 +2346,6 @@ func (x *StartWorkflowProviderRunRequest) GetExecutionRef() string {
 
 type GetWorkflowProviderRunRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	RunId         string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2390,13 +2381,6 @@ func (*GetWorkflowProviderRunRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{36}
 }
 
-func (x *GetWorkflowProviderRunRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
-}
-
 func (x *GetWorkflowProviderRunRequest) GetRunId() string {
 	if x != nil {
 		return x.RunId
@@ -2406,7 +2390,6 @@ func (x *GetWorkflowProviderRunRequest) GetRunId() string {
 
 type ListWorkflowProviderRunsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2439,13 +2422,6 @@ func (x *ListWorkflowProviderRunsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListWorkflowProviderRunsRequest.ProtoReflect.Descriptor instead.
 func (*ListWorkflowProviderRunsRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{37}
-}
-
-func (x *ListWorkflowProviderRunsRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
 }
 
 type ListWorkflowProviderRunsResponse struct {
@@ -2494,7 +2470,6 @@ func (x *ListWorkflowProviderRunsResponse) GetRuns() []*BoundWorkflowRun {
 
 type CancelWorkflowProviderRunRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	RunId         string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2531,13 +2506,6 @@ func (*CancelWorkflowProviderRunRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{39}
 }
 
-func (x *CancelWorkflowProviderRunRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
-}
-
 func (x *CancelWorkflowProviderRunRequest) GetRunId() string {
 	if x != nil {
 		return x.RunId
@@ -2559,7 +2527,6 @@ type UpsertWorkflowProviderScheduleRequest struct {
 	Timezone      string                 `protobuf:"bytes,3,opt,name=timezone,proto3" json:"timezone,omitempty"`
 	Target        *BoundWorkflowTarget   `protobuf:"bytes,4,opt,name=target,proto3" json:"target,omitempty"`
 	Paused        bool                   `protobuf:"varint,5,opt,name=paused,proto3" json:"paused,omitempty"`
-	PluginName    string                 `protobuf:"bytes,6,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	RequestedBy   *WorkflowActor         `protobuf:"bytes,7,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
 	ExecutionRef  string                 `protobuf:"bytes,8,opt,name=execution_ref,json=executionRef,proto3" json:"execution_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2631,13 +2598,6 @@ func (x *UpsertWorkflowProviderScheduleRequest) GetPaused() bool {
 	return false
 }
 
-func (x *UpsertWorkflowProviderScheduleRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
-}
-
 func (x *UpsertWorkflowProviderScheduleRequest) GetRequestedBy() *WorkflowActor {
 	if x != nil {
 		return x.RequestedBy
@@ -2654,7 +2614,6 @@ func (x *UpsertWorkflowProviderScheduleRequest) GetExecutionRef() string {
 
 type GetWorkflowProviderScheduleRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	ScheduleId    string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2690,13 +2649,6 @@ func (*GetWorkflowProviderScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{41}
 }
 
-func (x *GetWorkflowProviderScheduleRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
-}
-
 func (x *GetWorkflowProviderScheduleRequest) GetScheduleId() string {
 	if x != nil {
 		return x.ScheduleId
@@ -2706,7 +2658,6 @@ func (x *GetWorkflowProviderScheduleRequest) GetScheduleId() string {
 
 type ListWorkflowProviderSchedulesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2739,13 +2690,6 @@ func (x *ListWorkflowProviderSchedulesRequest) ProtoReflect() protoreflect.Messa
 // Deprecated: Use ListWorkflowProviderSchedulesRequest.ProtoReflect.Descriptor instead.
 func (*ListWorkflowProviderSchedulesRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{42}
-}
-
-func (x *ListWorkflowProviderSchedulesRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
 }
 
 type ListWorkflowProviderSchedulesResponse struct {
@@ -2794,7 +2738,6 @@ func (x *ListWorkflowProviderSchedulesResponse) GetSchedules() []*BoundWorkflowS
 
 type DeleteWorkflowProviderScheduleRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	ScheduleId    string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2830,13 +2773,6 @@ func (*DeleteWorkflowProviderScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{44}
 }
 
-func (x *DeleteWorkflowProviderScheduleRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
-}
-
 func (x *DeleteWorkflowProviderScheduleRequest) GetScheduleId() string {
 	if x != nil {
 		return x.ScheduleId
@@ -2846,7 +2782,6 @@ func (x *DeleteWorkflowProviderScheduleRequest) GetScheduleId() string {
 
 type PauseWorkflowProviderScheduleRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	ScheduleId    string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2882,13 +2817,6 @@ func (*PauseWorkflowProviderScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{45}
 }
 
-func (x *PauseWorkflowProviderScheduleRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
-}
-
 func (x *PauseWorkflowProviderScheduleRequest) GetScheduleId() string {
 	if x != nil {
 		return x.ScheduleId
@@ -2898,7 +2826,6 @@ func (x *PauseWorkflowProviderScheduleRequest) GetScheduleId() string {
 
 type ResumeWorkflowProviderScheduleRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	ScheduleId    string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2934,13 +2861,6 @@ func (*ResumeWorkflowProviderScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{46}
 }
 
-func (x *ResumeWorkflowProviderScheduleRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
-}
-
 func (x *ResumeWorkflowProviderScheduleRequest) GetScheduleId() string {
 	if x != nil {
 		return x.ScheduleId
@@ -2954,7 +2874,6 @@ type UpsertWorkflowProviderEventTriggerRequest struct {
 	Match         *WorkflowEventMatch    `protobuf:"bytes,2,opt,name=match,proto3" json:"match,omitempty"`
 	Target        *BoundWorkflowTarget   `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
 	Paused        bool                   `protobuf:"varint,4,opt,name=paused,proto3" json:"paused,omitempty"`
-	PluginName    string                 `protobuf:"bytes,5,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	RequestedBy   *WorkflowActor         `protobuf:"bytes,6,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3018,13 +2937,6 @@ func (x *UpsertWorkflowProviderEventTriggerRequest) GetPaused() bool {
 	return false
 }
 
-func (x *UpsertWorkflowProviderEventTriggerRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
-}
-
 func (x *UpsertWorkflowProviderEventTriggerRequest) GetRequestedBy() *WorkflowActor {
 	if x != nil {
 		return x.RequestedBy
@@ -3034,7 +2946,6 @@ func (x *UpsertWorkflowProviderEventTriggerRequest) GetRequestedBy() *WorkflowAc
 
 type GetWorkflowProviderEventTriggerRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	TriggerId     string                 `protobuf:"bytes,2,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3070,13 +2981,6 @@ func (*GetWorkflowProviderEventTriggerRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{48}
 }
 
-func (x *GetWorkflowProviderEventTriggerRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
-}
-
 func (x *GetWorkflowProviderEventTriggerRequest) GetTriggerId() string {
 	if x != nil {
 		return x.TriggerId
@@ -3086,7 +2990,6 @@ func (x *GetWorkflowProviderEventTriggerRequest) GetTriggerId() string {
 
 type ListWorkflowProviderEventTriggersRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3119,13 +3022,6 @@ func (x *ListWorkflowProviderEventTriggersRequest) ProtoReflect() protoreflect.M
 // Deprecated: Use ListWorkflowProviderEventTriggersRequest.ProtoReflect.Descriptor instead.
 func (*ListWorkflowProviderEventTriggersRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{49}
-}
-
-func (x *ListWorkflowProviderEventTriggersRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
 }
 
 type ListWorkflowProviderEventTriggersResponse struct {
@@ -3174,7 +3070,6 @@ func (x *ListWorkflowProviderEventTriggersResponse) GetTriggers() []*BoundWorkfl
 
 type DeleteWorkflowProviderEventTriggerRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	TriggerId     string                 `protobuf:"bytes,2,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3210,13 +3105,6 @@ func (*DeleteWorkflowProviderEventTriggerRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{51}
 }
 
-func (x *DeleteWorkflowProviderEventTriggerRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
-}
-
 func (x *DeleteWorkflowProviderEventTriggerRequest) GetTriggerId() string {
 	if x != nil {
 		return x.TriggerId
@@ -3226,7 +3114,6 @@ func (x *DeleteWorkflowProviderEventTriggerRequest) GetTriggerId() string {
 
 type PauseWorkflowProviderEventTriggerRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	TriggerId     string                 `protobuf:"bytes,2,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3262,13 +3149,6 @@ func (*PauseWorkflowProviderEventTriggerRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{52}
 }
 
-func (x *PauseWorkflowProviderEventTriggerRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
-}
-
 func (x *PauseWorkflowProviderEventTriggerRequest) GetTriggerId() string {
 	if x != nil {
 		return x.TriggerId
@@ -3278,7 +3158,6 @@ func (x *PauseWorkflowProviderEventTriggerRequest) GetTriggerId() string {
 
 type ResumeWorkflowProviderEventTriggerRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PluginName    string                 `protobuf:"bytes,1,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	TriggerId     string                 `protobuf:"bytes,2,opt,name=trigger_id,json=triggerId,proto3" json:"trigger_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3312,13 +3191,6 @@ func (x *ResumeWorkflowProviderEventTriggerRequest) ProtoReflect() protoreflect.
 // Deprecated: Use ResumeWorkflowProviderEventTriggerRequest.ProtoReflect.Descriptor instead.
 func (*ResumeWorkflowProviderEventTriggerRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{53}
-}
-
-func (x *ResumeWorkflowProviderEventTriggerRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
 }
 
 func (x *ResumeWorkflowProviderEventTriggerRequest) GetTriggerId() string {
@@ -3387,7 +3259,6 @@ type InvokeWorkflowOperationRequest struct {
 	Trigger       *WorkflowRunTrigger    `protobuf:"bytes,3,opt,name=trigger,proto3" json:"trigger,omitempty"`
 	Input         *structpb.Struct       `protobuf:"bytes,4,opt,name=input,proto3" json:"input,omitempty"`
 	Metadata      *structpb.Struct       `protobuf:"bytes,5,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	PluginName    string                 `protobuf:"bytes,6,opt,name=plugin_name,json=pluginName,proto3" json:"plugin_name,omitempty"`
 	CreatedBy     *WorkflowActor         `protobuf:"bytes,7,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
 	ExecutionRef  string                 `protobuf:"bytes,8,opt,name=execution_ref,json=executionRef,proto3" json:"execution_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -3457,13 +3328,6 @@ func (x *InvokeWorkflowOperationRequest) GetMetadata() *structpb.Struct {
 		return x.Metadata
 	}
 	return nil
-}
-
-func (x *InvokeWorkflowOperationRequest) GetPluginName() string {
-	if x != nil {
-		return x.PluginName
-	}
-	return ""
 }
 
 func (x *InvokeWorkflowOperationRequest) GetCreatedBy() *WorkflowActor {
@@ -3731,111 +3595,77 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12A\n" +
 	"\n" +
-	"created_by\x18\a \x01(\v2\".gestalt.provider.v1.WorkflowActorR\tcreatedBy\"\x95\x02\n" +
+	"created_by\x18\a \x01(\v2\".gestalt.provider.v1.WorkflowActorR\tcreatedBy\"\xf4\x01\n" +
 	"\x1fStartWorkflowProviderRunRequest\x12@\n" +
 	"\x06target\x18\x01 \x01(\v2(.gestalt.provider.v1.BoundWorkflowTargetR\x06target\x12'\n" +
-	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\x12\x1f\n" +
-	"\vplugin_name\x18\x03 \x01(\tR\n" +
-	"pluginName\x12A\n" +
+	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\x12A\n" +
 	"\n" +
 	"created_by\x18\x04 \x01(\v2\".gestalt.provider.v1.WorkflowActorR\tcreatedBy\x12#\n" +
-	"\rexecution_ref\x18\x05 \x01(\tR\fexecutionRef\"W\n" +
-	"\x1dGetWorkflowProviderRunRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x12\x15\n" +
-	"\x06run_id\x18\x02 \x01(\tR\x05runId\"B\n" +
-	"\x1fListWorkflowProviderRunsRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\"]\n" +
+	"\rexecution_ref\x18\x05 \x01(\tR\fexecutionRef\"6\n" +
+	"\x1dGetWorkflowProviderRunRequest\x12\x15\n" +
+	"\x06run_id\x18\x02 \x01(\tR\x05runId\"!\n" +
+	"\x1fListWorkflowProviderRunsRequest\"]\n" +
 	" ListWorkflowProviderRunsResponse\x129\n" +
-	"\x04runs\x18\x01 \x03(\v2%.gestalt.provider.v1.BoundWorkflowRunR\x04runs\"r\n" +
-	" CancelWorkflowProviderRunRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x12\x15\n" +
+	"\x04runs\x18\x01 \x03(\v2%.gestalt.provider.v1.BoundWorkflowRunR\x04runs\"Q\n" +
+	" CancelWorkflowProviderRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xdf\x02\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xbe\x02\n" +
 	"%UpsertWorkflowProviderScheduleRequest\x12\x1f\n" +
 	"\vschedule_id\x18\x01 \x01(\tR\n" +
 	"scheduleId\x12\x12\n" +
 	"\x04cron\x18\x02 \x01(\tR\x04cron\x12\x1a\n" +
 	"\btimezone\x18\x03 \x01(\tR\btimezone\x12@\n" +
 	"\x06target\x18\x04 \x01(\v2(.gestalt.provider.v1.BoundWorkflowTargetR\x06target\x12\x16\n" +
-	"\x06paused\x18\x05 \x01(\bR\x06paused\x12\x1f\n" +
-	"\vplugin_name\x18\x06 \x01(\tR\n" +
-	"pluginName\x12E\n" +
+	"\x06paused\x18\x05 \x01(\bR\x06paused\x12E\n" +
 	"\frequested_by\x18\a \x01(\v2\".gestalt.provider.v1.WorkflowActorR\vrequestedBy\x12#\n" +
-	"\rexecution_ref\x18\b \x01(\tR\fexecutionRef\"f\n" +
+	"\rexecution_ref\x18\b \x01(\tR\fexecutionRef\"E\n" +
 	"\"GetWorkflowProviderScheduleRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x12\x1f\n" +
+	"\vschedule_id\x18\x02 \x01(\tR\n" +
+	"scheduleId\"&\n" +
+	"$ListWorkflowProviderSchedulesRequest\"q\n" +
+	"%ListWorkflowProviderSchedulesResponse\x12H\n" +
+	"\tschedules\x18\x01 \x03(\v2*.gestalt.provider.v1.BoundWorkflowScheduleR\tschedules\"H\n" +
+	"%DeleteWorkflowProviderScheduleRequest\x12\x1f\n" +
 	"\vschedule_id\x18\x02 \x01(\tR\n" +
 	"scheduleId\"G\n" +
-	"$ListWorkflowProviderSchedulesRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\"q\n" +
-	"%ListWorkflowProviderSchedulesResponse\x12H\n" +
-	"\tschedules\x18\x01 \x03(\v2*.gestalt.provider.v1.BoundWorkflowScheduleR\tschedules\"i\n" +
-	"%DeleteWorkflowProviderScheduleRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x12\x1f\n" +
-	"\vschedule_id\x18\x02 \x01(\tR\n" +
-	"scheduleId\"h\n" +
 	"$PauseWorkflowProviderScheduleRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x12\x1f\n" +
 	"\vschedule_id\x18\x02 \x01(\tR\n" +
-	"scheduleId\"i\n" +
+	"scheduleId\"H\n" +
 	"%ResumeWorkflowProviderScheduleRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x12\x1f\n" +
 	"\vschedule_id\x18\x02 \x01(\tR\n" +
-	"scheduleId\"\xcb\x02\n" +
+	"scheduleId\"\xaa\x02\n" +
 	")UpsertWorkflowProviderEventTriggerRequest\x12\x1d\n" +
 	"\n" +
 	"trigger_id\x18\x01 \x01(\tR\ttriggerId\x12=\n" +
 	"\x05match\x18\x02 \x01(\v2'.gestalt.provider.v1.WorkflowEventMatchR\x05match\x12@\n" +
 	"\x06target\x18\x03 \x01(\v2(.gestalt.provider.v1.BoundWorkflowTargetR\x06target\x12\x16\n" +
-	"\x06paused\x18\x04 \x01(\bR\x06paused\x12\x1f\n" +
-	"\vplugin_name\x18\x05 \x01(\tR\n" +
-	"pluginName\x12E\n" +
-	"\frequested_by\x18\x06 \x01(\v2\".gestalt.provider.v1.WorkflowActorR\vrequestedBy\"h\n" +
-	"&GetWorkflowProviderEventTriggerRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x12\x1d\n" +
+	"\x06paused\x18\x04 \x01(\bR\x06paused\x12E\n" +
+	"\frequested_by\x18\x06 \x01(\v2\".gestalt.provider.v1.WorkflowActorR\vrequestedBy\"G\n" +
+	"&GetWorkflowProviderEventTriggerRequest\x12\x1d\n" +
 	"\n" +
-	"trigger_id\x18\x02 \x01(\tR\ttriggerId\"K\n" +
-	"(ListWorkflowProviderEventTriggersRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\"w\n" +
+	"trigger_id\x18\x02 \x01(\tR\ttriggerId\"*\n" +
+	"(ListWorkflowProviderEventTriggersRequest\"w\n" +
 	")ListWorkflowProviderEventTriggersResponse\x12J\n" +
-	"\btriggers\x18\x01 \x03(\v2..gestalt.provider.v1.BoundWorkflowEventTriggerR\btriggers\"k\n" +
-	")DeleteWorkflowProviderEventTriggerRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x12\x1d\n" +
+	"\btriggers\x18\x01 \x03(\v2..gestalt.provider.v1.BoundWorkflowEventTriggerR\btriggers\"J\n" +
+	")DeleteWorkflowProviderEventTriggerRequest\x12\x1d\n" +
 	"\n" +
-	"trigger_id\x18\x02 \x01(\tR\ttriggerId\"j\n" +
-	"(PauseWorkflowProviderEventTriggerRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x12\x1d\n" +
+	"trigger_id\x18\x02 \x01(\tR\ttriggerId\"I\n" +
+	"(PauseWorkflowProviderEventTriggerRequest\x12\x1d\n" +
 	"\n" +
-	"trigger_id\x18\x02 \x01(\tR\ttriggerId\"k\n" +
-	")ResumeWorkflowProviderEventTriggerRequest\x12\x1f\n" +
-	"\vplugin_name\x18\x01 \x01(\tR\n" +
-	"pluginName\x12\x1d\n" +
+	"trigger_id\x18\x02 \x01(\tR\ttriggerId\"J\n" +
+	")ResumeWorkflowProviderEventTriggerRequest\x12\x1d\n" +
 	"\n" +
 	"trigger_id\x18\x02 \x01(\tR\ttriggerId\"\x80\x01\n" +
 	"#PublishWorkflowProviderEventRequest\x12\x1f\n" +
 	"\vplugin_name\x18\x01 \x01(\tR\n" +
 	"pluginName\x128\n" +
-	"\x05event\x18\x02 \x01(\v2\".gestalt.provider.v1.WorkflowEventR\x05event\"\xa9\x03\n" +
+	"\x05event\x18\x02 \x01(\v2\".gestalt.provider.v1.WorkflowEventR\x05event\"\x88\x03\n" +
 	"\x1eInvokeWorkflowOperationRequest\x12@\n" +
 	"\x06target\x18\x01 \x01(\v2(.gestalt.provider.v1.BoundWorkflowTargetR\x06target\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12A\n" +
 	"\atrigger\x18\x03 \x01(\v2'.gestalt.provider.v1.WorkflowRunTriggerR\atrigger\x12-\n" +
 	"\x05input\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05input\x123\n" +
-	"\bmetadata\x18\x05 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12\x1f\n" +
-	"\vplugin_name\x18\x06 \x01(\tR\n" +
-	"pluginName\x12A\n" +
+	"\bmetadata\x18\x05 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12A\n" +
 	"\n" +
 	"created_by\x18\a \x01(\v2\".gestalt.provider.v1.WorkflowActorR\tcreatedBy\x12#\n" +
 	"\rexecution_ref\x18\b \x01(\tR\fexecutionRef\"M\n" +

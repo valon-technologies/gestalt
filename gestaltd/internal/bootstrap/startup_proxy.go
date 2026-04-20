@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -345,7 +346,7 @@ func (p *startupWorkflowProviderProxy) StartRun(ctx context.Context, req corewor
 }
 
 func (p *startupWorkflowProviderProxy) GetRun(ctx context.Context, req coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
-	provider, err := p.awaitForPlugin(ctx, req.PluginName)
+	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +354,7 @@ func (p *startupWorkflowProviderProxy) GetRun(ctx context.Context, req coreworkf
 }
 
 func (p *startupWorkflowProviderProxy) ListRuns(ctx context.Context, req coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
-	provider, err := p.awaitForPlugin(ctx, req.PluginName)
+	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +362,7 @@ func (p *startupWorkflowProviderProxy) ListRuns(ctx context.Context, req corewor
 }
 
 func (p *startupWorkflowProviderProxy) CancelRun(ctx context.Context, req coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
-	provider, err := p.awaitForPlugin(ctx, req.PluginName)
+	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -377,7 +378,7 @@ func (p *startupWorkflowProviderProxy) UpsertSchedule(ctx context.Context, req c
 }
 
 func (p *startupWorkflowProviderProxy) GetSchedule(ctx context.Context, req coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
-	provider, err := p.awaitForPlugin(ctx, req.PluginName)
+	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +386,7 @@ func (p *startupWorkflowProviderProxy) GetSchedule(ctx context.Context, req core
 }
 
 func (p *startupWorkflowProviderProxy) ListSchedules(ctx context.Context, req coreworkflow.ListSchedulesRequest) ([]*coreworkflow.Schedule, error) {
-	provider, err := p.awaitForPlugin(ctx, req.PluginName)
+	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -393,7 +394,7 @@ func (p *startupWorkflowProviderProxy) ListSchedules(ctx context.Context, req co
 }
 
 func (p *startupWorkflowProviderProxy) DeleteSchedule(ctx context.Context, req coreworkflow.DeleteScheduleRequest) error {
-	provider, err := p.awaitForPlugin(ctx, req.PluginName)
+	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return err
 	}
@@ -401,7 +402,7 @@ func (p *startupWorkflowProviderProxy) DeleteSchedule(ctx context.Context, req c
 }
 
 func (p *startupWorkflowProviderProxy) PauseSchedule(ctx context.Context, req coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
-	provider, err := p.awaitForPlugin(ctx, req.PluginName)
+	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +410,7 @@ func (p *startupWorkflowProviderProxy) PauseSchedule(ctx context.Context, req co
 }
 
 func (p *startupWorkflowProviderProxy) ResumeSchedule(ctx context.Context, req coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
-	provider, err := p.awaitForPlugin(ctx, req.PluginName)
+	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -425,7 +426,7 @@ func (p *startupWorkflowProviderProxy) UpsertEventTrigger(ctx context.Context, r
 }
 
 func (p *startupWorkflowProviderProxy) GetEventTrigger(ctx context.Context, req coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	provider, err := p.awaitForPlugin(ctx, req.PluginName)
+	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -433,7 +434,7 @@ func (p *startupWorkflowProviderProxy) GetEventTrigger(ctx context.Context, req 
 }
 
 func (p *startupWorkflowProviderProxy) ListEventTriggers(ctx context.Context, req coreworkflow.ListEventTriggersRequest) ([]*coreworkflow.EventTrigger, error) {
-	provider, err := p.awaitForPlugin(ctx, req.PluginName)
+	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -441,7 +442,7 @@ func (p *startupWorkflowProviderProxy) ListEventTriggers(ctx context.Context, re
 }
 
 func (p *startupWorkflowProviderProxy) DeleteEventTrigger(ctx context.Context, req coreworkflow.DeleteEventTriggerRequest) error {
-	provider, err := p.awaitForPlugin(ctx, req.PluginName)
+	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return err
 	}
@@ -449,7 +450,7 @@ func (p *startupWorkflowProviderProxy) DeleteEventTrigger(ctx context.Context, r
 }
 
 func (p *startupWorkflowProviderProxy) PauseEventTrigger(ctx context.Context, req coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	provider, err := p.awaitForPlugin(ctx, req.PluginName)
+	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -457,7 +458,7 @@ func (p *startupWorkflowProviderProxy) PauseEventTrigger(ctx context.Context, re
 }
 
 func (p *startupWorkflowProviderProxy) ResumeEventTrigger(ctx context.Context, req coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	provider, err := p.awaitForPlugin(ctx, req.PluginName)
+	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -501,6 +502,14 @@ func (p *startupWorkflowProviderProxy) awaitForPlugin(ctx context.Context, plugi
 	}
 	defer done()
 	return p.await(ctx)
+}
+
+func (p *startupWorkflowProviderProxy) awaitForContextPlugin(ctx context.Context) (coreworkflow.Provider, error) {
+	pluginName := strings.TrimSpace(invocation.WorkflowContextString(invocation.WorkflowContextFromContext(ctx), "plugin"))
+	if pluginName == "" {
+		return p.await(ctx)
+	}
+	return p.awaitForPlugin(ctx, pluginName)
 }
 
 func (p *startupWorkflowProviderProxy) beginPluginWait(pluginName string) (func(), error) {

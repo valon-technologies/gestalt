@@ -123,18 +123,14 @@ type StartRunRequest struct {
 }
 
 type GetRunRequest struct {
-	PluginName string
-	RunID      string
+	RunID string
 }
 
-type ListRunsRequest struct {
-	PluginName string
-}
+type ListRunsRequest struct{}
 
 type CancelRunRequest struct {
-	PluginName string
-	RunID      string
-	Reason     string
+	RunID  string
+	Reason string
 }
 
 type UpsertScheduleRequest struct {
@@ -147,27 +143,21 @@ type UpsertScheduleRequest struct {
 	ExecutionRef string
 }
 
-type ListSchedulesRequest struct {
-	PluginName string
-}
+type ListSchedulesRequest struct{}
 
 type GetScheduleRequest struct {
-	PluginName string
 	ScheduleID string
 }
 
 type DeleteScheduleRequest struct {
-	PluginName string
 	ScheduleID string
 }
 
 type PauseScheduleRequest struct {
-	PluginName string
 	ScheduleID string
 }
 
 type ResumeScheduleRequest struct {
-	PluginName string
 	ScheduleID string
 }
 
@@ -179,28 +169,22 @@ type UpsertEventTriggerRequest struct {
 	RequestedBy Actor
 }
 
-type ListEventTriggersRequest struct {
-	PluginName string
-}
+type ListEventTriggersRequest struct{}
 
 type GetEventTriggerRequest struct {
-	PluginName string
-	TriggerID  string
+	TriggerID string
 }
 
 type DeleteEventTriggerRequest struct {
-	PluginName string
-	TriggerID  string
+	TriggerID string
 }
 
 type PauseEventTriggerRequest struct {
-	PluginName string
-	TriggerID  string
+	TriggerID string
 }
 
 type ResumeEventTriggerRequest struct {
-	PluginName string
-	TriggerID  string
+	TriggerID string
 }
 
 type PublishEventRequest struct {
@@ -210,7 +194,6 @@ type PublishEventRequest struct {
 
 type InvokeOperationRequest struct {
 	ProviderName string
-	PluginName   string
 	RunID        string
 	Trigger      RunTrigger
 	Target       Target

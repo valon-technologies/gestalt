@@ -6050,8 +6050,6 @@ pub struct StartWorkflowProviderRunRequest {
     pub target: ::core::option::Option<BoundWorkflowTarget>,
     #[prost(string, tag = "2")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub plugin_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "4")]
     pub created_by: ::core::option::Option<WorkflowActor>,
     #[prost(string, tag = "5")]
@@ -6059,16 +6057,11 @@ pub struct StartWorkflowProviderRunRequest {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowProviderRunRequest {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub run_id: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListWorkflowProviderRunsRequest {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
-}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListWorkflowProviderRunsRequest {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderRunsResponse {
     #[prost(message, repeated, tag = "1")]
@@ -6076,8 +6069,6 @@ pub struct ListWorkflowProviderRunsResponse {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CancelWorkflowProviderRunRequest {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub run_id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
@@ -6095,8 +6086,6 @@ pub struct UpsertWorkflowProviderScheduleRequest {
     pub target: ::core::option::Option<BoundWorkflowTarget>,
     #[prost(bool, tag = "5")]
     pub paused: bool,
-    #[prost(string, tag = "6")]
-    pub plugin_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "7")]
     pub requested_by: ::core::option::Option<WorkflowActor>,
     #[prost(string, tag = "8")]
@@ -6104,16 +6093,11 @@ pub struct UpsertWorkflowProviderScheduleRequest {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowProviderScheduleRequest {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub schedule_id: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListWorkflowProviderSchedulesRequest {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
-}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListWorkflowProviderSchedulesRequest {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderSchedulesResponse {
     #[prost(message, repeated, tag = "1")]
@@ -6121,22 +6105,16 @@ pub struct ListWorkflowProviderSchedulesResponse {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DeleteWorkflowProviderScheduleRequest {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub schedule_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PauseWorkflowProviderScheduleRequest {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub schedule_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ResumeWorkflowProviderScheduleRequest {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub schedule_id: ::prost::alloc::string::String,
 }
@@ -6150,23 +6128,16 @@ pub struct UpsertWorkflowProviderEventTriggerRequest {
     pub target: ::core::option::Option<BoundWorkflowTarget>,
     #[prost(bool, tag = "4")]
     pub paused: bool,
-    #[prost(string, tag = "5")]
-    pub plugin_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub requested_by: ::core::option::Option<WorkflowActor>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowProviderEventTriggerRequest {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub trigger_id: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListWorkflowProviderEventTriggersRequest {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
-}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListWorkflowProviderEventTriggersRequest {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderEventTriggersResponse {
     #[prost(message, repeated, tag = "1")]
@@ -6174,22 +6145,16 @@ pub struct ListWorkflowProviderEventTriggersResponse {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DeleteWorkflowProviderEventTriggerRequest {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub trigger_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PauseWorkflowProviderEventTriggerRequest {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub trigger_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ResumeWorkflowProviderEventTriggerRequest {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub trigger_id: ::prost::alloc::string::String,
 }
@@ -6212,8 +6177,6 @@ pub struct InvokeWorkflowOperationRequest {
     pub input: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "5")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "6")]
-    pub plugin_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "7")]
     pub created_by: ::core::option::Option<WorkflowActor>,
     #[prost(string, tag = "8")]

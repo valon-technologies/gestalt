@@ -50,13 +50,11 @@ export const provider = defineWorkflowProvider({
   async getRun(request) {
     return requireRun(request);
   },
-  async listRuns(request) {
-    return [...runs.values()].filter(
-      (run) => run.target?.pluginName === request.pluginName,
-    );
+  async listRuns() {
+    return [...runs.values()];
   },
   async cancelRun(request) {
-    const run = requireRunByID(request.pluginName, request.runId);
+    const run = requireRunByID(request.runId);
     const updated = create(BoundWorkflowRunSchema, {
       id: run.id,
       status: WorkflowRunStatus.CANCELED,
@@ -80,14 +78,12 @@ export const provider = defineWorkflowProvider({
   async getSchedule(request) {
     return requireSchedule(request);
   },
-  async listSchedules(request) {
-    return [...schedules.values()].filter(
-      (schedule) => schedule.target?.pluginName === request.pluginName,
-    );
+  async listSchedules() {
+    return [...schedules.values()];
   },
   async deleteSchedule(request) {
-    if (!schedules.delete(scheduleKeyForPlugin(request.pluginName, request.scheduleId))) {
-      throw new Error(`unknown schedule ${request.pluginName}/${request.scheduleId}`);
+    if (!schedules.delete(request.scheduleId)) {
+      throw new Error(`unknown schedule ${request.scheduleId}`);
     }
   },
   async pauseSchedule(request) {
@@ -105,14 +101,12 @@ export const provider = defineWorkflowProvider({
   async getEventTrigger(request) {
     return requireTrigger(request);
   },
-  async listEventTriggers(request) {
-    return [...triggers.values()].filter(
-      (trigger) => trigger.target?.pluginName === request.pluginName,
-    );
+  async listEventTriggers() {
+    return [...triggers.values()];
   },
   async deleteEventTrigger(request) {
-    if (!triggers.delete(triggerKeyForPlugin(request.pluginName, request.triggerId))) {
-      throw new Error(`unknown trigger ${request.pluginName}/${request.triggerId}`);
+    if (!triggers.delete(request.triggerId)) {
+      throw new Error(`unknown trigger ${request.triggerId}`);
     }
   },
   async pauseEventTrigger(request) {
@@ -123,9 +117,10 @@ export const provider = defineWorkflowProvider({
   },
   async publishEvent(request: PublishWorkflowProviderEventRequest) {
     publishCount += 1;
-    const existing = triggers.get(`${request.pluginName}:published`);
+    const triggerId = publishedTriggerID(request.pluginName);
+    const existing = triggers.get(triggerId);
     const trigger = create(BoundWorkflowEventTriggerSchema, {
-      id: "published",
+      id: triggerId,
       ...(existing?.match ? { match: existing.match } : {}),
       target: existing?.target ?? {
         pluginName: request.pluginName,
@@ -133,7 +128,7 @@ export const provider = defineWorkflowProvider({
       },
       paused: false,
     });
-    triggers.set(`${request.pluginName}:published`, trigger);
+    triggers.set(triggerId, trigger);
   },
   warnings() {
     return publishCount > 0 ? [`published-events:${publishCount}`] : [];
@@ -141,33 +136,25 @@ export const provider = defineWorkflowProvider({
 });
 
 function scheduleKey(request: UpsertWorkflowProviderScheduleRequest): string {
-  return scheduleKeyForPlugin(request.target?.pluginName ?? "", request.scheduleId);
-}
-
-function scheduleKeyForPlugin(pluginName: string, scheduleId: string): string {
-  return `${pluginName}:${scheduleId}`;
+  return request.scheduleId;
 }
 
 function requireRun(request: GetWorkflowProviderRunRequest) {
-  return requireRunByID(request.pluginName, request.runId);
+  return requireRunByID(request.runId);
 }
 
 function requireSchedule(request: GetWorkflowProviderScheduleRequest) {
-  const schedule = schedules.get(
-    scheduleKeyForPlugin(request.pluginName, request.scheduleId),
-  );
+  const schedule = schedules.get(request.scheduleId);
   if (!schedule) {
-    throw new Error(`unknown schedule ${request.pluginName}/${request.scheduleId}`);
+    throw new Error(`unknown schedule ${request.scheduleId}`);
   }
   return schedule;
 }
 
 function requireTrigger(request: GetWorkflowProviderEventTriggerRequest) {
-  const trigger = triggers.get(
-    triggerKeyForPlugin(request.pluginName, request.triggerId),
-  );
+  const trigger = triggers.get(request.triggerId);
   if (!trigger) {
-    throw new Error(`unknown trigger ${request.pluginName}/${request.triggerId}`);
+    throw new Error(`unknown trigger ${request.triggerId}`);
   }
   return trigger;
 }
@@ -178,11 +165,9 @@ function updateSchedule(
     | ResumeWorkflowProviderScheduleRequest,
   paused: boolean,
 ) {
-  const schedule = schedules.get(
-    scheduleKeyForPlugin(request.pluginName, request.scheduleId),
-  );
+  const schedule = schedules.get(request.scheduleId);
   if (!schedule) {
-    throw new Error(`unknown schedule ${request.pluginName}/${request.scheduleId}`);
+    throw new Error(`unknown schedule ${request.scheduleId}`);
   }
   const updated = create(BoundWorkflowScheduleSchema, {
     id: schedule.id,
@@ -195,10 +180,7 @@ function updateSchedule(
     ...(schedule.updatedAt ? { updatedAt: schedule.updatedAt } : {}),
     ...(schedule.nextRunAt ? { nextRunAt: schedule.nextRunAt } : {}),
   });
-  schedules.set(
-    scheduleKeyForPlugin(request.pluginName, request.scheduleId),
-    updated,
-  );
+  schedules.set(request.scheduleId, updated);
   return updated;
 }
 
@@ -208,11 +190,9 @@ function updateTrigger(
     | ResumeWorkflowProviderEventTriggerRequest,
   paused: boolean,
 ) {
-  const trigger = triggers.get(
-    triggerKeyForPlugin(request.pluginName, request.triggerId),
-  );
+  const trigger = triggers.get(request.triggerId);
   if (!trigger) {
-    throw new Error(`unknown trigger ${request.pluginName}/${request.triggerId}`);
+    throw new Error(`unknown trigger ${request.triggerId}`);
   }
   const updated = create(BoundWorkflowEventTriggerSchema, {
     id: trigger.id,
@@ -223,25 +203,22 @@ function updateTrigger(
     ...(trigger.createdAt ? { createdAt: trigger.createdAt } : {}),
     ...(trigger.updatedAt ? { updatedAt: trigger.updatedAt } : {}),
   });
-  triggers.set(
-    triggerKeyForPlugin(request.pluginName, request.triggerId),
-    updated,
-  );
+  triggers.set(request.triggerId, updated);
   return updated;
 }
 
 function triggerKey(request: UpsertWorkflowProviderEventTriggerRequest): string {
-  return triggerKeyForPlugin(request.target?.pluginName ?? "", request.triggerId);
+  return request.triggerId;
 }
 
-function triggerKeyForPlugin(pluginName: string, triggerId: string): string {
-  return `${pluginName}:${triggerId}`;
+function publishedTriggerID(pluginName: string): string {
+  return `published:${pluginName}`;
 }
 
-function requireRunByID(pluginName: string, runId: string) {
+function requireRunByID(runId: string) {
   const run = runs.get(runId);
-  if (!run || run.target?.pluginName !== pluginName) {
-    throw new Error(`unknown run ${pluginName}/${runId}`);
+  if (!run) {
+    throw new Error(`unknown run ${runId}`);
   }
   return run;
 }
