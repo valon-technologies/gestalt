@@ -56,6 +56,9 @@ func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Princi
 	if p.Identity == nil || p.Identity.Email == "" {
 		return p, nil
 	}
+	if s.users == nil {
+		return p, nil
+	}
 
 	dbUser, err := s.users.FindOrCreateUser(ctx, p.Identity.Email)
 	if err != nil {

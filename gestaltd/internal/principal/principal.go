@@ -66,6 +66,20 @@ func (p *Principal) AuthSource() string {
 	return p.Source.String()
 }
 
+func (p *Principal) IsWorkload() bool {
+	return p != nil && p.Kind == KindWorkload
+}
+
+func (p *Principal) HasUserContext() bool {
+	if p == nil {
+		return false
+	}
+	if strings.TrimSpace(p.UserID) != "" {
+		return true
+	}
+	return p.Identity != nil && strings.TrimSpace(p.Identity.Email) != ""
+}
+
 func UserSubjectID(userID string) string {
 	if userID == "" {
 		return ""

@@ -14174,6 +14174,11 @@ func (s *stubHostIssuedSessionAuth) SessionTokenTTL() time.Duration {
 func TestCookieAuth(t *testing.T) {
 	t.Parallel()
 
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
 	stub := &coretesting.StubAuthProvider{
 		N: "test",
 		ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
@@ -14190,6 +14195,12 @@ func TestCookieAuth(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = stub
+		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{
+			Workloads: map[string]config.WorkloadDef{
+				"triage-bot": {Token: workloadToken},
+			},
+		}, nil, nil, nil)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -14229,6 +14240,20 @@ func TestCookieAuth(t *testing.T) {
 
 	if fallbackResp.StatusCode == http.StatusUnauthorized {
 		t.Fatal("valid Authorization header should have passed middleware after invalid cookie")
+	}
+
+	// A non-human token in the cookie slot should be ignored the same way as an invalid cookie.
+	reqWithWorkloadCookie, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	reqWithWorkloadCookie.AddCookie(&http.Cookie{Name: "session_token", Value: workloadToken})
+	reqWithWorkloadCookie.Header.Set("Authorization", "Bearer valid-header-token")
+	workloadFallbackResp, err := http.DefaultClient.Do(reqWithWorkloadCookie)
+	if err != nil {
+		t.Fatalf("request with workload cookie fallback: %v", err)
+	}
+	defer func() { _ = workloadFallbackResp.Body.Close() }()
+
+	if workloadFallbackResp.StatusCode == http.StatusUnauthorized {
+		t.Fatal("valid Authorization header should have passed middleware after workload cookie")
 	}
 }
 
@@ -16905,6 +16930,24 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 		},
 		ops: []core.Operation{{Name: "query", Method: http.MethodGet}},
 	}
+	deltaStub := &stubManualProviderWithCapabilities{
+		stubManualProvider: stubManualProvider{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "delta",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: serverTestCatalog("delta", []catalog.CatalogOperation{
+					{ID: "inspect", Method: http.MethodGet, Path: "/inspect", Transport: catalog.TransportREST},
+				}),
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				},
+			},
+		},
+		credentialFields: []core.CredentialFieldDef{{Name: "api_token", Label: "API Token"}},
+		connectionParams: map[string]core.ConnectionParamDef{
+			"region": {Description: "Optional region"},
+		},
+	}
 	gammaStub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "gamma",
@@ -16915,7 +16958,7 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 		},
 		ops: []core.Operation{{Name: "query", Method: http.MethodGet}},
 	}
-	providers := testutil.NewProviderRegistry(t, alphaStub, betaStub, gammaStub)
+	providers := testutil.NewProviderRegistry(t, alphaStub, betaStub, deltaStub, gammaStub)
 	authz, err := authorization.New(config.AuthorizationConfig{}, nil, providers, nil)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
@@ -16943,6 +16986,7 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 	doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Invoke Bot"}`, http.StatusCreated, &createResp)
 	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/alpha", "admin-session", `{"operations":["read"]}`, http.StatusOK, nil)
 	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/beta", "admin-session", `{"operations":["query"]}`, http.StatusOK, nil)
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/delta", "admin-session", `{"operations":["inspect"]}`, http.StatusOK, nil)
 
 	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/gamma", bytes.NewBufferString(`{"operations":["query"]}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -16984,7 +17028,7 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 		http.MethodPost,
 		ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens",
 		"admin-session",
-		`{"name":"invoke-token","permissions":[{"plugin":"alpha","operations":["read"]},{"plugin":"beta","operations":["query"]}]}`,
+		`{"name":"invoke-token","permissions":[{"plugin":"alpha","operations":["read"]},{"plugin":"beta","operations":["query"]},{"plugin":"delta","operations":["inspect"]}]}`,
 		http.StatusCreated,
 		&createTokenResp,
 	)
@@ -17012,8 +17056,62 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 	if status := call("/api/v1/beta/query"); status != http.StatusOK {
 		t.Fatalf("beta/query status = %d, want 200", status)
 	}
+	if status := call("/api/v1/delta/inspect"); status != http.StatusOK {
+		t.Fatalf("delta/inspect status = %d, want 200", status)
+	}
 	if status := call("/api/v1/gamma/query"); status != http.StatusForbidden {
 		t.Fatalf("gamma/query status = %d, want 403", status)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("Authorization", "Bearer "+createTokenResp.Token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("list integrations with managed identity token: %v", err)
+	}
+	type listedIntegration struct {
+		Name             string `json:"name"`
+		AuthTypes        []string
+		Connections      []struct{}          `json:"connections"`
+		CredentialFields []struct{}          `json:"credentialFields"`
+		ConnectionParams map[string]struct{} `json:"connectionParams"`
+	}
+	var integrations []listedIntegration
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		_ = resp.Body.Close()
+		t.Fatalf("decode integrations: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list integrations status = %d, want 200", resp.StatusCode)
+	}
+	var deltaInfo *listedIntegration
+	for i := range integrations {
+		if integrations[i].Name == "delta" {
+			deltaInfo = &integrations[i]
+			break
+		}
+	}
+	if deltaInfo == nil {
+		t.Fatalf("expected delta integration in %+v", integrations)
+	}
+	if len(deltaInfo.AuthTypes) != 0 || len(deltaInfo.Connections) != 0 || len(deltaInfo.CredentialFields) != 0 || len(deltaInfo.ConnectionParams) != 0 {
+		t.Fatalf("managed identity integration info should hide connection affordances: %+v", *deltaInfo)
+	}
+
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+createTokenResp.Token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("logout with managed identity token: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("logout status = %d, want 403: %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), "non-user callers are not allowed on this route") {
+		t.Fatalf("logout body = %q, want non-user route rejection", string(body))
 	}
 
 	doJSONRequestAndDecode(t, http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", "", http.StatusOK, nil)
