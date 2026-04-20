@@ -15,8 +15,6 @@ type Services struct {
 	ManagedIdentities        *ManagedIdentityService
 	IdentityMemberships      *ManagedIdentityMembershipService
 	IdentityGrants           *ManagedIdentityGrantService
-	PluginAuthorizations     *PluginAuthorizationService
-	AdminAuthorizations      *AdminAuthorizationService
 	Identities               *IdentityService
 	IdentityAuthBindings     *IdentityAuthBindingService
 	IdentityManagementGrants *IdentityManagementGrantService
@@ -47,12 +45,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	}
 	if err := ds.CreateObjectStore(ctx, StoreManagedIdentityGrants, ManagedIdentityGrantsSchema); err != nil {
 		return nil, fmt.Errorf("create managed_identity_grants store: %w", err)
-	}
-	if err := ds.CreateObjectStore(ctx, StorePluginAuthorizationMemberships, PluginAuthorizationMembershipsSchema); err != nil {
-		return nil, fmt.Errorf("create plugin_authorization_memberships store: %w", err)
-	}
-	if err := ds.CreateObjectStore(ctx, StoreAdminAuthorizationMemberships, AdminAuthorizationMembershipsSchema); err != nil {
-		return nil, fmt.Errorf("create admin_authorization_memberships store: %w", err)
 	}
 	if err := ds.CreateObjectStore(ctx, StoreIdentities, IdentitiesSchema); err != nil {
 		return nil, fmt.Errorf("create identities store: %w", err)
@@ -95,8 +87,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	managedIdentities := NewManagedIdentityService(ds, identities)
 	identityMemberships := NewManagedIdentityMembershipService(ds, identityManagementGrants, users)
 	identityGrants := NewManagedIdentityGrantService(ds, identityPluginAccess)
-	pluginAuthorizations := NewPluginAuthorizationService(ds, identityPluginAccess, users)
-	adminAuthorizations := NewAdminAuthorizationService(ds, workspaceRoles, users)
 	apiTokens := NewAPITokenService(ds, apiTokenAccess, users)
 	tokens := NewTokenService(ds, enc, externalCredentials, users)
 
@@ -115,12 +105,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := identityGrants.BackfillCanonicalAccess(ctx); err != nil {
 		return nil, fmt.Errorf("backfill canonical identity grants: %w", err)
 	}
-	if err := pluginAuthorizations.BackfillCanonicalAccess(ctx); err != nil {
-		return nil, fmt.Errorf("backfill canonical plugin authorizations: %w", err)
-	}
-	if err := adminAuthorizations.BackfillCanonicalWorkspaceRoles(ctx); err != nil {
-		return nil, fmt.Errorf("backfill canonical workspace roles: %w", err)
-	}
 	if err := apiTokens.BackfillTokenAccess(ctx); err != nil {
 		return nil, fmt.Errorf("backfill canonical api token access: %w", err)
 	}
@@ -135,8 +119,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 		ManagedIdentities:        managedIdentities,
 		IdentityMemberships:      identityMemberships,
 		IdentityGrants:           identityGrants,
-		PluginAuthorizations:     pluginAuthorizations,
-		AdminAuthorizations:      adminAuthorizations,
 		Identities:               identities,
 		IdentityAuthBindings:     authBindings,
 		IdentityManagementGrants: identityManagementGrants,

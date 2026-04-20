@@ -3,22 +3,20 @@ package coredata
 import "github.com/valon-technologies/gestalt/server/core/indexeddb"
 
 const (
-	StoreUsers                          = "users"
-	StoreIntegrationTokens              = "integration_tokens"
-	StoreAPITokens                      = "api_tokens"
-	StoreManagedIdentities              = "managed_identities"
-	StoreManagedIdentityMemberships     = "managed_identity_memberships"
-	StoreManagedIdentityGrants          = "managed_identity_grants"
-	StorePluginAuthorizationMemberships = "plugin_authorization_memberships"
-	StoreAdminAuthorizationMemberships  = "admin_authorization_memberships"
-	StoreIdentities                     = "identities"
-	StoreIdentityAuthBindings           = "identity_auth_bindings"
-	StoreIdentityManagementGrants       = "identity_management_grants"
-	StoreIdentityDelegations            = "identity_delegations"
-	StoreWorkspaceRoles                 = "workspace_roles"
-	StoreIdentityPluginAccess           = "identity_plugin_access"
-	StoreAPITokenAccess                 = "api_token_access"
-	StoreExternalCredentials            = "external_credentials"
+	StoreUsers                      = "users"
+	StoreIntegrationTokens          = "integration_tokens"
+	StoreAPITokens                  = "api_tokens"
+	StoreManagedIdentities          = "managed_identities"
+	StoreManagedIdentityMemberships = "managed_identity_memberships"
+	StoreManagedIdentityGrants      = "managed_identity_grants"
+	StoreIdentities                 = "identities"
+	StoreIdentityAuthBindings       = "identity_auth_bindings"
+	StoreIdentityManagementGrants   = "identity_management_grants"
+	StoreIdentityDelegations        = "identity_delegations"
+	StoreWorkspaceRoles             = "workspace_roles"
+	StoreIdentityPluginAccess       = "identity_plugin_access"
+	StoreAPITokenAccess             = "api_token_access"
+	StoreExternalCredentials        = "external_credentials"
 )
 
 var UsersSchema = indexeddb.ObjectStoreSchema{
@@ -126,36 +124,6 @@ var ManagedIdentityGrantsSchema = indexeddb.ObjectStoreSchema{
 		{Name: "identity_id", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "plugin", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "operations_json", Type: indexeddb.TypeString},
-		{Name: "created_at", Type: indexeddb.TypeTime},
-		{Name: "updated_at", Type: indexeddb.TypeTime},
-	},
-}
-
-var PluginAuthorizationMembershipsSchema = indexeddb.ObjectStoreSchema{
-	Indexes: []indexeddb.IndexSchema{
-		{Name: "by_plugin", KeyPath: []string{"plugin"}},
-		{Name: "by_plugin_user", KeyPath: []string{"plugin", "user_id"}, Unique: true},
-	},
-	Columns: []indexeddb.ColumnDef{
-		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-		{Name: "plugin", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "user_id", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "email", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "role", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "created_at", Type: indexeddb.TypeTime},
-		{Name: "updated_at", Type: indexeddb.TypeTime},
-	},
-}
-
-var AdminAuthorizationMembershipsSchema = indexeddb.ObjectStoreSchema{
-	Indexes: []indexeddb.IndexSchema{
-		{Name: "by_user", KeyPath: []string{"user_id"}, Unique: true},
-	},
-	Columns: []indexeddb.ColumnDef{
-		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-		{Name: "user_id", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "email", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "role", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "created_at", Type: indexeddb.TypeTime},
 		{Name: "updated_at", Type: indexeddb.TypeTime},
 	},

@@ -16,8 +16,6 @@ type RuntimeAuthorizer interface {
 	Start(ctx context.Context) error
 	Close() error
 
-	HasDynamicPluginAuthorizations() bool
-	HasDynamicAdminAuthorizations() bool
 	ReloadDynamic(ctx context.Context) error
 
 	IsWorkload(p *principal.Principal) bool

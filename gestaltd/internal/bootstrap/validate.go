@@ -12,7 +12,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/plugininvocation"
@@ -62,14 +61,11 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return warnings, err
 	}
-	var dynamicPluginServices []*coredata.PluginAuthorizationService
-	if _, authzEntry, err := cfg.SelectedAuthorizationProvider(); err != nil {
+	if _, _, err := cfg.SelectedAuthorizationProvider(); err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return warnings, err
-	} else if authzEntry != nil && prepared.Services != nil && prepared.Services.PluginAuthorizations != nil {
-		dynamicPluginServices = append(dynamicPluginServices, prepared.Services.PluginAuthorizations)
 	}
-	authz, err := authorization.New(authzCfg, cfg.Plugins, providers, connMaps.DefaultConnection, dynamicPluginServices...)
+	authz, err := authorization.New(authzCfg, cfg.Plugins, providers, connMaps.DefaultConnection)
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return warnings, err

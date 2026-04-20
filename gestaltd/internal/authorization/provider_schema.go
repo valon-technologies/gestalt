@@ -18,10 +18,6 @@ const (
 	ProviderSubjectTypeSubject = "subject"
 	ProviderSubjectTypeUser    = "user"
 	ProviderSubjectTypeEmail   = "email"
-
-	ProviderLegacyHumanImportSentinelRelation   = "managed"
-	ProviderLegacyHumanImportSentinelSubjectID  = "gestalt:authorization"
-	ProviderLegacyHumanImportSentinelResourceID = "__gestalt_legacy_human_import_v1__"
 )
 
 const (
@@ -53,27 +49,11 @@ func IsManagedProviderRelationship(rel *core.Relationship) bool {
 	}
 }
 
-func ProviderLegacyHumanImportSentinelRelationship() *core.Relationship {
-	return &core.Relationship{
-		Subject: &core.SubjectRef{
-			Type: ProviderSubjectTypeSubject,
-			Id:   ProviderLegacyHumanImportSentinelSubjectID,
-		},
-		Relation: ProviderLegacyHumanImportSentinelRelation,
-		Resource: &core.ResourceRef{
-			Type: ProviderResourceTypePolicyStatic,
-			Id:   ProviderLegacyHumanImportSentinelResourceID,
-		},
-	}
-}
-
 func buildProviderAuthorizationModel(state providerBackedRoleState) *core.AuthorizationModel {
 	model := &core.AuthorizationModel{Version: 1}
 
 	policyRoles := unionRoleLists(state.policyStaticRoles)
-	policyRelations := map[string][]string{
-		ProviderLegacyHumanImportSentinelRelation: {subjectTypeSubject},
-	}
+	policyRelations := map[string][]string{}
 	for _, role := range policyRoles {
 		policyRelations[role] = []string{subjectTypeSubject, subjectTypeEmail}
 	}

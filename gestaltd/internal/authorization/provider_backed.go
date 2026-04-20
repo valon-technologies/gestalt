@@ -2,7 +2,6 @@ package authorization
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -41,6 +40,8 @@ type ProviderBackedAuthorizer struct {
 
 var _ RuntimeAuthorizer = (*ProviderBackedAuthorizer)(nil)
 
+const providerBackedReloadInterval = 5 * time.Second
+
 func NewProviderBacked(legacy *Authorizer, provider core.AuthorizationProvider) *ProviderBackedAuthorizer {
 	return &ProviderBackedAuthorizer{
 		legacy:   legacy,
@@ -60,7 +61,7 @@ func (a *ProviderBackedAuthorizer) Start(ctx context.Context) error {
 	if a.legacy == nil {
 		return nil
 	}
-	if a.provider == nil || a.legacy == nil {
+	if a.provider == nil {
 		return a.legacy.Start(ctx)
 	}
 
@@ -75,10 +76,6 @@ func (a *ProviderBackedAuthorizer) Start(ctx context.Context) error {
 	if err := a.ReloadDynamic(ctx); err != nil {
 		return err
 	}
-	a.legacy.lifecycleMu.Lock()
-	a.legacy.started = true
-	a.legacy.lifecycleMu.Unlock()
-
 	pollCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	a.pollCancel = cancel
@@ -95,7 +92,7 @@ func (a *ProviderBackedAuthorizer) Close() error {
 	if a.legacy == nil {
 		return nil
 	}
-	if a.provider == nil || a.legacy == nil {
+	if a.provider == nil {
 		return a.legacy.Close()
 	}
 
@@ -131,37 +128,27 @@ func (a *ProviderBackedAuthorizer) ReloadDynamic(ctx context.Context) error {
 		return a.legacy.ReloadDynamic(ctx)
 	}
 
-	reloadErr := a.legacy.ReloadDynamic(ctx)
-
 	sourceModelID, err := a.sourceModelID(ctx)
 	if err != nil {
-		return errors.Join(reloadErr, err)
+		return err
 	}
 	sourceExisting := map[string]*core.Relationship{}
 	if sourceModelID != "" {
 		sourceExisting, err = a.readAllRelationships(ctx, sourceModelID)
 		if err != nil {
-			return errors.Join(reloadErr, err)
+			return err
 		}
 	}
-	_, legacyImported := sourceExisting[relationshipMapKey(ProviderLegacyHumanImportSentinelRelationship())]
-	importLegacy := !legacyImported && reloadErr == nil
-
-	var snapshot *dynamicSnapshot
-	if importLegacy {
-		snapshot = a.currentDynamicSnapshot()
-	}
-
-	desired, roles, err := a.buildDesiredRelationships(sourceExisting, snapshot, legacyImported || importLegacy)
+	desired, roles, err := a.buildDesiredRelationships(sourceExisting)
 	if err != nil {
-		return errors.Join(reloadErr, err)
+		return err
 	}
 	model, err := a.provider.WriteModel(ctx, &core.WriteModelRequest{Model: buildProviderAuthorizationModel(roles)})
 	if err != nil {
-		return errors.Join(reloadErr, fmt.Errorf("write authorization model: %w", err))
+		return fmt.Errorf("write authorization model: %w", err)
 	}
 	if model == nil || strings.TrimSpace(model.GetId()) == "" {
-		return errors.Join(reloadErr, fmt.Errorf("write authorization model: missing model id"))
+		return fmt.Errorf("write authorization model: missing model id")
 	}
 	modelID := strings.TrimSpace(model.GetId())
 
@@ -169,7 +156,7 @@ func (a *ProviderBackedAuthorizer) ReloadDynamic(ctx context.Context) error {
 	if modelID != sourceModelID {
 		targetExisting, err = a.readAllRelationships(ctx, modelID)
 		if err != nil {
-			return errors.Join(reloadErr, err)
+			return err
 		}
 	}
 
@@ -180,7 +167,7 @@ func (a *ProviderBackedAuthorizer) ReloadDynamic(ctx context.Context) error {
 			Deletes: deletes,
 			ModelId: modelID,
 		}); err != nil {
-			return errors.Join(reloadErr, fmt.Errorf("sync authorization relationships: %w", err))
+			return fmt.Errorf("sync authorization relationships: %w", err)
 		}
 	}
 
@@ -188,7 +175,7 @@ func (a *ProviderBackedAuthorizer) ReloadDynamic(ctx context.Context) error {
 	roles.modelID = modelID
 	a.state = roles
 	a.stateMu.Unlock()
-	return reloadErr
+	return nil
 }
 
 func (a *ProviderBackedAuthorizer) ManagedModelID(ctx context.Context) (string, error) {
@@ -207,7 +194,7 @@ func (a *ProviderBackedAuthorizer) ManagedModelID(ctx context.Context) (string, 
 
 func (a *ProviderBackedAuthorizer) pollLoop(ctx context.Context, done chan struct{}) {
 	defer close(done)
-	ticker := time.NewTicker(a.legacy.dynamicReloadEvery)
+	ticker := time.NewTicker(providerBackedReloadInterval)
 	defer ticker.Stop()
 
 	for {
@@ -227,14 +214,6 @@ func (a *ProviderBackedAuthorizer) ResolveWorkloadToken(token string) (*principa
 		return nil, false
 	}
 	return a.legacy.ResolveWorkloadToken(token)
-}
-
-func (a *ProviderBackedAuthorizer) HasDynamicPluginAuthorizations() bool {
-	return a != nil && a.legacy != nil && a.legacy.HasDynamicPluginAuthorizations()
-}
-
-func (a *ProviderBackedAuthorizer) HasDynamicAdminAuthorizations() bool {
-	return a != nil && a.legacy != nil && a.legacy.HasDynamicAdminAuthorizations()
 }
 
 func (a *ProviderBackedAuthorizer) IsWorkload(p *principal.Principal) bool {
@@ -305,7 +284,11 @@ func (a *ProviderBackedAuthorizer) ResolveAccess(ctx context.Context, p *princip
 	role, ok, err := a.resolveProviderRole(ctx, provider, p)
 	if err != nil {
 		a.logProviderEvalError("plugin", provider, err)
-		return a.legacy.ResolveAccess(ctx, p, provider)
+		if policy.DefaultAllow {
+			access.Role = defaultHumanRole
+			return access, true
+		}
+		return access, false
 	}
 	if ok {
 		access.Role = role
@@ -344,7 +327,11 @@ func (a *ProviderBackedAuthorizer) ResolvePolicyAccess(ctx context.Context, p *p
 	role, ok, err := a.resolvePolicyStaticRole(ctx, policyName, p)
 	if err != nil {
 		a.logProviderEvalError("policy", policyName, err)
-		return a.legacy.ResolvePolicyAccess(ctx, p, policyName)
+		if policy.DefaultAllow {
+			access.Role = defaultHumanRole
+			return access, true
+		}
+		return access, false
 	}
 	if ok {
 		access.Role = role
@@ -383,7 +370,11 @@ func (a *ProviderBackedAuthorizer) ResolveAdminAccess(ctx context.Context, p *pr
 	role, ok, err := a.resolveAdminStaticRole(ctx, policyName, p)
 	if err != nil {
 		a.logProviderEvalError("admin_policy", policyName, err)
-		return a.legacy.ResolveAdminAccess(ctx, p, policyName)
+		if policy.DefaultAllow {
+			access.Role = defaultHumanRole
+			return access, true
+		}
+		return access, false
 	}
 	if ok {
 		access.Role = role
@@ -392,7 +383,11 @@ func (a *ProviderBackedAuthorizer) ResolveAdminAccess(ctx context.Context, p *pr
 	role, ok, err = a.resolveAdminDynamicRole(ctx, p)
 	if err != nil {
 		a.logProviderEvalError("admin_dynamic", policyName, err)
-		return a.legacy.ResolveAdminAccess(ctx, p, policyName)
+		if policy.DefaultAllow {
+			access.Role = defaultHumanRole
+			return access, true
+		}
+		return access, false
 	}
 	if ok {
 		access.Role = role
@@ -608,21 +603,17 @@ func (a *ProviderBackedAuthorizer) readAllRelationships(ctx context.Context, mod
 	}
 }
 
-func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string]*core.Relationship, snapshot *dynamicSnapshot, markLegacyImported bool) (map[string]*core.Relationship, providerBackedRoleState, error) {
+func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string]*core.Relationship) (map[string]*core.Relationship, providerBackedRoleState, error) {
 	desired := map[string]*core.Relationship{}
 	state := providerBackedRoleState{
 		policyStaticRoles:  map[string][]string{},
 		pluginStaticRoles:  map[string][]string{},
 		pluginDynamicRoles: map[string][]string{},
 	}
-	if markLegacyImported {
-		addDesiredRelationship(desired, ProviderLegacyHumanImportSentinelRelationship())
-	}
 	policyStaticRoles := map[string]map[string]struct{}{}
 	pluginStaticRoles := map[string]map[string]struct{}{}
 	pluginDynamicRoles := map[string]map[string]struct{}{}
 	adminDynamicRoles := map[string]struct{}{}
-	existingDynamicSubjects := map[string]struct{}{}
 
 	for _, rel := range existing {
 		if rel == nil || rel.GetResource() == nil {
@@ -636,7 +627,6 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 				continue
 			}
 			addDesiredRelationship(desired, rel)
-			existingDynamicSubjects[dynamicMembershipSubjectResourceKey(rel.GetSubject(), rel.GetResource())] = struct{}{}
 			ensureRoleSet(pluginDynamicRoles, resourceID)[relation] = struct{}{}
 		case resourceTypeAdminDynamic:
 			resourceID := strings.TrimSpace(rel.GetResource().GetId())
@@ -645,7 +635,6 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 				continue
 			}
 			addDesiredRelationship(desired, rel)
-			existingDynamicSubjects[dynamicMembershipSubjectResourceKey(rel.GetSubject(), rel.GetResource())] = struct{}{}
 			adminDynamicRoles[relation] = struct{}{}
 		}
 	}
@@ -712,118 +701,6 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 					Subject:  &core.SubjectRef{Type: subjectTypeEmail, Id: email},
 					Relation: role,
 					Resource: &core.ResourceRef{Type: resourceTypePluginStatic, Id: providerName},
-				})
-			}
-		}
-	}
-
-	if snapshot != nil {
-		type legacyPluginImport struct {
-			providerName string
-			grant        dynamicGrant
-		}
-		pluginImports := map[string]legacyPluginImport{}
-		for providerName, byUserID := range snapshot.byPluginUserID {
-			providerName = strings.TrimSpace(providerName)
-			if providerName == "" {
-				continue
-			}
-			for _, grant := range byUserID {
-				key := strings.Join([]string{
-					providerName,
-					strings.TrimSpace(grant.UserID),
-					normalizeProviderEmail(grant.Email),
-				}, "\x00")
-				pluginImports[key] = legacyPluginImport{providerName: providerName, grant: grant}
-			}
-		}
-		for providerName, byEmail := range snapshot.byPluginEmail {
-			providerName = strings.TrimSpace(providerName)
-			if providerName == "" {
-				continue
-			}
-			for _, grant := range byEmail {
-				key := strings.Join([]string{
-					providerName,
-					strings.TrimSpace(grant.UserID),
-					normalizeProviderEmail(grant.Email),
-				}, "\x00")
-				pluginImports[key] = legacyPluginImport{providerName: providerName, grant: grant}
-			}
-		}
-		for _, item := range pluginImports {
-			role := strings.TrimSpace(item.grant.Role)
-			userID := strings.TrimSpace(item.grant.UserID)
-			email := normalizeProviderEmail(item.grant.Email)
-			if role == "" || (userID == "" && email == "") {
-				continue
-			}
-			keys := dynamicMembershipImportKeys(userID, email, resourceTypePluginDynamic, item.providerName)
-			if dynamicMembershipKeysPresent(existingDynamicSubjects, keys...) {
-				continue
-			}
-			for _, key := range keys {
-				existingDynamicSubjects[key] = struct{}{}
-			}
-			ensureRoleSet(pluginDynamicRoles, item.providerName)[role] = struct{}{}
-			if userID != "" {
-				addDesiredRelationship(desired, &core.Relationship{
-					Subject:  &core.SubjectRef{Type: subjectTypeUser, Id: userID},
-					Relation: role,
-					Resource: &core.ResourceRef{Type: resourceTypePluginDynamic, Id: item.providerName},
-				})
-			}
-			if email != "" {
-				addDesiredRelationship(desired, &core.Relationship{
-					Subject:  &core.SubjectRef{Type: subjectTypeEmail, Id: email},
-					Relation: role,
-					Resource: &core.ResourceRef{Type: resourceTypePluginDynamic, Id: item.providerName},
-				})
-			}
-		}
-
-		adminImports := map[string]dynamicGrant{}
-		for _, grant := range snapshot.adminByUserID {
-			key := strings.Join([]string{
-				strings.TrimSpace(grant.UserID),
-				normalizeProviderEmail(grant.Email),
-			}, "\x00")
-			adminImports[key] = grant
-		}
-		for _, grant := range snapshot.adminByEmail {
-			key := strings.Join([]string{
-				strings.TrimSpace(grant.UserID),
-				normalizeProviderEmail(grant.Email),
-			}, "\x00")
-			adminImports[key] = grant
-		}
-		for _, grant := range adminImports {
-			role := strings.TrimSpace(grant.Role)
-			userID := strings.TrimSpace(grant.UserID)
-			email := normalizeProviderEmail(grant.Email)
-			if role == "" || (userID == "" && email == "") {
-				continue
-			}
-			keys := dynamicMembershipImportKeys(userID, email, resourceTypeAdminDynamic, resourceIDAdminDynamicGlobal)
-			if dynamicMembershipKeysPresent(existingDynamicSubjects, keys...) {
-				continue
-			}
-			for _, key := range keys {
-				existingDynamicSubjects[key] = struct{}{}
-			}
-			adminDynamicRoles[role] = struct{}{}
-			if userID != "" {
-				addDesiredRelationship(desired, &core.Relationship{
-					Subject:  &core.SubjectRef{Type: subjectTypeUser, Id: userID},
-					Relation: role,
-					Resource: &core.ResourceRef{Type: resourceTypeAdminDynamic, Id: resourceIDAdminDynamicGlobal},
-				})
-			}
-			if email != "" {
-				addDesiredRelationship(desired, &core.Relationship{
-					Subject:  &core.SubjectRef{Type: subjectTypeEmail, Id: email},
-					Relation: role,
-					Resource: &core.ResourceRef{Type: resourceTypeAdminDynamic, Id: resourceIDAdminDynamicGlobal},
 				})
 			}
 		}
@@ -911,50 +788,6 @@ func roleSortKey(role string) string {
 	}
 }
 
-func dynamicMembershipSubjectResourceKey(subject *core.SubjectRef, resource *core.ResourceRef) string {
-	if subject == nil || resource == nil {
-		return ""
-	}
-	return dynamicMembershipKey(
-		strings.TrimSpace(subject.GetType()),
-		strings.TrimSpace(subject.GetId()),
-		strings.TrimSpace(resource.GetType()),
-		strings.TrimSpace(resource.GetId()),
-	)
-}
-
-func dynamicMembershipKey(subjectType, subjectID, resourceType, resourceID string) string {
-	return strings.Join([]string{
-		strings.TrimSpace(subjectType),
-		strings.TrimSpace(subjectID),
-		strings.TrimSpace(resourceType),
-		strings.TrimSpace(resourceID),
-	}, "\x00")
-}
-
-func dynamicMembershipImportKeys(userID, email, resourceType, resourceID string) []string {
-	keys := make([]string, 0, 2)
-	if userID = strings.TrimSpace(userID); userID != "" {
-		keys = append(keys, dynamicMembershipKey(subjectTypeUser, userID, resourceType, resourceID))
-	}
-	if email = normalizeProviderEmail(email); email != "" {
-		keys = append(keys, dynamicMembershipKey(subjectTypeEmail, email, resourceType, resourceID))
-	}
-	return keys
-}
-
-func dynamicMembershipKeysPresent(existing map[string]struct{}, keys ...string) bool {
-	for _, key := range keys {
-		if key == "" {
-			continue
-		}
-		if _, ok := existing[key]; ok {
-			return true
-		}
-	}
-	return false
-}
-
 func staticSubjectRefs(p *principal.Principal) []*core.SubjectRef {
 	if p == nil {
 		return nil
@@ -1034,7 +867,7 @@ func (a *ProviderBackedAuthorizer) logProviderEvalError(scope, name string, err 
 	if err == nil {
 		return
 	}
-	slog.Warn("authorization: provider evaluation failed; falling back to legacy rules",
+	slog.Warn("authorization: provider evaluation failed; denying provider-backed human access",
 		"scope", scope,
 		"name", name,
 		"error", err,
@@ -1045,17 +878,6 @@ func (a *ProviderBackedAuthorizer) currentState() providerBackedRoleState {
 	a.stateMu.RLock()
 	defer a.stateMu.RUnlock()
 	return a.state
-}
-
-func (a *ProviderBackedAuthorizer) currentDynamicSnapshot() *dynamicSnapshot {
-	if a == nil || a.legacy == nil {
-		return emptyDynamicSnapshot()
-	}
-	snapshot := a.legacy.dynamic.Load()
-	if snapshot == nil {
-		return emptyDynamicSnapshot()
-	}
-	return snapshot
 }
 
 func managedRelationship(rel *core.Relationship) bool {
