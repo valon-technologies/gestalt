@@ -74,7 +74,7 @@ func (a *ProviderBackedAuthorizer) Start(ctx context.Context) error {
 	if a.started {
 		return nil
 	}
-	if err := a.ReloadDynamic(ctx); err != nil {
+	if err := a.ReloadAuthorizationState(ctx); err != nil {
 		return err
 	}
 	pollCtx, cancel := context.WithCancel(ctx)
@@ -112,7 +112,7 @@ func (a *ProviderBackedAuthorizer) Close() error {
 	return a.base.Close()
 }
 
-func (a *ProviderBackedAuthorizer) ReloadDynamic(ctx context.Context) error {
+func (a *ProviderBackedAuthorizer) ReloadAuthorizationState(ctx context.Context) error {
 	if a == nil {
 		return nil
 	}
@@ -171,9 +171,6 @@ func (a *ProviderBackedAuthorizer) ManagedModelID(ctx context.Context) (string, 
 	if a == nil {
 		return "", fmt.Errorf("authorization provider is unavailable")
 	}
-	if a.provider == nil {
-		return "", fmt.Errorf("authorization provider is unavailable")
-	}
 	state := a.currentState()
 	if modelID := strings.TrimSpace(state.modelID); modelID != "" {
 		return modelID, nil
@@ -191,8 +188,8 @@ func (a *ProviderBackedAuthorizer) pollLoop(ctx context.Context, done chan struc
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := a.ReloadDynamic(ctx); err != nil {
-				slog.WarnContext(ctx, "authorization: provider-backed reload failed", "error", err)
+			if err := a.ReloadAuthorizationState(ctx); err != nil {
+				slog.WarnContext(ctx, "authorization: provider-backed authorization state reload failed", "error", err)
 			}
 		}
 	}

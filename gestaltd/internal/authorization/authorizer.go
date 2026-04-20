@@ -184,7 +184,7 @@ func (a *Authorizer) Close() error {
 	return nil
 }
 
-func (a *Authorizer) ReloadDynamic(ctx context.Context) error {
+func (a *Authorizer) ReloadAuthorizationState(ctx context.Context) error {
 	_ = ctx
 	return nil
 }

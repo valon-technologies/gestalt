@@ -900,8 +900,8 @@ func mustProviderBackedAuthorizer(t *testing.T, base *authorization.Authorizer, 
 	if err != nil {
 		t.Fatalf("NewProviderBacked: %v", err)
 	}
-	if err := authz.ReloadDynamic(context.Background()); err != nil {
-		t.Fatalf("ReloadDynamic: %v", err)
+	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
+		t.Fatalf("ReloadAuthorizationState: %v", err)
 	}
 	return authz
 }
@@ -910,8 +910,8 @@ func seedProviderDynamicAdminMembership(t *testing.T, svc *coredata.Services, au
 	t.Helper()
 	user := seedUser(t, svc, email)
 	if provider.activeModelID == "" {
-		if err := authz.ReloadDynamic(context.Background()); err != nil {
-			t.Fatalf("seedProviderDynamicAdminMembership reload: %v", err)
+		if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
+			t.Fatalf("seedProviderDynamicAdminMembership authorization state reload: %v", err)
 		}
 	}
 	if provider.activeModelID == "" {
@@ -922,8 +922,8 @@ func seedProviderDynamicAdminMembership(t *testing.T, svc *coredata.Services, au
 		Relation: role,
 		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
 	})
-	if err := authz.ReloadDynamic(context.Background()); err != nil {
-		t.Fatalf("seedProviderDynamicAdminMembership reload after write: %v", err)
+	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
+		t.Fatalf("seedProviderDynamicAdminMembership authorization state reload after write: %v", err)
 	}
 	return user
 }
@@ -932,8 +932,8 @@ func seedProviderPluginAuthorization(t *testing.T, svc *coredata.Services, authz
 	t.Helper()
 	user := seedUser(t, svc, email)
 	if provider.activeModelID == "" {
-		if err := authz.ReloadDynamic(context.Background()); err != nil {
-			t.Fatalf("seedProviderPluginAuthorization reload: %v", err)
+		if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
+			t.Fatalf("seedProviderPluginAuthorization authorization state reload: %v", err)
 		}
 	}
 	if provider.activeModelID == "" {
@@ -944,8 +944,8 @@ func seedProviderPluginAuthorization(t *testing.T, svc *coredata.Services, authz
 		Relation: role,
 		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: plugin},
 	})
-	if err := authz.ReloadDynamic(context.Background()); err != nil {
-		t.Fatalf("seedProviderPluginAuthorization reload after write: %v", err)
+	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
+		t.Fatalf("seedProviderPluginAuthorization authorization state reload after write: %v", err)
 	}
 	return user
 }
@@ -2607,8 +2607,8 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	if !pluginAccess.InvokeAllOperations {
 		t.Fatal("expected provider-backed plugin write to sync canonical invoke-all access")
 	}
-	if err := authz.ReloadDynamic(context.Background()); err != nil {
-		t.Fatalf("ReloadDynamic after provider-backed plugin write: %v", err)
+	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
+		t.Fatalf("ReloadAuthorizationState after provider-backed plugin write: %v", err)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", nil)
@@ -3026,8 +3026,8 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 	if len(roles) != 1 || roles[0].Role != "owner" {
 		t.Fatalf("workspace roles after provider-backed write = %+v, want [owner]", roles)
 	}
-	if err := authz.ReloadDynamic(context.Background()); err != nil {
-		t.Fatalf("ReloadDynamic after provider-backed admin write: %v", err)
+	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
+		t.Fatalf("ReloadAuthorizationState after provider-backed admin write: %v", err)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)

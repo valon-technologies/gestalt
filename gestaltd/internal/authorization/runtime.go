@@ -16,7 +16,7 @@ type RuntimeAuthorizer interface {
 	Start(ctx context.Context) error
 	Close() error
 
-	ReloadDynamic(ctx context.Context) error
+	ReloadAuthorizationState(ctx context.Context) error
 
 	IsWorkload(p *principal.Principal) bool
 	AllowProvider(ctx context.Context, p *principal.Principal, provider string) bool
@@ -33,6 +33,12 @@ type RuntimeAuthorizer interface {
 	StaticRoleForProviderIdentity(provider, subjectID, userID, email string) (AccessContext, bool)
 	StaticMembersForPolicy(policyName string) ([]StaticHumanMember, bool)
 	StaticMembersForProvider(provider string) (string, []StaticHumanMember, bool)
+}
+
+// ManagedAuthorizationModelResolver exposes the authorization model managed by
+// the current runtime authorizer when one exists.
+type ManagedAuthorizationModelResolver interface {
+	ManagedModelID(ctx context.Context) (string, error)
 }
 
 var _ RuntimeAuthorizer = (*Authorizer)(nil)
