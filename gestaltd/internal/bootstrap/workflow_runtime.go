@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -11,8 +12,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
@@ -31,6 +34,7 @@ type workflowRuntime struct {
 	providers              map[string]coreworkflow.Provider
 	startupWaits           *startupWaitTracker
 	invoker                invocation.Invoker
+	executionRefs          *coredata.WorkflowExecutionRefService
 }
 
 func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
@@ -164,6 +168,15 @@ func (r *workflowRuntime) SetInvoker(invoker invocation.Invoker) {
 	r.invoker = invoker
 }
 
+func (r *workflowRuntime) SetExecutionRefs(service *coredata.WorkflowExecutionRefService) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.executionRefs = service
+}
+
 func (r *workflowRuntime) ResolvePlugin(pluginName string) (coreworkflow.Provider, map[string]struct{}, error) {
 	if r == nil {
 		return nil, nil, fmt.Errorf("workflow runtime is not configured")
@@ -235,6 +248,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 	}
 	r.mu.RLock()
 	invoker := r.invoker
+	executionRefs := r.executionRefs
 	r.mu.RUnlock()
 	if invoker == nil {
 		return nil, fmt.Errorf("workflow runtime invoker is not configured")
@@ -253,11 +267,31 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 	if !r.Allow(req.ProviderName, pluginName, req.Target.Operation) {
 		return nil, fmt.Errorf("workflow target %q for plugin %q is not enabled", req.Target.Operation, pluginName)
 	}
+	principalValue := workflowWorkloadPrincipal(pluginName)
+	target := req.Target
+	invokeConnection := ""
+	invokeInstance := ""
+	if strings.TrimSpace(req.ExecutionRef) != "" {
+		resolvedRef, err := resolveWorkflowExecutionRef(ctx, executionRefs, req)
+		if err != nil {
+			return nil, err
+		}
+		principalValue = workflowExecutionPrincipal(resolvedRef)
+		target.PluginName = resolvedRef.Target.PluginName
+		target.Operation = resolvedRef.Target.Operation
+		target.Connection = resolvedRef.Target.Connection
+		target.Instance = resolvedRef.Target.Instance
+		invokeConnection = strings.TrimSpace(target.Connection)
+		invokeInstance = strings.TrimSpace(target.Instance)
+	}
 	if contextValue := workflowInvocationContext(req); len(contextValue) > 0 {
 		ctx = invocation.WithWorkflowContext(ctx, contextValue)
 	}
+	if invokeConnection != "" {
+		ctx = invocation.WithConnection(ctx, invokeConnection)
+	}
 	params := workflowInvocationParams(req)
-	result, err := invoker.Invoke(ctx, workflowWorkloadPrincipal(pluginName), pluginName, "", req.Target.Operation, params)
+	result, err := invoker.Invoke(ctx, principalValue, target.PluginName, invokeInstance, target.Operation, params)
 	if err != nil {
 		return nil, err
 	}
@@ -268,6 +302,56 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		Status: result.Status,
 		Body:   result.Body,
 	}, nil
+}
+
+func resolveWorkflowExecutionRef(ctx context.Context, service *coredata.WorkflowExecutionRefService, req coreworkflow.InvokeOperationRequest) (*coreworkflow.ExecutionReference, error) {
+	if service == nil {
+		return nil, fmt.Errorf("%w: workflow execution refs are not configured", invocation.ErrInternal)
+	}
+	refID := strings.TrimSpace(req.ExecutionRef)
+	ref, err := service.Get(ctx, refID)
+	if err != nil {
+		if errors.Is(err, indexeddb.ErrNotFound) {
+			return nil, fmt.Errorf("%w: workflow execution ref %q was not found", invocation.ErrAuthorizationDenied, refID)
+		}
+		return nil, fmt.Errorf("%w: workflow execution ref %q lookup failed: %v", invocation.ErrInternal, refID, err)
+	}
+	if ref == nil {
+		return nil, fmt.Errorf("%w: workflow execution ref %q was not found", invocation.ErrAuthorizationDenied, refID)
+	}
+	if ref.RevokedAt != nil && !ref.RevokedAt.IsZero() {
+		return nil, fmt.Errorf("%w: workflow execution ref %q is revoked", invocation.ErrAuthorizationDenied, refID)
+	}
+	if strings.TrimSpace(ref.ProviderName) != strings.TrimSpace(req.ProviderName) {
+		return nil, fmt.Errorf("%w: workflow execution ref %q is not valid for provider %q", invocation.ErrAuthorizationDenied, refID, req.ProviderName)
+	}
+	if strings.TrimSpace(ref.Target.PluginName) != strings.TrimSpace(req.Target.PluginName) ||
+		strings.TrimSpace(ref.Target.Operation) != strings.TrimSpace(req.Target.Operation) ||
+		strings.TrimSpace(ref.Target.Connection) != strings.TrimSpace(req.Target.Connection) ||
+		strings.TrimSpace(ref.Target.Instance) != strings.TrimSpace(req.Target.Instance) {
+		return nil, fmt.Errorf("%w: workflow execution ref %q target does not match the scheduled invocation", invocation.ErrAuthorizationDenied, refID)
+	}
+	return ref, nil
+}
+
+func workflowExecutionPrincipal(ref *coreworkflow.ExecutionReference) *principal.Principal {
+	if ref == nil {
+		return nil
+	}
+	subjectID := strings.TrimSpace(ref.SubjectID)
+	userID := principal.UserIDFromSubjectID(subjectID)
+	permissions := principal.CompilePermissions(ref.Permissions)
+	value := &principal.Principal{
+		UserID:           userID,
+		SubjectID:        subjectID,
+		Kind:             principal.KindUser,
+		Scopes:           principal.PermissionPlugins(permissions),
+		TokenPermissions: permissions,
+	}
+	if value.UserID == "" {
+		value.Kind = ""
+	}
+	return value
 }
 
 func workflowInvocationParams(req coreworkflow.InvokeOperationRequest) map[string]any {

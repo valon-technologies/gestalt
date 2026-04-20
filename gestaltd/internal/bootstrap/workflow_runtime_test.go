@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"testing"
@@ -10,10 +11,16 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
+	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -25,6 +32,75 @@ type funcInvoker struct {
 
 func (f funcInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
 	return f.invoke(ctx, p, providerName, instance, operation, params)
+}
+
+type erroringIndexedDB struct {
+	err error
+}
+
+func (d *erroringIndexedDB) ObjectStore(string) indexeddb.ObjectStore {
+	return erroringObjectStore{err: d.err}
+}
+func (d *erroringIndexedDB) CreateObjectStore(context.Context, string, indexeddb.ObjectStoreSchema) error {
+	return d.err
+}
+func (d *erroringIndexedDB) DeleteObjectStore(context.Context, string) error { return d.err }
+func (d *erroringIndexedDB) Ping(context.Context) error                      { return d.err }
+func (d *erroringIndexedDB) Close() error                                    { return d.err }
+
+type erroringObjectStore struct {
+	err error
+}
+
+func (o erroringObjectStore) Get(context.Context, string) (indexeddb.Record, error) {
+	return nil, o.err
+}
+func (o erroringObjectStore) GetKey(context.Context, string) (string, error) { return "", o.err }
+func (o erroringObjectStore) Add(context.Context, indexeddb.Record) error    { return o.err }
+func (o erroringObjectStore) Put(context.Context, indexeddb.Record) error    { return o.err }
+func (o erroringObjectStore) Delete(context.Context, string) error           { return o.err }
+func (o erroringObjectStore) Clear(context.Context) error                    { return o.err }
+func (o erroringObjectStore) GetAll(context.Context, *indexeddb.KeyRange) ([]indexeddb.Record, error) {
+	return nil, o.err
+}
+func (o erroringObjectStore) GetAllKeys(context.Context, *indexeddb.KeyRange) ([]string, error) {
+	return nil, o.err
+}
+func (o erroringObjectStore) Count(context.Context, *indexeddb.KeyRange) (int64, error) {
+	return 0, o.err
+}
+func (o erroringObjectStore) DeleteRange(context.Context, indexeddb.KeyRange) (int64, error) {
+	return 0, o.err
+}
+func (o erroringObjectStore) Index(string) indexeddb.Index { return erroringIndex(o) }
+func (o erroringObjectStore) OpenCursor(context.Context, *indexeddb.KeyRange, indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+	return nil, o.err
+}
+func (o erroringObjectStore) OpenKeyCursor(context.Context, *indexeddb.KeyRange, indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+	return nil, o.err
+}
+
+type erroringIndex struct {
+	err error
+}
+
+func (i erroringIndex) Get(context.Context, ...any) (indexeddb.Record, error) { return nil, i.err }
+func (i erroringIndex) GetKey(context.Context, ...any) (string, error)        { return "", i.err }
+func (i erroringIndex) GetAll(context.Context, *indexeddb.KeyRange, ...any) ([]indexeddb.Record, error) {
+	return nil, i.err
+}
+func (i erroringIndex) GetAllKeys(context.Context, *indexeddb.KeyRange, ...any) ([]string, error) {
+	return nil, i.err
+}
+func (i erroringIndex) Count(context.Context, *indexeddb.KeyRange, ...any) (int64, error) {
+	return 0, i.err
+}
+func (i erroringIndex) Delete(context.Context, ...any) (int64, error) { return 0, i.err }
+func (i erroringIndex) OpenCursor(context.Context, *indexeddb.KeyRange, indexeddb.CursorDirection, ...any) (indexeddb.Cursor, error) {
+	return nil, i.err
+}
+func (i erroringIndex) OpenKeyCursor(context.Context, *indexeddb.KeyRange, indexeddb.CursorDirection, ...any) (indexeddb.Cursor, error) {
+	return nil, i.err
 }
 
 type workflowRoundTripProvider struct {
@@ -132,12 +208,16 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 
 	var gotPrincipal *principal.Principal
 	var gotProvider string
+	var gotInstance string
+	var gotConnection string
 	var gotOperation string
 	var gotParams map[string]any
 	runtime.SetInvoker(funcInvoker{
-		invoke: func(ctx context.Context, p *principal.Principal, providerName, _ string, operation string, params map[string]any) (*core.OperationResult, error) {
+		invoke: func(ctx context.Context, p *principal.Principal, providerName, instance string, operation string, params map[string]any) (*core.OperationResult, error) {
 			gotPrincipal = p
 			gotProvider = providerName
+			gotInstance = instance
+			gotConnection = invocation.ConnectionFromContext(ctx)
 			gotOperation = operation
 			gotParams = params
 			ctx = principal.WithPrincipal(ctx, p)
@@ -149,7 +229,6 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 		ProviderName: "temporal",
 		PluginName:   "roadmap",
 		RunID:        "run-123",
-		ExecutionRef: "exec-ref-123",
 		Target: coreworkflow.Target{
 			PluginName: "roadmap",
 			Operation:  "sync",
@@ -192,6 +271,12 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	if gotProvider != "roadmap" {
 		t.Fatalf("provider = %q, want %q", gotProvider, "roadmap")
 	}
+	if gotInstance != "" {
+		t.Fatalf("instance = %q, want empty instance for workload invocations", gotInstance)
+	}
+	if gotConnection != "" {
+		t.Fatalf("connection = %q, want empty connection for workload invocations", gotConnection)
+	}
 	if gotOperation != "sync" {
 		t.Fatalf("operation = %q, want %q", gotOperation, "sync")
 	}
@@ -221,9 +306,6 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	if !ok || createdBy["subjectId"] != principal.UserSubjectID("user-123") || createdBy["authSource"] != principal.SourceAPIToken.String() {
 		t.Fatalf("workflow createdBy = %#v", roundTripProvider.workflowContext["createdBy"])
 	}
-	if got := roundTripProvider.workflowContext["executionRef"]; got != "exec-ref-123" {
-		t.Fatalf("workflow executionRef = %#v, want %q", got, "exec-ref-123")
-	}
 	target, ok := roundTripProvider.workflowContext["target"].(map[string]any)
 	if !ok || target["pluginName"] != "roadmap" || target["operation"] != "sync" {
 		t.Fatalf("workflow target = %#v", roundTripProvider.workflowContext["target"])
@@ -240,6 +322,316 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	}
 	if got := trigger["scheduledFor"]; got != scheduledFor.UTC().Format(time.RFC3339Nano) {
 		t.Fatalf("scheduledFor = %#v, want %q", got, scheduledFor.UTC().Format(time.RFC3339Nano))
+	}
+}
+
+func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user, err := services.Users.FindOrCreateUser(context.Background(), "ada@example.test")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser: %v", err)
+	}
+	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+		ID:           "exec-ref-123",
+		ProviderName: "temporal",
+		Target: coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "sync",
+			Connection: "analytics",
+			Instance:   "tenant-a",
+		},
+		SubjectID: principal.UserSubjectID(user.ID),
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		bindings: map[string]workflowBinding{
+			"roadmap": {
+				providerName: "temporal",
+				operations: map[string]struct{}{
+					"sync": {},
+				},
+			},
+		},
+		executionRefs: services.WorkflowExecutionRefs,
+	}
+
+	var gotPrincipal *principal.Principal
+	var gotProvider string
+	var gotInstance string
+	var gotConnection string
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
+			gotPrincipal = p
+			gotProvider = providerName
+			gotInstance = instance
+			gotConnection = invocation.ConnectionFromContext(ctx)
+			if operation != "sync" {
+				t.Fatalf("operation = %q, want %q", operation, "sync")
+			}
+			if params["taskId"] != "task-123" {
+				t.Fatalf("params = %#v", params)
+			}
+			return &core.OperationResult{Status: http.StatusAccepted, Body: `{"ok":true}`}, nil
+		},
+	})
+
+	resp, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		PluginName:   "roadmap",
+		ExecutionRef: "exec-ref-123",
+		Target: coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "sync",
+			Connection: "analytics",
+			Instance:   "tenant-a",
+			Input: map[string]any{
+				"mode": "full",
+			},
+		},
+		Input: map[string]any{
+			"taskId": "task-123",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusAccepted || resp.Body != `{"ok":true}` {
+		t.Fatalf("response = %#v", resp)
+	}
+	if gotPrincipal == nil || gotPrincipal.Kind != principal.KindUser || gotPrincipal.UserID != user.ID || gotPrincipal.SubjectID != principal.UserSubjectID(user.ID) {
+		t.Fatalf("principal = %#v", gotPrincipal)
+	}
+	if gotProvider != "roadmap" {
+		t.Fatalf("provider = %q, want %q", gotProvider, "roadmap")
+	}
+	if gotInstance != "tenant-a" {
+		t.Fatalf("instance = %q, want %q", gotInstance, "tenant-a")
+	}
+	if gotConnection != "analytics" {
+		t.Fatalf("connection = %q, want %q", gotConnection, "analytics")
+	}
+}
+
+func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user, err := services.Users.FindOrCreateUser(context.Background(), "ada@example.test")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser: %v", err)
+	}
+	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+		ID:           "exec-ref-denied",
+		ProviderName: "temporal",
+		Target: coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "sync",
+			Connection: "analytics",
+			Instance:   "tenant-a",
+		},
+		SubjectID: principal.UserSubjectID(user.ID),
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+	if err := services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+		UserID:      user.ID,
+		Integration: "roadmap",
+		Connection:  "analytics",
+		Instance:    "tenant-a",
+		AccessToken: "user-token",
+	}); err != nil {
+		t.Fatalf("StoreToken: %v", err)
+	}
+
+	providers := registry.New()
+	executed := false
+	if err := providers.Providers.Register("roadmap", &coretesting.StubIntegration{
+		N:        "roadmap",
+		ConnMode: core.ConnectionModeUser,
+		CatalogVal: &catalog.Catalog{
+			Name: "roadmap",
+			Operations: []catalog.CatalogOperation{
+				{ID: "sync", Method: http.MethodPost},
+			},
+		},
+		ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+			executed = true
+			return &core.OperationResult{Status: http.StatusAccepted, Body: `{"ok":true}`}, nil
+		},
+	}); err != nil {
+		t.Fatalf("Register provider: %v", err)
+	}
+
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"roadmap-policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{Email: "other@example.test", Role: "viewer"},
+				},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"roadmap": {AuthorizationPolicy: "roadmap-policy"},
+	}, &providers.Providers, nil)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		bindings: map[string]workflowBinding{
+			"roadmap": {
+				providerName: "temporal",
+				operations: map[string]struct{}{
+					"sync": {},
+				},
+			},
+		},
+		executionRefs: services.WorkflowExecutionRefs,
+	}
+	runtime.SetInvoker(invocation.NewBroker(&providers.Providers, services.Users, services.Tokens, invocation.WithAuthorizer(authz)))
+
+	_, err = runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		PluginName:   "roadmap",
+		ExecutionRef: "exec-ref-denied",
+		Target: coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "sync",
+			Connection: "analytics",
+			Instance:   "tenant-a",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected authorization error, got nil")
+	}
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("error = %v, want ErrAuthorizationDenied", err)
+	}
+	if executed {
+		t.Fatal("expected provider execution to be skipped")
+	}
+}
+
+func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	ctx := context.Background()
+
+	if _, err := services.WorkflowExecutionRefs.Put(ctx, &coreworkflow.ExecutionReference{
+		ID:           "exec-ref-123",
+		ProviderName: "basic",
+		Target: coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "export",
+			Connection: "analytics",
+			Instance:   "tenant-a",
+		},
+		SubjectID: principal.UserSubjectID("user-123"),
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	providers := registry.New()
+	executed := false
+	if err := providers.Providers.Register("roadmap", &coretesting.StubIntegration{
+		N: "roadmap",
+		CatalogVal: &catalog.Catalog{
+			Name: "roadmap",
+			Operations: []catalog.CatalogOperation{
+				{ID: "export", Method: http.MethodPost},
+			},
+		},
+		ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+			executed = true
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+		},
+	}); err != nil {
+		t.Fatalf("Register provider: %v", err)
+	}
+
+	broker := invocation.NewBroker(&providers.Providers, services.Users, services.Tokens)
+	runtime := &workflowRuntime{
+		bindings: map[string]workflowBinding{
+			"roadmap": {
+				providerName: "basic",
+				operations: map[string]struct{}{
+					"export": {},
+				},
+			},
+		},
+		invoker:       broker,
+		executionRefs: services.WorkflowExecutionRefs,
+	}
+
+	_, err := runtime.Invoke(ctx, coreworkflow.InvokeOperationRequest{
+		ProviderName: "basic",
+		PluginName:   "roadmap",
+		RunID:        "run-123",
+		Target: coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "export",
+			Connection: "analytics",
+			Instance:   "tenant-a",
+		},
+		ExecutionRef: "exec-ref-123",
+	})
+	if !errors.Is(err, invocation.ErrScopeDenied) {
+		t.Fatalf("Invoke error = %v, want scope denied", err)
+	}
+	if executed {
+		t.Fatal("expected provider Execute not to run when execution-ref permissions do not allow the operation")
+	}
+}
+
+func TestWorkflowRuntimeInvokeExecutionRefLookupInfrastructureErrorIsInternal(t *testing.T) {
+	t.Parallel()
+
+	lookupErr := errors.New("boom")
+	runtime := &workflowRuntime{
+		bindings: map[string]workflowBinding{
+			"roadmap": {
+				providerName: "basic",
+				operations: map[string]struct{}{
+					"sync": {},
+				},
+			},
+		},
+		executionRefs: coredata.NewWorkflowExecutionRefService(&erroringIndexedDB{err: lookupErr}),
+	}
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+			t.Fatal("invoke should not be called when execution-ref lookup fails")
+			return nil, nil
+		},
+	})
+
+	_, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "basic",
+		PluginName:   "roadmap",
+		ExecutionRef: "exec-ref-123",
+		Target: coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "sync",
+		},
+	})
+	if err == nil {
+		t.Fatal("expected internal error, got nil")
+	}
+	if !errors.Is(err, invocation.ErrInternal) {
+		t.Fatalf("error = %v, want ErrInternal", err)
+	}
+	if errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("error = %v, should not be ErrAuthorizationDenied", err)
 	}
 }
 

@@ -3,6 +3,8 @@ package workflow
 import (
 	"context"
 	"time"
+
+	"github.com/valon-technologies/gestalt/server/core"
 )
 
 const ConfigManagedSchedulePrefix = "cfg_"
@@ -30,6 +32,16 @@ type Target struct {
 	Connection string
 	Instance   string
 	Input      map[string]any
+}
+
+type ExecutionReference struct {
+	ID           string
+	ProviderName string
+	Target       Target
+	SubjectID    string
+	Permissions  []core.AccessPermission
+	CreatedAt    *time.Time
+	RevokedAt    *time.Time
 }
 
 type Event struct {
