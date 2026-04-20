@@ -293,15 +293,10 @@ func (s *Server) resumeWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) resolveWorkflowScheduleActor(w http.ResponseWriter, r *http.Request) (*principal.Principal, bool) {
-	p := PrincipalFromContext(r.Context())
+	p := principal.Canonicalized(PrincipalFromContext(r.Context()))
 	if p == nil {
 		writeError(w, http.StatusUnauthorized, "missing authorization")
 		return nil, false
-	}
-	if strings.TrimSpace(p.SubjectID) == "" && strings.TrimSpace(p.UserID) != "" {
-		cloned := *p
-		cloned.SubjectID = principal.UserSubjectID(strings.TrimSpace(p.UserID))
-		p = &cloned
 	}
 	if strings.TrimSpace(p.SubjectID) == "" {
 		writeError(w, http.StatusUnauthorized, "missing subject")
@@ -511,13 +506,11 @@ func (s *Server) putWorkflowExecutionRef(
 }
 
 func workflowExecutionRefSubjectID(p *principal.Principal) string {
+	p = principal.Canonicalized(p)
 	if p == nil {
 		return ""
 	}
-	if value := strings.TrimSpace(p.SubjectID); value != "" {
-		return value
-	}
-	return principal.UserSubjectID(strings.TrimSpace(p.UserID))
+	return strings.TrimSpace(p.SubjectID)
 }
 
 func workflowScheduleExecutionRefID(scheduleID string) string {
@@ -525,6 +518,7 @@ func workflowScheduleExecutionRefID(scheduleID string) string {
 }
 
 func workflowActorFromPrincipal(p *principal.Principal) coreworkflow.Actor {
+	p = principal.Canonicalized(p)
 	if p == nil {
 		return coreworkflow.Actor{}
 	}

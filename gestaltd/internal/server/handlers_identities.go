@@ -1295,21 +1295,17 @@ func managedIdentityGrantValidationPrincipal(p *principal.Principal, userID stri
 		return p
 	}
 	if p == nil {
-		return &principal.Principal{
-			Kind:      principal.KindUser,
-			UserID:    userID,
-			SubjectID: principal.UserSubjectID(userID),
-		}
+		return principal.Canonicalize(&principal.Principal{
+			Kind:   principal.KindUser,
+			UserID: userID,
+		})
 	}
 	if p.UserID == userID {
-		return p
+		return principal.Canonicalized(p)
 	}
 	clone := *p
 	clone.UserID = userID
-	if strings.TrimSpace(clone.SubjectID) == "" {
-		clone.SubjectID = principal.UserSubjectID(userID)
-	}
-	return &clone
+	return principal.Canonicalize(&clone)
 }
 
 type managedIdentitySessionTokenResolver interface {
