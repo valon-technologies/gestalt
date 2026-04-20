@@ -1,0 +1,74 @@
+# Authorization
+
+Authorization providers back dynamic human authorization state. They are
+separate from platform login: `providers.auth.<name>` decides how users sign in
+to Gestalt, while `providers.authorization.<name>` stores authorization
+relationships and answers authorization queries for Gestalt itself.
+
+## How authorization providers work
+
+Static shared policies still live under top-level `authorization.policies`.
+When `server.providers.authorization` selects a provider, Gestalt writes its
+authorization model plus dynamic human plugin and built-in admin relationships
+into that provider and uses it for runtime human authorization checks.
+
+Dynamic human plugin/admin grants and the built-in authorization control-plane
+APIs require an authorization provider. If you omit `providers.authorization`,
+Gestalt still evaluates static policy members from config, but there is no
+provider-backed relationship storage or dynamic human-grant control plane.
+
+## First-party authorization providers
+
+First-party authorization providers live under
+[`valon-technologies/gestalt-providers/authorization`](https://github.com/valon-technologies/gestalt-providers/tree/main/authorization).
+
+| Provider | Repository | Package path | Use case |
+| --- | --- | --- | --- |
+| IndexedDB Authorization | [`authorization/indexeddb`](https://github.com/valon-technologies/gestalt-providers/tree/main/authorization/indexeddb) | `github.com/valon-technologies/gestalt-providers/authorization/indexeddb` | Stores authorization models and relationships in a host IndexedDB provider |
+
+## Configuring `providers.authorization`
+
+```yaml
+server:
+  providers:
+    indexeddb: main
+    authorization: indexeddb
+
+providers:
+  indexeddb:
+    main:
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        dsn: ${DATABASE_URL}
+
+  authorization:
+    indexeddb:
+      source: https://artifacts.example.com/authorization/indexeddb/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        indexeddb: main
+```
+
+The first-party `authorization/indexeddb` provider expects the name of a host
+IndexedDB provider and stores authorization models plus relationships there.
+
+## Operational notes
+
+- `server.providers.authorization` selects the host authorization provider.
+- If more than one entry exists under `providers.authorization`, set
+  `server.providers.authorization` explicitly or mark one entry `default: true`.
+- Built-in admin authorization membership and inspection APIs use the selected
+  provider.
+- Static policy members still take precedence over dynamic grants.
+
+## Building your own authorization provider
+
+Implementation details for the decision plane, relationship control plane, and
+model lifecycle now live under
+[Custom Providers > Authorization](/custom-providers/authorization).
+
+## What to read next
+
+- [Configuration](/configuration): server and provider config structure
+- [Config File](/reference/config-file): full `providers.authorization` reference
+- [Built-in Providers](/reference/built-in-providers): first-party authorization provider reference
+- [Custom Authorization Providers](/custom-providers/authorization): advanced authoring docs

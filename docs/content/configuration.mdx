@@ -45,6 +45,8 @@ providers:
     <name>: ...             # each is a ProviderEntry
   authorization:            # named authorization providers
     <name>: ...             # each is a ProviderEntry
+  workflow:                 # named workflow providers
+    <name>: ...             # each is a ProviderEntry
   cache:                    # named cache providers
     <name>: ...             # each is a ProviderEntry
   s3:                       # named S3 object-store providers
@@ -57,15 +59,16 @@ ProviderEntry-backed entries accept `source` (where to load it from), `config` (
 
 ## Key concepts
 
-Gestalt has seven core concepts you configure in YAML:
+Gestalt has nine core concepts you configure in YAML:
 
 - **[Plugin.](/providers/plugins)** A tool backed by a provider package. Plugins expose operations that agents and users invoke over HTTP, MCP, or the CLI. Plugins can come from published packages or local source.
 - **Connection.** How Gestalt authenticates to an upstream API on behalf of a user or service. Connections handle OAuth flows, API keys, and manual credentials.
 - **[IndexedDB.](/providers/indexeddb)** The persistent storage layer. Stores users, sessions, tokens, and credentials through a provider that implements the IndexedDB interface.
-- **Authorization provider.** Optional host-scoped policy storage and decision engine for shared human authorization state. The first-party `authorization/indexeddb` provider persists models and relationships in the selected host IndexedDB provider.
+- **[Authorization.](/providers/authorization)** Optional host-scoped policy storage and decision engine for dynamic human authorization state. The first-party `authorization/indexeddb` provider persists models and relationships in the selected host IndexedDB provider.
 - **[S3.](/providers/s3)** Plugin-bound object storage. The provider config chooses the backend, credentials, and endpoint; plugin code chooses buckets, keys, and versions at runtime.
 - **[Auth.](/providers/auth)** Platform login for the Gestalt server. Separate from connection auth, which is per-plugin and per-upstream.
 - **[Secrets.](/providers/secrets)** Resolves structured secret refs in the config at startup. Backed by environment variables, files, or cloud secret managers.
+- **[Workflow.](/providers/workflow)** Plugin-scoped workflow runs, schedules, and event triggers backed by a workflow provider and optional host IndexedDB storage.
 - **[UI.](/providers/web-uis)** Public static UI bundles served under configured path prefixes, either directly from `providers.ui` or through `plugins.<name>.mountPath`. Omit `providers.ui` to run headless.
 
 ## Adding a plugin
@@ -353,7 +356,9 @@ SQLite works for single-instance deployments. For production, use a networked In
 
 ## Configuring authorization storage
 
-The `providers.authorization` block is optional. When configured, `server.providers.authorization` selects the host authorization provider Gestalt uses for human authorization relationships and model storage:
+The `providers.authorization` block is optional. When configured,
+`server.providers.authorization` selects the host authorization provider
+Gestalt uses for dynamic human authorization relationships and model storage:
 
 ```yaml
 server:
@@ -379,7 +384,53 @@ providers:
         indexeddb: main
 ```
 
-If `providers.authorization` is omitted, Gestalt keeps using its in-process authorization engine only. When it is present, Gestalt seeds the provider from configured static policy members and dynamic admin/plugin grants, then uses that provider for human authorization checks and the built-in admin authorization inspection APIs.
+If `providers.authorization` is omitted, static policy members from config still
+work, but there is no provider-backed relationship store and the dynamic human
+authorization control plane is unavailable. When it is present, Gestalt uses
+that provider for dynamic human authorization, human authorization checks, and
+the built-in admin authorization APIs.
+
+## Configuring workflow providers
+
+The `providers.workflow` block declares workflow backends. Plugins opt in under
+`plugins.<name>.workflow`. If a plugin omits `workflow.provider`, Gestalt uses
+the sole/default workflow provider.
+
+```yaml
+providers:
+  indexeddb:
+    workflow_state:
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        dsn: sqlite://./gestalt.db
+
+  workflow:
+    local:
+      source: https://artifacts.example.com/workflow/indexeddb/v0.0.1-alpha.1/provider-release.yaml
+      indexeddb:
+        provider: workflow_state
+        db: workflow
+      config:
+        pollInterval: 1s
+
+plugins:
+  roadmap:
+    workflow:
+      provider: local
+      operations:
+        - sync_items
+      schedules:
+        nightly_sync:
+          cron: "0 3 * * *"
+          timezone: America/New_York
+          operation: sync_items
+```
+
+`workflow.operations` is the allowlist of plugin operations the workflow
+provider may invoke for that plugin. `workflow.schedules` and
+`workflow.eventTriggers` declare config-owned schedules and event triggers that
+Gestalt reconciles into the provider at startup. See
+[Workflow](/providers/workflow) for the full provider model.
 
 ## Telemetry and audit
 

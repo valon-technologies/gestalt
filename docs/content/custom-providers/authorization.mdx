@@ -1,0 +1,174 @@
+# Authorization
+
+This page covers building custom authorization providers. If you only need to
+configure authorization storage for a deployment, use
+[Providers > Authorization](/providers/authorization).
+
+Authorization providers are host-scoped policy engines and relationship
+stores. Gestalt uses them for dynamic human authorization, built-in admin
+authorization APIs, and authorization model lifecycle.
+
+## Manifest
+
+An authorization provider manifest declares `kind: authorization`:
+
+```yaml
+kind: authorization
+source: github.com/your-org/authorization/example
+version: 0.0.1
+displayName: Example Authorization
+description: Authorization provider with custom model and relationship storage.
+spec:
+  configSchemaPath: ./authorization_config.json
+```
+
+## Provider interface
+
+Authorization provider authoring is currently exposed through the Go SDK.
+
+The contract has three parts:
+
+| Area | Methods |
+| --- | --- |
+| Decision plane | `Evaluate`, `EvaluateMany`, `SearchResources`, `SearchSubjects`, `SearchActions`, `GetMetadata` |
+| Relationship control plane | `ReadRelationships`, `WriteRelationships` |
+| Model lifecycle | `GetActiveModel`, `ListModels`, `WriteModel` |
+
+The example below shows the shape of a minimal in-memory provider. The
+remaining methods follow the same request/response pattern.
+
+```go
+package exampleauthz
+
+import (
+	"context"
+	"fmt"
+
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+type Provider struct {
+	modelID string
+}
+
+func New() *Provider { return &Provider{} }
+
+func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
+	p.modelID, _ = config["modelId"].(string)
+	return nil
+}
+
+func (p *Provider) Evaluate(_ context.Context, req *gestalt.AccessEvaluationRequest) (*gestalt.AccessDecision, error) {
+	allowed := req.GetAction().GetName() == "read"
+	return &gestalt.AccessDecision{
+		Allowed: allowed,
+		ModelId: p.modelID,
+	}, nil
+}
+
+func (p *Provider) EvaluateMany(ctx context.Context, req *gestalt.AccessEvaluationsRequest) (*gestalt.AccessEvaluationsResponse, error) {
+	decisions := make([]*gestalt.AccessDecision, 0, len(req.GetRequests()))
+	for _, item := range req.GetRequests() {
+		decision, err := p.Evaluate(ctx, item)
+		if err != nil {
+			return nil, err
+		}
+		decisions = append(decisions, decision)
+	}
+	return &gestalt.AccessEvaluationsResponse{Decisions: decisions}, nil
+}
+
+func (p *Provider) SearchResources(context.Context, *gestalt.ResourceSearchRequest) (*gestalt.ResourceSearchResponse, error) {
+	return &gestalt.ResourceSearchResponse{ModelId: p.modelID}, nil
+}
+
+func (p *Provider) SearchSubjects(context.Context, *gestalt.SubjectSearchRequest) (*gestalt.SubjectSearchResponse, error) {
+	return &gestalt.SubjectSearchResponse{ModelId: p.modelID}, nil
+}
+
+func (p *Provider) SearchActions(context.Context, *gestalt.ActionSearchRequest) (*gestalt.ActionSearchResponse, error) {
+	return &gestalt.ActionSearchResponse{ModelId: p.modelID}, nil
+}
+
+func (p *Provider) GetMetadata(context.Context) (*gestalt.AuthorizationMetadata, error) {
+	return &gestalt.AuthorizationMetadata{
+		Capabilities:  []string{"evaluate", "relationships", "models"},
+		ActiveModelId: p.modelID,
+	}, nil
+}
+
+func (p *Provider) ReadRelationships(context.Context, *gestalt.ReadRelationshipsRequest) (*gestalt.ReadRelationshipsResponse, error) {
+	return &gestalt.ReadRelationshipsResponse{ModelId: p.modelID}, nil
+}
+
+func (p *Provider) WriteRelationships(context.Context, *gestalt.WriteRelationshipsRequest) error {
+	return nil
+}
+
+func (p *Provider) GetActiveModel(context.Context) (*gestalt.GetActiveModelResponse, error) {
+	if p.modelID == "" {
+		return &gestalt.GetActiveModelResponse{}, nil
+	}
+	return &gestalt.GetActiveModelResponse{
+		Model: &gestalt.AuthorizationModelRef{Id: p.modelID, Version: "v1"},
+	}, nil
+}
+
+func (p *Provider) ListModels(context.Context, *gestalt.ListModelsRequest) (*gestalt.ListModelsResponse, error) {
+	if p.modelID == "" {
+		return &gestalt.ListModelsResponse{}, nil
+	}
+	return &gestalt.ListModelsResponse{
+		Models: []*gestalt.AuthorizationModelRef{{Id: p.modelID, Version: "v1"}},
+	}, nil
+}
+
+func (p *Provider) WriteModel(_ context.Context, req *gestalt.WriteModelRequest) (*gestalt.AuthorizationModelRef, error) {
+	if req.GetModel() == nil {
+		return nil, fmt.Errorf("model is required")
+	}
+	p.modelID = "example-model"
+	return &gestalt.AuthorizationModelRef{Id: p.modelID, Version: "v1"}, nil
+}
+
+func main() {
+	if err := gestalt.ServeAuthorizationProvider(context.Background(), New()); err != nil {
+		panic(err)
+	}
+}
+```
+
+## Config reference
+
+To use a custom authorization provider in a deployment, reference it as a named
+entry in `providers.authorization`:
+
+```yaml
+server:
+  providers:
+    indexeddb: main
+    authorization: example
+
+providers:
+  indexeddb:
+    main:
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        dsn: ${DATABASE_URL}
+
+  authorization:
+    example:
+      source: ./authorization/manifest.yaml
+      config:
+        modelId: default
+```
+
+Use `source: ./manifest.yaml` during development. For production, publish a
+release and point `source` at the resulting `provider-release.yaml` metadata
+URL.
+
+## What to read next
+
+- [Providers > Authorization](/providers/authorization): configuring host authorization providers
+- [Releasing](/custom-providers/releasing): packaging and publishing provider releases
+- [Built-in Providers](/reference/built-in-providers): first-party authorization provider reference

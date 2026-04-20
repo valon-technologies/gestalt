@@ -1,9 +1,9 @@
 # First-Party Providers
 
-Gestalt does not compile auth, IndexedDB, or S3 providers into the `gestaltd`
-binary. They are loaded at startup as external provider processes through the
-same runtime model that also powers plugins. The first-party implementations
-are published from
+Gestalt does not compile auth, authorization, workflow, IndexedDB, or S3
+providers into the `gestaltd` binary. They are loaded at startup as external
+provider processes through the same runtime model that also powers plugins. The
+first-party implementations are published from
 [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers)
 and maintained alongside the server.
 
@@ -31,6 +31,36 @@ providers:
 
 To disable platform auth entirely, omit the `providers.auth` block.
 
+## Authorization Providers
+
+Authorization providers back dynamic human authorization state. They are
+configured under `providers.authorization.<name>`, and
+`server.providers.authorization` selects which one Gestalt uses.
+
+```yaml
+server:
+  providers:
+    indexeddb: main
+    authorization: indexeddb
+
+providers:
+  indexeddb:
+    main:
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        dsn: ${DATABASE_URL}
+
+  authorization:
+    indexeddb:
+      source: https://artifacts.example.com/authorization/indexeddb/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        indexeddb: main
+```
+
+| Name | Purpose |
+| --- | --- |
+| `indexeddb` | Stores authorization models and relationships in a host IndexedDB provider. |
+
 ## IndexedDB Providers
 
 Datastore providers back the persistent state layer. They are configured under named entries in `providers.indexeddb`, and `server.providers.indexeddb` selects which one the host uses. Gestalt does not compile datastore drivers into the binary; it starts the configured external datastore provider process at runtime.
@@ -53,6 +83,41 @@ providers:
 | `relationaldb` | SQL-backed IndexedDB provider for PostgreSQL, MySQL, SQLite, and SQL Server. |
 | `dynamodb` | Amazon DynamoDB-backed IndexedDB provider for managed key-value and document storage. |
 | `mongodb` | MongoDB-backed IndexedDB provider for document-oriented storage. |
+
+## Workflow Providers
+
+Workflow providers back plugin-scoped runs, schedules, and event triggers. They
+are configured under `providers.workflow.<name>`, then bound per plugin through
+`plugins.<name>.workflow`.
+
+```yaml
+providers:
+  indexeddb:
+    workflow_state:
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        dsn: ${DATABASE_URL}
+
+  workflow:
+    local:
+      source: https://artifacts.example.com/workflow/indexeddb/v0.0.1-alpha.1/provider-release.yaml
+      indexeddb:
+        provider: workflow_state
+        db: workflow
+      config:
+        pollInterval: 1s
+
+plugins:
+  roadmap:
+    workflow:
+      provider: local
+      operations:
+        - sync_items
+```
+
+| Name | Purpose |
+| --- | --- |
+| `indexeddb` | Stores workflow runs, schedules, and event triggers in IndexedDB and invokes plugin operations through the workflow host. |
 
 ## S3 Providers
 

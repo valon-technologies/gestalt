@@ -1,0 +1,487 @@
+import { Tabs } from 'nextra/components'
+
+# Workflow
+
+This page covers building custom workflow providers. If you only need to
+configure workflow storage for a deployment, use
+[Providers > Workflow](/providers/workflow).
+
+Workflow providers back plugin-scoped workflow runs, schedules, and event
+triggers. Gestalt uses them to persist workflow state and to call back into
+allowed plugin operations through the workflow host socket.
+
+## Manifest
+
+A workflow provider manifest declares `kind: workflow`:
+
+```yaml
+kind: workflow
+source: github.com/your-org/workflow/example
+version: 0.0.1
+displayName: Example Workflow
+description: Workflow provider with custom run and schedule storage.
+spec:
+  configSchemaPath: ./workflow_config.json
+```
+
+## Provider interface
+
+The workflow service includes:
+
+| Method | Purpose |
+| --- | --- |
+| `StartRun` / `GetRun` / `ListRuns` / `CancelRun` | Manage workflow runs |
+| `UpsertSchedule` / `GetSchedule` / `ListSchedules` / `DeleteSchedule` / `PauseSchedule` / `ResumeSchedule` | Manage schedules |
+| `UpsertEventTrigger` / `GetEventTrigger` / `ListEventTriggers` / `DeleteEventTrigger` / `PauseEventTrigger` / `ResumeEventTrigger` | Manage event triggers |
+| `PublishEvent` | Deliver an event into the provider |
+
+The examples below show the core methods. The remaining methods follow the same
+request/response shape.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package exampleworkflow
+
+    import (
+    	"context"
+
+    	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+    )
+
+    type Provider struct{}
+
+    func New() *Provider { return &Provider{} }
+
+    func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
+    	return nil
+    }
+
+    func (p *Provider) StartRun(_ context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+    	return &proto.BoundWorkflowRun{
+    		Id:     req.GetTarget().GetPluginName() + ":run-1",
+    		Status: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING,
+    		Target: req.GetTarget(),
+    	}, nil
+    }
+
+    func (p *Provider) GetRun(_ context.Context, req *proto.GetWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+    	return &proto.BoundWorkflowRun{
+    		Id: req.GetRunId(),
+    		Target: &proto.BoundWorkflowTarget{
+    			PluginName: req.GetPluginName(),
+    		},
+    	}, nil
+    }
+
+    func (p *Provider) ListRuns(context.Context, *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
+    	return &proto.ListWorkflowProviderRunsResponse{}, nil
+    }
+
+    func (p *Provider) CancelRun(_ context.Context, req *proto.CancelWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+    	return &proto.BoundWorkflowRun{
+    		Id:     req.GetRunId(),
+    		Status: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_CANCELED,
+    	}, nil
+    }
+
+    func (p *Provider) UpsertSchedule(_ context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+    	return &proto.BoundWorkflowSchedule{
+    		Id:     req.GetScheduleId(),
+    		Cron:   req.GetCron(),
+    		Target: req.GetTarget(),
+    		Paused: req.GetPaused(),
+    	}, nil
+    }
+
+    func (p *Provider) GetSchedule(_ context.Context, req *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+    	return &proto.BoundWorkflowSchedule{Id: req.GetScheduleId()}, nil
+    }
+
+    func (p *Provider) ListSchedules(context.Context, *proto.ListWorkflowProviderSchedulesRequest) (*proto.ListWorkflowProviderSchedulesResponse, error) {
+    	return &proto.ListWorkflowProviderSchedulesResponse{}, nil
+    }
+
+    func (p *Provider) DeleteSchedule(context.Context, *proto.DeleteWorkflowProviderScheduleRequest) error {
+    	return nil
+    }
+
+    func (p *Provider) PauseSchedule(_ context.Context, req *proto.PauseWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+    	return &proto.BoundWorkflowSchedule{Id: req.GetScheduleId(), Paused: true}, nil
+    }
+
+    func (p *Provider) ResumeSchedule(_ context.Context, req *proto.ResumeWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+    	return &proto.BoundWorkflowSchedule{Id: req.GetScheduleId(), Paused: false}, nil
+    }
+
+    func (p *Provider) UpsertEventTrigger(_ context.Context, req *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+    	return &proto.BoundWorkflowEventTrigger{
+    		Id:     req.GetTriggerId(),
+    		Match:  req.GetMatch(),
+    		Target: req.GetTarget(),
+    		Paused: req.GetPaused(),
+    	}, nil
+    }
+
+    func (p *Provider) GetEventTrigger(_ context.Context, req *proto.GetWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+    	return &proto.BoundWorkflowEventTrigger{Id: req.GetTriggerId()}, nil
+    }
+
+    func (p *Provider) ListEventTriggers(context.Context, *proto.ListWorkflowProviderEventTriggersRequest) (*proto.ListWorkflowProviderEventTriggersResponse, error) {
+    	return &proto.ListWorkflowProviderEventTriggersResponse{}, nil
+    }
+
+    func (p *Provider) DeleteEventTrigger(context.Context, *proto.DeleteWorkflowProviderEventTriggerRequest) error {
+    	return nil
+    }
+
+    func (p *Provider) PauseEventTrigger(_ context.Context, req *proto.PauseWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+    	return &proto.BoundWorkflowEventTrigger{Id: req.GetTriggerId(), Paused: true}, nil
+    }
+
+    func (p *Provider) ResumeEventTrigger(_ context.Context, req *proto.ResumeWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+    	return &proto.BoundWorkflowEventTrigger{Id: req.GetTriggerId(), Paused: false}, nil
+    }
+
+    func (p *Provider) PublishEvent(context.Context, *proto.PublishWorkflowProviderEventRequest) error {
+    	return nil
+    }
+
+    func main() {
+    	if err := gestalt.ServeWorkflowProvider(context.Background(), New()); err != nil {
+    		panic(err)
+    	}
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+    class ExampleWorkflow(gestalt.WorkflowProvider):
+        def configure(self, name: str, config: dict) -> None:
+            pass
+
+        def StartRun(self, request, context):
+            return gestalt.pb.BoundWorkflowRun(
+                id=f"{request.target.plugin_name}:run-1",
+                status=gestalt.pb.WORKFLOW_RUN_STATUS_PENDING,
+                target=request.target,
+            )
+
+        def GetRun(self, request, context):
+            return gestalt.pb.BoundWorkflowRun(id=request.run_id)
+
+        def ListRuns(self, request, context):
+            return gestalt.pb.ListWorkflowProviderRunsResponse(runs=[])
+
+        def CancelRun(self, request, context):
+            return gestalt.pb.BoundWorkflowRun(
+                id=request.run_id,
+                status=gestalt.pb.WORKFLOW_RUN_STATUS_CANCELED,
+            )
+
+        def UpsertSchedule(self, request, context):
+            return gestalt.pb.BoundWorkflowSchedule(
+                id=request.schedule_id,
+                cron=request.cron,
+                target=request.target,
+                paused=request.paused,
+            )
+
+        def PublishEvent(self, request, context):
+            return gestalt.pb.google_dot_protobuf_dot_empty__pb2.Empty()
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use tonic::{Request, Response, Status};
+
+    use gestalt::generated::v1 as proto;
+
+    #[derive(Default)]
+    struct ExampleWorkflow;
+
+    #[gestalt::async_trait]
+    impl gestalt::WorkflowProvider for ExampleWorkflow {
+        async fn start_run(
+            &self,
+            request: Request<proto::StartWorkflowProviderRunRequest>,
+        ) -> Result<Response<proto::BoundWorkflowRun>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::BoundWorkflowRun {
+                id: format!("{}:run-1", req.plugin_name),
+                status: proto::WorkflowRunStatus::Pending as i32,
+                target: req.target,
+                ..Default::default()
+            }))
+        }
+
+        async fn get_run(
+            &self,
+            request: Request<proto::GetWorkflowProviderRunRequest>,
+        ) -> Result<Response<proto::BoundWorkflowRun>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::BoundWorkflowRun {
+                id: req.run_id,
+                ..Default::default()
+            }))
+        }
+
+        async fn list_runs(
+            &self,
+            _request: Request<proto::ListWorkflowProviderRunsRequest>,
+        ) -> Result<Response<proto::ListWorkflowProviderRunsResponse>, Status> {
+            Ok(Response::new(proto::ListWorkflowProviderRunsResponse { runs: vec![] }))
+        }
+
+        async fn cancel_run(
+            &self,
+            request: Request<proto::CancelWorkflowProviderRunRequest>,
+        ) -> Result<Response<proto::BoundWorkflowRun>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::BoundWorkflowRun {
+                id: req.run_id,
+                status: proto::WorkflowRunStatus::Canceled as i32,
+                ..Default::default()
+            }))
+        }
+
+        async fn publish_event(
+            &self,
+            _request: Request<proto::PublishWorkflowProviderEventRequest>,
+        ) -> Result<Response<()>, Status> {
+            Ok(Response::new(()))
+        }
+    }
+
+    gestalt::export_workflow_provider!(constructor = ExampleWorkflow::default);
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import {
+      WorkflowRunStatus,
+      defineWorkflowProvider,
+    } from "@valon-technologies/gestalt";
+
+    export const provider = defineWorkflowProvider({
+      async configure(_name, _config) {},
+
+      async startRun(request) {
+        return {
+          id: `${request.pluginName}:run-1`,
+          status: WorkflowRunStatus.PENDING,
+          target: request.target,
+        };
+      },
+
+      async getRun(request) {
+        return {
+          id: request.runId,
+        };
+      },
+
+      async listRuns(_request) {
+        return [];
+      },
+
+      async cancelRun(request) {
+        return {
+          id: request.runId,
+          status: WorkflowRunStatus.CANCELED,
+        };
+      },
+
+      async upsertSchedule(request) {
+        return {
+          id: request.scheduleId,
+          cron: request.cron,
+          target: request.target,
+          paused: request.paused,
+        };
+      },
+
+      async getSchedule(request) {
+        return { id: request.scheduleId };
+      },
+
+      async listSchedules(_request) {
+        return [];
+      },
+
+      async deleteSchedule(_request) {},
+
+      async pauseSchedule(request) {
+        return { id: request.scheduleId, paused: true };
+      },
+
+      async resumeSchedule(request) {
+        return { id: request.scheduleId, paused: false };
+      },
+
+      async upsertEventTrigger(request) {
+        return {
+          id: request.triggerId,
+          match: request.match,
+          target: request.target,
+          paused: request.paused,
+        };
+      },
+
+      async getEventTrigger(request) {
+        return { id: request.triggerId };
+      },
+
+      async listEventTriggers(_request) {
+        return [];
+      },
+
+      async deleteEventTrigger(_request) {},
+
+      async pauseEventTrigger(request) {
+        return { id: request.triggerId, paused: true };
+      },
+
+      async resumeEventTrigger(request) {
+        return { id: request.triggerId, paused: false };
+      },
+
+      async publishEvent(_request) {},
+    });
+    ```
+
+    Point `package.json` at the workflow provider with `gestalt.provider`:
+
+    ```json
+    {
+      "gestalt": {
+        "provider": {
+          "kind": "workflow",
+          "target": "./workflow.ts#provider"
+        }
+      }
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Workflow host
+
+Workflow providers call back into Gestalt through the workflow host socket to
+invoke allowed plugin operations.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    host, err := gestalt.WorkflowHost()
+    if err != nil {
+    	return nil, err
+    }
+    defer host.Close()
+
+    resp, err := host.InvokeOperation(ctx, &proto.InvokeWorkflowOperationRequest{
+    	PluginName: "roadmap",
+    	Target: &proto.BoundWorkflowTarget{
+    		PluginName: "roadmap",
+    		Operation:  "sync_items",
+    	},
+    	RunId: "run-1",
+    })
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    with gestalt.WorkflowHost() as host:
+        resp = host.invoke_operation(
+            gestalt.pb.InvokeWorkflowOperationRequest(
+                plugin_name="roadmap",
+                target=gestalt.pb.BoundWorkflowTarget(
+                    plugin_name="roadmap",
+                    operation="sync_items",
+                ),
+                run_id="run-1",
+            )
+        )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    let mut host = gestalt::WorkflowHost::connect().await?;
+    let resp = host
+        .invoke_operation(proto::InvokeWorkflowOperationRequest {
+            plugin_name: "roadmap".into(),
+            target: Some(proto::BoundWorkflowTarget {
+                plugin_name: "roadmap".into(),
+                operation: "sync_items".into(),
+                ..Default::default()
+            }),
+            run_id: "run-1".into(),
+            ..Default::default()
+        })
+        .await?;
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { WorkflowHost } from "@valon-technologies/gestalt";
+
+    const host = new WorkflowHost();
+    const resp = await host.invokeOperation({
+      pluginName: "roadmap",
+      target: {
+        pluginName: "roadmap",
+        operation: "sync_items",
+      },
+      runId: "run-1",
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Config reference
+
+To use a workflow provider in a deployment, configure it under
+`providers.workflow`, then bind plugins to it under `plugins.<name>.workflow`:
+
+```yaml
+providers:
+  indexeddb:
+    workflow_state:
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        dsn: ${DATABASE_URL}
+
+  workflow:
+    local:
+      source: ./workflow/manifest.yaml
+      indexeddb:
+        provider: workflow_state
+        db: workflow
+      config:
+        pollInterval: 1s
+
+plugins:
+  roadmap:
+    source: ./roadmap/manifest.yaml
+    workflow:
+      provider: local
+      operations:
+        - sync_items
+      schedules:
+        nightly_sync:
+          cron: "0 3 * * *"
+          timezone: America/New_York
+          operation: sync_items
+```
+
+`providers.workflow.<name>.indexeddb` is optional. When present, Gestalt
+exposes a host IndexedDB binding to the workflow provider over the usual
+IndexedDB SDK socket.
+
+## What to read next
+
+- [Providers > Workflow](/providers/workflow): configuring workflow providers
+- [Releasing](/custom-providers/releasing): packaging and publishing provider releases
+- [Built-in Providers](/reference/built-in-providers): first-party workflow provider reference
