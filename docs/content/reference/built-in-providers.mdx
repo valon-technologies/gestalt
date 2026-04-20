@@ -11,7 +11,7 @@ Two simple secrets providers (`env` and `file`), telemetry, and audit remain bui
 
 ## Authentication Providers
 
-Authentication providers handle platform login. They are configured under `providers.auth.<name>` in your config file.
+Authentication providers handle platform login. They are configured under `providers.authentication.<name>` in your config file.
 
 | Name | Purpose |
 | --- | --- |
@@ -20,7 +20,7 @@ Authentication providers handle platform login. They are configured under `provi
 
 ```yaml
 providers:
-  auth:
+  authentication:
     oidc:
       source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
       config:
@@ -32,7 +32,7 @@ providers:
             name: oidc-client-secret
 ```
 
-To disable platform authentication entirely, omit the `providers.auth` block.
+To disable platform authentication entirely, omit the `providers.authentication` block.
 
 ## Authorization Providers
 

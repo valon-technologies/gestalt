@@ -697,8 +697,8 @@ func validateAdminConfig(cfg *Config) error {
 			return err
 		}
 		if authProvider == nil {
-			return fmt.Errorf("config validation: server.admin.authorizationPolicy requires providers.auth to be configured")
-		}
+				return fmt.Errorf("config validation: server.admin.authorizationPolicy requires providers.authentication to be configured")
+			}
 		if err := validateAuthorizationPolicyReference(cfg, "server.admin", "/admin", policy); err != nil {
 			return err
 		}

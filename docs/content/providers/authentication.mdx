@@ -1,7 +1,7 @@
 # Authentication
 
 Authentication providers handle platform login for the Gestalt server. They are separate
-from plugin connections: `providers.auth.<name>` decides how users sign in to the
+from plugin connections: `providers.authentication.<name>` decides how users sign in to the
 deployment itself, while plugin connections decide how Gestalt authenticates to
 upstream APIs on behalf of callers.
 
@@ -28,11 +28,11 @@ First-party authentication providers live under
 | `local` | Single-user development on a trusted machine |
 | [`valon-technologies/gestalt-providers/auth/oidc`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth/oidc) | Generic OpenID Connect providers such as Google, Okta, Auth0, Azure AD, or Keycloak |
 
-## Configuring `providers.auth`
+## Configuring `providers.authentication`
 
 ```yaml
 providers:
-  auth:
+  authentication:
     oidc:
       source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
       config:
@@ -50,7 +50,7 @@ Structured secret refs such as `clientSecret.secret.provider: default` are
 resolved through `providers.secrets` before the authentication provider receives its
 config.
 
-To disable platform authentication entirely, omit `providers.auth`.
+To disable platform authentication entirely, omit `providers.authentication`.
 
 For local development, omission is the simple default: every request is treated
 as the same anonymous user.
@@ -59,7 +59,7 @@ as the same anonymous user.
 
 ```yaml
 providers:
-  auth:
+  authentication:
     oidc:
       source: ./oidc-auth/manifest.yaml
       config:
@@ -80,6 +80,6 @@ token validation, and release packaging now live under
 ## What To Read Next
 
 - [Secrets](/providers/secrets): secret managers for authentication provider config
-- [Configuration](/configuration): full config examples including `providers.auth`
+- [Configuration](/configuration): full config examples including `providers.authentication`
 - [Built-in Providers](/reference/built-in-providers): first-party authentication reference
 - [Custom Authentication Providers](/custom-providers/authentication): advanced authoring docs

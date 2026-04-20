@@ -279,6 +279,91 @@ plugins:
 	}
 }
 
+func TestLoadConfigAcceptsAuthenticationAliases(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v3
+server:
+  providers:
+    authentication: local
+    indexeddb: sqlite
+  encryptionKey: server-key
+providers:
+  authentication:
+    local:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	authName, authEntry := mustSelectedProvider(t, cfg, HostProviderKindAuth)
+	if authName != "local" || authEntry == nil {
+		t.Fatalf("SelectedAuthProvider = (%q, %#v), want local", authName, authEntry)
+	}
+	if cfg.Server.Providers.Auth != "local" {
+		t.Fatalf("Server.Providers.Auth = %q, want local", cfg.Server.Providers.Auth)
+	}
+	if cfg.Providers.Auth["local"] == nil {
+		t.Fatal("Providers.Auth[local] = nil")
+	}
+}
+
+func TestLoadConfigRejectsConflictingAuthenticationProviderKeys(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+server:
+  encryptionKey: server-key
+providers:
+  auth:
+    legacy:
+      source:
+        path: ./providers/auth/legacy
+  authentication:
+    preferred:
+      source:
+        path: ./providers/auth/preferred
+`)
+
+	_, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), "providers.authentication and providers.auth cannot both be set") {
+		t.Fatalf("Load error = %v, want providers.authentication/providers.auth conflict", err)
+	}
+}
+
+func TestLoadConfigRejectsConflictingServerAuthenticationSelectorKeys(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+server:
+  encryptionKey: server-key
+  providers:
+    auth: legacy
+    authentication: preferred
+providers:
+  authentication:
+    preferred:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+`)
+
+	_, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), "server.providers.authentication and server.providers.auth cannot both be set") {
+		t.Fatalf("Load error = %v, want server.providers.authentication/server.providers.auth conflict", err)
+	}
+}
+
 func TestLoadConfigEnvFileFallback(t *testing.T) {
 	t.Parallel()
 

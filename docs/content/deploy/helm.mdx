@@ -176,7 +176,7 @@ Service rather than exposing it on the public ingress.
 
 ## When to enable `pluginInit`
 
-Enable the init container when your config uses published provider metadata URLs under `plugins.*.source`, `providers.auth.*.source`, `providers.indexeddb.*.source`, or `providers.ui.*.source` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
+Enable the init container when your config uses published provider metadata URLs under `plugins.*.source`, `providers.authentication.*.source`, `providers.indexeddb.*.source`, or `providers.ui.*.source` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
 
 `/gestaltd init --config /etc/gestalt/config.yaml`
 
