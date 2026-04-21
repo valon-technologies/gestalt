@@ -2,26 +2,26 @@ package providerhost
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/url"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/session"
+	"github.com/valon-technologies/gestalt/server/internal/authcallback"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type authenticationRPCClient interface {
-	BeginLogin(context.Context, *proto.BeginLoginRequest, ...grpc.CallOption) (*proto.BeginLoginResponse, error)
-	CompleteLogin(context.Context, *proto.CompleteLoginRequest, ...grpc.CallOption) (*proto.AuthenticatedUser, error)
-	ValidateExternalToken(context.Context, *proto.ValidateExternalTokenRequest, ...grpc.CallOption) (*proto.AuthenticatedUser, error)
+	BeginAuthentication(context.Context, *proto.BeginAuthenticationRequest, ...grpc.CallOption) (*proto.BeginAuthenticationResponse, error)
+	CompleteAuthentication(context.Context, *proto.CompleteAuthenticationRequest, ...grpc.CallOption) (*proto.AuthenticatedUser, error)
+	Authenticate(context.Context, *proto.AuthenticateRequest, ...grpc.CallOption) (*proto.AuthenticatedUser, error)
 	GetSessionSettings(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.AuthSessionSettings, error)
 }
 
@@ -43,6 +43,7 @@ const defaultSessionTokenTTL = 24 * time.Hour
 type remoteAuthenticationProvider struct {
 	runtime     proto.ProviderLifecycleClient
 	client      authenticationRPCClient
+	conn        grpc.ClientConnInterface
 	name        string
 	displayName string
 	description string
@@ -69,7 +70,7 @@ func NewExecutableAuthenticationProvider(ctx context.Context, cfg Authentication
 
 	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
 	client := proto.NewAuthenticationProviderClient(proc.conn)
-	provider, err := newRemoteAuthenticationProvider(ctx, runtimeClient, client, cfg)
+	provider, err := newRemoteAuthenticationProvider(ctx, runtimeClient, client, proc.conn, cfg)
 	if err != nil {
 		_ = proc.Close()
 		return nil, err
@@ -78,10 +79,11 @@ func NewExecutableAuthenticationProvider(ctx context.Context, cfg Authentication
 	return provider, nil
 }
 
-func newRemoteAuthenticationProvider(ctx context.Context, runtimeClient proto.ProviderLifecycleClient, client authenticationRPCClient, cfg AuthenticationExecConfig) (*remoteAuthenticationProvider, error) {
+func newRemoteAuthenticationProvider(ctx context.Context, runtimeClient proto.ProviderLifecycleClient, client authenticationRPCClient, conn grpc.ClientConnInterface, cfg AuthenticationExecConfig) (*remoteAuthenticationProvider, error) {
 	provider := &remoteAuthenticationProvider{
 		runtime:     runtimeClient,
 		client:      client,
+		conn:        conn,
 		name:        cfg.Name,
 		callbackURL: cfg.CallbackURL,
 		sessionKey:  append([]byte(nil), cfg.SessionKey...),
@@ -134,110 +136,160 @@ func (p *remoteAuthenticationProvider) SessionTokenTTL() time.Duration {
 	return p.sessionTTL
 }
 
-func (p *remoteAuthenticationProvider) LoginURL(state string) (string, error) {
-	return p.LoginURLContext(context.Background(), state)
-}
-
-func (p *remoteAuthenticationProvider) LoginURLContext(ctx context.Context, state string) (string, error) {
+func (p *remoteAuthenticationProvider) BeginAuthentication(ctx context.Context, req *core.BeginAuthenticationRequest) (*core.BeginAuthenticationResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("begin authentication: request is required")
+	}
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
-	resp, err := p.client.BeginLogin(ctx, &proto.BeginLoginRequest{
-		CallbackUrl: p.callbackURL,
-		HostState:   state,
+	callbackURL := p.callbackURL
+	if req.CallbackURL != "" {
+		callbackURL = req.CallbackURL
+	}
+	resp, err := p.client.BeginAuthentication(ctx, &proto.BeginAuthenticationRequest{
+		CallbackUrl: callbackURL,
+		HostState:   req.HostState,
+		Scopes:      append([]string(nil), req.Scopes...),
+		Options:     cloneStringMap(req.Options),
 	})
 	if err != nil {
-		return "", fmt.Errorf("begin login: %w", err)
+		if status.Code(err) != codes.Unimplemented {
+			return nil, fmt.Errorf("begin authentication: %w", err)
+		}
+		legacyResp, legacyErr := p.beginLoginCompat(ctx, &proto.BeginAuthenticationRequest{
+			CallbackUrl: callbackURL,
+			HostState:   req.HostState,
+			Scopes:      append([]string(nil), req.Scopes...),
+			Options:     cloneStringMap(req.Options),
+		})
+		if legacyErr != nil {
+			return nil, fmt.Errorf("begin authentication: %w", legacyErr)
+		}
+		resp = &proto.BeginAuthenticationResponse{
+			AuthorizationUrl: legacyResp.GetAuthorizationUrl(),
+			ProviderState:    append([]byte(nil), legacyResp.GetProviderState()...),
+		}
 	}
 	if resp == nil {
-		return "", fmt.Errorf("begin login: provider returned nil response")
+		return nil, fmt.Errorf("begin authentication: provider returned nil response")
 	}
-	rewrittenURL, upstreamState, err := withWrappedStateParam(resp.GetAuthorizationUrl(), "")
-	if err != nil {
-		return "", err
-	}
-	encodedState, err := encodeAuthCallbackState(state, resp.GetProviderState(), upstreamState)
-	if err != nil {
-		return "", err
-	}
-	wrappedURL, _, err := withWrappedStateParam(rewrittenURL, encodedState)
-	if err != nil {
-		return "", err
-	}
-	return wrappedURL, nil
+	return &core.BeginAuthenticationResponse{
+		AuthorizationURL: resp.GetAuthorizationUrl(),
+		ProviderState:    append([]byte(nil), resp.GetProviderState()...),
+	}, nil
 }
 
-func (p *remoteAuthenticationProvider) HandleCallback(ctx context.Context, code string) (*core.UserIdentity, error) {
-	identity, _, err := p.HandleCallbackWithState(ctx, code, "")
-	return identity, err
-}
-
-func (p *remoteAuthenticationProvider) HandleCallbackWithState(ctx context.Context, code, rawState string) (*core.UserIdentity, string, error) {
-	values := url.Values{}
-	if code != "" {
-		values.Set("code", code)
+func (p *remoteAuthenticationProvider) CompleteAuthentication(ctx context.Context, req *core.CompleteAuthenticationRequest) (*core.UserIdentity, error) {
+	if req == nil {
+		return nil, fmt.Errorf("complete authentication: request is required")
 	}
-	if rawState != "" {
-		values.Set("state", rawState)
-	}
-	return p.HandleCallbackRequest(ctx, values)
-}
-
-func (p *remoteAuthenticationProvider) HandleCallbackRequest(ctx context.Context, query url.Values) (*core.UserIdentity, string, error) {
-	if query == nil {
-		query = url.Values{}
-	}
-	hostState, providerState, upstreamState, err := decodeAuthCallbackState(query.Get("state"))
+	hostState, providerState, normalizedQuery, err := decodeAndNormalizeAuthenticationQuery(req.Query, req.ProviderState)
 	if err != nil {
-		return nil, "", err
-	}
-	normalizedQuery := cloneQueryValues(query)
-	if upstreamState != "" {
-		normalizedQuery.Set("state", upstreamState)
-	} else {
-		normalizedQuery.Del("state")
+		return nil, err
 	}
 
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
-	resp, err := p.client.CompleteLogin(ctx, &proto.CompleteLoginRequest{
-		Query:         firstQueryValues(normalizedQuery),
+	callbackURL := p.callbackURL
+	if req.CallbackURL != "" {
+		callbackURL = req.CallbackURL
+	}
+	resp, err := p.client.CompleteAuthentication(ctx, &proto.CompleteAuthenticationRequest{
+		Query:         cloneStringMap(normalizedQuery),
 		ProviderState: append([]byte(nil), providerState...),
-		CallbackUrl:   p.callbackURL,
+		CallbackUrl:   callbackURL,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("complete login: %w", err)
+		if status.Code(err) != codes.Unimplemented {
+			return nil, fmt.Errorf("complete authentication: %w", err)
+		}
+		resp, err = p.completeLoginCompat(ctx, &proto.CompleteAuthenticationRequest{
+			Query:         cloneStringMap(normalizedQuery),
+			ProviderState: append([]byte(nil), providerState...),
+			CallbackUrl:   callbackURL,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("complete authentication: %w", err)
+		}
 	}
 	user := authenticatedUserFromProto(resp)
 	if user == nil {
-		return nil, "", fmt.Errorf("complete login: provider returned nil user")
+		return nil, fmt.Errorf("complete authentication: provider returned nil user")
 	}
-	return user, hostState, nil
+	_ = hostState
+	return user, nil
 }
 
-func (p *remoteAuthenticationProvider) ValidateToken(ctx context.Context, token string) (*core.UserIdentity, error) {
-	identity, jwtErr := p.validateSessionToken(token)
-	if jwtErr == nil {
-		return identity, nil
+func (p *remoteAuthenticationProvider) Authenticate(ctx context.Context, req *core.AuthenticateRequest) (*core.UserIdentity, error) {
+	if req == nil {
+		return nil, fmt.Errorf("authenticate: request is required")
 	}
-
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
-	user, err := p.client.ValidateExternalToken(ctx, &proto.ValidateExternalTokenRequest{Token: token})
-	if err != nil {
-		if status.Code(err) == codes.Unimplemented {
-			if jwtErr != nil && jwtErr != session.ErrNotJWT {
-				return nil, jwtErr
-			}
-			return nil, fmt.Errorf("validate token: authentication provider does not support external token validation")
+	var (
+		user   *proto.AuthenticatedUser
+		err    error
+		jwtErr error
+	)
+
+	switch {
+	case req.Token != nil:
+		identity, sessionErr := p.validateSessionToken(req.Token.Token)
+		jwtErr = sessionErr
+		if jwtErr == nil {
+			return identity, nil
 		}
-		return nil, fmt.Errorf("validate token: %w", err)
+
+		user, err = p.client.Authenticate(ctx, &proto.AuthenticateRequest{
+			Input: &proto.AuthenticateRequest_Token{
+				Token: &proto.TokenAuthInput{Token: req.Token.Token},
+			},
+			Options: cloneStringMap(req.Options),
+		})
+		if err == nil {
+			break
+		}
+		if status.Code(err) != codes.Unimplemented {
+			return nil, fmt.Errorf("authenticate: %w", err)
+		}
+
+		user, err = p.validateExternalTokenCompat(ctx, req.Token.Token)
+		if err != nil {
+			if status.Code(err) == codes.Unimplemented {
+				if jwtErr != nil && jwtErr != session.ErrNotJWT {
+					return nil, jwtErr
+				}
+				return nil, fmt.Errorf("authenticate: authentication provider does not support external authentication")
+			}
+			return nil, fmt.Errorf("authenticate: %w", err)
+		}
+	case req.HTTP != nil:
+		user, err = p.client.Authenticate(ctx, &proto.AuthenticateRequest{
+			Input: &proto.AuthenticateRequest_Http{
+				Http: &proto.HTTPRequestAuthInput{
+					Method:  req.HTTP.Method,
+					Url:     req.HTTP.URL,
+					Headers: cloneStringMap(req.HTTP.Headers),
+					Query:   cloneStringMap(req.HTTP.Query),
+				},
+			},
+			Options: cloneStringMap(req.Options),
+		})
+		if err != nil {
+			if status.Code(err) == codes.Unimplemented {
+				return nil, fmt.Errorf("authenticate: authentication provider does not support external authentication")
+			}
+			return nil, fmt.Errorf("authenticate: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("authenticate: input is required")
 	}
 	authenticated := authenticatedUserFromProto(user)
 	if authenticated == nil {
-		return nil, fmt.Errorf("validate token: provider returned nil user")
+		return nil, fmt.Errorf("authenticate: provider returned nil user")
 	}
 	return authenticated, nil
 }
@@ -254,6 +306,43 @@ func (p *remoteAuthenticationProvider) validateSessionToken(token string) (*core
 		return nil, session.ErrNotJWT
 	}
 	return session.ValidateToken(token, p.sessionKey)
+}
+
+func (p *remoteAuthenticationProvider) beginLoginCompat(ctx context.Context, req *proto.BeginAuthenticationRequest) (*proto.BeginAuthenticationResponse, error) {
+	if p.conn == nil {
+		return nil, status.Error(codes.Unimplemented, "legacy begin login RPC unavailable")
+	}
+	resp := new(proto.BeginAuthenticationResponse)
+	if err := p.conn.Invoke(ctx, proto.AuthenticationProvider_BeginLogin_FullMethodName, req, resp, grpc.StaticMethod()); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (p *remoteAuthenticationProvider) completeLoginCompat(ctx context.Context, req *proto.CompleteAuthenticationRequest) (*proto.AuthenticatedUser, error) {
+	if p.conn == nil {
+		return nil, status.Error(codes.Unimplemented, "legacy complete login RPC unavailable")
+	}
+	resp := new(proto.AuthenticatedUser)
+	if err := p.conn.Invoke(ctx, proto.AuthenticationProvider_CompleteLogin_FullMethodName, req, resp, grpc.StaticMethod()); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (p *remoteAuthenticationProvider) validateExternalTokenCompat(ctx context.Context, token string) (*proto.AuthenticatedUser, error) {
+	if p.conn == nil {
+		return nil, status.Error(codes.Unimplemented, "legacy validate external token RPC unavailable")
+	}
+	resp := new(proto.AuthenticatedUser)
+	req, err := legacyValidateExternalTokenRequest(token)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.conn.Invoke(ctx, proto.AuthenticationProvider_ValidateExternalToken_FullMethodName, req, resp, grpc.StaticMethod()); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func getAuthenticationSessionTTL(ctx context.Context, client authenticationRPCClient) time.Duration {
@@ -287,96 +376,46 @@ func authenticatedUserFromProto(user *proto.AuthenticatedUser) *core.UserIdentit
 	}
 }
 
-type authCallbackState struct {
-	HostState     string `json:"host_state"`
-	ProviderState string `json:"provider_state,omitempty"`
-	UpstreamState string `json:"upstream_state,omitempty"`
-}
-
-func encodeAuthCallbackState(hostState string, providerState []byte, upstreamState string) (string, error) {
-	payload := authCallbackState{HostState: hostState}
-	if len(providerState) > 0 {
-		payload.ProviderState = base64.RawURLEncoding.EncodeToString(providerState)
+func decodeAndNormalizeAuthenticationQuery(query map[string]string, providerState []byte) (string, []byte, map[string]string, error) {
+	hostState, wrappedProviderState, upstreamState, err := authcallback.DecodeState(query["state"])
+	if err != nil {
+		return "", nil, nil, err
 	}
+	normalizedQuery := cloneStringMap(query)
 	if upstreamState != "" {
-		payload.UpstreamState = upstreamState
+		normalizedQuery["state"] = upstreamState
+	} else {
+		delete(normalizedQuery, "state")
 	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("encode auth callback state: %w", err)
+	if len(providerState) > 0 {
+		wrappedProviderState = append([]byte(nil), providerState...)
 	}
-	return base64.RawURLEncoding.EncodeToString(data), nil
+	return hostState, wrappedProviderState, normalizedQuery, nil
 }
 
-func decodeAuthCallbackState(raw string) (string, []byte, string, error) {
-	if raw == "" {
-		return "", nil, "", nil
-	}
-	data, ok := decodeOptionalBase64URL(raw)
-	if !ok {
-		return raw, nil, raw, nil
-	}
-	payload, ok := decodeOptionalAuthCallbackState(data)
-	if !ok {
-		return raw, nil, raw, nil
-	}
-	if payload.ProviderState == "" {
-		return payload.HostState, nil, payload.UpstreamState, nil
-	}
-	providerState, err := base64.RawURLEncoding.DecodeString(payload.ProviderState)
-	if err != nil {
-		return "", nil, "", fmt.Errorf("decode auth callback state: %w", err)
-	}
-	return payload.HostState, providerState, payload.UpstreamState, nil
-}
-
-func decodeOptionalBase64URL(raw string) ([]byte, bool) {
-	data, err := base64.RawURLEncoding.DecodeString(raw)
-	return data, err == nil
-}
-
-func decodeOptionalAuthCallbackState(data []byte) (authCallbackState, bool) {
-	var payload authCallbackState
-	if err := json.Unmarshal(data, &payload); err != nil || payload.HostState == "" {
-		return authCallbackState{}, false
-	}
-	return payload, true
-}
-
-func withWrappedStateParam(rawURL, state string) (string, string, error) {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return "", "", fmt.Errorf("parse authorization URL: %w", err)
-	}
-	values := parsed.Query()
-	originalState := values.Get("state")
-	values.Set("state", state)
-	parsed.RawQuery = values.Encode()
-	return parsed.String(), originalState, nil
-}
-
-func firstQueryValues(values url.Values) map[string]string {
+func cloneStringMap(values map[string]string) map[string]string {
 	if len(values) == 0 {
 		return nil
 	}
-	out := make(map[string]string, len(values))
-	for key, candidates := range values {
-		if len(candidates) > 0 {
-			out[key] = candidates[0]
-		}
-	}
-	return out
-}
-
-func cloneQueryValues(values url.Values) url.Values {
-	if len(values) == 0 {
-		return url.Values{}
-	}
-	cloned := make(url.Values, len(values))
-	for key, candidates := range values {
-		cloned[key] = append([]string(nil), candidates...)
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
 	}
 	return cloned
+}
+
+func legacyValidateExternalTokenRequest(token string) (*dynamicpb.Message, error) {
+	messageDesc := proto.File_v1_authentication_proto.Messages().ByName("ValidateExternalTokenRequest")
+	if messageDesc == nil {
+		return nil, status.Error(codes.Internal, "legacy validate external token descriptor unavailable")
+	}
+	fieldDesc := messageDesc.Fields().ByName(protoreflect.Name("token"))
+	if fieldDesc == nil {
+		return nil, status.Error(codes.Internal, "legacy validate external token field unavailable")
+	}
+	message := dynamicpb.NewMessage(messageDesc)
+	message.Set(fieldDesc, protoreflect.ValueOfString(token))
+	return message, nil
 }
 
 var (
@@ -385,8 +424,7 @@ var (
 		DisplayName() string
 		Description() string
 		SessionTokenTTL() time.Duration
-		HandleCallbackWithState(context.Context, string, string) (*core.UserIdentity, string, error)
-		HandleCallbackRequest(context.Context, url.Values) (*core.UserIdentity, string, error)
 	} = (*remoteAuthenticationProvider)(nil)
+	_ core.Authenticator         = (*remoteAuthenticationProvider)(nil)
 	_ interface{ Close() error } = (*remoteAuthenticationProvider)(nil)
 )

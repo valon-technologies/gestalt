@@ -14,11 +14,11 @@ from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from gestalt import (
     AuthenticationProvider,
+    Authenticator,
     CacheEntry,
     CacheProvider,
     Catalog,
     CatalogOperation,
-    ExternalTokenValidator,
     HealthChecker,
     MetadataProvider,
     Plugin,
@@ -482,7 +482,7 @@ class MainEntrypointTests(unittest.TestCase):
 class AuthenticationRuntimeTests(unittest.TestCase):
     class StubAuthenticationProvider(
         AuthenticationProvider,
-        ExternalTokenValidator,
+        Authenticator,
         SessionTTLProvider,
         MetadataProvider,
         WarningsProvider,
@@ -490,6 +490,8 @@ class AuthenticationRuntimeTests(unittest.TestCase):
     ):
         def __init__(self) -> None:
             self.configured: list[tuple[str, dict[str, object]]] = []
+            self.begin_request_names: list[str] = []
+            self.complete_request_names: list[str] = []
 
         def configure(self, name: str, config: dict[str, Any]) -> None:
             self.configured.append((name, dict(config)))
@@ -509,19 +511,22 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         def health_check(self) -> None:
             return None
 
-        def begin_login(self, request: Any) -> Any:
-            return authentication_pb2.BeginLoginResponse(
+        def begin_authentication(self, request: Any) -> Any:
+            self.begin_request_names.append(request.DESCRIPTOR.name)
+            return authentication_pb2.BeginAuthenticationResponse(
                 authorization_url=f"https://auth.example.test/login?state={request.host_state}",
                 provider_state=b"provider-state",
             )
 
-        def complete_login(self, request: Any) -> Any:
+        def complete_authentication(self, request: Any) -> Any:
+            self.complete_request_names.append(request.DESCRIPTOR.name)
             return authentication_pb2.AuthenticatedUser(
                 email=request.query.get("email", ""),
                 display_name="Runtime User",
             )
 
-        def validate_external_token(self, token: str) -> Any:
+        def authenticate(self, request: Any) -> Any:
+            token = request.token.token if request.WhichOneof("input") == "token" else ""
             if token == "known-token":
                 return authentication_pb2.AuthenticatedUser(email="token@example.com")
             return None
@@ -592,7 +597,40 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         )
 
         auth_servicer = _runtime._authentication_servicer(provider=provider)
-        login = auth_servicer.BeginLogin(
+        begin = auth_servicer.BeginAuthentication(
+            authentication_pb2.BeginAuthenticationRequest(
+                callback_url="https://cb.example.test",
+                host_state="host-state",
+                scopes=["profile"],
+                options={"prompt": "consent"},
+            ),
+            mock.Mock(),
+        )
+        self.assertEqual(
+            begin.authorization_url, "https://auth.example.test/login?state=host-state"
+        )
+        self.assertEqual(bytes(begin.provider_state), b"provider-state")
+
+        user = auth_servicer.CompleteAuthentication(
+            authentication_pb2.CompleteAuthenticationRequest(
+                query={"email": "user@example.com"},
+                provider_state=b"provider-state",
+                callback_url="https://cb.example.test",
+            ),
+            mock.Mock(),
+        )
+        self.assertEqual(user.email, "user@example.com")
+        self.assertEqual(user.display_name, "Runtime User")
+
+        validated = auth_servicer.Authenticate(
+            authentication_pb2.AuthenticateRequest(
+                token=authentication_pb2.TokenAuthInput(token="known-token"),
+            ),
+            mock.Mock(),
+        )
+        self.assertEqual(validated.email, "token@example.com")
+
+        legacy_login = auth_servicer.BeginLogin(
             authentication_pb2.BeginLoginRequest(
                 callback_url="https://cb.example.test",
                 host_state="host-state",
@@ -602,20 +640,29 @@ class AuthenticationRuntimeTests(unittest.TestCase):
             mock.Mock(),
         )
         self.assertEqual(
-            login.authorization_url, "https://auth.example.test/login?state=host-state"
+            legacy_login.authorization_url,
+            "https://auth.example.test/login?state=host-state",
         )
-        self.assertEqual(bytes(login.provider_state), b"provider-state")
+        self.assertEqual(bytes(legacy_login.provider_state), b"provider-state")
+        self.assertEqual(
+            provider.begin_request_names,
+            ["BeginAuthenticationRequest", "BeginAuthenticationRequest"],
+        )
 
-        user = auth_servicer.CompleteLogin(
+        legacy_user = auth_servicer.CompleteLogin(
             authentication_pb2.CompleteLoginRequest(
-                query={"email": "user@example.com"},
+                query={"email": "legacy-user@example.com"},
                 provider_state=b"provider-state",
                 callback_url="https://cb.example.test",
             ),
             mock.Mock(),
         )
-        self.assertEqual(user.email, "user@example.com")
-        self.assertEqual(user.display_name, "Runtime User")
+        self.assertEqual(legacy_user.email, "legacy-user@example.com")
+        self.assertEqual(legacy_user.display_name, "Runtime User")
+        self.assertEqual(
+            provider.complete_request_names,
+            ["CompleteAuthenticationRequest", "CompleteAuthenticationRequest"],
+        )
 
         validated = auth_servicer.ValidateExternalToken(
             authentication_pb2.ValidateExternalTokenRequest(token="known-token"),
@@ -628,12 +675,12 @@ class AuthenticationRuntimeTests(unittest.TestCase):
 
     def test_auth_validator_missing_or_unknown_token(self) -> None:
         class NoValidator(AuthenticationProvider):
-            def begin_login(self, request: Any) -> Any:
-                return authentication_pb2.BeginLoginResponse(
+            def begin_authentication(self, request: Any) -> Any:
+                return authentication_pb2.BeginAuthenticationResponse(
                     authorization_url="https://example.test"
                 )
 
-            def complete_login(self, request: Any) -> Any:
+            def complete_authentication(self, request: Any) -> Any:
                 return authentication_pb2.AuthenticatedUser(email="user@example.com")
 
         no_validator_servicer = _runtime._authentication_servicer(
@@ -646,7 +693,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         )
         context.abort.assert_called_once_with(
             grpc.StatusCode.UNIMPLEMENTED,
-            "authentication provider does not support external token validation",
+            "authentication provider does not support external authentication",
         )
 
         unknown_context = mock.Mock()
@@ -659,7 +706,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         )
         unknown_context.abort.assert_called_once_with(
             grpc.StatusCode.NOT_FOUND,
-            "token not recognized",
+            "authentication input not recognized",
         )
 
 

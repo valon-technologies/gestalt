@@ -8,13 +8,13 @@ export const provider = defineAuthenticationProvider({
   configure(_name, config) {
     configuredIssuer = String(config.issuer ?? configuredIssuer);
   },
-  beginLogin(request) {
+  beginAuthentication(request) {
     return {
       authorizationUrl: `${configuredIssuer}/authorize?state=upstream-state&host=${encodeURIComponent(request.hostState)}`,
       providerState: new Uint8Array([1, 2, 3]),
     };
   },
-  completeLogin(request) {
+  completeAuthentication(request) {
     return {
       subject: request.query.code || "subject-1",
       email: "fixture@example.com",
@@ -27,7 +27,8 @@ export const provider = defineAuthenticationProvider({
       },
     };
   },
-  validateExternalToken(token) {
+  authenticate(request) {
+    const token = request.token?.token ?? "";
     if (!token) {
       return null;
     }

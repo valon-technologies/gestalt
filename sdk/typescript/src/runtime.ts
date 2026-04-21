@@ -16,7 +16,11 @@ import {
   AuthenticationProvider as AuthenticationProviderService,
   AuthSessionSettingsSchema,
   AuthenticatedUserSchema,
+  AuthenticateRequestSchema,
+  BeginAuthenticationResponseSchema,
   BeginLoginResponseSchema,
+  type AuthenticateRequest as AuthAuthenticateRequest,
+  type CompleteAuthenticationRequest as AuthCompleteAuthenticationRequest,
   type CompleteLoginRequest as AuthCompleteLoginRequest,
   type ValidateExternalTokenRequest,
 } from "../gen/v1/authentication_pb.ts";
@@ -552,55 +556,116 @@ export function createProviderService(
 export function createAuthenticationService(
   provider: AuthenticationProvider,
 ): Partial<ServiceImpl<typeof AuthenticationProviderService>> {
+  const beginAuthentication = async (request: {
+    callbackUrl: string;
+    hostState: string;
+    scopes: string[];
+    options: Record<string, string>;
+  }) => {
+    const response = await provider.beginAuthentication({
+      callbackUrl: request.callbackUrl,
+      hostState: request.hostState,
+      scopes: [...request.scopes],
+      options: {
+        ...request.options,
+      },
+    });
+    if (!response) {
+      throw new ConnectError(
+        "authentication provider returned nil response",
+        Code.Internal,
+      );
+    }
+    return response;
+  };
+
+  const completeAuthentication = async (
+    request: AuthCompleteAuthenticationRequest | AuthCompleteLoginRequest,
+  ) => {
+    const user = await provider.completeAuthentication({
+      query: {
+        ...request.query,
+      },
+      providerState: cloneUint8Array(request.providerState),
+      callbackUrl: request.callbackUrl,
+    });
+    if (!user) {
+      throw new ConnectError(
+        "authentication provider returned nil user",
+        Code.Internal,
+      );
+    }
+    return user;
+  };
+
+  const authenticate = async (request: AuthAuthenticateRequest) => {
+    const input =
+      request.input.case === "token"
+        ? { token: { token: request.input.value.token } }
+        : request.input.case === "http"
+          ? {
+              http: {
+                method: request.input.value.method,
+                url: request.input.value.url,
+                headers: { ...request.input.value.headers },
+                query: { ...request.input.value.query },
+              },
+            }
+          : {};
+    const authRequest = {
+      ...input,
+      options: { ...request.options },
+    };
+    if (!provider.supportsAuthenticateRequest(authRequest)) {
+      throw new ConnectError(
+        "authentication provider does not support external authentication",
+        Code.Unimplemented,
+      );
+    }
+    const user = await provider.authenticate(authRequest);
+    if (!user) {
+      throw new ConnectError("authentication input not recognized", Code.NotFound);
+    }
+    return user;
+  };
+
   return {
-    async beginLogin(request) {
-      const response = await provider.beginLogin({
-        callbackUrl: request.callbackUrl,
-        hostState: request.hostState,
-        scopes: [...request.scopes],
-        options: {
-          ...request.options,
-        },
+    async beginAuthentication(request) {
+      const response = await beginAuthentication(request);
+      return create(BeginAuthenticationResponseSchema, {
+        authorizationUrl: response.authorizationUrl,
+        providerState: response.providerState ?? new Uint8Array(),
       });
-      if (!response) {
-        throw new ConnectError(
-          "authentication provider returned nil response",
-          Code.Internal,
-        );
-      }
+    },
+    async completeAuthentication(request: AuthCompleteAuthenticationRequest) {
+      return authenticatedUserToProto(await completeAuthentication(request));
+    },
+    async authenticate(request: AuthAuthenticateRequest) {
+      return authenticatedUserToProto(await authenticate(request));
+    },
+    async beginLogin(request) {
+      const response = await beginAuthentication(request);
       return create(BeginLoginResponseSchema, {
         authorizationUrl: response.authorizationUrl,
         providerState: response.providerState ?? new Uint8Array(),
       });
     },
     async completeLogin(request: AuthCompleteLoginRequest) {
-      const user = await provider.completeLogin({
-        query: {
-          ...request.query,
-        },
-        providerState: cloneUint8Array(request.providerState),
-        callbackUrl: request.callbackUrl,
-      });
-      if (!user) {
-        throw new ConnectError(
-          "authentication provider returned nil user",
-          Code.Internal,
-        );
-      }
-      return authenticatedUserToProto(user);
+      return authenticatedUserToProto(await completeAuthentication(request));
     },
     async validateExternalToken(request: ValidateExternalTokenRequest) {
-      if (!provider.supportsExternalTokenValidation()) {
-        throw new ConnectError(
-          "authentication provider does not support external token validation",
-          Code.Unimplemented,
-        );
-      }
-      const user = await provider.validateExternalToken(request.token);
-      if (!user) {
-        throw new ConnectError("token not recognized", Code.NotFound);
-      }
-      return authenticatedUserToProto(user);
+      return authenticatedUserToProto(
+        await authenticate(
+          create(AuthenticateRequestSchema, {
+            input: {
+              case: "token",
+              value: {
+                token: request.token,
+              },
+            },
+          }),
+        ),
+      );
     },
     async getSessionSettings() {
       if (!provider.supportsSessionSettings()) {

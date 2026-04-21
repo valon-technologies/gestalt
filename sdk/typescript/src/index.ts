@@ -79,12 +79,18 @@ export {
   AuthenticationProvider,
   defineAuthenticationProvider,
   isAuthenticationProvider,
+  type AuthenticateRequest,
   type AuthenticatedUser,
   type AuthenticationProviderOptions,
   type AuthenticationSessionSettings,
+  type BeginAuthenticationRequest,
+  type BeginAuthenticationResponse,
   type BeginLoginRequest,
   type BeginLoginResponse,
+  type CompleteAuthenticationRequest,
   type CompleteLoginRequest,
+  type HTTPRequestAuthInput,
+  type TokenAuthInput,
 } from "./auth.ts";
 export {
   Cache,

@@ -24,6 +24,7 @@ from ._operations import INTERNAL_ERROR_MESSAGE
 from ._plugin import Plugin, _module_plugin
 from ._providers import (
     AuthenticationProvider,
+    Authenticator,
     CacheProvider,
     Closer,
     ExternalTokenValidator,
@@ -528,9 +529,9 @@ def _authentication_servicer(*, provider: PluginProvider) -> Any:
     auth_provider = cast(AuthenticationProvider, provider)
 
     class AuthenticationServicer(_authentication_pb2_grpc.AuthenticationProviderServicer):
-        @_grpc_handler("begin login")
-        def BeginLogin(self, request: Any, context: Any) -> Any:
-            response = auth_provider.begin_login(request)
+        @_grpc_handler("begin authentication")
+        def BeginAuthentication(self, request: Any, context: Any) -> Any:
+            response = auth_provider.begin_authentication(request)
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
@@ -538,9 +539,9 @@ def _authentication_servicer(*, provider: PluginProvider) -> Any:
                 )
             return response
 
-        @_grpc_handler("complete login")
-        def CompleteLogin(self, request: Any, context: Any) -> Any:
-            user = auth_provider.complete_login(request)
+        @_grpc_handler("complete authentication")
+        def CompleteAuthentication(self, request: Any, context: Any) -> Any:
+            user = auth_provider.complete_authentication(request)
             if user is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
@@ -548,26 +549,70 @@ def _authentication_servicer(*, provider: PluginProvider) -> Any:
                 )
             return user
 
-        def ValidateExternalToken(self, request: Any, context: Any) -> Any:
-            if not isinstance(auth_provider, ExternalTokenValidator):
+        def Authenticate(self, request: Any, context: Any) -> Any:
+            if isinstance(auth_provider, Authenticator):
+                try:
+                    user = auth_provider.authenticate(request)
+                except Exception as error:
+                    traceback.print_exception(error)
+                    return context.abort(
+                        grpc.StatusCode.UNKNOWN,
+                        f"authenticate: {error}",
+                    )
+                if user is None:
+                    return context.abort(
+                        grpc.StatusCode.NOT_FOUND,
+                        "authentication input not recognized",
+                    )
+                return user
+            if (
+                request.WhichOneof("input") != "token"
+                or not isinstance(auth_provider, ExternalTokenValidator)
+            ):
                 return context.abort(
                     grpc.StatusCode.UNIMPLEMENTED,
-                    "authentication provider does not support external token validation",
+                    "authentication provider does not support external authentication",
                 )
             try:
-                user = auth_provider.validate_external_token(request.token)
+                user = auth_provider.validate_external_token(request.token.token)
             except Exception as error:
                 traceback.print_exception(error)
                 return context.abort(
                     grpc.StatusCode.UNKNOWN,
-                    f"validate external token: {error}",
+                    f"authenticate: {error}",
                 )
             if user is None:
                 return context.abort(
                     grpc.StatusCode.NOT_FOUND,
-                    "token not recognized",
+                    "authentication input not recognized",
                 )
             return user
+
+        @_grpc_handler("begin login")
+        def BeginLogin(self, request: Any, context: Any) -> Any:
+            begin_authentication_request = authentication_pb2.BeginAuthenticationRequest(
+                callback_url=request.callback_url,
+                host_state=request.host_state,
+                scopes=request.scopes,
+                options=request.options,
+            )
+            return self.BeginAuthentication(begin_authentication_request, context)
+
+        @_grpc_handler("complete login")
+        def CompleteLogin(self, request: Any, context: Any) -> Any:
+            complete_authentication_request = (
+                authentication_pb2.CompleteAuthenticationRequest(
+                    query=request.query,
+                    provider_state=request.provider_state,
+                    callback_url=request.callback_url,
+                )
+            )
+            return self.CompleteAuthentication(complete_authentication_request, context)
+
+        def ValidateExternalToken(self, request: Any, context: Any) -> Any:
+            authenticate_request = authentication_pb2.AuthenticateRequest()
+            authenticate_request.token.token = request.token
+            return self.Authenticate(authenticate_request, context)
 
         def GetSessionSettings(self, request: Any, context: Any) -> Any:
             if not isinstance(auth_provider, SessionTTLProvider):

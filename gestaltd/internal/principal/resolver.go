@@ -109,7 +109,14 @@ func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, 
 		return nil, ErrInvalidToken
 	}
 
-	identity, err := r.auth.ValidateToken(ctx, token)
+	authenticator, ok := r.auth.(core.Authenticator)
+	if !ok {
+		metricutil.RecordAuthMetrics(ctx, startedAt, provider, "validate_token", true)
+		return nil, ErrInvalidToken
+	}
+	identity, err := authenticator.Authenticate(ctx, &core.AuthenticateRequest{
+		Token: &core.TokenAuthInput{Token: token},
+	})
 	metricutil.RecordAuthMetrics(ctx, startedAt, provider, "validate_token", err != nil || identity == nil)
 	if err == nil && identity != nil {
 		return &Principal{Identity: identity, Source: SourceSession}, nil

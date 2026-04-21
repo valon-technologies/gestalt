@@ -35,23 +35,48 @@ func (s *StubSecretManager) GetSecret(_ context.Context, name string) (string, e
 }
 
 type StubAuthProvider struct {
-	N                string
-	HandleCallbackFn func(context.Context, string) (*core.UserIdentity, error)
-	ValidateTokenFn  func(context.Context, string) (*core.UserIdentity, error)
+	N                        string
+	BeginAuthenticationFn    func(context.Context, *core.BeginAuthenticationRequest) (*core.BeginAuthenticationResponse, error)
+	CompleteAuthenticationFn func(context.Context, *core.CompleteAuthenticationRequest) (*core.UserIdentity, error)
+	AuthenticateFn           func(context.Context, *core.AuthenticateRequest) (*core.UserIdentity, error)
+	HandleCallbackFn         func(context.Context, string) (*core.UserIdentity, error)
+	ValidateTokenFn          func(context.Context, string) (*core.UserIdentity, error)
 }
 
 type StubAuthenticationProvider = StubAuthProvider
 
-func (s *StubAuthProvider) Name() string                    { return s.N }
-func (s *StubAuthProvider) LoginURL(string) (string, error) { return "", nil }
-func (s *StubAuthProvider) HandleCallback(ctx context.Context, code string) (*core.UserIdentity, error) {
+func (s *StubAuthProvider) Name() string { return s.N }
+
+func (s *StubAuthProvider) BeginAuthentication(ctx context.Context, req *core.BeginAuthenticationRequest) (*core.BeginAuthenticationResponse, error) {
+	if s.BeginAuthenticationFn != nil {
+		return s.BeginAuthenticationFn(ctx, req)
+	}
+	return &core.BeginAuthenticationResponse{}, nil
+}
+
+func (s *StubAuthProvider) CompleteAuthentication(ctx context.Context, req *core.CompleteAuthenticationRequest) (*core.UserIdentity, error) {
+	if s.CompleteAuthenticationFn != nil {
+		return s.CompleteAuthenticationFn(ctx, req)
+	}
 	if s.HandleCallbackFn != nil {
+		code := ""
+		if req != nil {
+			code = req.Query["code"]
+		}
 		return s.HandleCallbackFn(ctx, code)
 	}
 	return nil, nil
 }
-func (s *StubAuthProvider) ValidateToken(ctx context.Context, token string) (*core.UserIdentity, error) {
+
+func (s *StubAuthProvider) Authenticate(ctx context.Context, req *core.AuthenticateRequest) (*core.UserIdentity, error) {
+	if s.AuthenticateFn != nil {
+		return s.AuthenticateFn(ctx, req)
+	}
 	if s.ValidateTokenFn != nil {
+		token := ""
+		if req != nil && req.Token != nil {
+			token = req.Token.Token
+		}
 		return s.ValidateTokenFn(ctx, token)
 	}
 	return nil, nil

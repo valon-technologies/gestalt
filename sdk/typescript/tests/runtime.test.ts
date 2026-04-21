@@ -8,7 +8,10 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { expect, test } from "bun:test";
 
 import {
+  AuthenticateRequestSchema,
+  BeginAuthenticationRequestSchema,
   BeginLoginRequestSchema,
+  CompleteAuthenticationRequestSchema,
   CompleteLoginRequestSchema,
   ValidateExternalTokenRequestSchema,
 } from "../gen/v1/authentication_pb.ts";
@@ -62,6 +65,7 @@ import {
   PresignMethod,
   S3,
   WorkflowRunStatus,
+  defineAuthenticationProvider,
   defineCacheProvider,
   definePlugin,
   defineS3Provider,
@@ -656,8 +660,8 @@ test("authentication provider supports runtime metadata, login flows, and token 
     Code.FailedPrecondition,
   );
 
-  const defaultBegin = await (auth.beginLogin as any)(
-    create(BeginLoginRequestSchema, {
+  const defaultBegin = await (auth.beginAuthentication as any)(
+    create(BeginAuthenticationRequestSchema, {
       callbackUrl: "https://app.example.test/callback",
       hostState: "host-state",
       scopes: ["openid"],
@@ -686,8 +690,8 @@ test("authentication provider supports runtime metadata, login flows, and token 
   expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
 
-  const begin = await (auth.beginLogin as any)(
-    create(BeginLoginRequestSchema, {
+  const begin = await (auth.beginAuthentication as any)(
+    create(BeginAuthenticationRequestSchema, {
       callbackUrl: "https://app.example.test/callback",
       hostState: "host-state",
       scopes: ["openid"],
@@ -697,8 +701,8 @@ test("authentication provider supports runtime metadata, login flows, and token 
     "https://login.example.test/authorize",
   );
 
-  const user = await (auth.completeLogin as any)(
-    create(CompleteLoginRequestSchema, {
+  const user = await (auth.completeAuthentication as any)(
+    create(CompleteAuthenticationRequestSchema, {
       query: {
         code: "code-123",
       },
@@ -709,12 +713,81 @@ test("authentication provider supports runtime metadata, login flows, and token 
   expect(user.subject).toBe("code-123");
   expect(user.claims.issuer).toBe("https://login.example.test");
 
-  const validated = await (auth.validateExternalToken as any)(
-    create(ValidateExternalTokenRequestSchema, {
-      token: "api-token",
+  const validated = await (auth.authenticate as any)(
+    create(AuthenticateRequestSchema, {
+      input: {
+        case: "token",
+        value: {
+          token: "api-token",
+        },
+      },
     }),
   );
   expect(validated.email).toBe("api-token@example.com");
+
+  const legacyBegin = await (auth.beginLogin as any)(
+    create(BeginLoginRequestSchema, {
+      callbackUrl: "https://app.example.test/callback",
+      hostState: "host-state",
+      scopes: ["openid"],
+    }),
+  );
+  expect(legacyBegin.authorizationUrl).toContain(
+    "https://login.example.test/authorize",
+  );
+
+  const legacyUser = await (auth.completeLogin as any)(
+    create(CompleteLoginRequestSchema, {
+      query: {
+        code: "legacy-code",
+      },
+      callbackUrl: "https://app.example.test/callback",
+      providerState: new Uint8Array([1, 2, 3]),
+    }),
+  );
+  expect(legacyUser.subject).toBe("legacy-code");
+
+  const legacyValidated = await (auth.validateExternalToken as any)(
+    create(ValidateExternalTokenRequestSchema, {
+      token: "legacy-token",
+    }),
+  );
+  expect(legacyValidated.email).toBe("legacy-token@example.com");
+});
+
+test("authentication provider reports http auth as unimplemented for legacy token validators", async () => {
+  const auth = createAuthenticationService(
+    defineAuthenticationProvider({
+      displayName: "Legacy Token Validator",
+      beginLogin() {
+        return { authorizationUrl: "https://login.example.test/authorize" };
+      },
+      completeLogin() {
+        return { subject: "subject-1" };
+      },
+      validateExternalToken(token) {
+        return token ? { subject: token } : null;
+      },
+    }),
+  );
+
+  await expectConnectCode(
+    (auth.authenticate as any)(
+      create(AuthenticateRequestSchema, {
+        input: {
+          case: "http",
+          value: {
+            method: "GET",
+            url: "https://api.example.test/callback",
+            headers: {
+              authorization: "Bearer token",
+            },
+          },
+        },
+      }),
+    ),
+    Code.Unimplemented,
+  );
 });
 
 test("cache provider supports runtime metadata and cache operations", async () => {

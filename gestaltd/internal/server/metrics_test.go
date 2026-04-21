@@ -52,23 +52,28 @@ type metricsHostIssuedSessionAuth struct {
 
 func (s *metricsHostIssuedSessionAuth) Name() string { return s.name }
 
-func (s *metricsHostIssuedSessionAuth) LoginURL(state string) (string, error) {
-	return "https://idp.example.test/login?state=" + url.QueryEscape(state), nil
+func (s *metricsHostIssuedSessionAuth) BeginAuthentication(_ context.Context, req *core.BeginAuthenticationRequest) (*core.BeginAuthenticationResponse, error) {
+	return &core.BeginAuthenticationResponse{
+		AuthorizationURL: "https://idp.example.test/login?state=" + url.QueryEscape(req.HostState),
+	}, nil
 }
 
-func (s *metricsHostIssuedSessionAuth) HandleCallback(context.Context, string) (*core.UserIdentity, error) {
-	return nil, context.DeadlineExceeded
-}
-
-func (s *metricsHostIssuedSessionAuth) HandleCallbackWithState(_ context.Context, code, state string) (*core.UserIdentity, string, error) {
-	if code != "good-code" {
-		return nil, "", context.DeadlineExceeded
+func (s *metricsHostIssuedSessionAuth) CompleteAuthentication(_ context.Context, req *core.CompleteAuthenticationRequest) (*core.UserIdentity, error) {
+	code := ""
+	if req != nil {
+		code = req.Query["code"]
 	}
-	return &core.UserIdentity{Email: "host@example.com", DisplayName: "Host Issued"}, state, nil
+	if code != "good-code" {
+		return nil, context.DeadlineExceeded
+	}
+	return &core.UserIdentity{Email: "host@example.com", DisplayName: "Host Issued"}, nil
 }
 
-func (s *metricsHostIssuedSessionAuth) ValidateToken(_ context.Context, token string) (*core.UserIdentity, error) {
-	return session.ValidateToken(token, s.secret)
+func (s *metricsHostIssuedSessionAuth) Authenticate(_ context.Context, req *core.AuthenticateRequest) (*core.UserIdentity, error) {
+	if req == nil || req.Token == nil {
+		return nil, context.DeadlineExceeded
+	}
+	return session.ValidateToken(req.Token.Token, s.secret)
 }
 
 func (s *metricsHostIssuedSessionAuth) SessionTokenTTL() time.Duration {

@@ -27,7 +27,11 @@ spec:
 
 ## Interface
 
-You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `BeginLogin` returns an authorization URL that Gestalt redirects the user to. `CompleteLogin` exchanges the callback parameters for an authenticated identity.
+The preferred interface is `Configure`, `BeginAuthentication`, and `CompleteAuthentication`.
+`BeginAuthentication` returns the authorization URL that Gestalt redirects the user to, plus any opaque provider state that needs to survive until callback completion.
+`CompleteAuthentication` receives the full callback query parameters and returns the authenticated identity.
+
+Deprecated aliases `BeginLogin` and `CompleteLogin` still work during the migration window, and token-only validation can still be exposed through `ValidateExternalToken`, but new providers should implement `Authenticate` when they need direct bearer or request validation.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -59,7 +63,7 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
     	return nil
     }
 
-    func (g *GoogleAuth) BeginLogin(_ context.Context, req gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
+    func (g *GoogleAuth) BeginAuthentication(_ context.Context, req *gestalt.BeginAuthenticationRequest) (*gestalt.BeginAuthenticationResponse, error) {
     	cfg := &oauth2.Config{
     		ClientID:     g.clientID,
     		ClientSecret: g.clientSecret,
@@ -67,12 +71,12 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
     		Scopes:       []string{"openid", "email", "profile"},
     		Endpoint:     googleoauth.Endpoint,
     	}
-    	return &gestalt.BeginLoginResponse{
+	return &gestalt.BeginAuthenticationResponse{
     		AuthorizationUrl: cfg.AuthCodeURL(req.HostState, oauth2.AccessTypeOffline),
     	}, nil
     }
 
-    func (g *GoogleAuth) CompleteLogin(ctx context.Context, req gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
+    func (g *GoogleAuth) CompleteAuthentication(ctx context.Context, req *gestalt.CompleteAuthenticationRequest) (*gestalt.AuthenticatedUser, error) {
     	// Exchange req.Query["code"] for a token, then fetch userinfo.
     	return &gestalt.AuthenticatedUser{
     		Subject:       "user-123",
@@ -94,7 +98,10 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
             self.client_id = config["clientId"]
             self.client_secret = config["clientSecret"]
 
-        def begin_login(self, request: gestalt.BeginLoginRequest) -> gestalt.BeginLoginResponse:
+        def begin_authentication(
+            self,
+            request: gestalt.BeginAuthenticationRequest,
+        ) -> gestalt.BeginAuthenticationResponse:
             auth_url = (
                 "https://accounts.google.com/o/oauth2/v2/auth"
                 f"?client_id={self.client_id}"
@@ -103,9 +110,12 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
                 "&response_type=code"
                 "&scope=openid+email+profile"
             )
-            return gestalt.BeginLoginResponse(authorization_url=auth_url)
+            return gestalt.BeginAuthenticationResponse(authorization_url=auth_url)
 
-        def complete_login(self, request: gestalt.CompleteLoginRequest) -> gestalt.AuthenticatedUser:
+        def complete_authentication(
+            self,
+            request: gestalt.CompleteAuthenticationRequest,
+        ) -> gestalt.AuthenticatedUser:
             # Exchange request.query["code"] for a token, then fetch userinfo.
             return gestalt.AuthenticatedUser(
                 subject="user-123",
@@ -120,7 +130,13 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
   <Tabs.Tab>
     ```rust
     use std::sync::Mutex;
-    use gestalt::{AuthenticationProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest};
+    use gestalt::{
+        AuthenticationProvider,
+        AuthenticatedUser,
+        BeginAuthenticationRequest,
+        BeginAuthenticationResponse,
+        CompleteAuthenticationRequest,
+    };
 
     #[derive(Default)]
     pub struct GoogleAuth {
@@ -140,9 +156,12 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
             Ok(())
         }
 
-        async fn begin_login(&self, req: BeginLoginRequest) -> gestalt::Result<BeginLoginResponse> {
+        async fn begin_authentication(
+            &self,
+            req: BeginAuthenticationRequest,
+        ) -> gestalt::Result<BeginAuthenticationResponse> {
             let client_id = self.client_id.lock().unwrap().clone();
-            Ok(BeginLoginResponse {
+            Ok(BeginAuthenticationResponse {
                 authorization_url: format!(
                     "https://accounts.google.com/o/oauth2/v2/auth\
                     ?client_id={client_id}&redirect_uri={}&state={}&response_type=code\
@@ -153,7 +172,10 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
             })
         }
 
-        async fn complete_login(&self, req: CompleteLoginRequest) -> gestalt::Result<AuthenticatedUser> {
+        async fn complete_authentication(
+            &self,
+            req: CompleteAuthenticationRequest,
+        ) -> gestalt::Result<AuthenticatedUser> {
             // Exchange req.query["code"] for a token, then fetch userinfo.
             Ok(AuthenticatedUser {
                 subject: "user-123".into(),
@@ -181,7 +203,7 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
         clientId = config.clientId as string;
         clientSecret = config.clientSecret as string;
       },
-      async beginLogin(request) {
+      async beginAuthentication(request) {
         return {
           authorizationUrl:
             `https://accounts.google.com/o/oauth2/v2/auth` +
@@ -191,7 +213,7 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
             `&response_type=code&scope=${encodeURIComponent("openid email profile")}`,
         };
       },
-      async completeLogin(request) {
+      async completeAuthentication(request) {
         // Exchange request.query.code for a token, then fetch userinfo.
         return {
           subject: "user-123",
@@ -223,7 +245,7 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
 
 Two optional interfaces extend the base contract.
 
-**ExternalTokenValidator** lets API clients present a bearer token directly instead of going through the browser login flow. In Go, implement the `ExternalTokenValidator` interface on your provider. In Python, inherit from `gestalt.ExternalTokenValidator`. In Rust, override the `validate_external_token` method, which returns an unimplemented error by default. In TypeScript, provide the optional `validateExternalToken` handler to `defineAuthenticationProvider`.
+**Authenticator** lets API clients present a bearer token or other external auth input directly instead of going through the browser flow. In Go, implement the `Authenticator` interface on your provider. In Python, inherit from `gestalt.Authenticator`. In Rust, override the `authenticate` method; the runtime still bridges the deprecated `validate_external_token` method for token-only providers. In TypeScript, provide the optional `authenticate` handler to `defineAuthenticationProvider`.
 
 **SessionTTLProvider** controls session lifetime. The default is 24 hours. In Go, implement the `SessionTTLProvider` interface. In Python, inherit from `gestalt.SessionTTLProvider`. In Rust, override the `session_ttl` method, which returns `None` (the 24-hour default) by default. In TypeScript, provide the optional `sessionSettings` handler to `defineAuthenticationProvider`.
 
@@ -245,6 +267,8 @@ providers:
         allowedDomains:
           - example.com
 ```
+
+The deployment YAML does not need to change for the `BeginLogin` to `BeginAuthentication` rename. The interface migration is inside the authored provider runtime contract, not the host config shape.
 
 `source: ./manifest.yaml` points at the authentication provider's `manifest.yaml` during development. For production, use a published `provider-release.yaml` metadata URL. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
 

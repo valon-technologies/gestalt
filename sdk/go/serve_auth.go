@@ -8,8 +8,8 @@ import (
 )
 
 // ServeAuthenticationProvider starts a gRPC server for an
-// [AuthenticationProvider].
-func ServeAuthenticationProvider(ctx context.Context, auth AuthenticationProvider) error {
+// [AuthenticationProvider] or [LegacyAuthenticationProvider].
+func ServeAuthenticationProvider(ctx context.Context, auth PluginProvider) error {
 	return serveProvider(withProviderCloser(ctx, auth), func(srv *grpc.Server) {
 		server := newAuthenticationProviderServer(auth)
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindAuthentication, auth))

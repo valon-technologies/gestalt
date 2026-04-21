@@ -108,8 +108,8 @@ func (x *AuthenticatedUser) GetClaims() map[string]string {
 	return nil
 }
 
-// BeginLoginRequest starts an interactive login flow.
-type BeginLoginRequest struct {
+// BeginAuthenticationRequest starts an interactive authentication flow.
+type BeginAuthenticationRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// callback_url is the host-managed URL the provider should redirect back to.
 	CallbackUrl string `protobuf:"bytes,1,opt,name=callback_url,json=callbackUrl,proto3" json:"callback_url,omitempty"`
@@ -124,9 +124,401 @@ type BeginLoginRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *BeginAuthenticationRequest) Reset() {
+	*x = BeginAuthenticationRequest{}
+	mi := &file_v1_authentication_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BeginAuthenticationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BeginAuthenticationRequest) ProtoMessage() {}
+
+func (x *BeginAuthenticationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authentication_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BeginAuthenticationRequest.ProtoReflect.Descriptor instead.
+func (*BeginAuthenticationRequest) Descriptor() ([]byte, []int) {
+	return file_v1_authentication_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *BeginAuthenticationRequest) GetCallbackUrl() string {
+	if x != nil {
+		return x.CallbackUrl
+	}
+	return ""
+}
+
+func (x *BeginAuthenticationRequest) GetHostState() string {
+	if x != nil {
+		return x.HostState
+	}
+	return ""
+}
+
+func (x *BeginAuthenticationRequest) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+func (x *BeginAuthenticationRequest) GetOptions() map[string]string {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+// BeginAuthenticationResponse returns the provider-managed authorization URL and
+// opaque provider state that must be preserved until completion.
+type BeginAuthenticationResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	AuthorizationUrl string                 `protobuf:"bytes,1,opt,name=authorization_url,json=authorizationUrl,proto3" json:"authorization_url,omitempty"`
+	ProviderState    []byte                 `protobuf:"bytes,2,opt,name=provider_state,json=providerState,proto3" json:"provider_state,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *BeginAuthenticationResponse) Reset() {
+	*x = BeginAuthenticationResponse{}
+	mi := &file_v1_authentication_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BeginAuthenticationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BeginAuthenticationResponse) ProtoMessage() {}
+
+func (x *BeginAuthenticationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authentication_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BeginAuthenticationResponse.ProtoReflect.Descriptor instead.
+func (*BeginAuthenticationResponse) Descriptor() ([]byte, []int) {
+	return file_v1_authentication_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *BeginAuthenticationResponse) GetAuthorizationUrl() string {
+	if x != nil {
+		return x.AuthorizationUrl
+	}
+	return ""
+}
+
+func (x *BeginAuthenticationResponse) GetProviderState() []byte {
+	if x != nil {
+		return x.ProviderState
+	}
+	return nil
+}
+
+// CompleteAuthenticationRequest finishes an interactive authentication flow.
+type CompleteAuthenticationRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// query contains the callback URL query parameters returned by the identity
+	// provider.
+	Query map[string]string `protobuf:"bytes,1,rep,name=query,proto3" json:"query,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// provider_state is the opaque state returned from BeginAuthenticationResponse.
+	ProviderState []byte `protobuf:"bytes,2,opt,name=provider_state,json=providerState,proto3" json:"provider_state,omitempty"`
+	// callback_url is the fully qualified callback URL used by the host.
+	CallbackUrl   string `protobuf:"bytes,3,opt,name=callback_url,json=callbackUrl,proto3" json:"callback_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CompleteAuthenticationRequest) Reset() {
+	*x = CompleteAuthenticationRequest{}
+	mi := &file_v1_authentication_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CompleteAuthenticationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CompleteAuthenticationRequest) ProtoMessage() {}
+
+func (x *CompleteAuthenticationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authentication_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CompleteAuthenticationRequest.ProtoReflect.Descriptor instead.
+func (*CompleteAuthenticationRequest) Descriptor() ([]byte, []int) {
+	return file_v1_authentication_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *CompleteAuthenticationRequest) GetQuery() map[string]string {
+	if x != nil {
+		return x.Query
+	}
+	return nil
+}
+
+func (x *CompleteAuthenticationRequest) GetProviderState() []byte {
+	if x != nil {
+		return x.ProviderState
+	}
+	return nil
+}
+
+func (x *CompleteAuthenticationRequest) GetCallbackUrl() string {
+	if x != nil {
+		return x.CallbackUrl
+	}
+	return ""
+}
+
+type TokenAuthInput struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TokenAuthInput) Reset() {
+	*x = TokenAuthInput{}
+	mi := &file_v1_authentication_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TokenAuthInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TokenAuthInput) ProtoMessage() {}
+
+func (x *TokenAuthInput) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authentication_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TokenAuthInput.ProtoReflect.Descriptor instead.
+func (*TokenAuthInput) Descriptor() ([]byte, []int) {
+	return file_v1_authentication_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *TokenAuthInput) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+type HTTPRequestAuthInput struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Method        string                 `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
+	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	Headers       map[string]string      `protobuf:"bytes,3,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Query         map[string]string      `protobuf:"bytes,4,rep,name=query,proto3" json:"query,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HTTPRequestAuthInput) Reset() {
+	*x = HTTPRequestAuthInput{}
+	mi := &file_v1_authentication_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HTTPRequestAuthInput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HTTPRequestAuthInput) ProtoMessage() {}
+
+func (x *HTTPRequestAuthInput) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authentication_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HTTPRequestAuthInput.ProtoReflect.Descriptor instead.
+func (*HTTPRequestAuthInput) Descriptor() ([]byte, []int) {
+	return file_v1_authentication_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *HTTPRequestAuthInput) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *HTTPRequestAuthInput) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *HTTPRequestAuthInput) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *HTTPRequestAuthInput) GetQuery() map[string]string {
+	if x != nil {
+		return x.Query
+	}
+	return nil
+}
+
+// AuthenticateRequest asks the provider to validate an external authentication
+// input, such as a bearer token or signed HTTP request.
+type AuthenticateRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Input:
+	//
+	//	*AuthenticateRequest_Token
+	//	*AuthenticateRequest_Http
+	Input         isAuthenticateRequest_Input `protobuf_oneof:"input"`
+	Options       map[string]string           `protobuf:"bytes,10,rep,name=options,proto3" json:"options,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthenticateRequest) Reset() {
+	*x = AuthenticateRequest{}
+	mi := &file_v1_authentication_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthenticateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthenticateRequest) ProtoMessage() {}
+
+func (x *AuthenticateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_authentication_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthenticateRequest.ProtoReflect.Descriptor instead.
+func (*AuthenticateRequest) Descriptor() ([]byte, []int) {
+	return file_v1_authentication_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *AuthenticateRequest) GetInput() isAuthenticateRequest_Input {
+	if x != nil {
+		return x.Input
+	}
+	return nil
+}
+
+func (x *AuthenticateRequest) GetToken() *TokenAuthInput {
+	if x != nil {
+		if x, ok := x.Input.(*AuthenticateRequest_Token); ok {
+			return x.Token
+		}
+	}
+	return nil
+}
+
+func (x *AuthenticateRequest) GetHttp() *HTTPRequestAuthInput {
+	if x != nil {
+		if x, ok := x.Input.(*AuthenticateRequest_Http); ok {
+			return x.Http
+		}
+	}
+	return nil
+}
+
+func (x *AuthenticateRequest) GetOptions() map[string]string {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+type isAuthenticateRequest_Input interface {
+	isAuthenticateRequest_Input()
+}
+
+type AuthenticateRequest_Token struct {
+	Token *TokenAuthInput `protobuf:"bytes,1,opt,name=token,proto3,oneof"`
+}
+
+type AuthenticateRequest_Http struct {
+	Http *HTTPRequestAuthInput `protobuf:"bytes,2,opt,name=http,proto3,oneof"`
+}
+
+func (*AuthenticateRequest_Token) isAuthenticateRequest_Input() {}
+
+func (*AuthenticateRequest_Http) isAuthenticateRequest_Input() {}
+
+// Deprecated: use BeginAuthenticationRequest.
+type BeginLoginRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CallbackUrl   string                 `protobuf:"bytes,1,opt,name=callback_url,json=callbackUrl,proto3" json:"callback_url,omitempty"`
+	HostState     string                 `protobuf:"bytes,2,opt,name=host_state,json=hostState,proto3" json:"host_state,omitempty"`
+	Scopes        []string               `protobuf:"bytes,3,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	Options       map[string]string      `protobuf:"bytes,4,rep,name=options,proto3" json:"options,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
 func (x *BeginLoginRequest) Reset() {
 	*x = BeginLoginRequest{}
-	mi := &file_v1_authentication_proto_msgTypes[1]
+	mi := &file_v1_authentication_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -138,7 +530,7 @@ func (x *BeginLoginRequest) String() string {
 func (*BeginLoginRequest) ProtoMessage() {}
 
 func (x *BeginLoginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authentication_proto_msgTypes[1]
+	mi := &file_v1_authentication_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -151,7 +543,7 @@ func (x *BeginLoginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginLoginRequest.ProtoReflect.Descriptor instead.
 func (*BeginLoginRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authentication_proto_rawDescGZIP(), []int{1}
+	return file_v1_authentication_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *BeginLoginRequest) GetCallbackUrl() string {
@@ -182,8 +574,7 @@ func (x *BeginLoginRequest) GetOptions() map[string]string {
 	return nil
 }
 
-// BeginLoginResponse returns the provider-managed authorization URL and opaque
-// provider state that must be preserved until completion.
+// Deprecated: use BeginAuthenticationResponse.
 type BeginLoginResponse struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	AuthorizationUrl string                 `protobuf:"bytes,1,opt,name=authorization_url,json=authorizationUrl,proto3" json:"authorization_url,omitempty"`
@@ -194,7 +585,7 @@ type BeginLoginResponse struct {
 
 func (x *BeginLoginResponse) Reset() {
 	*x = BeginLoginResponse{}
-	mi := &file_v1_authentication_proto_msgTypes[2]
+	mi := &file_v1_authentication_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -206,7 +597,7 @@ func (x *BeginLoginResponse) String() string {
 func (*BeginLoginResponse) ProtoMessage() {}
 
 func (x *BeginLoginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authentication_proto_msgTypes[2]
+	mi := &file_v1_authentication_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -219,7 +610,7 @@ func (x *BeginLoginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginLoginResponse.ProtoReflect.Descriptor instead.
 func (*BeginLoginResponse) Descriptor() ([]byte, []int) {
-	return file_v1_authentication_proto_rawDescGZIP(), []int{2}
+	return file_v1_authentication_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *BeginLoginResponse) GetAuthorizationUrl() string {
@@ -236,23 +627,19 @@ func (x *BeginLoginResponse) GetProviderState() []byte {
 	return nil
 }
 
-// CompleteLoginRequest finishes an interactive login flow.
+// Deprecated: use CompleteAuthenticationRequest.
 type CompleteLoginRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// query contains the callback URL query parameters returned by the identity
-	// provider.
-	Query map[string]string `protobuf:"bytes,1,rep,name=query,proto3" json:"query,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// provider_state is the opaque state returned from BeginLoginResponse.
-	ProviderState []byte `protobuf:"bytes,2,opt,name=provider_state,json=providerState,proto3" json:"provider_state,omitempty"`
-	// callback_url is the fully qualified callback URL used by the host.
-	CallbackUrl   string `protobuf:"bytes,3,opt,name=callback_url,json=callbackUrl,proto3" json:"callback_url,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Query         map[string]string      `protobuf:"bytes,1,rep,name=query,proto3" json:"query,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ProviderState []byte                 `protobuf:"bytes,2,opt,name=provider_state,json=providerState,proto3" json:"provider_state,omitempty"`
+	CallbackUrl   string                 `protobuf:"bytes,3,opt,name=callback_url,json=callbackUrl,proto3" json:"callback_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CompleteLoginRequest) Reset() {
 	*x = CompleteLoginRequest{}
-	mi := &file_v1_authentication_proto_msgTypes[3]
+	mi := &file_v1_authentication_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -264,7 +651,7 @@ func (x *CompleteLoginRequest) String() string {
 func (*CompleteLoginRequest) ProtoMessage() {}
 
 func (x *CompleteLoginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authentication_proto_msgTypes[3]
+	mi := &file_v1_authentication_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -277,7 +664,7 @@ func (x *CompleteLoginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteLoginRequest.ProtoReflect.Descriptor instead.
 func (*CompleteLoginRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authentication_proto_rawDescGZIP(), []int{3}
+	return file_v1_authentication_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *CompleteLoginRequest) GetQuery() map[string]string {
@@ -301,8 +688,7 @@ func (x *CompleteLoginRequest) GetCallbackUrl() string {
 	return ""
 }
 
-// ValidateExternalTokenRequest asks the provider to validate a token minted
-// outside the interactive login flow.
+// Deprecated: use AuthenticateRequest with token input.
 type ValidateExternalTokenRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
@@ -312,7 +698,7 @@ type ValidateExternalTokenRequest struct {
 
 func (x *ValidateExternalTokenRequest) Reset() {
 	*x = ValidateExternalTokenRequest{}
-	mi := &file_v1_authentication_proto_msgTypes[4]
+	mi := &file_v1_authentication_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -324,7 +710,7 @@ func (x *ValidateExternalTokenRequest) String() string {
 func (*ValidateExternalTokenRequest) ProtoMessage() {}
 
 func (x *ValidateExternalTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authentication_proto_msgTypes[4]
+	mi := &file_v1_authentication_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -337,7 +723,7 @@ func (x *ValidateExternalTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateExternalTokenRequest.ProtoReflect.Descriptor instead.
 func (*ValidateExternalTokenRequest) Descriptor() ([]byte, []int) {
-	return file_v1_authentication_proto_rawDescGZIP(), []int{4}
+	return file_v1_authentication_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ValidateExternalTokenRequest) GetToken() string {
@@ -357,7 +743,7 @@ type AuthSessionSettings struct {
 
 func (x *AuthSessionSettings) Reset() {
 	*x = AuthSessionSettings{}
-	mi := &file_v1_authentication_proto_msgTypes[5]
+	mi := &file_v1_authentication_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -369,7 +755,7 @@ func (x *AuthSessionSettings) String() string {
 func (*AuthSessionSettings) ProtoMessage() {}
 
 func (x *AuthSessionSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_authentication_proto_msgTypes[5]
+	mi := &file_v1_authentication_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -382,7 +768,7 @@ func (x *AuthSessionSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthSessionSettings.ProtoReflect.Descriptor instead.
 func (*AuthSessionSettings) Descriptor() ([]byte, []int) {
-	return file_v1_authentication_proto_rawDescGZIP(), []int{5}
+	return file_v1_authentication_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *AuthSessionSettings) GetSessionTtlSeconds() int64 {
@@ -407,7 +793,50 @@ const file_v1_authentication_proto_rawDesc = "" +
 	"\x06claims\x18\x06 \x03(\v22.gestalt.provider.v1.AuthenticatedUser.ClaimsEntryR\x06claims\x1a9\n" +
 	"\vClaimsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf8\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8a\x02\n" +
+	"\x1aBeginAuthenticationRequest\x12!\n" +
+	"\fcallback_url\x18\x01 \x01(\tR\vcallbackUrl\x12\x1d\n" +
+	"\n" +
+	"host_state\x18\x02 \x01(\tR\thostState\x12\x16\n" +
+	"\x06scopes\x18\x03 \x03(\tR\x06scopes\x12V\n" +
+	"\aoptions\x18\x04 \x03(\v2<.gestalt.provider.v1.BeginAuthenticationRequest.OptionsEntryR\aoptions\x1a:\n" +
+	"\fOptionsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"q\n" +
+	"\x1bBeginAuthenticationResponse\x12+\n" +
+	"\x11authorization_url\x18\x01 \x01(\tR\x10authorizationUrl\x12%\n" +
+	"\x0eprovider_state\x18\x02 \x01(\fR\rproviderState\"\xf8\x01\n" +
+	"\x1dCompleteAuthenticationRequest\x12S\n" +
+	"\x05query\x18\x01 \x03(\v2=.gestalt.provider.v1.CompleteAuthenticationRequest.QueryEntryR\x05query\x12%\n" +
+	"\x0eprovider_state\x18\x02 \x01(\fR\rproviderState\x12!\n" +
+	"\fcallback_url\x18\x03 \x01(\tR\vcallbackUrl\x1a8\n" +
+	"\n" +
+	"QueryEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"&\n" +
+	"\x0eTokenAuthInput\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\"\xd4\x02\n" +
+	"\x14HTTPRequestAuthInput\x12\x16\n" +
+	"\x06method\x18\x01 \x01(\tR\x06method\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\x12P\n" +
+	"\aheaders\x18\x03 \x03(\v26.gestalt.provider.v1.HTTPRequestAuthInput.HeadersEntryR\aheaders\x12J\n" +
+	"\x05query\x18\x04 \x03(\v24.gestalt.provider.v1.HTTPRequestAuthInput.QueryEntryR\x05query\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a8\n" +
+	"\n" +
+	"QueryEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa9\x02\n" +
+	"\x13AuthenticateRequest\x12;\n" +
+	"\x05token\x18\x01 \x01(\v2#.gestalt.provider.v1.TokenAuthInputH\x00R\x05token\x12?\n" +
+	"\x04http\x18\x02 \x01(\v2).gestalt.provider.v1.HTTPRequestAuthInputH\x00R\x04http\x12O\n" +
+	"\aoptions\x18\n" +
+	" \x03(\v25.gestalt.provider.v1.AuthenticateRequest.OptionsEntryR\aoptions\x1a:\n" +
+	"\fOptionsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\a\n" +
+	"\x05input\"\xf8\x01\n" +
 	"\x11BeginLoginRequest\x12!\n" +
 	"\fcallback_url\x18\x01 \x01(\tR\vcallbackUrl\x12\x1d\n" +
 	"\n" +
@@ -431,8 +860,11 @@ const file_v1_authentication_proto_rawDesc = "" +
 	"\x1cValidateExternalTokenRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"E\n" +
 	"\x13AuthSessionSettings\x12.\n" +
-	"\x13session_ttl_seconds\x18\x01 \x01(\x03R\x11sessionTtlSeconds2\xa7\x03\n" +
-	"\x16AuthenticationProvider\x12]\n" +
+	"\x13session_ttl_seconds\x18\x01 \x01(\x03R\x11sessionTtlSeconds2\xf9\x05\n" +
+	"\x16AuthenticationProvider\x12x\n" +
+	"\x13BeginAuthentication\x12/.gestalt.provider.v1.BeginAuthenticationRequest\x1a0.gestalt.provider.v1.BeginAuthenticationResponse\x12t\n" +
+	"\x16CompleteAuthentication\x122.gestalt.provider.v1.CompleteAuthenticationRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\x12`\n" +
+	"\fAuthenticate\x12(.gestalt.provider.v1.AuthenticateRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\x12]\n" +
 	"\n" +
 	"BeginLogin\x12&.gestalt.provider.v1.BeginLoginRequest\x1a'.gestalt.provider.v1.BeginLoginResponse\x12b\n" +
 	"\rCompleteLogin\x12).gestalt.provider.v1.CompleteLoginRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\x12r\n" +
@@ -452,36 +884,60 @@ func file_v1_authentication_proto_rawDescGZIP() []byte {
 	return file_v1_authentication_proto_rawDescData
 }
 
-var file_v1_authentication_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_v1_authentication_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_v1_authentication_proto_goTypes = []any{
-	(*AuthenticatedUser)(nil),            // 0: gestalt.provider.v1.AuthenticatedUser
-	(*BeginLoginRequest)(nil),            // 1: gestalt.provider.v1.BeginLoginRequest
-	(*BeginLoginResponse)(nil),           // 2: gestalt.provider.v1.BeginLoginResponse
-	(*CompleteLoginRequest)(nil),         // 3: gestalt.provider.v1.CompleteLoginRequest
-	(*ValidateExternalTokenRequest)(nil), // 4: gestalt.provider.v1.ValidateExternalTokenRequest
-	(*AuthSessionSettings)(nil),          // 5: gestalt.provider.v1.AuthSessionSettings
-	nil,                                  // 6: gestalt.provider.v1.AuthenticatedUser.ClaimsEntry
-	nil,                                  // 7: gestalt.provider.v1.BeginLoginRequest.OptionsEntry
-	nil,                                  // 8: gestalt.provider.v1.CompleteLoginRequest.QueryEntry
-	(*emptypb.Empty)(nil),                // 9: google.protobuf.Empty
+	(*AuthenticatedUser)(nil),             // 0: gestalt.provider.v1.AuthenticatedUser
+	(*BeginAuthenticationRequest)(nil),    // 1: gestalt.provider.v1.BeginAuthenticationRequest
+	(*BeginAuthenticationResponse)(nil),   // 2: gestalt.provider.v1.BeginAuthenticationResponse
+	(*CompleteAuthenticationRequest)(nil), // 3: gestalt.provider.v1.CompleteAuthenticationRequest
+	(*TokenAuthInput)(nil),                // 4: gestalt.provider.v1.TokenAuthInput
+	(*HTTPRequestAuthInput)(nil),          // 5: gestalt.provider.v1.HTTPRequestAuthInput
+	(*AuthenticateRequest)(nil),           // 6: gestalt.provider.v1.AuthenticateRequest
+	(*BeginLoginRequest)(nil),             // 7: gestalt.provider.v1.BeginLoginRequest
+	(*BeginLoginResponse)(nil),            // 8: gestalt.provider.v1.BeginLoginResponse
+	(*CompleteLoginRequest)(nil),          // 9: gestalt.provider.v1.CompleteLoginRequest
+	(*ValidateExternalTokenRequest)(nil),  // 10: gestalt.provider.v1.ValidateExternalTokenRequest
+	(*AuthSessionSettings)(nil),           // 11: gestalt.provider.v1.AuthSessionSettings
+	nil,                                   // 12: gestalt.provider.v1.AuthenticatedUser.ClaimsEntry
+	nil,                                   // 13: gestalt.provider.v1.BeginAuthenticationRequest.OptionsEntry
+	nil,                                   // 14: gestalt.provider.v1.CompleteAuthenticationRequest.QueryEntry
+	nil,                                   // 15: gestalt.provider.v1.HTTPRequestAuthInput.HeadersEntry
+	nil,                                   // 16: gestalt.provider.v1.HTTPRequestAuthInput.QueryEntry
+	nil,                                   // 17: gestalt.provider.v1.AuthenticateRequest.OptionsEntry
+	nil,                                   // 18: gestalt.provider.v1.BeginLoginRequest.OptionsEntry
+	nil,                                   // 19: gestalt.provider.v1.CompleteLoginRequest.QueryEntry
+	(*emptypb.Empty)(nil),                 // 20: google.protobuf.Empty
 }
 var file_v1_authentication_proto_depIdxs = []int32{
-	6, // 0: gestalt.provider.v1.AuthenticatedUser.claims:type_name -> gestalt.provider.v1.AuthenticatedUser.ClaimsEntry
-	7, // 1: gestalt.provider.v1.BeginLoginRequest.options:type_name -> gestalt.provider.v1.BeginLoginRequest.OptionsEntry
-	8, // 2: gestalt.provider.v1.CompleteLoginRequest.query:type_name -> gestalt.provider.v1.CompleteLoginRequest.QueryEntry
-	1, // 3: gestalt.provider.v1.AuthenticationProvider.BeginLogin:input_type -> gestalt.provider.v1.BeginLoginRequest
-	3, // 4: gestalt.provider.v1.AuthenticationProvider.CompleteLogin:input_type -> gestalt.provider.v1.CompleteLoginRequest
-	4, // 5: gestalt.provider.v1.AuthenticationProvider.ValidateExternalToken:input_type -> gestalt.provider.v1.ValidateExternalTokenRequest
-	9, // 6: gestalt.provider.v1.AuthenticationProvider.GetSessionSettings:input_type -> google.protobuf.Empty
-	2, // 7: gestalt.provider.v1.AuthenticationProvider.BeginLogin:output_type -> gestalt.provider.v1.BeginLoginResponse
-	0, // 8: gestalt.provider.v1.AuthenticationProvider.CompleteLogin:output_type -> gestalt.provider.v1.AuthenticatedUser
-	0, // 9: gestalt.provider.v1.AuthenticationProvider.ValidateExternalToken:output_type -> gestalt.provider.v1.AuthenticatedUser
-	5, // 10: gestalt.provider.v1.AuthenticationProvider.GetSessionSettings:output_type -> gestalt.provider.v1.AuthSessionSettings
-	7, // [7:11] is the sub-list for method output_type
-	3, // [3:7] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	12, // 0: gestalt.provider.v1.AuthenticatedUser.claims:type_name -> gestalt.provider.v1.AuthenticatedUser.ClaimsEntry
+	13, // 1: gestalt.provider.v1.BeginAuthenticationRequest.options:type_name -> gestalt.provider.v1.BeginAuthenticationRequest.OptionsEntry
+	14, // 2: gestalt.provider.v1.CompleteAuthenticationRequest.query:type_name -> gestalt.provider.v1.CompleteAuthenticationRequest.QueryEntry
+	15, // 3: gestalt.provider.v1.HTTPRequestAuthInput.headers:type_name -> gestalt.provider.v1.HTTPRequestAuthInput.HeadersEntry
+	16, // 4: gestalt.provider.v1.HTTPRequestAuthInput.query:type_name -> gestalt.provider.v1.HTTPRequestAuthInput.QueryEntry
+	4,  // 5: gestalt.provider.v1.AuthenticateRequest.token:type_name -> gestalt.provider.v1.TokenAuthInput
+	5,  // 6: gestalt.provider.v1.AuthenticateRequest.http:type_name -> gestalt.provider.v1.HTTPRequestAuthInput
+	17, // 7: gestalt.provider.v1.AuthenticateRequest.options:type_name -> gestalt.provider.v1.AuthenticateRequest.OptionsEntry
+	18, // 8: gestalt.provider.v1.BeginLoginRequest.options:type_name -> gestalt.provider.v1.BeginLoginRequest.OptionsEntry
+	19, // 9: gestalt.provider.v1.CompleteLoginRequest.query:type_name -> gestalt.provider.v1.CompleteLoginRequest.QueryEntry
+	1,  // 10: gestalt.provider.v1.AuthenticationProvider.BeginAuthentication:input_type -> gestalt.provider.v1.BeginAuthenticationRequest
+	3,  // 11: gestalt.provider.v1.AuthenticationProvider.CompleteAuthentication:input_type -> gestalt.provider.v1.CompleteAuthenticationRequest
+	6,  // 12: gestalt.provider.v1.AuthenticationProvider.Authenticate:input_type -> gestalt.provider.v1.AuthenticateRequest
+	7,  // 13: gestalt.provider.v1.AuthenticationProvider.BeginLogin:input_type -> gestalt.provider.v1.BeginLoginRequest
+	9,  // 14: gestalt.provider.v1.AuthenticationProvider.CompleteLogin:input_type -> gestalt.provider.v1.CompleteLoginRequest
+	10, // 15: gestalt.provider.v1.AuthenticationProvider.ValidateExternalToken:input_type -> gestalt.provider.v1.ValidateExternalTokenRequest
+	20, // 16: gestalt.provider.v1.AuthenticationProvider.GetSessionSettings:input_type -> google.protobuf.Empty
+	2,  // 17: gestalt.provider.v1.AuthenticationProvider.BeginAuthentication:output_type -> gestalt.provider.v1.BeginAuthenticationResponse
+	0,  // 18: gestalt.provider.v1.AuthenticationProvider.CompleteAuthentication:output_type -> gestalt.provider.v1.AuthenticatedUser
+	0,  // 19: gestalt.provider.v1.AuthenticationProvider.Authenticate:output_type -> gestalt.provider.v1.AuthenticatedUser
+	8,  // 20: gestalt.provider.v1.AuthenticationProvider.BeginLogin:output_type -> gestalt.provider.v1.BeginLoginResponse
+	0,  // 21: gestalt.provider.v1.AuthenticationProvider.CompleteLogin:output_type -> gestalt.provider.v1.AuthenticatedUser
+	0,  // 22: gestalt.provider.v1.AuthenticationProvider.ValidateExternalToken:output_type -> gestalt.provider.v1.AuthenticatedUser
+	11, // 23: gestalt.provider.v1.AuthenticationProvider.GetSessionSettings:output_type -> gestalt.provider.v1.AuthSessionSettings
+	17, // [17:24] is the sub-list for method output_type
+	10, // [10:17] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_v1_authentication_proto_init() }
@@ -489,13 +945,17 @@ func file_v1_authentication_proto_init() {
 	if File_v1_authentication_proto != nil {
 		return
 	}
+	file_v1_authentication_proto_msgTypes[6].OneofWrappers = []any{
+		(*AuthenticateRequest_Token)(nil),
+		(*AuthenticateRequest_Http)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_authentication_proto_rawDesc), len(file_v1_authentication_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
