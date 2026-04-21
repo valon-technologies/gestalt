@@ -3,7 +3,6 @@ package authorization
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -16,11 +15,6 @@ import (
 const (
 	defaultInstance  = "default"
 	defaultHumanRole = "viewer"
-)
-
-var (
-	safeConnectionValue = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
-	safeInstanceValue   = regexp.MustCompile(`^[a-zA-Z0-9._ -]+$`)
 )
 
 type CredentialBinding struct {
@@ -502,7 +496,7 @@ func buildBinding(mode core.ConnectionMode, workloadID, provider string, def con
 		if connection == "" {
 			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q requires a bound connection", workloadID, provider)
 		}
-		if !safeConnectionValue.MatchString(connection) {
+		if !config.SafeConnectionValue(connection) {
 			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q connection contains invalid characters", workloadID, provider)
 		}
 
@@ -510,7 +504,7 @@ func buildBinding(mode core.ConnectionMode, workloadID, provider string, def con
 		if instance == "" {
 			instance = defaultInstance
 		}
-		if !safeInstanceValue.MatchString(instance) {
+		if !config.SafeInstanceValue(instance) {
 			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q instance contains invalid characters", workloadID, provider)
 		}
 

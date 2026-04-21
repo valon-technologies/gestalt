@@ -42,6 +42,10 @@ func (r Request) Invoker() (*InvokerClient, error) {
 	return Invoker(r.requestHandle)
 }
 
+func (r Request) WorkflowManager() (*WorkflowManagerClient, error) {
+	return WorkflowManager(r.requestHandle)
+}
+
 // Response is the typed handler result marshaled into the provider response body.
 // A zero Status defaults to 200.
 type Response[T any] struct {

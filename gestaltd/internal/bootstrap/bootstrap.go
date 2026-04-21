@@ -27,6 +27,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
+	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
@@ -142,6 +143,7 @@ type Deps struct {
 	CacheFactory          CacheFactory
 	S3                    map[string]s3store.Client
 	WorkflowRuntime       *workflowRuntime
+	WorkflowManager       workflowmanager.Service
 	Egress                EgressDeps
 	PluginInvoker         invocation.Invoker
 	PluginRuntime         pluginruntime.Provider
@@ -663,7 +665,9 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}()
 
 	pluginInvoker := newLazyInvoker()
+	workflowManager := newLazyWorkflowManager()
 	prepared.Deps.PluginInvoker = pluginInvoker
+	prepared.Deps.WorkflowManager = workflowManager
 
 	providers, providersReady, connAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
@@ -709,6 +713,15 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
 	)
 	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)
+	workflowManager.SetTarget(workflowmanager.New(workflowmanager.Config{
+		Providers:             providers,
+		Workflow:              prepared.Deps.WorkflowRuntime,
+		WorkflowExecutionRefs: prepared.Services.WorkflowExecutionRefs,
+		Invoker:               sharedInvoker,
+		Authorizer:            authz,
+		DefaultConnection:     connMaps.DefaultConnection,
+		CatalogConnection:     connMaps.APIConnection,
+	}))
 	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
 		return nil, err

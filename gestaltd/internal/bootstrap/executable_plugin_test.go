@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -26,6 +27,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -34,6 +36,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
@@ -235,6 +238,168 @@ func (r *staticCapabilityPluginRuntime) DialPlugin(ctx context.Context, req plug
 
 func (r *staticCapabilityPluginRuntime) Close() error {
 	return r.inner.Close()
+}
+
+type stubWorkflowManager struct {
+	mu       sync.Mutex
+	subjects []string
+	nextID   int
+	items    map[string]*workflowmanager.ManagedSchedule
+}
+
+func newStubWorkflowManager() *stubWorkflowManager {
+	return &stubWorkflowManager{
+		items: make(map[string]*workflowmanager.ManagedSchedule),
+	}
+}
+
+func (m *stubWorkflowManager) ListSchedules(context.Context, *principal.Principal) ([]*workflowmanager.ManagedSchedule, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]*workflowmanager.ManagedSchedule, 0, len(m.items))
+	for _, item := range m.items {
+		out = append(out, cloneManagedSchedule(item))
+	}
+	return out, nil
+}
+
+func (m *stubWorkflowManager) CreateSchedule(_ context.Context, p *principal.Principal, req workflowmanager.ScheduleUpsert) (*workflowmanager.ManagedSchedule, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.nextID++
+	id := fmt.Sprintf("sched-%d", m.nextID)
+	now := time.Now().UTC().Truncate(time.Second)
+	value := &workflowmanager.ManagedSchedule{
+		ProviderName: defaultWorkflowProviderName(req.ProviderName),
+		Schedule: &coreworkflow.Schedule{
+			ID:        id,
+			Cron:      req.Cron,
+			Timezone:  req.Timezone,
+			Target:    cloneWorkflowTarget(req.Target),
+			Paused:    req.Paused,
+			CreatedAt: &now,
+			UpdatedAt: &now,
+		},
+	}
+	m.items[id] = value
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	return cloneManagedSchedule(value), nil
+}
+
+func (m *stubWorkflowManager) GetSchedule(_ context.Context, p *principal.Principal, scheduleID string) (*workflowmanager.ManagedSchedule, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	value, ok := m.items[scheduleID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	return cloneManagedSchedule(value), nil
+}
+
+func (m *stubWorkflowManager) UpdateSchedule(_ context.Context, p *principal.Principal, scheduleID string, req workflowmanager.ScheduleUpsert) (*workflowmanager.ManagedSchedule, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	value, ok := m.items[scheduleID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	value.ProviderName = defaultWorkflowProviderName(req.ProviderName)
+	value.Schedule.Cron = req.Cron
+	value.Schedule.Timezone = req.Timezone
+	value.Schedule.Target = cloneWorkflowTarget(req.Target)
+	value.Schedule.Paused = req.Paused
+	value.Schedule.UpdatedAt = &now
+	return cloneManagedSchedule(value), nil
+}
+
+func (m *stubWorkflowManager) DeleteSchedule(_ context.Context, p *principal.Principal, scheduleID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	if _, ok := m.items[scheduleID]; !ok {
+		return core.ErrNotFound
+	}
+	delete(m.items, scheduleID)
+	return nil
+}
+
+func (m *stubWorkflowManager) PauseSchedule(_ context.Context, p *principal.Principal, scheduleID string) (*workflowmanager.ManagedSchedule, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	value, ok := m.items[scheduleID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	value.Schedule.Paused = true
+	value.Schedule.UpdatedAt = &now
+	return cloneManagedSchedule(value), nil
+}
+
+func (m *stubWorkflowManager) ResumeSchedule(_ context.Context, p *principal.Principal, scheduleID string) (*workflowmanager.ManagedSchedule, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	value, ok := m.items[scheduleID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	value.Schedule.Paused = false
+	value.Schedule.UpdatedAt = &now
+	return cloneManagedSchedule(value), nil
+}
+
+func (m *stubWorkflowManager) Subjects() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.subjects...)
+}
+
+func cloneManagedSchedule(value *workflowmanager.ManagedSchedule) *workflowmanager.ManagedSchedule {
+	if value == nil {
+		return nil
+	}
+	out := *value
+	if value.Schedule != nil {
+		schedule := *value.Schedule
+		schedule.Target = cloneWorkflowTarget(value.Schedule.Target)
+		out.Schedule = &schedule
+	}
+	if value.ExecutionRef != nil {
+		executionRef := *value.ExecutionRef
+		executionRef.Target = cloneWorkflowTarget(value.ExecutionRef.Target)
+		out.ExecutionRef = &executionRef
+	}
+	return &out
+}
+
+func cloneWorkflowTarget(value coreworkflow.Target) coreworkflow.Target {
+	return coreworkflow.Target{
+		PluginName: value.PluginName,
+		Operation:  value.Operation,
+		Connection: value.Connection,
+		Instance:   value.Instance,
+		Input:      maps.Clone(value.Input),
+	}
+}
+
+func subjectIDOf(p *principal.Principal) string {
+	if p == nil {
+		return ""
+	}
+	return p.SubjectID
+}
+
+func defaultWorkflowProviderName(name string) string {
+	if strings.TrimSpace(name) == "" {
+		return "basic"
+	}
+	return strings.TrimSpace(name)
 }
 
 func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
@@ -1466,6 +1631,323 @@ func TestPluginInvokesExposeHostSocketEnv(t *testing.T) {
 	}
 	if !env.Found || env.Value == "" {
 		t.Fatalf("plugin invoker env %q should be set when plugin declares invokes", providerhost.DefaultPluginInvokerSocketEnv)
+	}
+}
+
+func TestPluginWorkflowManagerExposeHostSocketEnv(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echo",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Workflow manager host env")
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echo": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+		WorkflowManager: newStubWorkflowManager(),
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echo")
+	if err != nil {
+		t.Fatalf("providers.Get(echo): %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": providerhost.DefaultWorkflowManagerSocketEnv}, "")
+	if err != nil {
+		t.Fatalf("Execute read_env: %v", err)
+	}
+
+	var env struct {
+		Value string `json:"value"`
+		Found bool   `json:"found"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if !env.Found || env.Value == "" {
+		t.Fatalf("workflow manager env %q should be set for executable plugins", providerhost.DefaultWorkflowManagerSocketEnv)
+	}
+}
+
+func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echo",
+		Operations: []catalog.CatalogOperation{
+			{ID: "create_workflow_schedule", Method: http.MethodPost},
+			{ID: "get_workflow_schedule", Method: http.MethodGet},
+			{ID: "update_workflow_schedule", Method: http.MethodPost},
+			{ID: "delete_workflow_schedule", Method: http.MethodPost},
+			{ID: "pause_workflow_schedule", Method: http.MethodPost},
+			{ID: "resume_workflow_schedule", Method: http.MethodPost},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Workflow manager CRUD")
+	manager := newStubWorkflowManager()
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echo": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+		WorkflowManager: manager,
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echo")
+	if err != nil {
+		t.Fatalf("providers.Get(echo): %v", err)
+	}
+
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "user:user-123",
+		UserID:    "user-123",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceSession,
+		Scopes:    []string{"echo"},
+	})
+
+	createResult, err := prov.Execute(ctx, "create_workflow_schedule", map[string]any{
+		"provider_name": "basic",
+		"cron":          "*/5 * * * *",
+		"timezone":      "America/New_York",
+		"target": map[string]any{
+			"plugin":     "roadmap",
+			"operation":  "sync",
+			"connection": "work",
+			"instance":   "default",
+			"input": map[string]any{
+				"mode": "incremental",
+			},
+		},
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(create_workflow_schedule): %v", err)
+	}
+	var created struct {
+		ProviderName string `json:"provider_name"`
+		Schedule     struct {
+			ID     string `json:"id"`
+			Cron   string `json:"cron"`
+			Paused bool   `json:"paused"`
+			Target struct {
+				Plugin    string         `json:"plugin"`
+				Operation string         `json:"operation"`
+				Input     map[string]any `json:"input"`
+			} `json:"target"`
+		} `json:"schedule"`
+	}
+	if err := json.Unmarshal([]byte(createResult.Body), &created); err != nil {
+		t.Fatalf("json.Unmarshal(create): %v", err)
+	}
+	if created.ProviderName != "basic" {
+		t.Fatalf("provider_name = %q, want basic", created.ProviderName)
+	}
+	if created.Schedule.ID == "" {
+		t.Fatal("created schedule id should be set")
+	}
+	if created.Schedule.Target.Plugin != "roadmap" || created.Schedule.Target.Operation != "sync" {
+		t.Fatalf("unexpected target: %+v", created.Schedule.Target)
+	}
+	if got := created.Schedule.Target.Input["mode"]; got != "incremental" {
+		t.Fatalf("target.input.mode = %v, want incremental", got)
+	}
+
+	getResult, err := prov.Execute(ctx, "get_workflow_schedule", map[string]any{
+		"schedule_id": created.Schedule.ID,
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(get_workflow_schedule): %v", err)
+	}
+	var fetched map[string]any
+	if err := json.Unmarshal([]byte(getResult.Body), &fetched); err != nil {
+		t.Fatalf("json.Unmarshal(get): %v", err)
+	}
+	if fetched["provider_name"] != "basic" {
+		t.Fatalf("fetched provider_name = %v, want basic", fetched["provider_name"])
+	}
+
+	updateResult, err := prov.Execute(ctx, "update_workflow_schedule", map[string]any{
+		"schedule_id":   created.Schedule.ID,
+		"provider_name": "secondary",
+		"cron":          "0 * * * *",
+		"timezone":      "UTC",
+		"paused":        true,
+		"target": map[string]any{
+			"plugin":    "roadmap",
+			"operation": "status",
+		},
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(update_workflow_schedule): %v", err)
+	}
+	var updated struct {
+		ProviderName string `json:"provider_name"`
+		Schedule     struct {
+			Cron   string `json:"cron"`
+			Paused bool   `json:"paused"`
+			Target struct {
+				Operation string `json:"operation"`
+			} `json:"target"`
+		} `json:"schedule"`
+	}
+	if err := json.Unmarshal([]byte(updateResult.Body), &updated); err != nil {
+		t.Fatalf("json.Unmarshal(update): %v", err)
+	}
+	if updated.ProviderName != "secondary" || updated.Schedule.Cron != "0 * * * *" || !updated.Schedule.Paused || updated.Schedule.Target.Operation != "status" {
+		t.Fatalf("unexpected update result: %+v", updated)
+	}
+
+	pauseResult, err := prov.Execute(ctx, "pause_workflow_schedule", map[string]any{
+		"schedule_id": created.Schedule.ID,
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(pause_workflow_schedule): %v", err)
+	}
+	var paused struct {
+		Schedule struct {
+			Paused bool `json:"paused"`
+		} `json:"schedule"`
+	}
+	if err := json.Unmarshal([]byte(pauseResult.Body), &paused); err != nil {
+		t.Fatalf("json.Unmarshal(pause): %v", err)
+	}
+	if !paused.Schedule.Paused {
+		t.Fatalf("pause result = %+v, want paused schedule", paused)
+	}
+
+	resumeResult, err := prov.Execute(ctx, "resume_workflow_schedule", map[string]any{
+		"schedule_id": created.Schedule.ID,
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(resume_workflow_schedule): %v", err)
+	}
+	var resumed struct {
+		Schedule struct {
+			Paused bool `json:"paused"`
+		} `json:"schedule"`
+	}
+	if err := json.Unmarshal([]byte(resumeResult.Body), &resumed); err != nil {
+		t.Fatalf("json.Unmarshal(resume): %v", err)
+	}
+	if resumed.Schedule.Paused {
+		t.Fatalf("resume result = %+v, want resumed schedule", resumed)
+	}
+
+	deleteResult, err := prov.Execute(ctx, "delete_workflow_schedule", map[string]any{
+		"schedule_id": created.Schedule.ID,
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(delete_workflow_schedule): %v", err)
+	}
+	var deleted struct {
+		Deleted bool `json:"deleted"`
+	}
+	if err := json.Unmarshal([]byte(deleteResult.Body), &deleted); err != nil {
+		t.Fatalf("json.Unmarshal(delete): %v", err)
+	}
+	if !deleted.Deleted {
+		t.Fatalf("delete result = %+v, want deleted", deleted)
+	}
+
+	if got := manager.Subjects(); len(got) != 6 || slices.Contains(got, "") || !slices.Equal(got, []string{
+		"user:user-123",
+		"user:user-123",
+		"user:user-123",
+		"user:user-123",
+		"user:user-123",
+		"user:user-123",
+	}) {
+		t.Fatalf("manager subjects = %v, want all user:user-123", got)
+	}
+}
+
+func TestPluginWorkflowManagerRejectsInvalidRequestHandle(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echo",
+		Operations: []catalog.CatalogOperation{
+			{ID: "create_workflow_schedule", Method: http.MethodPost},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Workflow manager invalid handle")
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echo": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+		WorkflowManager: newStubWorkflowManager(),
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echo")
+	if err != nil {
+		t.Fatalf("providers.Get(echo): %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "create_workflow_schedule", map[string]any{
+		"request_handle": "forged-handle",
+		"cron":           "*/5 * * * *",
+		"target": map[string]any{
+			"plugin":    "roadmap",
+			"operation": "sync",
+		},
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(create_workflow_schedule): %v", err)
+	}
+
+	var body struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if !strings.Contains(body.Error, "invalid or expired") {
+		t.Fatalf("invalid request handle error = %q, want invalid or expired", body.Error)
 	}
 }
 

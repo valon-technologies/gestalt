@@ -48,7 +48,6 @@ var (
 
 var (
 	safeParamValue         = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
-	safeInstanceValue      = regexp.MustCompile(`^[a-zA-Z0-9._ -]+$`)
 	safeTokenResponseValue = regexp.MustCompile(`^[a-zA-Z0-9._:/-]+$`)
 )
 
@@ -380,7 +379,7 @@ func (s *Server) requireOAuthHandler(w http.ResponseWriter, integration, connect
 
 func (s *Server) resolveRequestedConnection(w http.ResponseWriter, integration, requested string) (string, bool) {
 	if requested != "" {
-		if !safeParamValue.MatchString(requested) {
+		if !config.SafeConnectionValue(requested) {
 			writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
 			return "", false
 		}
@@ -400,7 +399,7 @@ func resolveRequestedInstance(w http.ResponseWriter, requested string) (string, 
 	if instance == "" {
 		instance = defaultTokenInstance
 	}
-	if !safeInstanceValue.MatchString(instance) {
+	if !config.SafeInstanceValue(instance) {
 		writeError(w, http.StatusBadRequest, "instance name contains invalid characters")
 		return "", false
 	}
@@ -714,54 +713,15 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 }
 
 func (s *Server) sessionCatalogConnections(providerName string, p *principal.Principal, explicit string) []string {
-	if explicit != "" {
-		return []string{config.ResolveConnectionAlias(explicit)}
-	}
-	if s.authorizer != nil && s.authorizer.IsWorkload(p) {
-		return []string{""}
-	}
-
-	connections := make([]string, 0, 2)
-	if conn := s.catalogConnection[providerName]; conn != "" {
-		connections = append(connections, conn)
-	} else if broker, ok := s.invoker.(interface{ MCPConnection(string) string }); ok {
-		if conn := broker.MCPConnection(providerName); conn != "" {
-			connections = append(connections, conn)
-		}
-	} else if conn := s.defaultConnection[providerName]; conn != "" {
-		connections = append(connections, conn)
-	}
-	if conn := s.defaultConnection[providerName]; conn != "" && (len(connections) == 0 || connections[0] != conn) && s.catalogConnection[providerName] == "" {
-		connections = append(connections, conn)
-	}
-	if len(connections) == 0 {
-		return []string{""}
-	}
-	return connections
+	return s.catalogSelectorConfig().SessionCatalogConnections(providerName, p, explicit)
 }
 
 func (s *Server) boundSessionCatalogConnections(providerName string, p *principal.Principal, explicit, instance string) ([]string, string) {
-	connections := s.sessionCatalogConnections(providerName, p, explicit)
-	boundConnections := make([]string, 0, len(connections))
-	boundInstance := instance
-	for _, connection := range connections {
-		connection, boundInstance = s.workloadBindingSelectors(p, providerName, connection, instance)
-		boundConnections = append(boundConnections, connection)
-	}
-	return boundConnections, boundInstance
+	return s.catalogSelectorConfig().BoundSessionCatalogConnections(providerName, p, explicit, instance)
 }
 
 func (s *Server) boundSessionCatalogTargets(providerName string, p *principal.Principal, explicit, instance string) []invocation.CatalogResolutionTarget {
-	connections := s.sessionCatalogConnections(providerName, p, explicit)
-	targets := make([]invocation.CatalogResolutionTarget, 0, len(connections))
-	for _, connection := range connections {
-		boundConnection, boundInstance := s.workloadBindingSelectors(p, providerName, connection, instance)
-		targets = append(targets, invocation.CatalogResolutionTarget{
-			Connection: boundConnection,
-			Instance:   boundInstance,
-		})
-	}
-	return targets
+	return s.catalogSelectorConfig().BoundSessionCatalogTargets(providerName, p, explicit, instance)
 }
 
 func httpVisibleCatalogOperations(ops []catalog.CatalogOperation) []catalog.CatalogOperation {

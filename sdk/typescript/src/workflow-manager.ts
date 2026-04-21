@@ -1,0 +1,131 @@
+import { connect } from "node:net";
+
+import type { MessageInitShape } from "@bufbuild/protobuf";
+import { createClient, type Client } from "@connectrpc/connect";
+import { createGrpcTransport } from "@connectrpc/connect-node";
+
+import {
+  WorkflowManagerCreateScheduleRequestSchema,
+  WorkflowManagerDeleteScheduleRequestSchema,
+  WorkflowManagerGetScheduleRequestSchema,
+  WorkflowManagerHost as WorkflowManagerHostService,
+  WorkflowManagerPauseScheduleRequestSchema,
+  WorkflowManagerResumeScheduleRequestSchema,
+  WorkflowManagerUpdateScheduleRequestSchema,
+  type ManagedWorkflowSchedule,
+} from "../gen/v1/workflow_pb.ts";
+import type { Request } from "./api.ts";
+
+export const ENV_WORKFLOW_MANAGER_SOCKET = "GESTALT_WORKFLOW_MANAGER_SOCKET";
+
+export type ManagedWorkflowScheduleMessage = ManagedWorkflowSchedule;
+export type WorkflowManagerCreateScheduleInput = MessageInitShape<
+  typeof WorkflowManagerCreateScheduleRequestSchema
+>;
+export type WorkflowManagerGetScheduleInput = MessageInitShape<
+  typeof WorkflowManagerGetScheduleRequestSchema
+>;
+export type WorkflowManagerUpdateScheduleInput = MessageInitShape<
+  typeof WorkflowManagerUpdateScheduleRequestSchema
+>;
+export type WorkflowManagerDeleteScheduleInput = MessageInitShape<
+  typeof WorkflowManagerDeleteScheduleRequestSchema
+>;
+export type WorkflowManagerPauseScheduleInput = MessageInitShape<
+  typeof WorkflowManagerPauseScheduleRequestSchema
+>;
+export type WorkflowManagerResumeScheduleInput = MessageInitShape<
+  typeof WorkflowManagerResumeScheduleRequestSchema
+>;
+
+export class WorkflowManager {
+  private readonly client: Client<typeof WorkflowManagerHostService>;
+  private readonly requestHandle: string;
+
+  constructor(request: Request);
+  constructor(requestHandle: string);
+  constructor(requestOrHandle: Request | string) {
+    this.requestHandle = normalizeRequestHandle(requestOrHandle);
+
+    const socketPath = process.env[ENV_WORKFLOW_MANAGER_SOCKET];
+    if (!socketPath) {
+      throw new Error(
+        `workflow manager: ${ENV_WORKFLOW_MANAGER_SOCKET} is not set`,
+      );
+    }
+
+    const transport = createGrpcTransport({
+      baseUrl: "http://localhost",
+      nodeOptions: {
+        createConnection: () => connect(socketPath),
+      },
+    });
+    this.client = createClient(WorkflowManagerHostService, transport);
+  }
+
+  async createSchedule(
+    request: WorkflowManagerCreateScheduleInput,
+  ): Promise<ManagedWorkflowScheduleMessage> {
+    return await this.client.createSchedule({
+      ...request,
+      requestHandle: this.requestHandle,
+    });
+  }
+
+  async getSchedule(
+    request: WorkflowManagerGetScheduleInput,
+  ): Promise<ManagedWorkflowScheduleMessage> {
+    return await this.client.getSchedule({
+      ...request,
+      requestHandle: this.requestHandle,
+    });
+  }
+
+  async updateSchedule(
+    request: WorkflowManagerUpdateScheduleInput,
+  ): Promise<ManagedWorkflowScheduleMessage> {
+    return await this.client.updateSchedule({
+      ...request,
+      requestHandle: this.requestHandle,
+    });
+  }
+
+  async deleteSchedule(
+    request: WorkflowManagerDeleteScheduleInput,
+  ): Promise<void> {
+    await this.client.deleteSchedule({
+      ...request,
+      requestHandle: this.requestHandle,
+    });
+  }
+
+  async pauseSchedule(
+    request: WorkflowManagerPauseScheduleInput,
+  ): Promise<ManagedWorkflowScheduleMessage> {
+    return await this.client.pauseSchedule({
+      ...request,
+      requestHandle: this.requestHandle,
+    });
+  }
+
+  async resumeSchedule(
+    request: WorkflowManagerResumeScheduleInput,
+  ): Promise<ManagedWorkflowScheduleMessage> {
+    return await this.client.resumeSchedule({
+      ...request,
+      requestHandle: this.requestHandle,
+    });
+  }
+}
+
+function normalizeRequestHandle(requestOrHandle: Request | string): string {
+  const requestHandle =
+    typeof requestOrHandle === "string"
+      ? requestOrHandle
+      : requestOrHandle.requestHandle;
+  const trimmed = requestHandle.trim();
+  if (!trimmed) {
+    throw new Error("workflow manager: request handle is not available");
+  }
+  return trimmed;
+}

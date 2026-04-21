@@ -830,3 +830,295 @@ var WorkflowHost_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "v1/workflow.proto",
 }
+
+const (
+	WorkflowManagerHost_CreateSchedule_FullMethodName = "/gestalt.provider.v1.WorkflowManagerHost/CreateSchedule"
+	WorkflowManagerHost_GetSchedule_FullMethodName    = "/gestalt.provider.v1.WorkflowManagerHost/GetSchedule"
+	WorkflowManagerHost_UpdateSchedule_FullMethodName = "/gestalt.provider.v1.WorkflowManagerHost/UpdateSchedule"
+	WorkflowManagerHost_DeleteSchedule_FullMethodName = "/gestalt.provider.v1.WorkflowManagerHost/DeleteSchedule"
+	WorkflowManagerHost_PauseSchedule_FullMethodName  = "/gestalt.provider.v1.WorkflowManagerHost/PauseSchedule"
+	WorkflowManagerHost_ResumeSchedule_FullMethodName = "/gestalt.provider.v1.WorkflowManagerHost/ResumeSchedule"
+)
+
+// WorkflowManagerHostClient is the client API for WorkflowManagerHost service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type WorkflowManagerHostClient interface {
+	CreateSchedule(ctx context.Context, in *WorkflowManagerCreateScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
+	GetSchedule(ctx context.Context, in *WorkflowManagerGetScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
+	UpdateSchedule(ctx context.Context, in *WorkflowManagerUpdateScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
+	DeleteSchedule(ctx context.Context, in *WorkflowManagerDeleteScheduleRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	PauseSchedule(ctx context.Context, in *WorkflowManagerPauseScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
+	ResumeSchedule(ctx context.Context, in *WorkflowManagerResumeScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
+}
+
+type workflowManagerHostClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewWorkflowManagerHostClient(cc grpc.ClientConnInterface) WorkflowManagerHostClient {
+	return &workflowManagerHostClient{cc}
+}
+
+func (c *workflowManagerHostClient) CreateSchedule(ctx context.Context, in *WorkflowManagerCreateScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ManagedWorkflowSchedule)
+	err := c.cc.Invoke(ctx, WorkflowManagerHost_CreateSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowManagerHostClient) GetSchedule(ctx context.Context, in *WorkflowManagerGetScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ManagedWorkflowSchedule)
+	err := c.cc.Invoke(ctx, WorkflowManagerHost_GetSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowManagerHostClient) UpdateSchedule(ctx context.Context, in *WorkflowManagerUpdateScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ManagedWorkflowSchedule)
+	err := c.cc.Invoke(ctx, WorkflowManagerHost_UpdateSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowManagerHostClient) DeleteSchedule(ctx context.Context, in *WorkflowManagerDeleteScheduleRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, WorkflowManagerHost_DeleteSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowManagerHostClient) PauseSchedule(ctx context.Context, in *WorkflowManagerPauseScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ManagedWorkflowSchedule)
+	err := c.cc.Invoke(ctx, WorkflowManagerHost_PauseSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowManagerHostClient) ResumeSchedule(ctx context.Context, in *WorkflowManagerResumeScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ManagedWorkflowSchedule)
+	err := c.cc.Invoke(ctx, WorkflowManagerHost_ResumeSchedule_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// WorkflowManagerHostServer is the server API for WorkflowManagerHost service.
+// All implementations must embed UnimplementedWorkflowManagerHostServer
+// for forward compatibility.
+type WorkflowManagerHostServer interface {
+	CreateSchedule(context.Context, *WorkflowManagerCreateScheduleRequest) (*ManagedWorkflowSchedule, error)
+	GetSchedule(context.Context, *WorkflowManagerGetScheduleRequest) (*ManagedWorkflowSchedule, error)
+	UpdateSchedule(context.Context, *WorkflowManagerUpdateScheduleRequest) (*ManagedWorkflowSchedule, error)
+	DeleteSchedule(context.Context, *WorkflowManagerDeleteScheduleRequest) (*emptypb.Empty, error)
+	PauseSchedule(context.Context, *WorkflowManagerPauseScheduleRequest) (*ManagedWorkflowSchedule, error)
+	ResumeSchedule(context.Context, *WorkflowManagerResumeScheduleRequest) (*ManagedWorkflowSchedule, error)
+	mustEmbedUnimplementedWorkflowManagerHostServer()
+}
+
+// UnimplementedWorkflowManagerHostServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedWorkflowManagerHostServer struct{}
+
+func (UnimplementedWorkflowManagerHostServer) CreateSchedule(context.Context, *WorkflowManagerCreateScheduleRequest) (*ManagedWorkflowSchedule, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateSchedule not implemented")
+}
+func (UnimplementedWorkflowManagerHostServer) GetSchedule(context.Context, *WorkflowManagerGetScheduleRequest) (*ManagedWorkflowSchedule, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSchedule not implemented")
+}
+func (UnimplementedWorkflowManagerHostServer) UpdateSchedule(context.Context, *WorkflowManagerUpdateScheduleRequest) (*ManagedWorkflowSchedule, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateSchedule not implemented")
+}
+func (UnimplementedWorkflowManagerHostServer) DeleteSchedule(context.Context, *WorkflowManagerDeleteScheduleRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteSchedule not implemented")
+}
+func (UnimplementedWorkflowManagerHostServer) PauseSchedule(context.Context, *WorkflowManagerPauseScheduleRequest) (*ManagedWorkflowSchedule, error) {
+	return nil, status.Error(codes.Unimplemented, "method PauseSchedule not implemented")
+}
+func (UnimplementedWorkflowManagerHostServer) ResumeSchedule(context.Context, *WorkflowManagerResumeScheduleRequest) (*ManagedWorkflowSchedule, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResumeSchedule not implemented")
+}
+func (UnimplementedWorkflowManagerHostServer) mustEmbedUnimplementedWorkflowManagerHostServer() {}
+func (UnimplementedWorkflowManagerHostServer) testEmbeddedByValue()                             {}
+
+// UnsafeWorkflowManagerHostServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to WorkflowManagerHostServer will
+// result in compilation errors.
+type UnsafeWorkflowManagerHostServer interface {
+	mustEmbedUnimplementedWorkflowManagerHostServer()
+}
+
+func RegisterWorkflowManagerHostServer(s grpc.ServiceRegistrar, srv WorkflowManagerHostServer) {
+	// If the following call panics, it indicates UnimplementedWorkflowManagerHostServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&WorkflowManagerHost_ServiceDesc, srv)
+}
+
+func _WorkflowManagerHost_CreateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowManagerCreateScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowManagerHostServer).CreateSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowManagerHost_CreateSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowManagerHostServer).CreateSchedule(ctx, req.(*WorkflowManagerCreateScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowManagerHost_GetSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowManagerGetScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowManagerHostServer).GetSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowManagerHost_GetSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowManagerHostServer).GetSchedule(ctx, req.(*WorkflowManagerGetScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowManagerHost_UpdateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowManagerUpdateScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowManagerHostServer).UpdateSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowManagerHost_UpdateSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowManagerHostServer).UpdateSchedule(ctx, req.(*WorkflowManagerUpdateScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowManagerHost_DeleteSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowManagerDeleteScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowManagerHostServer).DeleteSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowManagerHost_DeleteSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowManagerHostServer).DeleteSchedule(ctx, req.(*WorkflowManagerDeleteScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowManagerHost_PauseSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowManagerPauseScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowManagerHostServer).PauseSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowManagerHost_PauseSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowManagerHostServer).PauseSchedule(ctx, req.(*WorkflowManagerPauseScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowManagerHost_ResumeSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowManagerResumeScheduleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowManagerHostServer).ResumeSchedule(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowManagerHost_ResumeSchedule_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowManagerHostServer).ResumeSchedule(ctx, req.(*WorkflowManagerResumeScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// WorkflowManagerHost_ServiceDesc is the grpc.ServiceDesc for WorkflowManagerHost service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var WorkflowManagerHost_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "gestalt.provider.v1.WorkflowManagerHost",
+	HandlerType: (*WorkflowManagerHostServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "CreateSchedule",
+			Handler:    _WorkflowManagerHost_CreateSchedule_Handler,
+		},
+		{
+			MethodName: "GetSchedule",
+			Handler:    _WorkflowManagerHost_GetSchedule_Handler,
+		},
+		{
+			MethodName: "UpdateSchedule",
+			Handler:    _WorkflowManagerHost_UpdateSchedule_Handler,
+		},
+		{
+			MethodName: "DeleteSchedule",
+			Handler:    _WorkflowManagerHost_DeleteSchedule_Handler,
+		},
+		{
+			MethodName: "PauseSchedule",
+			Handler:    _WorkflowManagerHost_PauseSchedule_Handler,
+		},
+		{
+			MethodName: "ResumeSchedule",
+			Handler:    _WorkflowManagerHost_ResumeSchedule_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "v1/workflow.proto",
+}

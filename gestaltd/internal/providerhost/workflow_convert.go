@@ -7,6 +7,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -259,6 +260,28 @@ func workflowScheduleFromProto(schedule *proto.BoundWorkflowSchedule) (*corework
 	}, nil
 }
 
+func workflowScheduleToProto(schedule *coreworkflow.Schedule) (*proto.BoundWorkflowSchedule, error) {
+	if schedule == nil {
+		return nil, nil
+	}
+	target, err := workflowTargetToProto(schedule.Target)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.BoundWorkflowSchedule{
+		Id:           schedule.ID,
+		Cron:         schedule.Cron,
+		Timezone:     schedule.Timezone,
+		Target:       target,
+		Paused:       schedule.Paused,
+		CreatedAt:    timeToProto(schedule.CreatedAt),
+		UpdatedAt:    timeToProto(schedule.UpdatedAt),
+		NextRunAt:    timeToProto(schedule.NextRunAt),
+		CreatedBy:    workflowActorToProto(schedule.CreatedBy),
+		ExecutionRef: schedule.ExecutionRef,
+	}, nil
+}
+
 func workflowEventTriggerFromProto(trigger *proto.BoundWorkflowEventTrigger) (*coreworkflow.EventTrigger, error) {
 	if trigger == nil {
 		return nil, nil
@@ -302,6 +325,20 @@ func workflowInvokeResponseToProto(resp *coreworkflow.InvokeOperationResponse) *
 		Status: int32(resp.Status),
 		Body:   resp.Body,
 	}
+}
+
+func managedWorkflowScheduleToProto(managed *workflowmanager.ManagedSchedule) (*proto.ManagedWorkflowSchedule, error) {
+	if managed == nil {
+		return nil, nil
+	}
+	schedule, err := workflowScheduleToProto(managed.Schedule)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.ManagedWorkflowSchedule{
+		ProviderName: managed.ProviderName,
+		Schedule:     schedule,
+	}, nil
 }
 
 func workflowExtensionsToProto(values map[string]any) (map[string]*structpb.Value, error) {

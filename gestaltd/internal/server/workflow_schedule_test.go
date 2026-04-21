@@ -883,6 +883,72 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 	}
 }
 
+func TestWorkflowScheduleCreateFailureHidesInternalError(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryWorkflowProvider()
+	provider.nextUpsertErr = errors.New("boom")
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{
+				Name: "roadmap",
+				Operations: []catalog.CatalogOperation{
+					{ID: "sync", Method: http.MethodPost},
+				},
+			},
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			provider:            provider,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createReq, _ := http.NewRequest(
+		http.MethodPost,
+		ts.URL+"/api/v1/workflow/schedules/",
+		bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a"}}`),
+	)
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	if createResp.StatusCode != http.StatusInternalServerError {
+		body, _ := io.ReadAll(createResp.Body)
+		t.Fatalf("expected 500, got %d: %s", createResp.StatusCode, body)
+	}
+
+	body, err := io.ReadAll(createResp.Body)
+	if err != nil {
+		t.Fatalf("read create response body: %v", err)
+	}
+	text := string(body)
+	if strings.Contains(text, "boom") {
+		t.Fatalf("expected generic provider error, got body %q", text)
+	}
+	if !strings.Contains(text, "workflow schedule request failed for integration") || !strings.Contains(text, "roadmap") {
+		t.Fatalf("expected generic workflow provider message, got body %q", text)
+	}
+}
+
 func TestWorkflowScheduleCreatePinsResolvedInstance(t *testing.T) {
 	t.Parallel()
 

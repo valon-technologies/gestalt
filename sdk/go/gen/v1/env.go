@@ -8,6 +8,10 @@ const (
 	// use to invoke other declared plugin operations through the host.
 	EnvPluginInvokerSocket = "GESTALT_PLUGIN_INVOKER_SOCKET"
 
+	// EnvWorkflowManagerSocket is the Unix socket path an executable provider can
+	// use to manage global workflow schedules through the host.
+	EnvWorkflowManagerSocket = "GESTALT_WORKFLOW_MANAGER_SOCKET"
+
 	// EnvProviderParentPID is the host process ID for executable providers that
 	// want to terminate themselves when the parent goes away unexpectedly.
 	EnvProviderParentPID = "GESTALT_PLUGIN_PARENT_PID"
