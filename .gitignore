@@ -44,8 +44,8 @@ Thumbs.db
 build/
 dist/
 gestaltd/ui/out/
-gestaltd/internal/webui/out/
-!gestaltd/internal/webui/out/.gitkeep
+gestaltd/internal/ui/out/
+!gestaltd/internal/ui/out/.gitkeep
 
 # Exceptions
 !gestaltd/internal/manifest/
