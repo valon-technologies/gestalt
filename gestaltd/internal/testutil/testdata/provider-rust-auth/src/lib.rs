@@ -15,20 +15,20 @@ impl gestalt::AuthenticationProvider for Provider {
         })
     }
 
-    async fn begin_login(
+    async fn begin_authentication(
         &self,
-        _req: gestalt::BeginLoginRequest,
-    ) -> gestalt::Result<gestalt::BeginLoginResponse> {
-        Ok(gestalt::BeginLoginResponse {
+        _req: gestalt::BeginAuthenticationRequest,
+    ) -> gestalt::Result<gestalt::BeginAuthenticationResponse> {
+        Ok(gestalt::BeginAuthenticationResponse {
             authorization_url: "https://auth.example.test/login?state=idp-state&prompt=consent"
                 .to_string(),
             provider_state: Vec::new(),
         })
     }
 
-    async fn complete_login(
+    async fn complete_authentication(
         &self,
-        req: gestalt::CompleteLoginRequest,
+        req: gestalt::CompleteAuthenticationRequest,
     ) -> gestalt::Result<gestalt::AuthenticatedUser> {
         if req.query.get("state").map(String::as_str) != Some("idp-state") {
             return Err(gestalt::Error::bad_request("unexpected state"));
@@ -43,10 +43,14 @@ impl gestalt::AuthenticationProvider for Provider {
         })
     }
 
-    async fn validate_external_token(
+    async fn authenticate(
         &self,
-        token: &str,
+        req: gestalt::AuthenticateRequest,
     ) -> gestalt::Result<Option<gestalt::AuthenticatedUser>> {
+        let Some(gestalt::authenticate_request::Input::Token(input)) = req.input else {
+            return Ok(None);
+        };
+        let token = input.token;
         if token.is_empty() {
             return Err(gestalt::Error::bad_request("token is required"));
         }

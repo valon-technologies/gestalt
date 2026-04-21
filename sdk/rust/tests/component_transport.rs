@@ -11,11 +11,13 @@ use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use gestalt::proto::v1::s3_client::S3Client;
 use gestalt::proto::v1::s3_server::S3 as ProtoS3;
 use gestalt::proto::v1::{
-    BeginLoginRequest, CompleteLoginRequest, ConfigureProviderRequest, CopyObjectRequest,
-    CopyObjectResponse, DeleteObjectRequest, HeadObjectRequest, HeadObjectResponse,
-    ListObjectsRequest, ListObjectsResponse, PresignObjectRequest, PresignObjectResponse,
-    ProviderKind, ReadObjectChunk, ReadObjectRequest, S3ObjectMeta, S3ObjectRef,
-    ValidateExternalTokenRequest, WriteObjectRequest, WriteObjectResponse,
+    AuthenticateRequest, BeginAuthenticationRequest, BeginLoginRequest,
+    CompleteAuthenticationRequest, CompleteLoginRequest, ConfigureProviderRequest,
+    CopyObjectRequest, CopyObjectResponse, DeleteObjectRequest, HeadObjectRequest,
+    HeadObjectResponse, ListObjectsRequest, ListObjectsResponse, PresignObjectRequest,
+    PresignObjectResponse, ProviderKind, ReadObjectChunk, ReadObjectRequest, S3ObjectMeta,
+    S3ObjectRef, TokenAuthInput, ValidateExternalTokenRequest, WriteObjectRequest,
+    WriteObjectResponse, authenticate_request,
 };
 use gestalt::{AuthenticationProvider, RuntimeMetadata};
 use hyper_util::rt::tokio::TokioIo;
@@ -63,19 +65,19 @@ impl AuthenticationProvider for TestAuthProvider {
         vec!["set OIDC_BASE_URL".to_string()]
     }
 
-    async fn begin_login(
+    async fn begin_authentication(
         &self,
-        req: BeginLoginRequest,
-    ) -> gestalt::Result<gestalt::BeginLoginResponse> {
-        Ok(gestalt::BeginLoginResponse {
+        req: BeginAuthenticationRequest,
+    ) -> gestalt::Result<gestalt::BeginAuthenticationResponse> {
+        Ok(gestalt::BeginAuthenticationResponse {
             authorization_url: format!("https://example.com/login?state={}", req.host_state),
             provider_state: b"provider-state".to_vec(),
         })
     }
 
-    async fn complete_login(
+    async fn complete_authentication(
         &self,
-        req: CompleteLoginRequest,
+        req: CompleteAuthenticationRequest,
     ) -> gestalt::Result<gestalt::AuthenticatedUser> {
         Ok(gestalt::AuthenticatedUser {
             subject: "sub_123".to_string(),
@@ -87,14 +89,17 @@ impl AuthenticationProvider for TestAuthProvider {
             email_verified: true,
             display_name: "SDK User".to_string(),
             avatar_url: String::new(),
-            claims: BTreeMap::from([("source".to_string(), "complete_login".to_string())]),
+            claims: BTreeMap::from([("source".to_string(), "complete_authentication".to_string())]),
         })
     }
 
-    async fn validate_external_token(
+    async fn authenticate(
         &self,
-        token: &str,
+        req: AuthenticateRequest,
     ) -> gestalt::Result<Option<gestalt::AuthenticatedUser>> {
+        let Some(authenticate_request::Input::Token(TokenAuthInput { token })) = req.input else {
+            return Ok(None);
+        };
         if token == "external-token" {
             return Ok(Some(gestalt::AuthenticatedUser {
                 subject: "sub_external".to_string(),
@@ -382,6 +387,42 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
     );
 
     let begin = auth
+        .begin_authentication(BeginAuthenticationRequest {
+            callback_url: "https://host/callback".to_string(),
+            host_state: "host-state".to_string(),
+            scopes: vec!["openid".to_string()],
+            options: BTreeMap::new(),
+        })
+        .await
+        .expect("begin authentication")
+        .into_inner();
+    assert!(begin.authorization_url.contains("host-state"));
+    assert_eq!(begin.provider_state, b"provider-state");
+
+    let completed = auth
+        .complete_authentication(CompleteAuthenticationRequest {
+            query: BTreeMap::from([("email".to_string(), "complete@example.com".to_string())]),
+            provider_state: b"provider-state".to_vec(),
+            callback_url: "https://host/callback".to_string(),
+        })
+        .await
+        .expect("complete authentication")
+        .into_inner();
+    assert_eq!(completed.email, "complete@example.com");
+
+    let validated = auth
+        .authenticate(AuthenticateRequest {
+            options: BTreeMap::new(),
+            input: Some(authenticate_request::Input::Token(TokenAuthInput {
+                token: "external-token".to_string(),
+            })),
+        })
+        .await
+        .expect("authenticate")
+        .into_inner();
+    assert_eq!(validated.subject, "sub_external");
+
+    let legacy_begin = auth
         .begin_login(BeginLoginRequest {
             callback_url: "https://host/callback".to_string(),
             host_state: "host-state".to_string(),
@@ -391,28 +432,28 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
         .await
         .expect("begin login")
         .into_inner();
-    assert!(begin.authorization_url.contains("host-state"));
-    assert_eq!(begin.provider_state, b"provider-state");
+    assert!(legacy_begin.authorization_url.contains("host-state"));
+    assert_eq!(legacy_begin.provider_state, b"provider-state");
 
-    let completed = auth
+    let legacy_completed = auth
         .complete_login(CompleteLoginRequest {
-            query: BTreeMap::from([("email".to_string(), "complete@example.com".to_string())]),
+            query: BTreeMap::from([("email".to_string(), "legacy@example.com".to_string())]),
             provider_state: b"provider-state".to_vec(),
             callback_url: "https://host/callback".to_string(),
         })
         .await
         .expect("complete login")
         .into_inner();
-    assert_eq!(completed.email, "complete@example.com");
+    assert_eq!(legacy_completed.email, "legacy@example.com");
 
-    let validated = auth
+    let legacy_validated = auth
         .validate_external_token(ValidateExternalTokenRequest {
             token: "external-token".to_string(),
         })
         .await
         .expect("validate external token")
         .into_inner();
-    assert_eq!(validated.subject, "sub_external");
+    assert_eq!(legacy_validated.subject, "sub_external");
 
     let err = auth
         .validate_external_token(ValidateExternalTokenRequest {

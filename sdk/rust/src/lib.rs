@@ -33,8 +33,9 @@ pub mod proto {
 
 pub use api::{Access, Credential, Provider, Request, Response, RuntimeMetadata, Subject, ok};
 pub use auth::{
-    AuthenticatedUser, AuthenticationProvider, BeginLoginRequest, BeginLoginResponse,
-    CompleteLoginRequest,
+    AuthenticateRequest, AuthenticatedUser, AuthenticationProvider, BeginAuthenticationRequest,
+    BeginAuthenticationResponse, BeginLoginRequest, BeginLoginResponse,
+    CompleteAuthenticationRequest, CompleteLoginRequest, HttpRequestAuthInput, TokenAuthInput,
 };
 pub use cache::{
     Cache, CacheEntry, CacheError, CacheProvider, CacheSetOptions, ENV_CACHE_SOCKET,

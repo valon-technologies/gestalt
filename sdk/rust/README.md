@@ -93,7 +93,7 @@ sdk/rust/scripts/generate_stubs.sh
 The crate is intentionally small:
 
 - `Provider`, `Request`, `Response`, and `ok(...)` model integration providers
-- `AuthenticationProvider`, `BeginLoginRequest`, `BeginLoginResponse`, `CompleteLoginRequest`, and `AuthenticatedUser` model authentication providers
+- `AuthenticationProvider`, `BeginAuthenticationRequest`, `BeginAuthenticationResponse`, `CompleteAuthenticationRequest`, `AuthenticateRequest`, and `AuthenticatedUser` model authentication providers
 - `Cache`, `CacheProvider`, `CacheEntry`, and `CacheSetOptions` model cache clients and providers
 - `SecretsProvider` models secrets providers
 - `Workflow`, `WorkflowHost`, and `WorkflowProvider` model workflow clients, host callbacks, and workflow base providers

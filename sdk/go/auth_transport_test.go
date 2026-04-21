@@ -180,6 +180,22 @@ func TestAuthenticationProviderRoundTrip(t *testing.T) {
 		t.Fatalf("ready = false, want true")
 	}
 
+	beginAuthResp, err := authClient.BeginAuthentication(rpcCtx, &proto.BeginAuthenticationRequest{
+		CallbackUrl: "https://app.example.test/callback",
+		HostState:   "xyz",
+		Scopes:      []string{"read", "write"},
+		Options:     map[string]string{"prompt": "consent"},
+	})
+	if err != nil {
+		t.Fatalf("BeginAuthentication: %v", err)
+	}
+	if beginAuthResp.GetAuthorizationUrl() != "https://auth.example.test/login" {
+		t.Fatalf("authorization_url = %q, want %q", beginAuthResp.GetAuthorizationUrl(), "https://auth.example.test/login")
+	}
+	if !bytes.Equal(beginAuthResp.GetProviderState(), []byte("state-data")) {
+		t.Fatalf("provider_state = %q, want %q", beginAuthResp.GetProviderState(), "state-data")
+	}
+
 	beginResp, err := authClient.BeginLogin(rpcCtx, &proto.BeginLoginRequest{
 		CallbackUrl: "https://app.example.test/callback",
 		HostState:   "xyz",
@@ -196,6 +212,16 @@ func TestAuthenticationProviderRoundTrip(t *testing.T) {
 		t.Fatalf("provider_state = %q, want %q", beginResp.GetProviderState(), "state-data")
 	}
 
+	completeAuthResp, err := authClient.CompleteAuthentication(rpcCtx, &proto.CompleteAuthenticationRequest{
+		Query:         map[string]string{"code": "auth-code"},
+		ProviderState: []byte("state-data"),
+		CallbackUrl:   "https://app.example.test/callback",
+	})
+	if err != nil {
+		t.Fatalf("CompleteAuthentication: %v", err)
+	}
+	assertAuthenticatedUser(t, completeAuthResp)
+
 	completeResp, err := authClient.CompleteLogin(rpcCtx, &proto.CompleteLoginRequest{
 		Query:         map[string]string{"code": "auth-code"},
 		ProviderState: []byte("state-data"),
@@ -205,6 +231,32 @@ func TestAuthenticationProviderRoundTrip(t *testing.T) {
 		t.Fatalf("CompleteLogin: %v", err)
 	}
 	assertAuthenticatedUser(t, completeResp)
+
+	validAuthUser, err := authClient.Authenticate(rpcCtx, &proto.AuthenticateRequest{
+		Input: &proto.AuthenticateRequest_Token{
+			Token: &proto.TokenAuthInput{Token: "valid-token"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Authenticate(valid): %v", err)
+	}
+	assertAuthenticatedUser(t, validAuthUser)
+
+	_, err = authClient.Authenticate(rpcCtx, &proto.AuthenticateRequest{
+		Input: &proto.AuthenticateRequest_Http{
+			Http: &proto.HTTPRequestAuthInput{
+				Method:  "GET",
+				Url:     "https://api.example.test/callback",
+				Headers: map[string]string{"authorization": "Bearer valid-token"},
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("Authenticate(http) should return error")
+	}
+	if s, ok := status.FromError(err); !ok || s.Code() != codes.Unimplemented {
+		t.Fatalf("Authenticate(http) code = %v, want UNIMPLEMENTED", err)
+	}
 
 	validUser, err := authClient.ValidateExternalToken(rpcCtx, &proto.ValidateExternalTokenRequest{Token: "valid-token"})
 	if err != nil {

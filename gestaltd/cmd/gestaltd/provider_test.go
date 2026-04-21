@@ -842,10 +842,13 @@ func TestRun_ProviderReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 		}
 	}()
 
-	loginURL, err := auth.LoginURL("host-state")
+	beginResp, err := auth.BeginAuthentication(context.Background(), &core.BeginAuthenticationRequest{
+		HostState: "host-state",
+	})
 	if err != nil {
-		t.Fatalf("LoginURL: %v", err)
+		t.Fatalf("BeginAuthentication: %v", err)
 	}
+	loginURL := beginResp.AuthorizationURL
 	parsed, err := url.Parse(loginURL)
 	if err != nil {
 		t.Fatalf("url.Parse(loginURL): %v", err)
@@ -854,23 +857,19 @@ func TestRun_ProviderReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 	if state == "" {
 		t.Fatal("login URL did not include state")
 	}
-
-	callbackHandler, ok := auth.(interface {
-		HandleCallbackRequest(context.Context, url.Values) (*core.UserIdentity, string, error)
-	})
-	if !ok {
-		t.Fatal("auth provider did not expose HandleCallbackRequest")
+	if state != "idp-state" {
+		t.Fatalf("login state = %q, want %q", state, "idp-state")
 	}
-	identity, originalState, err := callbackHandler.HandleCallbackRequest(context.Background(), url.Values{
-		"code":   {"callback-code"},
-		"state":  {state},
-		"prompt": {parsed.Query().Get("prompt")},
+
+	identity, err := auth.CompleteAuthentication(context.Background(), &core.CompleteAuthenticationRequest{
+		Query: map[string]string{
+			"code":   "callback-code",
+			"state":  state,
+			"prompt": parsed.Query().Get("prompt"),
+		},
 	})
 	if err != nil {
-		t.Fatalf("HandleCallbackRequest: %v", err)
-	}
-	if originalState != "host-state" {
-		t.Fatalf("original state = %q, want %q", originalState, "host-state")
+		t.Fatalf("CompleteAuthentication: %v", err)
 	}
 	if identity == nil || identity.Email != "generated-auth@example.com" {
 		t.Fatalf("identity = %+v", identity)
@@ -883,12 +882,34 @@ func TestRun_ProviderReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IssueToken: %v", err)
 	}
-	validated, err := auth.ValidateToken(context.Background(), externalJWT)
+	authenticator, ok := auth.(core.Authenticator)
+	if !ok {
+		t.Fatal("auth provider does not implement core.Authenticator")
+	}
+	validated, err := authenticator.Authenticate(context.Background(), &core.AuthenticateRequest{
+		Token: &core.TokenAuthInput{Token: externalJWT},
+	})
 	if err != nil {
-		t.Fatalf("ValidateToken(external jwt): %v", err)
+		t.Fatalf("Authenticate(external jwt): %v", err)
 	}
 	if validated == nil || validated.Email != "jwt@example.com" {
 		t.Fatalf("validated = %+v", validated)
+	}
+
+	httpValidated, err := authenticator.Authenticate(context.Background(), &core.AuthenticateRequest{
+		HTTP: &core.HTTPRequestAuthInput{
+			Method: "GET",
+			URL:    "https://auth.example.test/userinfo",
+			Headers: map[string]string{
+				"x-test-user": "http@example.com",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Authenticate(http): %v", err)
+	}
+	if httpValidated == nil || httpValidated.Email != "http@example.com" {
+		t.Fatalf("http validated = %+v", httpValidated)
 	}
 }
 
@@ -2652,10 +2673,13 @@ func assertExecutableAuthProviderWorks(t *testing.T, command, providerName strin
 		}
 	}()
 
-	loginURL, err := auth.LoginURL("host-state")
+	beginResp, err := auth.BeginAuthentication(context.Background(), &core.BeginAuthenticationRequest{
+		HostState: "host-state",
+	})
 	if err != nil {
-		t.Fatalf("LoginURL: %v", err)
+		t.Fatalf("BeginAuthentication: %v", err)
 	}
+	loginURL := beginResp.AuthorizationURL
 	parsed, err := url.Parse(loginURL)
 	if err != nil {
 		t.Fatalf("url.Parse(loginURL): %v", err)
@@ -2665,22 +2689,15 @@ func assertExecutableAuthProviderWorks(t *testing.T, command, providerName strin
 		t.Fatal("login URL did not include state")
 	}
 
-	callbackHandler, ok := auth.(interface {
-		HandleCallbackRequest(context.Context, url.Values) (*core.UserIdentity, string, error)
-	})
-	if !ok {
-		t.Fatal("auth provider did not expose HandleCallbackRequest")
-	}
-	identity, originalState, err := callbackHandler.HandleCallbackRequest(context.Background(), url.Values{
-		"code":   {"callback-code"},
-		"state":  {state},
-		"prompt": {parsed.Query().Get("prompt")},
+	identity, err := auth.CompleteAuthentication(context.Background(), &core.CompleteAuthenticationRequest{
+		Query: map[string]string{
+			"code":   "callback-code",
+			"state":  state,
+			"prompt": parsed.Query().Get("prompt"),
+		},
 	})
 	if err != nil {
-		t.Fatalf("HandleCallbackRequest: %v", err)
-	}
-	if originalState != "host-state" {
-		t.Fatalf("original state = %q, want %q", originalState, "host-state")
+		t.Fatalf("CompleteAuthentication: %v", err)
 	}
 	if identity == nil || identity.Email != "generated-auth@example.com" {
 		t.Fatalf("identity = %+v", identity)
@@ -2695,9 +2712,15 @@ func assertExecutableAuthProviderWorks(t *testing.T, command, providerName strin
 		if err != nil {
 			t.Fatalf("IssueToken: %v", err)
 		}
-		validated, err := auth.ValidateToken(context.Background(), externalJWT)
+		authenticator, ok := auth.(core.Authenticator)
+		if !ok {
+			t.Fatal("auth provider does not implement core.Authenticator")
+		}
+		validated, err := authenticator.Authenticate(context.Background(), &core.AuthenticateRequest{
+			Token: &core.TokenAuthInput{Token: externalJWT},
+		})
 		if err != nil {
-			t.Fatalf("ValidateToken(external jwt): %v", err)
+			t.Fatalf("Authenticate(external jwt): %v", err)
 		}
 		if validated == nil || validated.Email != "jwt@example.com" {
 			t.Fatalf("validated = %+v", validated)

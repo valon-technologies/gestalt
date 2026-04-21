@@ -20,10 +20,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthenticationProvider_BeginLogin_FullMethodName            = "/gestalt.provider.v1.AuthenticationProvider/BeginLogin"
-	AuthenticationProvider_CompleteLogin_FullMethodName         = "/gestalt.provider.v1.AuthenticationProvider/CompleteLogin"
-	AuthenticationProvider_ValidateExternalToken_FullMethodName = "/gestalt.provider.v1.AuthenticationProvider/ValidateExternalToken"
-	AuthenticationProvider_GetSessionSettings_FullMethodName    = "/gestalt.provider.v1.AuthenticationProvider/GetSessionSettings"
+	AuthenticationProvider_BeginAuthentication_FullMethodName    = "/gestalt.provider.v1.AuthenticationProvider/BeginAuthentication"
+	AuthenticationProvider_CompleteAuthentication_FullMethodName = "/gestalt.provider.v1.AuthenticationProvider/CompleteAuthentication"
+	AuthenticationProvider_Authenticate_FullMethodName           = "/gestalt.provider.v1.AuthenticationProvider/Authenticate"
+	AuthenticationProvider_BeginLogin_FullMethodName             = "/gestalt.provider.v1.AuthenticationProvider/BeginLogin"
+	AuthenticationProvider_CompleteLogin_FullMethodName          = "/gestalt.provider.v1.AuthenticationProvider/CompleteLogin"
+	AuthenticationProvider_ValidateExternalToken_FullMethodName  = "/gestalt.provider.v1.AuthenticationProvider/ValidateExternalToken"
+	AuthenticationProvider_GetSessionSettings_FullMethodName     = "/gestalt.provider.v1.AuthenticationProvider/GetSessionSettings"
 )
 
 // AuthenticationProviderClient is the client API for AuthenticationProvider service.
@@ -33,8 +36,14 @@ const (
 // AuthenticationProvider models the shared Gestalt authentication-provider
 // protocol.
 type AuthenticationProviderClient interface {
+	BeginAuthentication(ctx context.Context, in *BeginAuthenticationRequest, opts ...grpc.CallOption) (*BeginAuthenticationResponse, error)
+	CompleteAuthentication(ctx context.Context, in *CompleteAuthenticationRequest, opts ...grpc.CallOption) (*AuthenticatedUser, error)
+	Authenticate(ctx context.Context, in *AuthenticateRequest, opts ...grpc.CallOption) (*AuthenticatedUser, error)
+	// Deprecated: use BeginAuthentication.
 	BeginLogin(ctx context.Context, in *BeginLoginRequest, opts ...grpc.CallOption) (*BeginLoginResponse, error)
+	// Deprecated: use CompleteAuthentication.
 	CompleteLogin(ctx context.Context, in *CompleteLoginRequest, opts ...grpc.CallOption) (*AuthenticatedUser, error)
+	// Deprecated: use Authenticate.
 	ValidateExternalToken(ctx context.Context, in *ValidateExternalTokenRequest, opts ...grpc.CallOption) (*AuthenticatedUser, error)
 	GetSessionSettings(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AuthSessionSettings, error)
 }
@@ -45,6 +54,36 @@ type authenticationProviderClient struct {
 
 func NewAuthenticationProviderClient(cc grpc.ClientConnInterface) AuthenticationProviderClient {
 	return &authenticationProviderClient{cc}
+}
+
+func (c *authenticationProviderClient) BeginAuthentication(ctx context.Context, in *BeginAuthenticationRequest, opts ...grpc.CallOption) (*BeginAuthenticationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BeginAuthenticationResponse)
+	err := c.cc.Invoke(ctx, AuthenticationProvider_BeginAuthentication_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authenticationProviderClient) CompleteAuthentication(ctx context.Context, in *CompleteAuthenticationRequest, opts ...grpc.CallOption) (*AuthenticatedUser, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AuthenticatedUser)
+	err := c.cc.Invoke(ctx, AuthenticationProvider_CompleteAuthentication_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authenticationProviderClient) Authenticate(ctx context.Context, in *AuthenticateRequest, opts ...grpc.CallOption) (*AuthenticatedUser, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AuthenticatedUser)
+	err := c.cc.Invoke(ctx, AuthenticationProvider_Authenticate_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *authenticationProviderClient) BeginLogin(ctx context.Context, in *BeginLoginRequest, opts ...grpc.CallOption) (*BeginLoginResponse, error) {
@@ -94,8 +133,14 @@ func (c *authenticationProviderClient) GetSessionSettings(ctx context.Context, i
 // AuthenticationProvider models the shared Gestalt authentication-provider
 // protocol.
 type AuthenticationProviderServer interface {
+	BeginAuthentication(context.Context, *BeginAuthenticationRequest) (*BeginAuthenticationResponse, error)
+	CompleteAuthentication(context.Context, *CompleteAuthenticationRequest) (*AuthenticatedUser, error)
+	Authenticate(context.Context, *AuthenticateRequest) (*AuthenticatedUser, error)
+	// Deprecated: use BeginAuthentication.
 	BeginLogin(context.Context, *BeginLoginRequest) (*BeginLoginResponse, error)
+	// Deprecated: use CompleteAuthentication.
 	CompleteLogin(context.Context, *CompleteLoginRequest) (*AuthenticatedUser, error)
+	// Deprecated: use Authenticate.
 	ValidateExternalToken(context.Context, *ValidateExternalTokenRequest) (*AuthenticatedUser, error)
 	GetSessionSettings(context.Context, *emptypb.Empty) (*AuthSessionSettings, error)
 	mustEmbedUnimplementedAuthenticationProviderServer()
@@ -108,6 +153,15 @@ type AuthenticationProviderServer interface {
 // pointer dereference when methods are called.
 type UnimplementedAuthenticationProviderServer struct{}
 
+func (UnimplementedAuthenticationProviderServer) BeginAuthentication(context.Context, *BeginAuthenticationRequest) (*BeginAuthenticationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method BeginAuthentication not implemented")
+}
+func (UnimplementedAuthenticationProviderServer) CompleteAuthentication(context.Context, *CompleteAuthenticationRequest) (*AuthenticatedUser, error) {
+	return nil, status.Error(codes.Unimplemented, "method CompleteAuthentication not implemented")
+}
+func (UnimplementedAuthenticationProviderServer) Authenticate(context.Context, *AuthenticateRequest) (*AuthenticatedUser, error) {
+	return nil, status.Error(codes.Unimplemented, "method Authenticate not implemented")
+}
 func (UnimplementedAuthenticationProviderServer) BeginLogin(context.Context, *BeginLoginRequest) (*BeginLoginResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method BeginLogin not implemented")
 }
@@ -140,6 +194,60 @@ func RegisterAuthenticationProviderServer(s grpc.ServiceRegistrar, srv Authentic
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&AuthenticationProvider_ServiceDesc, srv)
+}
+
+func _AuthenticationProvider_BeginAuthentication_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BeginAuthenticationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthenticationProviderServer).BeginAuthentication(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthenticationProvider_BeginAuthentication_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthenticationProviderServer).BeginAuthentication(ctx, req.(*BeginAuthenticationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthenticationProvider_CompleteAuthentication_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompleteAuthenticationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthenticationProviderServer).CompleteAuthentication(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthenticationProvider_CompleteAuthentication_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthenticationProviderServer).CompleteAuthentication(ctx, req.(*CompleteAuthenticationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthenticationProvider_Authenticate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AuthenticateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthenticationProviderServer).Authenticate(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthenticationProvider_Authenticate_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthenticationProviderServer).Authenticate(ctx, req.(*AuthenticateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _AuthenticationProvider_BeginLogin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -221,6 +329,18 @@ var AuthenticationProvider_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "gestalt.provider.v1.AuthenticationProvider",
 	HandlerType: (*AuthenticationProviderServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "BeginAuthentication",
+			Handler:    _AuthenticationProvider_BeginAuthentication_Handler,
+		},
+		{
+			MethodName: "CompleteAuthentication",
+			Handler:    _AuthenticationProvider_CompleteAuthentication_Handler,
+		},
+		{
+			MethodName: "Authenticate",
+			Handler:    _AuthenticationProvider_Authenticate_Handler,
+		},
 		{
 			MethodName: "BeginLogin",
 			Handler:    _AuthenticationProvider_BeginLogin_Handler,

@@ -156,13 +156,13 @@ func (p *Provider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (p *Provider) BeginLogin(_ context.Context, req *gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
-	return &gestalt.BeginLoginResponse{
+func (p *Provider) BeginAuthentication(_ context.Context, req *gestalt.BeginAuthenticationRequest) (*gestalt.BeginAuthenticationResponse, error) {
+	return &gestalt.BeginAuthenticationResponse{
 		AuthorizationUrl: "https://auth.example.test/login?state=idp-state&prompt=consent",
 	}, nil
 }
 
-func (p *Provider) CompleteLogin(_ context.Context, req *gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
+func (p *Provider) CompleteAuthentication(_ context.Context, req *gestalt.CompleteAuthenticationRequest) (*gestalt.AuthenticatedUser, error) {
 	if req.GetQuery()["state"] != "idp-state" {
 		return nil, fmt.Errorf("unexpected state %q", req.GetQuery()["state"])
 	}
@@ -175,20 +175,27 @@ func (p *Provider) CompleteLogin(_ context.Context, req *gestalt.CompleteLoginRe
 	}, nil
 }
 
-func (p *Provider) ValidateExternalToken(_ context.Context, token string) (*gestalt.AuthenticatedUser, error) {
-	if token == "" {
-		return nil, fmt.Errorf("token is required")
-	}
-	if strings.Count(token, ".") == 2 {
+func (p *Provider) Authenticate(_ context.Context, req *gestalt.AuthenticateRequest) (*gestalt.AuthenticatedUser, error) {
+	token := req.GetToken().GetToken()
+	if token != "" {
+		if strings.Count(token, ".") == 2 {
+			return &gestalt.AuthenticatedUser{
+				Email:       "jwt@example.com",
+				DisplayName: "Validated JWT User",
+			}, nil
+		}
 		return &gestalt.AuthenticatedUser{
-			Email:       "jwt@example.com",
-			DisplayName: "Validated JWT User",
+			Email:       token + "@example.com",
+			DisplayName: "Validated User",
 		}, nil
 	}
-	return &gestalt.AuthenticatedUser{
-		Email:       token + "@example.com",
-		DisplayName: "Validated User",
-	}, nil
+	if req.GetHttp() != nil {
+		return &gestalt.AuthenticatedUser{
+			Email:       req.GetHttp().GetHeaders()["x-test-user"],
+			DisplayName: "Validated HTTP User",
+		}, nil
+	}
+	return nil, fmt.Errorf("authentication input is required")
 }
 
 func (p *Provider) SessionTTL() time.Duration { return 90 * time.Minute }

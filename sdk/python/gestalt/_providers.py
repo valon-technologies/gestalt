@@ -16,6 +16,12 @@ from .gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 from .gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
 AuthenticatedUser: Any = _authentication_pb2.AuthenticatedUser  # ty: ignore[unresolved-attribute]
+BeginAuthenticationRequest: Any = _authentication_pb2.BeginAuthenticationRequest  # ty: ignore[unresolved-attribute]
+BeginAuthenticationResponse: Any = _authentication_pb2.BeginAuthenticationResponse  # ty: ignore[unresolved-attribute]
+CompleteAuthenticationRequest: Any = _authentication_pb2.CompleteAuthenticationRequest  # ty: ignore[unresolved-attribute]
+AuthenticateRequest: Any = _authentication_pb2.AuthenticateRequest  # ty: ignore[unresolved-attribute]
+TokenAuthInput: Any = _authentication_pb2.TokenAuthInput  # ty: ignore[unresolved-attribute]
+HTTPRequestAuthInput: Any = _authentication_pb2.HTTPRequestAuthInput  # ty: ignore[unresolved-attribute]
 BeginLoginRequest: Any = _authentication_pb2.BeginLoginRequest  # ty: ignore[unresolved-attribute]
 BeginLoginResponse: Any = _authentication_pb2.BeginLoginResponse  # ty: ignore[unresolved-attribute]
 CompleteLoginRequest: Any = _authentication_pb2.CompleteLoginRequest  # ty: ignore[unresolved-attribute]
@@ -127,14 +133,32 @@ class PluginProviderAdapter:
 class AuthenticationProvider(PluginProvider):
     """Base class for authentication providers."""
 
+    def begin_authentication(self, request: Any) -> Any:
+        """Begin an interactive authentication flow."""
+
+        if type(self).begin_login is not AuthenticationProvider.begin_login:
+            return self.begin_login(request)
+        raise NotImplementedError
+
+    def complete_authentication(self, request: Any) -> Any:
+        """Complete an interactive authentication flow."""
+
+        if type(self).complete_login is not AuthenticationProvider.complete_login:
+            return self.complete_login(request)
+        raise NotImplementedError
+
     def begin_login(self, request: Any) -> Any:
         """Begin an interactive login flow."""
 
+        if type(self).begin_authentication is not AuthenticationProvider.begin_authentication:
+            return self.begin_authentication(request)
         raise NotImplementedError
 
     def complete_login(self, request: Any) -> Any:
         """Complete an interactive login flow."""
 
+        if type(self).complete_authentication is not AuthenticationProvider.complete_authentication:
+            return self.complete_authentication(request)
         raise NotImplementedError
 
     def serve(self) -> None:
@@ -143,6 +167,16 @@ class AuthenticationProvider(PluginProvider):
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.AUTHENTICATION)
+
+
+class Authenticator:
+    """Optional mixin for providers that authenticate external inputs."""
+
+    def authenticate(self, request: Any) -> Any:
+        """Validate an external authentication input and return the subject."""
+
+        raise NotImplementedError
+
 
 class ExternalTokenValidator:
     """Optional mixin for providers that validate external bearer tokens."""
