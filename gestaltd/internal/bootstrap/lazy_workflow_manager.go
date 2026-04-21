@@ -80,6 +80,30 @@ func (l *lazyWorkflowManager) ResumeSchedule(ctx context.Context, p *principal.P
 	return target.ResumeSchedule(ctx, p, scheduleID)
 }
 
+func (l *lazyWorkflowManager) ListRuns(ctx context.Context, p *principal.Principal) ([]*workflowmanager.ManagedRun, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ListRuns(ctx, p)
+}
+
+func (l *lazyWorkflowManager) GetRun(ctx context.Context, p *principal.Principal, runID string) (*workflowmanager.ManagedRun, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.GetRun(ctx, p, runID)
+}
+
+func (l *lazyWorkflowManager) CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*workflowmanager.ManagedRun, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.CancelRun(ctx, p, runID, reason)
+}
+
 func (l *lazyWorkflowManager) current() (workflowmanager.Service, error) {
 	l.mu.RLock()
 	target := l.target

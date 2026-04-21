@@ -21,6 +21,7 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 		r.Route("/workflow/runs", func(r chi.Router) {
 			r.Get("/", s.listGlobalWorkflowRuns)
 			r.Get("/{runID}", s.getGlobalWorkflowRun)
+			r.Post("/{runID}/cancel", s.cancelGlobalWorkflowRun)
 		})
 
 		r.Post("/auth/start-oauth", s.startIntegrationOAuth)

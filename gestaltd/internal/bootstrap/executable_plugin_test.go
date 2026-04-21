@@ -354,6 +354,18 @@ func (m *stubWorkflowManager) ResumeSchedule(_ context.Context, p *principal.Pri
 	return cloneManagedSchedule(value), nil
 }
 
+func (m *stubWorkflowManager) ListRuns(context.Context, *principal.Principal) ([]*workflowmanager.ManagedRun, error) {
+	return nil, nil
+}
+
+func (m *stubWorkflowManager) GetRun(context.Context, *principal.Principal, string) (*workflowmanager.ManagedRun, error) {
+	return nil, core.ErrNotFound
+}
+
+func (m *stubWorkflowManager) CancelRun(context.Context, *principal.Principal, string, string) (*workflowmanager.ManagedRun, error) {
+	return nil, core.ErrNotFound
+}
+
 func (m *stubWorkflowManager) Subjects() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()

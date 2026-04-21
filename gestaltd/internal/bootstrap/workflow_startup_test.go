@@ -26,7 +26,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"gopkg.in/yaml.v3"
 )
@@ -220,6 +222,13 @@ func invokeWorkflowHostDuringStartup(t *testing.T, hostServices []providerhost.H
 	return proto.NewWorkflowHostClient(conn).InvokeOperation(context.Background(), req)
 }
 
+func explicitStartupWorkflowActor() *proto.WorkflowActor {
+	return &proto.WorkflowActor{
+		SubjectId:   "system:workflow-startup",
+		SubjectKind: "system",
+	}
+}
+
 func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testing.T) {
 	t.Parallel()
 
@@ -264,6 +273,7 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 				PluginName: "roadmap",
 				Operation:  "status",
 			},
+			CreatedBy: explicitStartupWorkflowActor(),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("startup callback: %w", err)
@@ -273,6 +283,61 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 		}
 		if !strings.Contains(resp.GetBody(), `"name":"roadmap"`) {
 			return nil, fmt.Errorf("startup callback body = %q", resp.GetBody())
+		}
+		return startupTestWorkflowProvider{}, nil
+	}
+
+	result, err := Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+}
+
+func TestManagedWorkflowStartupCallbackRequiresExplicitCreatedByWithoutExecutionRef(t *testing.T) {
+	t.Parallel()
+
+	bin, manifestRoot := buildModifiedExampleProviderBinary(t, func(source string) string { return source })
+
+	cfg := workflowStartupTestConfig()
+	cfg.Plugins = map[string]*config.ProviderEntry{
+		"roadmap": {
+			Command:              bin,
+			ResolvedManifest:     newExecutableManifest("Roadmap", "Startup callback provider"),
+			ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+			ConnectionMode:       providermanifestv1.ConnectionModeUser,
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	factories := workflowStartupTestFactories()
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps Deps) (coreworkflow.Provider, error) {
+		if name != "temporal" {
+			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
+		}
+		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+			SubjectID:   principal.IdentitySubjectID(),
+			Integration: "roadmap",
+			Connection:  config.PluginConnectionName,
+			Instance:    "default",
+			AccessToken: "workflow-startup-token",
+		}); err != nil {
+			return nil, fmt.Errorf("store identity token: %w", err)
+		}
+		_, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
+			Target: &proto.BoundWorkflowTarget{
+				PluginName: "roadmap",
+				Operation:  "status",
+			},
+		})
+		if err == nil {
+			return nil, fmt.Errorf("startup callback unexpectedly succeeded without created_by")
+		}
+		if got, want := status.Code(err), codes.InvalidArgument; got != want {
+			return nil, fmt.Errorf("startup callback code = %v, want %v (err=%v)", got, want, err)
 		}
 		return startupTestWorkflowProvider{}, nil
 	}

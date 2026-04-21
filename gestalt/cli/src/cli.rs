@@ -431,6 +431,14 @@ pub enum WorkflowRunCommands {
         /// Run ID
         id: String,
     },
+    /// Cancel a workflow run
+    Cancel {
+        /// Run ID
+        id: String,
+        /// Optional cancellation reason
+        #[arg(long)]
+        reason: Option<String>,
+    },
 }
 
 #[derive(Args)]

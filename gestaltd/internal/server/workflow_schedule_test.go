@@ -68,11 +68,13 @@ type memoryWorkflowProvider struct {
 	deleteReqs    []coreworkflow.DeleteScheduleRequest
 	pauseReqs     []coreworkflow.PauseScheduleRequest
 	resumeReqs    []coreworkflow.ResumeScheduleRequest
+	cancelReqs    []coreworkflow.CancelRunRequest
 	nextUpsertErr error
 	getErr        error
 	listErr       error
 	getRunErr     error
 	listRunsErr   error
+	cancelRunErr  error
 }
 
 func newMemoryWorkflowProvider() *memoryWorkflowProvider {
@@ -110,8 +112,22 @@ func (p *memoryWorkflowProvider) ListRuns(_ context.Context, _ coreworkflow.List
 	return out, nil
 }
 
-func (p *memoryWorkflowProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
-	return nil, errors.New("not implemented")
+func (p *memoryWorkflowProvider) CancelRun(_ context.Context, req coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
+	if p.cancelRunErr != nil {
+		return nil, p.cancelRunErr
+	}
+	run, ok := p.runs[req.RunID]
+	if !ok || run == nil {
+		return nil, core.ErrNotFound
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	run.Status = coreworkflow.RunStatusCanceled
+	run.CompletedAt = &now
+	if reason := strings.TrimSpace(req.Reason); reason != "" {
+		run.StatusMessage = reason
+	}
+	p.cancelReqs = append(p.cancelReqs, req)
+	return cloneWorkflowRun(run), nil
 }
 
 func (p *memoryWorkflowProvider) UpsertSchedule(_ context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {

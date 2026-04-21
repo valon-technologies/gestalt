@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -275,5 +276,83 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 	defer func() { _ = getResp.Body.Close() }()
 	if getResp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", getResp.StatusCode)
+	}
+}
+
+func TestGlobalWorkflowRunCancelUpdatesOwnedRun(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryWorkflowProvider()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	run := &coreworkflow.Run{
+		ID:           "run-cancel",
+		Status:       coreworkflow.RunStatusRunning,
+		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		ExecutionRef: "workflow_schedule:sched-cancel:ref-active",
+		CreatedAt:    &now,
+		StartedAt:    &now,
+	}
+	provider.runs[run.ID] = run
+	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+		ID:           run.ExecutionRef,
+		ProviderName: "basic",
+		Target:       run.Target,
+		SubjectID:    principal.UserSubjectID(user.ID),
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "roadmap",
+				Operations: []catalog.CatalogOperation{
+					{ID: "sync", Method: http.MethodPost},
+				},
+			},
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			provider:            provider,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	cancelBody := bytes.NewBufferString(`{"reason":"operator requested"}`)
+	cancelReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/runs/run-cancel/cancel", cancelBody)
+	cancelReq.Header.Set("Content-Type", "application/json")
+	cancelReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	cancelResp, err := http.DefaultClient.Do(cancelReq)
+	if err != nil {
+		t.Fatalf("cancel request: %v", err)
+	}
+	defer func() { _ = cancelResp.Body.Close() }()
+	if cancelResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", cancelResp.StatusCode)
+	}
+	var got workflowRunResponse
+	if err := json.NewDecoder(cancelResp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode cancel response: %v", err)
+	}
+	if got.ID != "run-cancel" || got.Status != string(coreworkflow.RunStatusCanceled) {
+		t.Fatalf("canceled run = %#v", got)
+	}
+	if len(provider.cancelReqs) != 1 || provider.cancelReqs[0].Reason != "operator requested" {
+		t.Fatalf("cancel requests = %#v", provider.cancelReqs)
 	}
 }

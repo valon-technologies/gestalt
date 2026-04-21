@@ -13,20 +13,17 @@ import (
 )
 
 type workflowInvokeFunc func(context.Context, coreworkflow.InvokeOperationRequest) (*coreworkflow.InvokeOperationResponse, error)
-type workflowInvokeContextFunc func(context.Context, coreworkflow.InvokeOperationRequest) context.Context
 
 type WorkflowHostServer struct {
 	proto.UnimplementedWorkflowHostServer
 	providerName string
 	invoke       workflowInvokeFunc
-	prepareCtx   workflowInvokeContextFunc
 }
 
-func NewWorkflowHostServer(providerName string, invoke workflowInvokeFunc, prepareCtx workflowInvokeContextFunc) *WorkflowHostServer {
+func NewWorkflowHostServer(providerName string, invoke workflowInvokeFunc) *WorkflowHostServer {
 	return &WorkflowHostServer{
 		providerName: providerName,
 		invoke:       invoke,
-		prepareCtx:   prepareCtx,
 	}
 }
 
@@ -46,10 +43,16 @@ func (s *WorkflowHostServer) InvokeOperation(ctx context.Context, req *proto.Inv
 	if value.Target.Operation == "" {
 		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.operation is required")
 	}
-	value.ProviderName = s.providerName
-	if s.prepareCtx != nil {
-		ctx = s.prepareCtx(ctx, value)
+	if strings.TrimSpace(value.ExecutionRef) == "" {
+		subjectID := strings.TrimSpace(value.CreatedBy.SubjectID)
+		switch {
+		case subjectID == "":
+			return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: created_by.subject_id is required when execution_ref is omitted")
+		case subjectID != "system:workflow-startup":
+			return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: created_by.subject_id must be system:workflow-startup when execution_ref is omitted")
+		}
 	}
+	value.ProviderName = s.providerName
 	resp, err := s.invoke(ctx, value)
 	if err != nil {
 		return nil, status.Errorf(workflowInvokeErrorCode(err), "workflow invoke operation: %v", err)

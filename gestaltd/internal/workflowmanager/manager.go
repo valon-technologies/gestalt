@@ -43,6 +43,9 @@ type Service interface {
 	DeleteSchedule(ctx context.Context, p *principal.Principal, scheduleID string) error
 	PauseSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*ManagedSchedule, error)
 	ResumeSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*ManagedSchedule, error)
+	ListRuns(ctx context.Context, p *principal.Principal) ([]*ManagedRun, error)
+	GetRun(ctx context.Context, p *principal.Principal, runID string) (*ManagedRun, error)
+	CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*ManagedRun, error)
 }
 
 type Config struct {
@@ -199,6 +202,25 @@ func (m *Manager) GetRun(ctx context.Context, p *principal.Principal, runID stri
 		return nil, firstErr
 	}
 	return nil, core.ErrNotFound
+}
+
+func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*ManagedRun, error) {
+	value, err := m.GetRun(ctx, p, runID)
+	if err != nil {
+		return nil, err
+	}
+	run, err := existingRunProvider(value).CancelRun(ctx, coreworkflow.CancelRunRequest{
+		RunID:  strings.TrimSpace(runID),
+		Reason: strings.TrimSpace(reason),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !runMatchesExecutionRef(value.ProviderName, run, value.ExecutionRef) {
+		return nil, core.ErrNotFound
+	}
+	value.Run = run
+	return value, nil
 }
 
 func (m *Manager) ListSchedules(ctx context.Context, p *principal.Principal) ([]*ManagedSchedule, error) {
@@ -758,6 +780,13 @@ func scheduleIDFromExecutionRefID(executionRefID string) string {
 }
 
 func existingProvider(value *ManagedSchedule) coreworkflow.Provider {
+	if value == nil {
+		return nil
+	}
+	return value.provider
+}
+
+func existingRunProvider(value *ManagedRun) coreworkflow.Provider {
 	if value == nil {
 		return nil
 	}
