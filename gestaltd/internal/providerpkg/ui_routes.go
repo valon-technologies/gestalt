@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func NormalizeWebUIRoutePath(label, routePath string) (string, error) {
+func NormalizeUIRoutePath(label, routePath string) (string, error) {
 	routePath = strings.TrimSpace(routePath)
 	if routePath == "" {
 		return "", fmt.Errorf("%s is required", label)
@@ -46,7 +46,7 @@ func NormalizeWebUIRoutePath(label, routePath string) (string, error) {
 	return routePath, nil
 }
 
-func NormalizeWebUIAllowedRoles(label string, allowedRoles []string) ([]string, error) {
+func NormalizeUIAllowedRoles(label string, allowedRoles []string) ([]string, error) {
 	if len(allowedRoles) == 0 {
 		return nil, fmt.Errorf("%s must not be empty", label)
 	}
@@ -66,7 +66,7 @@ func NormalizeWebUIAllowedRoles(label string, allowedRoles []string) ([]string, 
 	return roles, nil
 }
 
-func WebUIRouteMatches(routePath, requestPath string) bool {
+func UIRouteMatches(routePath, requestPath string) bool {
 	if routePath == "/*" {
 		return true
 	}

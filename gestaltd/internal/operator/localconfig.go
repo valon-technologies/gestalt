@@ -145,7 +145,7 @@ plugins:
 `, encryptionKey,
 		defaultProviderMetadataURL(config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion),
 		"sqlite://"+dbPath,
-		defaultProviderMetadataURL(config.DefaultWebUIProvider, config.DefaultWebUIVersion),
+		defaultProviderMetadataURL(config.DefaultUIProvider, config.DefaultUIVersion),
 		defaultProviderMetadataURL(defaultHTTPBinProvider, defaultHTTPBinVersion))
 }
 

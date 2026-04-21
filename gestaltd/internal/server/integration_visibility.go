@@ -40,15 +40,15 @@ func (s *Server) integrationMountedPathForPrincipalContext(ctx context.Context, 
 	if mountedPath == "" {
 		return ""
 	}
-	mounted, ok := s.mountedWebUIForProvider(provider, mountedPath)
-	if !ok || !s.mountedWebUIRootAccessibleContext(ctx, p, mounted) {
+	mounted, ok := s.mountedUIForProvider(provider, mountedPath)
+	if !ok || !s.mountedUIRootAccessibleContext(ctx, p, mounted) {
 		return ""
 	}
 	return mountedPath
 }
 
-func (s *Server) mountedWebUIForProvider(provider, mountedPath string) (MountedWebUI, bool) {
-	for _, mounted := range s.mountedWebUIs {
+func (s *Server) mountedUIForProvider(provider, mountedPath string) (MountedUI, bool) {
+	for _, mounted := range s.mountedUIs {
 		if mounted.Handler == nil || mounted.Path != mountedPath {
 			continue
 		}
@@ -56,16 +56,16 @@ func (s *Server) mountedWebUIForProvider(provider, mountedPath string) (MountedW
 			return mounted, true
 		}
 	}
-	for _, mounted := range s.mountedWebUIs {
+	for _, mounted := range s.mountedUIs {
 		if mounted.Handler == nil || mounted.Path != mountedPath {
 			continue
 		}
 		return mounted, true
 	}
-	return MountedWebUI{}, false
+	return MountedUI{}, false
 }
 
-func (s *Server) mountedWebUIRootAccessibleContext(ctx context.Context, p *principal.Principal, mounted MountedWebUI) bool {
+func (s *Server) mountedUIRootAccessibleContext(ctx context.Context, p *principal.Principal, mounted MountedUI) bool {
 	if mounted.AuthorizationPolicy == "" {
 		return true
 	}
@@ -86,11 +86,11 @@ func (s *Server) mountedWebUIRootAccessibleContext(ctx context.Context, p *princ
 		return false
 	}
 
-	route, matched := mounted.routeForRequestPath(mountedWebUIRootRequestPath(mounted))
-	return matched && len(route.AllowedRoles) > 0 && mountedWebUIRoleAllowed(access.Role, route.AllowedRoles)
+	route, matched := mounted.routeForRequestPath(mountedUIRootRequestPath(mounted))
+	return matched && len(route.AllowedRoles) > 0 && mountedUIRoleAllowed(access.Role, route.AllowedRoles)
 }
 
-func mountedWebUIRootRequestPath(mounted MountedWebUI) string {
+func mountedUIRootRequestPath(mounted MountedUI) string {
 	if mounted.Path == "/" {
 		return "/"
 	}

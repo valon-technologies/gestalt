@@ -20,7 +20,7 @@ func (s *Server) routes() {
 		s.mountMCPRoutes(r)
 		s.mountHTTPBindingRoutes(r)
 		s.mountAPIRoutes(r)
-		s.mountMountedWebUIRoutes(r)
+		s.mountMountedUIRoutes(r)
 		s.mountManagementHiddenRoutes(r)
 	case RouteProfileManagement:
 		s.mountCoreRoutes(r, metricsUnauthenticated)
@@ -32,7 +32,7 @@ func (s *Server) routes() {
 		s.mountMCPRoutes(r)
 		s.mountHTTPBindingRoutes(r)
 		s.mountAPIRoutes(r)
-		s.mountMountedWebUIRoutes(r)
+		s.mountMountedUIRoutes(r)
 		s.mountAdminAPIRoutes(r)
 		s.mountAdminUIRoutes(r)
 	}
@@ -91,14 +91,14 @@ func (s *Server) mountAdminAPIRoutes(r chi.Router) {
 	})
 }
 
-func (s *Server) mountMountedWebUIRoutes(r chi.Router) {
+func (s *Server) mountMountedUIRoutes(r chi.Router) {
 	var rootHandler http.Handler
-	for _, mounted := range s.mountedWebUIs {
+	for _, mounted := range s.mountedUIs {
 		if mounted.Handler == nil || mounted.Path == "" {
 			continue
 		}
 		path := mounted.Path
-		handler := s.mountedWebUIHandler(mounted)
+		handler := s.mountedUIHandler(mounted)
 		if path == "/" {
 			rootHandler = handler
 			continue

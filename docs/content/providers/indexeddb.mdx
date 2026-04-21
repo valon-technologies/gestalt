@@ -1,3 +1,5 @@
+import { Tabs } from 'nextra/components'
+
 # IndexedDB
 
 IndexedDB providers back Gestalt's persistent state layer. The host uses them
@@ -21,22 +23,20 @@ fall back to `<db>_` transport-level store prefixes. Plugins may also set
 `plugins.<name>.indexeddb.objectStores` to allowlist logical stores such as
 `tasks`.
 
-## How plugins use IndexedDB in code
+## Using IndexedDB from a plugin
 
 Executable plugins do not choose raw database DSNs or relational schemas at
 runtime. They receive one IndexedDB SDK socket from the host, and the host
 decides what that socket points to from config.
 
-- In plugin code, use `new IndexedDB()` to open the plugin's configured
-  IndexedDB connection.
-- `plugins.<name>.indexeddb.provider` selects which named
-  `providers.indexeddb` entry backs that socket.
-- `plugins.<name>.indexeddb.db` selects the plugin-visible database name used
-  for backend scoping. On schema-capable backends such as RelationalDB, that
-  becomes the backend schema name.
-- If the plugin omits `plugins.<name>.indexeddb`, it inherits the
-  host-selected IndexedDB provider and uses the plugin key as the default `db`
-  name.
+In plugin code, use the IndexedDB client from the language SDK. The
+`plugins.<name>.indexeddb.provider` field selects which named
+`providers.indexeddb` entry backs that client, and `plugins.<name>.indexeddb.db`
+selects the plugin-visible database name used for backend scoping. On
+schema-capable backends such as RelationalDB, that becomes the backend schema
+name. If the plugin omits `plugins.<name>.indexeddb`, it inherits the
+host-selected IndexedDB provider and uses the plugin key as the default `db`
+name.
 
 For example:
 
@@ -66,25 +66,99 @@ plugins:
 
 Then inside the plugin:
 
-```ts
-const db = new IndexedDB();
-```
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+        "context"
+        "log"
 
-The TypeScript SDK also accepts `new IndexedDB("name")`, which looks for a
-named `GESTALT_INDEXEDDB_SOCKET_<NAME>` environment variable. Standard plugin
-config does not expose multiple IndexedDB sockets, so normal plugins should
-select provider and `db` in YAML and use `new IndexedDB()`.
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    ctx := context.Background()
+
+    db, err := gestalt.IndexedDB()
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer db.Close()
+
+    tasks := db.ObjectStore("tasks")
+    if err := tasks.Put(ctx, gestalt.Record{
+        "id":    "task-1",
+        "title": "Ship docs",
+    }); err != nil {
+        log.Fatal(err)
+    }
+
+    record, err := tasks.Get(ctx, "task-1")
+    if err != nil {
+        log.Fatal(err)
+    }
+    _ = record
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+    db = gestalt.IndexedDB()
+    tasks = db.object_store("tasks")
+
+    tasks.put({"id": "task-1", "title": "Ship docs"})
+    record = tasks.get("task-1")
+
+    db.close()
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use std::collections::BTreeMap;
+
+    use gestalt::IndexedDB;
+    use serde_json::json;
+
+    let db = IndexedDB::connect().await?;
+    let mut tasks = db.object_store("tasks");
+
+    tasks
+        .put(BTreeMap::from([
+            ("id".to_string(), json!("task-1")),
+            ("title".to_string(), json!("Ship docs")),
+        ]))
+        .await?;
+
+    let record = tasks.get("task-1").await?;
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { IndexedDB } from "@valon-technologies/gestalt";
+
+    const db = new IndexedDB();
+    const tasks = db.objectStore("tasks");
+
+    await tasks.put({ id: "task-1", title: "Ship docs" });
+    const record = await tasks.get("task-1");
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Normal plugin config gives the plugin one effective IndexedDB binding. If you
+need a different backing store or a different scoped database name, choose that
+in YAML instead of encoding transport details in plugin code.
 
 ## First-party IndexedDB providers
 
 First-party storage backends live under
 [`valon-technologies/gestalt-providers/indexeddb`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb).
 
-| Provider | Repository | Package path | Notes |
-| --- | --- | --- | --- |
-| RelationalDB | [`indexeddb/relationaldb`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/relationaldb) | `github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb` | Supports PostgreSQL, MySQL, SQLite, and SQL Server through a `dsn` config value |
-| DynamoDB | [`indexeddb/dynamodb`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/dynamodb) | `github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb` | Uses Amazon DynamoDB with `table`, `region`, and optional `endpoint` config |
-| MongoDB | [`indexeddb/mongodb`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/mongodb) | `github.com/valon-technologies/gestalt-providers/indexeddb/mongodb` | Uses MongoDB with `uri` and optional `database` config |
+| Provider | Notes |
+| --- | --- |
+| [`github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/relationaldb) | Supports PostgreSQL, MySQL, SQLite, and SQL Server through a `dsn` config value |
+| [`github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/dynamodb) | Uses Amazon DynamoDB with `table`, `region`, and optional `endpoint` config |
+| [`github.com/valon-technologies/gestalt-providers/indexeddb/mongodb`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/mongodb) | Uses MongoDB with `uri` and optional `database` config |
 
 ## Configuring storage
 
@@ -146,11 +220,11 @@ providers:
 
 ## Operational notes
 
-- Gestalt needs exactly one active datastore selected by `server.providers.indexeddb`.
-- Published datastore packages can be prepared with `gestaltd init` just like
-  other provider types.
-- Plugins still go through the host's request and auth model; they do not talk
-  to the datastore provider directly.
+Gestalt needs exactly one active datastore selected by
+`server.providers.indexeddb`. Published datastore packages can be prepared with
+`gestaltd init` just like other provider types. Plugins still go through the
+host's request and auth model, so they do not talk to the datastore provider
+directly.
 
 ## Building your own datastore provider
 
@@ -160,6 +234,8 @@ release flow now live under
 
 ## What to read next
 
-- [Configuration](/configuration): server and provider config structure
-- [Built-in Providers](/reference/built-in-providers): first-party datastore reference
-- [Custom IndexedDB Providers](/custom-providers/indexeddb): advanced authoring docs
+For the broader server and provider config model, continue to
+[Configuration](/configuration). For the catalog of first-party packages, see
+[Built-in Providers](/reference/built-in-providers). If you want to implement
+the contract yourself, read
+[Custom IndexedDB Providers](/custom-providers/indexeddb).

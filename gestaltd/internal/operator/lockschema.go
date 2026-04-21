@@ -18,8 +18,8 @@ const (
 	providerLockKindAudit          = "audit"
 	providerLockRuntimeExecutable  = providerReleaseRuntimeExecutable
 	providerLockRuntimeDeclarative = providerReleaseRuntimeDeclarative
-	providerLockRuntimeWebUI       = providerReleaseRuntimeWebUI
-	providerLockRuntimeAssets      = providerLockRuntimeWebUI
+	providerLockRuntimeUI          = providerReleaseRuntimeUI
+	providerLockRuntimeAssets      = providerLockRuntimeUI
 )
 
 type providerLockfile struct {
@@ -41,7 +41,8 @@ type providerLockBuckets struct {
 	Secrets        map[string]portableLockEntry `json:"secrets,omitempty"`
 	Telemetry      map[string]portableLockEntry `json:"telemetry,omitempty"`
 	Audit          map[string]portableLockEntry `json:"audit,omitempty"`
-	WebUI          map[string]portableLockEntry `json:"webui,omitempty"`
+	UI             map[string]portableLockEntry `json:"ui,omitempty"`
+	LegacyWebUI    map[string]portableLockEntry `json:"webui,omitempty"`
 }
 
 type portableLockEntry struct {
@@ -166,7 +167,7 @@ func providerLockKinds() []string {
 		providermanifestv1.KindSecrets,
 		providerLockKindTelemetry,
 		providerLockKindAudit,
-		providermanifestv1.KindWebUI,
+		providermanifestv1.KindUI,
 	}
 }
 
@@ -195,7 +196,7 @@ func lockEntriesForProviderKind(lock *Lockfile, kind string) map[string]LockEntr
 		return lock.Telemetry
 	case providerLockKindAudit:
 		return lock.Audit
-	case providermanifestv1.KindWebUI:
+	case providermanifestv1.KindUI:
 		return lock.UIs
 	default:
 		return nil
@@ -219,7 +220,7 @@ func providerLockfileFromLockfile(lock *Lockfile) *providerLockfile {
 			Secrets:        portableEntriesFromLockEntries(lock.Secrets, providermanifestv1.KindSecrets),
 			Telemetry:      portableEntriesFromLockEntries(lock.Telemetry, providerLockKindTelemetry),
 			Audit:          portableEntriesFromLockEntries(lock.Audit, providerLockKindAudit),
-			WebUI:          portableEntriesFromLockEntries(lock.UIs, providermanifestv1.KindWebUI),
+			UI:             portableEntriesFromLockEntries(lock.UIs, providermanifestv1.KindUI),
 		},
 	}
 }
@@ -239,7 +240,7 @@ func (lock *providerLockfile) toLockfile() *Lockfile {
 	runtimeLock.Secrets = lockEntriesFromPortableEntries(lock.Providers.Secrets)
 	runtimeLock.Telemetry = lockEntriesFromPortableEntries(lock.Providers.Telemetry)
 	runtimeLock.Audit = lockEntriesFromPortableEntries(lock.Providers.Audit)
-	runtimeLock.UIs = lockEntriesFromPortableEntries(lock.Providers.WebUI)
+	runtimeLock.UIs = lockEntriesFromPortableEntries(mergePortableLockEntries(lock.Providers.UI, lock.Providers.LegacyWebUI))
 	return runtimeLock
 }
 
@@ -294,7 +295,7 @@ func lockEntriesFromPortableEntries(entries map[string]portableLockEntry) map[st
 		runtimeEntries[name] = LockEntry{
 			Fingerprint: entry.InputDigest,
 			Package:     entry.Package,
-			Kind:        entry.Kind,
+			Kind:        providermanifestv1.NormalizeKind(entry.Kind),
 			Runtime:     entry.Runtime,
 			Source:      source,
 			Version:     entry.Version,

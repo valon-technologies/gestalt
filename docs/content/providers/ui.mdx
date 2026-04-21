@@ -1,25 +1,38 @@
-# Web UIs
+# UI
 
-Web UI providers are static asset bundles. Gestalt serves each configured
+UI providers are static asset bundles. Gestalt serves each configured
 bundle either directly from `providers.ui.<name>.path` or via
 `plugins.<name>.mountPath`. The built-in admin UI at `/admin` remains available
 regardless of whether public UI bundles are configured.
 
-## How web UI providers work
+## How UI providers work
 
-Unlike executable providers, a web UI provider is just a packaged asset root.
+Unlike executable providers, a UI provider is just a packaged asset root.
 `gestaltd` resolves the bundle, prepares it during `gestaltd init`, and then
 serves the pinned assets from the configured public path prefix when the server
 starts.
+
+## How UI routes use authorization
+
+UI authorization is route-based. When you bind an `authorizationPolicy` to a UI
+entry, Gestalt authenticates the caller, resolves their role under that policy,
+and compares it to the mounted UI manifest's `spec.routes[].allowedRoles`
+rules before serving the matching route or its static assets.
+
+Plugin-backed mounted UIs inherit more than just a mount path. They also
+inherit the owning plugin's dynamic grants when that plugin declares an
+`authorizationPolicy`, and they inherit the plugin's route-auth provider when
+the plugin declares `auth.provider`. Direct `providers.ui` bundles and the
+built-in admin UI keep using the server-wide auth configuration instead.
 
 ## First-party UI bundles
 
 First-party UI bundles live under
 [`valon-technologies/gestalt-providers/web`](https://github.com/valon-technologies/gestalt-providers/tree/main/web).
 
-| Bundle | Repository | Package path |
-| --- | --- | --- |
-| Default Web UI | [`web/default`](https://github.com/valon-technologies/gestalt-providers/tree/main/web/default) | `github.com/valon-technologies/gestalt-providers/web/default` |
+| Provider |
+| --- |
+| [`github.com/valon-technologies/gestalt-providers/web/default`](https://github.com/valon-technologies/gestalt-providers/tree/main/web/default) |
 
 ## Configuring `providers.ui`
 
@@ -84,14 +97,14 @@ Reference a published bundle in production:
 providers:
   ui:
     roadmap:
-      source: https://artifacts.example.com/webui/customer-roadmap-review/v0.0.1/provider-release.yaml
+      source: https://artifacts.example.com/ui/customer-roadmap-review/v0.0.1/provider-release.yaml
       path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_review
 ```
 
 When `authorizationPolicy` is set, Gestalt authenticates the caller, resolves
-their role from `authorization.policies.<policy>`, and checks the web
-UI manifest's `spec.routes[].allowedRoles` before serving the route or its
+their role from `authorization.policies.<policy>`, and checks the UI
+manifest's `spec.routes[].allowedRoles` before serving the route or its
 associated static assets.
 
 ## Locked deployments
@@ -121,14 +134,15 @@ Plugin-backed mounted UIs also inherit the owning plugin's route-auth provider
 when that plugin declares `auth.provider`; direct `providers.ui` bundles and
 the built-in admin UI continue using the server-wide auth provider.
 
-## Building your own web UI bundle
+## Building your own UI bundle
 
 Asset-root layout, build hooks, and release packaging now live under
-[Custom Providers > Web UIs](/custom-providers/web-uis) and
+[Custom Providers > UI](/custom-providers/ui) and
 [Custom Providers > Releasing](/custom-providers/releasing).
 
 ## What to read next
 
 - [Configuration](/configuration): `providers.ui`, `plugins.<name>.mountPath`, and headless deployments
-- [Client Web UI](/client/web): what the default client exposes
-- [Custom Web UIs](/custom-providers/web-uis): advanced authoring docs
+- [Client UI](/client/web): what the default client exposes
+- [Authorization](/providers/authorization): route and role semantics
+- [Custom UI](/custom-providers/ui): advanced authoring docs

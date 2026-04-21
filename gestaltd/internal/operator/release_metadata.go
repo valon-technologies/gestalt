@@ -27,7 +27,7 @@ const (
 	providerReleaseSchemaVersion      = 1
 	providerReleaseRuntimeExecutable  = "executable"
 	providerReleaseRuntimeDeclarative = "declarative"
-	providerReleaseRuntimeWebUI       = "webui"
+	providerReleaseRuntimeUI          = "ui"
 	providerReleaseMetadataMaxBytes   = 4 << 20
 	httpAcceptHeader                  = "Accept"
 	httpAcceptOctetStream             = "application/octet-stream"
@@ -104,22 +104,22 @@ func validateProviderReleaseMetadata(metadata *providerReleaseMetadata) error {
 		return fmt.Errorf("provider release version: %w", err)
 	}
 	switch metadata.Kind {
-	case providermanifestv1.KindPlugin, providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindSecrets, providermanifestv1.KindWebUI:
+	case providermanifestv1.KindPlugin, providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindSecrets, providermanifestv1.KindUI:
 	default:
 		return fmt.Errorf("provider release kind %q is not supported", metadata.Kind)
 	}
 	switch metadata.Runtime {
 	case providerReleaseRuntimeExecutable:
-		if metadata.Kind == providermanifestv1.KindWebUI {
+		if metadata.Kind == providermanifestv1.KindUI {
 			return fmt.Errorf("provider release runtime %q is invalid for kind %q", metadata.Runtime, metadata.Kind)
 		}
 	case providerReleaseRuntimeDeclarative:
 		if metadata.Kind != providermanifestv1.KindPlugin {
 			return fmt.Errorf("provider release runtime %q is only valid for kind %q", metadata.Runtime, providermanifestv1.KindPlugin)
 		}
-	case providerReleaseRuntimeWebUI:
-		if metadata.Kind != providermanifestv1.KindWebUI {
-			return fmt.Errorf("provider release runtime %q is only valid for kind %q", metadata.Runtime, providermanifestv1.KindWebUI)
+	case providerReleaseRuntimeUI:
+		if metadata.Kind != providermanifestv1.KindUI {
+			return fmt.Errorf("provider release runtime %q is only valid for kind %q", metadata.Runtime, providermanifestv1.KindUI)
 		}
 	default:
 		return fmt.Errorf("provider release runtime %q is not supported", metadata.Runtime)
@@ -380,8 +380,8 @@ func lockEntryRuntime(entry LockEntry, fallbackKind string) string {
 		return value
 	}
 	switch lockEntryKind(entry, fallbackKind) {
-	case providermanifestv1.KindWebUI:
-		return providerReleaseRuntimeWebUI
+	case providermanifestv1.KindUI:
+		return providerReleaseRuntimeUI
 	default:
 		return providerReleaseRuntimeExecutable
 	}
@@ -389,8 +389,8 @@ func lockEntryRuntime(entry LockEntry, fallbackKind string) string {
 
 func releaseRuntimeForManifest(manifest *providermanifestv1.Manifest, kind string) string {
 	switch kind {
-	case providermanifestv1.KindWebUI:
-		return providerReleaseRuntimeWebUI
+	case providermanifestv1.KindUI:
+		return providerReleaseRuntimeUI
 	case providermanifestv1.KindPlugin:
 		if manifest != nil && manifest.IsDeclarativeOnlyProvider() {
 			return providerReleaseRuntimeDeclarative

@@ -85,7 +85,7 @@ var validManifestKinds = map[string]bool{
 	providermanifestv1.KindS3:             true,
 	providermanifestv1.KindWorkflow:       true,
 	providermanifestv1.KindSecrets:        true,
-	providermanifestv1.KindWebUI:          true,
+	providermanifestv1.KindUI:             true,
 }
 
 func ManifestKind(manifest *providermanifestv1.Manifest) (string, error) {
@@ -97,7 +97,7 @@ func ManifestKind(manifest *providermanifestv1.Manifest) (string, error) {
 	}
 	kind := providermanifestv1.NormalizeKind(manifest.Kind)
 	if !validManifestKinds[manifest.Kind] && !validManifestKinds[kind] {
-		return "", fmt.Errorf("manifest kind %q is not valid; expected one of plugin, authentication, authorization, indexeddb, cache, s3, workflow, secrets, or webui", manifest.Kind)
+		return "", fmt.Errorf("manifest kind %q is not valid; expected one of plugin, authentication, authorization, indexeddb, cache, s3, workflow, secrets, or ui", manifest.Kind)
 	}
 	manifest.Kind = kind
 	return kind, nil
@@ -212,17 +212,17 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 				return err
 			}
 		}
-	case providermanifestv1.KindWebUI:
+	case providermanifestv1.KindUI:
 		if manifest.Entrypoint != nil {
-			return fmt.Errorf("webui manifests may not define entrypoints")
+			return fmt.Errorf("ui manifests may not define entrypoints")
 		}
 		if spec == nil || spec.AssetRoot == "" {
-			return fmt.Errorf("spec.assetRoot is required for webui manifests")
+			return fmt.Errorf("spec.assetRoot is required for ui manifests")
 		}
 		if err := validateRelativePackagePath(spec.AssetRoot, "spec.assetRoot"); err != nil {
 			return err
 		}
-		if err := validateWebUIRoutes(spec.Routes); err != nil {
+		if err := validateUIRoutes(spec.Routes); err != nil {
 			return err
 		}
 	default:
@@ -258,10 +258,10 @@ func validateOwnedUI(ownedUI *providermanifestv1.OwnedUI, sourceMode bool) error
 	return fmt.Errorf("spec.ui.path is required when spec.ui is set")
 }
 
-func validateWebUIRoutes(routes []providermanifestv1.WebUIRoute) error {
+func validateUIRoutes(routes []providermanifestv1.UIRoute) error {
 	seenPaths := make(map[string]struct{}, len(routes))
 	for i := range routes {
-		normalized, err := NormalizeWebUIRoutePath(fmt.Sprintf("spec.routes[%d].path", i), routes[i].Path)
+		normalized, err := NormalizeUIRoutePath(fmt.Sprintf("spec.routes[%d].path", i), routes[i].Path)
 		if err != nil {
 			return err
 		}
@@ -271,7 +271,7 @@ func validateWebUIRoutes(routes []providermanifestv1.WebUIRoute) error {
 		}
 		seenPaths[normalized] = struct{}{}
 
-		roles, err := NormalizeWebUIAllowedRoles(fmt.Sprintf("spec.routes[%d].allowedRoles", i), routes[i].AllowedRoles)
+		roles, err := NormalizeUIAllowedRoles(fmt.Sprintf("spec.routes[%d].allowedRoles", i), routes[i].AllowedRoles)
 		if err != nil {
 			return err
 		}
@@ -280,7 +280,7 @@ func validateWebUIRoutes(routes []providermanifestv1.WebUIRoute) error {
 	return nil
 }
 
-func ValidatePolicyBoundWebUIRoutes(routes []providermanifestv1.WebUIRoute) error {
+func ValidatePolicyBoundUIRoutes(routes []providermanifestv1.UIRoute) error {
 	if len(routes) == 0 {
 		return fmt.Errorf("policy-bound UIs must declare at least one route")
 	}
@@ -289,7 +289,7 @@ func ValidatePolicyBoundWebUIRoutes(routes []providermanifestv1.WebUIRoute) erro
 		if len(routes[i].AllowedRoles) == 0 {
 			return fmt.Errorf("spec.routes[%d].allowedRoles must not be empty", i)
 		}
-		if WebUIRouteMatches(routes[i].Path, "/") {
+		if UIRouteMatches(routes[i].Path, "/") {
 			coversRoot = true
 		}
 	}

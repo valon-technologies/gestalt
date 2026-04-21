@@ -38,14 +38,14 @@ const (
 	RouteProfileManagement
 )
 
-type MountedWebUIRoute = providermanifestv1.WebUIRoute
+type MountedUIRoute = providermanifestv1.UIRoute
 
-type MountedWebUI struct {
+type MountedUI struct {
 	Name                string
 	Path                string
 	PluginName          string
 	AuthorizationPolicy string
-	Routes              []MountedWebUIRoute
+	Routes              []MountedUIRoute
 	Handler             http.Handler
 	builtInAdmin        bool
 }
@@ -115,7 +115,7 @@ type Server struct {
 	prometheusMetrics      http.Handler
 	mcpHandler             http.Handler
 	mountedHTTPBindings    []MountedHTTPBinding
-	mountedWebUIs          []MountedWebUI
+	mountedUIs             []MountedUI
 	adminRoute             AdminRouteConfig
 	adminUI                http.Handler
 	routeProfile           RouteProfile
@@ -156,7 +156,7 @@ type Config struct {
 	Readiness             ReadinessChecker
 	PrometheusMetrics     http.Handler
 	MCPHandler            http.Handler
-	MountedWebUIs         []MountedWebUI
+	MountedUIs            []MountedUI
 	Admin                 AdminRouteConfig
 	AdminUI               http.Handler
 	BuiltinAdminUI        *BuiltinAdminUIOptions
@@ -204,18 +204,18 @@ func New(cfg Config) (*Server, error) {
 	if err := validateAdminRouteRuntime(adminRoute, noAuth, cfg.PublicBaseURL, cfg.ManagementBaseURL, cfg.RouteProfile); err != nil {
 		return nil, fmt.Errorf("validate admin route: %w", err)
 	}
-	mountedWebUIs := cfg.MountedWebUIs
-	if len(mountedWebUIs) == 0 && len(cfg.ProviderUIs) != 0 {
-		mountedWebUIs, err = mountedWebUIsFromEntries(cfg.ProviderUIs)
+	mountedUIs := cfg.MountedUIs
+	if len(mountedUIs) == 0 && len(cfg.ProviderUIs) != 0 {
+		mountedUIs, err = mountedUIsFromEntries(cfg.ProviderUIs)
 		if err != nil {
 			return nil, fmt.Errorf("resolve mounted ui handlers: %w", err)
 		}
 	}
-	mountedWebUIs, err = normalizeMountedWebUIs(mountedWebUIs)
+	mountedUIs, err = normalizeMountedUIs(mountedUIs)
 	if err != nil {
 		return nil, err
 	}
-	mountedHTTPBindings, err := mountedHTTPBindingsFromEntries(cfg.PluginDefs, cfg.Providers, mountedWebUIs)
+	mountedHTTPBindings, err := mountedHTTPBindingsFromEntries(cfg.PluginDefs, cfg.Providers, mountedUIs)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +299,7 @@ func New(cfg Config) (*Server, error) {
 		prometheusMetrics:      cfg.PrometheusMetrics,
 		mcpHandler:             cfg.MCPHandler,
 		mountedHTTPBindings:    mountedHTTPBindings,
-		mountedWebUIs:          mountedWebUIs,
+		mountedUIs:             mountedUIs,
 		adminRoute:             adminRoute,
 		adminUI:                adminUI,
 		routeProfile:           cfg.RouteProfile,

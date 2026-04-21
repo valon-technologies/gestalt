@@ -180,7 +180,7 @@ func resolvePreparedInstallBuildKind(root string, manifest *providermanifestv1.M
 			return "", err
 		}
 	}
-	if kind == providermanifestv1.KindWebUI {
+	if kind == providermanifestv1.KindUI {
 		return "", nil
 	}
 

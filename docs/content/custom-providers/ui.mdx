@@ -1,27 +1,30 @@
 import { Tabs } from 'nextra/components'
 
-# Web UIs
+# UI
 
-This page covers building custom web UI bundles. If you only need to configure
-which UI a deployment serves, use [Providers > Web UIs](/providers/web-uis).
+This page covers building custom UI bundles. If you only need to configure
+which UI a deployment serves, use [Providers > UI](/providers/ui).
 
-Web UI bundles are static asset packages. Gestalt serves them under the path
+UI bundles are static asset packages. Gestalt serves them under the path
 prefixes configured in `providers.ui.<name>.path`. The built-in admin UI at
 `/admin` remains available regardless of whether a custom UI bundle is
 configured.
 
-A UI bundle is not a plugin in the executable sense. It contains no server-side code. Gestalt simply serves the static files from the asset root directory. The bundle talks to Gestalt through the same HTTP API and MCP endpoints that any other client would use.
+A UI bundle is not a plugin in the executable sense. It contains no server-side
+code. Gestalt simply serves the static files from the asset root directory. The
+bundle talks to Gestalt through the same HTTP API and MCP endpoints that any
+other client would use.
 
 ## Manifest
 
-The Default Web UI manifest declares `spec.assetRoot`, which points to the directory containing the built static assets. The source field identifies the provider in the registry.
+The Default UI manifest declares `spec.assetRoot`, which points to the directory containing the built static assets. The source field identifies the provider in the registry.
 
 ```yaml
-kind: webui
+kind: ui
 source: github.com/valon-technologies/gestalt-providers/web/default
 version: 0.0.1
-displayName: Default Web UI
-description: Default Gestalt web UI bundle.
+displayName: Default UI
+description: Default Gestalt UI bundle.
 release:
   build:
     command:
@@ -48,10 +51,10 @@ declare non-empty `allowedRoles`.
 
 If your UI needs a build step before packaging, use `release.build` to run it automatically during `gestaltd provider release`. This runs before source-manifest preparation, so the built assets are included in the release archive.
 
-The Default Web UI uses a shell script that runs `npm ci && npm run build` to produce the static output:
+The Default UI uses a shell script that runs `npm ci && npm run build` to produce the static output:
 
 ```yaml
-kind: webui
+kind: ui
 source: github.com/valon-technologies/gestalt-providers/web/default
 version: 0.0.1
 release:
@@ -86,7 +89,7 @@ For production, reference a published release metadata URL:
 providers:
   ui:
     dashboard:
-      source: https://artifacts.example.com/webui/default/v0.0.1/provider-release.yaml
+      source: https://artifacts.example.com/ui/default/v0.0.1/provider-release.yaml
       path: /dashboard
       authorizationPolicy: dashboard_users
 ```

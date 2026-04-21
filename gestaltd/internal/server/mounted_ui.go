@@ -16,13 +16,13 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
-	"github.com/valon-technologies/gestalt/server/internal/webui"
+	"github.com/valon-technologies/gestalt/server/internal/ui"
 )
 
 const browserLoginPath = "/api/v1/auth/login"
 const adminUIDirEnv = "GESTALTD_ADMIN_UI_DIR"
 
-type mountedWebUINavigationPathResolver interface {
+type mountedUINavigationPathResolver interface {
 	NavigationPathForRequest(string) (string, bool)
 }
 
@@ -42,7 +42,7 @@ func normalizeAdminRouteConfig(admin AdminRouteConfig) (AdminRouteConfig, error)
 		return admin, nil
 	}
 
-	roles, err := providerpkg.NormalizeWebUIAllowedRoles("admin allowedRoles", admin.AllowedRoles)
+	roles, err := providerpkg.NormalizeUIAllowedRoles("admin allowedRoles", admin.AllowedRoles)
 	if err != nil {
 		return AdminRouteConfig{}, err
 	}
@@ -96,14 +96,14 @@ func parseAbsoluteBaseURL(label, raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func mountedWebUIsFromEntries(entries map[string]*config.UIEntry) ([]MountedWebUI, error) {
+func mountedUIsFromEntries(entries map[string]*config.UIEntry) ([]MountedUI, error) {
 	names := make([]string, 0, len(entries))
 	for name := range entries {
 		names = append(names, name)
 	}
 	slices.Sort(names)
 
-	mounted := make([]MountedWebUI, 0, len(names))
+	mounted := make([]MountedUI, 0, len(names))
 	for _, name := range names {
 		entry := entries[name]
 		if entry == nil {
@@ -113,23 +113,23 @@ func mountedWebUIsFromEntries(entries map[string]*config.UIEntry) ([]MountedWebU
 			return nil, fmt.Errorf("ui %q configured but asset root not resolved", name)
 		}
 
-		handler, err := webui.DirHandler(entry.ResolvedAssetRoot)
+		handler, err := ui.DirHandler(entry.ResolvedAssetRoot)
 		if err != nil {
 			return nil, fmt.Errorf("ui %q: %w", name, err)
 		}
 
-		routes := []MountedWebUIRoute(nil)
+		routes := []MountedUIRoute(nil)
 		if spec := entry.ManifestSpec(); spec != nil && len(spec.Routes) > 0 {
-			routes = make([]MountedWebUIRoute, 0, len(spec.Routes))
+			routes = make([]MountedUIRoute, 0, len(spec.Routes))
 			for _, route := range spec.Routes {
-				routes = append(routes, MountedWebUIRoute{
+				routes = append(routes, MountedUIRoute{
 					Path:         route.Path,
 					AllowedRoles: append([]string(nil), route.AllowedRoles...),
 				})
 			}
 		}
 
-		mounted = append(mounted, MountedWebUI{
+		mounted = append(mounted, MountedUI{
 			Name:                name,
 			Path:                entry.Path,
 			PluginName:          entry.OwnerPlugin,
@@ -157,14 +157,14 @@ func resolveBuiltinAdminUI(opts BuiltinAdminUIOptions) (http.Handler, error) {
 	return handler, nil
 }
 
-func normalizeMountedWebUIs(mounted []MountedWebUI) ([]MountedWebUI, error) {
+func normalizeMountedUIs(mounted []MountedUI) ([]MountedUI, error) {
 	if len(mounted) == 0 {
 		return nil, nil
 	}
 
-	normalized := append([]MountedWebUI(nil), mounted...)
+	normalized := append([]MountedUI(nil), mounted...)
 	for i := range normalized {
-		routes, err := normalizeMountedWebUIRoutes(normalized[i].Routes)
+		routes, err := normalizeMountedUIRoutes(normalized[i].Routes)
 		if err != nil {
 			name := normalized[i].Name
 			if name == "" {
@@ -173,7 +173,7 @@ func normalizeMountedWebUIs(mounted []MountedWebUI) ([]MountedWebUI, error) {
 			return nil, fmt.Errorf("normalize mounted ui %q routes: %w", name, err)
 		}
 		normalized[i].Routes = routes
-		if err := validatePolicyBoundMountedWebUIRoutes(normalized[i]); err != nil {
+		if err := validatePolicyBoundMountedUIRoutes(normalized[i]); err != nil {
 			name := normalized[i].Name
 			if name == "" {
 				name = normalized[i].Path
@@ -184,15 +184,15 @@ func normalizeMountedWebUIs(mounted []MountedWebUI) ([]MountedWebUI, error) {
 	return normalized, nil
 }
 
-func normalizeMountedWebUIRoutes(routes []MountedWebUIRoute) ([]MountedWebUIRoute, error) {
+func normalizeMountedUIRoutes(routes []MountedUIRoute) ([]MountedUIRoute, error) {
 	if len(routes) == 0 {
 		return nil, nil
 	}
 
-	normalized := append([]MountedWebUIRoute(nil), routes...)
+	normalized := append([]MountedUIRoute(nil), routes...)
 	seenPaths := make(map[string]struct{}, len(normalized))
 	for i := range normalized {
-		routePath, err := providerpkg.NormalizeWebUIRoutePath(fmt.Sprintf("route %d path", i), normalized[i].Path)
+		routePath, err := providerpkg.NormalizeUIRoutePath(fmt.Sprintf("route %d path", i), normalized[i].Path)
 		if err != nil {
 			return nil, err
 		}
@@ -202,16 +202,16 @@ func normalizeMountedWebUIRoutes(routes []MountedWebUIRoute) ([]MountedWebUIRout
 		}
 		seenPaths[routePath] = struct{}{}
 
-		roles, err := providerpkg.NormalizeWebUIAllowedRoles(fmt.Sprintf("route %d allowedRoles", i), normalized[i].AllowedRoles)
+		roles, err := providerpkg.NormalizeUIAllowedRoles(fmt.Sprintf("route %d allowedRoles", i), normalized[i].AllowedRoles)
 		if err != nil {
 			return nil, err
 		}
 		normalized[i].AllowedRoles = roles
 	}
 
-	slices.SortFunc(normalized, func(a, b MountedWebUIRoute) int {
-		aLen, aWildcard := mountedWebUIRouteSpecificity(a.Path)
-		bLen, bWildcard := mountedWebUIRouteSpecificity(b.Path)
+	slices.SortFunc(normalized, func(a, b MountedUIRoute) int {
+		aLen, aWildcard := mountedUIRouteSpecificity(a.Path)
+		bLen, bWildcard := mountedUIRouteSpecificity(b.Path)
 		if aLen != bLen {
 			return bLen - aLen
 		}
@@ -226,7 +226,7 @@ func normalizeMountedWebUIRoutes(routes []MountedWebUIRoute) ([]MountedWebUIRout
 	return normalized, nil
 }
 
-func validatePolicyBoundMountedWebUIRoutes(mounted MountedWebUI) error {
+func validatePolicyBoundMountedUIRoutes(mounted MountedUI) error {
 	if mounted.AuthorizationPolicy == "" {
 		return nil
 	}
@@ -238,7 +238,7 @@ func validatePolicyBoundMountedWebUIRoutes(mounted MountedWebUI) error {
 		if len(mounted.Routes[i].AllowedRoles) == 0 {
 			return fmt.Errorf("route %q allowedRoles must not be empty", mounted.Routes[i].Path)
 		}
-		if providerpkg.WebUIRouteMatches(mounted.Routes[i].Path, "/") {
+		if providerpkg.UIRouteMatches(mounted.Routes[i].Path, "/") {
 			coversRoot = true
 		}
 	}
@@ -248,7 +248,7 @@ func validatePolicyBoundMountedWebUIRoutes(mounted MountedWebUI) error {
 	return nil
 }
 
-func (s *Server) mountedWebUIHandler(mounted MountedWebUI) http.Handler {
+func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 	inner := mounted.Handler
 	if inner == nil {
 		return http.NotFoundHandler()
@@ -256,25 +256,25 @@ func (s *Server) mountedWebUIHandler(mounted MountedWebUI) http.Handler {
 	if mounted.Path != "/" {
 		inner = http.StripPrefix(mounted.Path, inner)
 	}
-	return s.protectedUIHandler(mounted, inner, s.redirectMountedWebUILogin)
+	return s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin)
 }
 
 func (s *Server) adminUIHandler() http.Handler {
 	if s.adminUI == nil {
 		return http.NotFoundHandler()
 	}
-	mounted := s.adminMountedWebUI()
+	mounted := s.adminMountedUI()
 	inner := http.StripPrefix(mounted.Path, mounted.Handler)
 	return s.protectedUIHandler(mounted, inner, s.redirectAdminUILogin)
 }
 
-func (s *Server) adminMountedWebUI() MountedWebUI {
-	return MountedWebUI{
+func (s *Server) adminMountedUI() MountedUI {
+	return MountedUI{
 		Name:                "builtin_admin",
 		Path:                "/admin",
 		AuthorizationPolicy: s.adminRoute.AuthorizationPolicy,
 		builtInAdmin:        true,
-		Routes: []MountedWebUIRoute{{
+		Routes: []MountedUIRoute{{
 			Path:         "/*",
 			AllowedRoles: append([]string(nil), s.adminRoute.AllowedRoles...),
 		}},
@@ -282,7 +282,7 @@ func (s *Server) adminMountedWebUI() MountedWebUI {
 	}
 }
 
-func (s *Server) protectedUIHandler(mounted MountedWebUI, inner http.Handler, redirectLogin protectedUILoginRedirect) http.Handler {
+func (s *Server) protectedUIHandler(mounted MountedUI, inner http.Handler, redirectLogin protectedUILoginRedirect) http.Handler {
 	if mounted.AuthorizationPolicy == "" {
 		return inner
 	}
@@ -296,13 +296,13 @@ func (s *Server) protectedUIHandler(mounted MountedWebUI, inner http.Handler, re
 	})
 }
 
-func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Request, mounted MountedWebUI, redirectLogin protectedUILoginRedirect) (context.Context, bool) {
+func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Request, mounted MountedUI, redirectLogin protectedUILoginRedirect) (context.Context, bool) {
 	if s.authorizer == nil {
 		writeError(w, http.StatusInternalServerError, "app authorization is unavailable")
 		return nil, false
 	}
 
-	p, authenticated, err := s.resolveMountedWebUIPrincipal(r, mounted)
+	p, authenticated, err := s.resolveMountedUIPrincipal(r, mounted)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
 		return nil, false
@@ -337,7 +337,7 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 		return nil, false
 	}
 	route, matched := mounted.routeForRequestPath(r.URL.Path)
-	if !matched || len(route.AllowedRoles) == 0 || !mountedWebUIRoleAllowed(access.Role, route.AllowedRoles) {
+	if !matched || len(route.AllowedRoles) == 0 || !mountedUIRoleAllowed(access.Role, route.AllowedRoles) {
 		writeError(w, http.StatusForbidden, "app access denied")
 		return nil, false
 	}
@@ -352,8 +352,8 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 	return ctx, true
 }
 
-func (s *Server) resolveMountedWebUIPrincipal(r *http.Request, mounted MountedWebUI) (*principal.Principal, bool, error) {
-	auth, err := s.mountedWebUIAuthRuntime(mounted)
+func (s *Server) resolveMountedUIPrincipal(r *http.Request, mounted MountedUI) (*principal.Principal, bool, error) {
+	auth, err := s.mountedUIAuthRuntime(mounted)
 	if err != nil {
 		return nil, false, err
 	}
@@ -378,7 +378,7 @@ func (s *Server) resolveMountedWebUIPrincipal(r *http.Request, mounted MountedWe
 	}
 }
 
-func (s *Server) redirectMountedWebUILogin(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) redirectMountedUILogin(w http.ResponseWriter, r *http.Request) error {
 	target := browserLoginPath + "?next=" + url.QueryEscape(r.URL.RequestURI())
 	http.Redirect(w, r, target, http.StatusFound)
 	return nil
@@ -386,7 +386,7 @@ func (s *Server) redirectMountedWebUILogin(w http.ResponseWriter, r *http.Reques
 
 func (s *Server) redirectAdminUILogin(w http.ResponseWriter, r *http.Request) error {
 	if s.routeProfile != RouteProfileManagement {
-		return s.redirectMountedWebUILogin(w, r)
+		return s.redirectMountedUILogin(w, r)
 	}
 	if s.publicBaseURL == "" {
 		return fmt.Errorf("admin login redirect requires server.baseUrl")
@@ -400,17 +400,17 @@ func (s *Server) redirectAdminUILogin(w http.ResponseWriter, r *http.Request) er
 	return nil
 }
 
-func (m MountedWebUI) routeForRequestPath(requestPath string) (MountedWebUIRoute, bool) {
+func (m MountedUI) routeForRequestPath(requestPath string) (MountedUIRoute, bool) {
 	var (
-		best        MountedWebUIRoute
+		best        MountedUIRoute
 		bestMatched bool
 		bestLen     int
 		bestWild    bool
 	)
 	for _, routePath := range m.authorizationPathsForRequest(requestPath) {
 		for _, route := range m.Routes {
-			if providerpkg.WebUIRouteMatches(route.Path, routePath) {
-				routeLen, routeWild := mountedWebUIRouteSpecificity(route.Path)
+			if providerpkg.UIRouteMatches(route.Path, routePath) {
+				routeLen, routeWild := mountedUIRouteSpecificity(route.Path)
 				if !bestMatched || routeLen > bestLen || (routeLen == bestLen && bestWild && !routeWild) {
 					best = route
 					bestMatched = true
@@ -423,7 +423,7 @@ func (m MountedWebUI) routeForRequestPath(requestPath string) (MountedWebUIRoute
 	return best, bestMatched
 }
 
-func (m MountedWebUI) authorizationPathsForRequest(requestPath string) []string {
+func (m MountedUI) authorizationPathsForRequest(requestPath string) []string {
 	relativePath := requestPath
 	if m.Path != "/" {
 		relativePath = strings.TrimPrefix(requestPath, m.Path)
@@ -434,25 +434,25 @@ func (m MountedWebUI) authorizationPathsForRequest(requestPath string) []string 
 	if !strings.HasPrefix(relativePath, "/") {
 		relativePath = "/" + relativePath
 	}
-	requestAuthorizationPath := cleanMountedWebUIAuthorizationPath(relativePath)
+	requestAuthorizationPath := cleanMountedUIAuthorizationPath(relativePath)
 	paths := []string{requestAuthorizationPath}
-	if resolver, ok := m.Handler.(mountedWebUINavigationPathResolver); ok {
+	if resolver, ok := m.Handler.(mountedUINavigationPathResolver); ok {
 		if routePath, navigation := resolver.NavigationPathForRequest(relativePath); navigation {
-			return appendMountedWebUIAuthorizationPath(paths, cleanMountedWebUIAuthorizationPath(routePath))
+			return appendMountedUIAuthorizationPath(paths, cleanMountedUIAuthorizationPath(routePath))
 		}
-		for path := cleanMountedWebUIAuthorizationPath(stdpath.Dir(relativePath)); ; {
-			paths = appendMountedWebUIAuthorizationPath(paths, path)
+		for path := cleanMountedUIAuthorizationPath(stdpath.Dir(relativePath)); ; {
+			paths = appendMountedUIAuthorizationPath(paths, path)
 			if path == "/" {
 				break
 			}
-			path = cleanMountedWebUIAuthorizationPath(stdpath.Dir(path))
+			path = cleanMountedUIAuthorizationPath(stdpath.Dir(path))
 		}
 		return paths
 	}
 	return paths
 }
 
-func cleanMountedWebUIAuthorizationPath(routePath string) string {
+func cleanMountedUIAuthorizationPath(routePath string) string {
 	routePath = stdpath.Clean(routePath)
 	if routePath == "." {
 		return "/"
@@ -460,21 +460,21 @@ func cleanMountedWebUIAuthorizationPath(routePath string) string {
 	return routePath
 }
 
-func appendMountedWebUIAuthorizationPath(paths []string, path string) []string {
+func appendMountedUIAuthorizationPath(paths []string, path string) []string {
 	if len(paths) == 0 || paths[len(paths)-1] != path {
 		return append(paths, path)
 	}
 	return paths
 }
 
-func mountedWebUIRouteSpecificity(routePath string) (int, bool) {
+func mountedUIRouteSpecificity(routePath string) (int, bool) {
 	if strings.HasSuffix(routePath, "/*") {
 		return len(strings.TrimSuffix(routePath, "/*")), true
 	}
 	return len(routePath), false
 }
 
-func mountedWebUIRoleAllowed(role string, allowedRoles []string) bool {
+func mountedUIRoleAllowed(role string, allowedRoles []string) bool {
 	role = strings.TrimSpace(role)
 	if role == "" {
 		return false

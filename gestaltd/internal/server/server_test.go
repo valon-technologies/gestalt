@@ -52,7 +52,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	"github.com/valon-technologies/gestalt/server/internal/webui"
+	"github.com/valon-technologies/gestalt/server/internal/ui"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -1098,7 +1098,7 @@ func TestHealthCheck(t *testing.T) {
 	}
 }
 
-func TestMountedWebUIRoutes(t *testing.T) {
+func TestMountedUIRoutes(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1111,13 +1111,13 @@ func TestMountedWebUIRoutes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("console.log('sample')"), 0o644); err != nil {
 		t.Fatalf("WriteFile app.js: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Path:    "/sample-portal",
 			Handler: handler,
 		}}
@@ -1184,7 +1184,7 @@ func TestMountedWebUIRoutes(t *testing.T) {
 	}
 }
 
-func TestMountedWebUIRoutes_PrefersNestedMount(t *testing.T) {
+func TestMountedUIRoutes_PrefersNestedMount(t *testing.T) {
 	t.Parallel()
 
 	parentDir := t.TempDir()
@@ -1196,17 +1196,17 @@ func TestMountedWebUIRoutes_PrefersNestedMount(t *testing.T) {
 		t.Fatalf("WriteFile child index.html: %v", err)
 	}
 
-	parentHandler, err := testutilWebUIHandler(parentDir)
+	parentHandler, err := testutilUIHandler(parentDir)
 	if err != nil {
-		t.Fatalf("parent webui handler: %v", err)
+		t.Fatalf("parent ui handler: %v", err)
 	}
-	childHandler, err := testutilWebUIHandler(childDir)
+	childHandler, err := testutilUIHandler(childDir)
 	if err != nil {
-		t.Fatalf("child webui handler: %v", err)
+		t.Fatalf("child ui handler: %v", err)
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.MountedWebUIs = []server.MountedWebUI{
+		cfg.MountedUIs = []server.MountedUI{
 			{
 				Path:    "/workplace-hub",
 				Handler: parentHandler,
@@ -1252,7 +1252,7 @@ func TestMountedWebUIRoutes_PrefersNestedMount(t *testing.T) {
 	}
 }
 
-func TestMountedWebUIRoutes_HumanAuthorization(t *testing.T) {
+func TestMountedUIRoutes_HumanAuthorization(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1265,9 +1265,9 @@ func TestMountedWebUIRoutes_HumanAuthorization(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("console.log('protected-sample')"), 0o644); err != nil {
 		t.Fatalf("WriteFile app.js: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -1299,11 +1299,11 @@ func TestMountedWebUIRoutes_HumanAuthorization(t *testing.T) {
 		}
 		cfg.Services = svc
 		cfg.Authorizer = legacy
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
 			AuthorizationPolicy: "sample_policy",
-			Routes: []server.MountedWebUIRoute{
+			Routes: []server.MountedUIRoute{
 				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
 				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
 			},
@@ -1387,16 +1387,16 @@ func TestMountedWebUIRoutes_HumanAuthorization(t *testing.T) {
 	}
 }
 
-func TestMountedWebUIRoutes_HumanAuthorization_UsesPluginRouteAuthOverride(t *testing.T) {
+func TestMountedUIRoutes_HumanAuthorization_UsesPluginRouteAuthOverride(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile index.html: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -1452,12 +1452,12 @@ func TestMountedWebUIRoutes_HumanAuthorization_UsesPluginRouteAuthOverride(t *te
 				RouteAuth:           &config.RouteAuthDef{Provider: "alt"},
 			},
 		}
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
 			PluginName:          "sample_portal",
 			AuthorizationPolicy: "sample_policy",
-			Routes: []server.MountedWebUIRoute{
+			Routes: []server.MountedUIRoute{
 				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
 			},
 			Handler: handler,
@@ -1535,16 +1535,16 @@ func TestMountedWebUIRoutes_HumanAuthorization_UsesPluginRouteAuthOverride(t *te
 	}
 }
 
-func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewerWithPluginName(t *testing.T) {
+func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewerWithPluginName(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile index.html: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -1577,12 +1577,12 @@ func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUs
 		}
 		cfg.Services = svc
 		cfg.Authorizer = legacy
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
 			PluginName:          "sample_portal",
 			AuthorizationPolicy: "sample_policy",
-			Routes: []server.MountedWebUIRoute{
+			Routes: []server.MountedUIRoute{
 				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
 				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
 			},
@@ -1639,16 +1639,16 @@ func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUs
 	}
 }
 
-func TestMountedWebUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
+func TestMountedUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile index.html: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -1688,12 +1688,12 @@ func TestMountedWebUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 		}
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
 			PluginName:          "sample_portal",
 			AuthorizationPolicy: "sample_policy",
-			Routes: []server.MountedWebUIRoute{
+			Routes: []server.MountedUIRoute{
 				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
 				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
 			},
@@ -1750,16 +1750,16 @@ func TestMountedWebUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 	}
 }
 
-func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewerWithoutPluginName(t *testing.T) {
+func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewerWithoutPluginName(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile index.html: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -1790,11 +1790,11 @@ func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUs
 		}
 		cfg.Services = svc
 		cfg.Authorizer = legacy
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
 			AuthorizationPolicy: "sample_policy",
-			Routes: []server.MountedWebUIRoute{
+			Routes: []server.MountedUIRoute{
 				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
 				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
 			},
@@ -1832,9 +1832,9 @@ func TestBuiltInAdminRoute_HumanAuthorization(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "theme.css"), []byte("body{background:#eee;}"), 0o644); err != nil {
 		t.Fatalf("WriteFile theme.css: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -1971,9 +1971,9 @@ func TestBuiltInAdminRoute_HumanAuthorizationOnManagementProfile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-admin-shell</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile index.html: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -2095,9 +2095,9 @@ func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-admin-shell</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile index.html: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
@@ -3799,12 +3799,12 @@ func TestAdminAPI_AdminAuthorizationPutFailureReturnsServerError(t *testing.T) {
 	}
 }
 
-func TestMountedWebUIRoutesHiddenOnManagementProfile(t *testing.T) {
+func TestMountedUIRoutesHiddenOnManagementProfile(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfileManagement
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Path:    "/sample-portal",
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("unexpected")) }),
 		}}
@@ -3821,10 +3821,10 @@ func TestMountedWebUIRoutesHiddenOnManagementProfile(t *testing.T) {
 	}
 }
 
-func TestMountedWebUIAuthorizationPolicyRequiresExplicitRouteCoverage(t *testing.T) {
+func TestMountedUIAuthorizationPolicyRequiresExplicitRouteCoverage(t *testing.T) {
 	t.Parallel()
 
-	makeConfig := func(mounted server.MountedWebUI) server.Config {
+	makeConfig := func(mounted server.MountedUI) server.Config {
 		svc := coretesting.NewStubServices(t)
 		authz := mustAuthorizer(t, config.AuthorizationConfig{
 			Policies: map[string]config.HumanPolicyDef{
@@ -3839,12 +3839,12 @@ func TestMountedWebUIAuthorizationPolicyRequiresExplicitRouteCoverage(t *testing
 			"sample_portal": {AuthorizationPolicy: "sample_policy"},
 		}, nil)
 		return server.Config{
-			Auth:          &coretesting.StubAuthProvider{N: "test"},
-			Services:      svc,
-			Invoker:       &testutil.StubInvoker{},
-			Authorizer:    authz,
-			StateSecret:   []byte("0123456789abcdef0123456789abcdef"),
-			MountedWebUIs: []server.MountedWebUI{mounted},
+			Auth:        &coretesting.StubAuthProvider{N: "test"},
+			Services:    svc,
+			Invoker:     &testutil.StubInvoker{},
+			Authorizer:  authz,
+			StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+			MountedUIs:  []server.MountedUI{mounted},
 			Providers: func() *registry.ProviderMap[core.Provider] {
 				reg := registry.New()
 				return &reg.Providers
@@ -3854,12 +3854,12 @@ func TestMountedWebUIAuthorizationPolicyRequiresExplicitRouteCoverage(t *testing
 
 	tests := []struct {
 		name    string
-		mounted server.MountedWebUI
+		mounted server.MountedUI
 		want    string
 	}{
 		{
 			name: "missing routes",
-			mounted: server.MountedWebUI{
+			mounted: server.MountedUI{
 				Name:                "sample_portal",
 				Path:                "/sample-portal",
 				AuthorizationPolicy: "sample_policy",
@@ -3869,11 +3869,11 @@ func TestMountedWebUIAuthorizationPolicyRequiresExplicitRouteCoverage(t *testing
 		},
 		{
 			name: "missing root coverage",
-			mounted: server.MountedWebUI{
+			mounted: server.MountedUI{
 				Name:                "sample_portal",
 				Path:                "/sample-portal",
 				AuthorizationPolicy: "sample_policy",
-				Routes: []server.MountedWebUIRoute{
+				Routes: []server.MountedUIRoute{
 					{Path: "/sync/*", AllowedRoles: []string{"viewer", "admin"}},
 				},
 				Handler: http.NotFoundHandler(),
@@ -3895,16 +3895,16 @@ func TestMountedWebUIAuthorizationPolicyRequiresExplicitRouteCoverage(t *testing
 	}
 }
 
-func TestMountedWebUIAuthorizationPolicyNamedBuiltinAdminDoesNotUseAdminResolver(t *testing.T) {
+func TestMountedUIAuthorizationPolicyNamedBuiltinAdminDoesNotUseAdminResolver(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>custom-builtin-admin-name</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile index.html: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -3940,11 +3940,11 @@ func TestMountedWebUIAuthorizationPolicyNamedBuiltinAdminDoesNotUseAdminResolver
 			AuthorizationPolicy: "admin_policy",
 			AllowedRoles:        []string{"admin"},
 		}
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "builtin_admin",
 			Path:                "/sample-portal",
 			AuthorizationPolicy: "sample_policy",
-			Routes: []server.MountedWebUIRoute{
+			Routes: []server.MountedUIRoute{
 				{Path: "/*", AllowedRoles: []string{"admin"}},
 			},
 			Handler: handler,
@@ -3965,16 +3965,16 @@ func TestMountedWebUIAuthorizationPolicyNamedBuiltinAdminDoesNotUseAdminResolver
 	}
 }
 
-func TestMountedWebUIAuthorizationPolicyDeniesUnmatchedNavigationRoute(t *testing.T) {
+func TestMountedUIAuthorizationPolicyDeniesUnmatchedNavigationRoute(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile index.html: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -4004,11 +4004,11 @@ func TestMountedWebUIAuthorizationPolicyDeniesUnmatchedNavigationRoute(t *testin
 		}
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
 			AuthorizationPolicy: "sample_policy",
-			Routes: []server.MountedWebUIRoute{
+			Routes: []server.MountedUIRoute{
 				{Path: "/", AllowedRoles: []string{"viewer", "admin"}},
 				{Path: "/sync/*", AllowedRoles: []string{"viewer", "admin"}},
 			},
@@ -4029,7 +4029,7 @@ func TestMountedWebUIAuthorizationPolicyDeniesUnmatchedNavigationRoute(t *testin
 	}
 }
 
-func TestMountedWebUIAuthorizationPolicyUsesCanonicalNavigationPaths(t *testing.T) {
+func TestMountedUIAuthorizationPolicyUsesCanonicalNavigationPaths(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -4048,9 +4048,9 @@ func TestMountedWebUIAuthorizationPolicyUsesCanonicalNavigationPaths(t *testing.
 	if err := os.WriteFile(filepath.Join(dir, "reports", "index.html"), []byte("<html>reports</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile reports/index.html: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -4080,11 +4080,11 @@ func TestMountedWebUIAuthorizationPolicyUsesCanonicalNavigationPaths(t *testing.
 		}
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
 			AuthorizationPolicy: "sample_policy",
-			Routes: []server.MountedWebUIRoute{
+			Routes: []server.MountedUIRoute{
 				{Path: "/", AllowedRoles: []string{"viewer", "admin"}},
 				{Path: "/reports", AllowedRoles: []string{"viewer", "admin"}},
 			},
@@ -4116,7 +4116,7 @@ func TestMountedWebUIAuthorizationPolicyUsesCanonicalNavigationPaths(t *testing.
 	}
 }
 
-func TestMountedWebUIAuthorizationPolicyUsesNearestAncestorRouteForNestedAssets(t *testing.T) {
+func TestMountedUIAuthorizationPolicyUsesNearestAncestorRouteForNestedAssets(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -4129,9 +4129,9 @@ func TestMountedWebUIAuthorizationPolicyUsesNearestAncestorRouteForNestedAssets(
 	if err := os.WriteFile(filepath.Join(dir, "reports", "assets", "app.js"), []byte("console.log('reports-only')"), 0o644); err != nil {
 		t.Fatalf("WriteFile reports/assets/app.js: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -4161,11 +4161,11 @@ func TestMountedWebUIAuthorizationPolicyUsesNearestAncestorRouteForNestedAssets(
 		}
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
 			AuthorizationPolicy: "sample_policy",
-			Routes: []server.MountedWebUIRoute{
+			Routes: []server.MountedUIRoute{
 				{Path: "/", AllowedRoles: []string{"viewer", "admin"}},
 				{Path: "/reports", AllowedRoles: []string{"admin"}},
 			},
@@ -4186,7 +4186,7 @@ func TestMountedWebUIAuthorizationPolicyUsesNearestAncestorRouteForNestedAssets(
 	}
 }
 
-func TestMountedWebUIAuthorizationPolicyAllowsExplicitCatchAllAndDottedRoutes(t *testing.T) {
+func TestMountedUIAuthorizationPolicyAllowsExplicitCatchAllAndDottedRoutes(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -4199,9 +4199,9 @@ func TestMountedWebUIAuthorizationPolicyAllowsExplicitCatchAllAndDottedRoutes(t 
 	if err := os.WriteFile(filepath.Join(dir, "admin", "widget.js"), []byte("console.log('admin-only')"), 0o644); err != nil {
 		t.Fatalf("WriteFile admin/widget.js: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -4231,11 +4231,11 @@ func TestMountedWebUIAuthorizationPolicyAllowsExplicitCatchAllAndDottedRoutes(t 
 		}
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
 			AuthorizationPolicy: "sample_policy",
-			Routes: []server.MountedWebUIRoute{
+			Routes: []server.MountedUIRoute{
 				{Path: "/admin/widget.js", AllowedRoles: []string{"admin"}},
 				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
 			},
@@ -4267,16 +4267,16 @@ func TestMountedWebUIAuthorizationPolicyAllowsExplicitCatchAllAndDottedRoutes(t 
 	}
 }
 
-func TestMountedWebUIAuthorizationPolicyPrefersExactRoutesOverWildcards(t *testing.T) {
+func TestMountedUIAuthorizationPolicyPrefersExactRoutesOverWildcards(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile index.html: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -4306,11 +4306,11 @@ func TestMountedWebUIAuthorizationPolicyPrefersExactRoutesOverWildcards(t *testi
 		}
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
 			AuthorizationPolicy: "sample_policy",
-			Routes: []server.MountedWebUIRoute{
+			Routes: []server.MountedUIRoute{
 				{Path: "/admin/settings", AllowedRoles: []string{"admin"}},
 				{Path: "/admin/*", AllowedRoles: []string{"viewer", "admin"}},
 				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
@@ -4343,16 +4343,16 @@ func TestMountedWebUIAuthorizationPolicyPrefersExactRoutesOverWildcards(t *testi
 	}
 }
 
-func TestMountedWebUIAuthorizationPolicyExactRoutesDoNotMatchDescendants(t *testing.T) {
+func TestMountedUIAuthorizationPolicyExactRoutesDoNotMatchDescendants(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile index.html: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -4382,11 +4382,11 @@ func TestMountedWebUIAuthorizationPolicyExactRoutesDoNotMatchDescendants(t *test
 		}
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
 			AuthorizationPolicy: "sample_policy",
-			Routes: []server.MountedWebUIRoute{
+			Routes: []server.MountedUIRoute{
 				{Path: "/admin", AllowedRoles: []string{"viewer", "admin"}},
 				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
 				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
@@ -4430,7 +4430,7 @@ func TestMountedWebUIAuthorizationPolicyExactRoutesDoNotMatchDescendants(t *test
 	}
 }
 
-func TestMountedRootWebUIRoutes(t *testing.T) {
+func TestMountedRootUIRoutes(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -4443,13 +4443,13 @@ func TestMountedRootWebUIRoutes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("console.log('root-ui')"), 0o644); err != nil {
 		t.Fatalf("WriteFile app.js: %v", err)
 	}
-	handler, err := testutilWebUIHandler(dir)
+	handler, err := testutilUIHandler(dir)
 	if err != nil {
-		t.Fatalf("webui handler: %v", err)
+		t.Fatalf("ui handler: %v", err)
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Path:    "/",
 			Handler: handler,
 		}}
@@ -4521,12 +4521,12 @@ func TestMountedRootWebUIRoutes(t *testing.T) {
 	}
 }
 
-func TestMountedRootWebUIRoutesHiddenOnManagementProfile(t *testing.T) {
+func TestMountedRootUIRoutesHiddenOnManagementProfile(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfileManagement
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Path:    "/",
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("unexpected")) }),
 		}}
@@ -4543,8 +4543,8 @@ func TestMountedRootWebUIRoutesHiddenOnManagementProfile(t *testing.T) {
 	}
 }
 
-func testutilWebUIHandler(dir string) (http.Handler, error) {
-	return webui.DirHandler(dir)
+func testutilUIHandler(dir string) (http.Handler, error) {
+	return ui.DirHandler(dir)
 }
 
 func TestSecurityHeaders(t *testing.T) {
@@ -5211,7 +5211,7 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 				MountPath: "/github",
 			},
 		}
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:       "github",
 			PluginName: "github",
 			Path:       "/github",
@@ -5329,13 +5329,13 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 		cfg.PluginDefs = pluginDefs
 		cfg.Services = svc
 		cfg.Authorizer = authz
-		cfg.MountedWebUIs = []server.MountedWebUI{
+		cfg.MountedUIs = []server.MountedUI{
 			{
 				Name:                "ops-visible",
 				PluginName:          "ops-visible",
 				Path:                "/ops-visible",
 				AuthorizationPolicy: "sample_policy",
-				Routes: []server.MountedWebUIRoute{
+				Routes: []server.MountedUIRoute{
 					{Path: "/*", AllowedRoles: []string{"admin"}},
 				},
 				Handler: handler,
@@ -5345,7 +5345,7 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 				PluginName:          "settings-visible",
 				Path:                "/settings-visible",
 				AuthorizationPolicy: "sample_policy",
-				Routes: []server.MountedWebUIRoute{
+				Routes: []server.MountedUIRoute{
 					{Path: "/*", AllowedRoles: []string{"admin"}},
 				},
 				Handler: handler,
@@ -5355,7 +5355,7 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 				PluginName:          "ui-visible",
 				Path:                "/ui-visible",
 				AuthorizationPolicy: "sample_policy",
-				Routes: []server.MountedWebUIRoute{
+				Routes: []server.MountedUIRoute{
 					{Path: "/*", AllowedRoles: []string{"viewer"}},
 				},
 				Handler: handler,
@@ -5365,7 +5365,7 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 				PluginName:          "hidden",
 				Path:                "/hidden",
 				AuthorizationPolicy: "sample_policy",
-				Routes: []server.MountedWebUIRoute{
+				Routes: []server.MountedUIRoute{
 					{Path: "/*", AllowedRoles: []string{"admin"}},
 				},
 				Handler: handler,
@@ -6399,7 +6399,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 				"clickhouse": plugin,
 			}
 			cfg.Services = coretesting.NewStubServices(t)
-			cfg.MountedWebUIs = []server.MountedWebUI{{
+			cfg.MountedUIs = []server.MountedUI{{
 				Name:       "clickhouse",
 				PluginName: "clickhouse",
 				Path:       "/clickhouse",
@@ -10133,7 +10133,7 @@ func TestStartBrowserLogin_MissingPluginRouteAuthProviderAuditsAttemptedProvider
 		cfg.Auth = &stubHostIssuedSessionAuth{name: "server"}
 		cfg.SelectedAuthProvider = "server"
 		cfg.AuditSink = auditSink
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:       "sample_portal",
 			Path:       "/sample-portal",
 			PluginName: "sample_portal",
@@ -10275,7 +10275,7 @@ func TestLoginCallback_MissingPluginRouteAuthProviderAuditsAttemptedProvider(t *
 		cfg.AuthProviders = map[string]core.AuthenticationProvider{
 			"alt": &stubHostIssuedSessionAuth{name: "alt"},
 		}
-		cfg.MountedWebUIs = []server.MountedWebUI{{
+		cfg.MountedUIs = []server.MountedUI{{
 			Name:       "sample_portal",
 			Path:       "/sample-portal",
 			PluginName: "sample_portal",

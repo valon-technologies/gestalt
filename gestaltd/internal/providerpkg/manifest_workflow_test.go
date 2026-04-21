@@ -69,18 +69,18 @@ func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t 
 
 }
 
-func TestManifestWorkflow_RoundTripsWebUIPackage(t *testing.T) {
+func TestManifestWorkflow_RoundTripsUIPackage(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	sourceDir := filepath.Join(root, "webui")
+	sourceDir := filepath.Join(root, "ui")
 	manifest := &providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindWebUI,
-		Source:  "github.com/acme/plugins/webui",
+		Kind:    providermanifestv1.KindUI,
+		Source:  "github.com/acme/plugins/ui",
 		Version: "1.0.0",
 		Spec: &providermanifestv1.Spec{
 			AssetRoot: "ui/dist",
-			Routes: []providermanifestv1.WebUIRoute{
+			Routes: []providermanifestv1.UIRoute{
 				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
 				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
 			},
@@ -98,13 +98,13 @@ func TestManifestWorkflow_RoundTripsWebUIPackage(t *testing.T) {
 		t.Fatalf("manifest path = %q, want manifest.yml", gotPath)
 	}
 	if manifest.Spec == nil || manifest.Spec.AssetRoot != "ui/dist" {
-		t.Fatalf("unexpected webui manifest: %#v", manifest.Spec)
+		t.Fatalf("unexpected ui manifest: %#v", manifest.Spec)
 	}
 	if len(manifest.Spec.Routes) != 2 || manifest.Spec.Routes[0].Path != "/admin/*" || manifest.Spec.Routes[1].Path != "/*" {
-		t.Fatalf("unexpected webui routes: %#v", manifest.Spec.Routes)
+		t.Fatalf("unexpected ui routes: %#v", manifest.Spec.Routes)
 	}
 
-	archivePath := filepath.Join(root, "webui.tar.gz")
+	archivePath := filepath.Join(root, "ui.tar.gz")
 	if err := CreatePackageFromDir(sourceDir, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestLoadManifestFromPath_PrefersManifestFileOrder(t *testing.T) {
 					source = "github.com/acme/plugins/yaml-first"
 				}
 				manifest := &providermanifestv1.Manifest{
-					Kind:    providermanifestv1.KindWebUI,
+					Kind:    providermanifestv1.KindUI,
 					Source:  source,
 					Version: "1.0.0",
 					Spec:    &providermanifestv1.Spec{AssetRoot: "ui"},
@@ -218,7 +218,7 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 		wantError  string
 	}{
 		{
-			name: "missing provider and webui",
+			name: "missing provider and ui",
 			buildData: func(t *testing.T, dir string) string {
 				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, &providermanifestv1.Manifest{
 					Kind:    "",
@@ -229,12 +229,12 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 			wantError: "manifest kind is required",
 		},
 		{
-			name: "rejects webui route without allowed roles",
+			name: "rejects ui route without allowed roles",
 			buildData: func(t *testing.T, dir string) string {
 				mustWriteFile(t, filepath.Join(dir, "ui", "dist", "index.html"), []byte("<html/>"), 0o644)
 				return mustWriteManifestData(t, dir, "manifest.yml", []byte(`
-kind: webui
-source: github.com/acme/plugins/webui-routes
+kind: ui
+source: github.com/acme/plugins/ui-routes
 version: 1.0.0
 spec:
   assetRoot: ui/dist
@@ -245,12 +245,12 @@ spec:
 			wantError: "allowedRoles must not be empty",
 		},
 		{
-			name: "rejects non-terminal wildcard webui route",
+			name: "rejects non-terminal wildcard ui route",
 			buildData: func(t *testing.T, dir string) string {
 				mustWriteFile(t, filepath.Join(dir, "ui", "dist", "index.html"), []byte("<html/>"), 0o644)
 				return mustWriteManifestData(t, dir, "manifest.yml", []byte(`
-kind: webui
-source: github.com/acme/plugins/webui-routes
+kind: ui
+source: github.com/acme/plugins/ui-routes
 version: 1.0.0
 spec:
   assetRoot: ui/dist

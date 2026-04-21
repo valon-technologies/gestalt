@@ -69,7 +69,7 @@ func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		p, authenticated, err := s.resolveMountedWebUIPrincipal(r, s.adminMountedWebUI())
+		p, authenticated, err := s.resolveMountedUIPrincipal(r, s.adminMountedUI())
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to resolve user")
 			return
@@ -84,7 +84,7 @@ func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
 		}
 
 		access, allowed := s.authorizer.ResolveAdminAccess(r.Context(), p, s.adminRoute.AuthorizationPolicy)
-		if !allowed || !mountedWebUIRoleAllowed(access.Role, s.adminRoute.AllowedRoles) {
+		if !allowed || !mountedUIRoleAllowed(access.Role, s.adminRoute.AllowedRoles) {
 			writeError(w, http.StatusForbidden, "admin access denied")
 			return
 		}
@@ -614,5 +614,5 @@ func (s *Server) ensureAdminAuthorizationWriteAccess(w http.ResponseWriter, r *h
 }
 
 func (s *Server) adminRoleCanMutate(role string) bool {
-	return mountedWebUIRoleAllowed(strings.TrimSpace(role), s.adminRoute.AllowedRoles)
+	return mountedUIRoleAllowed(strings.TrimSpace(role), s.adminRoute.AllowedRoles)
 }

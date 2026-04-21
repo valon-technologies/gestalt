@@ -4,7 +4,7 @@ Gestalt is configured from one or more YAML files. This page covers the key conc
 
 ## Config file structure
 
-A Gestalt config has five top-level keys: `server` for host settings and host-provider selection, `authorization` for shared human/workload access policy, `providers` for named host-scoped providers and web UIs, `workflows` for config-managed schedules and event triggers, and `plugins` for executable integrations and optional plugin-backed UI mounts.
+A Gestalt config has five top-level keys: `server` for host settings and host-provider selection, `authorization` for shared human/workload access policy, `providers` for named host-scoped providers and UIs, `workflows` for config-managed schedules and event triggers, and `plugins` for executable integrations and optional plugin-backed UI mounts.
 
 ```yaml
 authorization:
@@ -50,7 +50,7 @@ providers:
   telemetry:
     <name>: ...            # default: providers.telemetry.default = stdout
 
-  # named web UI bundles
+  # named UI bundles
   ui:
     <name>: ...             # each is a UIEntry
 
@@ -107,7 +107,7 @@ Gestalt has nine core concepts you configure in YAML:
 - **[Authentication.](/providers/authentication)** Platform login for the Gestalt server. Separate from connection authentication, which is per-plugin and per-upstream.
 - **[Secrets.](/providers/secrets)** Resolves structured secret refs in the config at startup. Backed by environment variables, files, or cloud secret managers.
 - **[Workflow.](/providers/workflow)** Global workflow runs, schedules, and event triggers backed by a workflow provider and optional host IndexedDB storage.
-- **[UI.](/providers/web-uis)** Public static UI bundles served under configured path prefixes, either directly from `providers.ui` or through `plugins.<name>.mountPath`. Omit `providers.ui` to run headless.
+- **[UI.](/providers/ui)** Public static UI bundles served under configured path prefixes, either directly from `providers.ui` or through `plugins.<name>.mountPath`. Omit `providers.ui` to run headless.
 
 ## Adding a plugin
 
@@ -312,7 +312,7 @@ providers:
 
 Cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault) are also available. See [Secret Providers](/providers/secrets) for the full list.
 
-## Web UI
+## UI
 
 The `providers.ui` map controls public static UI bundles served under explicit non-root paths. Omit it to run headless:
 
@@ -326,15 +326,15 @@ Or point at a custom UI bundle:
 providers:
   ui:
     roadmap:
-      source: https://artifacts.example.com/webui/your-ui/v1.0.0/provider-release.yaml
+      source: https://artifacts.example.com/ui/your-ui/v1.0.0/provider-release.yaml
       path: /create-customer-roadmap-review
 ```
 
-The built-in admin UI at `/admin` is always available regardless of this setting. See [Web UIs](/providers/web-uis) for the bundle format.
+The built-in admin UI at `/admin` is always available regardless of this setting. See [UIs](/providers/ui) for the bundle format.
 
 ## Platform Authentication
 
-The `providers.authentication` map protects the web UI, HTTP API, and `/mcp` endpoint. For local development, omit it:
+The `providers.authentication` map protects the UI, HTTP API, and `/mcp` endpoint. For local development, omit it:
 
 For multi-user deployments, point at a published authentication provider:
 
@@ -467,7 +467,7 @@ workflows:
 Workflow targets are always explicit: `plugin`, `operation`, and optional
 `connection`, `instance`, and `input`. Config-managed schedules and event
 triggers are reconciled into the provider at startup. See
-[Workflow](/providers/workflow) for the full provider model.
+[Workflow](/providers/workflow) for the user-facing and provider model.
 
 ## Telemetry and audit
 

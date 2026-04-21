@@ -23,7 +23,7 @@ var validMountedHTTPBindingMethods = map[string]bool{
 	http.MethodDelete: true,
 }
 
-func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], mountedWebUIs []MountedWebUI) ([]MountedHTTPBinding, error) {
+func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], mountedUIs []MountedUI) ([]MountedHTTPBinding, error) {
 	if len(entries) == 0 {
 		return nil, nil
 	}
@@ -102,7 +102,7 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 			})
 		}
 	}
-	if err := validateMountedHTTPBindingRoutes(mounted, mountedWebUIs); err != nil {
+	if err := validateMountedHTTPBindingRoutes(mounted, mountedUIs); err != nil {
 		return nil, err
 	}
 	return mounted, nil
@@ -257,7 +257,7 @@ func validateMountedHTTPBinding(pluginName, bindingName string, binding *config.
 	return nil
 }
 
-func validateMountedHTTPBindingRoutes(bindings []MountedHTTPBinding, mountedWebUIs []MountedWebUI) error {
+func validateMountedHTTPBindingRoutes(bindings []MountedHTTPBinding, mountedUIs []MountedUI) error {
 	seen := make(map[string]string, len(bindings))
 	for _, binding := range bindings {
 		if binding.Path == "" {
@@ -268,7 +268,7 @@ func validateMountedHTTPBindingRoutes(bindings []MountedHTTPBinding, mountedWebU
 				return fmt.Errorf("http binding %s.%s path %q conflicts with core route namespace %q", binding.PluginName, binding.Name, binding.Path, prefix)
 			}
 		}
-		for _, mounted := range mountedWebUIs {
+		for _, mounted := range mountedUIs {
 			if mounted.Path == "" || mounted.Path == "/" {
 				continue
 			}

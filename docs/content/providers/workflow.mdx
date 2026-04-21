@@ -1,36 +1,73 @@
+import { Callout, Tabs } from 'nextra/components'
+
 # Workflow
 
-Workflow providers back global workflow runs, schedules, and event triggers.
-Configure them under `providers.workflow`, then use them from either:
+Gestalt workflows let you invoke a plugin operation later instead of right now.
+Today that primarily means cron-based schedules, workflow run history and run
+cancelation, and config-managed event triggers. The workflow model is global.
+A workflow target is always explicit: `plugin`, `operation`, and optional
+`connection`, `instance`, and `input`.
 
-- top-level `workflows.schedules` and `workflows.eventTriggers` for
-  config-managed workflows
-- the global workflow API and CLI for user-owned schedules:
-  `/api/v1/workflow/schedules` and `gestalt workflows ...`
+<Callout type="info">
+  Event triggers exist today, but only as config-managed objects under
+  top-level `workflows.eventTriggers`. There is not yet a public HTTP or CLI
+  CRUD surface for event triggers or a generic public event-publish endpoint.
+</Callout>
+
+## Mental model
+
+Start by configuring at least one workflow provider under
+`providers.workflow`, then define a workflow target for the plugin operation
+you want Gestalt to invoke. From there you create either a schedule, which runs
+on a cron expression, or an event trigger, which runs when a published event
+matches. The workflow provider persists that object, creates workflow runs, and
+calls back into Gestalt when a run should execute. Gestalt then invokes the
+target plugin operation, and you inspect or cancel the resulting runs through
+the global workflow runs surface.
+
+There are two ownership modes. Config-managed workflows live in YAML under
+top-level `workflows:` and execute as the system config actor. User-owned
+schedules are created through the global API or CLI and execute as the subject
+that created them.
 
 ## How workflow providers work
 
-Workflow provider selection is global, not plugin-scoped.
+Workflow provider selection is global, not plugin-scoped. A config-managed
+workflow object chooses a provider with `provider`, or inherits the
+sole/default `providers.workflow` entry when that field is omitted.
+User-owned schedules use the same provider pool through the global HTTP API and
+CLI. In every case the target is explicit, and a workflow provider may bind a
+host IndexedDB provider through `providers.workflow.<name>.indexeddb`.
 
-- Config-managed workflow objects choose a provider with `provider`, or inherit
-  the sole/default `providers.workflow` entry when that field is omitted.
-- User-owned schedules use the same provider pool through the global HTTP API
-  and CLI.
-- Workflow targets are explicit: `plugin`, `operation`, and optional
-  `connection`, `instance`, and `input`.
-- A workflow provider may bind a host IndexedDB provider through
-  `providers.workflow.<name>.indexeddb`.
+## How workflow execution uses authorization
+
+Workflow authorization is easiest to reason about if you split it into creation
+time and run time. When a user creates a schedule, Gestalt checks whether the
+current subject is allowed to invoke the target operation right now. It then
+stores the owner subject plus a permission ceiling for delayed execution.
+
+When the workflow fires later, Gestalt resolves that stored owner reference and
+checks authorization again before invoking the target. That means a schedule
+can still fail at run time if the subject lost access, if the target operation
+is no longer allowed, or if the original token had narrower permissions than
+the full subject would otherwise have.
+
+Config-managed workflows follow the same pattern, but the owner is the system
+config actor rather than a human subject.
 
 ## First-party workflow providers
 
 First-party workflow providers live under
 [`valon-technologies/gestalt-providers/workflow`](https://github.com/valon-technologies/gestalt-providers/tree/main/workflow).
 
-| Provider | Repository | Package path | Use case |
-| --- | --- | --- | --- |
-| IndexedDB Workflow Provider | [`workflow/indexeddb`](https://github.com/valon-technologies/gestalt-providers/tree/main/workflow/indexeddb) | `github.com/valon-technologies/gestalt-providers/workflow/indexeddb` | Stores workflow runs, schedules, and event triggers in IndexedDB and invokes target plugin operations through the workflow host |
+| Provider | Use case |
+| --- | --- |
+| [`github.com/valon-technologies/gestalt-providers/workflow/indexeddb`](https://github.com/valon-technologies/gestalt-providers/tree/main/workflow/indexeddb) | Stores workflow runs, schedules, and event triggers in IndexedDB and invokes target plugin operations through the workflow host |
 
 ## Configuring `providers.workflow`
+
+You need at least one entry under `providers.workflow`. The first-party
+IndexedDB workflow provider is the usual starting point:
 
 ```yaml
 providers:
@@ -49,39 +86,230 @@ providers:
         db: workflow
       config:
         pollInterval: 1s
+```
 
+If you configure exactly one workflow provider, or mark one as `default: true`,
+then schedules and event triggers may omit `provider`.
+
+## Defining config-managed workflows
+
+Config-managed workflows live under the top-level `workflows:` block.
+
+### Schedules
+
+```yaml
 workflows:
   schedules:
     nightly_sync:
+      provider: local
       plugin: roadmap
       cron: "0 3 * * *"
       timezone: America/New_York
-      operation: sync_items
+      operation: sync
+      connection: default
+      instance: tenant-a
+      input:
+        mode: incremental
+        includeArchived: false
+```
 
+This creates a durable schedule named `nightly_sync` that invokes
+`roadmap.sync` every day at 3:00 AM New York time.
+
+### Event triggers
+
+```yaml
+workflows:
   eventTriggers:
-    item_updated:
-      plugin: roadmap
+    roadmap_item_updated:
+      provider: local
+      plugin: slack
       match:
         type: roadmap.item.updated
-      operation: sync_items
+        source: roadmap
+        subject: item
+      operation: chat.postMessage
+      connection: alerts
+      instance: engineering
+      input:
+        channel: C123456
+        text: "A roadmap item changed."
 ```
 
-With that config in place, operators get config-managed workflows from
-`workflows:` and users can create their own schedules with the same provider:
+This creates a durable event trigger that listens for published events with:
+`type = "roadmap.item.updated"`, plus optional exact matches for
+`source = "roadmap"` and `subject = "item"`. When an event matches, Gestalt
+invokes `slack.chat.postMessage` with the static input above and records a
+workflow run.
 
-```sh
-gestalt workflows create \
-  --plugin roadmap \
-  --operation sync_items \
-  --cron "0 6 * * 1-5"
-```
+### Match semantics
 
-## Operational notes
+Event trigger matching is exact string matching. `match.type` is required.
+`match.source` and `match.subject` are optional. If `source` or `subject` is
+omitted, that field is ignored during matching.
 
-- A workflow provider is required only when you use global workflows.
-- Config-managed schedules and event triggers are reconciled into the provider
-  at startup and removed when deleted from config.
-- User-owned schedules are global resources, not nested under plugins.
+## Creating user-owned schedules
+
+User-owned schedules are global resources exposed through
+`POST /api/v1/workflow/schedules` and `gestalt workflows schedules ...`.
+These schedules execute as the creating subject, not as a plugin-local or
+synthetic workflow workload.
+
+<Tabs items={['CLI', 'HTTP']}>
+  <Tabs.Tab>
+    ```sh
+    gestalt workflows schedules create \
+      --cron "0 */6 * * *" \
+      --timezone America/New_York \
+      --plugin github \
+      --operation issues.list \
+      --connection default \
+      --instance acme-org \
+      -p owner=valon-technologies \
+      -p repo=gestalt \
+      -p state=open
+    ```
+
+    List schedules:
+
+    ```sh
+    gestalt workflows schedules list
+    gestalt workflows schedules list --plugin github
+    ```
+
+    Inspect, update, pause, resume, or delete a schedule:
+
+    ```sh
+    gestalt workflows schedules get <schedule-id>
+    gestalt workflows schedules update <schedule-id> --cron "0 9 * * 1-5"
+    gestalt workflows schedules pause <schedule-id>
+    gestalt workflows schedules resume <schedule-id>
+    gestalt workflows schedules delete <schedule-id>
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```sh
+    curl -X POST "$GESTALT_URL/api/v1/workflow/schedules" \
+      -H "Authorization: Bearer $GESTALT_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "cron": "0 */6 * * *",
+        "timezone": "America/New_York",
+        "target": {
+          "plugin": "github",
+          "operation": "issues.list",
+          "connection": "default",
+          "instance": "acme-org",
+          "input": {
+            "owner": "valon-technologies",
+            "repo": "gestalt",
+            "state": "open"
+          }
+        }
+      }'
+    ```
+
+    List or inspect schedules:
+
+    ```sh
+    curl -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/workflow/schedules"
+
+    curl -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/workflow/schedules/<schedule-id>"
+    ```
+
+    Pause, resume, or delete:
+
+    ```sh
+    curl -X POST -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/workflow/schedules/<schedule-id>/pause"
+
+    curl -X POST -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/workflow/schedules/<schedule-id>/resume"
+
+    curl -X DELETE -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/workflow/schedules/<schedule-id>"
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+The `provider` field is available on the HTTP API. Omit it when you have a
+sole/default workflow provider; include it when you need to select a specific
+workflow backend.
+
+## Inspecting and canceling workflow runs
+
+Runs are the execution records produced by schedules, event triggers, or other
+workflow-provider actions. The global run surface is
+`GET /api/v1/workflow/runs`, `GET /api/v1/workflow/runs/{runID}`,
+`POST /api/v1/workflow/runs/{runID}/cancel`, and
+`gestalt workflows runs ...`.
+
+<Tabs items={['CLI', 'HTTP', 'UI']}>
+  <Tabs.Tab>
+    ```sh
+    gestalt workflows runs list
+    gestalt workflows runs list --plugin github --status failed
+    gestalt workflows runs get <run-id>
+    gestalt workflows runs cancel <run-id> --reason "operator requested"
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```sh
+    curl -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/workflow/runs"
+
+    curl -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/workflow/runs?plugin=github&status=failed"
+
+    curl -H "Authorization: Bearer $GESTALT_API_KEY" \
+      "$GESTALT_URL/api/v1/workflow/runs/<run-id>"
+
+    curl -X POST "$GESTALT_URL/api/v1/workflow/runs/<run-id>/cancel" \
+      -H "Authorization: Bearer $GESTALT_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"reason":"operator requested"}'
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    When you mount the default web bundle, the workflow runs UI is available at
+    `/workflows`. It shows recent runs, supports filtering and search, and lets
+    you cancel pending runs from the detail panel.
+  </Tabs.Tab>
+</Tabs>
+
+Run responses include `id`, `provider`, `status`, `target`, `trigger`,
+`createdBy`, `createdAt`, `startedAt`, `completedAt`, `statusMessage`, and
+`resultBody`. The `trigger.kind` value is `schedule`, `event`, or `manual`.
+
+## Event triggers today
+
+Event triggers are usable today, but they are more primitive than schedules
+from a product-surface perspective. What exists today is top-level config under
+`workflows.eventTriggers`, durable storage in the workflow provider, matching
+against published events, and normal workflow run records once a trigger fires.
+What does not exist yet is `gestalt workflows triggers ...`,
+`/api/v1/workflow/event-triggers`, or a generic public
+`/api/v1/workflow/events` publish endpoint.
+
+In practice, that makes event triggers most useful for deployment-managed
+automation defined in YAML, or for custom workflow providers and internal
+components that can publish events into the workflow provider.
+
+If you are implementing a provider or another event producer, see
+[Custom Providers > Workflow](/custom-providers/workflow) for the
+`PublishEvent` interface.
+
+## How execution works
+
+When a workflow fires, the workflow provider creates a run and calls back into
+Gestalt through the workflow host. Gestalt invokes the target plugin operation,
+then the run is updated to `succeeded`, `failed`, or `canceled`.
+
+The execution identity depends on how the workflow was created. Config-managed
+schedules and event triggers execute as `system:config`, while user-owned
+schedules execute as the creating subject.
 
 ## Building your own workflow provider
 
@@ -91,10 +319,9 @@ release flow live under
 
 ## What to read next
 
-- [Configuration](/configuration): server and provider config structure
-- [Config File](/reference/config-file): full `providers.workflow` and
-  `workflows.*` reference
-- [Built-in Providers](/reference/built-in-providers): first-party workflow
-  provider reference
-- [Custom Workflow Providers](/custom-providers/workflow): advanced authoring
-  docs
+If you want the surrounding config model, read [Configuration](/configuration)
+and the full [Config File](/reference/config-file) reference. For route and
+command details, see [HTTP API](/reference/http-api) and [CLI](/client/cli).
+If you need provider implementation details, continue to
+[Custom Workflow Providers](/custom-providers/workflow) or the
+[Built-in Providers](/reference/built-in-providers) reference.

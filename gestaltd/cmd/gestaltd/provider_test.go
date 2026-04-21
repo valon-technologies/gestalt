@@ -35,9 +35,9 @@ const (
 	releaseProviderSchemaPath      = "schemas/provider.schema.json"
 	declarativeReleasePluginName   = "declarative-release"
 	declarativeReleaseSource       = "github.com/testowner/plugins/catalog/declarative-release"
-	webUITestPluginName            = "webui-test"
-	webUITestSource                = "github.com/testowner/plugins/catalog/webui-test"
-	webUITestAssetRoot             = "out"
+	uiTestPluginName               = "ui-test"
+	uiTestSource                   = "github.com/testowner/plugins/catalog/ui-test"
+	uiTestAssetRoot                = "out"
 	prebuiltProviderPluginName     = "prebuilt-provider"
 	prebuiltProviderSource         = "github.com/testowner/plugins/prebuilt-provider"
 	prebuiltProviderBinaryPath     = "bin/provider"
@@ -1313,10 +1313,10 @@ func TestRun_ProviderReleaseCopiesCompiledSupportFiles(t *testing.T) {
 	}
 }
 
-func TestRun_ProviderReleaseCopiesWebUISupportFiles(t *testing.T) {
+func TestRun_ProviderReleaseCopiesUISupportFiles(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newWebUIReleaseFixture(t, t.TempDir())
+	pluginDir := newUIReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 	testVersion := "0.0.3-test"
 
@@ -1325,7 +1325,7 @@ func TestRun_ProviderReleaseCopiesWebUISupportFiles(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-webui-test_v" + testVersion + ".tar.gz"
+	archiveName := "gestalt-plugin-ui-test_v" + testVersion + ".tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 
 	for _, rel := range []string{
@@ -1339,29 +1339,29 @@ func TestRun_ProviderReleaseCopiesWebUISupportFiles(t *testing.T) {
 	}
 
 	metadata := readProviderReleaseMetadata(t, outputDir)
-	if metadata.Package != webUITestSource {
-		t.Fatalf("release metadata package = %q, want %q", metadata.Package, webUITestSource)
+	if metadata.Package != uiTestSource {
+		t.Fatalf("release metadata package = %q, want %q", metadata.Package, uiTestSource)
 	}
-	if metadata.Kind != providermanifestv1.KindWebUI {
-		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindWebUI)
+	if metadata.Kind != providermanifestv1.KindUI {
+		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindUI)
 	}
-	if metadata.Runtime != providerReleaseRuntimeKindWebUI {
-		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindWebUI)
+	if metadata.Runtime != providerReleaseRuntimeKindUI {
+		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindUI)
 	}
-	webUIArtifact, ok := metadata.Artifacts[providerReleaseGenericTarget]
+	uiArtifact, ok := metadata.Artifacts[providerReleaseGenericTarget]
 	if !ok {
 		t.Fatalf("release metadata artifacts missing generic key: %+v", metadata.Artifacts)
 	}
-	webUIDigest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))
+	uiDigest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))
 	if err != nil {
-		t.Fatalf("hash webui archive: %v", err)
+		t.Fatalf("hash ui archive: %v", err)
 	}
-	if webUIArtifact.Path != archiveName || webUIArtifact.SHA256 != webUIDigest {
-		t.Fatalf("release metadata webui artifact = %+v, want path %q sha %q", webUIArtifact, archiveName, webUIDigest)
+	if uiArtifact.Path != archiveName || uiArtifact.SHA256 != uiDigest {
+		t.Fatalf("release metadata ui artifact = %+v, want path %q sha %q", uiArtifact, archiveName, uiDigest)
 	}
 }
 
-func TestRun_ProviderReleaseStagesOwnedWebUIPackage(t *testing.T) {
+func TestRun_ProviderReleaseStagesOwnedUIPackage(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -1541,23 +1541,23 @@ func TestRun_ProviderReleaseBuildsProviderSupportFilesBeforePackaging(t *testing
 	}
 }
 
-func TestRun_ProviderReleaseBuildsWebUIAssetsBeforePackaging(t *testing.T) {
+func TestRun_ProviderReleaseBuildsUIAssetsBeforePackaging(t *testing.T) {
 	t.Parallel()
 
 	if runtime.GOOS == "windows" {
 		t.Skip("release build fixture uses POSIX shell")
 	}
 
-	pluginDir := newBuiltWebUIReleaseFixture(t, t.TempDir())
+	pluginDir := newBuiltUIReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
-	const testVersion = "0.0.3-build-webui"
+	const testVersion = "0.0.3-build-ui"
 
 	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-webui-test_v" + testVersion + ".tar.gz"
+	archiveName := "gestalt-plugin-ui-test_v" + testVersion + ".tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	if manifest.Release != nil {
@@ -1577,15 +1577,15 @@ func TestRun_ProviderReleaseBuildsWebUIAssetsBeforePackaging(t *testing.T) {
 func TestRun_ProviderReleaseAllowsOverlappingSupportPaths(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := filepath.Join(t.TempDir(), "webui-overlap")
+	pluginDir := filepath.Join(t.TempDir(), "ui-overlap")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
-		Source:      "github.com/testowner/plugins/webui-overlap",
+		Kind:        providermanifestv1.KindUI,
+		Source:      "github.com/testowner/plugins/ui-overlap",
 		Version:     "0.0.1",
-		DisplayName: "WebUI Overlap",
+		DisplayName: "UI Overlap",
 		IconFile:    "out/icon.svg",
 		Spec: &providermanifestv1.Spec{
 			AssetRoot: "out",
@@ -1602,7 +1602,7 @@ func TestRun_ProviderReleaseAllowsOverlappingSupportPaths(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-webui-overlap_v" + testVersion + ".tar.gz"
+	archiveName := "gestalt-plugin-ui-overlap_v" + testVersion + ".tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	for _, rel := range []string{"out/icon.svg", "out/index.html"} {
 		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
@@ -1614,23 +1614,23 @@ func TestRun_ProviderReleaseAllowsOverlappingSupportPaths(t *testing.T) {
 func TestRun_ProviderReleaseTreatsGoModWithoutProviderPackageAsDeclarative(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newWebUIReleaseFixture(t, t.TempDir())
+	pluginDir := newUIReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 	testVersion := "0.0.4-test"
 
-	writeTestFile(t, pluginDir, "go.mod", []byte("module example.com/webui-test\n\ngo 1.22\n"), 0644)
+	writeTestFile(t, pluginDir, "go.mod", []byte("module example.com/ui-test\n\ngo 1.22\n"), 0644)
 
 	runProviderReleaseCommand(t, pluginDir,
 		"--version", testVersion,
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-webui-test_v" + testVersion + ".tar.gz"
+	archiveName := "gestalt-plugin-ui-test_v" + testVersion + ".tar.gz"
 	if _, err := os.Stat(filepath.Join(outputDir, archiveName)); err != nil {
 		t.Fatalf("expected declarative archive %s to exist: %v", archiveName, err)
 	}
 
-	compiledArchiveName := "gestalt-plugin-webui-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	compiledArchiveName := "gestalt-plugin-ui-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 	if _, err := os.Stat(filepath.Join(outputDir, compiledArchiveName)); !os.IsNotExist(err) {
 		t.Fatalf("unexpected compiled archive %s: %v", compiledArchiveName, err)
 	}
@@ -1800,7 +1800,7 @@ func TestRun_ProviderReleaseSupportsSourcePackageManifestFile(t *testing.T) {
 func TestRun_ProviderReleaseChecksumsOnlyCurrentArchives(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newWebUIReleaseFixture(t, t.TempDir())
+	pluginDir := newUIReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
 
 	runProviderReleaseCommand(t, pluginDir,
@@ -1817,24 +1817,24 @@ func TestRun_ProviderReleaseChecksumsOnlyCurrentArchives(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read checksums.txt: %v", err)
 	}
-	if got := string(checksumData); strings.Contains(got, "gestalt-plugin-webui-test_v1.0.0.tar.gz") {
+	if got := string(checksumData); strings.Contains(got, "gestalt-plugin-ui-test_v1.0.0.tar.gz") {
 		t.Fatalf("checksums.txt unexpectedly included stale archive: %s", got)
-	} else if !strings.Contains(got, "gestalt-plugin-webui-test_v1.0.1.tar.gz") {
+	} else if !strings.Contains(got, "gestalt-plugin-ui-test_v1.0.1.tar.gz") {
 		t.Fatalf("checksums.txt missing current archive: %s", got)
 	}
 }
 
-func TestRun_ProviderReleaseRejectsOutputInsideWebUIAssetRoot(t *testing.T) {
+func TestRun_ProviderReleaseRejectsOutputInsideUIAssetRoot(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newWebUIReleaseFixtureWithAssetRoot(t, t.TempDir(), "release-output")
+	pluginDir := newUIReleaseFixtureWithAssetRoot(t, t.TempDir(), "release-output")
 	outputDir := filepath.Join(pluginDir, "release-output", "nested")
 
 	out, err := runProviderReleaseCommandResult(pluginDir, "--version", "1.0.0", "--output", outputDir)
 	if err == nil {
 		t.Fatalf("expected provider release to fail, got output: %s", out)
 	}
-	if !strings.Contains(string(out), "must not be inside webui.asset_root") {
+	if !strings.Contains(string(out), "must not be inside ui.asset_root") {
 		t.Fatalf("expected overlap error, got: %s", out)
 	}
 }
@@ -3287,22 +3287,22 @@ func newPrebuiltProviderReleaseFixture(t *testing.T, dir string) string {
 	return pluginDir
 }
 
-func newWebUIReleaseFixture(t *testing.T, dir string) string {
-	return newWebUIReleaseFixtureWithAssetRoot(t, dir, webUITestAssetRoot)
+func newUIReleaseFixture(t *testing.T, dir string) string {
+	return newUIReleaseFixtureWithAssetRoot(t, dir, uiTestAssetRoot)
 }
 
-func newBuiltWebUIReleaseFixture(t *testing.T, dir string) string {
+func newBuiltUIReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
-	pluginDir := filepath.Join(dir, webUITestPluginName)
+	pluginDir := filepath.Join(dir, uiTestPluginName)
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
-		Source:      webUITestSource,
+		Kind:        providermanifestv1.KindUI,
+		Source:      uiTestSource,
 		Version:     "0.0.1",
-		DisplayName: "WebUI Test",
+		DisplayName: "UI Test",
 		IconFile:    releaseTestIconPath,
 		Release: &providermanifestv1.ReleaseMetadata{
 			Build: &providermanifestv1.ReleaseBuild{
@@ -3328,7 +3328,7 @@ func newSourceProviderReleaseFixtureWithOwnedUI(t *testing.T, dir string) string
 		t.Fatalf("MkdirAll(uiDir): %v", err)
 	}
 	writeReleaseTestManifest(t, uiDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
+		Kind:        providermanifestv1.KindUI,
 		Source:      "github.com/testowner/web/roadmap-ui",
 		Version:     "0.0.1",
 		DisplayName: "Roadmap UI",
@@ -3361,7 +3361,7 @@ func newSourceProviderReleaseFixtureWithBuiltOwnedUI(t *testing.T, dir string) s
 		t.Fatalf("MkdirAll(uiDir): %v", err)
 	}
 	writeReleaseTestManifest(t, uiDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
+		Kind:        providermanifestv1.KindUI,
 		Source:      "github.com/testowner/web/roadmap-ui",
 		Version:     "0.0.1",
 		DisplayName: "Roadmap UI",
@@ -3390,18 +3390,18 @@ func newSourceProviderReleaseFixtureWithBuiltOwnedUI(t *testing.T, dir string) s
 	return pluginDir
 }
 
-func newWebUIReleaseFixtureWithAssetRoot(t *testing.T, dir, assetRoot string) string {
+func newUIReleaseFixtureWithAssetRoot(t *testing.T, dir, assetRoot string) string {
 	t.Helper()
 
-	pluginDir := filepath.Join(dir, webUITestPluginName)
+	pluginDir := filepath.Join(dir, uiTestPluginName)
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
-		Source:      webUITestSource,
+		Kind:        providermanifestv1.KindUI,
+		Source:      uiTestSource,
 		Version:     "0.0.1",
-		DisplayName: "WebUI Test",
+		DisplayName: "UI Test",
 		IconFile:    releaseTestIconPath,
 		Spec: &providermanifestv1.Spec{
 			AssetRoot: assetRoot,

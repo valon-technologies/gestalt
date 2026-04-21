@@ -1,3 +1,5 @@
+import { Tabs } from 'nextra/components'
+
 # Cache
 
 Cache providers are plugin-bound utilities for short-lived key/value state.
@@ -7,7 +9,28 @@ They are configured under `providers.cache` and attached to plugins with
 Unlike IndexedDB, cache providers are not selected through `server.providers`.
 They are only exposed to plugins that request them.
 
-## Configuration
+## How cache providers work
+
+Each entry under `providers.cache` defines a named cache backend. Plugins opt
+into those backends with `plugins.<name>.cache`, which is just a list of named
+bindings. Every binding name must already exist under `providers.cache`, and
+duplicate bindings are rejected during config validation.
+
+In plugin code you usually open a cache by binding name, such as `session` or
+`rate_limit`. If a plugin binds exactly one cache, the SDKs also support the
+default unnamed cache handle, but using the explicit binding name is usually
+clearer.
+
+## First-party cache providers
+
+First-party cache providers live under
+[`valon-technologies/gestalt-providers/cache`](https://github.com/valon-technologies/gestalt-providers/tree/main/cache).
+
+| Provider | Use case |
+| --- | --- |
+| [`github.com/valon-technologies/gestalt-providers/cache/valkey`](https://github.com/valon-technologies/gestalt-providers/tree/main/cache/valkey) | Valkey or Redis-compatible cache backend for short-lived plugin state |
+
+## Configuring `providers.cache`
 
 ```yaml
 providers:
@@ -32,77 +55,111 @@ plugins:
       - rate_limit
 ```
 
-## How bindings work
+This example binds two caches into the `search` plugin. Both bindings use the
+same provider package, but they point at different logical databases. That is a
+common pattern for keeping session and rate-limit state separate without
+introducing a second cache technology.
 
-- `plugins.<name>.cache` is a list of named cache bindings.
-- Cache names must exist under `providers.cache`.
-- Duplicate cache names are rejected during config validation.
-- With one binding, the host sets both `GESTALT_CACHE_SOCKET` and the named env var.
-- With multiple bindings, the host sets only the named env vars:
-  `GESTALT_CACHE_SOCKET_<NAME>`.
+## Using `Cache` from a plugin
 
-For a binding named `session`, the SDK env var is:
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+        "context"
+        "log"
+        "time"
 
-```text
-GESTALT_CACHE_SOCKET_SESSION
-```
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
 
-Names are normalized to uppercase with non-alphanumeric characters replaced by `_`.
+    ctx := context.Background()
 
-## SDK use
+    cache, err := gestalt.Cache("session")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer cache.Close()
 
-Go:
+    if err := cache.Set(ctx, "user:1", []byte("alpha"), gestalt.CacheSetOptions{
+        TTL: 5 * time.Minute,
+    }); err != nil {
+        log.Fatal(err)
+    }
 
-```go
-cache, err := gestalt.Cache("session")
-if err != nil {
-    panic(err)
-}
-defer cache.Close()
+    value, found, err := cache.Get(ctx, "user:1")
+    if err != nil {
+        log.Fatal(err)
+    }
+    _ = value
+    _ = found
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import datetime as dt
+    import gestalt
 
-value, found, err := cache.Get(ctx, "user:1")
-if err != nil {
-    panic(err)
-}
-_ = value
-_ = found
-```
+    cache = gestalt.Cache("session")
+    cache.set("user:1", b"alpha", ttl=dt.timedelta(minutes=5))
+    value = cache.get("user:1") or b""
+    cache.close()
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use std::time::Duration;
 
-Python:
+    use gestalt::{Cache, CacheSetOptions};
 
-```python
-import datetime as dt
-import gestalt
+    let mut cache = Cache::connect_named("session").await?;
+    cache
+        .set(
+            "user:1",
+            b"alpha",
+            CacheSetOptions {
+                ttl: Some(Duration::from_secs(5 * 60)),
+            },
+        )
+        .await?;
+    let value = cache.get("user:1").await?;
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { Cache } from "@valon-technologies/gestalt";
 
-cache = gestalt.Cache("session")
-cache.set("user:1", b"alpha", ttl=dt.timedelta(minutes=5))
-value = cache.get("user:1")
-cache.close()
-```
+    const cache = new Cache("session");
+    await cache.set("user:1", new TextEncoder().encode("alpha"), {
+      ttlMs: 5 * 60 * 1000,
+    });
+    const value = await cache.get("user:1");
+    ```
+  </Tabs.Tab>
+</Tabs>
 
-Rust:
+The host resolves the configured cache bindings and exposes them to the plugin
+through the language SDK. Plugin code does not choose raw Redis or Valkey
+endpoints directly at runtime. It just opens the bound cache by name.
 
-```rust
-let mut cache = gestalt::Cache::connect_named("session").await?;
-let value = cache.get("user:1").await?;
-```
+## Operational notes
 
-TypeScript:
+Cache providers are best for short-lived, non-authoritative state such as
+sessions, idempotency helpers, and rate-limit counters. They remain
+plugin-bound, so they do not participate in the host-wide `server.providers`
+selection model. The exact `config` block depends on the selected provider
+package. For the first-party `cache/valkey` provider, that usually means an
+address plus any backend-specific connection settings.
 
-```ts
-import { Cache } from "@valon-technologies/gestalt";
-
-const cache = new Cache("session");
-const value = await cache.get("user:1");
-```
-
-## First-party providers
-
-First-party cache backends can live under
-`github.com/valon-technologies/gestalt-providers/cache/...`.
-The exact package set depends on what has been published so far.
-
-## Custom implementations
+## Building your own cache provider
 
 For manifests, SDK authoring surfaces, and release flow, see
+[Custom Providers > Cache](/custom-providers/cache).
+
+## What to read next
+
+If you want the full config reference, read
+[Config File](/reference/config-file#providerscache). For plugin-side binding
+behavior in the broader config model, see [Configuration](/configuration). If
+you need implementation details, continue to
 [Custom Providers > Cache](/custom-providers/cache).

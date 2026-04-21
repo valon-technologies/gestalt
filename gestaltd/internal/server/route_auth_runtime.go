@@ -73,7 +73,7 @@ func (s *Server) pluginAuthRuntime(pluginName string) (authRuntime, error) {
 	return s.authRuntimeForProvider(entry.RouteAuth.Provider)
 }
 
-func (s *Server) mountedWebUIAuthRuntime(mounted MountedWebUI) (authRuntime, error) {
+func (s *Server) mountedUIAuthRuntime(mounted MountedUI) (authRuntime, error) {
 	if strings.TrimSpace(mounted.PluginName) == "" {
 		return s.serverAuthRuntime(), nil
 	}
@@ -81,17 +81,17 @@ func (s *Server) mountedWebUIAuthRuntime(mounted MountedWebUI) (authRuntime, err
 }
 
 func (s *Server) loginAuthRuntimeForNextPath(nextPath string) (authRuntime, error) {
-	mounted, ok := s.mountedWebUIForNextPath(nextPath)
+	mounted, ok := s.mountedUIForNextPath(nextPath)
 	if !ok {
 		return s.serverAuthRuntime(), nil
 	}
-	return s.mountedWebUIAuthRuntime(mounted)
+	return s.mountedUIAuthRuntime(mounted)
 }
 
-func (s *Server) mountedWebUIForNextPath(nextPath string) (MountedWebUI, bool) {
+func (s *Server) mountedUIForNextPath(nextPath string) (MountedUI, bool) {
 	parsed, err := url.Parse(nextPath)
 	if err != nil {
-		return MountedWebUI{}, false
+		return MountedUI{}, false
 	}
 	path := parsed.Path
 	if path == "" {
@@ -100,10 +100,10 @@ func (s *Server) mountedWebUIForNextPath(nextPath string) (MountedWebUI, bool) {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	return s.mountedWebUIForPath(path)
+	return s.mountedUIForPath(path)
 }
 
-func (s *Server) mountedWebUIForPath(path string) (MountedWebUI, bool) {
+func (s *Server) mountedUIForPath(path string) (MountedUI, bool) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		path = "/"
@@ -113,12 +113,12 @@ func (s *Server) mountedWebUIForPath(path string) (MountedWebUI, bool) {
 	}
 
 	var (
-		best        MountedWebUI
+		best        MountedUI
 		bestLen     int
 		bestMatched bool
 	)
-	consider := func(candidate MountedWebUI) {
-		if candidate.Path == "" || !mountedWebUIPathMatches(path, candidate.Path) {
+	consider := func(candidate MountedUI) {
+		if candidate.Path == "" || !mountedUIPathMatches(path, candidate.Path) {
 			return
 		}
 		if !bestMatched || len(candidate.Path) > bestLen {
@@ -128,16 +128,16 @@ func (s *Server) mountedWebUIForPath(path string) (MountedWebUI, bool) {
 		}
 	}
 
-	for _, mounted := range s.mountedWebUIs {
+	for _, mounted := range s.mountedUIs {
 		consider(mounted)
 	}
 	if s.adminUI != nil {
-		consider(s.adminMountedWebUI())
+		consider(s.adminMountedUI())
 	}
 	return best, bestMatched
 }
 
-func mountedWebUIPathMatches(requestPath, mountedPath string) bool {
+func mountedUIPathMatches(requestPath, mountedPath string) bool {
 	if mountedPath == "/" {
 		return strings.HasPrefix(requestPath, "/")
 	}

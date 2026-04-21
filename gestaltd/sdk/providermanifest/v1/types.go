@@ -21,11 +21,13 @@ const (
 	KindS3             = "s3"
 	KindWorkflow       = "workflow"
 	KindSecrets        = "secrets"
-	KindWebUI          = "webui"
+	KindUI             = "ui"
 )
 
 func NormalizeKind(kind string) string {
 	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case "auth":
+		return KindAuthentication
 	case KindAuthentication:
 		return KindAuthentication
 	case KindPlugin:
@@ -42,8 +44,10 @@ func NormalizeKind(kind string) string {
 		return KindWorkflow
 	case KindSecrets:
 		return KindSecrets
-	case KindWebUI:
-		return KindWebUI
+	case "webui":
+		return KindUI
+	case KindUI:
+		return KindUI
 	default:
 		return strings.TrimSpace(kind)
 	}
@@ -73,7 +77,7 @@ type ReleaseBuild struct {
 
 // Spec is a union type validated per kind. For auth/datastore/secrets only
 // ConfigSchemaPath is valid. For plugins all surface/connection fields are
-// valid. For webui AssetRoot + ConfigSchemaPath.
+// valid. For ui AssetRoot + ConfigSchemaPath.
 type Spec struct {
 	ConfigSchemaPath string `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
 
@@ -93,9 +97,9 @@ type Spec struct {
 	Requires          []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
 	UI                *OwnedUI                              `json:"ui,omitempty" yaml:"ui,omitempty"`
 
-	// WebUI-specific fields
-	AssetRoot string       `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
-	Routes    []WebUIRoute `json:"routes,omitempty" yaml:"routes,omitempty"`
+	// UI-specific fields
+	AssetRoot string    `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
+	Routes    []UIRoute `json:"routes,omitempty" yaml:"routes,omitempty"`
 }
 
 type RouteAuthRef struct {
@@ -359,7 +363,7 @@ type ManifestConnectionDef struct {
 	Discovery   *ProviderDiscovery                 `json:"discovery,omitempty" yaml:"discovery,omitempty"`
 }
 
-type WebUIRoute struct {
+type UIRoute struct {
 	Path         string   `json:"path" yaml:"path"`
 	AllowedRoles []string `json:"allowedRoles,omitempty" yaml:"allowedRoles,omitempty"`
 }
@@ -493,7 +497,7 @@ type specJSONWire struct {
 	Requires          []string                              `json:"requires,omitempty"`
 	UI                *OwnedUI                              `json:"ui,omitempty"`
 	AssetRoot         string                                `json:"assetRoot,omitempty"`
-	Routes            []WebUIRoute                          `json:"routes,omitempty"`
+	Routes            []UIRoute                             `json:"routes,omitempty"`
 }
 
 type specYAMLWire struct {
@@ -513,7 +517,7 @@ type specYAMLWire struct {
 	Requires          []string                              `yaml:"requires,omitempty"`
 	UI                *OwnedUI                              `yaml:"ui,omitempty"`
 	AssetRoot         string                                `yaml:"assetRoot,omitempty"`
-	Routes            []WebUIRoute                          `yaml:"routes,omitempty"`
+	Routes            []UIRoute                             `yaml:"routes,omitempty"`
 }
 
 type specWire struct {
@@ -533,7 +537,7 @@ type specWire struct {
 	Requires          []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
 	UI                *OwnedUI                              `json:"ui,omitempty" yaml:"ui,omitempty"`
 	AssetRoot         string                                `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
-	Routes            []WebUIRoute                          `json:"routes,omitempty" yaml:"routes,omitempty"`
+	Routes            []UIRoute                             `json:"routes,omitempty" yaml:"routes,omitempty"`
 }
 
 func (s *Spec) UnmarshalJSON(data []byte) error {

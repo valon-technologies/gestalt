@@ -33,8 +33,8 @@ const (
 
 	DefaultIndexedDBProvider = DefaultProviderRepo + "/indexeddb/relationaldb"
 	DefaultIndexedDBVersion  = "0.0.1-alpha.1"
-	DefaultWebUIProvider     = DefaultProviderRepo + "/web/default"
-	DefaultWebUIVersion      = "0.0.1-alpha.11"
+	DefaultUIProvider        = DefaultProviderRepo + "/web/default"
+	DefaultUIVersion         = "0.0.1-alpha.11"
 	DefaultProviderInstance  = "default"
 )
 
@@ -2131,7 +2131,7 @@ func normalizeProviderSourceShapes(cfg *Config) {
 	}
 	for _, entry := range cfg.Providers.UI {
 		if entry != nil {
-			normalizeEntry(providermanifestv1.KindWebUI, &entry.ProviderEntry)
+			normalizeEntry(providermanifestv1.KindUI, &entry.ProviderEntry)
 		}
 	}
 }
@@ -2336,7 +2336,7 @@ func normalizeAdminConfig(cfg *Config) error {
 		return nil
 	}
 
-	roles, err := providerpkg.NormalizeWebUIAllowedRoles("server.admin.allowedRoles", admin.AllowedRoles)
+	roles, err := providerpkg.NormalizeUIAllowedRoles("server.admin.allowedRoles", admin.AllowedRoles)
 	if err != nil {
 		if admin.AuthorizationPolicy == "" {
 			return fmt.Errorf("normalize admin config: server.admin.allowedRoles requires server.admin.authorizationPolicy")
@@ -2454,7 +2454,7 @@ func resolveRelativePathsInValue(configPath string, root map[string]any, sourceS
 			{key: "secrets", kind: providermanifestv1.KindSecrets},
 			{key: "telemetry", kind: string(HostProviderKindTelemetry)},
 			{key: "audit", kind: string(HostProviderKindAudit)},
-			{key: "ui", kind: providermanifestv1.KindWebUI},
+			{key: "ui", kind: providermanifestv1.KindUI},
 			{key: "indexeddb", kind: providermanifestv1.KindIndexedDB},
 			{key: "cache", kind: providermanifestv1.KindCache},
 			{key: "s3", kind: providermanifestv1.KindS3},

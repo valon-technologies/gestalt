@@ -47,7 +47,7 @@ const providerReleaseSchemaName = "gestaltd-provider-release"
 const providerReleaseSchemaVersion = 1
 const providerReleaseRuntimeKindExecutable = "executable"
 const providerReleaseRuntimeKindDeclarative = "declarative"
-const providerReleaseRuntimeKindWebUI = "webui"
+const providerReleaseRuntimeKindUI = "ui"
 const providerReleaseGenericTarget = "generic"
 const windowsOS = "windows"
 const windowsExecutableSuffix = ".exe"
@@ -257,7 +257,7 @@ func resolveReleaseBuildTarget(root string, manifest *providermanifestv1.Manifes
 	if err != nil {
 		return nil, err
 	}
-	if kind == providermanifestv1.KindWebUI {
+	if kind == providermanifestv1.KindUI {
 		return nil, nil
 	}
 	hasSource, err := providerpkg.HasSourceReleaseTarget(root, kind)
@@ -523,8 +523,8 @@ func releaseRuntimeMetadata(manifest *providermanifestv1.Manifest) (string, erro
 			return providerReleaseRuntimeKindDeclarative, nil
 		}
 		return providerReleaseRuntimeKindExecutable, nil
-	case providermanifestv1.KindWebUI:
-		return providerReleaseRuntimeKindWebUI, nil
+	case providermanifestv1.KindUI:
+		return providerReleaseRuntimeKindUI, nil
 	default:
 		return providerReleaseRuntimeKindExecutable, nil
 	}
@@ -553,10 +553,10 @@ func validateReleaseOutputDir(manifest *providermanifestv1.Manifest, sourceDir, 
 
 	insideAssetRoot, err := pathWithinBase(outputDirAbs, assetRootAbs)
 	if err != nil {
-		return fmt.Errorf("compare output dir to webui asset_root: %w", err)
+		return fmt.Errorf("compare output dir to ui asset_root: %w", err)
 	}
 	if insideAssetRoot {
-		return fmt.Errorf("--output %q must not be inside webui.asset_root %q", outputDir, manifest.Spec.AssetRoot)
+		return fmt.Errorf("--output %q must not be inside ui.asset_root %q", outputDir, manifest.Spec.AssetRoot)
 	}
 
 	return nil

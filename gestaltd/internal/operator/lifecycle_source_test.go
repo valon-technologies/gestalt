@@ -919,14 +919,14 @@ func TestSourceWorkflowMetadataURLInitAndLockedLoad(t *testing.T) {
 	}
 }
 
-func TestSourceWebUIMetadataURLInitAndLockedLoad(t *testing.T) {
+func TestSourceUIMetadataURLInitAndLockedLoad(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	packageSource := "github.com/acme/tools/roadmap-ui"
 	version := "0.9.1"
 	archivePath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
+		Kind:        providermanifestv1.KindUI,
 		Source:      packageSource,
 		Version:     version,
 		DisplayName: "Roadmap UI",
@@ -938,7 +938,7 @@ func TestSourceWebUIMetadataURLInitAndLockedLoad(t *testing.T) {
 	}, false)
 	archiveData, err := os.ReadFile(archivePath)
 	if err != nil {
-		t.Fatalf("read webui archive: %v", err)
+		t.Fatalf("read ui archive: %v", err)
 	}
 	archiveSHA := sha256.Sum256(archiveData)
 
@@ -970,9 +970,9 @@ func TestSourceWebUIMetadataURLInitAndLockedLoad(t *testing.T) {
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       packageSource,
-				Kind:          providermanifestv1.KindWebUI,
+				Kind:          providermanifestv1.KindUI,
 				Version:       version,
-				Runtime:       providerReleaseRuntimeWebUI,
+				Runtime:       providerReleaseRuntimeUI,
 				Artifacts: map[string]providerReleaseArtifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(archivePathURL),
@@ -1047,11 +1047,11 @@ func TestSourceWebUIMetadataURLInitAndLockedLoad(t *testing.T) {
 	if entry.Package != packageSource {
 		t.Fatalf("entry.Package = %q, want %q", entry.Package, packageSource)
 	}
-	if entry.Kind != providermanifestv1.KindWebUI {
-		t.Fatalf("entry.Kind = %q, want %q", entry.Kind, providermanifestv1.KindWebUI)
+	if entry.Kind != providermanifestv1.KindUI {
+		t.Fatalf("entry.Kind = %q, want %q", entry.Kind, providermanifestv1.KindUI)
 	}
-	if entry.Runtime != providerReleaseRuntimeWebUI {
-		t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerReleaseRuntimeWebUI)
+	if entry.Runtime != providerReleaseRuntimeUI {
+		t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerReleaseRuntimeUI)
 	}
 	if entry.Version != version {
 		t.Fatalf("entry.Version = %q, want %q", entry.Version, version)
@@ -1092,8 +1092,8 @@ func TestSourceWebUIMetadataURLInitAndLockedLoad(t *testing.T) {
 	if ui == nil || ui.ResolvedManifest == nil {
 		t.Fatalf("ui resolved manifest = %+v", ui)
 	}
-	if got := ui.ResolvedManifest.Kind; got != providermanifestv1.KindWebUI {
-		t.Fatalf("ui manifest kind = %q, want %q", got, providermanifestv1.KindWebUI)
+	if got := ui.ResolvedManifest.Kind; got != providermanifestv1.KindUI {
+		t.Fatalf("ui manifest kind = %q, want %q", got, providermanifestv1.KindUI)
 	}
 	if got := ui.ResolvedManifest.Source; got != packageSource {
 		t.Fatalf("ui manifest source = %q, want %q", got, packageSource)

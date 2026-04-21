@@ -173,7 +173,7 @@ Additional rules:
 
 This matrix captures the minimum V1 surface area.
 
-| Feature | Backend / Data Model | HTTP API | CLI | Default Web UI | Notes |
+| Feature | Backend / Data Model | HTTP API | CLI | Default UI | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Identity CRUD | Required | Required | Required | Required | Workspace-owned runtime resources |
 | Membership sharing | Required | Required | Required | Required | Canonical user `subject_id` storage, email-friendly writes |
