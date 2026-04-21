@@ -42,6 +42,7 @@ type providerLockBuckets struct {
 	Telemetry      map[string]portableLockEntry `json:"telemetry,omitempty"`
 	Audit          map[string]portableLockEntry `json:"audit,omitempty"`
 	UI             map[string]portableLockEntry `json:"ui,omitempty"`
+	LegacyWebUI    map[string]portableLockEntry `json:"webui,omitempty"`
 }
 
 type portableLockEntry struct {
@@ -239,7 +240,7 @@ func (lock *providerLockfile) toLockfile() *Lockfile {
 	runtimeLock.Secrets = lockEntriesFromPortableEntries(lock.Providers.Secrets)
 	runtimeLock.Telemetry = lockEntriesFromPortableEntries(lock.Providers.Telemetry)
 	runtimeLock.Audit = lockEntriesFromPortableEntries(lock.Providers.Audit)
-	runtimeLock.UIs = lockEntriesFromPortableEntries(lock.Providers.UI)
+	runtimeLock.UIs = lockEntriesFromPortableEntries(mergePortableLockEntries(lock.Providers.UI, lock.Providers.LegacyWebUI))
 	return runtimeLock
 }
 
@@ -294,7 +295,7 @@ func lockEntriesFromPortableEntries(entries map[string]portableLockEntry) map[st
 		runtimeEntries[name] = LockEntry{
 			Fingerprint: entry.InputDigest,
 			Package:     entry.Package,
-			Kind:        entry.Kind,
+			Kind:        providermanifestv1.NormalizeKind(entry.Kind),
 			Runtime:     entry.Runtime,
 			Source:      source,
 			Version:     entry.Version,

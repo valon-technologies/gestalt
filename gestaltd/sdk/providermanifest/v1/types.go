@@ -26,6 +26,8 @@ const (
 
 func NormalizeKind(kind string) string {
 	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case "auth":
+		return KindAuthentication
 	case KindAuthentication:
 		return KindAuthentication
 	case KindPlugin:
@@ -42,6 +44,8 @@ func NormalizeKind(kind string) string {
 		return KindWorkflow
 	case KindSecrets:
 		return KindSecrets
+	case "webui":
+		return KindUI
 	case KindUI:
 		return KindUI
 	default:
