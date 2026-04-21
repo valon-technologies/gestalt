@@ -66,38 +66,38 @@ type Config struct {
 }
 
 type ProvidersConfig struct {
-	Auth          map[string]*ProviderEntry `yaml:"auth,omitempty"`
-	Authorization map[string]*ProviderEntry `yaml:"authorization,omitempty"`
-	Secrets       map[string]*ProviderEntry `yaml:"secrets,omitempty"`
-	Telemetry     map[string]*ProviderEntry `yaml:"telemetry,omitempty"`
-	Audit         map[string]*ProviderEntry `yaml:"audit,omitempty"`
-	UI            map[string]*UIEntry       `yaml:"ui,omitempty"`
-	IndexedDB     map[string]*ProviderEntry `yaml:"indexeddb,omitempty"`
-	Cache         map[string]*ProviderEntry `yaml:"cache,omitempty"`
-	S3            map[string]*ProviderEntry `yaml:"s3,omitempty"`
-	Workflow      map[string]*ProviderEntry `yaml:"workflow,omitempty"`
+	Authentication map[string]*ProviderEntry `yaml:"authentication,omitempty"`
+	Authorization  map[string]*ProviderEntry `yaml:"authorization,omitempty"`
+	Secrets        map[string]*ProviderEntry `yaml:"secrets,omitempty"`
+	Telemetry      map[string]*ProviderEntry `yaml:"telemetry,omitempty"`
+	Audit          map[string]*ProviderEntry `yaml:"audit,omitempty"`
+	UI             map[string]*UIEntry       `yaml:"ui,omitempty"`
+	IndexedDB      map[string]*ProviderEntry `yaml:"indexeddb,omitempty"`
+	Cache          map[string]*ProviderEntry `yaml:"cache,omitempty"`
+	S3             map[string]*ProviderEntry `yaml:"s3,omitempty"`
+	Workflow       map[string]*ProviderEntry `yaml:"workflow,omitempty"`
 }
 
 type HostProviderKind string
 
 const (
-	HostProviderKindAuth          HostProviderKind = "auth"
-	HostProviderKindAuthorization HostProviderKind = "authorization"
-	HostProviderKindSecrets       HostProviderKind = "secrets"
-	HostProviderKindTelemetry     HostProviderKind = "telemetry"
-	HostProviderKindAudit         HostProviderKind = "audit"
-	HostProviderKindIndexedDB     HostProviderKind = "indexeddb"
-	HostProviderKindCache         HostProviderKind = "cache"
-	HostProviderKindWorkflow      HostProviderKind = "workflow"
+	HostProviderKindAuthentication HostProviderKind = "authentication"
+	HostProviderKindAuthorization  HostProviderKind = "authorization"
+	HostProviderKindSecrets        HostProviderKind = "secrets"
+	HostProviderKindTelemetry      HostProviderKind = "telemetry"
+	HostProviderKindAudit          HostProviderKind = "audit"
+	HostProviderKindIndexedDB      HostProviderKind = "indexeddb"
+	HostProviderKindCache          HostProviderKind = "cache"
+	HostProviderKindWorkflow       HostProviderKind = "workflow"
 )
 
 type ServerProvidersConfig struct {
-	Auth          string `yaml:"auth,omitempty"`
-	Authorization string `yaml:"authorization,omitempty"`
-	Secrets       string `yaml:"secrets,omitempty"`
-	Telemetry     string `yaml:"telemetry,omitempty"`
-	Audit         string `yaml:"audit,omitempty"`
-	IndexedDB     string `yaml:"indexeddb,omitempty"`
+	Authentication string `yaml:"authentication,omitempty"`
+	Authorization  string `yaml:"authorization,omitempty"`
+	Secrets        string `yaml:"secrets,omitempty"`
+	Telemetry      string `yaml:"telemetry,omitempty"`
+	Audit          string `yaml:"audit,omitempty"`
+	IndexedDB      string `yaml:"indexeddb,omitempty"`
 }
 
 // ProviderSource supports handwritten config in three forms via custom
@@ -1092,7 +1092,7 @@ func OverlayRemotePluginConfigPaths(paths []string, cfg *Config) error {
 		kind    HostProviderKind
 		entries map[string]*ProviderEntry
 	}{
-		{HostProviderKindAuth, cfg.Providers.Auth},
+		{HostProviderKindAuthentication, cfg.Providers.Authentication},
 		{HostProviderKindAuthorization, cfg.Providers.Authorization},
 		{HostProviderKindSecrets, cfg.Providers.Secrets},
 		{HostProviderKindTelemetry, cfg.Providers.Telemetry},
@@ -1223,8 +1223,8 @@ func normalizeLegacyMappingKey(node *yaml.Node, preferred, legacy, preferredPath
 	if preferredIdx >= 0 && legacyIdx >= 0 {
 		return fmt.Errorf("parsing config YAML: %s and %s cannot both be set", preferredPath, legacyPath)
 	}
-	if preferredIdx >= 0 {
-		node.Content[preferredIdx].Value = legacy
+	if legacyIdx >= 0 {
+		node.Content[legacyIdx].Value = preferred
 	}
 	return nil
 }
@@ -1571,7 +1571,7 @@ func rejectRemovedDisabledFields(root *yaml.Node) error {
 		return err
 	}
 	providersNode := mappingValueNode(root, "providers")
-	for _, section := range []string{"auth", "secrets", "telemetry", "audit", "indexeddb", "cache", "s3", "ui"} {
+	for _, section := range []string{"authentication", "secrets", "telemetry", "audit", "indexeddb", "cache", "s3", "ui"} {
 		if err := rejectRemovedDisabledEntryFields(mappingValueNode(providersNode, section), "providers."+section); err != nil {
 			return err
 		}
@@ -1815,7 +1815,7 @@ func applyDefaults(cfg *Config) {
 	cfg.Workflows.Schedules = nonNilWorkflowScheduleMap(cfg.Workflows.Schedules)
 	cfg.Workflows.EventTriggers = nonNilWorkflowEventTriggerMap(cfg.Workflows.EventTriggers)
 	cfg.Providers.UI = nonNilUIEntryMap(cfg.Providers.UI)
-	cfg.Providers.Auth = nonNilProviderEntryMap(cfg.Providers.Auth)
+	cfg.Providers.Authentication = nonNilProviderEntryMap(cfg.Providers.Authentication)
 	cfg.Providers.Authorization = nonNilProviderEntryMap(cfg.Providers.Authorization)
 	cfg.Providers.Secrets = applyDefaultBuiltinProviderEntries(cfg.Providers.Secrets, DefaultProviderInstance, "env")
 	cfg.Providers.Telemetry = applyDefaultBuiltinProviderEntries(cfg.Providers.Telemetry, DefaultProviderInstance, "stdout")
@@ -1861,7 +1861,7 @@ func normalizeProviderSourceShapes(cfg *Config) {
 		kind    string
 		entries map[string]*ProviderEntry
 	}{
-		{providermanifestv1.KindAuth, cfg.Providers.Auth},
+		{providermanifestv1.KindAuth, cfg.Providers.Authentication},
 		{providermanifestv1.KindAuthorization, cfg.Providers.Authorization},
 		{providermanifestv1.KindSecrets, cfg.Providers.Secrets},
 		{string(HostProviderKindTelemetry), cfg.Providers.Telemetry},
@@ -2195,7 +2195,7 @@ func resolveRelativePathsInValue(configPath string, root map[string]any, sourceS
 			key  string
 			kind string
 		}{
-			{key: "auth", kind: providermanifestv1.KindAuth},
+			{key: "authentication", kind: providermanifestv1.KindAuth},
 			{key: "authorization", kind: providermanifestv1.KindAuthorization},
 			{key: "secrets", kind: providermanifestv1.KindSecrets},
 			{key: "telemetry", kind: string(HostProviderKindTelemetry)},
@@ -2288,7 +2288,7 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		entry.Source.Path = resolveRelativePath(baseDir, entry.Source.Path)
 	}
 
-	for _, entry := range cfg.Providers.Auth {
+	for _, entry := range cfg.Providers.Authentication {
 		resolveEntry(entry)
 	}
 	for _, entry := range cfg.Providers.Authorization {

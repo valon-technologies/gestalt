@@ -56,7 +56,7 @@ func TestLoadConfigGenericFixture(t *testing.T) {
 apiVersion: gestaltd.config/v3
 server:
   providers:
-    auth: google
+    authentication: google
     indexeddb: sqlite
   encryptionKey: server-key
   public:
@@ -66,7 +66,7 @@ server:
     host: 127.0.0.1
     port: 9191
 providers:
-  auth:
+  authentication:
     google:
       source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
       config:
@@ -131,7 +131,7 @@ server:
   providers:
     authorization: indexeddb
 providers:
-  auth:
+  authentication:
     primary:
       source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
     backup:
@@ -165,9 +165,9 @@ plugins:
 		t.Fatalf("Load: %v", err)
 	}
 
-	authName, authEntry := mustSelectedProvider(t, cfg, HostProviderKindAuth)
+	authName, authEntry := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 	if authName != "backup" || authEntry == nil {
-		t.Fatalf("SelectedAuthProvider = (%q, %#v), want backup", authName, authEntry)
+		t.Fatalf("SelectedAuthenticationProvider = (%q, %#v), want backup", authName, authEntry)
 	}
 	indexedDBName, indexedDBEntry := mustSelectedProvider(t, cfg, HostProviderKindIndexedDB)
 	if indexedDBName != "archive" || indexedDBEntry == nil {
@@ -228,11 +228,11 @@ func TestLoadConfigDefaultsAndEnv(t *testing.T) {
 apiVersion: gestaltd.config/v3
 server:
   providers:
-    auth: local
+    authentication: local
     indexeddb: sqlite
   encryptionKey: ${TEST_ENCRYPTION}
 providers:
-  auth:
+  authentication:
     local:
       source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
       config:
@@ -269,9 +269,9 @@ plugins:
 		t.Fatalf("Server.EncryptionKey = %q", cfg.Server.EncryptionKey)
 	}
 
-	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuth)
+	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 	if auth == nil {
-		t.Fatal("SelectedAuthProvider = nil")
+		t.Fatal("SelectedAuthenticationProvider = nil")
 	}
 	authCfg := mustDecodeNode(t, auth.Config)
 	if authCfg["clientId"] != "client-from-env" {
@@ -286,11 +286,11 @@ func TestLoadConfigAcceptsAuthenticationAliases(t *testing.T) {
 apiVersion: gestaltd.config/v3
 server:
   providers:
-    authentication: local
+    auth: local
     indexeddb: sqlite
   encryptionKey: server-key
 providers:
-  authentication:
+  auth:
     local:
       source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
   indexeddb:
@@ -304,15 +304,15 @@ providers:
 		t.Fatalf("Load: %v", err)
 	}
 
-	authName, authEntry := mustSelectedProvider(t, cfg, HostProviderKindAuth)
+	authName, authEntry := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 	if authName != "local" || authEntry == nil {
-		t.Fatalf("SelectedAuthProvider = (%q, %#v), want local", authName, authEntry)
+		t.Fatalf("SelectedAuthenticationProvider = (%q, %#v), want local", authName, authEntry)
 	}
-	if cfg.Server.Providers.Auth != "local" {
-		t.Fatalf("Server.Providers.Auth = %q, want local", cfg.Server.Providers.Auth)
+	if cfg.Server.Providers.Authentication != "local" {
+		t.Fatalf("Server.Providers.Authentication = %q, want local", cfg.Server.Providers.Authentication)
 	}
-	if cfg.Providers.Auth["local"] == nil {
-		t.Fatal("Providers.Auth[local] = nil")
+	if cfg.Providers.Authentication["local"] == nil {
+		t.Fatal("Providers.Authentication[local] = nil")
 	}
 }
 
@@ -688,7 +688,7 @@ func TestValidateRuntime(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "missing auth provider is allowed",
+			name: "missing authentication provider is allowed",
 			yaml: `
 providers:
   indexeddb:
@@ -760,9 +760,9 @@ server:
 				t.Fatalf("ValidateRuntime: %v", err)
 			}
 			if tc.name == "omitted auth is allowed" {
-				_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuth)
+				_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 				if auth != nil {
-					t.Fatalf("SelectedAuthProvider = %#v, want nil", auth)
+					t.Fatalf("SelectedAuthenticationProvider = %#v, want nil", auth)
 				}
 			}
 		})
@@ -821,7 +821,7 @@ server:
   baseUrl: not a url
   encryptionKey: server-key
   providers:
-    auth: sample
+    authentication: sample
     indexeddb: sqlite
   management:
     host: 127.0.0.1
@@ -830,7 +830,7 @@ server:
   admin:
     authorizationPolicy: admin_policy
 providers:
-  auth:
+  authentication:
     sample:
       source:
         path: ./providers/auth/sample
@@ -861,7 +861,7 @@ server:
   baseUrl: https://gestalt.example.test
   encryptionKey: server-key
   providers:
-    auth: sample
+    authentication: sample
     indexeddb: sqlite
   management:
     host: 127.0.0.1
@@ -870,7 +870,7 @@ server:
   admin:
     authorizationPolicy: admin_policy
 providers:
-  auth:
+  authentication:
     sample:
       source:
         path: ./providers/auth/sample
@@ -901,14 +901,14 @@ server:
   baseUrl: https://gestalt.example.test
   encryptionKey: server-key
   providers:
-    auth: sample
+    authentication: sample
     indexeddb: sqlite
   management:
     baseUrl: https://gestalt.example.test:9090
   admin:
     authorizationPolicy: admin_policy
 providers:
-  auth:
+  authentication:
     sample:
       source:
         path: ./providers/auth/sample
@@ -938,14 +938,14 @@ authorization:
 server:
   encryptionKey: server-key
   providers:
-    auth: sample
+    authentication: sample
     indexeddb: sqlite
   admin:
     authorizationPolicy: admin_policy
     allowedRoles:
       - ""
 providers:
-  auth:
+  authentication:
     sample:
       source:
         path: ./providers/auth/sample
@@ -3222,7 +3222,7 @@ providers:
 			yaml: `
 apiVersion: gestaltd.config/v3
 providers:
-  auth:
+  authentication:
     primary:
       source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
 `,
@@ -3322,10 +3322,10 @@ server:
 `,
 		},
 		{
-			name: "multiple auth providers require selection or default",
+			name: "multiple authentication providers require selection or default",
 			yaml: `
 providers:
-  auth:
+  authentication:
     one:
       source:
         path: ./one/manifest.yaml
@@ -3974,31 +3974,31 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			wantErr: "source.path or metadata URL is required",
 		},
 		{
-			name: "auth provider valid",
+			name: "authentication provider valid",
 			cfg: &Config{
 				Providers: ProvidersConfig{
-					Auth: singletonProviderEntry(&ProviderEntry{Source: ProviderSource{metadataURL: "https://example.com/providers/test-auth/provider-release.yaml"}}),
+					Authentication: singletonProviderEntry(&ProviderEntry{Source: ProviderSource{metadataURL: "https://example.com/providers/test-auth/provider-release.yaml"}}),
 				},
 			},
 		},
 		{
-			name: "auth provider none valid",
+			name: "authentication provider none valid",
 			cfg:  &Config{},
 		},
 		{
-			name: "auth provider invalid when source missing",
+			name: "authentication provider invalid when source missing",
 			cfg: &Config{
 				Providers: ProvidersConfig{
-					Auth: singletonProviderEntry(&ProviderEntry{}),
+					Authentication: singletonProviderEntry(&ProviderEntry{}),
 				},
 			},
 			wantErr: `source.path or metadata URL is required`,
 		},
 		{
-			name: "auth config requires source",
+			name: "authentication config requires source",
 			cfg: &Config{
 				Providers: ProvidersConfig{
-					Auth: singletonProviderEntry(&ProviderEntry{Config: yaml.Node{Kind: yaml.MappingNode}}),
+					Authentication: singletonProviderEntry(&ProviderEntry{Config: yaml.Node{Kind: yaml.MappingNode}}),
 				},
 			},
 			wantErr: `source.path or metadata URL is required`,
@@ -4070,8 +4070,8 @@ func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 	}
 	if err := os.WriteFile(cfgPath, []byte(`
 providers:
-  auth:
-    auth:
+  authentication:
+    authentication:
       source:
         path: ../auth-plugin/provider.yaml
   indexeddb:
@@ -4098,9 +4098,9 @@ server:
 	if got := cfg.Plugins["service-a"].IconFile; got != iconPath {
 		t.Fatalf("IconFile = %q, want %q", got, iconPath)
 	}
-	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuth)
+	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 	if auth == nil {
-		t.Fatal("SelectedAuthProvider = nil")
+		t.Fatal("SelectedAuthenticationProvider = nil")
 	}
 	if got := auth.SourcePath(); got != filepath.Join(dir, "auth-plugin", "provider.yaml") {
 		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "provider.yaml"))
@@ -4158,8 +4158,8 @@ func TestAuthConfigMap(t *testing.T) {
 	path := mustWriteConfigFile(t, `
 apiVersion: gestaltd.config/v3
 providers:
-  auth:
-    auth:
+  authentication:
+    authentication:
       source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
       config:
         clientId: client-1
@@ -4180,9 +4180,9 @@ server:
 		t.Fatalf("Load: %v", err)
 	}
 
-	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuth)
+	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 	if auth == nil {
-		t.Fatal("SelectedAuthProvider = nil")
+		t.Fatal("SelectedAuthenticationProvider = nil")
 	}
 	authCfg := mustDecodeNode(t, auth.Config)
 	if len(authCfg) != 3 {

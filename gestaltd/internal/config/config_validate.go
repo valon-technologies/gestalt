@@ -73,7 +73,7 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		kind    HostProviderKind
 		entries map[string]*ProviderEntry
 	}{
-		{HostProviderKindAuth, cfg.Providers.Auth},
+		{HostProviderKindAuthentication, cfg.Providers.Authentication},
 		{HostProviderKindAuthorization, cfg.Providers.Authorization},
 		{HostProviderKindSecrets, cfg.Providers.Secrets},
 		{HostProviderKindTelemetry, cfg.Providers.Telemetry},
@@ -161,11 +161,11 @@ func validateHostProviderEntries(kind HostProviderKind, entries map[string]*Prov
 			return err
 		}
 		switch kind {
-		case HostProviderKindAuth:
+		case HostProviderKindAuthentication:
 			if entry.Source.IsBuiltin() {
-				return fmt.Errorf("config validation: auth provider %q does not support builtin providers; use a provider source reference or omit auth", name)
+				return fmt.Errorf("config validation: authentication provider %q does not support builtin providers; use a provider source reference or omit authentication", name)
 			}
-			if err := validateProviderEntrySource("auth", name, entry, sourceSyntax); err != nil {
+			if err := validateProviderEntrySource("authentication", name, entry, sourceSyntax); err != nil {
 				return err
 			}
 		case HostProviderKindAuthorization:
@@ -692,13 +692,13 @@ func validateAdminConfig(cfg *Config) error {
 			return fmt.Errorf("config validation: server.admin.allowedRoles requires server.admin.authorizationPolicy")
 		}
 	} else {
-		_, authProvider, err := cfg.SelectedAuthProvider()
+		_, authProvider, err := cfg.SelectedAuthenticationProvider()
 		if err != nil {
 			return err
 		}
 		if authProvider == nil {
-				return fmt.Errorf("config validation: server.admin.authorizationPolicy requires providers.authentication to be configured")
-			}
+			return fmt.Errorf("config validation: server.admin.authorizationPolicy requires providers.authentication to be configured")
+		}
 		if err := validateAuthorizationPolicyReference(cfg, "server.admin", "/admin", policy); err != nil {
 			return err
 		}

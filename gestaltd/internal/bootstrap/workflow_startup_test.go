@@ -127,7 +127,7 @@ func workflowStartupTestConfig() *config.Config {
 	return &config.Config{
 		Plugins: map[string]*config.ProviderEntry{},
 		Providers: config.ProvidersConfig{
-			Auth: map[string]*config.ProviderEntry{
+			Authentication: map[string]*config.ProviderEntry{
 				"default": {
 					Source: config.NewMetadataSource("https://example.invalid/github-com-valon-technologies-gestalt-providers-auth-oidc/v0.0.1-alpha.1/provider-release.yaml"),
 					Config: yaml.Node{Kind: yaml.MappingNode},

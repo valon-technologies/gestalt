@@ -940,18 +940,18 @@ func closeSecretManager(sm core.SecretManager) error {
 }
 
 func buildAuthProviders(cfg *config.Config, factories *FactoryRegistry, deps Deps) (string, map[string]core.AuthProvider, error) {
-	selectedName, _, err := cfg.SelectedAuthProvider()
+	selectedName, _, err := cfg.SelectedAuthenticationProvider()
 	if err != nil {
 		return "", nil, err
 	}
-	if len(cfg.Providers.Auth) == 0 {
+	if len(cfg.Providers.Authentication) == 0 {
 		return selectedName, nil, nil
 	}
 	if factories.Auth == nil {
-		return "", nil, fmt.Errorf("bootstrap: auth factory is not registered")
+		return "", nil, fmt.Errorf("bootstrap: authentication factory is not registered")
 	}
-	providers := make(map[string]core.AuthProvider, len(cfg.Providers.Auth))
-	for name, authEntry := range cfg.Providers.Auth {
+	providers := make(map[string]core.AuthProvider, len(cfg.Providers.Authentication))
+	for name, authEntry := range cfg.Providers.Authentication {
 		if authEntry == nil {
 			continue
 		}
@@ -972,14 +972,14 @@ func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factor
 	node := authEntry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
 		var err error
-		node, err = config.BuildComponentRuntimeConfigNode(name, "auth", authEntry, authEntry.Config)
+		node, err = config.BuildComponentRuntimeConfigNode(name, "authentication", authEntry, authEntry.Config)
 		if err != nil {
-			return nil, fmt.Errorf("bootstrap: auth provider %q: %w", name, err)
+			return nil, fmt.Errorf("bootstrap: authentication provider %q: %w", name, err)
 		}
 	}
 	auth, err := factories.Auth(node, deps)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: auth provider %q: %w", name, err)
+		return nil, fmt.Errorf("bootstrap: authentication provider %q: %w", name, err)
 	}
 	return auth, nil
 }

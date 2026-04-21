@@ -43,18 +43,19 @@ const (
 )
 
 type Lockfile struct {
-	Version       int                          `json:"version"`
-	Providers     map[string]LockProviderEntry `json:"providers"`
-	Auth          map[string]LockEntry         `json:"auth,omitempty"`
-	Authorization map[string]LockEntry         `json:"authorization,omitempty"`
-	IndexedDBs    map[string]LockEntry         `json:"indexeddbs,omitempty"`
-	Caches        map[string]LockEntry         `json:"cache,omitempty"`
-	S3            map[string]LockEntry         `json:"s3,omitempty"`
-	Workflows     map[string]LockEntry         `json:"workflow,omitempty"`
-	Secrets       map[string]LockEntry         `json:"secrets,omitempty"`
-	Telemetry     map[string]LockEntry         `json:"telemetry,omitempty"`
-	Audit         map[string]LockEntry         `json:"audit,omitempty"`
-	UIs           map[string]LockUIEntry       `json:"ui,omitempty"`
+	Version        int                          `json:"version"`
+	Providers      map[string]LockProviderEntry `json:"providers"`
+	Authentication map[string]LockEntry         `json:"authentication,omitempty"`
+	LegacyAuth     map[string]LockEntry         `json:"auth,omitempty"`
+	Authorization  map[string]LockEntry         `json:"authorization,omitempty"`
+	IndexedDBs     map[string]LockEntry         `json:"indexeddbs,omitempty"`
+	Caches         map[string]LockEntry         `json:"cache,omitempty"`
+	S3             map[string]LockEntry         `json:"s3,omitempty"`
+	Workflows      map[string]LockEntry         `json:"workflow,omitempty"`
+	Secrets        map[string]LockEntry         `json:"secrets,omitempty"`
+	Telemetry      map[string]LockEntry         `json:"telemetry,omitempty"`
+	Audit          map[string]LockEntry         `json:"audit,omitempty"`
+	UIs            map[string]LockUIEntry       `json:"ui,omitempty"`
 }
 
 // LockArchive records a platform-specific archive URL and optional integrity hash.
@@ -179,7 +180,7 @@ func (l *Lifecycle) initAtPaths(configPaths []string, state StatePaths) (*Lockfi
 		return nil, nil, initPaths{}, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", len(lock.Auth), "authorization", len(lock.Authorization), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "s3", len(lock.S3), "workflow", len(lock.Workflows), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "authentication", len(lock.Authentication), "authorization", len(lock.Authorization), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "s3", len(lock.S3), "workflow", len(lock.Workflows), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, paths, nil
 }
@@ -662,7 +663,7 @@ func hostProviderCollections(cfg *config.Config) []struct {
 		kind    config.HostProviderKind
 		entries map[string]*config.ProviderEntry
 	}{
-		{config.HostProviderKindAuth, cfg.Providers.Auth},
+		{config.HostProviderKindAuthentication, cfg.Providers.Authentication},
 		{config.HostProviderKindAuthorization, cfg.Providers.Authorization},
 		{config.HostProviderKindSecrets, cfg.Providers.Secrets},
 		{config.HostProviderKindTelemetry, cfg.Providers.Telemetry},
@@ -677,8 +678,8 @@ func lockEntriesForKind(lock *Lockfile, kind config.HostProviderKind) map[string
 		return nil
 	}
 	switch kind {
-	case config.HostProviderKindAuth:
-		return lock.Auth
+	case config.HostProviderKindAuthentication:
+		return lock.Authentication
 	case config.HostProviderKindAuthorization:
 		return lock.Authorization
 	case config.HostProviderKindSecrets:
@@ -899,7 +900,7 @@ func s3DestDir(paths initPaths, name string) string {
 
 func componentDestDir(paths initPaths, kind config.HostProviderKind, name string) string {
 	switch kind {
-	case config.HostProviderKindAuth:
+	case config.HostProviderKindAuthentication:
 		return authDestDir(paths, name)
 	case config.HostProviderKindAuthorization:
 		return authorizationDestDir(paths, name)
@@ -955,7 +956,7 @@ func inspectPreparedInstall(destDir string) (*preparedInstall, error) {
 
 func providerManifestKind(kind config.HostProviderKind) string {
 	switch kind {
-	case config.HostProviderKindAuth:
+	case config.HostProviderKindAuthentication:
 		return providermanifestv1.KindAuth
 	case config.HostProviderKindAuthorization:
 		return providermanifestv1.KindAuthorization

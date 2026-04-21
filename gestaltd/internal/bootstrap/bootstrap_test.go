@@ -674,7 +674,7 @@ func validConfig() *config.Config {
 	return &config.Config{
 		Plugins: map[string]*config.ProviderEntry{},
 		Providers: config.ProvidersConfig{
-			Auth: map[string]*config.ProviderEntry{
+			Authentication: map[string]*config.ProviderEntry{
 				"default": {
 					Source: config.NewMetadataSource("https://example.invalid/github-com-valon-technologies-gestalt-providers-auth-oidc/v0.0.1-alpha.1/provider-release.yaml"),
 					Config: yaml.Node{Kind: yaml.MappingNode},
@@ -707,11 +707,11 @@ func mustYAMLNode(t *testing.T, value any) yaml.Node {
 	return node
 }
 
-func selectedAuthEntry(t *testing.T, cfg *config.Config) *config.ProviderEntry {
+func selectedAuthenticationEntry(t *testing.T, cfg *config.Config) *config.ProviderEntry {
 	t.Helper()
-	_, entry, err := cfg.SelectedAuthProvider()
+	_, entry, err := cfg.SelectedAuthenticationProvider()
 	if err != nil {
-		t.Fatalf("SelectedAuthProvider: %v", err)
+		t.Fatalf("SelectedAuthenticationProvider: %v", err)
 	}
 	return entry
 }
@@ -3485,7 +3485,7 @@ func TestBootstrap_ReusesPreparedComponentRuntimeConfig(t *testing.T) {
 
 	cfg := validConfig()
 
-	authRuntime, err := config.BuildComponentRuntimeConfigNode("auth", "auth", selectedAuthEntry(t, cfg), yaml.Node{
+	authRuntime, err := config.BuildComponentRuntimeConfigNode("auth", "auth", selectedAuthenticationEntry(t, cfg), yaml.Node{
 		Kind: yaml.MappingNode,
 		Content: []*yaml.Node{
 			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "clientId"},
@@ -3495,7 +3495,7 @@ func TestBootstrap_ReusesPreparedComponentRuntimeConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildComponentRuntimeConfigNode(auth): %v", err)
 	}
-	selectedAuthEntry(t, cfg).Config = authRuntime
+	selectedAuthenticationEntry(t, cfg).Config = authRuntime
 
 	var gotAuthNode yaml.Node
 	factories := validFactories()
@@ -3740,7 +3740,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		cfg := validConfig()
-		selectedAuthEntry(t, cfg).Config = yaml.Node{
+		selectedAuthenticationEntry(t, cfg).Config = yaml.Node{
 			Kind: yaml.MappingNode,
 			Content: []*yaml.Node{
 				{Kind: yaml.ScalarNode, Value: "clientSecret", Tag: "!!str"},
@@ -4543,11 +4543,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
-		cfg.Providers.Auth = map[string]*config.ProviderEntry{
+		cfg.Providers.Authentication = map[string]*config.ProviderEntry{
 			"secondary": {Source: config.NewMetadataSource("https://example.invalid/github-com-valon-technologies-gestalt-providers-auth-oidc/v0.0.1-alpha.1/provider-release.yaml")},
 		}
-		cfg.Server.Providers.Auth = "secondary"
-		cfg.Providers.Auth["secondary"].Config = yaml.Node{
+		cfg.Server.Providers.Authentication = "secondary"
+		cfg.Providers.Authentication["secondary"].Config = yaml.Node{
 			Kind: yaml.MappingNode,
 			Content: []*yaml.Node{
 				{Kind: yaml.ScalarNode, Value: "issuerUrl", Tag: "!!str"},
@@ -4583,12 +4583,12 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("omits auth when auth provider is unset", func(t *testing.T) {
+	t.Run("omits authentication when the authentication provider is unset", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
-		cfg.Providers.Auth = nil
-		cfg.Server.Providers.Auth = ""
+		cfg.Providers.Authentication = nil
+		cfg.Server.Providers.Authentication = ""
 
 		var authFactoryCalled atomic.Bool
 		factories := validFactories()
