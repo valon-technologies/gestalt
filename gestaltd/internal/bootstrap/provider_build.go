@@ -684,11 +684,31 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			maps.Copy(env, execEnv)
 		}
 	}
-	runtimeProvider, runtimeOwned := effectivePluginRuntime(deps)
-	session, err := runtimeProvider.StartSession(ctx, pluginruntime.StartSessionRequest{
-		PluginName: name,
-		Metadata:   map[string]string{"plugin": name},
-	})
+	runtimeConfig, runtimeProvider, runtimeOwned, err := effectivePluginRuntime(ctx, name, entry, deps)
+	if err != nil {
+		return nil, err
+	}
+	runtimeRequirements, err := pluginRuntimeRequirementsForPlugin(name, entry, deps)
+	if err != nil {
+		if runtimeOwned {
+			_ = runtimeProvider.Close()
+		}
+		return nil, err
+	}
+	runtimeCapabilities, err := runtimeProvider.Capabilities(ctx)
+	if err != nil {
+		if runtimeOwned {
+			_ = runtimeProvider.Close()
+		}
+		return nil, fmt.Errorf("query %s capabilities: %w", pluginRuntimeLabel(runtimeConfig), err)
+	}
+	if err := validatePluginRuntimeCapabilities(pluginRuntimeLabel(runtimeConfig), runtimeCapabilities, runtimeRequirements); err != nil {
+		if runtimeOwned {
+			_ = runtimeProvider.Close()
+		}
+		return nil, err
+	}
+	session, err := runtimeProvider.StartSession(ctx, buildPluginRuntimeStartSessionRequest(name, runtimeConfig))
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -767,11 +787,91 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	return prov, nil
 }
 
-func effectivePluginRuntime(deps Deps) (pluginruntime.Provider, bool) {
+func effectivePluginRuntime(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (config.EffectivePluginRuntime, pluginruntime.Provider, bool, error) {
 	if deps.PluginRuntime != nil {
-		return deps.PluginRuntime, false
+		runtimeConfig := config.EffectivePluginRuntime{}
+		if entry != nil && entry.Runtime != nil {
+			runtimeConfig.Template = strings.TrimSpace(entry.Runtime.Template)
+			runtimeConfig.Image = strings.TrimSpace(entry.Runtime.Image)
+			runtimeConfig.Metadata = maps.Clone(entry.Runtime.Metadata)
+		}
+		return runtimeConfig, deps.PluginRuntime, false, nil
 	}
-	return pluginruntime.NewLocalProvider(), true
+	if deps.PluginRuntimeRegistry != nil {
+		runtimeConfig, runtimeProvider, err := deps.PluginRuntimeRegistry.Resolve(ctx, name, entry)
+		if err != nil {
+			return config.EffectivePluginRuntime{}, nil, false, err
+		}
+		if runtimeProvider != nil {
+			return runtimeConfig, runtimeProvider, false, nil
+		}
+		if runtimeConfig.Enabled {
+			return runtimeConfig, pluginruntime.NewLocalProvider(), true, nil
+		}
+	}
+	return config.EffectivePluginRuntime{}, pluginruntime.NewLocalProvider(), true, nil
+}
+
+type pluginRuntimeCapabilityRequirements struct {
+	HostServiceTunnels  bool
+	HostnameProxyEgress bool
+}
+
+func pluginRuntimeRequirementsForPlugin(name string, entry *config.ProviderEntry, deps Deps) (pluginRuntimeCapabilityRequirements, error) {
+	if entry == nil {
+		return pluginRuntimeCapabilityRequirements{}, nil
+	}
+	effectiveIndexedDB, err := config.ResolveEffectivePluginIndexedDB(name, entry, deps.SelectedIndexedDBName, deps.IndexedDBDefs)
+	if err != nil {
+		return pluginRuntimeCapabilityRequirements{}, err
+	}
+	return pluginRuntimeCapabilityRequirements{
+		HostServiceTunnels:  effectiveIndexedDB.Enabled || len(entry.Cache) > 0 || len(entry.S3) > 0 || len(entry.Invokes) > 0,
+		HostnameProxyEgress: len(entry.AllowedHosts) > 0,
+	}, nil
+}
+
+func pluginRuntimeLabel(runtimeConfig config.EffectivePluginRuntime) string {
+	if name := strings.TrimSpace(runtimeConfig.ProviderName); name != "" {
+		return fmt.Sprintf("runtime provider %q", name)
+	}
+	return "plugin runtime"
+}
+
+func validatePluginRuntimeCapabilities(label string, caps pluginruntime.Capabilities, req pluginRuntimeCapabilityRequirements) error {
+	var missing []string
+	if !caps.HostedPluginRuntime {
+		missing = append(missing, "hosted plugin execution")
+	}
+	if !caps.ProviderGRPCTunnel {
+		missing = append(missing, "provider gRPC tunneling")
+	}
+	if req.HostServiceTunnels && !caps.HostServiceTunnels {
+		missing = append(missing, "host service tunnels")
+	}
+	if req.HostnameProxyEgress && !caps.HostnameProxyEgress {
+		missing = append(missing, "hostname-based egress controls")
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%s is missing required capabilities: %s", label, strings.Join(missing, ", "))
+}
+
+func buildPluginRuntimeStartSessionRequest(name string, runtimeConfig config.EffectivePluginRuntime) pluginruntime.StartSessionRequest {
+	metadata := maps.Clone(runtimeConfig.Metadata)
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+	if name != "" {
+		metadata["plugin"] = name
+	}
+	return pluginruntime.StartSessionRequest{
+		PluginName: name,
+		Template:   runtimeConfig.Template,
+		Image:      runtimeConfig.Image,
+		Metadata:   metadata,
+	}
 }
 
 const pluginRuntimeStopTimeout = 3 * time.Second

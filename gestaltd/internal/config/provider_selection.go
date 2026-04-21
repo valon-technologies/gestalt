@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -88,6 +89,13 @@ func (c *Config) SelectedWorkflowProvider() (string, *ProviderEntry, error) {
 	return ResolveSelectedHostProvider(HostProviderKindWorkflow, "", c.HostProviderEntries(HostProviderKindWorkflow))
 }
 
+func (c *Config) SelectedRuntimeProvider() (string, *RuntimeProviderEntry, error) {
+	if c == nil {
+		return "", nil, nil
+	}
+	return ResolveSelectedRuntimeProvider(c.Server.Runtime.Provider, c.Runtime.Providers)
+}
+
 type EffectivePluginIndexedDB struct {
 	Enabled      bool
 	ProviderName string
@@ -102,6 +110,15 @@ type EffectiveWorkflowIndexedDB struct {
 	Provider     *ProviderEntry
 	DB           string
 	ObjectStores []string
+}
+
+type EffectivePluginRuntime struct {
+	Enabled      bool
+	ProviderName string
+	Provider     *RuntimeProviderEntry
+	Template     string
+	Image        string
+	Metadata     map[string]string
 }
 
 func (c *Config) EffectivePluginIndexedDB(pluginName string, entry *ProviderEntry) (EffectivePluginIndexedDB, error) {
@@ -129,6 +146,14 @@ func (c *Config) EffectiveWorkflowProvider(providerName string) (string, *Provid
 
 func (c *Config) EffectiveWorkflowIndexedDB(name string, entry *ProviderEntry) (EffectiveWorkflowIndexedDB, error) {
 	return ResolveEffectiveWorkflowIndexedDB(name, entry, c.Providers.IndexedDB)
+}
+
+func (c *Config) EffectivePluginRuntime(pluginName string, entry *ProviderEntry) (EffectivePluginRuntime, error) {
+	selectedName, _, err := c.SelectedRuntimeProvider()
+	if err != nil {
+		return EffectivePluginRuntime{}, err
+	}
+	return ResolveEffectivePluginRuntime(pluginName, entry, selectedName, c.Runtime.Providers)
 }
 
 func ResolveEffectivePluginIndexedDB(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*ProviderEntry) (EffectivePluginIndexedDB, error) {
@@ -203,6 +228,35 @@ func ResolveEffectiveWorkflowIndexedDB(name string, entry *ProviderEntry, entrie
 	}, nil
 }
 
+func ResolveEffectivePluginRuntime(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*RuntimeProviderEntry) (EffectivePluginRuntime, error) {
+	if entry == nil || entry.Runtime == nil {
+		return EffectivePluginRuntime{}, nil
+	}
+
+	providerName := strings.TrimSpace(entry.Runtime.Provider)
+	if providerName == "" {
+		providerName = strings.TrimSpace(selectedName)
+	}
+
+	var provider *RuntimeProviderEntry
+	if providerName != "" {
+		var ok bool
+		provider, ok = entries[providerName]
+		if !ok || provider == nil {
+			return EffectivePluginRuntime{}, fmt.Errorf("config validation: plugins.%s.runtime.provider references unknown runtime %q", pluginName, providerName)
+		}
+	}
+
+	runtime := EffectivePluginRuntime{
+		Enabled:      true,
+		ProviderName: providerName,
+		Provider:     provider,
+		Template:     strings.TrimSpace(entry.Runtime.Template),
+		Image:        strings.TrimSpace(entry.Runtime.Image),
+		Metadata:     maps.Clone(entry.Runtime.Metadata),
+	}
+	return runtime, nil
+}
 func ResolveSelectedHostProvider(kind HostProviderKind, explicit string, entries map[string]*ProviderEntry) (string, *ProviderEntry, error) {
 	if len(entries) == 0 {
 		return "", nil, nil
@@ -241,5 +295,43 @@ func ResolveSelectedHostProvider(kind HostProviderKind, explicit string, entries
 	default:
 		sort.Strings(names)
 		return "", nil, fmt.Errorf("config validation: providers.%s has multiple providers but no selection or default: %s", kind, strings.Join(names, ", "))
+	}
+}
+
+func ResolveSelectedRuntimeProvider(explicit string, entries map[string]*RuntimeProviderEntry) (string, *RuntimeProviderEntry, error) {
+	explicit = strings.TrimSpace(explicit)
+	if explicit != "" {
+		if len(entries) == 0 {
+			return "", nil, fmt.Errorf("config validation: server.runtime.provider references unknown runtime %q", explicit)
+		}
+		entry, ok := entries[explicit]
+		if !ok || entry == nil {
+			return "", nil, fmt.Errorf("config validation: server.runtime.provider references unknown runtime %q", explicit)
+		}
+		return explicit, entry, nil
+	}
+	if len(entries) == 0 {
+		return "", nil, nil
+	}
+
+	defaultNames := make([]string, 0, len(entries))
+	for name, entry := range entries {
+		if entry == nil {
+			continue
+		}
+		if entry.Default {
+			defaultNames = append(defaultNames, name)
+		}
+	}
+
+	switch {
+	case len(defaultNames) == 1:
+		name := defaultNames[0]
+		return name, entries[name], nil
+	case len(defaultNames) > 1:
+		sort.Strings(defaultNames)
+		return "", nil, fmt.Errorf("config validation: runtime.providers declares multiple defaults: %s", strings.Join(defaultNames, ", "))
+	default:
+		return "", nil, nil
 	}
 }

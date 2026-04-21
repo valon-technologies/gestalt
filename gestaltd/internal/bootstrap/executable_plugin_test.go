@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -72,42 +73,83 @@ type nestedInvokeHarness struct {
 	services *coredata.Services
 }
 
-type trackingPluginRuntime struct {
-	inner     pluginruntime.Provider
-	stopCount atomic.Int32
+type capturingPluginRuntime struct {
+	provider *pluginruntime.LocalProvider
+
+	mu            sync.Mutex
+	startRequests []pluginruntime.StartSessionRequest
+	stopCount     atomic.Int32
 }
 
-func (r *trackingPluginRuntime) Capabilities(ctx context.Context) (pluginruntime.Capabilities, error) {
-	return r.inner.Capabilities(ctx)
+func newCapturingPluginRuntime() *capturingPluginRuntime {
+	return &capturingPluginRuntime{provider: pluginruntime.NewLocalProvider()}
 }
 
-func (r *trackingPluginRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
-	return r.inner.StartSession(ctx, req)
+func (r *capturingPluginRuntime) Capabilities(ctx context.Context) (pluginruntime.Capabilities, error) {
+	return r.provider.Capabilities(ctx)
 }
 
-func (r *trackingPluginRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
-	return r.inner.GetSession(ctx, req)
+func (r *capturingPluginRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
+	r.mu.Lock()
+	r.startRequests = append(r.startRequests, pluginruntime.StartSessionRequest{
+		PluginName: req.PluginName,
+		Template:   req.Template,
+		Image:      req.Image,
+		Metadata:   cloneRuntimeMetadata(req.Metadata),
+	})
+	r.mu.Unlock()
+	return r.provider.StartSession(ctx, req)
 }
 
-func (r *trackingPluginRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
+func (r *capturingPluginRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
+	return r.provider.GetSession(ctx, req)
+}
+
+func (r *capturingPluginRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
 	r.stopCount.Add(1)
-	return r.inner.StopSession(ctx, req)
+	return r.provider.StopSession(ctx, req)
 }
 
-func (r *trackingPluginRuntime) BindHostService(ctx context.Context, req pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
-	return r.inner.BindHostService(ctx, req)
+func (r *capturingPluginRuntime) BindHostService(ctx context.Context, req pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
+	return r.provider.BindHostService(ctx, req)
 }
 
-func (r *trackingPluginRuntime) StartPlugin(ctx context.Context, req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
-	return r.inner.StartPlugin(ctx, req)
+func (r *capturingPluginRuntime) StartPlugin(ctx context.Context, req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
+	return r.provider.StartPlugin(ctx, req)
 }
 
-func (r *trackingPluginRuntime) DialPlugin(ctx context.Context, req pluginruntime.DialPluginRequest) (pluginruntime.HostedPluginConn, error) {
-	return r.inner.DialPlugin(ctx, req)
+func (r *capturingPluginRuntime) DialPlugin(ctx context.Context, req pluginruntime.DialPluginRequest) (pluginruntime.HostedPluginConn, error) {
+	return r.provider.DialPlugin(ctx, req)
 }
 
-func (r *trackingPluginRuntime) Close() error {
-	return r.inner.Close()
+func (r *capturingPluginRuntime) Close() error {
+	return r.provider.Close()
+}
+
+func (r *capturingPluginRuntime) startSessionRequests() []pluginruntime.StartSessionRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]pluginruntime.StartSessionRequest, len(r.startRequests))
+	for i, req := range r.startRequests {
+		out[i] = pluginruntime.StartSessionRequest{
+			PluginName: req.PluginName,
+			Template:   req.Template,
+			Image:      req.Image,
+			Metadata:   cloneRuntimeMetadata(req.Metadata),
+		}
+	}
+	return out
+}
+
+func cloneRuntimeMetadata(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
 }
 
 type slowStopPluginRuntime struct {
@@ -156,6 +198,43 @@ type failingBindSlowStopPluginRuntime struct {
 
 func (r *failingBindSlowStopPluginRuntime) BindHostService(context.Context, pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
 	return nil, r.err
+}
+
+type staticCapabilityPluginRuntime struct {
+	inner        pluginruntime.Provider
+	capabilities pluginruntime.Capabilities
+}
+
+func (r *staticCapabilityPluginRuntime) Capabilities(context.Context) (pluginruntime.Capabilities, error) {
+	return r.capabilities, nil
+}
+
+func (r *staticCapabilityPluginRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
+	return r.inner.StartSession(ctx, req)
+}
+
+func (r *staticCapabilityPluginRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
+	return r.inner.GetSession(ctx, req)
+}
+
+func (r *staticCapabilityPluginRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
+	return r.inner.StopSession(ctx, req)
+}
+
+func (r *staticCapabilityPluginRuntime) BindHostService(ctx context.Context, req pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
+	return r.inner.BindHostService(ctx, req)
+}
+
+func (r *staticCapabilityPluginRuntime) StartPlugin(ctx context.Context, req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
+	return r.inner.StartPlugin(ctx, req)
+}
+
+func (r *staticCapabilityPluginRuntime) DialPlugin(ctx context.Context, req pluginruntime.DialPluginRequest) (pluginruntime.HostedPluginConn, error) {
+	return r.inner.DialPlugin(ctx, req)
+}
+
+func (r *staticCapabilityPluginRuntime) Close() error {
+	return r.inner.Close()
 }
 
 func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
@@ -1955,7 +2034,7 @@ func TestInjectedPluginRuntimeStopsSessionOnProviderClose(t *testing.T) {
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := &trackingPluginRuntime{inner: pluginruntime.NewLocalProvider()}
+	runtimeProvider := newCapturingPluginRuntime()
 	cfg := &config.Config{
 		Plugins: map[string]*config.ProviderEntry{
 			"echoext": {
@@ -2094,6 +2173,208 @@ func TestInjectedPluginRuntimeStopSessionTimeoutDoesNotHangBootstrapFailure(t *t
 
 	if runtimeProvider.stopCount.Load() == 0 {
 		t.Fatal("expected bootstrap failure to attempt stopping the hosted plugin runtime session")
+	}
+}
+
+func TestPluginRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *testing.T) {
+	t.Parallel()
+
+	type runtimeFactoryContextKey struct{}
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := newCapturingPluginRuntime()
+	ctxSentinel := &struct{}{}
+	var factoryContextValue any
+	factories := NewFactoryRegistry()
+	factories.PluginRuntimes[config.RuntimeProviderDriver("capture")] = func(ctx context.Context, _ string, _ *config.RuntimeProviderEntry, _ Deps) (pluginruntime.Provider, error) {
+		factoryContextValue = ctx.Value(runtimeFactoryContextKey{})
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime: &config.PluginRuntimeConfig{
+					Template: "python-dev",
+					Image:    "ghcr.io/valon/gestalt-python-runtime:latest",
+					Metadata: map[string]string{"tenant": "eng"},
+				},
+			},
+		},
+	}
+
+	deps := Deps{
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.PluginRuntimes, Deps{}),
+	}
+	buildCtx := context.WithValue(context.Background(), runtimeFactoryContextKey{}, ctxSentinel)
+	providers, _, err := buildProvidersStrict(buildCtx, cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+	if _, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": "PATH"}, ""); err != nil {
+		t.Fatalf("Execute read_env: %v", err)
+	}
+	if err := CloseProviders(providers); err != nil {
+		t.Fatalf("CloseProviders: %v", err)
+	}
+
+	requests := runtimeProvider.startSessionRequests()
+	if len(requests) != 1 {
+		t.Fatalf("start session requests = %d, want 1", len(requests))
+	}
+	req := requests[0]
+	if req.PluginName != "echoext" {
+		t.Fatalf("StartSession PluginName = %q, want echoext", req.PluginName)
+	}
+	if req.Template != "python-dev" {
+		t.Fatalf("StartSession Template = %q, want python-dev", req.Template)
+	}
+	if req.Image != "ghcr.io/valon/gestalt-python-runtime:latest" {
+		t.Fatalf("StartSession Image = %q", req.Image)
+	}
+	if req.Metadata["tenant"] != "eng" {
+		t.Fatalf("StartSession Metadata[tenant] = %q, want eng", req.Metadata["tenant"])
+	}
+	if req.Metadata["plugin"] != "echoext" {
+		t.Fatalf("StartSession Metadata[plugin] = %q, want echoext", req.Metadata["plugin"])
+	}
+	if factoryContextValue != ctxSentinel {
+		t.Fatalf("runtime factory context value = %#v, want %#v", factoryContextValue, ctxSentinel)
+	}
+}
+
+func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapability(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := &staticCapabilityPluginRuntime{
+		inner: pluginruntime.NewLocalProvider(),
+		capabilities: pluginruntime.Capabilities{
+			HostedPluginRuntime: true,
+			ProviderGRPCTunnel:  true,
+			HostnameProxyEgress: true,
+		},
+	}
+	factories := NewFactoryRegistry()
+	factories.PluginRuntimes[config.RuntimeProviderDriver("capture")] = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+				Invokes: []config.PluginInvocationDependency{
+					{Plugin: "other", Operation: "read"},
+				},
+			},
+		},
+	}
+
+	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.PluginRuntimes, Deps{}),
+	})
+	if err == nil || !strings.Contains(err.Error(), "host service tunnels") {
+		t.Fatalf("buildProvidersStrict error = %v, want missing host service tunnels", err)
+	}
+}
+
+func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := &staticCapabilityPluginRuntime{
+		inner: pluginruntime.NewLocalProvider(),
+		capabilities: pluginruntime.Capabilities{
+			HostedPluginRuntime: true,
+			ProviderGRPCTunnel:  true,
+			HostServiceTunnels:  true,
+		},
+	}
+	factories := NewFactoryRegistry()
+	factories.PluginRuntimes[config.RuntimeProviderDriver("capture")] = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+				AllowedHosts:         []string{"api.github.com"},
+			},
+		},
+	}
+
+	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.PluginRuntimes, Deps{}),
+	})
+	if err == nil || !strings.Contains(err.Error(), "hostname-based egress controls") {
+		t.Fatalf("buildProvidersStrict error = %v, want missing hostname-based egress controls", err)
 	}
 }
 

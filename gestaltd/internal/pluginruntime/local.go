@@ -127,25 +127,18 @@ func (p *LocalProvider) StopSession(_ context.Context, req StopSessionRequest) e
 	}
 	p.mu.Unlock()
 
+	var errs []error
 	if plugin != nil {
-		err := plugin.Close()
-		if rootDir == "" {
-			return err
+		if err := plugin.Close(); err != nil {
+			errs = append(errs, err)
 		}
-		if cleanupErr := os.RemoveAll(rootDir); cleanupErr != nil {
-			if err != nil {
-				return errors.Join(err, fmt.Errorf("remove runtime session dir: %w", cleanupErr))
-			}
-			return fmt.Errorf("remove runtime session dir: %w", cleanupErr)
-		}
-		return err
 	}
 	if rootDir != "" {
 		if err := os.RemoveAll(rootDir); err != nil {
-			return fmt.Errorf("remove runtime session dir: %w", err)
+			errs = append(errs, fmt.Errorf("remove runtime session dir: %w", err))
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (p *LocalProvider) BindHostService(_ context.Context, req BindHostServiceRequest) (*HostServiceBinding, error) {
@@ -271,7 +264,7 @@ func (p *LocalProvider) DialPlugin(_ context.Context, req DialPluginRequest) (Ho
 	return &localHostedPluginConn{
 		process: session.plugin.process,
 		onClose: func() {
-			p.forgetSession(req.SessionID)
+			p.releaseSession(req.SessionID)
 		},
 	}, nil
 }
@@ -318,12 +311,17 @@ func (p *LocalProvider) sessionLocked(sessionID string) (*localSession, error) {
 	return session, nil
 }
 
-func (p *LocalProvider) forgetSession(sessionID string) {
+func (p *LocalProvider) releaseSession(sessionID string) {
+	var rootDir string
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	if session, ok := p.sessions[sessionID]; ok && session != nil {
 		session.state = SessionStateStopped
+		rootDir = session.rootDir
 		delete(p.sessions, sessionID)
+	}
+	p.mu.Unlock()
+	if rootDir != "" {
+		_ = os.RemoveAll(rootDir)
 	}
 }
 
