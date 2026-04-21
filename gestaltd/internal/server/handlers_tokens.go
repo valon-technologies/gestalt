@@ -181,7 +181,8 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 	if plugin == nil {
 		return []connectionDefInfo{}
 	}
-	plan, err := config.BuildStaticConnectionPlan(plugin, plugin.ManifestSpec())
+	manifestSpec := plugin.ManifestSpec()
+	plan, err := config.BuildStaticConnectionPlan(plugin, manifestSpec)
 	if err != nil {
 		return []connectionDefInfo{}
 	}
@@ -192,12 +193,38 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 		if !ok || shouldHidePassiveNamedConnection(plan, name, conn, integrationAuthTypes) {
 			continue
 		}
+		if name == config.PluginConnectionName {
+			conn = displayPluginConnectionDef(plugin, manifestSpec, conn)
+		}
 		if info, ok := s.connectionInfoFromAuth(integration, userFacingConnectionName(name), conn, integrationAuthTypes, defaultCredentialFields, name != config.PluginConnectionName); ok {
 			infos = append(infos, info)
 		}
 	}
 
 	return infos
+}
+
+func displayPluginConnectionDef(plugin *config.ProviderEntry, manifestSpec *providermanifestv1.Spec, conn config.ConnectionDef) config.ConnectionDef {
+	if plugin == nil || manifestSpec == nil || manifestSpec.IsManifestBacked() {
+		return conn
+	}
+	def := manifestSpec.DefaultConnectionDef()
+	if def == nil {
+		return conn
+	}
+
+	merged := config.ConnectionDef{}
+	if def.Auth != nil {
+		config.MergeConnectionAuth(&merged.Auth, config.ManifestAuthToConnectionAuthDef(def.Auth))
+	}
+	if plugin.Auth != nil {
+		config.MergeConnectionAuth(&merged.Auth, *plugin.Auth)
+	}
+	if len(merged.Auth.Credentials) == 0 {
+		return conn
+	}
+	conn.Auth = merged.Auth
+	return conn
 }
 
 func userFacingConnectionName(name string) string {

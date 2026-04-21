@@ -17,6 +17,14 @@ type TokenResolver interface {
 	ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error)
 }
 
+type effectiveCredentialBindingResolver interface {
+	ResolveEffectiveCredentialBinding(p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error)
+}
+
+type bindingTokenResolver interface {
+	ResolveTokenWithBinding(ctx context.Context, p *principal.Principal, providerName, connection, instance string, boundCredential CredentialBindingResolution) (context.Context, string, error)
+}
+
 type requestStaticOperationResolver interface {
 	ResolveStaticOperationForRequest(ctx context.Context, operation string) (catalog.CatalogOperation, bool)
 }
@@ -144,12 +152,21 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 	if !core.SupportsSessionCatalog(prov) {
 		return nil, false, nil
 	}
+	boundCredential := CredentialBindingResolution{}
+	if bindingResolver, ok := resolver.(effectiveCredentialBindingResolver); ok && p != nil {
+		resolvedBinding, err := bindingResolver.ResolveEffectiveCredentialBinding(p, provName, connection, instance)
+		if err != nil {
+			return nil, true, err
+		}
+		if resolvedBinding.HasBinding {
+			boundCredential = resolvedBinding
+			connection = boundCredential.Connection
+			instance = boundCredential.Instance
+		}
+	}
 	if prov.ConnectionMode() == core.ConnectionModeNone {
 		if resolver != nil && p != nil {
-			// No-auth providers do not consume connection or instance selectors
-			// when resolving session catalogs. Passing them through here causes
-			// workload callers to trip the override guard before static fallback.
-			enrichedCtx, token, err := resolver.ResolveToken(ctx, p, provName, "", "")
+			enrichedCtx, token, err := resolveSessionCatalogToken(ctx, resolver, p, provName, connection, instance, boundCredential)
 			if err != nil {
 				return nil, true, err
 			}
@@ -164,12 +181,21 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 		return nil, false, nil
 	}
 
-	ctx, token, err := resolver.ResolveToken(ctx, p, provName, connection, instance)
+	ctx, token, err := resolveSessionCatalogToken(ctx, resolver, p, provName, connection, instance, boundCredential)
 	if err != nil {
 		return nil, true, err
 	}
 	cat, _, err := core.CatalogForRequest(ctx, prov, token)
 	return cat, true, err
+}
+
+func resolveSessionCatalogToken(ctx context.Context, resolver TokenResolver, p *principal.Principal, provName, connection, instance string, boundCredential CredentialBindingResolution) (context.Context, string, error) {
+	if boundCredential.HasBinding {
+		if bindingResolver, ok := resolver.(bindingTokenResolver); ok {
+			return bindingResolver.ResolveTokenWithBinding(ctx, p, provName, connection, instance, boundCredential)
+		}
+	}
+	return resolver.ResolveToken(ctx, p, provName, connection, instance)
 }
 
 func resolveSessionOperation(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, operation string, connections []string, instance string) (catalog.CatalogOperation, string, bool, error) {

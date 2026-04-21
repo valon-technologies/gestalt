@@ -6039,12 +6039,9 @@ func TestListIntegrations_ManualProvidersWithoutDeclaredCredentialsExposeGeneric
 	}
 }
 
+//nolint:paralleltest // This response-shape integration test flakes under full-package parallelism in CI.
 func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T) {
-	t.Parallel()
-
 	t.Run("non manifest-backed connections still expose plugin and named auth", func(t *testing.T) {
-		t.Parallel()
-
 		stub := &coretesting.StubIntegration{N: "example", DN: "Example"}
 		plugin := &config.ProviderEntry{
 			Source: config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-example/v1.0.0/provider-release.yaml"),
@@ -6195,8 +6192,6 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 	})
 
 	t.Run("manifest-backed API surfaces only expose the resolved named connection", func(t *testing.T) {
-		t.Parallel()
-
 		stub := &coretesting.StubIntegration{N: "example", DN: "Example"}
 		plugin := &config.ProviderEntry{
 			Source: config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-example/v1.0.0/provider-release.yaml"),
@@ -17508,6 +17503,7 @@ func TestManagedIdentityAPITokenInvocation_UsesCreatorCredentialSubject(t *testi
 
 	svc := coretesting.NewStubServices(t)
 	admin := seedUser(t, svc, "admin@example.test")
+	var gammaSessionCatalogTokens []string
 
 	alphaStub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
@@ -17532,20 +17528,27 @@ func TestManagedIdentityAPITokenInvocation_UsesCreatorCredentialSubject(t *testi
 		},
 		ops: []core.Operation{{Name: "query", Method: http.MethodGet}},
 	}
-	gammaStub := &stubIntegrationWithOps{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "gamma",
-			ConnMode: core.ConnectionModeUser,
-			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+	gammaStub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "gamma",
+				ConnMode: core.ConnectionModeUser,
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				},
 			},
+			ops: []core.Operation{{Name: "query", Method: http.MethodGet}},
 		},
-		ops: []core.Operation{{Name: "query", Method: http.MethodGet}},
+		catalog: serverTestCatalogFromOperations("gamma", []core.Operation{{Name: "query", Method: http.MethodGet}}),
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			gammaSessionCatalogTokens = append(gammaSessionCatalogTokens, token)
+			return serverTestCatalogFromOperations("gamma", []core.Operation{{Name: "query", Method: http.MethodGet}}), nil
+		},
 	}
 	providers := testutil.NewProviderRegistry(t, alphaStub, betaStub, gammaStub)
 	seedToken(t, svc, &core.IntegrationToken{
 		ID: "gamma-admin-token", SubjectID: principal.UserSubjectID(admin.ID), Integration: "gamma",
-		Connection: "", Instance: "default", AccessToken: "gamma-user-token",
+		Connection: "workspace", Instance: "default", AccessToken: "gamma-user-token",
 	})
 	authz, err := authorization.New(config.AuthorizationConfig{}, nil, providers, nil)
 	if err != nil {
@@ -17565,6 +17568,7 @@ func TestManagedIdentityAPITokenInvocation_UsesCreatorCredentialSubject(t *testi
 		cfg.Providers = providers
 		cfg.Services = svc
 		cfg.Authorizer = authz
+		cfg.DefaultConnection = map[string]string{"gamma": "workspace"}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -17615,10 +17619,125 @@ func TestManagedIdentityAPITokenInvocation_UsesCreatorCredentialSubject(t *testi
 	if status := call("/api/v1/gamma/query"); status != http.StatusOK {
 		t.Fatalf("gamma/query status = %d, want 200", status)
 	}
+	if len(gammaSessionCatalogTokens) == 0 {
+		t.Fatal("expected gamma session catalog to be resolved")
+	}
+	for _, token := range gammaSessionCatalogTokens {
+		if token != "gamma-user-token" {
+			t.Fatalf("expected session catalog to use creator credential token, got %q", token)
+		}
+	}
 
 	doJSONRequestAndDecode(t, http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", "", http.StatusOK, nil)
 	if status := call("/api/v1/alpha/read"); status != http.StatusUnauthorized {
 		t.Fatalf("alpha/read after identity delete status = %d, want 401", status)
+	}
+}
+
+func TestManagedIdentityAPITokenInvocation_MissingCreatorTokenAuditsResolvedCredentialSubject(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	admin := seedUser(t, svc, "admin@example.test")
+	var auditBuf bytes.Buffer
+
+	gammaStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "gamma",
+			ConnMode: core.ConnectionModeUser,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "query", Method: http.MethodGet}},
+	}
+	providers := testutil.NewProviderRegistry(t, gammaStub)
+	authz, err := authorization.New(config.AuthorizationConfig{}, nil, providers, nil)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	auditSink := invocation.NewSlogAuditSink(&auditBuf)
+	broker := invocation.NewBroker(providers, svc.Users, svc.Tokens, invocation.WithAuthorizer(authz))
+	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "admin-session" {
+					return nil, fmt.Errorf("unknown session %q", token)
+				}
+				return &core.UserIdentity{Email: "admin@example.test"}, nil
+			},
+		}
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.AuditSink = auditSink
+		cfg.Invoker = guarded
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createResp := struct {
+		ID string `json:"id"`
+	}{}
+	doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Invoke Bot"}`, http.StatusCreated, &createResp)
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/gamma", "admin-session", `{"operations":["query"]}`, http.StatusOK, nil)
+
+	createTokenResp := struct {
+		Token string `json:"token"`
+	}{}
+	doJSONRequestAndDecode(
+		t,
+		http.MethodPost,
+		ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens",
+		"admin-session",
+		`{"name":"invoke-token","permissions":[{"plugin":"gamma","operations":["query"]}]}`,
+		http.StatusCreated,
+		&createTokenResp,
+	)
+	if createTokenResp.Token == "" {
+		t.Fatal("expected plaintext token for invocation test")
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/gamma/query", nil)
+	req.Header.Set("Authorization", "Bearer "+createTokenResp.Token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 412, got %d: %s", resp.StatusCode, body)
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	if len(lines) == 0 {
+		t.Fatal("expected audit record")
+	}
+
+	var auditRecord map[string]any
+	for i := len(lines) - 1; i >= 0; i-- {
+		if err := json.Unmarshal(lines[i], &auditRecord); err != nil {
+			t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+		}
+		if auditRecord["provider"] == "gamma" && auditRecord["operation"] == "query" {
+			break
+		}
+		auditRecord = nil
+	}
+	if auditRecord == nil {
+		t.Fatalf("expected gamma.query audit record, got %s", auditBuf.String())
+	}
+	if auditRecord["subject_id"] != principal.ManagedIdentitySubjectID(createResp.ID) {
+		t.Fatalf("expected subject_id %q, got %v", principal.ManagedIdentitySubjectID(createResp.ID), auditRecord["subject_id"])
+	}
+	if auditRecord["credential_mode"] != "user" {
+		t.Fatalf("expected credential_mode user, got %v", auditRecord["credential_mode"])
+	}
+	if auditRecord["credential_subject_id"] != principal.UserSubjectID(admin.ID) {
+		t.Fatalf("expected credential_subject_id %q, got %v", principal.UserSubjectID(admin.ID), auditRecord["credential_subject_id"])
 	}
 }
 
