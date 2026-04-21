@@ -78,6 +78,7 @@ type Server struct {
 	providers             *registry.ProviderMap[core.Provider]
 	workflow              bootstrap.WorkflowControl
 	resolver              *principal.Resolver
+	authResolvers         map[string]*principal.Resolver
 	invoker               invocation.Invoker
 	defaultConnection     map[string]string
 	catalogConnection     map[string]string
@@ -105,6 +106,8 @@ type Server struct {
 
 type Config struct {
 	Auth                  core.AuthProvider
+	SelectedAuthProvider  string
+	AuthProviders         map[string]core.AuthProvider
 	AuditSink             core.AuditSink
 	Services              *coredata.Services
 	Providers             *registry.ProviderMap[core.Provider]
@@ -195,6 +198,22 @@ func New(cfg Config) (*Server, error) {
 	identityPluginAccess := cfg.Services.IdentityPluginAccess
 	workflowExecutionRefs := cfg.Services.WorkflowExecutionRefs
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, managedIdentities, identityGrants, cfg.Authorizer)
+	authProviders := make(map[string]core.AuthProvider, len(cfg.AuthProviders)+1)
+	for name, provider := range cfg.AuthProviders {
+		if provider == nil {
+			continue
+		}
+		authProviders[name] = provider
+	}
+	if cfg.Auth != nil && cfg.SelectedAuthProvider != "" {
+		if _, ok := authProviders[cfg.SelectedAuthProvider]; !ok {
+			authProviders[cfg.SelectedAuthProvider] = cfg.Auth
+		}
+	}
+	authResolvers := make(map[string]*principal.Resolver, len(authProviders))
+	for name, provider := range authProviders {
+		authResolvers[name] = principal.NewResolver(provider, users, apiTokens, managedIdentities, identityGrants, cfg.Authorizer)
+	}
 
 	router := chi.NewRouter()
 	otelOptions := []otelhttp.Option{}
@@ -219,6 +238,7 @@ func New(cfg Config) (*Server, error) {
 		providers:             cfg.Providers,
 		workflow:              cfg.Workflow,
 		resolver:              resolver,
+		authResolvers:         authResolvers,
 		invoker:               cfg.Invoker,
 		defaultConnection:     cfg.DefaultConnection,
 		catalogConnection:     cfg.CatalogConnection,

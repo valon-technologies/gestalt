@@ -4678,6 +4678,161 @@ func TestAuthMiddleware_NoAuth(t *testing.T) {
 	}
 }
 
+func TestPluginRouteAuth_HTTPRoutesUseNamedProviderOverride(t *testing.T) {
+	t.Parallel()
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	seedAPIToken(t, svc, plaintext, hashed, "api-user")
+	openProvider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "open",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: "open:" + op}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "ping", Method: http.MethodGet}},
+	}
+	lockedProvider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "locked",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: "locked:" + op}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "ping", Method: http.MethodGet}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = nil
+		cfg.AuthProviders = map[string]core.AuthProvider{
+			"alt": &coretesting.StubAuthProvider{
+				N: "alt",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "alt-session" {
+						return nil, fmt.Errorf("invalid token")
+					}
+					return &core.UserIdentity{Email: "alt-user@example.test"}, nil
+				},
+			},
+		}
+		cfg.Services = svc
+		cfg.Providers = testutil.NewProviderRegistry(t, openProvider, lockedProvider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"locked": {
+				RouteAuth: &config.RouteAuthDef{Provider: "alt"},
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	t.Run("server-level routes and plugins without overrides remain anonymous", func(t *testing.T) {
+		t.Parallel()
+
+		resp, err := http.Get(ts.URL + "/api/v1/integrations")
+		if err != nil {
+			t.Fatalf("GET integrations: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("integrations status = %d, want 200: %s", resp.StatusCode, body)
+		}
+
+		resp, err = http.Get(ts.URL + "/api/v1/open/ping")
+		if err != nil {
+			t.Fatalf("GET open ping: %v", err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("open ping status = %d, want 200: %s", resp.StatusCode, body)
+		}
+		if string(body) != "open:ping" {
+			t.Fatalf("open ping body = %q, want %q", body, "open:ping")
+		}
+
+		resp, err = http.Get(ts.URL + "/api/v1/integrations/open/operations")
+		if err != nil {
+			t.Fatalf("GET open operations: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("open operations status = %d, want 200: %s", resp.StatusCode, body)
+		}
+	})
+
+	t.Run("plugin override requires its named auth provider", func(t *testing.T) {
+		t.Parallel()
+
+		resp, err := http.Get(ts.URL + "/api/v1/locked/ping")
+		if err != nil {
+			t.Fatalf("GET locked ping: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusUnauthorized {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("locked ping status = %d, want 401: %s", resp.StatusCode, body)
+		}
+
+		resp, err = http.Get(ts.URL + "/api/v1/integrations/locked/operations")
+		if err != nil {
+			t.Fatalf("GET locked operations: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusUnauthorized {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("locked operations status = %d, want 401: %s", resp.StatusCode, body)
+		}
+	})
+
+	t.Run("named auth provider and api tokens both pass through route auth", func(t *testing.T) {
+		t.Parallel()
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/locked/ping", nil)
+		req.Header.Set("Authorization", "Bearer alt-session")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET locked ping with named auth: %v", err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("locked ping with named auth status = %d, want 200: %s", resp.StatusCode, body)
+		}
+		if string(body) != "locked:ping" {
+			t.Fatalf("locked ping body = %q, want %q", body, "locked:ping")
+		}
+
+		req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/locked/operations", nil)
+		req.Header.Set("Authorization", "Bearer "+plaintext)
+		resp, err = http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET locked operations with api token: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("locked operations with api token status = %d, want 200: %s", resp.StatusCode, body)
+		}
+
+		var ops []catalog.CatalogOperation
+		if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+			t.Fatalf("decoding locked operations: %v", err)
+		}
+		if len(ops) != 1 || ops[0].ID != "ping" {
+			t.Fatalf("operations = %#v, want [ping]", ops)
+		}
+	})
+}
+
 func TestAuthMiddleware_UnprefixedTokenRejected(t *testing.T) {
 	t.Parallel()
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -127,11 +128,11 @@ func requestedAuthSource(r *http.Request) string {
 	return ""
 }
 
-func (s *Server) resolveRequestPrincipal(r *http.Request) (*principal.Principal, error) {
+func (s *Server) resolveRequestPrincipalWithResolver(r *http.Request, resolver *principal.Resolver) (*principal.Principal, error) {
 	var lastErr error
 
 	if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
-		p, err := s.resolver.ResolveToken(r.Context(), c.Value)
+		p, err := resolver.ResolveToken(r.Context(), c.Value)
 		if p != nil && p.Kind != principal.KindWorkload {
 			return p, nil
 		}
@@ -150,7 +151,7 @@ func (s *Server) resolveRequestPrincipal(r *http.Request) (*principal.Principal,
 		return nil, lastErr
 	}
 
-	p, err := s.resolver.ResolveToken(r.Context(), token)
+	p, err := resolver.ResolveToken(r.Context(), token)
 	if p != nil {
 		return p, nil
 	}
@@ -158,6 +159,10 @@ func (s *Server) resolveRequestPrincipal(r *http.Request) (*principal.Principal,
 		lastErr = err
 	}
 	return nil, lastErr
+}
+
+func (s *Server) resolveRequestPrincipal(r *http.Request) (*principal.Principal, error) {
+	return s.resolveRequestPrincipalWithResolver(r, s.resolver)
 }
 
 func (s *Server) resolveRequestPrincipalWithUserID(r *http.Request) (*principal.Principal, error) {
@@ -168,48 +173,85 @@ func (s *Server) resolveRequestPrincipalWithUserID(r *http.Request) (*principal.
 	return s.resolvePrincipalUserID(r.Context(), p)
 }
 
+func (s *Server) serveAuthenticated(w http.ResponseWriter, r *http.Request, next http.Handler, resolver *principal.Resolver, noAuth bool, anonymous *principal.Principal, auditProvider string) {
+	if noAuth {
+		ctx := principal.WithPrincipal(r.Context(), anonymous)
+		next.ServeHTTP(w, r.WithContext(ctx))
+		return
+	}
+
+	p, err := s.resolveRequestPrincipalWithResolver(r, resolver)
+	if err == nil && p != nil {
+		enriched, enrichErr := s.resolvePrincipalUserID(r.Context(), p)
+		switch {
+		case enrichErr == nil && enriched != nil:
+			p = enriched
+		case enrichErr != nil:
+			slog.WarnContext(r.Context(), "auth: unable to resolve user ID", "error", enrichErr)
+		}
+		ctx := principal.WithPrincipal(r.Context(), p)
+		next.ServeHTTP(w, r.WithContext(ctx))
+		return
+	}
+
+	authSource := requestedAuthSource(r)
+	switch {
+	case err == nil:
+		s.auditRequestEventWithAuthSource(r, authSource, auditProvider, "auth.authenticate", false, errors.New("missing authorization"))
+		writeError(w, http.StatusUnauthorized, "missing authorization")
+		return
+	case errors.Is(err, errInvalidAuthorizationHeader):
+		s.auditRequestEventWithAuthSource(r, authSource, auditProvider, "auth.authenticate", false, errInvalidAuthorizationHeader)
+		writeError(w, http.StatusUnauthorized, "invalid authorization header format")
+		return
+	case errors.Is(err, principal.ErrInvalidToken):
+		slog.InfoContext(r.Context(), "auth: invalid token", "remote_addr", r.RemoteAddr)
+		s.auditRequestEventWithAuthSource(r, authSource, auditProvider, "auth.authenticate", false, principal.ErrInvalidToken)
+		writeError(w, http.StatusUnauthorized, "invalid token")
+		return
+	default:
+		slog.ErrorContext(r.Context(), "auth: token validation failed", "remote_addr", r.RemoteAddr, "error", err)
+		s.auditRequestEventWithAuthSource(r, authSource, auditProvider, "auth.authenticate", false, errors.New("token validation failed"))
+		writeError(w, http.StatusInternalServerError, "token validation failed")
+		return
+	}
+}
+
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.noAuth {
-			ctx := principal.WithPrincipal(r.Context(), s.anonymousPrincipal)
-			next.ServeHTTP(w, r.WithContext(ctx))
-			return
-		}
-
-		p, err := s.resolveRequestPrincipal(r)
-		if err == nil && p != nil {
-			enriched, enrichErr := s.resolvePrincipalUserID(r.Context(), p)
-			switch {
-			case enrichErr == nil && enriched != nil:
-				p = enriched
-			case enrichErr != nil:
-				slog.WarnContext(r.Context(), "auth: unable to resolve user ID", "error", enrichErr)
-			}
-			ctx := principal.WithPrincipal(r.Context(), p)
-			next.ServeHTTP(w, r.WithContext(ctx))
-			return
-		}
-
-		authSource := requestedAuthSource(r)
-		switch {
-		case err == nil:
-			s.auditRequestEventWithAuthSource(r, authSource, "", "auth.authenticate", false, errors.New("missing authorization"))
-			writeError(w, http.StatusUnauthorized, "missing authorization")
-			return
-		case errors.Is(err, errInvalidAuthorizationHeader):
-			s.auditRequestEventWithAuthSource(r, authSource, "", "auth.authenticate", false, errInvalidAuthorizationHeader)
-			writeError(w, http.StatusUnauthorized, "invalid authorization header format")
-			return
-		case errors.Is(err, principal.ErrInvalidToken):
-			slog.InfoContext(r.Context(), "auth: invalid token", "remote_addr", r.RemoteAddr)
-			s.auditRequestEventWithAuthSource(r, authSource, "", "auth.authenticate", false, principal.ErrInvalidToken)
-			writeError(w, http.StatusUnauthorized, "invalid token")
-			return
-		default:
-			slog.ErrorContext(r.Context(), "auth: token validation failed", "remote_addr", r.RemoteAddr, "error", err)
-			s.auditRequestEventWithAuthSource(r, authSource, "", "auth.authenticate", false, errors.New("token validation failed"))
-			writeError(w, http.StatusInternalServerError, "token validation failed")
-			return
-		}
+		s.serveAuthenticated(w, r, next, s.resolver, s.noAuth, s.anonymousPrincipal, "")
 	})
+}
+
+func (s *Server) pluginRouteAuthMiddleware(pluginParam string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			pluginName := strings.TrimSpace(chi.URLParam(r, pluginParam))
+			if pluginName == "" {
+				s.serveAuthenticated(w, r, next, s.resolver, s.noAuth, s.anonymousPrincipal, "")
+				return
+			}
+
+			entry := s.pluginDefs[pluginName]
+			if entry == nil || entry.RouteAuth == nil || strings.TrimSpace(entry.RouteAuth.Provider) == "" {
+				s.serveAuthenticated(w, r, next, s.resolver, s.noAuth, s.anonymousPrincipal, "")
+				return
+			}
+
+			providerName := strings.TrimSpace(entry.RouteAuth.Provider)
+			if providerName == "server" {
+				s.serveAuthenticated(w, r, next, s.resolver, s.noAuth, s.anonymousPrincipal, "")
+				return
+			}
+
+			resolver := s.authResolvers[providerName]
+			if resolver == nil {
+				slog.ErrorContext(r.Context(), "plugin route auth provider is not initialized", "plugin", pluginName, "auth_provider", providerName)
+				writeError(w, http.StatusInternalServerError, "plugin route auth provider is not initialized")
+				return
+			}
+
+			s.serveAuthenticated(w, r, next, resolver, false, nil, providerName)
+		})
+	}
 }

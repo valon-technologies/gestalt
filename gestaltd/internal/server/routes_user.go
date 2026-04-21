@@ -8,7 +8,6 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 
 		r.Get("/integrations", s.listIntegrations)
 		r.Delete("/integrations/{name}", s.disconnectIntegration)
-		r.Get("/integrations/{name}/operations", s.listOperations)
 
 		r.Route("/workflow/schedules", func(r chi.Router) {
 			r.Get("/", s.listGlobalWorkflowSchedules)
@@ -19,9 +18,6 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Post("/{scheduleID}/pause", s.pauseGlobalWorkflowSchedule)
 			r.Post("/{scheduleID}/resume", s.resumeGlobalWorkflowSchedule)
 		})
-
-		r.Get("/{integration}/{operation}", s.executeOperation)
-		r.Post("/{integration}/{operation}", s.executeOperation)
 
 		r.Post("/auth/start-oauth", s.startIntegrationOAuth)
 		r.Post("/auth/connect-manual", s.connectManual)
@@ -49,4 +45,8 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Delete("/{identityID}/tokens/{id}", s.revokeManagedIdentityToken)
 		})
 	})
+
+	r.With(s.pluginRouteAuthMiddleware("name")).Get("/integrations/{name}/operations", s.listOperations)
+	r.With(s.pluginRouteAuthMiddleware("integration")).Get("/{integration}/{operation}", s.executeOperation)
+	r.With(s.pluginRouteAuthMiddleware("integration")).Post("/{integration}/{operation}", s.executeOperation)
 }
