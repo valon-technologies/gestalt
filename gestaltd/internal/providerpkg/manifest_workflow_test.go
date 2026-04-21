@@ -306,9 +306,11 @@ kind: plugin
 source: github.com/acme/plugins/missing-token-url
 version: 1.0.0
 spec:
-  auth:
-    type: oauth2
-    authorizationUrl: https://auth.example.com/authorize
+  connections:
+    default:
+      auth:
+        type: oauth2
+        authorizationUrl: https://auth.example.com/authorize
 `))
 			},
 			readSource: true,
@@ -335,7 +337,7 @@ spec:
 			wantError:  "field extraField not found",
 		},
 		{
-			name: "rejects ambiguous auth object",
+			name: "rejects legacy auth fields alongside route auth",
 			buildData: func(t *testing.T, dir string) string {
 				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
 kind: plugin
@@ -350,7 +352,7 @@ spec:
 `))
 			},
 			readSource: true,
-			wantError:  "spec.auth is ambiguous",
+			wantError:  "field type not found",
 		},
 		{
 			name: "rejects empty route auth object",
@@ -367,7 +369,7 @@ spec:
 			wantError:  "provider.auth.provider is required",
 		},
 		{
-			name: "rejects unknown nested legacy auth field",
+			name: "rejects unknown nested route auth field",
 			buildData: func(t *testing.T, dir string) string {
 				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
 kind: plugin
@@ -375,40 +377,26 @@ source: github.com/acme/plugins/legacy-auth-unknown-field
 version: 1.0.0
 spec:
   auth:
-    type: manual
-    credentials:
-      - name: api_key
-        label: API Key
-    authMapping:
-      basic:
-        username:
-          valueFrom:
-            credentialFieldRef:
-              name: api_key
-              typo: bad
+    provider: server
+    typo: bad
 `))
 			},
 			readSource: true,
 			wantError:  "field typo not found",
 		},
 		{
-			name: "rejects legacy top-level connection fields with canonical default connection",
+			name: "rejects legacy top-level connection fields",
 			buildData: func(t *testing.T, dir string) string {
 				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
 kind: plugin
 source: github.com/acme/plugins/duplicate-default
 version: 1.0.0
 spec:
-  auth:
-    provider: server
   connectionMode: user
-  connections:
-    default:
-      mode: none
 `))
 			},
 			readSource: true,
-			wantError:  "legacy top-level connection fields may not be combined with spec.connections.default",
+			wantError:  "spec.connectionMode is not supported",
 		},
 	}
 
@@ -508,88 +496,33 @@ spec:
 	}
 }
 
-func TestManifestWorkflow_NormalizesLegacyTopLevelConnectionFieldsIntoDefaultConnection(t *testing.T) {
+func TestManifestWorkflow_EncodesCanonicalProgrammaticDefaultConnection(t *testing.T) {
 	t.Parallel()
-
-	dir := t.TempDir()
-	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
-kind: plugin
-source: github.com/acme/plugins/legacy-auth
-version: 1.0.0
-spec:
-  auth:
-    type: oauth2
-    authorizationUrl: https://auth.example.com/authorize
-    tokenUrl: https://auth.example.com/token
-  connectionMode: user
-  connectionParams:
-    workspace_id:
-      required: true
-      description: Workspace ID
-  discovery:
-    url: https://api.example.com/workspaces
-    idPath: id
-`))
-
-	_, manifest, err := ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		t.Fatalf("ReadSourceManifestFile: %v", err)
-	}
-	if manifest.Spec == nil {
-		t.Fatal("expected plugin metadata")
-	}
-	if manifest.Spec.RouteAuth != nil {
-		t.Fatalf("expected route auth to be empty for legacy connection auth, got %#v", manifest.Spec.RouteAuth)
-	}
-	def := manifest.Spec.Connections["default"]
-	if def == nil {
-		t.Fatalf("expected synthesized default connection: %#v", manifest.Spec.Connections)
-	}
-	if def.Mode != providermanifestv1.ConnectionModeUser {
-		t.Fatalf("default connection mode = %q, want %q", def.Mode, providermanifestv1.ConnectionModeUser)
-	}
-	if def.Auth == nil || def.Auth.Type != providermanifestv1.AuthTypeOAuth2 {
-		t.Fatalf("default connection auth = %#v", def.Auth)
-	}
-	if def.Params["workspace_id"].Description != "Workspace ID" {
-		t.Fatalf("default connection params = %#v", def.Params)
-	}
-	if def.Discovery == nil || def.Discovery.URL != "https://api.example.com/workspaces" {
-		t.Fatalf("default connection discovery = %#v", def.Discovery)
-	}
-
-	encoded, err := EncodeSourceManifestFormat(manifest, ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat: %v", err)
-	}
-	rendered := string(encoded)
-	if !strings.Contains(rendered, "connections:") || !strings.Contains(rendered, "default:") {
-		t.Fatalf("expected canonical default connection in output:\n%s", rendered)
-	}
-	if strings.Contains(rendered, "\n  connectionMode:") || strings.Contains(rendered, "\n  connectionParams:") || strings.Contains(rendered, "\n  discovery:") {
-		t.Fatalf("expected canonical output without legacy top-level connection fields:\n%s", rendered)
-	}
 
 	programmatic := &providermanifestv1.Manifest{
 		Kind:    providermanifestv1.KindPlugin,
-		Source:  "github.com/acme/plugins/programmatic-legacy-auth",
+		Source:  "github.com/acme/plugins/programmatic-default-connection",
 		Version: "1.0.0",
 		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{
-				Type:             providermanifestv1.AuthTypeOAuth2,
-				AuthorizationURL: "https://auth.example.com/authorize",
-				TokenURL:         "https://auth.example.com/token",
-			},
-			ConnectionMode: providermanifestv1.ConnectionModeUser,
-			ConnectionParams: map[string]providermanifestv1.ProviderConnectionParam{
-				"workspace_id": {
-					Required:    true,
-					Description: "Workspace ID",
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {
+					Mode: providermanifestv1.ConnectionModeUser,
+					Auth: &providermanifestv1.ProviderAuth{
+						Type:             providermanifestv1.AuthTypeOAuth2,
+						AuthorizationURL: "https://auth.example.com/authorize",
+						TokenURL:         "https://auth.example.com/token",
+					},
+					Params: map[string]providermanifestv1.ProviderConnectionParam{
+						"workspace_id": {
+							Required:    true,
+							Description: "Workspace ID",
+						},
+					},
+					Discovery: &providermanifestv1.ProviderDiscovery{
+						URL:    "https://api.example.com/workspaces",
+						IDPath: "id",
+					},
 				},
-			},
-			Discovery: &providermanifestv1.ProviderDiscovery{
-				URL:    "https://api.example.com/workspaces",
-				IDPath: "id",
 			},
 		},
 	}
@@ -604,29 +537,9 @@ spec:
 	if strings.Contains(programmaticRendered, "\n  connectionMode:") || strings.Contains(programmaticRendered, "\n  connectionParams:") || strings.Contains(programmaticRendered, "\n  discovery:") {
 		t.Fatalf("expected programmatic canonical output without legacy top-level connection fields:\n%s", programmaticRendered)
 	}
-	if _, ok := programmatic.Spec.Connections["default"]; ok {
-		t.Fatalf("programmatic manifest was mutated during encode: %#v", programmatic.Spec.Connections)
-	}
-
-	conflicting := &providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindPlugin,
-		Source:  "github.com/acme/plugins/conflicting-legacy-auth",
-		Version: "1.0.0",
-		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{
-				Type:             providermanifestv1.AuthTypeOAuth2,
-				AuthorizationURL: "https://auth.example.com/authorize",
-				TokenURL:         "https://auth.example.com/token",
-			},
-			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-				"default": {
-					Mode: providermanifestv1.ConnectionModeNone,
-				},
-			},
-		},
-	}
-	if _, err := EncodeSourceManifestFormat(conflicting, ManifestFormatYAML); err == nil || !strings.Contains(err.Error(), "legacy top-level connection fields may not be combined with spec.connections.default") {
-		t.Fatalf("EncodeSourceManifestFormat(conflicting) error = %v", err)
+	def := programmatic.Spec.Connections["default"]
+	if def == nil || def.Auth == nil || def.Auth.Type != providermanifestv1.AuthTypeOAuth2 {
+		t.Fatalf("programmatic manifest mutated unexpectedly: %#v", programmatic.Spec.Connections)
 	}
 }
 

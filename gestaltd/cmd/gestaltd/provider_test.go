@@ -746,7 +746,11 @@ plugin = "os import path\nimport os;os.system('cmd')#:attr"
 		Source:  "github.com/testowner/plugins/invalid-python-release",
 		Version: "0.0.1",
 		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+				},
+			},
 		},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -1693,9 +1697,13 @@ func TestRun_ProviderReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *
 		Spec: &providermanifestv1.Spec{
 			ConfigSchemaPath: releaseProviderSchemaPath,
 			MCP:              true,
-			ConnectionMode:   "identity",
-			ConnectionParams: map[string]providermanifestv1.ProviderConnectionParam{
-				"tenant": {Required: true},
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {
+					Mode: providermanifestv1.ConnectionModeIdentity,
+					Params: map[string]providermanifestv1.ProviderConnectionParam{
+						"tenant": {Required: true},
+					},
+				},
 			},
 		},
 	})
@@ -2186,7 +2194,11 @@ def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
 		Source:  "github.com/testowner/plugins/python-release",
 		Version: "0.0.1",
 		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+				},
+			},
 		},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -2932,7 +2944,11 @@ func newGoSourceReleaseFixture(t *testing.T, dir string) string {
 		Version:     "0.0.1",
 		DisplayName: "Release Test",
 		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+				},
+			},
 		},
 	})
 	return pluginDir
@@ -2951,7 +2967,11 @@ func newTypeScriptSourceReleaseFixture(t *testing.T, dir string) string {
 		Version:     "0.0.1",
 		DisplayName: "TypeScript Release",
 		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+				},
+			},
 		},
 	})
 	if err := os.Remove(filepath.Join(pluginDir, providerpkg.StaticCatalogFile)); err != nil {

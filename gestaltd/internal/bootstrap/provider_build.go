@@ -1153,7 +1153,7 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 		AuthTypes:        staticAuthTypes(conn.Auth.Type),
 		ConnectionParams: providerhost.ConnectionParamDefsFromManifest(conn.ConnectionParams),
 		CredentialFields: providerhost.CredentialFieldsFromManifest(conn.Auth.Credentials),
-		DiscoveryConfig:  providerhost.DiscoveryConfigFromManifest(manifest.Spec.Discovery),
+		DiscoveryConfig:  providerhost.DiscoveryConfigFromManifest(conn.Discovery),
 	}, plan, nil
 }
 

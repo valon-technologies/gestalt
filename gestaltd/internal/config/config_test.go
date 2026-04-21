@@ -1019,7 +1019,7 @@ plugins:
 		}
 	})
 
-	t.Run("apiVersion moves sibling auth onto metadata URL sources", func(t *testing.T) {
+	t.Run("apiVersion preserves nested source auth on metadata URL sources", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1027,9 +1027,10 @@ apiVersion: gestaltd.config/v3
 providers:
 plugins:
     custom_tool:
-      source: https://example.com/providers/custom_tool/provider-release.yaml?download=1
-      auth:
-        token: test-token
+      source:
+        url: https://example.com/providers/custom_tool/provider-release.yaml?download=1
+        auth:
+          token: test-token
 `)
 
 		cfg, err := Load(path)
@@ -1043,8 +1044,8 @@ plugins:
 		if entry.Source.Auth == nil || entry.Source.Auth.Token != "test-token" {
 			t.Fatalf("Source.Auth = %#v", entry.Source.Auth)
 		}
-		if entry.InlineSourceAuth != nil {
-			t.Fatalf("InlineSourceAuth = %#v, want nil", entry.InlineSourceAuth)
+		if entry.RouteAuth != nil {
+			t.Fatalf("RouteAuth = %#v, want nil", entry.RouteAuth)
 		}
 		marshaled, err := yaml.Marshal(entry)
 		if err != nil {
@@ -1054,12 +1055,19 @@ plugins:
 		if err := yaml.Unmarshal(marshaled, &roundTripped); err != nil {
 			t.Fatalf("yaml.Unmarshal: %v", err)
 		}
-		if got, ok := roundTripped["source"].(string); !ok || got != "https://example.com/providers/custom_tool/provider-release.yaml?download=1" {
+		source, ok := roundTripped["source"].(map[string]any)
+		if !ok {
 			t.Fatalf("round-tripped source = %#v", roundTripped["source"])
 		}
-		auth, ok := roundTripped["auth"].(map[string]any)
+		if source["url"] != "https://example.com/providers/custom_tool/provider-release.yaml?download=1" {
+			t.Fatalf("round-tripped source.url = %#v", source["url"])
+		}
+		auth, ok := source["auth"].(map[string]any)
 		if !ok || auth["token"] != "test-token" {
-			t.Fatalf("round-tripped auth = %#v", roundTripped["auth"])
+			t.Fatalf("round-tripped source.auth = %#v", source["auth"])
+		}
+		if _, ok := roundTripped["auth"]; ok {
+			t.Fatalf("round-tripped auth = %#v, want absent", roundTripped["auth"])
 		}
 
 		marshaledConfig, err := yaml.Marshal(cfg)
@@ -1078,16 +1086,163 @@ plugins:
 		if !ok {
 			t.Fatalf("plugins.custom_tool = %#v", plugins["custom_tool"])
 		}
-		if got, ok := plugin["source"].(string); !ok || got != "https://example.com/providers/custom_tool/provider-release.yaml?download=1" {
+		source, ok = plugin["source"].(map[string]any)
+		if !ok {
 			t.Fatalf("config round-tripped source = %#v", plugin["source"])
 		}
-		auth, ok = plugin["auth"].(map[string]any)
+		if source["url"] != "https://example.com/providers/custom_tool/provider-release.yaml?download=1" {
+			t.Fatalf("config round-tripped source.url = %#v", source["url"])
+		}
+		auth, ok = source["auth"].(map[string]any)
 		if !ok || auth["token"] != "test-token" {
-			t.Fatalf("config round-tripped auth = %#v", plugin["auth"])
+			t.Fatalf("config round-tripped source.auth = %#v", source["auth"])
+		}
+		if _, ok := plugin["auth"]; ok {
+			t.Fatalf("config round-tripped auth = %#v, want absent", plugin["auth"])
 		}
 	})
 
-	t.Run("apiVersion preserves github release metadata sources", func(t *testing.T) {
+	t.Run("apiVersion preserves bare source.url mapping on round-trip", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v3
+server:
+  providers:
+    auth: corporate
+providers:
+  auth:
+    corporate:
+      source: https://example.com/providers/auth/corporate/provider-release.yaml
+plugins:
+    custom_tool:
+      source:
+        url: https://example.com/providers/custom_tool/provider-release.yaml
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		entry := cfg.Plugins["custom_tool"]
+		if got := entry.SourceMetadataURL(); got != "https://example.com/providers/custom_tool/provider-release.yaml" {
+			t.Fatalf("SourceMetadataURL = %q", got)
+		}
+		if entry.Source.Auth != nil {
+			t.Fatalf("Source.Auth = %#v, want nil", entry.Source.Auth)
+		}
+		marshaled, err := yaml.Marshal(entry)
+		if err != nil {
+			t.Fatalf("yaml.Marshal: %v", err)
+		}
+		var roundTripped map[string]any
+		if err := yaml.Unmarshal(marshaled, &roundTripped); err != nil {
+			t.Fatalf("yaml.Unmarshal: %v", err)
+		}
+		source, ok := roundTripped["source"].(map[string]any)
+		if !ok {
+			t.Fatalf("round-tripped source = %#v", roundTripped["source"])
+		}
+		if source["url"] != "https://example.com/providers/custom_tool/provider-release.yaml" {
+			t.Fatalf("round-tripped source.url = %#v", source["url"])
+		}
+		if _, ok := source["auth"]; ok {
+			t.Fatalf("round-tripped source.auth = %#v, want absent", source["auth"])
+		}
+
+		marshaledConfig, err := yaml.Marshal(cfg)
+		if err != nil {
+			t.Fatalf("yaml.Marshal config: %v", err)
+		}
+		var roundTrippedConfig map[string]any
+		if err := yaml.Unmarshal(marshaledConfig, &roundTrippedConfig); err != nil {
+			t.Fatalf("yaml.Unmarshal config: %v", err)
+		}
+		plugins, ok := roundTrippedConfig["plugins"].(map[string]any)
+		if !ok {
+			t.Fatalf("plugins = %#v", roundTrippedConfig["plugins"])
+		}
+		plugin, ok := plugins["custom_tool"].(map[string]any)
+		if !ok {
+			t.Fatalf("plugins.custom_tool = %#v", plugins["custom_tool"])
+		}
+		source, ok = plugin["source"].(map[string]any)
+		if !ok {
+			t.Fatalf("config round-tripped source = %#v", plugin["source"])
+		}
+		if source["url"] != "https://example.com/providers/custom_tool/provider-release.yaml" {
+			t.Fatalf("config round-tripped source.url = %#v", source["url"])
+		}
+		if _, ok := source["auth"]; ok {
+			t.Fatalf("config round-tripped source.auth = %#v, want absent", source["auth"])
+		}
+		if _, ok := plugin["auth"]; ok {
+			t.Fatalf("config round-tripped auth = %#v, want absent", plugin["auth"])
+		}
+	})
+
+	t.Run("apiVersion preserves nested source auth with plugin route auth overrides", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v3
+server:
+  providers:
+    auth: corporate
+providers:
+  auth:
+    corporate:
+      source: https://example.com/providers/auth/corporate/provider-release.yaml
+plugins:
+    custom_tool:
+      source:
+        url: https://example.com/providers/custom_tool/provider-release.yaml
+        auth:
+          token: source-token
+      auth:
+        provider: server
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		entry := cfg.Plugins["custom_tool"]
+		if got := entry.SourceMetadataURL(); got != "https://example.com/providers/custom_tool/provider-release.yaml" {
+			t.Fatalf("SourceMetadataURL = %q", got)
+		}
+		if entry.Source.Auth == nil || entry.Source.Auth.Token != "source-token" {
+			t.Fatalf("Source.Auth = %#v", entry.Source.Auth)
+		}
+		if entry.RouteAuth == nil || entry.RouteAuth.Provider != "server" {
+			t.Fatalf("RouteAuth = %#v", entry.RouteAuth)
+		}
+		marshaled, err := yaml.Marshal(entry)
+		if err != nil {
+			t.Fatalf("yaml.Marshal: %v", err)
+		}
+		var roundTripped map[string]any
+		if err := yaml.Unmarshal(marshaled, &roundTripped); err != nil {
+			t.Fatalf("yaml.Unmarshal: %v", err)
+		}
+		source, ok := roundTripped["source"].(map[string]any)
+		if !ok {
+			t.Fatalf("round-tripped source = %#v", roundTripped["source"])
+		}
+		if source["url"] != "https://example.com/providers/custom_tool/provider-release.yaml" {
+			t.Fatalf("round-tripped source.url = %#v", source["url"])
+		}
+		sourceAuth, ok := source["auth"].(map[string]any)
+		if !ok || sourceAuth["token"] != "source-token" {
+			t.Fatalf("round-tripped source.auth = %#v", source["auth"])
+		}
+		auth, ok := roundTripped["auth"].(map[string]any)
+		if !ok || auth["provider"] != "server" {
+			t.Fatalf("round-tripped auth = %#v", roundTripped["auth"])
+		}
+	})
+
+	t.Run("apiVersion preserves github release metadata sources with nested auth", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1100,8 +1255,8 @@ plugins:
           repo: valon-technologies/toolshed
           tag: plugins/custom-tool/v0.0.1-alpha.1
           asset: provider-release.yaml
-      auth:
-        token: test-token
+        auth:
+          token: test-token
 `)
 
 		cfg, err := Load(path)
@@ -1136,13 +1291,16 @@ plugins:
 		if !ok || githubRelease["repo"] != "valon-technologies/toolshed" || githubRelease["tag"] != "plugins/custom-tool/v0.0.1-alpha.1" || githubRelease["asset"] != "provider-release.yaml" {
 			t.Fatalf("round-tripped githubRelease = %#v", source["githubRelease"])
 		}
-		auth, ok := roundTripped["auth"].(map[string]any)
+		auth, ok := source["auth"].(map[string]any)
 		if !ok || auth["token"] != "test-token" {
-			t.Fatalf("round-tripped auth = %#v", roundTripped["auth"])
+			t.Fatalf("round-tripped source.auth = %#v", source["auth"])
+		}
+		if _, ok := roundTripped["auth"]; ok {
+			t.Fatalf("round-tripped auth = %#v, want absent", roundTripped["auth"])
 		}
 	})
 
-	t.Run("apiVersion moves sibling auth onto local release metadata sources", func(t *testing.T) {
+	t.Run("apiVersion preserves nested source auth on local release metadata sources", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1150,9 +1308,10 @@ apiVersion: gestaltd.config/v4
 providers:
 plugins:
     custom_tool:
-      source: ./plugins/custom_tool/dist/provider-release.yaml
-      auth:
-        token: test-token
+      source:
+        path: ./plugins/custom_tool/dist/provider-release.yaml
+        auth:
+          token: test-token
 `)
 
 		cfg, err := Load(path)
@@ -1167,9 +1326,6 @@ plugins:
 		if entry.Source.Auth == nil || entry.Source.Auth.Token != "test-token" {
 			t.Fatalf("Source.Auth = %#v", entry.Source.Auth)
 		}
-		if entry.InlineSourceAuth != nil {
-			t.Fatalf("InlineSourceAuth = %#v, want nil", entry.InlineSourceAuth)
-		}
 		marshaled, err := yaml.Marshal(entry)
 		if err != nil {
 			t.Fatalf("yaml.Marshal: %v", err)
@@ -1182,9 +1338,12 @@ plugins:
 		if !ok || source["path"] != wantPath {
 			t.Fatalf("round-tripped source = %#v", roundTripped["source"])
 		}
-		auth, ok := roundTripped["auth"].(map[string]any)
+		auth, ok := source["auth"].(map[string]any)
 		if !ok || auth["token"] != "test-token" {
-			t.Fatalf("round-tripped auth = %#v", roundTripped["auth"])
+			t.Fatalf("round-tripped source.auth = %#v", source["auth"])
+		}
+		if _, ok := roundTripped["auth"]; ok {
+			t.Fatalf("round-tripped auth = %#v, want absent", roundTripped["auth"])
 		}
 	})
 
@@ -2580,7 +2739,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `field workflow not found in type config.UIEntry`) {
+		if !strings.Contains(err.Error(), `field workflow not found`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2994,15 +3153,48 @@ plugins:
 `,
 		},
 		{
-			name: "apiVersion metadata url with sibling auth",
+			name: "apiVersion metadata url with plugin route auth",
+			yaml: `
+apiVersion: gestaltd.config/v3
+server:
+  providers:
+    auth: corporate
+providers:
+  auth:
+    corporate:
+      source: https://example.com/providers/auth/corporate/provider-release.yaml
+plugins:
+    external:
+      source: https://example.com/providers/external/provider-release.yaml
+      auth:
+        provider: server
+`,
+		},
+		{
+			name: "apiVersion metadata url with nested source auth",
 			yaml: `
 apiVersion: gestaltd.config/v3
 providers:
 plugins:
     external:
-      source: https://example.com/providers/external/provider-release.yaml
-      auth:
-        token: test-token
+      source:
+        url: https://example.com/providers/external/provider-release.yaml
+        auth:
+          token: test-token
+`,
+		},
+		{
+			name: "provider metadata url with nested source auth",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+  auth:
+    primary:
+      source:
+        url: https://example.com/providers/test-auth/provider-release.yaml
+        auth:
+          token: test-token
+plugins:
 `,
 		},
 	}
@@ -3078,6 +3270,20 @@ plugins:
       source: ./plugins/dummy/manifest.yaml
 `,
 			want: `unsupported apiVersion "gestaltd.config/v99"`,
+		},
+		{
+			name: "provider auth override is rejected outside plugins",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+  cache:
+    shared:
+      source: https://example.com/providers/cache/shared/provider-release.yaml
+      auth:
+        provider: server
+plugins:
+`,
+			want: `providers.cache.shared.auth is only supported on plugins.*`,
 		},
 	}
 
@@ -3293,19 +3499,25 @@ plugins:
 			wantErr: "source.ref/source.version are no longer supported",
 		},
 		{
-			name: "apiVersion metadata url with sibling auth is valid",
+			name: "apiVersion route auth override is valid",
 			yaml: `
 apiVersion: gestaltd.config/v3
+server:
+  providers:
+    auth: corporate
 providers:
+  auth:
+    corporate:
+      source: https://example.com/providers/auth/corporate/provider-release.yaml
 plugins:
     external:
       source: https://example.com/providers/external/provider-release.yaml
       auth:
-        token: test-token
+        provider: server
 `,
 		},
 		{
-			name: "apiVersion github release source with sibling auth is valid",
+			name: "apiVersion github release source with nested source auth is valid",
 			yaml: `
 apiVersion: gestaltd.config/v3
 providers:
@@ -3316,8 +3528,8 @@ plugins:
           repo: valon-technologies/toolshed
           tag: plugins/external/v1.2.3
           asset: provider-release.yaml
-      auth:
-        token: test-token
+        auth:
+          token: test-token
 `,
 		},
 		{
@@ -3350,17 +3562,78 @@ plugins:
 			wantErr: "source.githubRelease.repo must be owner/name",
 		},
 		{
-			name: "apiVersion rejects nested source auth compatibility shape",
+			name: "apiVersion nested source auth is valid",
 			yaml: `
 apiVersion: gestaltd.config/v3
 providers:
 plugins:
     external:
       source:
+        url: https://example.com/providers/external/provider-release.yaml
         auth:
           token: test-token
 `,
-			wantErr: "source.auth is no longer supported; use sibling auth alongside source",
+		},
+		{
+			name: "plugin auth override is valid alongside nested source auth",
+			yaml: `
+apiVersion: gestaltd.config/v3
+server:
+  providers:
+    auth: corporate
+providers:
+  auth:
+    corporate:
+      source: https://example.com/providers/auth/corporate/provider-release.yaml
+plugins:
+    external:
+      source:
+        url: https://example.com/providers/external/provider-release.yaml
+        auth:
+          token: test-token
+      auth:
+        provider: server
+`,
+		},
+		{
+			name: "plugin auth override rejects source auth token mix",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    external:
+      source: https://example.com/providers/external/provider-release.yaml
+      auth:
+        token: test-token
+        provider: server
+`,
+			wantErr: "field token not found",
+		},
+		{
+			name: "plugin auth override rejects unknown auth provider",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    external:
+      source: https://example.com/providers/external/provider-release.yaml
+      auth:
+        provider: missing
+`,
+			wantErr: `plugins.external.auth.provider references unknown auth provider "missing"`,
+		},
+		{
+			name: "plugin auth override rejects server alias without configured auth provider",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    external:
+      source: https://example.com/providers/external/provider-release.yaml
+      auth:
+        provider: server
+`,
+			wantErr: `plugins.external.auth.provider "server" requires a configured platform auth provider`,
 		},
 		{
 			name: "apiVersion local source rejects sibling auth",
@@ -3373,7 +3646,7 @@ plugins:
       auth:
         token: test-token
 `,
-			wantErr: "auth is only valid with provider-release metadata sources",
+			wantErr: "field token not found",
 		},
 		{
 			name: "apiVersion v4 local provider-release metadata is valid",
@@ -3396,15 +3669,16 @@ plugins:
 `,
 		},
 		{
-			name: "apiVersion v4 local provider-release metadata accepts sibling auth",
+			name: "apiVersion v4 local provider-release metadata accepts nested source auth",
 			yaml: `
 apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
-      source: ./plugins/dummy/dist/provider-release.yaml
-      auth:
-        token: test-token
+      source:
+        path: ./plugins/dummy/dist/provider-release.yaml
+        auth:
+          token: test-token
 `,
 		},
 		{

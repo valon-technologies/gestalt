@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
@@ -118,6 +119,17 @@ type ProviderSource struct {
 	Auth          *SourceAuthDef          `yaml:"auth,omitempty"`
 }
 
+type providerSourceYAML struct {
+	URL           string                  `yaml:"url,omitempty"`
+	GitHubRelease *GitHubReleaseSourceDef `yaml:"githubRelease,omitempty"`
+	Path          string                  `yaml:"path,omitempty"`
+	Auth          *SourceAuthDef          `yaml:"auth,omitempty"`
+}
+
+type RouteAuthDef struct {
+	Provider string `yaml:"provider,omitempty"`
+}
+
 type GitHubReleaseSourceDef struct {
 	Repo  string `yaml:"repo,omitempty"`
 	Tag   string `yaml:"tag,omitempty"`
@@ -141,7 +153,6 @@ func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind == yaml.MappingNode {
 		hasRef := false
 		hasVersion := false
-		hasAuth := false
 		for i := 0; i+1 < len(value.Content); i += 2 {
 			key := strings.TrimSpace(value.Content[i].Value)
 			switch key {
@@ -149,8 +160,6 @@ func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
 				hasRef = true
 			case "version":
 				hasVersion = true
-			case "auth":
-				hasAuth = true
 			}
 		}
 		if hasRef {
@@ -159,38 +168,53 @@ func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
 		if hasVersion {
 			return fmt.Errorf("source.version is no longer supported; use source: <provider-release.yaml URL>")
 		}
-		if hasAuth {
-			return fmt.Errorf("source.auth is no longer supported; use sibling auth alongside source")
+		var raw providerSourceYAML
+		if err := decodeYAMLNodeKnownFields(value, &raw); err != nil {
+			return err
 		}
+		s.GitHubRelease = cloneGitHubReleaseSourceDef(raw.GitHubRelease)
+		s.Path = strings.TrimSpace(raw.Path)
+		s.metadataURL = strings.TrimSpace(raw.URL)
+		s.Auth = cloneSourceAuthDef(raw.Auth)
+		return nil
 	}
-	type raw ProviderSource
-	return value.Decode((*raw)(s))
+	var raw providerSourceYAML
+	if err := decodeYAMLNodeKnownFields(value, &raw); err != nil {
+		return err
+	}
+	s.GitHubRelease = cloneGitHubReleaseSourceDef(raw.GitHubRelease)
+	s.Path = strings.TrimSpace(raw.Path)
+	s.metadataURL = strings.TrimSpace(raw.URL)
+	s.Auth = cloneSourceAuthDef(raw.Auth)
+	return nil
 }
 
 func (s ProviderSource) MarshalYAML() (any, error) {
 	if s.Builtin != "" {
 		return s.Builtin, nil
 	}
+	auth := cloneSourceAuthDef(s.Auth)
 	if s.metadataURL != "" && s.Path == "" && s.metadataPath == "" {
-		return s.metadataURL, nil
+		return providerSourceYAML{URL: s.metadataURL, Auth: auth}, nil
 	}
 	if s.GitHubRelease != nil && s.Path == "" && s.metadataPath == "" {
-		type raw struct {
-			GitHubRelease *GitHubReleaseSourceDef `yaml:"githubRelease,omitempty"`
-		}
-		return raw{GitHubRelease: cloneGitHubReleaseSourceDef(s.GitHubRelease)}, nil
+		return providerSourceYAML{
+			GitHubRelease: cloneGitHubReleaseSourceDef(s.GitHubRelease),
+			Auth:          auth,
+		}, nil
 	}
-	if s.scalar != "" && s.Path == "" && s.metadataPath == "" {
+	if s.scalar != "" && s.Path == "" && s.metadataPath == "" && auth == nil {
 		return s.scalar, nil
 	}
 	if s.metadataPath != "" && s.Path == "" {
-		type raw struct {
-			Path string `yaml:"path,omitempty"`
-		}
-		return raw{Path: s.metadataPath}, nil
+		return providerSourceYAML{Path: s.metadataPath, Auth: auth}, nil
 	}
-	type raw ProviderSource
-	return raw(s), nil
+	return providerSourceYAML{
+		URL:           s.metadataURL,
+		GitHubRelease: cloneGitHubReleaseSourceDef(s.GitHubRelease),
+		Path:          s.Path,
+		Auth:          auth,
+	}, nil
 }
 
 func (s ProviderSource) IsBuiltin() bool       { return s.Builtin != "" }
@@ -224,6 +248,15 @@ func NewLocalReleaseMetadataSource(rawPath string) ProviderSource {
 	return ProviderSource{metadataPath: strings.TrimSpace(rawPath)}
 }
 
+func cloneSourceAuthDef(src *SourceAuthDef) *SourceAuthDef {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	cloned.Token = strings.TrimSpace(cloned.Token)
+	return &cloned
+}
+
 func cloneGitHubReleaseSourceDef(src *GitHubReleaseSourceDef) *GitHubReleaseSourceDef {
 	if src == nil {
 		return nil
@@ -255,15 +288,15 @@ func (g GitHubReleaseSourceDef) Location() string {
 
 // ProviderEntry is the universal configuration for any provider.
 type ProviderEntry struct {
-	Source           ProviderSource    `yaml:"source"`
-	Config           yaml.Node         `yaml:"config,omitempty"`
-	Default          bool              `yaml:"default,omitempty"`
-	Env              map[string]string `yaml:"env,omitempty"`
-	AllowedHosts     []string          `yaml:"allowedHosts,omitempty"`
-	DisplayName      string            `yaml:"displayName,omitempty"`
-	Description      string            `yaml:"description,omitempty"`
-	IconFile         string            `yaml:"iconFile,omitempty"`
-	InlineSourceAuth *SourceAuthDef    `yaml:"auth,omitempty"`
+	Source       ProviderSource    `yaml:"source"`
+	Config       yaml.Node         `yaml:"config,omitempty"`
+	Default      bool              `yaml:"default,omitempty"`
+	Env          map[string]string `yaml:"env,omitempty"`
+	AllowedHosts []string          `yaml:"allowedHosts,omitempty"`
+	DisplayName  string            `yaml:"displayName,omitempty"`
+	Description  string            `yaml:"description,omitempty"`
+	IconFile     string            `yaml:"iconFile,omitempty"`
+	RouteAuth    *RouteAuthDef     `yaml:"-"`
 	// AuthorizationPolicy binds this provider to a shared human access policy.
 	AuthorizationPolicy string `yaml:"authorizationPolicy,omitempty"`
 
@@ -295,14 +328,46 @@ type ProviderEntry struct {
 	MCPToolPrefix        string                                `yaml:"-"`
 }
 
-func (e ProviderEntry) MarshalYAML() (any, error) {
-	type raw ProviderEntry
-	if e.HasReleaseMetadataSource() && e.Source.Auth != nil && e.InlineSourceAuth == nil {
-		auth := *e.Source.Auth
-		e.InlineSourceAuth = &auth
-		e.Source.Auth = nil
+type providerEntryFields ProviderEntry
+
+type providerEntryYAML struct {
+	providerEntryFields `yaml:",inline"`
+	Auth                *RouteAuthDef `yaml:"auth,omitempty"`
+}
+
+type providerEntryMarshalYAML struct {
+	providerEntryFields `yaml:",inline"`
+	Auth                *RouteAuthDef `yaml:"auth,omitempty"`
+}
+
+type uiEntryYAML struct {
+	providerEntryYAML `yaml:",inline"`
+	Path              string `yaml:"path,omitempty"`
+}
+
+type uiEntryMarshalYAML struct {
+	providerEntryMarshalYAML `yaml:",inline"`
+	Path                     string `yaml:"path,omitempty"`
+}
+
+func (e *ProviderEntry) UnmarshalYAML(value *yaml.Node) error {
+	var raw providerEntryYAML
+	if err := decodeYAMLNodeKnownFields(value, &raw); err != nil {
+		return err
 	}
-	return raw(e), nil
+	decoded, err := raw.decode()
+	if err != nil {
+		return err
+	}
+	*e = decoded
+	return nil
+}
+
+func (e ProviderEntry) MarshalYAML() (any, error) {
+	return providerEntryMarshalYAML{
+		providerEntryFields: providerEntryFieldsFromEntry(e),
+		Auth:                cloneRouteAuthDef(e.RouteAuth),
+	}, nil
 }
 
 type ProviderSurfaceOverrides struct {
@@ -391,6 +456,73 @@ type UIEntry struct {
 	ProviderEntry `yaml:",inline"`
 	Path          string `yaml:"path,omitempty"`
 	OwnerPlugin   string `yaml:"-"`
+}
+
+func (e *UIEntry) UnmarshalYAML(value *yaml.Node) error {
+	var raw uiEntryYAML
+	if err := decodeYAMLNodeKnownFields(value, &raw); err != nil {
+		return err
+	}
+	decoded, err := raw.decode()
+	if err != nil {
+		return err
+	}
+	*e = UIEntry{
+		ProviderEntry: decoded,
+		Path:          raw.Path,
+	}
+	return nil
+}
+
+func (e UIEntry) MarshalYAML() (any, error) {
+	raw, err := e.ProviderEntry.MarshalYAML()
+	if err != nil {
+		return nil, err
+	}
+	entry, ok := raw.(providerEntryMarshalYAML)
+	if !ok {
+		return nil, fmt.Errorf("marshal ui entry: unexpected provider entry shape %T", raw)
+	}
+	return uiEntryMarshalYAML{
+		providerEntryMarshalYAML: entry,
+		Path:                     e.Path,
+	}, nil
+}
+
+func (raw providerEntryYAML) decode() (ProviderEntry, error) {
+	entry := raw.toProviderEntry()
+	entry.RouteAuth = cloneRouteAuthDef(raw.Auth)
+	return entry, nil
+}
+
+func decodeYAMLNodeKnownFields(node *yaml.Node, out any) error {
+	data, err := yaml.Marshal(node)
+	if err != nil {
+		return fmt.Errorf("marshal yaml node: %w", err)
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(out); err != nil && err != io.EOF {
+		return err
+	}
+	return nil
+}
+
+func cloneRouteAuthDef(src *RouteAuthDef) *RouteAuthDef {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	cloned.Provider = strings.TrimSpace(cloned.Provider)
+	return &cloned
+}
+
+func (f providerEntryFields) toProviderEntry() ProviderEntry {
+	return ProviderEntry(f)
+}
+
+func providerEntryFieldsFromEntry(e ProviderEntry) providerEntryFields {
+	return providerEntryFields(e)
 }
 
 func (e *ProviderEntry) HasMetadataSource() bool {
@@ -832,12 +964,17 @@ func cloneAuthValue(src AuthValueDef) AuthValueDef {
 func EffectivePluginConnectionDef(plugin *ProviderEntry, manifestPlugin *providermanifestv1.Spec) ConnectionDef {
 	conn := ConnectionDef{}
 	if manifestPlugin != nil {
-		conn.Mode = manifestPlugin.ConnectionMode
-		if len(manifestPlugin.ConnectionParams) > 0 {
-			conn.ConnectionParams = maps.Clone(manifestPlugin.ConnectionParams)
-		}
-		if manifestPlugin.Auth != nil {
-			MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(manifestPlugin.Auth))
+		if def := manifestPlugin.DefaultConnectionDef(); def != nil {
+			conn.Mode = def.Mode
+			if len(def.Params) > 0 {
+				conn.ConnectionParams = maps.Clone(def.Params)
+			}
+			if def.Auth != nil {
+				MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(def.Auth))
+			}
+			if def.Discovery != nil {
+				conn.Discovery = def.Discovery
+			}
 		}
 	}
 	if plugin != nil {
@@ -1681,11 +1818,6 @@ func normalizeProviderSourceShapes(cfg *Config) {
 			return
 		}
 		normalizeProviderSource(kind, &entry.Source, sourceSyntax)
-		if entry.HasReleaseMetadataSource() && entry.Source.Auth == nil && entry.InlineSourceAuth != nil {
-			auth := *entry.InlineSourceAuth
-			entry.Source.Auth = &auth
-			entry.InlineSourceAuth = nil
-		}
 	}
 
 	for _, entry := range cfg.Plugins {
@@ -1721,6 +1853,11 @@ func normalizeProviderSource(kind string, source *ProviderSource, sourceSyntax p
 		return
 	}
 	source.scalar = strings.TrimSpace(source.scalar)
+	source.Path = strings.TrimSpace(source.Path)
+	source.metadataURL = strings.TrimSpace(source.metadataURL)
+	source.metadataPath = strings.TrimSpace(source.metadataPath)
+	source.unsupported = strings.TrimSpace(source.unsupported)
+	source.Auth = cloneSourceAuthDef(source.Auth)
 	if sourceSyntax == providerSourceSyntaxV4 && source.Path != "" && source.metadataPath == "" {
 		source.metadataPath = source.Path
 		source.Path = ""
