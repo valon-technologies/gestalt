@@ -35,11 +35,20 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	gproto "google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 )
+
+func explicitStartupWorkflowActor() *proto.WorkflowActor {
+	return &proto.WorkflowActor{
+		SubjectId:   "system:workflow-startup",
+		SubjectKind: "system",
+	}
+}
 
 func stubAuthFactory(name string) bootstrap.AuthFactory {
 	return func(yaml.Node, bootstrap.Deps) (core.AuthenticationProvider, error) {
@@ -3012,6 +3021,7 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 				PluginName: "roadmap",
 				Operation:  "sync",
 			},
+			CreatedBy: explicitStartupWorkflowActor(),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("startup callback: %w", err)
@@ -3066,6 +3076,7 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 				PluginName: "roadmap",
 				Operation:  "sync",
 			},
+			CreatedBy: explicitStartupWorkflowActor(),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("startup callback: %w", err)
@@ -3084,74 +3095,89 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 	}
 }
 
-func TestBootstrapStartupWorkflowCallbackIgnoresProviderCreatedByForAuthorization(t *testing.T) {
+func TestBootstrapStartupWorkflowCallbackRejectsNonStartupCreatedByForAuthorization(t *testing.T) {
 	t.Parallel()
-
-	var requestPath atomic.Value
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestPath.Store(r.URL.Path)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer srv.Close()
-
-	cfg := workflowStartupCallbackConfig(srv.URL)
-	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
-	cfg.Plugins["roadmap"].AuthorizationPolicy = "roadmap-policy"
-	cfg.Plugins["roadmap"].ResolvedManifest.Spec.Surfaces.REST.Operations[0].AllowedRoles = []string{"viewer"}
-	cfg.Authorization.Policies = map[string]config.HumanPolicyDef{
-		"roadmap-policy": {
-			Members: []config.HumanPolicyMemberDef{{
-				SubjectID: principal.UserSubjectID("viewer-user"),
-				Role:      "viewer",
-			}},
-		},
-	}
-
-	factories := validFactories()
-	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
-		if name != "temporal" {
-			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
-		}
-		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.IdentitySubjectID(),
-			Integration: "roadmap",
-			Connection:  config.PluginConnectionName,
-			Instance:    "default",
-			AccessToken: "workflow-startup-token",
-		}); err != nil {
-			return nil, fmt.Errorf("store identity token: %w", err)
-		}
-		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target: &proto.BoundWorkflowTarget{
-				PluginName: "roadmap",
-				Operation:  "sync",
-			},
-			CreatedBy: &proto.WorkflowActor{
+	for _, tc := range []struct {
+		name  string
+		actor *proto.WorkflowActor
+	}{
+		{
+			name: "spoofed user actor",
+			actor: &proto.WorkflowActor{
 				SubjectId:   principal.UserSubjectID("spoofed-user"),
 				SubjectKind: string(principal.KindUser),
 				DisplayName: "Spoofed User",
 			},
+		},
+		{
+			name: "spoofed system actor",
+			actor: &proto.WorkflowActor{
+				SubjectId:   "system:config",
+				SubjectKind: "system",
+				DisplayName: "Config",
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusAccepted)
+				_, _ = w.Write([]byte(`{"ok":true}`))
+			}))
+			defer srv.Close()
+
+			cfg := workflowStartupCallbackConfig(srv.URL)
+			cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+			cfg.Plugins["roadmap"].AuthorizationPolicy = "roadmap-policy"
+			cfg.Plugins["roadmap"].ResolvedManifest.Spec.Surfaces.REST.Operations[0].AllowedRoles = []string{"viewer"}
+			cfg.Authorization.Policies = map[string]config.HumanPolicyDef{
+				"roadmap-policy": {
+					Members: []config.HumanPolicyMemberDef{{
+						SubjectID: principal.UserSubjectID("viewer-user"),
+						Role:      "viewer",
+					}},
+				},
+			}
+
+			factories := validFactories()
+			factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+				if name != "temporal" {
+					return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
+				}
+				if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+					SubjectID:   principal.IdentitySubjectID(),
+					Integration: "roadmap",
+					Connection:  config.PluginConnectionName,
+					Instance:    "default",
+					AccessToken: "workflow-startup-token",
+				}); err != nil {
+					return nil, fmt.Errorf("store identity token: %w", err)
+				}
+				_, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
+					Target: &proto.BoundWorkflowTarget{
+						PluginName: "roadmap",
+						Operation:  "sync",
+					},
+					CreatedBy: tc.actor,
+				})
+				if err == nil {
+					return nil, fmt.Errorf("expected startup callback authorization failure")
+				}
+				if status.Code(err) != codes.InvalidArgument {
+					return nil, fmt.Errorf("startup callback status = %s, want %s", status.Code(err), codes.InvalidArgument)
+				}
+				return &stubWorkflowProvider{}, nil
+			}
+
+			result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+			if err != nil {
+				t.Fatalf("Bootstrap: %v", err)
+			}
+			defer func() { _ = result.Close(context.Background()) }()
 		})
-		if err != nil {
-			return nil, fmt.Errorf("startup callback: %w", err)
-		}
-		if resp.GetStatus() != http.StatusAccepted || resp.GetBody() != `{"ok":true}` {
-			return nil, fmt.Errorf("startup callback response = %#v", resp)
-		}
-		return &stubWorkflowProvider{}, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	if got, _ := requestPath.Load().(string); got != "/sync" {
-		t.Fatalf("request path = %q, want %q", got, "/sync")
 	}
 }
 
@@ -3299,6 +3325,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 						PluginName: "roadmap",
 						Operation:  "sync",
 					},
+					CreatedBy: explicitStartupWorkflowActor(),
 				})
 				if err != nil {
 					return nil, fmt.Errorf("startup callback: %w", err)

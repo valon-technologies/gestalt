@@ -160,16 +160,6 @@ func (r *workflowRuntime) ResolveProviderSelection(name string) (string, corewor
 	return selectedName, provider, nil
 }
 
-func (r *workflowRuntime) StartupPendingProvider(name string) bool {
-	if r == nil {
-		return false
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	_, ok := r.providers[strings.TrimSpace(name)].(*startupWorkflowProviderProxy)
-	return ok
-}
-
 func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOperationRequest) (*coreworkflow.InvokeOperationResponse, error) {
 	if r == nil {
 		return nil, fmt.Errorf("workflow runtime is not configured")
@@ -202,7 +192,10 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		invokeConnection = strings.TrimSpace(target.Connection)
 		invokeInstance = strings.TrimSpace(target.Instance)
 	} else if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
-		return nil, fmt.Errorf("%w: workflow execution principal is required when execution_ref is omitted", invocation.ErrInternal)
+		principalValue = workflowRequestPrincipal(req)
+		if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
+			return nil, fmt.Errorf("%w: workflow execution principal is required when execution_ref is omitted", invocation.ErrInternal)
+		}
 	}
 	if contextValue := workflowInvocationContext(req); len(contextValue) > 0 {
 		ctx = invocation.WithWorkflowContext(ctx, contextValue)
@@ -266,14 +259,21 @@ func workflowExecutionPrincipal(ref *coreworkflow.ExecutionReference) *principal
 	})
 }
 
-func workflowStartupPrincipal(req coreworkflow.InvokeOperationRequest) *principal.Principal {
+func workflowRequestPrincipal(req coreworkflow.InvokeOperationRequest) *principal.Principal {
+	subjectID := strings.TrimSpace(req.CreatedBy.SubjectID)
+	if subjectID != "system:workflow-startup" {
+		return nil
+	}
 	permissions := principal.CompilePermissions(workflowExecutionRefPermissionsForTarget(req.Target))
-	return principal.Canonicalize(&principal.Principal{
-		SubjectID:           "system:workflow-startup",
-		CredentialSubjectID: principal.IdentitySubjectID(),
-		Scopes:              principal.PermissionPlugins(permissions),
-		TokenPermissions:    permissions,
-	})
+	value := &principal.Principal{
+		SubjectID:        subjectID,
+		DisplayName:      strings.TrimSpace(req.CreatedBy.DisplayName),
+		Source:           principal.ParseSource(req.CreatedBy.AuthSource),
+		Scopes:           principal.PermissionPlugins(permissions),
+		TokenPermissions: permissions,
+	}
+	value.CredentialSubjectID = principal.IdentitySubjectID()
+	return principal.Canonicalize(value)
 }
 
 func workflowInvocationParams(req coreworkflow.InvokeOperationRequest) map[string]any {

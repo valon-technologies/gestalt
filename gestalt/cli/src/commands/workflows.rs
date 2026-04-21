@@ -108,6 +108,23 @@ pub fn get_run(client: &ApiClient, id: &str, format: Format) -> Result<()> {
     Ok(())
 }
 
+pub fn cancel_run(
+    client: &ApiClient,
+    id: &str,
+    reason: Option<&str>,
+    format: Format,
+) -> Result<()> {
+    let body = match reason {
+        Some(reason) => json!({ "reason": reason }),
+        None => json!({}),
+    };
+    let resp = client
+        .post(&format!("{RUNS_PATH}/{id}/cancel"), &body)
+        .with_context(|| format!("failed to cancel workflow run {id}"))?;
+    print_run(&resp, format);
+    Ok(())
+}
+
 fn filter_by_plugin(value: Value, plugin: Option<&str>) -> Value {
     let Some(plugin) = plugin else {
         return value;

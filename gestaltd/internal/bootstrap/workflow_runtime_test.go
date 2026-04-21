@@ -249,7 +249,14 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 			},
 		},
 	}
-	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), workflowStartupPrincipal(req)), req)
+	startupPermissions := principal.CompilePermissions(workflowExecutionRefPermissionsForTarget(req.Target))
+	startupPrincipal := principal.Canonicalize(&principal.Principal{
+		SubjectID:           "system:workflow-startup",
+		CredentialSubjectID: principal.IdentitySubjectID(),
+		Scopes:              principal.PermissionPlugins(startupPermissions),
+		TokenPermissions:    startupPermissions,
+	})
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), startupPrincipal), req)
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}

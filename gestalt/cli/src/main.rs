@@ -162,6 +162,9 @@ fn run() -> anyhow::Result<()> {
                     WorkflowRunCommands::Get { id } => {
                         commands::workflows::get_run(&client, &id, format)
                     }
+                    WorkflowRunCommands::Cancel { id, reason } => {
+                        commands::workflows::cancel_run(&client, &id, reason.as_deref(), format)
+                    }
                 },
             }
         }

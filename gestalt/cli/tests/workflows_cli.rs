@@ -343,3 +343,43 @@ fn test_cli_gets_run() {
         .stdout(predicate::str::contains("run-1"))
         .stdout(predicate::str::contains("succeeded"));
 }
+
+#[test]
+fn test_cli_cancels_run() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/workflow/runs/run-1/cancel",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"reason":"operator requested"}"#.to_string(),
+    ))
+    .with_body(
+        r#"{
+            "id":"run-1",
+            "provider":"test-provider",
+            "status":"canceled",
+            "target":{"plugin":"dummy","operation":"doit"},
+            "statusMessage":"operator requested"
+        }"#,
+    )
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "workflows",
+            "runs",
+            "cancel",
+            "run-1",
+            "--reason",
+            "operator requested",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("run-1"))
+        .stdout(predicate::str::contains("canceled"));
+}

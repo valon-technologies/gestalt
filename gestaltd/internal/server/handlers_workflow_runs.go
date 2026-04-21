@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -57,6 +59,10 @@ type workflowRunInfo struct {
 	ResultBody    string                     `json:"resultBody,omitempty"`
 }
 
+type workflowRunCancelRequest struct {
+	Reason string `json:"reason,omitempty"`
+}
+
 func (s *Server) listGlobalWorkflowRuns(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.resolveWorkflowScheduleActor(w, r)
 	if !ok {
@@ -91,6 +97,27 @@ func (s *Server) getGlobalWorkflowRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	managed, err := s.workflowSchedules.GetRun(r.Context(), p, chi.URLParam(r, "runID"))
+	if err != nil {
+		s.writeWorkflowRunManagerError(w, r, chi.URLParam(r, "runID"), err)
+		return
+	}
+	writeJSON(w, http.StatusOK, workflowRunInfoFromManaged(managed))
+}
+
+func (s *Server) cancelGlobalWorkflowRun(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveWorkflowScheduleActor(w, r)
+	if !ok {
+		return
+	}
+	var req workflowRunCancelRequest
+	if r.Body != nil {
+		defer func() { _ = r.Body.Close() }()
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+	}
+	managed, err := s.workflowSchedules.CancelRun(r.Context(), p, chi.URLParam(r, "runID"), req.Reason)
 	if err != nil {
 		s.writeWorkflowRunManagerError(w, r, chi.URLParam(r, "runID"), err)
 		return

@@ -1150,7 +1150,7 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 	hostServices := []providerhost.HostService{{
 		EnvVar: providerhost.DefaultWorkflowHostSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterWorkflowHostServer(srv, providerhost.NewWorkflowHostServer(name, deps.WorkflowRuntime.Invoke, workflowHostStartupContextFunc(deps.WorkflowRuntime, name)))
+			proto.RegisterWorkflowHostServer(srv, providerhost.NewWorkflowHostServer(name, deps.WorkflowRuntime.Invoke))
 		},
 	}}
 	var cleanup func()
