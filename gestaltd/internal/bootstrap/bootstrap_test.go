@@ -3530,18 +3530,18 @@ func TestResultCloseClosesEachAuthProviderOnce(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
-	cfg.Providers.Auth["secondary"] = &config.ProviderEntry{
+	cfg.Providers.Authentication["secondary"] = &config.ProviderEntry{
 		Source: config.NewMetadataSource("https://example.invalid/github-com-valon-technologies-gestalt-providers-auth-google/v0.0.1-alpha.1/provider-release.yaml"),
 		Config: yaml.Node{Kind: yaml.MappingNode},
 	}
-	cfg.Server.Providers.Auth = "secondary"
+	cfg.Server.Providers.Authentication = "secondary"
 
 	var builds atomic.Int32
 	var firstClosed atomic.Int32
 	var secondClosed atomic.Int32
 
 	factories := validFactories()
-	factories.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
+	factories.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthenticationProvider, error) {
 		provider := &closableAuthProvider{
 			StubAuthProvider: &coretesting.StubAuthProvider{N: "test-auth"},
 		}

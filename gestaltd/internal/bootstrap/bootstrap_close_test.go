@@ -37,7 +37,7 @@ func TestPreparedCoreCloseClosesEachAuthProviderOnce(t *testing.T) {
 
 	prepared := &preparedCore{
 		Auth: selected,
-		AuthProviders: map[string]core.AuthProvider{
+		AuthProviders: map[string]core.AuthenticationProvider{
 			"selected": selected,
 			"extra":    extra,
 		},
