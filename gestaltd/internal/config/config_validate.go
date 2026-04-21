@@ -68,6 +68,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 	if err := validateEgress(&cfg.Server.Egress); err != nil {
 		return err
 	}
+	if err := validateRuntimeConfig(cfg); err != nil {
+		return err
+	}
 
 	for _, collection := range []struct {
 		kind    HostProviderKind
@@ -393,6 +396,29 @@ func ValidateRuntime(cfg *Config) error {
 	return nil
 }
 
+func validateRuntimeConfig(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	cfg.Server.Runtime.Provider = strings.TrimSpace(cfg.Server.Runtime.Provider)
+	for name, entry := range cfg.Runtime.Providers {
+		if entry == nil {
+			return fmt.Errorf("config validation: runtime.providers.%s is required", name)
+		}
+		entry.Driver = RuntimeProviderDriver(strings.TrimSpace(string(entry.Driver)))
+		if entry.Driver == "" {
+			return fmt.Errorf("config validation: runtime.providers.%s.driver is required", name)
+		}
+		if entry.Driver == RuntimeProviderDriverLocal && entry.Config.Kind != 0 {
+			return fmt.Errorf("config validation: runtime.providers.%s.config is not supported when driver is %q", name, RuntimeProviderDriverLocal)
+		}
+	}
+	if _, _, err := cfg.SelectedRuntimeProvider(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax providerSourceSyntaxMode) error {
 	if entry == nil {
 		return fmt.Errorf("config validation: plugin %q requires a source", name)
@@ -407,6 +433,22 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 		entry.IndexedDB.DB = strings.TrimSpace(entry.IndexedDB.DB)
 		for i, store := range entry.IndexedDB.ObjectStores {
 			entry.IndexedDB.ObjectStores[i] = strings.TrimSpace(store)
+		}
+	}
+	if entry.Runtime != nil {
+		entry.Runtime.Provider = strings.TrimSpace(entry.Runtime.Provider)
+		entry.Runtime.Template = strings.TrimSpace(entry.Runtime.Template)
+		entry.Runtime.Image = strings.TrimSpace(entry.Runtime.Image)
+		trimmed := make(map[string]string, len(entry.Runtime.Metadata))
+		for key, value := range entry.Runtime.Metadata {
+			trimmedKey := strings.TrimSpace(key)
+			if trimmedKey == "" {
+				return fmt.Errorf("config validation: plugins.%s.runtime.metadata keys must be non-empty", name)
+			}
+			trimmed[trimmedKey] = strings.TrimSpace(value)
+		}
+		if entry.Runtime.Metadata != nil {
+			entry.Runtime.Metadata = trimmed
 		}
 	}
 	seenInvokes := make(map[string]int, len(entry.Invokes))
@@ -444,6 +486,9 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 		return err
 	}
 	if err := validateAuthorizationPolicyReference(cfg, "plugin", name, entry.AuthorizationPolicy); err != nil {
+		return err
+	}
+	if _, err := cfg.EffectivePluginRuntime(name, entry); err != nil {
 		return err
 	}
 	return validateManifestBackedIntegration(name, entry)
@@ -581,6 +626,9 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	if len(entry.Invokes) > 0 {
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
 	}
+	if entry.Runtime != nil {
+		return fmt.Errorf("config validation: %s.runtime is only supported on plugins.*", subject)
+	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
 	}
@@ -631,6 +679,9 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	}
 	if len(entry.Invokes) > 0 {
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
+	}
+	if entry.Runtime != nil {
+		return fmt.Errorf("config validation: %s.runtime is only supported on plugins.*", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)

@@ -34,6 +34,8 @@ type Session struct {
 
 type StartSessionRequest struct {
 	PluginName string
+	Template   string
+	Image      string
 	Metadata   map[string]string
 }
 

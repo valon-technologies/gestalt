@@ -61,6 +61,7 @@ type Config struct {
 	Server        ServerConfig              `yaml:"server"`
 	Authorization AuthorizationConfig       `yaml:"authorization,omitempty"`
 	Providers     ProvidersConfig           `yaml:"providers"`
+	Runtime       RuntimeConfig             `yaml:"runtime,omitempty"`
 	Workflows     WorkflowsConfig           `yaml:"workflows,omitempty"`
 	Plugins       map[string]*ProviderEntry `yaml:"plugins,omitempty"`
 }
@@ -76,6 +77,20 @@ type ProvidersConfig struct {
 	Cache          map[string]*ProviderEntry `yaml:"cache,omitempty"`
 	S3             map[string]*ProviderEntry `yaml:"s3,omitempty"`
 	Workflow       map[string]*ProviderEntry `yaml:"workflow,omitempty"`
+}
+
+type RuntimeConfig struct {
+	Providers map[string]*RuntimeProviderEntry `yaml:"providers,omitempty"`
+}
+
+type RuntimeProviderDriver string
+
+const RuntimeProviderDriverLocal RuntimeProviderDriver = "local"
+
+type RuntimeProviderEntry struct {
+	Driver  RuntimeProviderDriver `yaml:"driver,omitempty"`
+	Default bool                  `yaml:"default,omitempty"`
+	Config  yaml.Node             `yaml:"config,omitempty"`
 }
 
 type HostProviderKind string
@@ -309,6 +324,7 @@ type ProviderEntry struct {
 	IndexedDB         *PluginIndexedDBConfig        `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
 	S3                []string                      `yaml:"s3,omitempty"`
+	Runtime           *PluginRuntimeConfig          `yaml:"runtime,omitempty"`
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 	MCP               bool                          `yaml:"mcp,omitempty"`
 
@@ -381,6 +397,13 @@ type PluginIndexedDBConfig struct {
 	Provider     string   `yaml:"provider,omitempty"`
 	DB           string   `yaml:"db,omitempty"`
 	ObjectStores []string `yaml:"objectStores,omitempty"`
+}
+
+type PluginRuntimeConfig struct {
+	Provider string            `yaml:"provider,omitempty"`
+	Template string            `yaml:"template,omitempty"`
+	Image    string            `yaml:"image,omitempty"`
+	Metadata map[string]string `yaml:"metadata,omitempty"`
 }
 
 type WorkflowsConfig struct {
@@ -700,8 +723,13 @@ type ServerConfig struct {
 	APITokenTTL   string                   `yaml:"apiTokenTtl"`
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
 	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
+	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
+}
+
+type ServerRuntimeConfig struct {
+	Provider string `yaml:"provider,omitempty"`
 }
 
 func (s ServerConfig) PublicListener() ListenerConfig {

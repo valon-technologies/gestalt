@@ -145,6 +145,7 @@ type Deps struct {
 	Egress                EgressDeps
 	PluginInvoker         invocation.Invoker
 	PluginRuntime         pluginruntime.Provider
+	PluginRuntimeRegistry *pluginRuntimeRegistry
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
@@ -158,21 +159,27 @@ type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
 type FactoryRegistry struct {
-	Auth          AuthFactory
-	Authorization AuthorizationFactory
-	Secrets       map[string]SecretManagerFactory
-	IndexedDB     IndexedDBFactory
-	Cache         CacheFactory
-	S3            S3Factory
-	Workflow      WorkflowFactory
-	Telemetry     map[string]TelemetryFactory
-	Audit         AuditFactory
-	Builtins      []core.Provider
+	Auth           AuthFactory
+	Authorization  AuthorizationFactory
+	Secrets        map[string]SecretManagerFactory
+	IndexedDB      IndexedDBFactory
+	Cache          CacheFactory
+	PluginRuntimes map[config.RuntimeProviderDriver]pluginRuntimeFactory
+	S3             S3Factory
+	Workflow       WorkflowFactory
+	Telemetry      map[string]TelemetryFactory
+	Audit          AuditFactory
+	Builtins       []core.Provider
 }
 
 func NewFactoryRegistry() *FactoryRegistry {
 	return &FactoryRegistry{
-		Secrets:   make(map[string]SecretManagerFactory),
+		Secrets: make(map[string]SecretManagerFactory),
+		PluginRuntimes: map[config.RuntimeProviderDriver]pluginRuntimeFactory{
+			config.RuntimeProviderDriverLocal: func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+				return pluginruntime.NewLocalProvider(), nil
+			},
+		},
 		Telemetry: make(map[string]TelemetryFactory),
 	}
 }
@@ -197,9 +204,10 @@ type Result struct {
 	SecretManager         core.SecretManager
 	Telemetry             core.TelemetryProvider
 
-	auditClose func(context.Context) error
-	mu         sync.Mutex
-	closed     bool
+	pluginRuntimeRegistry *pluginRuntimeRegistry
+	auditClose            func(context.Context) error
+	mu                    sync.Mutex
+	closed                bool
 }
 
 func (r *Result) Start(ctx context.Context) error {
@@ -252,6 +260,7 @@ func (r *Result) Close(ctx context.Context) error {
 		closeS3s(r.ExtraS3s...),
 		closeWorkflows(r.ExtraWorkflows...),
 		closeSecretManager(r.SecretManager),
+		closePluginRuntimeRegistry(r.pluginRuntimeRegistry),
 	)
 	if r.auditClose != nil {
 		errs = append(errs, r.auditClose(ctx))
@@ -339,6 +348,8 @@ type preparedCore struct {
 	SecretManager         core.SecretManager
 	Telemetry             core.TelemetryProvider
 	Deps                  Deps
+
+	pluginRuntimeRegistry *pluginRuntimeRegistry
 }
 
 type configSecretManagers struct {
@@ -590,6 +601,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
+	runtimeRegistry := newPluginRuntimeRegistry(cfg, factories.PluginRuntimes, deps)
+	deps.PluginRuntimeRegistry = runtimeRegistry
 
 	closeSM = false
 	shutdownTelemetry = false
@@ -608,6 +621,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		SecretManager:         sm,
 		Telemetry:             tp,
 		Deps:                  deps,
+		pluginRuntimeRegistry: runtimeRegistry,
 	}, nil
 }
 
@@ -628,6 +642,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 		closeIndexedDBs(p.ExtraIndexedDBs...),
 		closeS3s(p.ExtraS3s...),
 		closeSecretManager(p.SecretManager),
+		closePluginRuntimeRegistry(p.pluginRuntimeRegistry),
 	)
 	if p.Telemetry != nil {
 		errs = append(errs, p.Telemetry.Shutdown(ctx))
@@ -746,6 +761,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		AuditSink:             audit,
 		SecretManager:         prepared.SecretManager,
 		Telemetry:             prepared.Telemetry,
+		pluginRuntimeRegistry: prepared.pluginRuntimeRegistry,
 		auditClose:            auditClose,
 	}, nil
 }
