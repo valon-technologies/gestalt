@@ -351,7 +351,7 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	if err := svc.Tokens.StoreToken(t.Context(), &core.IntegrationToken{
 		ID:          "identity-audit-token",
-		UserID:      principal.IdentityPrincipal,
+		SubjectID:   principal.IdentitySubjectID(),
 		Integration: "audit-workload-prov",
 		Connection:  "workspace",
 		Instance:    "team-a",

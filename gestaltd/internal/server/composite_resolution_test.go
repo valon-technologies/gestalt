@@ -13,6 +13,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
@@ -55,7 +56,7 @@ func TestExecuteOperation_CompositeStaticRESTBypassesMCPSessionResolution(t *tes
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-oauth", UserID: u.ID, Integration: "notion",
+		ID: "tok-oauth", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
 		Connection: "OAuth", Instance: "default", AccessToken: "oauth-token",
 	})
 

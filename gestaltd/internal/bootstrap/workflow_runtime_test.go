@@ -465,7 +465,7 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 		t.Fatalf("Put execution ref: %v", err)
 	}
 	if err := services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-		UserID:      user.ID,
+		SubjectID:   principal.UserSubjectID(user.ID),
 		Integration: "roadmap",
 		Connection:  "analytics",
 		Instance:    "tenant-a",

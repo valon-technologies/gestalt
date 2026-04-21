@@ -669,12 +669,14 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 	}
 	expiresAt := time.Now().Add(24 * time.Hour)
 	if err := services.APITokens.StoreAPIToken(context.Background(), &core.APIToken{
-		ID:          "workflow-scope-token",
-		UserID:      user.ID,
-		Name:        "workflow-scope-token",
-		HashedToken: hashed,
-		ExpiresAt:   &expiresAt,
-		Permissions: []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}},
+		ID:                  "workflow-scope-token",
+		OwnerKind:           core.APITokenOwnerKindUser,
+		OwnerID:             user.ID,
+		CredentialSubjectID: principal.UserSubjectID(user.ID),
+		Name:                "workflow-scope-token",
+		HashedToken:         hashed,
+		ExpiresAt:           &expiresAt,
+		Permissions:         []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}},
 	}); err != nil {
 		t.Fatalf("StoreAPIToken: %v", err)
 	}
@@ -907,7 +909,7 @@ func TestWorkflowScheduleCreatePinsResolvedInstance(t *testing.T) {
 	user := seedUser(t, services, "ada@example.test")
 	seedToken(t, services, &core.IntegrationToken{
 		ID:          "roadmap-default-tenant-a",
-		UserID:      user.ID,
+		SubjectID:   principal.UserSubjectID(user.ID),
 		Integration: "roadmap",
 		Connection:  "default",
 		Instance:    "tenant-a",
@@ -1153,14 +1155,14 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	user := seedUser(t, services, "ada@example.test")
 	seedToken(t, services, &core.IntegrationToken{
 		ID:          "roadmap-default-token",
-		UserID:      user.ID,
+		SubjectID:   principal.UserSubjectID(user.ID),
 		Integration: "roadmap",
 		Connection:  "default",
 		AccessToken: "roadmap-token",
 	})
 	seedToken(t, services, &core.IntegrationToken{
 		ID:          "analytics-default-token",
-		UserID:      user.ID,
+		SubjectID:   principal.UserSubjectID(user.ID),
 		Integration: "analytics",
 		Connection:  "default",
 		AccessToken: "analytics-token",

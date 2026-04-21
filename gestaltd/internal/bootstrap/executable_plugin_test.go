@@ -844,7 +844,7 @@ func storeNestedInvokeToken(t *testing.T, harness *nestedInvokeHarness, ctx cont
 	t.Helper()
 
 	if err := harness.services.Tokens.StoreToken(ctx, &core.IntegrationToken{
-		UserID:       userID,
+		SubjectID:    principal.UserSubjectID(userID),
 		Integration:  plugin,
 		Connection:   connection,
 		Instance:     instance,

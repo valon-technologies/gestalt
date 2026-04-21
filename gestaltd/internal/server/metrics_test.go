@@ -16,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
@@ -207,7 +208,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	u := seedUser(t, successSvc, "anonymous@gestalt")
 	expired := time.Now().Add(-1 * time.Hour)
 	seedToken(t, successSvc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: providerName,
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: providerName,
 		Connection: "default", Instance: "default",
 		AccessToken: "old-access-token", RefreshToken: "old-refresh-token", ExpiresAt: &expired,
 	})
@@ -247,7 +248,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	errorSvc := coretesting.NewStubServices(t)
 	u2 := seedUser(t, errorSvc, "anonymous@gestalt")
 	seedToken(t, errorSvc, &core.IntegrationToken{
-		ID: "tok2", UserID: u2.ID, Integration: providerName,
+		ID: "tok2", SubjectID: principal.UserSubjectID(u2.ID), Integration: providerName,
 		Connection: "default", Instance: "default",
 		AccessToken: "expired-access-token", RefreshToken: "expired-refresh-token", ExpiresAt: &expired,
 	})

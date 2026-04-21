@@ -15,7 +15,6 @@ type User struct {
 
 type IntegrationToken struct {
 	ID                string
-	UserID            string
 	SubjectID         string
 	Integration       string
 	Connection        string
@@ -39,7 +38,6 @@ type AccessPermission struct {
 type APIToken struct {
 	ID                  string
 	IdentityID          string
-	UserID              string
 	OwnerKind           string
 	OwnerID             string
 	CredentialSubjectID string

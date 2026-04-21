@@ -33,8 +33,7 @@ func NewTokenService(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor, ex
 }
 
 func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationToken) error {
-	token.SubjectID = canonicalTokenSubjectID(token.SubjectID, token.UserID)
-	token.UserID = tokenUserIDFromSubjectID(token.SubjectID)
+	token.SubjectID = strings.TrimSpace(token.SubjectID)
 
 	accessEnc, refreshEnc, err := s.enc.EncryptTokenPair(token.AccessToken, token.RefreshToken)
 	if err != nil {
@@ -149,7 +148,7 @@ func (s *TokenService) DeleteToken(ctx context.Context, id string) error {
 				return err
 			}
 		} else {
-			identityID, resolveErr := s.resolveIdentityID(ctx, tokenUserIDFromSubjectID(subjectID))
+			identityID, resolveErr := s.resolveIdentityID(ctx, subjectID)
 			if resolveErr == nil {
 				if err := s.externalCredentials.DeleteCredential(ctx, identityID, recString(rec, "integration"), recString(rec, "connection"), recString(rec, "instance")); err != nil && err != core.ErrNotFound {
 					return fmt.Errorf("delete canonical external credential: %w", err)
@@ -170,7 +169,6 @@ func (s *TokenService) recordToToken(rec indexeddb.Record) (*core.IntegrationTok
 	}
 	return &core.IntegrationToken{
 		ID:                recString(rec, "id"),
-		UserID:            tokenUserIDFromSubjectID(tokenRecordSubjectID(rec)),
 		SubjectID:         tokenRecordSubjectID(rec),
 		Integration:       recString(rec, "integration"),
 		Connection:        recString(rec, "connection"),
@@ -248,24 +246,6 @@ func (s *TokenService) BackfillCanonicalCredentials(ctx context.Context) error {
 	return nil
 }
 
-func (s *TokenService) BackfillSubjectIDs(ctx context.Context) error {
-	recs, err := s.store.GetAll(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("list integration tokens for subject_id backfill: %w", err)
-	}
-	for _, rec := range recs {
-		subjectID := tokenRecordSubjectID(rec)
-		if subjectID == "" || recString(rec, "subject_id") == subjectID {
-			continue
-		}
-		rec["subject_id"] = subjectID
-		if err := s.store.Put(ctx, rec); err != nil {
-			return fmt.Errorf("backfill integration token subject_id %q: %w", recString(rec, "id"), err)
-		}
-	}
-	return nil
-}
-
 func dedupeTokenRecords(recs []indexeddb.Record) []indexeddb.Record {
 	if len(recs) <= 1 {
 		return recs
@@ -298,33 +278,7 @@ func tokenLookupKey(rec indexeddb.Record) string {
 }
 
 func tokenRecordSubjectID(rec indexeddb.Record) string {
-	return canonicalTokenSubjectID(recString(rec, "subject_id"), recString(rec, "user_id"))
-}
-
-func canonicalTokenSubjectID(subjectID, userID string) string {
-	subjectID = strings.TrimSpace(subjectID)
-	if subjectID != "" {
-		return subjectID
-	}
-	userID = strings.TrimSpace(userID)
-	switch userID {
-	case "":
-		return ""
-	case "__identity__":
-		return "identity:__identity__"
-	}
-	return "user:" + userID
-}
-
-func tokenUserIDFromSubjectID(subjectID string) string {
-	switch {
-	case strings.HasPrefix(subjectID, "user:"):
-		return strings.TrimPrefix(subjectID, "user:")
-	case subjectID == "identity:__identity__":
-		return "__identity__"
-	default:
-		return ""
-	}
+	return strings.TrimSpace(recString(rec, "subject_id"))
 }
 
 func tokenRecordLess(a, b indexeddb.Record) bool {
@@ -343,7 +297,21 @@ func tokenRecordLess(a, b indexeddb.Record) bool {
 	return recString(a, "id") < recString(b, "id")
 }
 
-func (s *TokenService) resolveIdentityID(ctx context.Context, userID string) (string, error) {
+func (s *TokenService) resolveIdentityID(ctx context.Context, subjectID string) (string, error) {
+	subjectID = strings.TrimSpace(subjectID)
+	switch {
+	case subjectID == "":
+		return "", core.ErrNotFound
+	case subjectID == tokenIdentitySubjectID():
+		return tokenIdentityPrincipal(), nil
+	case tokenManagedIdentityIDFromSubjectID(subjectID) != "":
+		return tokenManagedIdentityIDFromSubjectID(subjectID), nil
+	}
+
+	userID := tokenUserIDFromSubjectID(subjectID)
+	if userID == "" {
+		return "", core.ErrNotFound
+	}
 	if s.users == nil {
 		return userID, nil
 	}
@@ -351,10 +319,10 @@ func (s *TokenService) resolveIdentityID(ctx context.Context, userID string) (st
 }
 
 func (s *TokenService) syncExternalCredential(ctx context.Context, token *core.IntegrationToken, accessTokenEncrypted, refreshTokenEncrypted string) error {
-	if s.externalCredentials == nil || token == nil || token.UserID == "" || token.Integration == "" || token.Connection == "" {
+	if s.externalCredentials == nil || token == nil || token.SubjectID == "" || token.Integration == "" || token.Connection == "" {
 		return nil
 	}
-	identityID, resolveErr := s.resolveIdentityID(ctx, token.UserID)
+	identityID, resolveErr := s.resolveIdentityID(ctx, token.SubjectID)
 	if resolveErr != nil {
 		if errors.Is(resolveErr, core.ErrNotFound) {
 			return nil
@@ -403,7 +371,7 @@ func (s *TokenService) syncExternalCredentialRecord(ctx context.Context, rec ind
 	if s.externalCredentials == nil {
 		return nil
 	}
-	identityID, resolveErr := s.resolveIdentityID(ctx, tokenUserIDFromSubjectID(tokenRecordSubjectID(rec)))
+	identityID, resolveErr := s.resolveIdentityID(ctx, tokenRecordSubjectID(rec))
 	if resolveErr != nil {
 		if errors.Is(resolveErr, core.ErrNotFound) {
 			return nil
@@ -444,4 +412,28 @@ func (s *TokenService) syncExternalCredentialRecord(ctx context.Context, rec ind
 		return fmt.Errorf("sync canonical external credential record %q/%q/%q/%q: %w", identityID, plugin, connection, recString(rec, "instance"), err)
 	}
 	return nil
+}
+
+func tokenIdentityPrincipal() string {
+	return "__identity__"
+}
+
+func tokenIdentitySubjectID() string {
+	return "identity:" + tokenIdentityPrincipal()
+}
+
+func tokenManagedIdentityIDFromSubjectID(subjectID string) string {
+	const prefix = "managed_identity:"
+	if !strings.HasPrefix(subjectID, prefix) {
+		return ""
+	}
+	return strings.TrimPrefix(subjectID, prefix)
+}
+
+func tokenUserIDFromSubjectID(subjectID string) string {
+	const prefix = "user:"
+	if !strings.HasPrefix(subjectID, prefix) {
+		return ""
+	}
+	return strings.TrimPrefix(subjectID, prefix)
 }

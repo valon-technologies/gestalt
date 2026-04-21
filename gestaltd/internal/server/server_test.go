@@ -830,11 +830,13 @@ func seedAPIToken(t *testing.T, svc *coredata.Services, plaintext, hashed, userI
 	}
 	exp := time.Now().Add(24 * time.Hour)
 	if err := svc.APITokens.StoreAPIToken(ctx, &core.APIToken{
-		ID:          "api-tok-" + userID,
-		UserID:      user.ID,
-		Name:        "test-token",
-		HashedToken: hashed,
-		ExpiresAt:   &exp,
+		ID:                  "api-tok-" + userID,
+		OwnerKind:           core.APITokenOwnerKindUser,
+		OwnerID:             user.ID,
+		CredentialSubjectID: principal.UserSubjectID(user.ID),
+		Name:                "test-token",
+		HashedToken:         hashed,
+		ExpiresAt:           &exp,
 	}); err != nil {
 		t.Fatalf("seedAPIToken: StoreAPIToken: %v", err)
 	}
@@ -885,7 +887,7 @@ func seedIdentityToken(t *testing.T, svc *coredata.Services, integration, connec
 	t.Helper()
 	seedToken(t, svc, &core.IntegrationToken{
 		ID:          integration + "-" + connection + "-" + instance,
-		UserID:      principal.IdentityPrincipal,
+		SubjectID:   principal.IdentitySubjectID(),
 		Integration: integration,
 		Connection:  connection,
 		Instance:    instance,
@@ -5409,7 +5411,7 @@ func TestListIntegrationsShowsConnected(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "slack",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
 		Connection: "default", Instance: "default", AccessToken: "test-token",
 	})
 
@@ -6561,7 +6563,7 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	u := seedLegacyUserRecord(t, svc, "user-a", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "slack",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
 		Connection: "default", Instance: "default", AccessToken: "test-token",
 	})
 
@@ -6624,7 +6626,7 @@ func TestListIntegrations_ShowsConnectedStatus_PrefersCanonicalLowercaseEmailOve
 	seedLegacyUserRecord(t, svc, "user-a", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
 	userB := seedLegacyUserRecord(t, svc, "user-b", "USER@example.com", time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC))
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: userB.ID, Integration: "slack",
+		ID: "tok1", SubjectID: principal.UserSubjectID(userB.ID), Integration: "slack",
 		Connection: "default", Instance: "default", AccessToken: "test-token",
 	})
 
@@ -6849,7 +6851,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		svc := coretesting.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-1", UserID: u.ID, Integration: "slack",
+			ID: "tok-1", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
 			Connection: "", Instance: "default", AccessToken: "test-token",
 		})
 
@@ -6886,11 +6888,11 @@ func TestDisconnectIntegration(t *testing.T) {
 		svc := coretesting.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-a", UserID: u.ID, Integration: "notion",
+			ID: "tok-a", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
 			Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
 		})
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-b", UserID: u.ID, Integration: "notion",
+			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
 			Connection: "default", Instance: "default", AccessToken: "test-token-2",
 		})
 
@@ -6919,7 +6921,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		svc := coretesting.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-b", UserID: u.ID, Integration: "slack",
+			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
 			Connection: "workspace", Instance: "team-b", AccessToken: "test-token",
 		})
 
@@ -6949,11 +6951,11 @@ func TestDisconnectIntegration(t *testing.T) {
 		u := seedUser(t, svc, "anonymous@gestalt")
 		var auditBuf bytes.Buffer
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-b", UserID: u.ID, Integration: "notion",
+			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
 			Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
 		})
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-c", UserID: u.ID, Integration: "notion",
+			ID: "tok-c", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
 			Connection: "default", Instance: "default", AccessToken: "test-token-2",
 		})
 
@@ -7008,11 +7010,11 @@ func TestDisconnectIntegration(t *testing.T) {
 		u := seedUser(t, svc, "anonymous@gestalt")
 		var auditBuf bytes.Buffer
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-a", UserID: u.ID, Integration: "slack",
+			ID: "tok-a", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
 			Connection: "workspace", Instance: "team-a", AccessToken: "test-token",
 		})
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-b", UserID: u.ID, Integration: "slack",
+			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), Integration: "slack",
 			Connection: "workspace", Instance: "team-b", AccessToken: "test-token-2",
 		})
 
@@ -7222,11 +7224,11 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-cat", UserID: u.ID, Integration: "test-int",
+		ID: "tok-cat", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
 		Connection: testCatalogConnection, Instance: "default", AccessToken: testCatalogToken,
 	})
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-cat-alt", UserID: u.ID, Integration: "test-int",
+		ID: "tok-cat-alt", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
 		Connection: altCatalogConnection, Instance: altInstance, AccessToken: altCatalogToken,
 	})
 
@@ -7341,11 +7343,11 @@ func TestListOperations_FallsBackToStaticCatalogWhenSessionCatalogErrors(t *test
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-mcp", UserID: u.ID, Integration: "notion",
+		ID: "tok-mcp", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
 		Connection: "MCP", Instance: "default", AccessToken: "mcp-token",
 	})
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-oauth", UserID: u.ID, Integration: "notion",
+		ID: "tok-oauth", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
 		Connection: "OAuth", Instance: "OAuth", AccessToken: "oauth-token",
 	})
 
@@ -7418,11 +7420,11 @@ func TestListOperations_UsesBrokerCatalogConnectionFallback(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-catalog", UserID: u.ID, Integration: "sample-int",
+		ID: "tok-catalog", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
 		Connection: "catalog-conn", Instance: "default", AccessToken: "catalog-token",
 	})
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-rest", UserID: u.ID, Integration: "sample-int",
+		ID: "tok-rest", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
 		Connection: "rest-conn", Instance: "default", AccessToken: "rest-token",
 	})
 
@@ -7489,7 +7491,7 @@ func TestListOperations_RetriesDefaultConnectionAfterBrokerCatalogError(t *testi
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-rest", UserID: u.ID, Integration: "sample-int",
+		ID: "tok-rest", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
 		Connection: "rest-conn", Instance: "default", AccessToken: "rest-token",
 	})
 
@@ -7542,7 +7544,7 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog(t *testing.T) {
 	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
 	viewer := seedUser(t, svc, "viewer-user@test.local")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-cat-human", UserID: viewer.ID, Integration: "test-int",
+		ID: "tok-cat-human", SubjectID: principal.UserSubjectID(viewer.ID), Integration: "test-int",
 		Connection: testCatalogConnection, Instance: "default", AccessToken: testCatalogToken,
 	})
 
@@ -7637,7 +7639,7 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog_DynamicGrant(t *t
 	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
 	viewer := seedUser(t, svc, "viewer-user@test.local")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-cat-human", UserID: viewer.ID, Integration: "test-int",
+		ID: "tok-cat-human", SubjectID: principal.UserSubjectID(viewer.ID), Integration: "test-int",
 		Connection: testCatalogConnection, Instance: "default", AccessToken: testCatalogToken,
 	})
 
@@ -7730,7 +7732,7 @@ func TestExecuteOperation_HumanAuthorizationUsesCatalogRoles(t *testing.T) {
 	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
 	viewer := seedUser(t, svc, "viewer-user@test.local")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-exec-human", UserID: viewer.ID, Integration: "test-int",
+		ID: "tok-exec-human", SubjectID: principal.UserSubjectID(viewer.ID), Integration: "test-int",
 		Connection: testDefaultConnection, Instance: "default", AccessToken: "exec-token",
 	})
 
@@ -7824,7 +7826,7 @@ func TestExecuteOperation_HumanAuthorizationUsesSessionMetadataOnCollision(t *te
 	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
 	viewer := seedUser(t, svc, "viewer-user@test.local")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-session-collision", UserID: viewer.ID, Integration: "sample-int",
+		ID: "tok-session-collision", SubjectID: principal.UserSubjectID(viewer.ID), Integration: "sample-int",
 		Connection: testDefaultConnection, Instance: "default", AccessToken: "session-token",
 	})
 
@@ -7974,11 +7976,11 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 		svc := coretesting.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-a", UserID: u.ID, Integration: "test-int",
+			ID: "tok-a", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
 			Connection: testCatalogConnection, Instance: "inst-a", AccessToken: "tok-a",
 		})
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-b", UserID: u.ID, Integration: "test-int",
+			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
 			Connection: testCatalogConnection, Instance: "inst-b", AccessToken: "tok-b",
 		})
 
@@ -8057,7 +8059,7 @@ func TestExecuteOperation(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "test-int",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
 		Connection: "", Instance: "default", AccessToken: "test-token",
 	})
 
@@ -8183,7 +8185,7 @@ func TestExecuteOperation_WrappedProvidersPreserveOperationConnectionRouting(t *
 	}
 	seedToken(t, svc, &core.IntegrationToken{
 		ID:          "svc-workspace-default",
-		UserID:      user.ID,
+		SubjectID:   principal.UserSubjectID(user.ID),
 		Integration: "svc",
 		Connection:  "workspace",
 		Instance:    "default",
@@ -8328,7 +8330,7 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-team-a", UserID: u.ID, Integration: "sample-int",
+		ID: "tok-team-a", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
 		Connection: testCatalogConnection, Instance: "team-a", AccessToken: "tok-team-a",
 	})
 
@@ -9111,7 +9113,7 @@ func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 		svc := coretesting.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-cat", UserID: u.ID, Integration: "test-int",
+			ID: "tok-cat", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
 			Connection: testCatalogConnection, Instance: "default", AccessToken: "tok-a",
 		})
 
@@ -9188,11 +9190,11 @@ func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 		svc := coretesting.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-mcp", UserID: u.ID, Integration: "test-int",
+			ID: "tok-mcp", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
 			Connection: "mcp-conn", Instance: "default", AccessToken: "mcp-token",
 		})
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-cat", UserID: u.ID, Integration: "test-int",
+			ID: "tok-cat", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
 			Connection: "catalog-conn", Instance: "default", AccessToken: "catalog-token",
 		})
 
@@ -9265,7 +9267,7 @@ func TestExecuteOperation_UsesFallbackSessionCatalogConnectionAfterEarlierError(
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-rest", UserID: u.ID, Integration: "sample-int",
+		ID: "tok-rest", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
 		Connection: "rest-conn", Instance: "default", AccessToken: "rest-token",
 	})
 
@@ -9354,11 +9356,11 @@ func TestExecuteOperation_PinsSessionCatalogConnectionIntoExecution(t *testing.T
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-mcp", UserID: u.ID, Integration: "sample-int",
+		ID: "tok-mcp", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
 		Connection: "mcp-conn", Instance: "default", AccessToken: "mcp-token",
 	})
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-rest", UserID: u.ID, Integration: "sample-int",
+		ID: "tok-rest", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
 		Connection: "rest-conn", Instance: "default", AccessToken: "rest-token",
 	})
 
@@ -9429,11 +9431,11 @@ func TestExecuteOperation_UsesConfiguredCatalogConnectionWhenInvokerIsWrapped(t 
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-catalog", UserID: u.ID, Integration: "sample-int",
+		ID: "tok-catalog", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
 		Connection: "catalog-conn", Instance: "default", AccessToken: "catalog-token",
 	})
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-rest", UserID: u.ID, Integration: "sample-int",
+		ID: "tok-rest", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
 		Connection: "rest-conn", Instance: "default", AccessToken: "rest-token",
 	})
 
@@ -9512,11 +9514,11 @@ func TestExecuteOperation_UsesServerCatalogConnectionBeforeBrokerFallback(t *tes
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-catalog", UserID: u.ID, Integration: "sample-int",
+		ID: "tok-catalog", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
 		Connection: "catalog-conn", Instance: "default", AccessToken: "catalog-token",
 	})
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-rest", UserID: u.ID, Integration: "sample-int",
+		ID: "tok-rest", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
 		Connection: "rest-conn", Instance: "default", AccessToken: "rest-token",
 	})
 
@@ -9588,11 +9590,11 @@ func TestExecuteOperation_DoesNotFallbackPastConfiguredCatalogConnection(t *test
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-catalog", UserID: u.ID, Integration: "sample-int",
+		ID: "tok-catalog", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
 		Connection: "catalog-conn", Instance: "default", AccessToken: "catalog-token",
 	})
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-rest", UserID: u.ID, Integration: "sample-int",
+		ID: "tok-rest", SubjectID: principal.UserSubjectID(u.ID), Integration: "sample-int",
 		Connection: "rest-conn", Instance: "default", AccessToken: "rest-token",
 	})
 
@@ -10667,22 +10669,10 @@ func TestCreateAndListAPITokens(t *testing.T) {
 	}
 }
 
-func TestListAPITokensIncludesLegacyAndOwnedUserRecords(t *testing.T) {
+func TestListAPITokensListsOwnedUserRecords(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
-	u := seedUser(t, svc, "anonymous@gestalt")
-	legacyTime := time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)
-	if err := svc.DB.ObjectStore(coredata.StoreAPITokens).Add(context.Background(), indexeddb.Record{
-		"id":           "legacy-token",
-		"user_id":      u.ID,
-		"name":         "legacy-token",
-		"hashed_token": "sha256:legacy-token",
-		"created_at":   legacyTime,
-		"updated_at":   legacyTime,
-	}); err != nil {
-		t.Fatalf("seed legacy api token: %v", err)
-	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Services = svc
@@ -10726,17 +10716,8 @@ func TestListAPITokensIncludesLegacyAndOwnedUserRecords(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&tokens); err != nil {
 		t.Fatalf("decode list response: %v", err)
 	}
-	if len(tokens) != 2 {
-		t.Fatalf("tokens = %+v, want 2 entries", tokens)
-	}
-	gotIDs := map[string]struct{}{}
-	for _, token := range tokens {
-		gotIDs[token.ID] = struct{}{}
-	}
-	for _, wantID := range []string{"legacy-token", createResp.ID} {
-		if _, ok := gotIDs[wantID]; !ok {
-			t.Fatalf("token ids = %+v, want %q present", gotIDs, wantID)
-		}
+	if len(tokens) != 1 || tokens[0].ID != createResp.ID {
+		t.Fatalf("tokens = %+v, want only %q", tokens, createResp.ID)
 	}
 }
 
@@ -10749,7 +10730,7 @@ func TestRevokeAPIToken(t *testing.T) {
 	ctx := context.Background()
 	exp := time.Now().Add(24 * time.Hour)
 	_ = svc.APITokens.StoreAPIToken(ctx, &core.APIToken{
-		ID: "tok-123", UserID: u.ID, Name: "test", HashedToken: "h1", ExpiresAt: &exp,
+		ID: "tok-123", OwnerKind: core.APITokenOwnerKindUser, OwnerID: u.ID, CredentialSubjectID: principal.UserSubjectID(u.ID), Name: "test", HashedToken: "h1", ExpiresAt: &exp,
 	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -11028,7 +11009,7 @@ func TestRevokeAllAPITokens(t *testing.T) {
 	exp := time.Now().Add(24 * time.Hour)
 	for i, name := range []string{"tok-a", "tok-b", "tok-c"} {
 		_ = svc.APITokens.StoreAPIToken(ctx, &core.APIToken{
-			ID: name, UserID: u.ID, Name: fmt.Sprintf("token-%d", i),
+			ID: name, OwnerKind: core.APITokenOwnerKindUser, OwnerID: u.ID, CredentialSubjectID: principal.UserSubjectID(u.ID), Name: fmt.Sprintf("token-%d", i),
 			HashedToken: fmt.Sprintf("h%d", i), ExpiresAt: &exp,
 		})
 	}
@@ -11104,7 +11085,7 @@ func TestExecuteOperation_POST(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "test-int",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
 		Connection: "", Instance: "default", AccessToken: "test-token",
 	})
 
@@ -11563,7 +11544,7 @@ func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 	u := seedUser(t, svc, "anonymous@gestalt")
 	expired := time.Now().Add(-1 * time.Hour)
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "fake",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "fake",
 		Connection: "default", Instance: "default",
 		AccessToken: "expired-access", RefreshToken: "old-refresh-token", ExpiresAt: &expired,
 	})
@@ -11618,7 +11599,7 @@ func TestExecuteOperation_RefreshFailsButTokenStillValid(t *testing.T) {
 	u := seedUser(t, svc, "anonymous@gestalt")
 	almostExpired := time.Now().Add(2 * time.Minute)
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "fake",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "fake",
 		Connection: "default", Instance: "default",
 		AccessToken: "still-valid-token", RefreshToken: "some-refresh", ExpiresAt: &almostExpired,
 	})
@@ -11815,7 +11796,7 @@ func TestExecuteOperation_RefreshPersistsReturnedTokenFields(t *testing.T) {
 			u := seedUser(t, svc, "anonymous@gestalt")
 			expired := time.Now().Add(-1 * time.Hour)
 			seedToken(t, svc, &core.IntegrationToken{
-				ID: "tok1", UserID: u.ID, Integration: "fake",
+				ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "fake",
 				Connection: "default", Instance: "default",
 				AccessToken: "old-access", RefreshToken: "old-refresh", ExpiresAt: &expired,
 			})
@@ -11906,7 +11887,7 @@ func TestExecuteOperation_RefreshFailureEdgeCases(t *testing.T) {
 			svc := coretesting.NewStubServices(t)
 			u := seedUser(t, svc, "anonymous@gestalt")
 			seedToken(t, svc, &core.IntegrationToken{
-				ID: "tok1", UserID: u.ID, Integration: "fake",
+				ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "fake",
 				Connection: "default", Instance: "default",
 				AccessToken: "still-valid-token", RefreshToken: "some-refresh", ExpiresAt: &tc.expiresAt,
 			})
@@ -11963,7 +11944,7 @@ func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T
 	u := seedUser(t, svc, "anonymous@gestalt")
 	expired := time.Now().Add(-1 * time.Hour)
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "fake",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "fake",
 		Connection: "default", Instance: "default",
 		AccessToken: "original-token", RefreshToken: "some-refresh", ExpiresAt: &expired,
 	})
@@ -11983,7 +11964,7 @@ func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T
 		refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
 			ctx := context.Background()
 			_ = svc.Tokens.StoreToken(ctx, &core.IntegrationToken{
-				ID: "tok1", UserID: u.ID, Integration: "fake",
+				ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "fake",
 				Connection: "default", Instance: "default",
 				AccessToken: "concurrently-refreshed-token", RefreshToken: "new-refresh",
 			})
@@ -12022,7 +12003,7 @@ func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
 	u := seedUser(t, svc, "anonymous@gestalt")
 	expired := time.Now().Add(-1 * time.Hour)
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "fake",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "fake",
 		Connection: "default", Instance: "default",
 		AccessToken: "old-access", RefreshToken: "old-refresh", ExpiresAt: &expired,
 	})
@@ -13189,7 +13170,7 @@ func TestRefresh_UsesConnectionAuthHandlers(t *testing.T) {
 			expired := time.Now().Add(-1 * time.Hour)
 			seedToken(t, svc, &core.IntegrationToken{
 				ID:           "tok1",
-				UserID:       u.ID,
+				SubjectID:    principal.UserSubjectID(u.ID),
 				Integration:  "fake",
 				Connection:   "default",
 				Instance:     "default",
@@ -13273,7 +13254,7 @@ func TestRefresh_UsesResolvedConnectionTokenURL(t *testing.T) {
 	expired := time.Now().Add(-1 * time.Hour)
 	seedToken(t, svc, &core.IntegrationToken{
 		ID:           "tok1",
-		UserID:       u.ID,
+		SubjectID:    principal.UserSubjectID(u.ID),
 		Integration:  "fake",
 		Connection:   "default",
 		Instance:     "default",
@@ -13930,7 +13911,7 @@ func TestErrorSanitization(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "test-int",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
 		Connection: "", Instance: "default", AccessToken: "test-token",
 	})
 
@@ -14048,7 +14029,7 @@ func TestExecuteOperation_UserFacingErrorMessage(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "test-int",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
 		Connection: "", Instance: "default", AccessToken: "test-token",
 	})
 
@@ -14154,7 +14135,7 @@ func TestExecuteOperation_WrappedOperationErrorMessage(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "test-int",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
 		Connection: "", Instance: "default", AccessToken: "test-token",
 	})
 
@@ -14207,7 +14188,7 @@ func TestExecuteOperation_RuntimeUnavailableMessage(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "test-int",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "test-int",
 		Connection: "", Instance: "default", AccessToken: "test-token",
 	})
 
@@ -14669,7 +14650,7 @@ func TestExecuteOperation_ConnectionModeIdentity(t *testing.T) {
 
 	svc := coretesting.NewStubServices(t)
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: principal.IdentityPrincipal, Integration: "svc",
+		ID: "tok1", SubjectID: principal.IdentitySubjectID(), Integration: "svc",
 		Connection: "", Instance: "default", AccessToken: "identity-tok",
 	})
 
@@ -14736,7 +14717,7 @@ func TestExecuteOperation_ConnectionModeUserDoesNotFallbackToIdentity(t *testing
 		seedAPIToken(t, svc, apiToken, hashed, "api-user")
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "api-user@test.local")
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-user", UserID: u.ID, Integration: "svc",
+			ID: "tok-user", SubjectID: principal.UserSubjectID(u.ID), Integration: "svc",
 			Connection: "", Instance: "default", AccessToken: "user-tok",
 		})
 
@@ -14774,7 +14755,7 @@ func TestExecuteOperation_ConnectionModeUserDoesNotFallbackToIdentity(t *testing
 		}
 		seedAPIToken(t, svc, apiToken, hashed, "api-user")
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-identity", UserID: principal.IdentityPrincipal, Integration: "svc",
+			ID: "tok-identity", SubjectID: principal.IdentitySubjectID(), Integration: "svc",
 			Connection: "", Instance: "default", AccessToken: "identity-tok",
 		})
 
@@ -14978,7 +14959,7 @@ func TestAPITokenScopes_EnforcedDuringInvocation(t *testing.T) {
 	u, _ := svc.Users.FindOrCreateUser(ctx, "scoped@test.local")
 	exp := time.Now().Add(24 * time.Hour)
 	_ = svc.APITokens.StoreAPIToken(ctx, &core.APIToken{
-		ID: "api-tok-scoped", UserID: u.ID, Name: "scoped-token",
+		ID: "api-tok-scoped", OwnerKind: core.APITokenOwnerKindUser, OwnerID: u.ID, CredentialSubjectID: principal.UserSubjectID(u.ID), Name: "scoped-token",
 		HashedToken: hashed, Scopes: "alpha", ExpiresAt: &exp,
 	})
 
@@ -15761,7 +15742,7 @@ func TestManagedIdentityGrantValidationUsesSessionCatalog(t *testing.T) {
 		admin := seedUser(t, svc, "admin@example.test")
 		seedToken(t, svc, &core.IntegrationToken{
 			ID:          "tok-session-only",
-			UserID:      admin.ID,
+			SubjectID:   principal.UserSubjectID(admin.ID),
 			Integration: "session-only",
 			Connection:  "default",
 			Instance:    "default",
@@ -15836,7 +15817,7 @@ func TestManagedIdentityGrantValidationUsesSessionCatalog(t *testing.T) {
 		expired := time.Now().Add(-time.Hour).UTC()
 		seedToken(t, svc, &core.IntegrationToken{
 			ID:           "tok-session-refresh",
-			UserID:       admin.ID,
+			SubjectID:    principal.UserSubjectID(admin.ID),
 			Integration:  "session-refresh",
 			Connection:   "default",
 			Instance:     "default",
@@ -15940,7 +15921,7 @@ func TestManagedIdentityGrantValidationUsesSessionCatalog(t *testing.T) {
 		admin := seedUser(t, svc, "admin@example.test")
 		seedToken(t, svc, &core.IntegrationToken{
 			ID:          "tok-default",
-			UserID:      admin.ID,
+			SubjectID:   principal.UserSubjectID(admin.ID),
 			Integration: "session-fallback",
 			Connection:  "default",
 			Instance:    "default",
@@ -16275,7 +16256,7 @@ func TestManagedIdentityGrantValidationUsesSessionCatalog(t *testing.T) {
 		admin := seedUser(t, svc, "admin@example.test")
 		seedToken(t, svc, &core.IntegrationToken{
 			ID:          "tok-team-a-primary",
-			UserID:      admin.ID,
+			SubjectID:   principal.UserSubjectID(admin.ID),
 			Integration: "team-catalog",
 			Connection:  "team-a",
 			Instance:    "primary",
@@ -16283,7 +16264,7 @@ func TestManagedIdentityGrantValidationUsesSessionCatalog(t *testing.T) {
 		})
 		seedToken(t, svc, &core.IntegrationToken{
 			ID:          "tok-team-a-secondary",
-			UserID:      admin.ID,
+			SubjectID:   principal.UserSubjectID(admin.ID),
 			Integration: "team-catalog",
 			Connection:  "team-a",
 			Instance:    "secondary",
@@ -17075,7 +17056,7 @@ func TestManagedIdentityAPITokenInvocation_UsesCreatorCredentialSubject(t *testi
 	}
 	providers := testutil.NewProviderRegistry(t, alphaStub, betaStub, gammaStub)
 	seedToken(t, svc, &core.IntegrationToken{
-		ID: "gamma-admin-token", UserID: admin.ID, Integration: "gamma",
+		ID: "gamma-admin-token", SubjectID: principal.UserSubjectID(admin.ID), Integration: "gamma",
 		Connection: "", Instance: "default", AccessToken: "gamma-user-token",
 	})
 	authz, err := authorization.New(config.AuthorizationConfig{}, nil, providers, nil)

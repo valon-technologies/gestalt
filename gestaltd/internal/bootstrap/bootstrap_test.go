@@ -1144,7 +1144,7 @@ func TestBootstrap(t *testing.T) {
 					tokenValue = tc.tokenValue
 				}
 				if err := result.Services.Tokens.StoreToken(ctx, &core.IntegrationToken{
-					UserID:       user.ID,
+					SubjectID:    principal.UserSubjectID(user.ID),
 					Integration:  "slack",
 					Connection:   tc.tokenConn,
 					Instance:     "default",
@@ -2993,7 +2993,7 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			UserID:      principal.IdentityPrincipal,
+			SubjectID:   principal.IdentitySubjectID(),
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
@@ -3047,7 +3047,7 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			UserID:      principal.IdentityPrincipal,
+			SubjectID:   principal.IdentitySubjectID(),
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
@@ -3134,7 +3134,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 					return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 				}
 				if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-					UserID:      principal.IdentityPrincipal,
+					SubjectID:   principal.IdentitySubjectID(),
 					Integration: "roadmap",
 					Connection:  config.PluginConnectionName,
 					Instance:    "default",
@@ -3229,7 +3229,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 			connection = config.PluginConnectionName
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			UserID:      principal.IdentityPrincipal,
+			SubjectID:   principal.IdentitySubjectID(),
 			Integration: "roadmap",
 			Connection:  connection,
 			Instance:    "default",
@@ -3413,7 +3413,7 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("workflow managed workloads reject normalized credentialed providers", func(t *testing.T) {
+	t.Run("workflow managed workloads skip normalized credentialed providers", func(t *testing.T) {
 		t.Parallel()
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -3453,9 +3453,8 @@ func TestValidate(t *testing.T) {
 			return &stubWorkflowProvider{}, nil
 		}
 
-		_, err := bootstrap.Validate(context.Background(), cfg, factories)
-		if err == nil || !strings.Contains(err.Error(), `unsupported connection mode "user"`) {
-			t.Fatalf("Validate error = %v, want unsupported connection mode user", err)
+		if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
+			t.Fatalf("Validate: %v", err)
 		}
 	})
 
@@ -4731,7 +4730,7 @@ func TestBootstrapRejectsBuiltinEitherProviderWithoutAuthorizationConfig(t *test
 	}
 }
 
-func TestBootstrapWorkflowAuthorizationRejectsNormalizedCredentialedProvider(t *testing.T) {
+func TestBootstrapWorkflowAuthorizationSkipsNormalizedCredentialedProvider(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -4772,8 +4771,7 @@ func TestBootstrapWorkflowAuthorizationRejectsNormalizedCredentialedProvider(t *
 		return &stubWorkflowProvider{}, nil
 	}
 
-	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err == nil || !strings.Contains(err.Error(), `unsupported connection mode "user"`) {
-		t.Fatalf("Bootstrap error = %v, want unsupported connection mode user", err)
+	if _, err := bootstrap.Bootstrap(context.Background(), cfg, factories); err != nil {
+		t.Fatalf("Bootstrap: %v", err)
 	}
 }

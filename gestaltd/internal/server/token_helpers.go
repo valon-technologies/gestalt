@@ -18,7 +18,6 @@ func (s *Server) nowUTCSecond() time.Time {
 
 func (s *Server) issueAPIToken(ctx context.Context, userID, name, scopes string, nonExpiring bool) (*core.APIToken, string, error) {
 	return s.issueOwnedAPIToken(ctx, &core.APIToken{
-		UserID:              userID,
 		OwnerKind:           core.APITokenOwnerKindUser,
 		OwnerID:             userID,
 		CredentialSubjectID: principal.UserSubjectID(userID),

@@ -134,12 +134,17 @@ func (r *Resolver) resolveAPIToken(ctx context.Context, token string) (*Principa
 	switch ownerKind := r.apiTokenOwnerKind(apiToken); ownerKind {
 	case core.APITokenOwnerKindManagedIdentity:
 		return r.resolveManagedIdentityAPIToken(ctx, apiToken)
-	case "", core.APITokenOwnerKindUser:
+	case core.APITokenOwnerKindUser:
 	default:
 		return nil, ErrInvalidToken
 	}
 
-	user, err := r.users.GetUser(ctx, apiToken.UserID)
+	ownerID := strings.TrimSpace(apiToken.OwnerID)
+	if ownerID == "" {
+		return nil, ErrInvalidToken
+	}
+
+	user, err := r.users.GetUser(ctx, ownerID)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			return nil, ErrInvalidToken
@@ -250,11 +255,5 @@ func (r *Resolver) apiTokenOwnerKind(apiToken *core.APIToken) string {
 	if apiToken == nil {
 		return ""
 	}
-	if ownerKind := strings.TrimSpace(apiToken.OwnerKind); ownerKind != "" {
-		return ownerKind
-	}
-	if apiToken.UserID != "" {
-		return core.APITokenOwnerKindUser
-	}
-	return ""
+	return strings.TrimSpace(apiToken.OwnerKind)
 }

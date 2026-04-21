@@ -30,14 +30,16 @@ func (s *APITokenService) StoreAPIToken(ctx context.Context, token *core.APIToke
 	if token.ID == "" {
 		token.ID = uuid.New().String()
 	}
-	ownerKind := token.OwnerKind
-	ownerID := token.OwnerID
-	if ownerKind == "" && token.UserID != "" {
-		ownerKind = core.APITokenOwnerKindUser
+	ownerKind := strings.TrimSpace(token.OwnerKind)
+	ownerID := strings.TrimSpace(token.OwnerID)
+	if ownerKind == "" || ownerID == "" {
+		return fmt.Errorf("store api token: owner_kind and owner_id are required")
 	}
-	if ownerID == "" && token.UserID != "" {
-		ownerID = token.UserID
+	if token.CredentialSubjectID == "" && ownerKind == core.APITokenOwnerKindUser {
+		token.CredentialSubjectID = apiTokenUserSubjectID(ownerID)
 	}
+	token.OwnerKind = ownerKind
+	token.OwnerID = ownerID
 	identityID, err := s.identityIDForToken(ctx, token)
 	if err != nil {
 		return err
@@ -54,7 +56,6 @@ func (s *APITokenService) StoreAPIToken(ctx context.Context, token *core.APIToke
 	rec := indexeddb.Record{
 		"id":                    token.ID,
 		"identity_id":           identityID,
-		"user_id":               token.UserID,
 		"owner_kind":            ownerKind,
 		"owner_id":              ownerID,
 		"credential_subject_id": token.CredentialSubjectID,
@@ -108,56 +109,15 @@ func (s *APITokenService) ListAPITokensByIdentity(ctx context.Context, identityI
 }
 
 func (s *APITokenService) ListAPITokensByOwner(ctx context.Context, ownerKind, ownerID string) ([]*core.APIToken, error) {
-	var (
-		recs []indexeddb.Record
-		err  error
-	)
-	if ownerKind == core.APITokenOwnerKindUser {
-		ownerRecs, err := s.store.Index("by_owner").GetAll(ctx, nil, ownerKind, ownerID)
-		if err != nil {
-			return nil, fmt.Errorf("list api tokens: %w", err)
-		}
-		legacyRecs, err := s.store.Index("by_user").GetAll(ctx, nil, ownerID)
-		if err != nil {
-			return nil, fmt.Errorf("list api tokens: %w", err)
-		}
-		recs = mergeUniqueAPITokenRecords(ownerRecs, legacyRecs)
-	} else {
-		recs, err = s.store.Index("by_owner").GetAll(ctx, nil, ownerKind, ownerID)
-		if err != nil {
-			return nil, fmt.Errorf("list api tokens: %w", err)
-		}
+	recs, err := s.store.Index("by_owner").GetAll(ctx, nil, ownerKind, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("list api tokens: %w", err)
 	}
 	out := make([]*core.APIToken, len(recs))
 	for i, rec := range recs {
 		out[i] = recordToAPIToken(rec)
 	}
 	return out, nil
-}
-
-func mergeUniqueAPITokenRecords(recordSets ...[]indexeddb.Record) []indexeddb.Record {
-	if len(recordSets) == 0 {
-		return nil
-	}
-	seen := map[string]struct{}{}
-	merged := make([]indexeddb.Record, 0)
-	for _, recs := range recordSets {
-		for _, rec := range recs {
-			id := recString(rec, "id")
-			if id == "" {
-				continue
-			}
-			if _, ok := seen[id]; ok {
-				continue
-			}
-			seen[id] = struct{}{}
-			merged = append(merged, rec)
-		}
-	}
-	if len(merged) == 0 {
-		return nil
-	}
-	return merged
 }
 
 func (s *APITokenService) RevokeAPIToken(ctx context.Context, userID, id string) error {
@@ -181,33 +141,7 @@ func (s *APITokenService) RevokeAPITokenByIdentity(ctx context.Context, identity
 }
 
 func (s *APITokenService) RevokeAPITokenByOwner(ctx context.Context, ownerKind, ownerID, id string) error {
-	var (
-		deleted int64
-		err     error
-	)
-	if ownerKind == core.APITokenOwnerKindUser {
-		if deleted, err = s.store.Index("by_user_id").Delete(ctx, id, ownerID); err == nil && deleted > 0 {
-		} else if err == nil {
-			deleted, err = s.store.Index("by_owner_id").Delete(ctx, id, ownerKind, ownerID)
-		}
-	} else {
-		deleted, err = s.store.Index("by_owner_id").Delete(ctx, id, ownerKind, ownerID)
-		if err == nil && deleted == 0 {
-			tokens, listErr := s.ListAPITokensByOwner(ctx, ownerKind, ownerID)
-			if listErr != nil {
-				return fmt.Errorf("revoke api token: %w", listErr)
-			}
-			for _, token := range tokens {
-				if token != nil && token.ID == id {
-					if deleteErr := s.store.Delete(ctx, id); deleteErr != nil {
-						return fmt.Errorf("revoke api token: %w", deleteErr)
-					}
-					deleted = 1
-					break
-				}
-			}
-		}
-	}
+	deleted, err := s.store.Index("by_owner_id").Delete(ctx, id, ownerKind, ownerID)
 	if err != nil {
 		return fmt.Errorf("revoke api token: %w", err)
 	}
@@ -248,37 +182,11 @@ func (s *APITokenService) RevokeAllAPITokensByIdentity(ctx context.Context, iden
 
 func (s *APITokenService) RevokeAllAPITokensByOwner(ctx context.Context, ownerKind, ownerID string) (int64, error) {
 	var deletedIDs []string
-	var (
-		deleted int64
-		err     error
-	)
 	tokensBefore, listErr := s.ListAPITokensByOwner(ctx, ownerKind, ownerID)
 	if listErr == nil {
 		deletedIDs = collectAPITokenIDs(tokensBefore)
 	}
-	if ownerKind == core.APITokenOwnerKindUser {
-		if deleted, err = s.store.Index("by_user").Delete(ctx, ownerID); err == nil && deleted > 0 {
-		} else if err == nil {
-			deleted, err = s.store.Index("by_owner").Delete(ctx, ownerKind, ownerID)
-		}
-	} else {
-		deleted, err = s.store.Index("by_owner").Delete(ctx, ownerKind, ownerID)
-		if err == nil && deleted == 0 {
-			tokens, listErr := s.ListAPITokensByOwner(ctx, ownerKind, ownerID)
-			if listErr != nil {
-				return 0, fmt.Errorf("revoke all api tokens: %w", listErr)
-			}
-			for _, token := range tokens {
-				if token == nil || token.ID == "" {
-					continue
-				}
-				if deleteErr := s.store.Delete(ctx, token.ID); deleteErr != nil {
-					return 0, fmt.Errorf("revoke all api tokens: %w", deleteErr)
-				}
-				deleted++
-			}
-		}
-	}
+	deleted, err := s.store.Index("by_owner").Delete(ctx, ownerKind, ownerID)
 	if err != nil {
 		return 0, fmt.Errorf("revoke all api tokens: %w", err)
 	}
@@ -320,7 +228,6 @@ func recordToAPIToken(rec indexeddb.Record) *core.APIToken {
 	token := &core.APIToken{
 		ID:                  recString(rec, "id"),
 		IdentityID:          recString(rec, "identity_id"),
-		UserID:              recString(rec, "user_id"),
 		OwnerKind:           recString(rec, "owner_kind"),
 		OwnerID:             recString(rec, "owner_id"),
 		CredentialSubjectID: recString(rec, "credential_subject_id"),
@@ -332,25 +239,19 @@ func recordToAPIToken(rec indexeddb.Record) *core.APIToken {
 		CreatedAt:           recTime(rec, "created_at"),
 		UpdatedAt:           recTime(rec, "updated_at"),
 	}
-	if token.OwnerKind == "" && token.UserID != "" {
-		token.OwnerKind = core.APITokenOwnerKindUser
-	}
-	if token.OwnerID == "" && token.UserID != "" {
-		token.OwnerID = token.UserID
-	}
 	if token.IdentityID == "" {
 		switch token.OwnerKind {
 		case core.APITokenOwnerKindManagedIdentity:
 			token.IdentityID = token.OwnerID
-		case "", core.APITokenOwnerKindUser:
-			token.IdentityID = token.UserID
+		case core.APITokenOwnerKindUser:
+			token.IdentityID = token.OwnerID
 		}
 	}
 	if token.TokenKind == "" {
 		token.TokenKind = core.APITokenKindAPI
 	}
 	if token.CredentialSubjectID == "" && token.OwnerKind == core.APITokenOwnerKindUser && token.OwnerID != "" {
-		token.CredentialSubjectID = "user:" + token.OwnerID
+		token.CredentialSubjectID = apiTokenUserSubjectID(token.OwnerID)
 	}
 	if raw := recString(rec, "permissions_json"); raw != "" {
 		var permissions []core.AccessPermission
@@ -365,7 +266,7 @@ func (s *APITokenService) identityIDForOwner(ctx context.Context, ownerKind, own
 	switch ownerKind {
 	case core.APITokenOwnerKindManagedIdentity:
 		return ownerID, nil
-	case "", core.APITokenOwnerKindUser:
+	case core.APITokenOwnerKindUser:
 		if s.users == nil {
 			return ownerID, nil
 		}
@@ -382,13 +283,10 @@ func (s *APITokenService) identityIDForToken(ctx context.Context, token *core.AP
 	if token.IdentityID != "" {
 		return token.IdentityID, nil
 	}
-	if token.OwnerKind != "" || token.OwnerID != "" {
-		return s.identityIDForOwner(ctx, token.OwnerKind, token.OwnerID)
+	if token.OwnerKind == "" || token.OwnerID == "" {
+		return "", fmt.Errorf("store api token: owner_kind and owner_id are required")
 	}
-	if token.UserID != "" {
-		return s.identityIDForOwner(ctx, core.APITokenOwnerKindUser, token.UserID)
-	}
-	return "", fmt.Errorf("store api token: identity_id is required")
+	return s.identityIDForOwner(ctx, token.OwnerKind, token.OwnerID)
 }
 
 func (s *APITokenService) syncTokenAccess(ctx context.Context, token *core.APIToken) error {
@@ -467,4 +365,12 @@ func tokenIDSet(tokens []*core.APIToken) map[string]struct{} {
 		out[token.ID] = struct{}{}
 	}
 	return out
+}
+
+func apiTokenUserSubjectID(userID string) string {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return ""
+	}
+	return "user:" + userID
 }
