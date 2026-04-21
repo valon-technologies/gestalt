@@ -496,6 +496,130 @@ spec:
 	}
 }
 
+func TestManifestWorkflow_AcceptsHostedHTTPBindingsAndSecuritySchemes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: plugin
+source: github.com/acme/plugins/slack
+version: 1.0.0
+spec:
+  securitySchemes:
+    slack:
+      type: slack_signature
+      secret:
+        env: SLACK_SIGNING_SECRET
+  http:
+    command:
+      path: /command
+      method: POST
+      security: slack
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded: {}
+      target: handle_command
+      ack:
+        body:
+          response_type: ephemeral
+          text: Working on it...
+`))
+
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile: %v", err)
+	}
+	if manifest.Spec == nil {
+		t.Fatal("expected plugin metadata")
+	}
+	if manifest.Spec.SecuritySchemes["slack"] == nil || manifest.Spec.SecuritySchemes["slack"].Type != providermanifestv1.HTTPSecuritySchemeTypeSlackSignature {
+		t.Fatalf("unexpected security scheme: %#v", manifest.Spec.SecuritySchemes["slack"])
+	}
+	if manifest.Spec.HTTP["command"] == nil {
+		t.Fatal("expected http binding")
+	}
+	if got, want := manifest.Spec.HTTP["command"].Path, "/command"; got != want {
+		t.Fatalf("http path = %q, want %q", got, want)
+	}
+	if got, want := manifest.Spec.HTTP["command"].Target, "handle_command"; got != want {
+		t.Fatalf("http target = %q, want %q", got, want)
+	}
+
+	encoded, err := EncodeSourceManifestFormat(manifest, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	rendered := string(encoded)
+	if !strings.Contains(rendered, "securitySchemes:") || !strings.Contains(rendered, "http:") {
+		t.Fatalf("expected hosted http metadata in canonical output:\n%s", rendered)
+	}
+}
+
+func TestManifestWorkflow_RejectsNon2xxHTTPAckStatus(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: plugin
+source: github.com/acme/plugins/bad-http-ack
+version: 1.0.0
+spec:
+  securitySchemes:
+    none:
+      type: none
+  http:
+    command:
+      path: /command
+      method: POST
+      security: none
+      target: handle_command
+      ack:
+        status: 500
+`))
+
+	_, _, err := ReadSourceManifestFile(manifestPath)
+	if err == nil {
+		t.Fatal("expected invalid manifest")
+	}
+	if !strings.Contains(err.Error(), `provider.http.command.ack.status must be a 2xx status`) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestManifestWorkflow_RejectsDuplicateNormalizedHTTPContentTypes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: plugin
+source: github.com/acme/plugins/bad-http-content
+version: 1.0.0
+spec:
+  securitySchemes:
+    none:
+      type: none
+  http:
+    command:
+      path: /command
+      method: POST
+      security: none
+      target: handle_command
+      requestBody:
+        content:
+          application/json: {}
+          application/json; charset=utf-8: {}
+`))
+
+	_, _, err := ReadSourceManifestFile(manifestPath)
+	if err == nil {
+		t.Fatal("expected invalid manifest")
+	}
+	if !strings.Contains(err.Error(), `provider.http.command.requestBody.content "application/json" is duplicated after normalization`) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestManifestWorkflow_EncodesCanonicalProgrammaticDefaultConnection(t *testing.T) {
 	t.Parallel()
 

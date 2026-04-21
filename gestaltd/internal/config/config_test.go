@@ -121,6 +121,125 @@ plugins:
 	}
 }
 
+func TestLoadConfigParsesPluginHTTPSecuritySchemesAndBindings(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+server:
+  encryptionKey: server-key
+plugins:
+  slack:
+    source:
+      path: /tmp/manifest.yaml
+    securitySchemes:
+      slack:
+        type: slack_signature
+        secret:
+          env: SLACK_SIGNING_SECRET
+    http:
+      command:
+        path: /command
+        method: POST
+        security: slack
+        requestBody:
+          required: true
+          content:
+            application/x-www-form-urlencoded: {}
+        target: handle_command
+        ack:
+          body:
+            response_type: ephemeral
+            text: Working on it...
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	entry := cfg.Plugins["slack"]
+	if entry == nil {
+		t.Fatal("Plugins[slack] = nil")
+	}
+	if entry.SecuritySchemes["slack"] == nil || entry.SecuritySchemes["slack"].Type != providermanifestv1.HTTPSecuritySchemeTypeSlackSignature {
+		t.Fatalf("SecuritySchemes[slack] = %#v", entry.SecuritySchemes["slack"])
+	}
+	if entry.HTTP["command"] == nil {
+		t.Fatal("HTTP[command] = nil")
+	}
+	if got, want := entry.HTTP["command"].Path, "/command"; got != want {
+		t.Fatalf("HTTP[command].Path = %q, want %q", got, want)
+	}
+	if got, want := entry.HTTP["command"].Target, "handle_command"; got != want {
+		t.Fatalf("HTTP[command].Target = %q, want %q", got, want)
+	}
+	if entry.HTTP["command"].Ack == nil || entry.HTTP["command"].Ack.Body == nil {
+		t.Fatalf("HTTP[command].Ack = %#v", entry.HTTP["command"].Ack)
+	}
+}
+
+func TestProviderEntryEffectiveHTTPBindings_ClonesAckBody(t *testing.T) {
+	t.Parallel()
+
+	entry := &ProviderEntry{
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				HTTP: map[string]*providermanifestv1.HTTPBinding{
+					"command": {
+						Path:     "/command",
+						Method:   "POST",
+						Security: "slack",
+						Target:   "handle_command",
+						Ack: &providermanifestv1.HTTPAck{
+							Headers: map[string]string{"Content-Type": "application/json"},
+							Body: map[string]any{
+								"text": "Working on it...",
+								"meta": map[string]any{
+									"tags": []any{"one", "two"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	effective := entry.EffectiveHTTPBindings()
+	body, ok := effective["command"].Ack.Body.(map[string]any)
+	if !ok {
+		t.Fatalf("effective ack body = %#v", effective["command"].Ack.Body)
+	}
+	body["text"] = "changed"
+	meta, ok := body["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("effective ack body meta = %#v", body["meta"])
+	}
+	tags, ok := meta["tags"].([]any)
+	if !ok {
+		t.Fatalf("effective ack body tags = %#v", meta["tags"])
+	}
+	tags[0] = "changed"
+
+	originalBody, ok := entry.ResolvedManifest.Spec.HTTP["command"].Ack.Body.(map[string]any)
+	if !ok {
+		t.Fatalf("original ack body = %#v", entry.ResolvedManifest.Spec.HTTP["command"].Ack.Body)
+	}
+	if got, want := originalBody["text"], "Working on it..."; got != want {
+		t.Fatalf("original ack body text = %#v, want %q", got, want)
+	}
+	originalMeta, ok := originalBody["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("original ack body meta = %#v", originalBody["meta"])
+	}
+	originalTags, ok := originalMeta["tags"].([]any)
+	if !ok {
+		t.Fatalf("original ack body tags = %#v", originalMeta["tags"])
+	}
+	if got, want := originalTags[0], "one"; got != want {
+		t.Fatalf("original ack body tags[0] = %#v, want %q", got, want)
+	}
+}
+
 func TestLoadConfigSelectsDefaultProvidersFromNamedMaps(t *testing.T) {
 	t.Parallel()
 

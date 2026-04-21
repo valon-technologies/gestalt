@@ -100,6 +100,18 @@
         "auth": {
           "$ref": "#/$defs/routeAuthRef"
         },
+        "securitySchemes": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/httpSecurityScheme"
+          }
+        },
+        "http": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/httpBinding"
+          }
+        },
         "headers": {
           "type": "object",
           "additionalProperties": {
@@ -168,6 +180,138 @@
         "provider": {
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "httpSecretRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "env": {
+          "type": "string",
+          "minLength": 1
+        },
+        "secret": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "httpSecurityScheme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "slack_signature",
+            "apiKey",
+            "http",
+            "none"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "in": {
+          "type": "string",
+          "enum": [
+            "header",
+            "query"
+          ]
+        },
+        "scheme": {
+          "type": "string",
+          "enum": [
+            "basic",
+            "bearer"
+          ]
+        },
+        "secret": {
+          "$ref": "#/$defs/httpSecretRef"
+        }
+      }
+    },
+    "httpMediaType": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "httpRequestBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "content": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/httpMediaType"
+          }
+        }
+      }
+    },
+    "httpAck": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "body": {}
+      }
+    },
+    "httpBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "method",
+        "target"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        "requestBody": {
+          "$ref": "#/$defs/httpRequestBody"
+        },
+        "security": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ack": {
+          "$ref": "#/$defs/httpAck"
         }
       }
     },

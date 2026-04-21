@@ -18,6 +18,7 @@ func (s *Server) routes() {
 	case RouteProfilePublic:
 		s.mountCoreRoutes(r, metricsHidden)
 		s.mountMCPRoutes(r)
+		s.mountHTTPBindingRoutes(r)
 		s.mountAPIRoutes(r)
 		s.mountMountedWebUIRoutes(r)
 		s.mountManagementHiddenRoutes(r)
@@ -29,6 +30,7 @@ func (s *Server) routes() {
 	default:
 		s.mountCoreRoutes(r, metricsAuthenticated)
 		s.mountMCPRoutes(r)
+		s.mountHTTPBindingRoutes(r)
 		s.mountAPIRoutes(r)
 		s.mountMountedWebUIRoutes(r)
 		s.mountAdminAPIRoutes(r)

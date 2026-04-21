@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"mime"
 	"os"
 	"path"
 	"path/filepath"
@@ -413,12 +414,142 @@ func validateRouteAuthRef(path string, auth *providermanifestv1.RouteAuthRef) er
 	return nil
 }
 
+func normalizeHTTPBindingPath(field, value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", fmt.Errorf("%s is required", field)
+	}
+	if strings.Contains(value, "*") {
+		return "", fmt.Errorf("%s must not contain wildcards", field)
+	}
+	cleaned := path.Clean(strings.ReplaceAll(value, "\\", "/"))
+	if cleaned == "." {
+		cleaned = "/"
+	}
+	if !strings.HasPrefix(cleaned, "/") {
+		cleaned = "/" + cleaned
+	}
+	return cleaned, nil
+}
+
+func normalizeHTTPContentType(field, value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", fmt.Errorf("%s must not be empty", field)
+	}
+	mediaType, _, err := mime.ParseMediaType(value)
+	if err != nil {
+		return "", fmt.Errorf("%s must be a valid media type", field)
+	}
+	return strings.ToLower(mediaType), nil
+}
+
+func validateHTTPSecurityScheme(path string, scheme *providermanifestv1.HTTPSecurityScheme) error {
+	if scheme == nil {
+		return fmt.Errorf("%s is required", path)
+	}
+	switch scheme.Type {
+	case providermanifestv1.HTTPSecuritySchemeTypeSlackSignature:
+		if scheme.Secret == nil {
+			return fmt.Errorf("%s.secret is required", path)
+		}
+	case providermanifestv1.HTTPSecuritySchemeTypeAPIKey:
+		if strings.TrimSpace(scheme.Name) == "" {
+			return fmt.Errorf("%s.name is required", path)
+		}
+		switch scheme.In {
+		case providermanifestv1.HTTPInHeader, providermanifestv1.HTTPInQuery:
+		default:
+			return fmt.Errorf("%s.in %q is not supported", path, scheme.In)
+		}
+		if scheme.Secret == nil {
+			return fmt.Errorf("%s.secret is required", path)
+		}
+	case providermanifestv1.HTTPSecuritySchemeTypeHTTP:
+		switch scheme.Scheme {
+		case providermanifestv1.HTTPAuthSchemeBasic, providermanifestv1.HTTPAuthSchemeBearer:
+		default:
+			return fmt.Errorf("%s.scheme %q is not supported", path, scheme.Scheme)
+		}
+		if scheme.Secret == nil {
+			return fmt.Errorf("%s.secret is required", path)
+		}
+	case providermanifestv1.HTTPSecuritySchemeTypeNone:
+	default:
+		return fmt.Errorf("%s.type %q is not supported", path, scheme.Type)
+	}
+	if scheme.Secret != nil && strings.TrimSpace(scheme.Secret.Env) == "" && strings.TrimSpace(scheme.Secret.Secret) == "" {
+		return fmt.Errorf("%s.secret must set env or secret", path)
+	}
+	return nil
+}
+
+func validateHTTPBinding(path string, binding *providermanifestv1.HTTPBinding, schemes map[string]*providermanifestv1.HTTPSecurityScheme) error {
+	if binding == nil {
+		return fmt.Errorf("%s is required", path)
+	}
+	normalizedPath, err := normalizeHTTPBindingPath(path+".path", binding.Path)
+	if err != nil {
+		return err
+	}
+	binding.Path = normalizedPath
+	method := strings.ToUpper(strings.TrimSpace(binding.Method))
+	if !validHTTPMethods[method] {
+		return fmt.Errorf("%s.method %q is not a valid HTTP method", path, binding.Method)
+	}
+	binding.Method = method
+	if strings.TrimSpace(binding.Target) == "" {
+		return fmt.Errorf("%s.target is required", path)
+	}
+	binding.Target = strings.TrimSpace(binding.Target)
+	binding.Security = strings.TrimSpace(binding.Security)
+	if binding.Security == "" {
+		return fmt.Errorf("%s.security is required", path)
+	}
+	if schemes == nil || schemes[binding.Security] == nil {
+		return fmt.Errorf("%s.security %q references an undefined security scheme", path, binding.Security)
+	}
+	if binding.RequestBody != nil {
+		normalizedContent := make(map[string]*providermanifestv1.HTTPMediaType, len(binding.RequestBody.Content))
+		for mediaType := range binding.RequestBody.Content {
+			normalizedMediaType, err := normalizeHTTPContentType(path+".requestBody.content", mediaType)
+			if err != nil {
+				return err
+			}
+			if _, exists := normalizedContent[normalizedMediaType]; exists {
+				return fmt.Errorf("%s.requestBody.content %q is duplicated after normalization", path, normalizedMediaType)
+			}
+			normalizedContent[normalizedMediaType] = binding.RequestBody.Content[mediaType]
+		}
+		binding.RequestBody.Content = normalizedContent
+	}
+	if binding.Ack != nil {
+		if binding.Ack.Status == 0 {
+			binding.Ack.Status = 200
+		}
+		if binding.Ack.Status < 200 || binding.Ack.Status > 299 {
+			return fmt.Errorf("%s.ack.status must be a 2xx status", path)
+		}
+	}
+	return nil
+}
+
 func validateExecutableProviderMetadata(provider *providermanifestv1.Spec) error {
 	if provider == nil {
 		return nil
 	}
 	if err := validateRouteAuthRef("provider.auth", provider.RouteAuth); err != nil {
 		return err
+	}
+	for name, scheme := range provider.SecuritySchemes {
+		if err := validateHTTPSecurityScheme(fmt.Sprintf("provider.securitySchemes.%s", name), scheme); err != nil {
+			return err
+		}
+	}
+	for name, binding := range provider.HTTP {
+		if err := validateHTTPBinding(fmt.Sprintf("provider.http.%s", name), binding, provider.SecuritySchemes); err != nil {
+			return err
+		}
 	}
 	for name, conn := range provider.Connections {
 		if conn == nil {
