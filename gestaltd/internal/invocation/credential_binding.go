@@ -1,6 +1,7 @@
 package invocation
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -15,6 +16,14 @@ type CredentialBindingResolution struct {
 	CredentialSubjectID string
 	Connection          string
 	Instance            string
+}
+
+type EffectiveCredentialBindingResolver interface {
+	ResolveEffectiveCredentialBinding(p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error)
+}
+
+type BindingTokenResolver interface {
+	ResolveTokenWithBinding(ctx context.Context, p *principal.Principal, providerName, connection, instance string, boundCredential CredentialBindingResolution) (context.Context, string, error)
 }
 
 func ResolveEffectiveCredentialBinding(authz authorization.RuntimeAuthorizer, p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error) {
@@ -81,4 +90,16 @@ func resolveCredentialBinding(authz authorization.RuntimeAuthorizer, p *principa
 
 func bindingSelectorOverrideError() error {
 	return fmt.Errorf("%w: workloads may not override connection or instance bindings", ErrAuthorizationDenied)
+}
+
+func ResolveTokenForBinding(ctx context.Context, resolver TokenResolver, p *principal.Principal, providerName, connection, instance string, boundCredential CredentialBindingResolution) (context.Context, string, error) {
+	if resolver == nil {
+		return ctx, "", fmt.Errorf("token resolution not supported")
+	}
+	if boundCredential.HasBinding {
+		if bindingResolver, ok := resolver.(BindingTokenResolver); ok {
+			return bindingResolver.ResolveTokenWithBinding(ctx, p, providerName, connection, instance, boundCredential)
+		}
+	}
+	return resolver.ResolveToken(ctx, p, providerName, connection, instance)
 }

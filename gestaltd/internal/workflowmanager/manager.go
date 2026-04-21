@@ -35,14 +35,6 @@ type WorkflowControl interface {
 	ResolveProviderSelection(name string) (providerName string, provider coreworkflow.Provider, err error)
 }
 
-type effectiveCredentialBindingResolver interface {
-	ResolveEffectiveCredentialBinding(p *principal.Principal, providerName, connection, instance string) (invocation.CredentialBindingResolution, error)
-}
-
-type bindingTokenResolver interface {
-	ResolveTokenWithBinding(ctx context.Context, p *principal.Principal, providerName, connection, instance string, boundCredential invocation.CredentialBindingResolution) (context.Context, string, error)
-}
-
 type Service interface {
 	ListSchedules(ctx context.Context, p *principal.Principal) ([]*ManagedSchedule, error)
 	CreateSchedule(ctx context.Context, p *principal.Principal, req ScheduleUpsert) (*ManagedSchedule, error)
@@ -485,7 +477,7 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 		resolver = tr
 	}
 	boundCredential := invocation.CredentialBindingResolution{}
-	if bindingResolver, ok := m.invoker.(effectiveCredentialBindingResolver); ok {
+	if bindingResolver, ok := m.invoker.(invocation.EffectiveCredentialBindingResolver); ok {
 		boundCredential, err = bindingResolver.ResolveEffectiveCredentialBinding(p, pluginName, connection, instance)
 		if err != nil {
 			return coreworkflow.Target{}, err
@@ -506,15 +498,7 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 		connection = resolvedConnection
 	}
 	if resolver != nil && sessionInstance == "" {
-		resolveToken := resolver.ResolveToken
-		if boundCredential.HasBinding {
-			if bindingResolver, ok := resolver.(bindingTokenResolver); ok {
-				resolveToken = func(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
-					return bindingResolver.ResolveTokenWithBinding(ctx, p, providerName, connection, instance, boundCredential)
-				}
-			}
-		}
-		resolvedCtx, _, err := resolveToken(ctx, p, pluginName, connection, sessionInstance)
+		resolvedCtx, _, err := invocation.ResolveTokenForBinding(ctx, resolver, p, pluginName, connection, sessionInstance, boundCredential)
 		if err != nil {
 			return coreworkflow.Target{}, err
 		}

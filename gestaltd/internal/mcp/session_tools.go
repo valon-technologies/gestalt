@@ -118,7 +118,7 @@ func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov 
 				if err != nil {
 					return ctx, "", connection, err
 				}
-				sessionCtx, token, err := resolveSessionCredentialToken(ctx, cfg, p, provName, connection, instance, boundCredential)
+				sessionCtx, token, err := invocation.ResolveTokenForBinding(ctx, cfg.TokenResolver, p, provName, connection, instance, boundCredential)
 				if err != nil {
 					return sessionCtx, token, connection, err
 				}
@@ -138,7 +138,7 @@ func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov 
 	if err != nil {
 		return ctx, "", connection, err
 	}
-	sessionCtx, token, err := resolveSessionCredentialToken(ctx, cfg, p, provName, connection, instance, boundCredential)
+	sessionCtx, token, err := invocation.ResolveTokenForBinding(ctx, cfg.TokenResolver, p, provName, connection, instance, boundCredential)
 	if err != nil {
 		return sessionCtx, token, connection, err
 	}
@@ -390,18 +390,6 @@ func sessionCatalogOperationMarkerForInstance(name, provider, instance string) b
 
 func internalSessionToolHandler(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	return mcpgo.NewToolResultError("tool not found"), nil
-}
-
-func resolveSessionCredentialToken(ctx context.Context, cfg Config, p *principal.Principal, provName, connection, instance string, boundCredential invocation.CredentialBindingResolution) (context.Context, string, error) {
-	type bindingTokenResolver interface {
-		ResolveTokenWithBinding(ctx context.Context, p *principal.Principal, providerName, connection, instance string, boundCredential invocation.CredentialBindingResolution) (context.Context, string, error)
-	}
-	if boundCredential.HasBinding {
-		if resolver, ok := cfg.TokenResolver.(bindingTokenResolver); ok {
-			return resolver.ResolveTokenWithBinding(ctx, p, provName, connection, instance, boundCredential)
-		}
-	}
-	return cfg.TokenResolver.ResolveToken(ctx, p, provName, connection, instance)
 }
 
 func sessionTokenSelectors(cfg Config, p *principal.Principal, provName, instanceOverride string) (string, string, invocation.CredentialBindingResolution, error) {
