@@ -112,7 +112,7 @@ function toJsonValue(value: unknown): JsonValue {
     typeof value === "number" ||
     typeof value === "boolean"
   ) {
-    return value;
+    return value as JsonValue;
   }
   if (Array.isArray(value)) {
     return value.map((entry) => toJsonValue(entry));
