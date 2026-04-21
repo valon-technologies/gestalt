@@ -813,7 +813,7 @@ plugins:
 | `ui` | Optional UI key from `providers.ui` used with `mountPath`. Omit it to mount the plugin manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#pluginssource) below. |
 | `source.auth` | Optional metadata-fetch auth for release sources. Use this for `source.url`, `source.githubRelease`, or local `provider-release.yaml` metadata. |
-| `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on plugin HTTP operation routes (`/api/v1/integrations/{name}/operations` and `/api/v1/{integration}/{operation}`). Browser login, mounted UIs, and `/mcp` still use the server-wide auth provider in this phase. |
+| `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on plugin HTTP operation routes (`/api/v1/integrations/{name}/operations` and `/api/v1/{integration}/{operation}`) and on plugin-backed mounted UIs, including browser-login flows whose `next` path resolves into that plugin's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
@@ -852,9 +852,12 @@ plugins:
       provider: server
 ```
 
-This field changes runtime authentication for plugin HTTP operation routes only.
-Browser login, mounted UIs, integration OAuth helper routes, and `/mcp` still
-use the server-wide auth provider in this phase.
+This field changes runtime authentication for plugin HTTP operation routes and
+plugin-backed mounted UIs. Browser login uses the plugin's route-auth provider
+when its `next` path resolves into that plugin's mounted UI. Standalone
+`providers.ui` bundles, the built-in admin UI/admin API, integration OAuth
+helper routes, and `/mcp` still use the server-wide auth provider in this
+phase.
 For published providers, `source` can point at a `provider-release.yaml`
 metadata URL directly, or it can describe a GitHub release logically:
 
@@ -922,7 +925,7 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
 | --- | --- |
 | `source` | A local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
 | `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs, `source.githubRelease`, and local `provider-release.yaml` metadata. |
-| `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either `server` or a named `providers.authentication` entry. Gestalt enforces this on plugin HTTP operation routes only; browser login, mounted UIs, and `/mcp` still use the server-wide auth provider in this phase. |
+| `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either `server` or a named `providers.authentication` entry. Gestalt enforces this on plugin HTTP operation routes and on plugin-backed mounted UIs. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 

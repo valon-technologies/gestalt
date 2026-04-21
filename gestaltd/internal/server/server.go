@@ -63,6 +63,8 @@ type Server struct {
 	router                chi.Router
 	handler               http.Handler
 	auth                  core.AuthenticationProvider
+	authProviders         map[string]core.AuthenticationProvider
+	serverAuthProvider    string
 	auditSink             core.AuditSink
 	users                 *coredata.UserService
 	tokens                *coredata.TokenService
@@ -142,6 +144,14 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("invoker is required")
 	}
 	noAuth := cfg.Auth == nil || cfg.Auth.Name() == "none"
+	serverAuthProvider := strings.TrimSpace(cfg.SelectedAuthProvider)
+	if serverAuthProvider == "" {
+		if cfg.Auth == nil {
+			serverAuthProvider = "none"
+		} else {
+			serverAuthProvider = cfg.Auth.Name()
+		}
+	}
 	var stateCodec *integrationOAuthStateCodec
 	var encryptor *cryptoutil.AESGCMEncryptor
 	if len(cfg.StateSecret) > 0 {
@@ -224,6 +234,8 @@ func New(cfg Config) (*Server, error) {
 		router:                router,
 		handler:               withRequestMeterProvider(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider),
 		auth:                  cfg.Auth,
+		authProviders:         authProviders,
+		serverAuthProvider:    serverAuthProvider,
 		auditSink:             cfg.AuditSink,
 		users:                 users,
 		tokens:                tokens,
@@ -262,7 +274,7 @@ func New(cfg Config) (*Server, error) {
 		adminUI:               adminUI,
 		routeProfile:          cfg.RouteProfile,
 	}
-	if noAuth {
+	if noAuth || hasAnonymousAuthProvider(authProviders) {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)
 	}
 
@@ -270,18 +282,27 @@ func New(cfg Config) (*Server, error) {
 	return s, nil
 }
 
-func (s *Server) issueSessionToken(identity *core.UserIdentity) (string, error) {
-	if issuer, ok := s.auth.(SessionTokenIssuer); ok {
+func (s *Server) issueSessionToken(provider core.AuthenticationProvider, identity *core.UserIdentity) (string, error) {
+	if issuer, ok := provider.(SessionTokenIssuer); ok {
 		return issuer.IssueSessionToken(identity)
 	}
 	if len(s.sessionIssuer) == 0 {
 		return "", fmt.Errorf("session secret is not configured")
 	}
 	ttl := defaultSessionCookieTTL
-	if p, ok := s.auth.(SessionTokenTTLProvider); ok {
+	if p, ok := provider.(SessionTokenTTLProvider); ok {
 		ttl = p.SessionTokenTTL()
 	}
 	return session.IssueToken(identity, s.sessionIssuer, ttl)
+}
+
+func hasAnonymousAuthProvider(providers map[string]core.AuthenticationProvider) bool {
+	for _, provider := range providers {
+		if provider != nil && provider.Name() == "none" {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

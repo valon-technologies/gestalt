@@ -30,6 +30,9 @@ type authInfoResponse struct {
 }
 
 func (s *Server) authProviderName() string {
+	if s.serverAuthProvider != "" {
+		return s.serverAuthProvider
+	}
 	if s.auth == nil {
 		return "none"
 	}
@@ -59,10 +62,10 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
 	auditAllowed := false
 	auditErr := errors.New("login start failed")
-	providerName := s.authProviderName()
+	auth := s.serverAuthRuntime()
 	defer func() {
-		metricutil.RecordAuthMetrics(r.Context(), startedAt, providerName, "begin_login", auditErr != nil)
-		s.auditHTTPEvent(r.Context(), nil, s.authProviderName(), "auth.login.start", auditAllowed, auditErr)
+		metricutil.RecordAuthMetrics(r.Context(), startedAt, auth.providerName, "begin_login", auditErr != nil)
+		s.auditHTTPEvent(r.Context(), nil, auth.providerName, "auth.login.start", auditAllowed, auditErr)
 	}()
 
 	var req loginRequest
@@ -75,12 +78,12 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 	if req.CallbackPort > 0 && req.CallbackPort <= maxPort {
 		state = fmt.Sprintf("%s%d:%s", cliStatePrefix, req.CallbackPort, req.State)
 	}
-	if !s.authEnabled() {
+	if auth.noAuth || auth.provider == nil {
 		auditErr = errors.New("auth is disabled")
 		writeError(w, http.StatusNotFound, "auth is disabled")
 		return
 	}
-	loginURL, err := s.beginLogin(w, r, state, "")
+	loginURL, err := s.beginLogin(w, r, auth, state, "")
 	if err != nil {
 		auditErr = err
 		status := http.StatusInternalServerError
@@ -101,10 +104,10 @@ func (s *Server) startBrowserLogin(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
 	auditAllowed := false
 	auditErr := errors.New("login start failed")
-	providerName := s.authProviderName()
+	auth := s.serverAuthRuntime()
 	defer func() {
-		metricutil.RecordAuthMetrics(r.Context(), startedAt, providerName, "begin_login", auditErr != nil)
-		s.auditHTTPEvent(r.Context(), nil, s.authProviderName(), "auth.login.start", auditAllowed, auditErr)
+		metricutil.RecordAuthMetrics(r.Context(), startedAt, auth.providerName, "begin_login", auditErr != nil)
+		s.auditHTTPEvent(r.Context(), nil, auth.providerName, "auth.login.start", auditAllowed, auditErr)
 	}()
 
 	nextPath, err := resolveLoginRedirectPath(r.URL.Query().Get("next"), s.allowedLoginRedirectBaseURLs())
@@ -113,13 +116,19 @@ func (s *Server) startBrowserLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !s.authEnabled() {
+	auth, err = s.loginAuthRuntimeForNextPath(nextPath)
+	if err != nil {
+		auditErr = err
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if auth.noAuth || auth.provider == nil {
 		auditErr = errors.New("auth is disabled")
 		writeError(w, http.StatusNotFound, "auth is disabled")
 		return
 	}
 
-	loginURL, err := s.beginLogin(w, r, browserLoginStateForNextPath(nextPath), nextPath)
+	loginURL, err := s.beginLogin(w, r, auth, browserLoginStateForNextPath(nextPath), nextPath)
 	if err != nil {
 		auditErr = err
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -131,8 +140,8 @@ func (s *Server) startBrowserLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, loginURL, http.StatusFound)
 }
 
-func (s *Server) beginLogin(w http.ResponseWriter, r *http.Request, state, nextPath string) (string, error) {
-	loginURLRaw, err := loginURLForRequest(r.Context(), s.auth, state)
+func (s *Server) beginLogin(w http.ResponseWriter, r *http.Request, auth authRuntime, state, nextPath string) (string, error) {
+	loginURLRaw, err := loginURLForRequest(r.Context(), auth.provider, state)
 	if err != nil {
 		return "", errors.New("failed to generate login URL")
 	}
@@ -143,6 +152,7 @@ func (s *Server) beginLogin(w http.ResponseWriter, r *http.Request, state, nextP
 	if s.encryptor != nil {
 		encoded, encErr := encodeLoginState(s.encryptor, loginState{
 			State:     state,
+			Provider:  auth.providerRef,
 			NextPath:  nextPath,
 			ExpiresAt: s.now().Add(loginStateTTL).Unix(),
 		})
@@ -310,9 +320,9 @@ type SessionTokenTTLProvider interface {
 	SessionTokenTTL() time.Duration
 }
 
-func (s *Server) setSessionCookie(w http.ResponseWriter, token string) {
+func (s *Server) setSessionCookie(provider core.AuthenticationProvider, w http.ResponseWriter, token string) {
 	maxAge := int(defaultSessionCookieTTL.Seconds())
-	if p, ok := s.auth.(SessionTokenTTLProvider); ok {
+	if p, ok := provider.(SessionTokenTTLProvider); ok {
 		maxAge = int(p.SessionTokenTTL().Seconds())
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -357,14 +367,14 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	auditAllowed := false
 	auditErr := errors.New("login callback failed")
 	auditUserID := ""
-	providerName := s.authProviderName()
+	auth := s.serverAuthRuntime()
 	defer func() {
-		metricutil.RecordAuthMetrics(r.Context(), startedAt, providerName, "complete_login", auditErr != nil)
+		metricutil.RecordAuthMetrics(r.Context(), startedAt, auth.providerName, "complete_login", auditErr != nil)
 		if auditUserID != "" {
-			s.auditHTTPEventWithUserID(r.Context(), auditUserID, principal.SourceSession.String(), s.authProviderName(), "auth.login.complete", auditAllowed, auditErr)
+			s.auditHTTPEventWithUserID(r.Context(), auditUserID, principal.SourceSession.String(), auth.providerName, "auth.login.complete", auditAllowed, auditErr)
 			return
 		}
-		s.auditHTTPEvent(r.Context(), nil, s.authProviderName(), "auth.login.complete", auditAllowed, auditErr)
+		s.auditHTTPEvent(r.Context(), nil, auth.providerName, "auth.login.complete", auditAllowed, auditErr)
 	}()
 
 	code := r.URL.Query().Get("code")
@@ -373,7 +383,22 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "missing code parameter")
 		return
 	}
-	if !s.authEnabled() {
+	loginState, err := s.loginStateForCallback(r)
+	if err != nil {
+		auditErr = errors.New("login state validation failed")
+		slog.ErrorContext(r.Context(), "login state validation failed", "error", err)
+		writeError(w, http.StatusForbidden, "login state validation failed")
+		return
+	}
+
+	auth, err = s.authRuntimeForProvider(loginState.Provider)
+	if err != nil {
+		auditErr = err
+		slog.ErrorContext(r.Context(), "login auth provider resolution failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "login auth provider is not initialized")
+		return
+	}
+	if auth.noAuth || auth.provider == nil {
 		auditErr = errors.New("auth is disabled")
 		writeError(w, http.StatusNotFound, "auth is disabled")
 		return
@@ -381,16 +406,15 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 
 	var identity *core.UserIdentity
 	var originalState string
-	var err error
 
-	if handler, ok := s.auth.(RequestCallbackHandler); ok {
+	if handler, ok := auth.provider.(RequestCallbackHandler); ok {
 		identity, originalState, err = handler.HandleCallbackRequest(r.Context(), r.URL.Query())
-	} else if stateful, ok := s.auth.(StatefulCallbackHandler); ok {
+	} else if stateful, ok := auth.provider.(StatefulCallbackHandler); ok {
 		state := r.URL.Query().Get("state")
 		identity, originalState, err = stateful.HandleCallbackWithState(r.Context(), code, state)
 	} else {
 		originalState = r.URL.Query().Get("state")
-		identity, err = s.auth.HandleCallback(r.Context(), code)
+		identity, err = auth.provider.HandleCallback(r.Context(), code)
 	}
 	if err != nil {
 		auditErr = errors.New("login failed")
@@ -399,10 +423,9 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	loginState, csrfErr := s.validateLoginState(r, originalState)
-	if csrfErr != nil {
+	if !loginStatesMatch(loginState.State, originalState) {
 		auditErr = errors.New("login state validation failed")
-		slog.ErrorContext(r.Context(), "login state validation failed", "error", csrfErr)
+		slog.ErrorContext(r.Context(), "login state validation failed", "error", errors.New("login state mismatch"))
 		writeError(w, http.StatusForbidden, "login state validation failed")
 		return
 	}
@@ -453,13 +476,13 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		"displayName": identity.DisplayName,
 	}
 
-	token, err := s.issueSessionToken(identity)
+	token, err := s.issueSessionToken(auth.provider, identity)
 	if err != nil {
 		auditErr = errors.New("failed to issue session token")
 		writeError(w, http.StatusInternalServerError, "failed to issue session token")
 		return
 	}
-	s.setSessionCookie(w, token)
+	s.setSessionCookie(auth.provider, w, token)
 
 	auditAllowed = true
 	auditErr = nil
@@ -470,22 +493,25 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (s *Server) validateLoginState(r *http.Request, originalState string) (*loginState, error) {
+func (s *Server) loginStateForCallback(r *http.Request) (*loginState, error) {
 	if s.encryptor == nil {
-		return &loginState{State: originalState}, nil
+		return &loginState{
+			State:    r.URL.Query().Get("state"),
+			Provider: "server",
+		}, nil
 	}
 	cookie, err := r.Cookie(loginStateCookieName)
 	if err != nil {
 		return nil, fmt.Errorf("missing login state cookie")
 	}
-	expected, err := decodeLoginState(s.encryptor, cookie.Value, s.now())
+	state, err := decodeLoginState(s.encryptor, cookie.Value, s.now())
 	if err != nil {
 		return nil, fmt.Errorf("invalid login state cookie: %w", err)
 	}
-	if !loginStatesMatch(expected.State, originalState) {
-		return nil, fmt.Errorf("login state mismatch")
+	if strings.TrimSpace(state.Provider) == "" {
+		state.Provider = "server"
 	}
-	return expected, nil
+	return state, nil
 }
 
 func loginStatesMatch(expectedState, originalState string) bool {

@@ -228,30 +228,19 @@ func (s *Server) pluginRouteAuthMiddleware(pluginParam string) func(http.Handler
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			pluginName := strings.TrimSpace(chi.URLParam(r, pluginParam))
 			if pluginName == "" {
-				s.serveAuthenticated(w, r, next, s.resolver, s.noAuth, s.anonymousPrincipal, "")
+				auth := s.serverAuthRuntime()
+				s.serveAuthenticated(w, r, next, auth.resolver, auth.noAuth, auth.anonymous, auth.providerName)
 				return
 			}
 
-			entry := s.pluginDefs[pluginName]
-			if entry == nil || entry.RouteAuth == nil || strings.TrimSpace(entry.RouteAuth.Provider) == "" {
-				s.serveAuthenticated(w, r, next, s.resolver, s.noAuth, s.anonymousPrincipal, "")
-				return
-			}
-
-			providerName := strings.TrimSpace(entry.RouteAuth.Provider)
-			if providerName == "server" {
-				s.serveAuthenticated(w, r, next, s.resolver, s.noAuth, s.anonymousPrincipal, "")
-				return
-			}
-
-			resolver := s.authResolvers[providerName]
-			if resolver == nil {
-				slog.ErrorContext(r.Context(), "plugin route auth provider is not initialized", "plugin", pluginName, "auth_provider", providerName)
+			auth, err := s.pluginAuthRuntime(pluginName)
+			if err != nil {
+				slog.ErrorContext(r.Context(), "plugin route auth provider is not initialized", "plugin", pluginName, "error", err)
 				writeError(w, http.StatusInternalServerError, "plugin route auth provider is not initialized")
 				return
 			}
 
-			s.serveAuthenticated(w, r, next, resolver, false, nil, providerName)
+			s.serveAuthenticated(w, r, next, auth.resolver, auth.noAuth, auth.anonymous, auth.providerName)
 		})
 	}
 }

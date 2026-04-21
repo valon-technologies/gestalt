@@ -69,7 +69,7 @@ func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		p, authenticated, err := s.resolveMountedWebUIPrincipal(r)
+		p, authenticated, err := s.resolveMountedWebUIPrincipal(r, s.adminMountedWebUI())
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to resolve user")
 			return

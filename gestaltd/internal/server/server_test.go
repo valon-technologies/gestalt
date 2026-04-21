@@ -1386,6 +1386,154 @@ func TestMountedWebUIRoutes_HumanAuthorization(t *testing.T) {
 	}
 }
 
+func TestMountedWebUIRoutes_HumanAuthorization_UsesPluginRouteAuthOverride(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	viewer := seedUser(t, svc, "viewer@example.test")
+	legacy := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, nil, map[string]*config.ProviderEntry{
+		"sample_portal": {AuthorizationPolicy: "sample_policy"},
+	}, nil)
+
+	serverSecret := []byte("0123456789abcdef0123456789abcdef")
+	altSecret := []byte("abcdef0123456789abcdef0123456789")
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar.New: %v", err)
+	}
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &stubHostIssuedSessionAuth{
+			secret:    serverSecret,
+			name:      "server",
+			loginHost: "server-idp.example.test",
+			email:     "server@example.test",
+		}
+		cfg.StateSecret = altSecret
+		cfg.SelectedAuthProvider = "server"
+		cfg.AuthProviders = map[string]core.AuthenticationProvider{
+			"alt": &stubHostIssuedSessionAuth{
+				secret:    altSecret,
+				name:      "alt",
+				loginHost: "alt-idp.example.test",
+				email:     "viewer@example.test",
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = legacy
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"sample_portal": {
+				AuthorizationPolicy: "sample_policy",
+				RouteAuth:           &config.RouteAuthDef{Provider: "alt"},
+			},
+		}
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:                "sample_portal",
+			Path:                "/sample-portal",
+			PluginName:          "sample_portal",
+			AuthorizationPolicy: "sample_policy",
+			Routes: []server.MountedWebUIRoute{
+				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
+			},
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	protectedPath := "/sample-portal/sync?code=invite-code&state=abc123"
+	resp, err := client.Get(ts.URL + protectedPath)
+	if err != nil {
+		t.Fatalf("GET protected mounted ui without auth: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("start status = %d, want %d", resp.StatusCode, http.StatusFound)
+	}
+	if got, want := resp.Header.Get("Location"), "/api/v1/auth/login?next=%2Fsample-portal%2Fsync%3Fcode%3Dinvite-code%26state%3Dabc123"; got != want {
+		t.Fatalf("start Location = %q, want %q", got, want)
+	}
+
+	loginStartResp, err := client.Get(ts.URL + resp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("start browser login: %v", err)
+	}
+	defer func() { _ = loginStartResp.Body.Close() }()
+	if loginStartResp.StatusCode != http.StatusFound {
+		t.Fatalf("login start status = %d, want %d", loginStartResp.StatusCode, http.StatusFound)
+	}
+	loginURL, err := url.Parse(loginStartResp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("parse login redirect: %v", err)
+	}
+	if got, want := loginURL.Host, "alt-idp.example.test"; got != want {
+		t.Fatalf("login redirect host = %q, want %q", got, want)
+	}
+	if got, want := loginURL.Query().Get("state"), "/sample-portal/sync"; got != want {
+		t.Fatalf("login redirect state = %q, want %q", got, want)
+	}
+
+	callbackResp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=" + url.QueryEscape(loginURL.Query().Get("state")))
+	if err != nil {
+		t.Fatalf("browser login callback: %v", err)
+	}
+	defer func() { _ = callbackResp.Body.Close() }()
+	if callbackResp.StatusCode != http.StatusFound {
+		t.Fatalf("callback status = %d, want %d", callbackResp.StatusCode, http.StatusFound)
+	}
+	if got, want := callbackResp.Header.Get("Location"), protectedPath; got != want {
+		t.Fatalf("callback redirect = %q, want %q", got, want)
+	}
+
+	resp, err = client.Get(ts.URL + protectedPath)
+	if err != nil {
+		t.Fatalf("GET protected mounted ui with route-auth session: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll protected mounted ui: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("protected mounted ui status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if !strings.Contains(string(body), "protected-sample-shell") {
+		t.Fatalf("body = %q, want protected sample shell", body)
+	}
+
+	resp, err = client.Get(ts.URL + "/api/v1/integrations")
+	if err != nil {
+		t.Fatalf("GET integrations with route-auth session: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("integrations status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+	}
+}
+
 func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewerWithPluginName(t *testing.T) {
 	t.Parallel()
 
@@ -9977,6 +10125,54 @@ func TestStartLogin_NoAuthInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestStartBrowserLogin_MissingPluginRouteAuthProviderAuditsAttemptedProvider(t *testing.T) {
+	t.Parallel()
+
+	var auditBuf bytes.Buffer
+	auditSink := invocation.NewSlogAuditSink(&auditBuf)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &stubHostIssuedSessionAuth{name: "server"}
+		cfg.SelectedAuthProvider = "server"
+		cfg.AuditSink = auditSink
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:       "sample_portal",
+			Path:       "/sample-portal",
+			PluginName: "sample_portal",
+			Handler:    http.NotFoundHandler(),
+		}}
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"sample_portal": {RouteAuth: &config.RouteAuthDef{Provider: "alt"}},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	noRedirect := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	resp, err := noRedirect.Get(ts.URL + "/api/v1/auth/login?next=" + url.QueryEscape("/sample-portal"))
+	if err != nil {
+		t.Fatalf("GET browser login start: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+
+	var auditRecord map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(auditBuf.Bytes()), &auditRecord); err != nil {
+		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["operation"] != "auth.login.start" {
+		t.Fatalf("expected audit operation auth.login.start, got %v", auditRecord["operation"])
+	}
+	if auditRecord["provider"] != "alt" {
+		t.Fatalf("expected audit provider alt, got %v", auditRecord["provider"])
+	}
+	if auditRecord["allowed"] != false {
+		t.Fatalf("expected audit allowed=false, got %v", auditRecord["allowed"])
+	}
+}
+
 func TestLoginCallback(t *testing.T) {
 	t.Parallel()
 
@@ -10052,6 +10248,96 @@ func TestLoginCallback(t *testing.T) {
 	}
 	if uid, ok := auditRecord["user_id"].(string); !ok || uid != existing.ID {
 		t.Fatalf("expected audit user_id %q, got %v", existing.ID, auditRecord["user_id"])
+	}
+}
+
+func TestLoginCallback_MissingPluginRouteAuthProviderAuditsAttemptedProvider(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	startJar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar.New: %v", err)
+	}
+	startClient := &http.Client{
+		Jar: startJar,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	startServer := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &stubHostIssuedSessionAuth{name: "server"}
+		cfg.SelectedAuthProvider = "server"
+		cfg.StateSecret = secret
+		cfg.AuthProviders = map[string]core.AuthenticationProvider{
+			"alt": &stubHostIssuedSessionAuth{name: "alt"},
+		}
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:       "sample_portal",
+			Path:       "/sample-portal",
+			PluginName: "sample_portal",
+			Handler:    http.NotFoundHandler(),
+		}}
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"sample_portal": {RouteAuth: &config.RouteAuthDef{Provider: "alt"}},
+		}
+	})
+	testutil.CloseOnCleanup(t, startServer)
+
+	startResp, err := startClient.Get(startServer.URL + "/api/v1/auth/login?next=" + url.QueryEscape("/sample-portal"))
+	if err != nil {
+		t.Fatalf("start browser login: %v", err)
+	}
+	defer func() { _ = startResp.Body.Close() }()
+	if startResp.StatusCode != http.StatusFound {
+		t.Fatalf("start status = %d, want %d", startResp.StatusCode, http.StatusFound)
+	}
+
+	var loginStateCookie *http.Cookie
+	for _, cookie := range startJar.Cookies(startResp.Request.URL) {
+		if cookie.Name == "login_state" {
+			c := *cookie
+			loginStateCookie = &c
+			break
+		}
+	}
+	if loginStateCookie == nil {
+		t.Fatal("expected login_state cookie")
+	}
+
+	var auditBuf bytes.Buffer
+	callbackServer := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &stubHostIssuedSessionAuth{name: "server"}
+		cfg.SelectedAuthProvider = "server"
+		cfg.StateSecret = secret
+		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
+	})
+	testutil.CloseOnCleanup(t, callbackServer)
+
+	req, _ := http.NewRequest(http.MethodGet, callbackServer.URL+"/api/v1/auth/login/callback?code=good-code&state="+url.QueryEscape("/sample-portal"), nil)
+	req.AddCookie(loginStateCookie)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("callback request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("callback status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+
+	var auditRecord map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(auditBuf.Bytes()), &auditRecord); err != nil {
+		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["operation"] != "auth.login.complete" {
+		t.Fatalf("expected audit operation auth.login.complete, got %v", auditRecord["operation"])
+	}
+	if auditRecord["provider"] != "alt" {
+		t.Fatalf("expected audit provider alt, got %v", auditRecord["provider"])
+	}
+	if auditRecord["allowed"] != false {
+		t.Fatalf("expected audit allowed=false, got %v", auditRecord["allowed"])
 	}
 }
 
@@ -14425,13 +14711,26 @@ func (s *stubAuthWithToken) SessionTokenTTL() time.Duration {
 }
 
 type stubHostIssuedSessionAuth struct {
-	secret []byte
+	secret      []byte
+	name        string
+	loginHost   string
+	email       string
+	displayName string
 }
 
-func (s *stubHostIssuedSessionAuth) Name() string { return "host-issued" }
+func (s *stubHostIssuedSessionAuth) Name() string {
+	if s.name != "" {
+		return s.name
+	}
+	return "host-issued"
+}
 
 func (s *stubHostIssuedSessionAuth) LoginURL(state string) (string, error) {
-	return "https://idp.example.test/login?state=" + url.QueryEscape(state), nil
+	host := s.loginHost
+	if host == "" {
+		host = "idp.example.test"
+	}
+	return "https://" + host + "/login?state=" + url.QueryEscape(state), nil
 }
 
 func (s *stubHostIssuedSessionAuth) HandleCallback(_ context.Context, _ string) (*core.UserIdentity, error) {
@@ -14442,7 +14741,15 @@ func (s *stubHostIssuedSessionAuth) HandleCallbackWithState(_ context.Context, c
 	if code != "good-code" {
 		return nil, "", fmt.Errorf("unexpected code %q", code)
 	}
-	return &core.UserIdentity{Email: "host@example.com", DisplayName: "Host Issued"}, state, nil
+	email := s.email
+	if email == "" {
+		email = "host@example.com"
+	}
+	displayName := s.displayName
+	if displayName == "" {
+		displayName = "Host Issued"
+	}
+	return &core.UserIdentity{Email: email, DisplayName: displayName}, state, nil
 }
 
 func (s *stubHostIssuedSessionAuth) ValidateToken(_ context.Context, token string) (*core.UserIdentity, error) {
