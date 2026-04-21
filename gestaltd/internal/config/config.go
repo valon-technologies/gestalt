@@ -288,16 +288,15 @@ func (g GitHubReleaseSourceDef) Location() string {
 
 // ProviderEntry is the universal configuration for any provider.
 type ProviderEntry struct {
-	Source           ProviderSource    `yaml:"source"`
-	Config           yaml.Node         `yaml:"config,omitempty"`
-	Default          bool              `yaml:"default,omitempty"`
-	Env              map[string]string `yaml:"env,omitempty"`
-	AllowedHosts     []string          `yaml:"allowedHosts,omitempty"`
-	DisplayName      string            `yaml:"displayName,omitempty"`
-	Description      string            `yaml:"description,omitempty"`
-	IconFile         string            `yaml:"iconFile,omitempty"`
-	InlineSourceAuth *SourceAuthDef    `yaml:"-"`
-	RouteAuth        *RouteAuthDef     `yaml:"-"`
+	Source       ProviderSource    `yaml:"source"`
+	Config       yaml.Node         `yaml:"config,omitempty"`
+	Default      bool              `yaml:"default,omitempty"`
+	Env          map[string]string `yaml:"env,omitempty"`
+	AllowedHosts []string          `yaml:"allowedHosts,omitempty"`
+	DisplayName  string            `yaml:"displayName,omitempty"`
+	Description  string            `yaml:"description,omitempty"`
+	IconFile     string            `yaml:"iconFile,omitempty"`
+	RouteAuth    *RouteAuthDef     `yaml:"-"`
 	// AuthorizationPolicy binds this provider to a shared human access policy.
 	AuthorizationPolicy string `yaml:"authorizationPolicy,omitempty"`
 
@@ -333,7 +332,7 @@ type providerEntryFields ProviderEntry
 
 type providerEntryYAML struct {
 	providerEntryFields `yaml:",inline"`
-	Auth                yaml.Node `yaml:"auth,omitempty"`
+	Auth                *RouteAuthDef `yaml:"auth,omitempty"`
 }
 
 type providerEntryMarshalYAML struct {
@@ -365,9 +364,6 @@ func (e *ProviderEntry) UnmarshalYAML(value *yaml.Node) error {
 }
 
 func (e ProviderEntry) MarshalYAML() (any, error) {
-	if e.HasReleaseMetadataSource() && e.Source.Auth == nil && e.InlineSourceAuth != nil {
-		e.Source.Auth = cloneSourceAuthDef(e.InlineSourceAuth)
-	}
 	return providerEntryMarshalYAML{
 		providerEntryFields: providerEntryFieldsFromEntry(e),
 		Auth:                cloneRouteAuthDef(e.RouteAuth),
@@ -498,58 +494,9 @@ func (e UIEntry) MarshalYAML() (any, error) {
 }
 
 func (raw providerEntryYAML) decode() (ProviderEntry, error) {
-	routeAuth, inlineSourceAuth, err := parseProviderEntryAuthNode(&raw.Auth)
-	if err != nil {
-		return ProviderEntry{}, err
-	}
 	entry := raw.toProviderEntry()
-	if entry.Source.Auth != nil && inlineSourceAuth != nil {
-		return ProviderEntry{}, fmt.Errorf("source auth must be configured either as source.auth or sibling auth, not both")
-	}
-	entry.InlineSourceAuth = inlineSourceAuth
-	entry.RouteAuth = routeAuth
+	entry.RouteAuth = cloneRouteAuthDef(raw.Auth)
 	return entry, nil
-}
-
-func parseProviderEntryAuthNode(node *yaml.Node) (*RouteAuthDef, *SourceAuthDef, error) {
-	if node == nil || node.Kind == 0 {
-		return nil, nil, nil
-	}
-	if node.Kind == yaml.DocumentNode && len(node.Content) == 1 {
-		node = node.Content[0]
-	}
-	if node.Kind != yaml.MappingNode {
-		return nil, nil, fmt.Errorf("auth must be a mapping")
-	}
-	hasToken := false
-	hasProvider := false
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		switch strings.TrimSpace(node.Content[i].Value) {
-		case "token":
-			hasToken = true
-		case "provider":
-			hasProvider = true
-		}
-	}
-	if hasToken && hasProvider {
-		return nil, nil, fmt.Errorf("auth.token source auth must be nested under source.auth; sibling auth is reserved for plugin auth overrides")
-	}
-	if hasProvider {
-		var auth RouteAuthDef
-		if err := decodeYAMLNodeKnownFields(node, &auth); err != nil {
-			return nil, nil, err
-		}
-		auth.Provider = strings.TrimSpace(auth.Provider)
-		return &auth, nil, nil
-	}
-	if hasToken {
-		var auth SourceAuthDef
-		if err := decodeYAMLNodeKnownFields(node, &auth); err != nil {
-			return nil, nil, err
-		}
-		return nil, cloneSourceAuthDef(&auth), nil
-	}
-	return nil, nil, fmt.Errorf("auth.provider is required for plugin route auth overrides; use source.auth for source auth")
 }
 
 func decodeYAMLNodeKnownFields(node *yaml.Node, out any) error {
@@ -1021,12 +968,17 @@ func cloneAuthValue(src AuthValueDef) AuthValueDef {
 func EffectivePluginConnectionDef(plugin *ProviderEntry, manifestPlugin *providermanifestv1.Spec) ConnectionDef {
 	conn := ConnectionDef{}
 	if manifestPlugin != nil {
-		conn.Mode = manifestPlugin.ConnectionMode
-		if len(manifestPlugin.ConnectionParams) > 0 {
-			conn.ConnectionParams = maps.Clone(manifestPlugin.ConnectionParams)
-		}
-		if manifestPlugin.Auth != nil {
-			MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(manifestPlugin.Auth))
+		if def := manifestPlugin.DefaultConnectionDef(); def != nil {
+			conn.Mode = def.Mode
+			if len(def.Params) > 0 {
+				conn.ConnectionParams = maps.Clone(def.Params)
+			}
+			if def.Auth != nil {
+				MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(def.Auth))
+			}
+			if def.Discovery != nil {
+				conn.Discovery = def.Discovery
+			}
 		}
 	}
 	if plugin != nil {
@@ -1878,11 +1830,6 @@ func normalizeProviderSourceShapes(cfg *Config) {
 			return
 		}
 		normalizeProviderSource(kind, &entry.Source, sourceSyntax)
-		if entry.HasReleaseMetadataSource() && entry.Source.Auth == nil && entry.InlineSourceAuth != nil {
-			auth := *entry.InlineSourceAuth
-			entry.Source.Auth = &auth
-			entry.InlineSourceAuth = nil
-		}
 	}
 
 	for _, entry := range cfg.Plugins {

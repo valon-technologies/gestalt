@@ -251,9 +251,6 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry, source
 	}
 	src := entry.Source
 	auth := src.Auth
-	if auth == nil {
-		auth = entry.InlineSourceAuth
-	}
 	if src.IsBuiltin() {
 		if auth != nil {
 			return fmt.Errorf("config validation: %s %q auth is only valid with metadata URL sources", kind, name)

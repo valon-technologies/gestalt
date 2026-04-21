@@ -98,22 +98,7 @@
           "type": "boolean"
         },
         "auth": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/routeAuthRef"
-            },
-            {
-              "$ref": "#/$defs/providerAuth"
-            }
-          ]
-        },
-        "connectionMode": {
-          "type": "string",
-          "enum": [
-            "none",
-            "user",
-            "identity"
-          ]
+          "$ref": "#/$defs/routeAuthRef"
         },
         "headers": {
           "type": "object",
@@ -153,15 +138,6 @@
           },
           "additionalProperties": {
             "$ref": "#/$defs/manifestConnectionDef"
-          }
-        },
-        "discovery": {
-          "$ref": "#/$defs/providerDiscovery"
-        },
-        "connectionParams": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/providerConnectionParam"
           }
         },
         "requires": {

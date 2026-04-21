@@ -74,8 +74,6 @@ The `spec` block for a `kind: plugin` manifest describes a plugin. It supports d
 | `requires` | string[] | Provider source identifiers that this provider depends on. Gestalt ensures the listed providers are available before starting this provider. |
 | `ui` | OwnedUIRef | Optional owned web UI reference for plugins that publish a mounted UI. |
 
-Legacy manifests may still use top-level `spec.auth`, `spec.connectionMode`, `spec.connectionParams`, and `spec.discovery` for upstream auth. Gestalt accepts that input for compatibility and normalizes it into `spec.connections.default`, but canonical manifests should declare upstream auth only under `spec.connections`.
-
 ### Owned UI
 
 Plugins that back mounted apps may declare their UI artifact in the plugin manifest. Deployment config still chooses whether to mount the app, which public path to use, and which authorization policy to bind. The manifest only says which UI bundle belongs to the plugin.

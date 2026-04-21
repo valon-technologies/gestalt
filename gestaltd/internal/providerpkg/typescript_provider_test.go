@@ -647,7 +647,11 @@ func mustWriteTypeScriptSourceManifest(t *testing.T, root, pluginName string) st
 		Source:  "github.com/testowner/plugins/" + pluginName,
 		Version: "0.0.1",
 		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+				},
+			},
 		},
 	}, ManifestFormatYAML)
 	if err != nil {
