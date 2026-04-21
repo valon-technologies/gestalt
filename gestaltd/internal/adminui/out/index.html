@@ -1339,11 +1339,15 @@
 
         function principalLabel(row) {
           if (!row) return "Unknown";
+          if (row.email) return row.email;
           return row.selectorValue || "Unknown";
         }
 
         function principalMeta(row) {
           if (!row) return "";
+          if (row.selectorKind === "subject_id" && typeof row.selectorValue === "string" && row.selectorValue.trim()) {
+            return "subject_id: " + row.selectorValue.trim();
+          }
           return row.selectorKind || "";
         }
 

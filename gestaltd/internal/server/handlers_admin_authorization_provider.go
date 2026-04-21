@@ -237,6 +237,7 @@ func (s *Server) adminAuthorizationDynamicRowFromProviderRelationship(ctx contex
 		}
 		row.SelectorKind = "subject_id"
 		row.SelectorValue = subjectID
+		row.Email = s.adminAuthorizationEmailForSubjectID(ctx, subjectID)
 	default:
 		return adminAuthorizationMemberRow{}, false, nil
 	}

@@ -2486,6 +2486,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		Membership struct {
 			SelectorKind  string `json:"selectorKind"`
 			SelectorValue string `json:"selectorValue"`
+			Email         string `json:"email"`
 			Role          string `json:"role"`
 		} `json:"membership"`
 	}
@@ -2501,6 +2502,9 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	}
 	if putPluginMembershipResp.Membership.SelectorValue != principal.UserSubjectID(dynamicUser.ID) {
 		t.Fatalf("plugin membership selectorValue = %q, want canonical subject id", putPluginMembershipResp.Membership.SelectorValue)
+	}
+	if putPluginMembershipResp.Membership.Email != dynamicEmail {
+		t.Fatalf("plugin membership email = %q, want %q", putPluginMembershipResp.Membership.Email, dynamicEmail)
 	}
 
 	resp, err = http.Get(ts.URL + "/admin/api/v1/authorization/plugins/sample_plugin/members")
@@ -2530,6 +2534,9 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		}
 		if member["selectorValue"] != principal.UserSubjectID(dynamicUser.ID) {
 			t.Fatalf("dynamic plugin member selector metadata = %+v, want canonical subject_id selectorValue", member)
+		}
+		if member["email"] != dynamicEmail {
+			t.Fatalf("dynamic plugin member email = %v, want %q", member["email"], dynamicEmail)
 		}
 	}
 	if !foundDynamicPluginMember {
@@ -2900,6 +2907,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 		Membership struct {
 			SelectorKind  string `json:"selectorKind"`
 			SelectorValue string `json:"selectorValue"`
+			Email         string `json:"email"`
 			Role          string `json:"role"`
 		} `json:"membership"`
 	}
@@ -2915,6 +2923,9 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	}
 	if putAdminMembershipResp.Membership.SelectorValue != principal.UserSubjectID(dynamicAdmin.ID) {
 		t.Fatalf("admin membership selectorValue = %q, want canonical subject id", putAdminMembershipResp.Membership.SelectorValue)
+	}
+	if putAdminMembershipResp.Membership.Email != dynamicAdminEmail {
+		t.Fatalf("admin membership email = %q, want %q", putAdminMembershipResp.Membership.Email, dynamicAdminEmail)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
@@ -2945,6 +2956,9 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 		}
 		if member["selectorValue"] != principal.UserSubjectID(dynamicAdmin.ID) {
 			t.Fatalf("dynamic admin member selector metadata = %+v, want canonical subject_id selectorValue", member)
+		}
+		if member["email"] != dynamicAdminEmail {
+			t.Fatalf("dynamic admin member email = %v, want %q", member["email"], dynamicAdminEmail)
 		}
 	}
 	if !foundDynamicAdminMember {
