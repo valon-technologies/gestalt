@@ -744,14 +744,15 @@ func staticSubjectRefs(p *principal.Principal) []*core.SubjectRef {
 }
 
 func dynamicSubjectRefs(p *principal.Principal) []*core.SubjectRef {
+	p = principal.Canonicalized(p)
 	if p == nil {
 		return nil
 	}
-	out := make([]*core.SubjectRef, 0, 1)
-	if userID := strings.TrimSpace(p.UserID); userID != "" {
-		out = append(out, &core.SubjectRef{Type: subjectTypeUser, Id: userID})
+	subjectID := strings.TrimSpace(p.SubjectID)
+	if principal.UserIDFromSubjectID(subjectID) == "" {
+		return nil
 	}
-	return out
+	return []*core.SubjectRef{{Type: subjectTypeSubject, Id: subjectID}}
 }
 
 func relationshipMapKey(rel *core.Relationship) string {

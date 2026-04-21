@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
 const providerCanonicalSyncReadPageSize = 500
@@ -166,8 +167,11 @@ func providerRelationshipIdentityID(ctx context.Context, users *coredata.UserSer
 		return "", core.ErrNotFound
 	}
 	switch strings.TrimSpace(subject.GetType()) {
-	case authorization.ProviderSubjectTypeUser:
-		return users.CanonicalIdentityIDForUser(ctx, strings.TrimSpace(subject.GetId()))
+	case authorization.ProviderSubjectTypeSubject:
+		if userID := principal.UserIDFromSubjectID(strings.TrimSpace(subject.GetId())); userID != "" {
+			return users.CanonicalIdentityIDForUser(ctx, userID)
+		}
+		return "", core.ErrNotFound
 	default:
 		return "", core.ErrNotFound
 	}

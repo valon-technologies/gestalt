@@ -8,6 +8,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
 type providerPluginAuthorizationMembership struct {
@@ -266,8 +267,8 @@ func (s *Server) providerRelationshipMatchesUser(_ context.Context, rel *core.Re
 	subjectType := strings.TrimSpace(rel.GetSubject().GetType())
 	subjectID := strings.TrimSpace(rel.GetSubject().GetId())
 	switch subjectType {
-	case authorization.ProviderSubjectTypeUser:
-		return userID != "" && subjectID == userID, nil
+	case authorization.ProviderSubjectTypeSubject:
+		return userID != "" && subjectID == principal.UserSubjectID(userID), nil
 	default:
 		return false, nil
 	}
@@ -283,7 +284,7 @@ func providerDynamicMembershipRelationships(resource *core.ResourceRef, user *co
 		return nil
 	}
 	return []*core.Relationship{{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeUser, Id: userID},
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(userID)},
 		Relation: role,
 		Resource: cloneResourceRef(resource),
 	}}
