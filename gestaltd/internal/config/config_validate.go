@@ -1179,7 +1179,7 @@ func validateExecutableConnectionAuthSupport(name string, plan *StaticConnection
 	}
 
 	supportsMCPOAuth = provider != nil && provider.MCPURL() != ""
-	if conn := EffectivePluginConnectionDef(plugin, provider); conn.Auth.Type == providermanifestv1.AuthTypeMCPOAuth && !supportsMCPOAuth {
+	if conn := EffectivePluginConnectionDef(plugin); conn.Auth.Type == providermanifestv1.AuthTypeMCPOAuth && !supportsMCPOAuth {
 		return fmt.Errorf("config validation: integration %q plugin auth type %q requires an MCP surface", name, providermanifestv1.AuthTypeMCPOAuth)
 	}
 
@@ -1216,7 +1216,7 @@ func validateManifestBackedIntegration(name string, entry *ProviderEntry) error 
 	if err := validateExecutableConnectionAuthSupport(name, plan, entry, effectiveProvider); err != nil {
 		return err
 	}
-	pluginConnection := EffectivePluginConnectionDef(entry, effectiveProvider)
+	pluginConnection := EffectivePluginConnectionDef(entry)
 	if plan != nil {
 		pluginConnection = plan.PluginConnection()
 	}

@@ -989,7 +989,7 @@ func cloneAuthValue(src AuthValueDef) AuthValueDef {
 	return dst
 }
 
-func EffectivePluginConnectionDef(plugin *ProviderEntry, manifestPlugin *providermanifestv1.Spec) ConnectionDef {
+func EffectivePluginConnectionDef(plugin *ProviderEntry) ConnectionDef {
 	conn := ConnectionDef{}
 	if plugin != nil {
 		override := &ConnectionDef{
