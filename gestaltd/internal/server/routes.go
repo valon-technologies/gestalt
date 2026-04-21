@@ -87,6 +87,7 @@ func (s *Server) mountAdminAPIRoutes(r chi.Router) {
 		if s.adminRoute.AuthorizationPolicy != "" {
 			r.Use(s.adminAPIAuthMiddleware)
 		}
+		s.mountAdminRuntimeRoutes(r)
 		s.mountAdminAuthorizationRoutes(r)
 	})
 }

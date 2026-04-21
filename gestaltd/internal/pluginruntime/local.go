@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -89,6 +90,34 @@ func (p *LocalProvider) StartSession(_ context.Context, req StartSessionRequest)
 	}
 	p.sessions[sessionID] = session
 	return cloneSession(session), nil
+}
+
+func (p *LocalProvider) ListSessions(_ context.Context) ([]Session, error) {
+	if p == nil {
+		return nil, fmt.Errorf("plugin runtime is not configured")
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return nil, fmt.Errorf("plugin runtime is closed")
+	}
+
+	sessionIDs := make([]string, 0, len(p.sessions))
+	for sessionID := range p.sessions {
+		sessionIDs = append(sessionIDs, sessionID)
+	}
+	slices.Sort(sessionIDs)
+
+	out := make([]Session, 0, len(sessionIDs))
+	for _, sessionID := range sessionIDs {
+		session := cloneSession(p.sessions[sessionID])
+		if session == nil {
+			continue
+		}
+		out = append(out, *session)
+	}
+	return out, nil
 }
 
 func (p *LocalProvider) GetSession(_ context.Context, req GetSessionRequest) (*Session, error) {
