@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/mail"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,6 +38,7 @@ type adminAuthorizationMemberRow struct {
 
 type putAdminAuthorizationMemberRequest struct {
 	SubjectID string `json:"subjectId"`
+	Email     string `json:"email"`
 	Role      string `json:"role"`
 }
 
@@ -152,23 +154,13 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	userID, err := adminAuthorizationUserIDFromSubjectID(req.SubjectID)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
 	if strings.TrimSpace(req.Role) == "" {
 		writeError(w, http.StatusBadRequest, "role is required")
 		return
 	}
-	user, err := s.users.GetUser(r.Context(), userID)
-	switch {
-	case err == nil:
-	case errors.Is(err, core.ErrNotFound):
-		writeError(w, http.StatusNotFound, "subject not found")
-		return
-	default:
-		writeError(w, http.StatusInternalServerError, "failed to resolve user")
+	user, status, message := s.resolveAdminAuthorizationWriteUser(r.Context(), req)
+	if status != 0 {
+		writeError(w, status, message)
 		return
 	}
 	if access, ok := s.authorizer.StaticRoleForProviderIdentity(plugin, principal.UserSubjectID(user.ID)); ok && access.Role != "" {
@@ -276,23 +268,13 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	userID, err := adminAuthorizationUserIDFromSubjectID(req.SubjectID)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
 	if strings.TrimSpace(req.Role) == "" {
 		writeError(w, http.StatusBadRequest, "role is required")
 		return
 	}
-	user, err := s.users.GetUser(r.Context(), userID)
-	switch {
-	case err == nil:
-	case errors.Is(err, core.ErrNotFound):
-		writeError(w, http.StatusNotFound, "subject not found")
-		return
-	default:
-		writeError(w, http.StatusInternalServerError, "failed to resolve user")
+	user, status, message := s.resolveAdminAuthorizationWriteUser(r.Context(), req)
+	if status != 0 {
+		writeError(w, status, message)
 		return
 	}
 	if access, ok := s.authorizer.StaticRoleForPolicyIdentity(s.adminRoute.AuthorizationPolicy, principal.UserSubjectID(user.ID)); ok && access.Role != "" {
@@ -510,6 +492,41 @@ func (s *Server) reloadAuthorizationState(ctx context.Context) error {
 
 func (r adminAuthorizationMemberRow) adminAuthorizationRowKey() string {
 	return r.Source + ":" + r.SelectorKind + ":" + r.SelectorValue
+}
+
+func (s *Server) resolveAdminAuthorizationWriteUser(ctx context.Context, req putAdminAuthorizationMemberRequest) (*core.User, int, string) {
+	subjectID := strings.TrimSpace(req.SubjectID)
+	email := strings.TrimSpace(req.Email)
+	switch {
+	case subjectID != "" && email != "":
+		return nil, http.StatusBadRequest, "provide either subjectId or email, not both"
+	case subjectID != "":
+		userID, err := adminAuthorizationUserIDFromSubjectID(subjectID)
+		if err != nil {
+			return nil, http.StatusBadRequest, err.Error()
+		}
+		user, err := s.users.GetUser(ctx, userID)
+		switch {
+		case err == nil:
+			return user, 0, ""
+		case errors.Is(err, core.ErrNotFound):
+			return nil, http.StatusNotFound, "subject not found"
+		default:
+			return nil, http.StatusInternalServerError, "failed to resolve user"
+		}
+	case email != "":
+		parsed, err := mail.ParseAddress(email)
+		if err != nil || strings.TrimSpace(parsed.Address) == "" {
+			return nil, http.StatusBadRequest, "email must be a valid email address"
+		}
+		user, err := s.users.FindOrCreateUser(ctx, parsed.Address)
+		if err != nil {
+			return nil, http.StatusInternalServerError, "failed to resolve user"
+		}
+		return user, 0, ""
+	default:
+		return nil, http.StatusBadRequest, "subjectId or email is required"
+	}
 }
 
 func adminAuthorizationUserIDFromSubjectID(subjectID string) (string, error) {

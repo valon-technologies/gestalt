@@ -761,9 +761,9 @@
 
           <p class="metric-note controls-note">
             Dynamic grants are plugin-scoped and evaluated only after static
-            policy members. Writes require a canonical user subject ID and are
-            blocked when that subject already has static authorization on the
-            selected plugin.
+            policy members. Writes accept a user email, resolve it to a
+            canonical user subject ID, and are blocked when that subject
+            already has static authorization on the selected plugin.
           </p>
         </section>
 
@@ -800,9 +800,9 @@
             </p>
 
             <form id="authorization-form" class="auth-form">
-              <label class="control-group" for="authorization-subject-input">
-                <span class="label-text">Subject ID</span>
-                <input class="text-input" id="authorization-subject-input" name="subjectId" type="text" spellcheck="false" placeholder="user:usr_123" />
+              <label class="control-group" for="authorization-email-input">
+                <span class="label-text">User email</span>
+                <input class="text-input" id="authorization-email-input" name="email" type="email" spellcheck="false" placeholder="user@example.com" />
               </label>
 
               <label class="control-group" for="authorization-role-input">
@@ -814,7 +814,7 @@
             </form>
 
             <p class="metric-note inline-note" id="authorization-form-note">
-              Pick a plugin, then add or update a dynamic grant for an existing user subject.
+              Pick a plugin, then add or update a dynamic grant by user email.
             </p>
           </article>
 
@@ -890,9 +890,9 @@
             </p>
 
             <form id="admin-members-form" class="auth-form">
-              <label class="control-group" for="admin-members-subject-input">
-                <span class="label-text">Subject ID</span>
-                <input class="text-input" id="admin-members-subject-input" name="subjectId" type="text" spellcheck="false" placeholder="user:usr_123" />
+              <label class="control-group" for="admin-members-email-input">
+                <span class="label-text">User email</span>
+                <input class="text-input" id="admin-members-email-input" name="email" type="email" spellcheck="false" placeholder="user@example.com" />
               </label>
 
               <label class="control-group" for="admin-members-role-input">
@@ -904,7 +904,7 @@
             </form>
 
             <p class="metric-note inline-note" id="admin-members-form-note">
-              Add or update a dynamic Gestalt admin grant for an existing user subject.
+              Add or update a dynamic Gestalt admin grant by user email.
             </p>
           </article>
 
@@ -1057,6 +1057,10 @@
         }
 
         function normalizeSubjectID(value) {
+          return typeof value === "string" ? value.trim() : "";
+        }
+
+        function normalizeEmailInput(value) {
           return typeof value === "string" ? value.trim() : "";
         }
 
@@ -1419,28 +1423,25 @@
         }
 
         function updateAuthorizationFormState() {
-          const subjectInput = byId("authorization-subject-input");
+          const emailInput = byId("authorization-email-input");
           const roleInput = byId("authorization-role-input");
           const submitButton = byId("authorization-submit-button");
           const formNote = byId("authorization-form-note");
           const pluginSelect = byId("authorization-plugin-select");
           const hasPlugin = !!selectedPluginName;
           pluginSelect.disabled = authLoading || authSaving;
-          subjectInput.disabled = !hasPlugin || authLoading || authSaving;
+          emailInput.disabled = !hasPlugin || authLoading || authSaving;
           roleInput.disabled = !hasPlugin || authLoading || authSaving;
 
-          const subjectID = normalizeSubjectID(subjectInput.value);
+          const email = normalizeEmailInput(emailInput.value);
           const role = String(roleInput.value || "").trim();
-          const staticConflict = subjectID && authStaticSubjectIDs().has(subjectID);
-          submitButton.disabled = !hasPlugin || !subjectID || !role || staticConflict || authLoading || authSaving;
+          submitButton.disabled = !hasPlugin || !email || !role || authLoading || authSaving;
           submitButton.textContent = authSaving ? "Saving..." : "Save dynamic grant";
 
           if (!hasPlugin) {
             formNote.textContent = "Pick a plugin with an authorization policy to manage members.";
-          } else if (staticConflict) {
-            formNote.textContent = "This subject already has static authorization on the selected plugin and cannot receive a dynamic grant.";
           } else {
-            formNote.textContent = "Static rows remain read-only. Dynamic rows use canonical user subject IDs and can be added, updated, or removed here.";
+            formNote.textContent = "Enter a user email. The server resolves it to a canonical user subject ID before writing the dynamic grant.";
           }
         }
 
@@ -1606,18 +1607,17 @@
         }
 
         function updateAdminMembersFormState() {
-          const subjectInput = byId("admin-members-subject-input");
+          const emailInput = byId("admin-members-email-input");
           const roleInput = byId("admin-members-role-input");
           const submitButton = byId("admin-members-submit-button");
           const formNote = byId("admin-members-form-note");
 
-          subjectInput.disabled = !adminAvailable || !adminCanWrite || adminLoading || adminSaving;
+          emailInput.disabled = !adminAvailable || !adminCanWrite || adminLoading || adminSaving;
           roleInput.disabled = !adminAvailable || !adminCanWrite || adminLoading || adminSaving;
 
-          const subjectID = normalizeSubjectID(subjectInput.value);
+          const email = normalizeEmailInput(emailInput.value);
           const role = String(roleInput.value || "").trim();
-          const staticConflict = subjectID && adminStaticSubjectIDs().has(subjectID);
-          submitButton.disabled = !adminAvailable || !adminCanWrite || !subjectID || !role || staticConflict || adminLoading || adminSaving;
+          submitButton.disabled = !adminAvailable || !adminCanWrite || !email || !role || adminLoading || adminSaving;
           submitButton.textContent = adminSaving ? "Saving..." : "Save admin grant";
 
           if (adminLoading && !adminLoaded) {
@@ -1628,10 +1628,8 @@
             formNote.textContent = "The last refresh failed. Use Refresh to retry before changing built-in admins.";
           } else if (!adminCanWrite) {
             formNote.textContent = "You can inspect built-in admin memberships here, but only callers with an allowed built-in admin role can change them.";
-          } else if (staticConflict) {
-            formNote.textContent = "This subject already has static built-in admin authorization and cannot receive a dynamic admin grant.";
           } else {
-            formNote.textContent = "Static seed admins remain read-only. Dynamic admin rows use canonical user subject IDs and can be added, updated, or removed here.";
+            formNote.textContent = "Enter a user email. The server resolves it to a canonical user subject ID before writing the dynamic admin grant.";
           }
         }
 
@@ -1751,18 +1749,18 @@
             loadAuthorizationPlugins();
           });
 
-          byId("authorization-subject-input").addEventListener("input", updateAuthorizationFormState);
+          byId("authorization-email-input").addEventListener("input", updateAuthorizationFormState);
           byId("authorization-role-input").addEventListener("input", updateAuthorizationFormState);
 
           byId("authorization-form").addEventListener("submit", async function (event) {
             event.preventDefault();
             if (!selectedPluginName || authSaving) return;
 
-            const subjectInput = byId("authorization-subject-input");
+            const emailInput = byId("authorization-email-input");
             const roleInput = byId("authorization-role-input");
-            const subjectID = normalizeSubjectID(subjectInput.value);
+            const email = normalizeEmailInput(emailInput.value);
             const role = String(roleInput.value || "").trim();
-            if (!subjectID || !role) {
+            if (!email || !role) {
               updateAuthorizationFormState();
               return;
             }
@@ -1779,10 +1777,10 @@
                     Accept: "application/json",
                     "Content-Type": "application/json",
                   },
-                  body: JSON.stringify({ subjectId: subjectID, role: role }),
+                  body: JSON.stringify({ email: email, role: role }),
                 },
               );
-              subjectInput.value = "";
+              emailInput.value = "";
               if (result.payload && result.payload.membership && result.payload.membership.role) {
                 roleInput.value = result.payload.membership.role;
               }
@@ -1840,18 +1838,18 @@
             loadAdminMembers();
           });
 
-          byId("admin-members-subject-input").addEventListener("input", updateAdminMembersFormState);
+          byId("admin-members-email-input").addEventListener("input", updateAdminMembersFormState);
           byId("admin-members-role-input").addEventListener("input", updateAdminMembersFormState);
 
           byId("admin-members-form").addEventListener("submit", async function (event) {
             event.preventDefault();
             if (adminSaving || !adminAvailable) return;
 
-            const subjectInput = byId("admin-members-subject-input");
+            const emailInput = byId("admin-members-email-input");
             const roleInput = byId("admin-members-role-input");
-            const subjectID = normalizeSubjectID(subjectInput.value);
+            const email = normalizeEmailInput(emailInput.value);
             const role = String(roleInput.value || "").trim();
-            if (!subjectID || !role) {
+            if (!email || !role) {
               updateAdminMembersFormState();
               return;
             }
@@ -1866,9 +1864,9 @@
                   Accept: "application/json",
                   "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ subjectId: subjectID, role: role }),
+                body: JSON.stringify({ email: email, role: role }),
               });
-              subjectInput.value = "";
+              emailInput.value = "";
               if (result.payload && result.payload.membership && result.payload.membership.role) {
                 roleInput.value = result.payload.membership.role;
               }

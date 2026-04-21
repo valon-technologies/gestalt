@@ -2469,8 +2469,8 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("plugins status = %d, want 200", resp.StatusCode)
 	}
 
-	dynamicUser := seedUser(t, svc, "dynamic@example.test")
-	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
+	dynamicEmail := "dynamic@example.test"
+	body := bytes.NewBufferString(fmt.Sprintf(`{"email":%q,"role":"viewer"}`, dynamicEmail))
 	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
@@ -2491,6 +2491,10 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&putPluginMembershipResp); err != nil {
 		t.Fatalf("decode plugin membership response: %v", err)
+	}
+	dynamicUser, err := svc.Users.FindUserByEmail(context.Background(), dynamicEmail)
+	if err != nil {
+		t.Fatalf("FindUserByEmail dynamic plugin member: %v", err)
 	}
 	if putPluginMembershipResp.Membership.SelectorKind != "subject_id" {
 		t.Fatalf("plugin membership selectorKind = %q, want subject_id", putPluginMembershipResp.Membership.SelectorKind)
@@ -2532,8 +2536,7 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("expected one dynamic plugin member, got %+v", members)
 	}
 
-	staticUser := seedUser(t, svc, "static@example.test")
-	body = bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(staticUser.ID)))
+	body = bytes.NewBufferString(`{"email":"static@example.test","role":"viewer"}`)
 	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
@@ -2879,8 +2882,8 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("admin members = %+v, want one static row", members)
 	}
 
-	dynamicAdmin := seedUser(t, svc, "dynamic-admin@example.test")
-	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"owner"}`, principal.UserSubjectID(dynamicAdmin.ID)))
+	dynamicAdminEmail := "dynamic-admin@example.test"
+	body := bytes.NewBufferString(fmt.Sprintf(`{"email":%q,"role":"owner"}`, dynamicAdminEmail))
 	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
@@ -2902,6 +2905,10 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&putAdminMembershipResp); err != nil {
 		t.Fatalf("decode admin membership response: %v", err)
+	}
+	dynamicAdmin, err := svc.Users.FindUserByEmail(context.Background(), dynamicAdminEmail)
+	if err != nil {
+		t.Fatalf("FindUserByEmail dynamic admin member: %v", err)
 	}
 	if putAdminMembershipResp.Membership.SelectorKind != "subject_id" {
 		t.Fatalf("admin membership selectorKind = %q, want subject_id", putAdminMembershipResp.Membership.SelectorKind)
@@ -2944,8 +2951,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("expected one dynamic admin member, got %+v", members)
 	}
 
-	staticAdmin := seedUser(t, svc, "static-admin@example.test")
-	body = bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"owner"}`, principal.UserSubjectID(staticAdmin.ID)))
+	body = bytes.NewBufferString(`{"email":"static-admin@example.test","role":"owner"}`)
 	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
