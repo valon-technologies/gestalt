@@ -264,13 +264,14 @@ func workflowEventTriggerFromProto(trigger *proto.BoundWorkflowEventTrigger) (*c
 		return nil, nil
 	}
 	return &coreworkflow.EventTrigger{
-		ID:        trigger.GetId(),
-		Match:     workflowEventMatchFromProto(trigger.GetMatch()),
-		Target:    workflowTargetFromProto(trigger.GetTarget()),
-		Paused:    trigger.GetPaused(),
-		CreatedBy: workflowActorFromProto(trigger.GetCreatedBy()),
-		CreatedAt: timeFromProto(trigger.GetCreatedAt()),
-		UpdatedAt: timeFromProto(trigger.GetUpdatedAt()),
+		ID:           trigger.GetId(),
+		Match:        workflowEventMatchFromProto(trigger.GetMatch()),
+		Target:       workflowTargetFromProto(trigger.GetTarget()),
+		Paused:       trigger.GetPaused(),
+		ExecutionRef: trigger.GetExecutionRef(),
+		CreatedBy:    workflowActorFromProto(trigger.GetCreatedBy()),
+		CreatedAt:    timeFromProto(trigger.GetCreatedAt()),
+		UpdatedAt:    timeFromProto(trigger.GetUpdatedAt()),
 	}, nil
 }
 

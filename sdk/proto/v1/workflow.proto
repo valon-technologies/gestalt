@@ -105,6 +105,7 @@ message BoundWorkflowEventTrigger {
   google.protobuf.Timestamp created_at = 5;
   google.protobuf.Timestamp updated_at = 6;
   WorkflowActor created_by = 7;
+  string execution_ref = 8;
 }
 
 message StartWorkflowProviderRunRequest {
@@ -167,6 +168,7 @@ message UpsertWorkflowProviderEventTriggerRequest {
   BoundWorkflowTarget target = 3;
   bool paused = 4;
   WorkflowActor requested_by = 6;
+  string execution_ref = 7;
 }
 
 message GetWorkflowProviderEventTriggerRequest {

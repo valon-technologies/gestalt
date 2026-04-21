@@ -199,6 +199,9 @@ func (a *Authorizer) AllowProvider(ctx context.Context, p *principal.Principal, 
 	if a.isManagedIdentityPrincipal(p) {
 		return a.allowManagedIdentityProvider(p, provider)
 	}
+	if principal.IsSystemPrincipal(p) {
+		return principal.AllowsProviderPermission(p, provider)
+	}
 	if !a.IsWorkload(p) {
 		_, allowed := a.ResolveAccess(ctx, p, provider)
 		return allowed
@@ -210,6 +213,9 @@ func (a *Authorizer) AllowProvider(ctx context.Context, p *principal.Principal, 
 func (a *Authorizer) AllowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
 	if a.isManagedIdentityPrincipal(p) {
 		return a.allowManagedIdentityProvider(p, provider) && principal.AllowsOperationPermission(p, provider, operation)
+	}
+	if principal.IsSystemPrincipal(p) {
+		return principal.AllowsOperationPermission(p, provider, operation)
 	}
 	if !a.IsWorkload(p) {
 		return a.AllowProvider(ctx, p, provider)
@@ -259,6 +265,9 @@ func (a *Authorizer) ResolveAccess(_ context.Context, p *principal.Principal, pr
 	}
 	if a.isManagedIdentityPrincipal(p) {
 		return AccessContext{}, a.allowManagedIdentityProvider(p, provider)
+	}
+	if principal.IsSystemPrincipal(p) {
+		return AccessContext{}, principal.AllowsProviderPermission(p, provider)
 	}
 	policyName := strings.TrimSpace(a.providerPolicies[provider])
 	if policyName == "" {
@@ -413,6 +422,9 @@ func (a *Authorizer) ResolveAdminAccess(_ context.Context, p *principal.Principa
 func (a *Authorizer) AllowCatalogOperation(ctx context.Context, p *principal.Principal, provider string, op catalog.CatalogOperation) bool {
 	if a.isManagedIdentityPrincipal(p) {
 		return a.allowManagedIdentityProvider(p, provider) && principal.AllowsOperationPermission(p, provider, op.ID)
+	}
+	if principal.IsSystemPrincipal(p) {
+		return principal.AllowsOperationPermission(p, provider, op.ID)
 	}
 	if a.IsWorkload(p) {
 		return a.AllowOperation(ctx, p, provider, op.ID)

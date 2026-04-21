@@ -881,6 +881,7 @@ type BoundWorkflowEventTrigger struct {
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	CreatedBy     *WorkflowActor         `protobuf:"bytes,7,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	ExecutionRef  string                 `protobuf:"bytes,8,opt,name=execution_ref,json=executionRef,proto3" json:"execution_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -962,6 +963,13 @@ func (x *BoundWorkflowEventTrigger) GetCreatedBy() *WorkflowActor {
 		return x.CreatedBy
 	}
 	return nil
+}
+
+func (x *BoundWorkflowEventTrigger) GetExecutionRef() string {
+	if x != nil {
+		return x.ExecutionRef
+	}
+	return ""
 }
 
 type StartWorkflowProviderRunRequest struct {
@@ -1563,6 +1571,7 @@ type UpsertWorkflowProviderEventTriggerRequest struct {
 	Target        *BoundWorkflowTarget   `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
 	Paused        bool                   `protobuf:"varint,4,opt,name=paused,proto3" json:"paused,omitempty"`
 	RequestedBy   *WorkflowActor         `protobuf:"bytes,6,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
+	ExecutionRef  string                 `protobuf:"bytes,7,opt,name=execution_ref,json=executionRef,proto3" json:"execution_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1630,6 +1639,13 @@ func (x *UpsertWorkflowProviderEventTriggerRequest) GetRequestedBy() *WorkflowAc
 		return x.RequestedBy
 	}
 	return nil
+}
+
+func (x *UpsertWorkflowProviderEventTriggerRequest) GetExecutionRef() string {
+	if x != nil {
+		return x.ExecutionRef
+	}
+	return ""
 }
 
 type GetWorkflowProviderEventTriggerRequest struct {
@@ -2169,7 +2185,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"created_by\x18\t \x01(\v2\".gestalt.provider.v1.WorkflowActorR\tcreatedBy\x12#\n" +
 	"\rexecution_ref\x18\n" +
-	" \x01(\tR\fexecutionRef\"\xfd\x02\n" +
+	" \x01(\tR\fexecutionRef\"\xa2\x03\n" +
 	"\x19BoundWorkflowEventTrigger\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12=\n" +
 	"\x05match\x18\x02 \x01(\v2'.gestalt.provider.v1.WorkflowEventMatchR\x05match\x12@\n" +
@@ -2180,7 +2196,8 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12A\n" +
 	"\n" +
-	"created_by\x18\a \x01(\v2\".gestalt.provider.v1.WorkflowActorR\tcreatedBy\"\xf4\x01\n" +
+	"created_by\x18\a \x01(\v2\".gestalt.provider.v1.WorkflowActorR\tcreatedBy\x12#\n" +
+	"\rexecution_ref\x18\b \x01(\tR\fexecutionRef\"\xf4\x01\n" +
 	"\x1fStartWorkflowProviderRunRequest\x12@\n" +
 	"\x06target\x18\x01 \x01(\v2(.gestalt.provider.v1.BoundWorkflowTargetR\x06target\x12'\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\x12A\n" +
@@ -2218,14 +2235,15 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"scheduleId\"H\n" +
 	"%ResumeWorkflowProviderScheduleRequest\x12\x1f\n" +
 	"\vschedule_id\x18\x02 \x01(\tR\n" +
-	"scheduleId\"\xaa\x02\n" +
+	"scheduleId\"\xcf\x02\n" +
 	")UpsertWorkflowProviderEventTriggerRequest\x12\x1d\n" +
 	"\n" +
 	"trigger_id\x18\x01 \x01(\tR\ttriggerId\x12=\n" +
 	"\x05match\x18\x02 \x01(\v2'.gestalt.provider.v1.WorkflowEventMatchR\x05match\x12@\n" +
 	"\x06target\x18\x03 \x01(\v2(.gestalt.provider.v1.BoundWorkflowTargetR\x06target\x12\x16\n" +
 	"\x06paused\x18\x04 \x01(\bR\x06paused\x12E\n" +
-	"\frequested_by\x18\x06 \x01(\v2\".gestalt.provider.v1.WorkflowActorR\vrequestedBy\"G\n" +
+	"\frequested_by\x18\x06 \x01(\v2\".gestalt.provider.v1.WorkflowActorR\vrequestedBy\x12#\n" +
+	"\rexecution_ref\x18\a \x01(\tR\fexecutionRef\"G\n" +
 	"&GetWorkflowProviderEventTriggerRequest\x12\x1d\n" +
 	"\n" +
 	"trigger_id\x18\x02 \x01(\tR\ttriggerId\"*\n" +

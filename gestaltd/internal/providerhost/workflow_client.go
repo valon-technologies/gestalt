@@ -211,11 +211,12 @@ func (r *remoteWorkflow) UpsertEventTrigger(ctx context.Context, req coreworkflo
 		return nil, err
 	}
 	resp, err := r.client.UpsertEventTrigger(ctx, &proto.UpsertWorkflowProviderEventTriggerRequest{
-		TriggerId:   req.TriggerID,
-		Match:       workflowEventMatchToProto(req.Match),
-		Target:      target,
-		Paused:      req.Paused,
-		RequestedBy: workflowActorToProto(req.RequestedBy),
+		TriggerId:    req.TriggerID,
+		Match:        workflowEventMatchToProto(req.Match),
+		Target:       target,
+		Paused:       req.Paused,
+		RequestedBy:  workflowActorToProto(req.RequestedBy),
+		ExecutionRef: req.ExecutionRef,
 	})
 	if err != nil {
 		return nil, err

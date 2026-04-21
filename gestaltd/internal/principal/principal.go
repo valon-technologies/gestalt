@@ -107,6 +107,14 @@ func IdentitySubjectID() string {
 	return "identity:" + IdentityPrincipal
 }
 
+func IsSystemSubjectID(subjectID string) bool {
+	return strings.HasPrefix(strings.TrimSpace(subjectID), "system:")
+}
+
+func IsSystemPrincipal(p *Principal) bool {
+	return p != nil && IsSystemSubjectID(p.SubjectID)
+}
+
 func EffectiveCredentialSubjectID(p *Principal) string {
 	if p == nil {
 		return ""

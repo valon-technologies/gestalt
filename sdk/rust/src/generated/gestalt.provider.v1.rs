@@ -5862,6 +5862,8 @@ pub struct BoundWorkflowEventTrigger {
     pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(message, optional, tag = "7")]
     pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "8")]
+    pub execution_ref: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StartWorkflowProviderRunRequest {
@@ -5949,6 +5951,8 @@ pub struct UpsertWorkflowProviderEventTriggerRequest {
     pub paused: bool,
     #[prost(message, optional, tag = "6")]
     pub requested_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "7")]
+    pub execution_ref: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowProviderEventTriggerRequest {

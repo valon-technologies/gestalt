@@ -255,8 +255,14 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	if resp.Status != http.StatusAccepted || resp.Body != `{"ok":true}` {
 		t.Fatalf("response = %#v", resp)
 	}
-	if gotPrincipal == nil || gotPrincipal.SubjectID != principal.WorkloadSubjectID("workflow.config") {
+	if gotPrincipal == nil || gotPrincipal.SubjectID != "system:workflow-startup" {
 		t.Fatalf("principal = %#v", gotPrincipal)
+	}
+	if gotPrincipal.CredentialSubjectID != principal.IdentitySubjectID() {
+		t.Fatalf("credential subject = %q, want %q", gotPrincipal.CredentialSubjectID, principal.IdentitySubjectID())
+	}
+	if !principal.AllowsOperationPermission(gotPrincipal, "roadmap", "sync") {
+		t.Fatalf("principal operation permissions = %#v, want roadmap.sync", gotPrincipal.TokenPermissions)
 	}
 	if gotProvider != "roadmap" {
 		t.Fatalf("provider = %q, want %q", gotProvider, "roadmap")
