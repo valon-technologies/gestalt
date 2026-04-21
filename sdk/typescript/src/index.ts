@@ -65,11 +65,16 @@ export {
   type PluginInvokeOptions,
 } from "./invoker.ts";
 export {
+  AuthenticationProvider,
+  defineAuthenticationProvider,
+  isAuthenticationProvider,
   defineAuthProvider,
   isAuthProvider,
   type AuthenticatedUser,
   type AuthProviderOptions,
   type AuthSessionSettings,
+  type AuthenticationProviderOptions,
+  type AuthenticationSessionSettings,
   type BeginLoginRequest,
   type BeginLoginResponse,
   type CompleteLoginRequest,

@@ -32,7 +32,7 @@ func (p *fullAuthProvider) Configure(_ context.Context, name string, config map[
 
 func (p *fullAuthProvider) Metadata() gestalt.ProviderMetadata {
 	return gestalt.ProviderMetadata{
-		Kind:        gestalt.ProviderKindAuth,
+		Kind:        gestalt.ProviderKindAuthentication,
 		Name:        "stub-auth",
 		DisplayName: "Stub Auth",
 		Version:     "1.0",
@@ -100,7 +100,7 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 
 	conn := newUnixConn(t, socket)
 	runtimeClient := proto.NewProviderLifecycleClient(conn)
-	authClient := proto.NewAuthProviderClient(conn)
+	authClient := proto.NewAuthenticationProviderClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer rpcCancel()
@@ -109,8 +109,8 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProviderIdentity: %v", err)
 	}
-	if meta.GetKind() != proto.ProviderKind_PROVIDER_KIND_AUTH {
-		t.Fatalf("kind = %v, want AUTH", meta.GetKind())
+	if meta.GetKind() != proto.ProviderKind_PROVIDER_KIND_AUTHENTICATION {
+		t.Fatalf("kind = %v, want AUTHENTICATION", meta.GetKind())
 	}
 	if meta.GetName() != "stub-auth" {
 		t.Fatalf("name = %q, want %q", meta.GetName(), "stub-auth")

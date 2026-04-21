@@ -1,4 +1,4 @@
-import { Tabs } from 'nextra/components'
+import { Tabs } from "nextra/components";
 
 # Authentication
 
@@ -13,10 +13,10 @@ The examples on this page use a Google OAuth provider as the running example.
 
 ## Manifest
 
-An authentication provider manifest declares `kind: auth`. You can optionally include a `configSchemaPath` so Gestalt validates provider config at startup.
+An authentication provider manifest declares `kind: authentication`. You can optionally include a `configSchemaPath` so Gestalt validates provider config at startup.
 
 ```yaml
-kind: auth
+kind: authentication
 source: github.com/your-org/authentication/google
 version: 0.0.1
 displayName: Google Authentication
@@ -83,12 +83,13 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
     }
 
     ```
+
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
     import gestalt
 
-    class GoogleAuth(gestalt.AuthProvider):
+    class GoogleAuth(gestalt.AuthenticationProvider):
         def configure(self, name: str, config: dict) -> None:
             self.client_id = config["clientId"]
             self.client_secret = config["clientSecret"]
@@ -114,11 +115,12 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
             )
 
     ```
+
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
     use std::sync::Mutex;
-    use gestalt::{AuthProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest};
+    use gestalt::{AuthenticationProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest};
 
     #[derive(Default)]
     pub struct GoogleAuth {
@@ -127,7 +129,7 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
     }
 
     #[gestalt::async_trait]
-    impl AuthProvider for GoogleAuth {
+    impl AuthenticationProvider for GoogleAuth {
         async fn configure(
             &self, _name: &str, config: serde_json::Map<String, serde_json::Value>,
         ) -> gestalt::Result<()> {
@@ -163,17 +165,18 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
         }
     }
 
-    gestalt::export_auth_provider!(constructor = GoogleAuth::default);
+    gestalt::export_authentication_provider!(constructor = GoogleAuth::default);
     ```
+
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import { defineAuthProvider } from "@valon-technologies/gestalt";
+    import { defineAuthenticationProvider } from "@valon-technologies/gestalt";
 
     let clientId = "";
     let clientSecret = "";
 
-    export const provider = defineAuthProvider({
+    export const provider = defineAuthenticationProvider({
       async configure(_name, config) {
         clientId = config.clientId as string;
         clientSecret = config.clientSecret as string;
@@ -206,12 +209,13 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
     {
       "gestalt": {
         "provider": {
-          "kind": "auth",
+          "kind": "authentication",
           "target": "./authentication.ts#provider"
         }
       }
     }
     ```
+
   </Tabs.Tab>
 </Tabs>
 
@@ -219,9 +223,9 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
 
 Two optional interfaces extend the base contract.
 
-**ExternalTokenValidator** lets API clients present a bearer token directly instead of going through the browser login flow. In Go, implement the `ExternalTokenValidator` interface on your provider. In Python, inherit from `gestalt.ExternalTokenValidator`. In Rust, override the `validate_external_token` method, which returns an unimplemented error by default. In TypeScript, provide the optional `validateExternalToken` handler to `defineAuthProvider`.
+**ExternalTokenValidator** lets API clients present a bearer token directly instead of going through the browser login flow. In Go, implement the `ExternalTokenValidator` interface on your provider. In Python, inherit from `gestalt.ExternalTokenValidator`. In Rust, override the `validate_external_token` method, which returns an unimplemented error by default. In TypeScript, provide the optional `validateExternalToken` handler to `defineAuthenticationProvider`.
 
-**SessionTTLProvider** controls session lifetime. The default is 24 hours. In Go, implement the `SessionTTLProvider` interface. In Python, inherit from `gestalt.SessionTTLProvider`. In Rust, override the `session_ttl` method, which returns `None` (the 24-hour default) by default. In TypeScript, provide the optional `sessionSettings` handler to `defineAuthProvider`.
+**SessionTTLProvider** controls session lifetime. The default is 24 hours. In Go, implement the `SessionTTLProvider` interface. In Python, inherit from `gestalt.SessionTTLProvider`. In Rust, override the `session_ttl` method, which returns `None` (the 24-hour default) by default. In TypeScript, provide the optional `sessionSettings` handler to `defineAuthenticationProvider`.
 
 ## Config Reference
 

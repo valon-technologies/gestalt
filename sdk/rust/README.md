@@ -67,7 +67,7 @@ Current scope:
 - `WorkflowHost` client helpers for workflow-provider host callbacks
 - `S3` client helpers and the `S3Provider` trait for S3-compatible provider components
 - runtime servers for the integration, auth, cache, secrets, workflow, and S3 provider surfaces over the Unix socket exposed by `gestaltd`
-- `export_provider!`, `export_auth_provider!`, `export_cache_provider!`, `export_secrets_provider!`, `export_workflow_provider!`, and `export_s3_provider!` macros for source builds that let `gestaltd` synthesize the executable wrapper
+- `export_provider!`, `export_authentication_provider!`, `export_cache_provider!`, `export_secrets_provider!`, `export_workflow_provider!`, and `export_s3_provider!` macros for source builds that let `gestaltd` synthesize the executable wrapper
 
 ## Codegen strategy
 
@@ -93,7 +93,7 @@ sdk/rust/scripts/generate_stubs.sh
 The crate is intentionally small:
 
 - `Provider`, `Request`, `Response`, and `ok(...)` model integration providers
-- `AuthProvider`, `BeginLoginRequest`, `BeginLoginResponse`, `CompleteLoginRequest`, and `AuthenticatedUser` model auth providers
+- `AuthenticationProvider`, `BeginLoginRequest`, `BeginLoginResponse`, `CompleteLoginRequest`, and `AuthenticatedUser` model authentication providers
 - `Cache`, `CacheProvider`, `CacheEntry`, and `CacheSetOptions` model cache clients and providers
 - `SecretsProvider` models secrets providers
 - `WorkflowHost` and `WorkflowProvider` model workflow host callbacks and workflow base providers
@@ -103,7 +103,7 @@ The crate is intentionally small:
 - `RuntimeMetadata` lets any provider kind describe its runtime name/display metadata and version
 - `runtime` runs the integration, auth, cache, secrets, workflow, or S3 gRPC servers, or writes the static catalog when `GESTALT_PLUGIN_WRITE_CATALOG` is set
 - `export_provider!` exports `__gestalt_serve` and `__gestalt_write_catalog` for integration providers
-- `export_auth_provider!` exports `__gestalt_serve_auth` for auth providers
+- `export_authentication_provider!` exports `__gestalt_serve_authentication` for authentication providers
 - `export_cache_provider!` exports `__gestalt_serve_cache` for cache providers
 - `export_secrets_provider!` exports `__gestalt_serve_secrets` for secrets providers
 - `export_workflow_provider!` exports `__gestalt_serve_workflow` for workflow providers

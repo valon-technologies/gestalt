@@ -59,7 +59,7 @@ const (
 	typeScriptReleaseModule        = "./provider.ts#provider"
 	typeScriptReleaseTarget        = "plugin:./provider.ts#provider"
 	authReleaseTypeScriptModule    = "./auth.ts#auth"
-	authReleaseTypeScriptTarget    = "auth:./auth.ts#auth"
+	authReleaseTypeScriptTarget    = "authentication:./auth.ts#auth"
 )
 
 func TestRun_ProviderCLIUsageAndErrors(t *testing.T) {
@@ -1180,7 +1180,7 @@ func TestRun_ProviderReleaseBuildsExecutableAuthProviders(t *testing.T) {
 				fakeCargoDir := t.TempDir()
 				writeFakeRustReleaseCargo(t, filepath.Join(fakeCargoDir, "cargo"), fakeRustCargoConfig{
 					ExpectedPluginName:   authReleasePluginName,
-					ExpectedServeExport:  "__gestalt_serve_auth",
+					ExpectedServeExport:  "__gestalt_serve_authentication",
 					ExpectedCatalogWrite: false,
 					DelegateBinary:       buildGoSourceAuthBinary(t),
 					AllowedTargets:       []string{hostTarget},
@@ -1951,7 +1951,7 @@ func TestRun_ProviderReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypo
 				DisplayName: "Missing Auth",
 				Spec:        &providermanifestv1.Spec{},
 			},
-			wantError: "no Go, Rust, Python, or TypeScript auth source package found",
+			wantError: "no Go, Rust, Python, or TypeScript authentication source package found",
 		},
 		{
 			name: "authorization",
@@ -2258,7 +2258,7 @@ version = "0.0.1-alpha.1"
 dependencies = ["gestalt"]
 
 [tool.gestalt]
-auth = "provider:auth_provider"
+authentication = "provider:auth_provider"
 `), 0o644)
 	writeTestFile(t, pluginDir, "provider.py", []byte("auth_provider = object()\n"), 0o644)
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
@@ -2275,7 +2275,7 @@ auth = "provider:auth_provider"
 		t,
 		filepath.Join(pluginDir, ".venv", "bin", "python"),
 		"provider:auth_provider",
-		"auth",
+		"authentication",
 		pythonAuthReleasePluginName,
 		runtime.GOOS,
 		runtime.GOARCH,

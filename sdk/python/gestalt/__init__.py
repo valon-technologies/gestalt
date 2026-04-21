@@ -59,6 +59,7 @@ from ._indexeddb import (
 from ._invoker import ENV_PLUGIN_INVOKER_SOCKET, PluginInvoker
 from ._plugin import Plugin, operation, session_catalog
 from ._providers import (
+    AuthenticationProvider,
     AuthenticatedUser,
     AuthProvider,
     BeginLoginRequest,
@@ -107,6 +108,7 @@ from ._workflow import (
 
 __all__ = [
     "AlreadyExistsError",
+    "AuthenticationProvider",
     "AuthProvider",
     "AuthenticatedUser",
     "Cache",

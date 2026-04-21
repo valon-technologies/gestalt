@@ -13,6 +13,9 @@ import {
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
 import {
+  AuthenticationProvider as AuthenticationProviderService,
+} from "../gen/v1/authentication_pb.ts";
+import {
   AuthProvider as AuthProviderService,
   AuthSessionSettingsSchema,
   AuthenticatedUserSchema,
@@ -61,7 +64,8 @@ import { S3 as S3Service } from "../gen/v1/s3_pb.ts";
 import { WorkflowProvider as WorkflowProviderService } from "../gen/v1/workflow_pb.ts";
 import { errorMessage, type Request } from "./api.ts";
 import {
-  AuthProvider,
+  AuthenticationProvider,
+  isAuthenticationProvider,
   isAuthProvider,
   type AuthenticatedUser,
 } from "./auth.ts";
@@ -129,7 +133,7 @@ export type RuntimeArgs = {
  */
 export type LoadedProvider =
   | PluginProvider
-  | AuthProvider
+  | AuthenticationProvider
   | CacheProvider
   | SecretsProvider
   | S3Provider
@@ -154,13 +158,18 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
       );
     },
   },
-  auth: {
-    isProvider: isAuthProvider as (value: unknown) => value is LoadedProvider,
-    protoKind: ProtoProviderKind.AUTH,
+  authentication: {
+    isProvider:
+      isAuthenticationProvider as (value: unknown) => value is LoadedProvider,
+    protoKind: ProtoProviderKind.AUTHENTICATION,
     registerService(router, provider) {
       router.service(
+        AuthenticationProviderService,
+        createAuthenticationService(provider as AuthenticationProvider),
+      );
+      router.service(
         AuthProviderService,
-        createAuthService(provider as AuthProvider),
+        createAuthenticationService(provider as AuthenticationProvider),
       );
     },
   },
@@ -543,13 +552,14 @@ export function createProviderService(
 }
 
 /**
- * Adapts an auth provider to the shared protocol service implementation.
+ * Adapts an authentication provider to the shared protocol service
+ * implementation.
  *
  * @internal
  */
-export function createAuthService(
-  provider: AuthProvider,
-): Partial<ServiceImpl<typeof AuthProviderService>> {
+export function createAuthenticationService(
+  provider: AuthenticationProvider,
+): Partial<ServiceImpl<typeof AuthenticationProviderService>> {
   return {
     async beginLogin(request) {
       const response = await provider.beginLogin({
@@ -562,7 +572,7 @@ export function createAuthService(
       });
       if (!response) {
         throw new ConnectError(
-          "auth provider returned nil response",
+          "authentication provider returned nil response",
           Code.Internal,
         );
       }
@@ -581,7 +591,7 @@ export function createAuthService(
       });
       if (!user) {
         throw new ConnectError(
-          "auth provider returned nil user",
+          "authentication provider returned nil user",
           Code.Internal,
         );
       }
@@ -590,7 +600,7 @@ export function createAuthService(
     async validateExternalToken(request: ValidateExternalTokenRequest) {
       if (!provider.supportsExternalTokenValidation()) {
         throw new ConnectError(
-          "auth provider does not support external token validation",
+          "authentication provider does not support external token validation",
           Code.Unimplemented,
         );
       }
@@ -603,7 +613,7 @@ export function createAuthService(
     async getSessionSettings() {
       if (!provider.supportsSessionSettings()) {
         throw new ConnectError(
-          "auth provider does not expose session settings",
+          "authentication provider does not expose session settings",
           Code.Unimplemented,
         );
       }
@@ -614,6 +624,8 @@ export function createAuthService(
     },
   };
 }
+
+export const createAuthService = createAuthenticationService;
 
 /**
  * Adapts a cache provider to the shared protocol service implementation.

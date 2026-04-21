@@ -70,12 +70,12 @@ func TestServeAuthProviderClosesProviderOnShutdown(t *testing.T) {
 		cancel()
 		waitServeResult(t, errCh)
 		if !auth.closed.Load() {
-			t.Fatal("auth provider Close was not called")
+			t.Fatal("authentication provider Close was not called")
 		}
 	})
 
 	conn := newUnixConn(t, socket)
-	client := proto.NewAuthProviderClient(conn)
+	client := proto.NewAuthenticationProviderClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
 	defer rpcCancel()

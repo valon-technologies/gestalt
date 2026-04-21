@@ -156,9 +156,10 @@ func buildTypeScriptBinary(sourceDir, binaryPath, pluginName, target, goos, goar
 }
 
 func typeScriptComponentKind(kind string) (string, error) {
+	kind = providermanifestv1.NormalizeKind(kind)
 	switch kind {
-	case providermanifestv1.KindAuth:
-		return "auth", nil
+	case providermanifestv1.KindAuthentication:
+		return "authentication", nil
 	case providermanifestv1.KindCache:
 		return "cache", nil
 	case providermanifestv1.KindIndexedDB:
@@ -298,8 +299,8 @@ func normalizeTypeScriptProviderKind(value string) string {
 	switch strings.TrimSpace(strings.ToLower(value)) {
 	case "", "plugin":
 		return "integration"
-	case "auth":
-		return "auth"
+	case "authentication", "auth":
+		return "authentication"
 	case "cache":
 		return "cache"
 	case "indexeddb":

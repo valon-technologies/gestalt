@@ -40,6 +40,7 @@ func DetectPythonProviderTarget(root string) (string, error) {
 }
 
 func DetectPythonComponentTarget(root, kind string) (string, error) {
+	kind = providermanifestv1.NormalizeKind(kind)
 	if err := validateSourceComponentKind(kind); err != nil {
 		return "", err
 	}
@@ -255,21 +256,23 @@ func SplitPythonProviderTarget(target string) (module string, attr string, err e
 }
 
 const (
-	pythonRuntimeKindIntegration = "integration"
-	pythonRuntimeKindAuth        = "auth"
-	pythonRuntimeKindCache       = "cache"
-	pythonRuntimeKindIndexedDB   = "indexeddb"
-	pythonRuntimeKindS3          = "s3"
-	pythonRuntimeKindWorkflow    = "workflow"
-	pythonRuntimeKindSecrets     = "secrets"
+	pythonRuntimeKindIntegration    = "integration"
+	pythonRuntimeKindAuthentication = "authentication"
+	pythonRuntimeKindAuth           = pythonRuntimeKindAuthentication
+	pythonRuntimeKindCache          = "cache"
+	pythonRuntimeKindIndexedDB      = "indexeddb"
+	pythonRuntimeKindS3             = "s3"
+	pythonRuntimeKindWorkflow       = "workflow"
+	pythonRuntimeKindSecrets        = "secrets"
 )
 
 func pythonRuntimeKind(kind string) (string, error) {
+	kind = providermanifestv1.NormalizeKind(kind)
 	switch kind {
 	case providermanifestv1.KindPlugin:
 		return pythonRuntimeKindIntegration, nil
-	case providermanifestv1.KindAuth:
-		return pythonRuntimeKindAuth, nil
+	case providermanifestv1.KindAuthentication:
+		return pythonRuntimeKindAuthentication, nil
 	case providermanifestv1.KindCache:
 		return pythonRuntimeKindCache, nil
 	case providermanifestv1.KindIndexedDB:
@@ -305,6 +308,12 @@ func isPythonIdentifier(value string) bool {
 func pythonProjectTarget(data []byte, wantedKey string) (string, error) {
 	if wantedKey == "plugin" {
 		target, err := pythonProjectTargetValue(data, "provider")
+		if err != nil || target != "" {
+			return target, err
+		}
+	}
+	if wantedKey == providermanifestv1.KindAuthentication {
+		target, err := pythonProjectTargetValue(data, providermanifestv1.LegacyKindAuth)
 		if err != nil || target != "" {
 			return target, err
 		}

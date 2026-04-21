@@ -5,7 +5,7 @@ import type { MaybePromise } from "./api.ts";
  */
 export type ProviderKind =
   | "integration"
-  | "auth"
+  | "authentication"
   | "cache"
   | "secrets"
   | "s3"

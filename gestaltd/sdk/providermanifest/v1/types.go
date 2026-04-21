@@ -11,16 +11,43 @@ import (
 )
 
 const (
-	KindPlugin        = "plugin"
-	KindAuth          = "auth"
-	KindAuthorization = "authorization"
-	KindIndexedDB     = "indexeddb"
-	KindCache         = "cache"
-	KindS3            = "s3"
-	KindWorkflow      = "workflow"
-	KindSecrets       = "secrets"
-	KindWebUI         = "webui"
+	KindPlugin         = "plugin"
+	KindAuthentication = "authentication"
+	KindAuth           = KindAuthentication
+	LegacyKindAuth     = "auth"
+	KindAuthorization  = "authorization"
+	KindIndexedDB      = "indexeddb"
+	KindCache          = "cache"
+	KindS3             = "s3"
+	KindWorkflow       = "workflow"
+	KindSecrets        = "secrets"
+	KindWebUI          = "webui"
 )
+
+func NormalizeKind(kind string) string {
+	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case KindAuthentication, LegacyKindAuth:
+		return KindAuthentication
+	case KindPlugin:
+		return KindPlugin
+	case KindAuthorization:
+		return KindAuthorization
+	case KindIndexedDB:
+		return KindIndexedDB
+	case KindCache:
+		return KindCache
+	case KindS3:
+		return KindS3
+	case KindWorkflow:
+		return KindWorkflow
+	case KindSecrets:
+		return KindSecrets
+	case KindWebUI:
+		return KindWebUI
+	default:
+		return strings.TrimSpace(kind)
+	}
+}
 
 type Manifest struct {
 	Kind        string           `json:"kind,omitempty" yaml:"kind,omitempty"`

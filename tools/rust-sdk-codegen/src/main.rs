@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const PROTO_FILES: &[&str] = &[
+    "authentication.proto",
     "plugin.proto",
     "runtime.proto",
     "auth.proto",

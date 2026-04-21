@@ -2,7 +2,8 @@ import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 import type { MaybePromise } from "./api.ts";
 
 /**
- * Identity payload returned by an auth provider after a successful login.
+ * Identity payload returned by an authentication provider after a successful
+ * login.
  */
 export interface AuthenticatedUser {
   subject: string;
@@ -14,7 +15,7 @@ export interface AuthenticatedUser {
 }
 
 /**
- * Input passed to an auth provider's `beginLogin` handler.
+ * Input passed to an authentication provider's `beginLogin` handler.
  */
 export interface BeginLoginRequest {
   callbackUrl: string;
@@ -24,7 +25,7 @@ export interface BeginLoginRequest {
 }
 
 /**
- * Response returned by an auth provider's `beginLogin` handler.
+ * Response returned by an authentication provider's `beginLogin` handler.
  */
 export interface BeginLoginResponse {
   authorizationUrl: string;
@@ -32,7 +33,8 @@ export interface BeginLoginResponse {
 }
 
 /**
- * Callback payload passed to an auth provider's `completeLogin` handler.
+ * Callback payload passed to an authentication provider's `completeLogin`
+ * handler.
  */
 export interface CompleteLoginRequest {
   query: Record<string, string>;
@@ -41,16 +43,18 @@ export interface CompleteLoginRequest {
 }
 
 /**
- * Session TTL hints exposed by an auth provider.
+ * Session TTL hints exposed by an authentication provider.
  */
-export interface AuthSessionSettings {
+export interface AuthenticationSessionSettings {
   sessionTtlSeconds: number | bigint;
 }
 
+export type AuthSessionSettings = AuthenticationSessionSettings
+
 /**
- * Runtime hooks required to implement a Gestalt auth provider.
+ * Runtime hooks required to implement a Gestalt authentication provider.
  */
-export interface AuthProviderOptions extends RuntimeProviderOptions {
+export interface AuthenticationProviderOptions extends RuntimeProviderOptions {
   beginLogin: (
     request: BeginLoginRequest,
   ) => MaybePromise<BeginLoginResponse>;
@@ -60,21 +64,23 @@ export interface AuthProviderOptions extends RuntimeProviderOptions {
   validateExternalToken?: (
     token: string,
   ) => MaybePromise<AuthenticatedUser | null | undefined>;
-  sessionSettings?: () => MaybePromise<AuthSessionSettings>;
+  sessionSettings?: () => MaybePromise<AuthenticationSessionSettings>;
 }
 
+export type AuthProviderOptions = AuthenticationProviderOptions
+
 /**
- * Auth provider implementation consumed by the Gestalt runtime.
+ * Authentication provider implementation consumed by the Gestalt runtime.
  */
-export class AuthProvider extends RuntimeProvider {
-  readonly kind = "auth" as const;
+export class AuthenticationProvider extends RuntimeProvider {
+  readonly kind = "authentication" as const;
 
-  private readonly beginLoginHandler: AuthProviderOptions["beginLogin"];
-  private readonly completeLoginHandler: AuthProviderOptions["completeLogin"];
-  private readonly validateExternalTokenHandler: AuthProviderOptions["validateExternalToken"];
-  private readonly sessionSettingsHandler: AuthProviderOptions["sessionSettings"];
+  private readonly beginLoginHandler: AuthenticationProviderOptions["beginLogin"];
+  private readonly completeLoginHandler: AuthenticationProviderOptions["completeLogin"];
+  private readonly validateExternalTokenHandler: AuthenticationProviderOptions["validateExternalToken"];
+  private readonly sessionSettingsHandler: AuthenticationProviderOptions["sessionSettings"];
 
-  constructor(options: AuthProviderOptions) {
+  constructor(options: AuthenticationProviderOptions) {
     super(options);
     this.beginLoginHandler = options.beginLogin;
     this.completeLoginHandler = options.completeLogin;
@@ -108,14 +114,15 @@ export class AuthProvider extends RuntimeProvider {
 }
 
 /**
- * Creates an auth provider with the standard Gestalt runtime contract.
+ * Creates an authentication provider with the standard Gestalt runtime
+ * contract.
  *
  * @example
  * ```ts
- * import { defineAuthProvider } from "@valon-technologies/gestalt";
+ * import { defineAuthenticationProvider } from "@valon-technologies/gestalt";
  *
- * export const auth = defineAuthProvider({
- *   displayName: "Example Auth",
+ * export const authentication = defineAuthenticationProvider({
+ *   displayName: "Example Authentication",
  *   async beginLogin(request) {
  *     return {
  *       authorizationUrl: new URL("/login", request.callbackUrl).toString(),
@@ -127,21 +134,31 @@ export class AuthProvider extends RuntimeProvider {
  * });
  * ```
  */
-export function defineAuthProvider(options: AuthProviderOptions): AuthProvider {
-  return new AuthProvider(options);
+export function defineAuthenticationProvider(
+  options: AuthenticationProviderOptions,
+): AuthenticationProvider {
+  return new AuthenticationProvider(options);
 }
 
 /**
- * Runtime type guard for auth providers loaded from user modules.
+ * Runtime type guard for authentication providers loaded from user modules.
  */
-export function isAuthProvider(value: unknown): value is AuthProvider {
+export function isAuthenticationProvider(
+  value: unknown,
+): value is AuthenticationProvider {
   return (
-    value instanceof AuthProvider ||
+    value instanceof AuthenticationProvider ||
     (typeof value === "object" &&
       value !== null &&
       "kind" in value &&
-      (value as { kind?: unknown }).kind === "auth" &&
+      ["authentication", "auth"].includes(
+        String((value as { kind?: unknown }).kind ?? ""),
+      ) &&
       "beginLogin" in value &&
       "completeLogin" in value)
   );
 }
+
+export const defineAuthProvider = defineAuthenticationProvider;
+export const isAuthProvider = isAuthenticationProvider;
+export { AuthenticationProvider as AuthProvider };

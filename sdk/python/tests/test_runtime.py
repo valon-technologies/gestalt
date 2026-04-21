@@ -13,7 +13,7 @@ from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from gestalt import (
-    AuthProvider,
+    AuthenticationProvider,
     CacheEntry,
     CacheProvider,
     Catalog,
@@ -88,7 +88,7 @@ class ParseRuntimeArgsTests(unittest.TestCase):
             _runtime.RuntimeArgs(
                 target="example.plugin:PLUGIN",
                 root=pathlib.Path("/tmp/plugin"),
-                runtime_kind="auth",
+                runtime_kind="authentication",
             ),
         )
 
@@ -482,7 +482,7 @@ class MainEntrypointTests(unittest.TestCase):
 
 class AuthRuntimeTests(unittest.TestCase):
     class StubAuthProvider(
-        AuthProvider,
+        AuthenticationProvider,
         ExternalTokenValidator,
         SessionTTLProvider,
         MetadataProvider,
@@ -497,10 +497,10 @@ class AuthRuntimeTests(unittest.TestCase):
 
         def metadata(self) -> ProviderMetadata:
             return ProviderMetadata(
-                kind=ProviderKind.AUTH,
+                kind=ProviderKind.AUTHENTICATION,
                 name="stub-auth",
                 display_name="Stub Auth",
-                description="test auth provider",
+                description="test authentication provider",
                 version="1.2.3",
             )
 
@@ -569,7 +569,10 @@ class AuthRuntimeTests(unittest.TestCase):
             mock.Mock(),
         )
         meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
-        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_AUTH)
+        self.assertEqual(
+            meta.kind,
+            runtime_pb2.ProviderKind.PROVIDER_KIND_AUTHENTICATION,
+        )
         self.assertEqual(meta.name, "stub-auth")
         self.assertEqual(list(meta.warnings), ["set AUTH_ENV"])
         self.assertEqual(
@@ -625,7 +628,7 @@ class AuthRuntimeTests(unittest.TestCase):
         self.assertEqual(session_settings.session_ttl_seconds, 45 * 60)
 
     def test_auth_validator_missing_or_unknown_token(self) -> None:
-        class NoValidator(AuthProvider):
+        class NoValidator(AuthenticationProvider):
             def begin_login(self, request: Any) -> Any:
                 return auth_pb2.BeginLoginResponse(
                     authorization_url="https://example.test"
@@ -644,7 +647,7 @@ class AuthRuntimeTests(unittest.TestCase):
         )
         context.abort.assert_called_once_with(
             grpc.StatusCode.UNIMPLEMENTED,
-            "auth provider does not support external token validation",
+            "authentication provider does not support external token validation",
         )
 
         unknown_context = mock.Mock()

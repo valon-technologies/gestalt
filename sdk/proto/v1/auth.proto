@@ -6,7 +6,7 @@ import "google/protobuf/empty.proto";
 
 option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 
-// AuthenticatedUser is the normalized user identity returned by an auth
+// AuthenticatedUser is the normalized user identity returned by an authentication
 // provider after a login or token-validation flow.
 message AuthenticatedUser {
   string subject = 1;
@@ -59,7 +59,8 @@ message AuthSessionSettings {
   int64 session_ttl_seconds = 1;
 }
 
-// AuthProvider models the shared Gestalt auth-provider protocol.
+// AuthProvider is the legacy compatibility alias for the shared Gestalt
+// authentication-provider protocol.
 service AuthProvider {
   rpc BeginLogin(BeginLoginRequest) returns (BeginLoginResponse);
   rpc CompleteLogin(CompleteLoginRequest) returns (AuthenticatedUser);

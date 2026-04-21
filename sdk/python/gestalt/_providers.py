@@ -1,8 +1,9 @@
 """Provider base classes for non-integration Gestalt runtimes.
 
-The generated request and response protobuf messages for auth and catalog data
-remain available through the public :mod:`gestalt` package, but these helpers
-document the handwritten provider interfaces that wrap those messages.
+The generated request and response protobuf messages for authentication and
+catalog data remain available through the public :mod:`gestalt` package, but
+these helpers document the handwritten provider interfaces that wrap those
+messages.
 """
 
 import datetime as dt
@@ -24,7 +25,8 @@ class ProviderKind(str, Enum):
     """Runtime kinds supported by the Python SDK."""
 
     INTEGRATION = "integration"
-    AUTH = "auth"
+    AUTHENTICATION = "authentication"
+    AUTH = "authentication"
     CACHE = "cache"
     S3 = "s3"
     WORKFLOW = "workflow"
@@ -123,7 +125,7 @@ class PluginProviderAdapter:
         _runtime.serve(self)
 
 
-class AuthProvider(PluginProvider):
+class AuthenticationProvider(PluginProvider):
     """Base class for authentication providers."""
 
     def begin_login(self, request: Any) -> Any:
@@ -137,11 +139,14 @@ class AuthProvider(PluginProvider):
         raise NotImplementedError
 
     def serve(self) -> None:
-        """Start the auth runtime."""
+        """Start the authentication runtime."""
 
         from . import _runtime
 
-        _runtime.serve(self, runtime_kind=ProviderKind.AUTH)
+        _runtime.serve(self, runtime_kind=ProviderKind.AUTHENTICATION)
+
+
+AuthProvider = AuthenticationProvider
 
 
 class ExternalTokenValidator:

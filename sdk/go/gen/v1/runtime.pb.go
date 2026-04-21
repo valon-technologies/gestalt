@@ -26,8 +26,10 @@ const (
 type ProviderKind int32
 
 const (
-	ProviderKind_PROVIDER_KIND_UNSPECIFIED   ProviderKind = 0
-	ProviderKind_PROVIDER_KIND_INTEGRATION   ProviderKind = 1
+	ProviderKind_PROVIDER_KIND_UNSPECIFIED    ProviderKind = 0
+	ProviderKind_PROVIDER_KIND_INTEGRATION    ProviderKind = 1
+	ProviderKind_PROVIDER_KIND_AUTHENTICATION ProviderKind = 2
+	// Deprecated: Marked as deprecated in v1/runtime.proto.
 	ProviderKind_PROVIDER_KIND_AUTH          ProviderKind = 2
 	ProviderKind_PROVIDER_KIND_INDEXEDDB     ProviderKind = 3
 	ProviderKind_PROVIDER_KIND_SECRETS       ProviderKind = 4
@@ -43,7 +45,8 @@ var (
 	ProviderKind_name = map[int32]string{
 		0: "PROVIDER_KIND_UNSPECIFIED",
 		1: "PROVIDER_KIND_INTEGRATION",
-		2: "PROVIDER_KIND_AUTH",
+		2: "PROVIDER_KIND_AUTHENTICATION",
+		// Duplicate value: 2: "PROVIDER_KIND_AUTH",
 		3: "PROVIDER_KIND_INDEXEDDB",
 		4: "PROVIDER_KIND_SECRETS",
 		5: "PROVIDER_KIND_TELEMETRY",
@@ -53,16 +56,17 @@ var (
 		9: "PROVIDER_KIND_AUTHORIZATION",
 	}
 	ProviderKind_value = map[string]int32{
-		"PROVIDER_KIND_UNSPECIFIED":   0,
-		"PROVIDER_KIND_INTEGRATION":   1,
-		"PROVIDER_KIND_AUTH":          2,
-		"PROVIDER_KIND_INDEXEDDB":     3,
-		"PROVIDER_KIND_SECRETS":       4,
-		"PROVIDER_KIND_TELEMETRY":     5,
-		"PROVIDER_KIND_CACHE":         6,
-		"PROVIDER_KIND_S3":            7,
-		"PROVIDER_KIND_WORKFLOW":      8,
-		"PROVIDER_KIND_AUTHORIZATION": 9,
+		"PROVIDER_KIND_UNSPECIFIED":    0,
+		"PROVIDER_KIND_INTEGRATION":    1,
+		"PROVIDER_KIND_AUTHENTICATION": 2,
+		"PROVIDER_KIND_AUTH":           2,
+		"PROVIDER_KIND_INDEXEDDB":      3,
+		"PROVIDER_KIND_SECRETS":        4,
+		"PROVIDER_KIND_TELEMETRY":      5,
+		"PROVIDER_KIND_CACHE":          6,
+		"PROVIDER_KIND_S3":             7,
+		"PROVIDER_KIND_WORKFLOW":       8,
+		"PROVIDER_KIND_AUTHORIZATION":  9,
 	}
 )
 
@@ -379,18 +383,19 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion\"E\n" +
 	"\x13HealthCheckResponse\x12\x14\n" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage*\xa5\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage*\xcf\x02\n" +
 	"\fProviderKind\x12\x1d\n" +
 	"\x19PROVIDER_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
-	"\x19PROVIDER_KIND_INTEGRATION\x10\x01\x12\x16\n" +
-	"\x12PROVIDER_KIND_AUTH\x10\x02\x12\x1b\n" +
+	"\x19PROVIDER_KIND_INTEGRATION\x10\x01\x12 \n" +
+	"\x1cPROVIDER_KIND_AUTHENTICATION\x10\x02\x12\x1a\n" +
+	"\x12PROVIDER_KIND_AUTH\x10\x02\x1a\x02\b\x01\x12\x1b\n" +
 	"\x17PROVIDER_KIND_INDEXEDDB\x10\x03\x12\x19\n" +
 	"\x15PROVIDER_KIND_SECRETS\x10\x04\x12\x1b\n" +
 	"\x17PROVIDER_KIND_TELEMETRY\x10\x05\x12\x17\n" +
 	"\x13PROVIDER_KIND_CACHE\x10\x06\x12\x14\n" +
 	"\x10PROVIDER_KIND_S3\x10\a\x12\x1a\n" +
 	"\x16PROVIDER_KIND_WORKFLOW\x10\b\x12\x1f\n" +
-	"\x1bPROVIDER_KIND_AUTHORIZATION\x10\t2\xae\x02\n" +
+	"\x1bPROVIDER_KIND_AUTHORIZATION\x10\t\x1a\x02\x10\x012\xae\x02\n" +
 	"\x11ProviderLifecycle\x12T\n" +
 	"\x13GetProviderIdentity\x12\x16.google.protobuf.Empty\x1a%.gestalt.provider.v1.ProviderIdentity\x12r\n" +
 	"\x11ConfigureProvider\x12-.gestalt.provider.v1.ConfigureProviderRequest\x1a..gestalt.provider.v1.ConfigureProviderResponse\x12O\n" +

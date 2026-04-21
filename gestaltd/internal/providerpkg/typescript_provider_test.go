@@ -15,7 +15,7 @@ const (
 	typeScriptTestPluginModuleTarget    = "./provider.ts#plugin"
 	typeScriptTestPluginTarget          = "plugin:./provider.ts#plugin"
 	typeScriptTestAuthModuleTarget      = "./auth.ts#auth"
-	typeScriptTestAuthTarget            = "auth:./auth.ts#auth"
+	typeScriptTestAuthTarget            = "authentication:./auth.ts#auth"
 	typeScriptTestCacheModuleTarget     = "./cache.ts#cache"
 	typeScriptTestCacheTarget           = "cache:./cache.ts#cache"
 	typeScriptTestDatastoreModuleTarget = "./datastore.ts#datastore"
@@ -631,7 +631,7 @@ func mustWriteTypeScriptTargetModule(t *testing.T, root, target string) {
 
 func runtimeTargetModulePath(t *testing.T, target string) string {
 	t.Helper()
-	for _, prefix := range []string{"plugin:", "auth:", "cache:", "indexeddb:", "secrets:", "telemetry:"} {
+	for _, prefix := range []string{"plugin:", "authentication:", "auth:", "cache:", "indexeddb:", "secrets:", "telemetry:"} {
 		if strings.HasPrefix(target, prefix) {
 			return strings.TrimPrefix(target, prefix)
 		}

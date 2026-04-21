@@ -40,7 +40,7 @@ func TestConfigureRuntimeProviderRefreshesMetadataAfterConfigure(t *testing.T) {
 			getCalls++
 			if configured {
 				return &proto.ProviderIdentity{
-					Kind:               proto.ProviderKind_PROVIDER_KIND_AUTH,
+					Kind:               proto.ProviderKind_PROVIDER_KIND_AUTHENTICATION,
 					Name:               "oidc",
 					DisplayName:        "Google",
 					Description:        "Sign in with Google",
@@ -51,7 +51,7 @@ func TestConfigureRuntimeProviderRefreshesMetadataAfterConfigure(t *testing.T) {
 				}, nil
 			}
 			return &proto.ProviderIdentity{
-				Kind:               proto.ProviderKind_PROVIDER_KIND_AUTH,
+				Kind:               proto.ProviderKind_PROVIDER_KIND_AUTHENTICATION,
 				Name:               "oidc",
 				DisplayName:        "SSO",
 				Description:        "Default sign in",
@@ -79,7 +79,7 @@ func TestConfigureRuntimeProviderRefreshesMetadataAfterConfigure(t *testing.T) {
 	meta, err := configureRuntimeProvider(
 		context.Background(),
 		client,
-		proto.ProviderKind_PROVIDER_KIND_AUTH,
+		proto.ProviderKind_PROVIDER_KIND_AUTHENTICATION,
 		"oidc",
 		map[string]any{"displayName": "Google"},
 	)

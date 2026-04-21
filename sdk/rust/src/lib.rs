@@ -31,8 +31,10 @@ pub mod proto {
 }
 
 pub use api::{Access, Credential, Provider, Request, Response, RuntimeMetadata, Subject, ok};
+pub use auth::AuthenticationProvider as AuthProvider;
 pub use auth::{
-    AuthProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest,
+    AuthenticatedUser, AuthenticationProvider, BeginLoginRequest, BeginLoginResponse,
+    CompleteLoginRequest,
 };
 pub use cache::{
     Cache, CacheEntry, CacheError, CacheProvider, CacheSetOptions, ENV_CACHE_SOCKET,
@@ -94,14 +96,26 @@ macro_rules! export_provider {
     };
 }
 
+/// Exports the authentication-provider entrypoint expected by `gestaltd`.
+#[macro_export]
+macro_rules! export_authentication_provider {
+    (constructor = $constructor:path $(,)?) => {
+        pub fn __gestalt_serve_authentication(_name: &str) -> $crate::Result<()> {
+            let provider = std::sync::Arc::new($constructor());
+            $crate::runtime::run_authentication_provider(provider)
+        }
+
+        pub fn __gestalt_serve_auth(_name: &str) -> $crate::Result<()> {
+            __gestalt_serve_authentication(_name)
+        }
+    };
+}
+
 /// Exports the auth-provider entrypoint expected by `gestaltd`.
 #[macro_export]
 macro_rules! export_auth_provider {
     (constructor = $constructor:path $(,)?) => {
-        pub fn __gestalt_serve_auth(_name: &str) -> $crate::Result<()> {
-            let provider = std::sync::Arc::new($constructor());
-            $crate::runtime::run_auth_provider(provider)
-        }
+        $crate::export_authentication_provider!(constructor = $constructor);
     };
 }
 

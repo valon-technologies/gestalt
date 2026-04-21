@@ -145,7 +145,7 @@ type Deps struct {
 	PluginInvoker         invocation.Invoker
 }
 
-type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
+type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
 type AuthorizationFactory func(node yaml.Node, hostServices []providerhost.HostService, deps Deps) (core.AuthorizationProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
@@ -176,9 +176,9 @@ func NewFactoryRegistry() *FactoryRegistry {
 }
 
 type Result struct {
-	Auth                  core.AuthProvider
+	Auth                  core.AuthenticationProvider
 	SelectedAuthProvider  string
-	AuthProviders         map[string]core.AuthProvider
+	AuthProviders         map[string]core.AuthenticationProvider
 	AuthorizationProvider core.AuthorizationProvider
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
@@ -327,9 +327,9 @@ func (p *workflowProviderWithCleanup) Close() error {
 }
 
 type preparedCore struct {
-	Auth                  core.AuthProvider
+	Auth                  core.AuthenticationProvider
 	SelectedAuthProvider  string
-	AuthProviders         map[string]core.AuthProvider
+	AuthProviders         map[string]core.AuthenticationProvider
 	AuthorizationProvider core.AuthorizationProvider
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
@@ -894,7 +894,7 @@ func buildNamedSecretManager(name string, secrets *config.ProviderEntry, factori
 	return sm, nil
 }
 
-func closeAuth(provider core.AuthProvider) error {
+func closeAuth(provider core.AuthenticationProvider) error {
 	closer, ok := provider.(interface{ Close() error })
 	if !ok {
 		return nil
@@ -902,7 +902,7 @@ func closeAuth(provider core.AuthProvider) error {
 	return closer.Close()
 }
 
-func closeAuthProviders(providers map[string]core.AuthProvider) error {
+func closeAuthProviders(providers map[string]core.AuthenticationProvider) error {
 	if len(providers) == 0 {
 		return nil
 	}
@@ -939,7 +939,7 @@ func closeSecretManager(sm core.SecretManager) error {
 	return closer.Close()
 }
 
-func buildAuthProviders(cfg *config.Config, factories *FactoryRegistry, deps Deps) (string, map[string]core.AuthProvider, error) {
+func buildAuthProviders(cfg *config.Config, factories *FactoryRegistry, deps Deps) (string, map[string]core.AuthenticationProvider, error) {
 	selectedName, _, err := cfg.SelectedAuthenticationProvider()
 	if err != nil {
 		return "", nil, err
@@ -950,7 +950,7 @@ func buildAuthProviders(cfg *config.Config, factories *FactoryRegistry, deps Dep
 	if factories.Auth == nil {
 		return "", nil, fmt.Errorf("bootstrap: authentication factory is not registered")
 	}
-	providers := make(map[string]core.AuthProvider, len(cfg.Providers.Authentication))
+	providers := make(map[string]core.AuthenticationProvider, len(cfg.Providers.Authentication))
 	for name, authEntry := range cfg.Providers.Authentication {
 		if authEntry == nil {
 			continue
@@ -965,7 +965,7 @@ func buildAuthProviders(cfg *config.Config, factories *FactoryRegistry, deps Dep
 	return selectedName, providers, nil
 }
 
-func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.AuthProvider, error) {
+func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.AuthenticationProvider, error) {
 	if authEntry == nil {
 		return nil, nil
 	}

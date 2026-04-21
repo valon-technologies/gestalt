@@ -63,7 +63,7 @@ func TestDetectPythonComponentTarget(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
 plugin = "provider"
-auth = "provider:auth_provider"
+authentication = "provider:auth_provider"
 cache = "provider:cache_provider"
 indexeddb = "provider:indexeddb_provider"
 `), 0o644); err != nil {
@@ -192,7 +192,7 @@ func TestPythonComponentExecutionCommand_PassesRuntimeKind(t *testing.T) {
 	if len(args) != 5 {
 		t.Fatalf("args = %q, want 5 args", args)
 	}
-	if got := strings.Join(args, " "); got != "-m gestalt._runtime "+root+" provider:auth_provider auth" {
+	if got := strings.Join(args, " "); got != "-m gestalt._runtime "+root+" provider:auth_provider authentication" {
 		t.Fatalf("args = %q", got)
 	}
 }

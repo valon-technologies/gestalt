@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 PROTO_MODULES = (
+    "authentication",
     "auth",
     "cache",
     "datastore",
@@ -18,12 +19,19 @@ GRPC_RUNTIME_IMPORT_PREFIX = "from v1 import "
 GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX = "from . import "
 
 
+def grpc_pb2_import_module(module_name: str) -> str:
+    if module_name == "authentication":
+        return "auth"
+    return module_name
+
+
 def grpc_runtime_header(module_name: str) -> str:
+    pb2_module = grpc_pb2_import_module(module_name)
     return f"""import grpc
 import warnings
 
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
-from . import {module_name}_pb2 as v1_dot_{module_name}__pb2
+from . import {pb2_module}_pb2 as v1_dot_{pb2_module}__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
@@ -84,8 +92,9 @@ def main() -> int:
                 )
 
             pb2_grpc_source = pb2_grpc_path.read_text(encoding="utf-8")
+            pb2_import_module = grpc_pb2_import_module(module_name)
             expected_import = (
-                f"{GRPC_RUNTIME_IMPORT_PREFIX}{module_name}_pb2 as v1_dot_{module_name}__pb2\n"
+                f"{GRPC_RUNTIME_IMPORT_PREFIX}{pb2_import_module}_pb2 as v1_dot_{pb2_import_module}__pb2\n"
             )
             if expected_import not in pb2_grpc_source:
                 raise RuntimeError(
@@ -96,13 +105,13 @@ def main() -> int:
             # are vendored under gestalt.gen.v1 and need package-relative imports.
             pb2_grpc_source = pb2_grpc_source.replace(
                 expected_import,
-                f"{GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX}{module_name}_pb2 as v1_dot_{module_name}__pb2\n",
+                f"{GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX}{pb2_import_module}_pb2 as v1_dot_{pb2_import_module}__pb2\n",
                 1,
             )
             pb2_grpc_source = pb2_grpc_source.replace(
                 "import grpc\n\n"
                 "from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2\n"
-                f"from . import {module_name}_pb2 as v1_dot_{module_name}__pb2\n",
+                f"from . import {pb2_import_module}_pb2 as v1_dot_{pb2_import_module}__pb2\n",
                 grpc_runtime_header(module_name),
                 1,
             )

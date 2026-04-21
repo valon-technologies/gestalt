@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package gestalt.provider.v1;
+
+import "google/protobuf/empty.proto";
+import "v1/auth.proto";
+
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+// AuthenticationProvider models the shared Gestalt authentication-provider
+// protocol.
+service AuthenticationProvider {
+  rpc BeginLogin(BeginLoginRequest) returns (BeginLoginResponse);
+  rpc CompleteLogin(CompleteLoginRequest) returns (AuthenticatedUser);
+  rpc ValidateExternalToken(ValidateExternalTokenRequest) returns (AuthenticatedUser);
+  rpc GetSessionSettings(google.protobuf.Empty) returns (AuthSessionSettings);
+}

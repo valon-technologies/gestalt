@@ -2,7 +2,7 @@ Python API Reference
 ====================
 
 These pages document the authored Python API that provider authors use to build
-Gestalt integrations, auth providers, caches, and S3 backends.
+Gestalt integrations, authentication providers, caches, and S3 backends.
 
 .. automodule:: gestalt
    :no-members:
@@ -118,7 +118,7 @@ Provider interfaces
    WarningsProvider
    Closer
    PluginProviderAdapter
-   AuthProvider
+   AuthenticationProvider
    ExternalTokenValidator
    SessionTTLProvider
    SecretsProvider
@@ -157,7 +157,7 @@ Provider interfaces
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
-.. autoclass:: AuthProvider
+.. autoclass:: AuthenticationProvider
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
@@ -184,9 +184,9 @@ Provider interfaces
 Auth protocol types
 -------------------
 
-These generated auth message types are also re-exported from :mod:`gestalt` so
-provider code can type or construct lower-level auth protocol payloads without
-reaching into private modules.
+These generated authentication message types are also re-exported from
+:mod:`gestalt` so provider code can type or construct lower-level protocol
+payloads without reaching into private modules.
 
 .. autosummary::
    :nosignatures:

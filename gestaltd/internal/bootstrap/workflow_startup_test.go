@@ -153,7 +153,7 @@ func workflowStartupTestConfig() *config.Config {
 
 func workflowStartupTestFactories() *FactoryRegistry {
 	f := NewFactoryRegistry()
-	f.Auth = func(yaml.Node, Deps) (core.AuthProvider, error) {
+	f.Auth = func(yaml.Node, Deps) (core.AuthenticationProvider, error) {
 		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 	}
 	f.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) {

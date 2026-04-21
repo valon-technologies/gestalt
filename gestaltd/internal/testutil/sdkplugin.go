@@ -150,7 +150,7 @@ func (p *Provider) Configure(context.Context, string, map[string]any) error { re
 
 func (p *Provider) Metadata() gestalt.ProviderMetadata {
 	return gestalt.ProviderMetadata{
-		Kind:        gestalt.ProviderKindAuth,
+		Kind:        gestalt.ProviderKindAuthentication,
 		Name:        "generated-auth",
 		DisplayName: "Generated Auth",
 	}

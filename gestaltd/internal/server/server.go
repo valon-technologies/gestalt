@@ -62,7 +62,7 @@ type BuiltinAdminUIOptions struct {
 type Server struct {
 	router                chi.Router
 	handler               http.Handler
-	auth                  core.AuthProvider
+	auth                  core.AuthenticationProvider
 	auditSink             core.AuditSink
 	users                 *coredata.UserService
 	tokens                *coredata.TokenService
@@ -105,9 +105,9 @@ type Server struct {
 }
 
 type Config struct {
-	Auth                  core.AuthProvider
+	Auth                  core.AuthenticationProvider
 	SelectedAuthProvider  string
-	AuthProviders         map[string]core.AuthProvider
+	AuthProviders         map[string]core.AuthenticationProvider
 	AuditSink             core.AuditSink
 	Services              *coredata.Services
 	Providers             *registry.ProviderMap[core.Provider]
@@ -198,7 +198,7 @@ func New(cfg Config) (*Server, error) {
 	identityPluginAccess := cfg.Services.IdentityPluginAccess
 	workflowExecutionRefs := cfg.Services.WorkflowExecutionRefs
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, managedIdentities, identityGrants, cfg.Authorizer)
-	authProviders := make(map[string]core.AuthProvider, len(cfg.AuthProviders)+1)
+	authProviders := make(map[string]core.AuthenticationProvider, len(cfg.AuthProviders)+1)
 	for name, provider := range cfg.AuthProviders {
 		if provider == nil {
 			continue

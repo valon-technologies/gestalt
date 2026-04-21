@@ -90,6 +90,7 @@ func validateProviderReleaseMetadata(metadata *providerReleaseMetadata) error {
 	if metadata == nil {
 		return fmt.Errorf("provider release metadata is required")
 	}
+	metadata.Kind = providermanifestv1.NormalizeKind(metadata.Kind)
 	if metadata.Schema != providerReleaseSchemaName {
 		return fmt.Errorf("unsupported provider release schema %q", metadata.Schema)
 	}
@@ -103,7 +104,7 @@ func validateProviderReleaseMetadata(metadata *providerReleaseMetadata) error {
 		return fmt.Errorf("provider release version: %w", err)
 	}
 	switch metadata.Kind {
-	case providermanifestv1.KindPlugin, providermanifestv1.KindAuth, providermanifestv1.KindAuthorization, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindSecrets, providermanifestv1.KindWebUI:
+	case providermanifestv1.KindPlugin, providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindSecrets, providermanifestv1.KindWebUI:
 	default:
 		return fmt.Errorf("provider release kind %q is not supported", metadata.Kind)
 	}

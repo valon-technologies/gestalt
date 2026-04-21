@@ -94,12 +94,12 @@ Use `ok(body)` for normal responses and `response(status, body)` when a handler
 needs to set a non-200 status. Plain objects with `status` and `body` fields
 are treated as user data.
 
-Auth providers, cache providers, and secrets providers use dedicated helpers:
+Authentication providers, cache providers, and secrets providers use dedicated helpers:
 
 ```ts
 import {
   Cache,
-  defineAuthProvider,
+  defineAuthenticationProvider,
   defineCacheProvider,
   defineSecretsProvider,
 } from "@valon-technologies/gestalt";

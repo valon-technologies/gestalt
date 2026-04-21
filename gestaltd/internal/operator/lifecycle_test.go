@@ -2491,7 +2491,7 @@ func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testin
 	if err == nil {
 		t.Fatal("expected provider kind validation error")
 	}
-	if !strings.Contains(err.Error(), `manifest has kind "auth", want "plugin"`) {
+	if !strings.Contains(err.Error(), `manifest has kind "authentication", want "plugin"`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

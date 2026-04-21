@@ -69,13 +69,13 @@ func (m *ProviderMap[T]) List() []string {
 }
 
 type Registry struct {
-	AuthProviders ProviderMap[core.AuthProvider]
+	AuthProviders ProviderMap[core.AuthenticationProvider]
 	Providers     ProviderMap[core.Provider]
 }
 
 func New() *Registry {
 	return &Registry{
-		AuthProviders: newProviderMap[core.AuthProvider]("auth provider"),
+		AuthProviders: newProviderMap[core.AuthenticationProvider]("authentication provider"),
 		Providers:     newProviderMap[core.Provider]("provider"),
 	}
 }
