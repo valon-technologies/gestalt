@@ -1192,40 +1192,6 @@ func normalizeConfigRoot(root *yaml.Node) error {
 	if doc.Kind != yaml.MappingNode {
 		return fmt.Errorf("parsing config YAML: expected mapping document")
 	}
-	if err := normalizeAuthenticationConfigAliases(doc); err != nil {
-		return err
-	}
-	return nil
-}
-
-func normalizeAuthenticationConfigAliases(doc *yaml.Node) error {
-	if err := normalizeLegacyMappingKey(mappingValueNode(doc, "providers"), "authentication", "auth", "providers.authentication", "providers.auth"); err != nil {
-		return err
-	}
-	return normalizeLegacyMappingKey(mappingValueNode(mappingValueNode(doc, "server"), "providers"), "authentication", "auth", "server.providers.authentication", "server.providers.auth")
-}
-
-func normalizeLegacyMappingKey(node *yaml.Node, preferred, legacy, preferredPath, legacyPath string) error {
-	node = documentValueNode(node)
-	if node == nil || node.Kind != yaml.MappingNode {
-		return nil
-	}
-	preferredIdx := -1
-	legacyIdx := -1
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		switch node.Content[i].Value {
-		case preferred:
-			preferredIdx = i
-		case legacy:
-			legacyIdx = i
-		}
-	}
-	if preferredIdx >= 0 && legacyIdx >= 0 {
-		return fmt.Errorf("parsing config YAML: %s and %s cannot both be set", preferredPath, legacyPath)
-	}
-	if legacyIdx >= 0 {
-		node.Content[legacyIdx].Value = preferred
-	}
 	return nil
 }
 
@@ -1861,7 +1827,7 @@ func normalizeProviderSourceShapes(cfg *Config) {
 		kind    string
 		entries map[string]*ProviderEntry
 	}{
-		{providermanifestv1.KindAuth, cfg.Providers.Authentication},
+		{providermanifestv1.KindAuthentication, cfg.Providers.Authentication},
 		{providermanifestv1.KindAuthorization, cfg.Providers.Authorization},
 		{providermanifestv1.KindSecrets, cfg.Providers.Secrets},
 		{string(HostProviderKindTelemetry), cfg.Providers.Telemetry},
@@ -2195,7 +2161,7 @@ func resolveRelativePathsInValue(configPath string, root map[string]any, sourceS
 			key  string
 			kind string
 		}{
-			{key: "authentication", kind: providermanifestv1.KindAuth},
+			{key: "authentication", kind: providermanifestv1.KindAuthentication},
 			{key: "authorization", kind: providermanifestv1.KindAuthorization},
 			{key: "secrets", kind: providermanifestv1.KindSecrets},
 			{key: "telemetry", kind: string(HostProviderKindTelemetry)},

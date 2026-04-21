@@ -2,18 +2,205 @@
 // @generated from file v1/authentication.proto (package gestalt.provider.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_empty } from "@bufbuild/protobuf/wkt";
-import type { AuthenticatedUserSchema, AuthSessionSettingsSchema, BeginLoginRequestSchema, BeginLoginResponseSchema, CompleteLoginRequestSchema, ValidateExternalTokenRequestSchema } from "./auth_pb";
-import { file_v1_auth } from "./auth_pb";
+import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file v1/authentication.proto.
  */
 export const file_v1_authentication: GenFile = /*@__PURE__*/
-  fileDesc("Chd2MS9hdXRoZW50aWNhdGlvbi5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MTKnAwoWQXV0aGVudGljYXRpb25Qcm92aWRlchJdCgpCZWdpbkxvZ2luEiYuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpbkxvZ2luUmVxdWVzdBonLmdlc3RhbHQucHJvdmlkZXIudjEuQmVnaW5Mb2dpblJlc3BvbnNlEmIKDUNvbXBsZXRlTG9naW4SKS5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvbXBsZXRlTG9naW5SZXF1ZXN0GiYuZ2VzdGFsdC5wcm92aWRlci52MS5BdXRoZW50aWNhdGVkVXNlchJyChVWYWxpZGF0ZUV4dGVybmFsVG9rZW4SMS5nZXN0YWx0LnByb3ZpZGVyLnYxLlZhbGlkYXRlRXh0ZXJuYWxUb2tlblJlcXVlc3QaJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhlbnRpY2F0ZWRVc2VyElYKEkdldFNlc3Npb25TZXR0aW5ncxIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRooLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aFNlc3Npb25TZXR0aW5nc0I7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_v1_auth]);
+  fileDesc("Chd2MS9hdXRoZW50aWNhdGlvbi5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSLoAQoRQXV0aGVudGljYXRlZFVzZXISDwoHc3ViamVjdBgBIAEoCRINCgVlbWFpbBgCIAEoCRIWCg5lbWFpbF92ZXJpZmllZBgDIAEoCBIUCgxkaXNwbGF5X25hbWUYBCABKAkSEgoKYXZhdGFyX3VybBgFIAEoCRJCCgZjbGFpbXMYBiADKAsyMi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhlbnRpY2F0ZWRVc2VyLkNsYWltc0VudHJ5Gi0KC0NsYWltc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiwwEKEUJlZ2luTG9naW5SZXF1ZXN0EhQKDGNhbGxiYWNrX3VybBgBIAEoCRISCgpob3N0X3N0YXRlGAIgASgJEg4KBnNjb3BlcxgDIAMoCRJECgdvcHRpb25zGAQgAygLMjMuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpbkxvZ2luUmVxdWVzdC5PcHRpb25zRW50cnkaLgoMT3B0aW9uc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiRwoSQmVnaW5Mb2dpblJlc3BvbnNlEhkKEWF1dGhvcml6YXRpb25fdXJsGAEgASgJEhYKDnByb3ZpZGVyX3N0YXRlGAIgASgMIrcBChRDb21wbGV0ZUxvZ2luUmVxdWVzdBJDCgVxdWVyeRgBIAMoCzI0Lmdlc3RhbHQucHJvdmlkZXIudjEuQ29tcGxldGVMb2dpblJlcXVlc3QuUXVlcnlFbnRyeRIWCg5wcm92aWRlcl9zdGF0ZRgCIAEoDBIUCgxjYWxsYmFja191cmwYAyABKAkaLAoKUXVlcnlFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIi0KHFZhbGlkYXRlRXh0ZXJuYWxUb2tlblJlcXVlc3QSDQoFdG9rZW4YASABKAkiMgoTQXV0aFNlc3Npb25TZXR0aW5ncxIbChNzZXNzaW9uX3R0bF9zZWNvbmRzGAEgASgDMqcDChZBdXRoZW50aWNhdGlvblByb3ZpZGVyEl0KCkJlZ2luTG9naW4SJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkJlZ2luTG9naW5SZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpbkxvZ2luUmVzcG9uc2USYgoNQ29tcGxldGVMb2dpbhIpLmdlc3RhbHQucHJvdmlkZXIudjEuQ29tcGxldGVMb2dpblJlcXVlc3QaJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhlbnRpY2F0ZWRVc2VyEnIKFVZhbGlkYXRlRXh0ZXJuYWxUb2tlbhIxLmdlc3RhbHQucHJvdmlkZXIudjEuVmFsaWRhdGVFeHRlcm5hbFRva2VuUmVxdWVzdBomLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aGVudGljYXRlZFVzZXISVgoSR2V0U2Vzc2lvblNldHRpbmdzEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GiguZ2VzdGFsdC5wcm92aWRlci52MS5BdXRoU2Vzc2lvblNldHRpbmdzQjtaOWdpdGh1Yi5jb20vdmFsb24tdGVjaG5vbG9naWVzL2dlc3RhbHQvc2RrL2dvL2dlbi92MTtwcm90b2IGcHJvdG8z", [file_google_protobuf_empty]);
+
+/**
+ * AuthenticatedUser is the normalized user identity returned by an authentication
+ * provider after a login or token-validation flow.
+ *
+ * @generated from message gestalt.provider.v1.AuthenticatedUser
+ */
+export type AuthenticatedUser = Message<"gestalt.provider.v1.AuthenticatedUser"> & {
+  /**
+   * @generated from field: string subject = 1;
+   */
+  subject: string;
+
+  /**
+   * @generated from field: string email = 2;
+   */
+  email: string;
+
+  /**
+   * @generated from field: bool email_verified = 3;
+   */
+  emailVerified: boolean;
+
+  /**
+   * @generated from field: string display_name = 4;
+   */
+  displayName: string;
+
+  /**
+   * @generated from field: string avatar_url = 5;
+   */
+  avatarUrl: string;
+
+  /**
+   * @generated from field: map<string, string> claims = 6;
+   */
+  claims: { [key: string]: string };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AuthenticatedUser.
+ * Use `create(AuthenticatedUserSchema)` to create a new message.
+ */
+export const AuthenticatedUserSchema: GenMessage<AuthenticatedUser> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 0);
+
+/**
+ * BeginLoginRequest starts an interactive login flow.
+ *
+ * @generated from message gestalt.provider.v1.BeginLoginRequest
+ */
+export type BeginLoginRequest = Message<"gestalt.provider.v1.BeginLoginRequest"> & {
+  /**
+   * callback_url is the host-managed URL the provider should redirect back to.
+   *
+   * @generated from field: string callback_url = 1;
+   */
+  callbackUrl: string;
+
+  /**
+   * host_state is opaque state generated by the host and echoed back on
+   * completion.
+   *
+   * @generated from field: string host_state = 2;
+   */
+  hostState: string;
+
+  /**
+   * scopes are the provider-specific scopes the host is requesting.
+   *
+   * @generated from field: repeated string scopes = 3;
+   */
+  scopes: string[];
+
+  /**
+   * options carries provider-specific login parameters.
+   *
+   * @generated from field: map<string, string> options = 4;
+   */
+  options: { [key: string]: string };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.BeginLoginRequest.
+ * Use `create(BeginLoginRequestSchema)` to create a new message.
+ */
+export const BeginLoginRequestSchema: GenMessage<BeginLoginRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 1);
+
+/**
+ * BeginLoginResponse returns the provider-managed authorization URL and opaque
+ * provider state that must be preserved until completion.
+ *
+ * @generated from message gestalt.provider.v1.BeginLoginResponse
+ */
+export type BeginLoginResponse = Message<"gestalt.provider.v1.BeginLoginResponse"> & {
+  /**
+   * @generated from field: string authorization_url = 1;
+   */
+  authorizationUrl: string;
+
+  /**
+   * @generated from field: bytes provider_state = 2;
+   */
+  providerState: Uint8Array;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.BeginLoginResponse.
+ * Use `create(BeginLoginResponseSchema)` to create a new message.
+ */
+export const BeginLoginResponseSchema: GenMessage<BeginLoginResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 2);
+
+/**
+ * CompleteLoginRequest finishes an interactive login flow.
+ *
+ * @generated from message gestalt.provider.v1.CompleteLoginRequest
+ */
+export type CompleteLoginRequest = Message<"gestalt.provider.v1.CompleteLoginRequest"> & {
+  /**
+   * query contains the callback URL query parameters returned by the identity
+   * provider.
+   *
+   * @generated from field: map<string, string> query = 1;
+   */
+  query: { [key: string]: string };
+
+  /**
+   * provider_state is the opaque state returned from BeginLoginResponse.
+   *
+   * @generated from field: bytes provider_state = 2;
+   */
+  providerState: Uint8Array;
+
+  /**
+   * callback_url is the fully qualified callback URL used by the host.
+   *
+   * @generated from field: string callback_url = 3;
+   */
+  callbackUrl: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.CompleteLoginRequest.
+ * Use `create(CompleteLoginRequestSchema)` to create a new message.
+ */
+export const CompleteLoginRequestSchema: GenMessage<CompleteLoginRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 3);
+
+/**
+ * ValidateExternalTokenRequest asks the provider to validate a token minted
+ * outside the interactive login flow.
+ *
+ * @generated from message gestalt.provider.v1.ValidateExternalTokenRequest
+ */
+export type ValidateExternalTokenRequest = Message<"gestalt.provider.v1.ValidateExternalTokenRequest"> & {
+  /**
+   * @generated from field: string token = 1;
+   */
+  token: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ValidateExternalTokenRequest.
+ * Use `create(ValidateExternalTokenRequestSchema)` to create a new message.
+ */
+export const ValidateExternalTokenRequestSchema: GenMessage<ValidateExternalTokenRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 4);
+
+/**
+ * AuthSessionSettings configures how the host persists authenticated sessions.
+ *
+ * @generated from message gestalt.provider.v1.AuthSessionSettings
+ */
+export type AuthSessionSettings = Message<"gestalt.provider.v1.AuthSessionSettings"> & {
+  /**
+   * @generated from field: int64 session_ttl_seconds = 1;
+   */
+  sessionTtlSeconds: bigint;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AuthSessionSettings.
+ * Use `create(AuthSessionSettingsSchema)` to create a new message.
+ */
+export const AuthSessionSettingsSchema: GenMessage<AuthSessionSettings> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 5);
 
 /**
  * AuthenticationProvider models the shared Gestalt authentication-provider

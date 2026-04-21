@@ -8,7 +8,7 @@ When `gestaltd serve --locked` reports that prepared artifacts are missing or st
 
 The validation error `server.encryptionKey is required` means the config is missing its root deployment secret. Set `server.encryptionKey` to a structured secret ref or other secret-backed value. The encryption key is used for token encryption and derived session material, so the server refuses to start without it.
 
-Set `server.encryptionKey` for every real deployment. Gestalt derives token and session encryption from it regardless of which auth and datastore providers you use.
+Set `server.encryptionKey` for every real deployment. Gestalt derives token and session encryption from it regardless of which authentication and datastore providers you use.
 
 If the `/mcp` endpoint is not mounted, the server found no plugin that exposes tools. At least one plugin must surface MCP-visible operations before `/mcp` becomes available.
 

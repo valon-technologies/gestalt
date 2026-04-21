@@ -12,7 +12,7 @@ the executable artifacts for packaged providers, and optional static assets.
 
 ## What can be released
 
-Gestalt uses the same release system for executable provider packages, auth and datastore component packages, and packaged web UI bundles. Every package is described by a provider manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`.
+Gestalt uses the same release system for executable provider packages, authentication and datastore component packages, and packaged web UI bundles. Every package is described by a provider manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`.
 
 ## Source manifests vs release manifests
 
@@ -120,8 +120,8 @@ packaging.
     }
     ```
 
-    TypeScript auth and datastore providers use `gestalt.provider` objects
-    such as `{ "kind": "auth", "target": "./auth.ts#provider" }`.
+    TypeScript authentication and datastore providers use `gestalt.provider` objects
+    such as `{ "kind": "authentication", "target": "./auth.ts#provider" }`.
   </Tabs.Tab>
 </Tabs>
 
@@ -129,7 +129,7 @@ packaging.
 
 Source manifests may optionally define a `release.build` command. Gestalt runs
 it before source-manifest preparation, which lets web UI packages generate
-static assets and lets provider/auth/datastore packages generate support files
+static assets and lets provider/authentication/datastore packages generate support files
 such as config schemas before packaging.
 
 ```yaml

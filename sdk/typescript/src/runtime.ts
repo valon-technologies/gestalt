@@ -14,15 +14,12 @@ import { connectNodeAdapter } from "@connectrpc/connect-node";
 
 import {
   AuthenticationProvider as AuthenticationProviderService,
-} from "../gen/v1/authentication_pb.ts";
-import {
-  AuthProvider as AuthProviderService,
   AuthSessionSettingsSchema,
   AuthenticatedUserSchema,
   BeginLoginResponseSchema,
   type CompleteLoginRequest as AuthCompleteLoginRequest,
   type ValidateExternalTokenRequest,
-} from "../gen/v1/auth_pb.ts";
+} from "../gen/v1/authentication_pb.ts";
 import {
   Cache as CacheService,
   CacheDeleteManyResponseSchema,
@@ -66,7 +63,6 @@ import { errorMessage, type Request } from "./api.ts";
 import {
   AuthenticationProvider,
   isAuthenticationProvider,
-  isAuthProvider,
   type AuthenticatedUser,
 } from "./auth.ts";
 import { CacheProvider, isCacheProvider } from "./cache.ts";
@@ -165,10 +161,6 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
     registerService(router, provider) {
       router.service(
         AuthenticationProviderService,
-        createAuthenticationService(provider as AuthenticationProvider),
-      );
-      router.service(
-        AuthProviderService,
         createAuthenticationService(provider as AuthenticationProvider),
       );
     },
@@ -624,8 +616,6 @@ export function createAuthenticationService(
     },
   };
 }
-
-export const createAuthService = createAuthenticationService;
 
 /**
  * Adapts a cache provider to the shared protocol service implementation.

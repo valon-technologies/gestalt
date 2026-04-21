@@ -28,8 +28,6 @@ type AuthenticationProvider interface {
 	CompleteLogin(ctx context.Context, req *CompleteLoginRequest) (*AuthenticatedUser, error)
 }
 
-type AuthProvider = AuthenticationProvider
-
 // ExternalTokenValidator is implemented by authentication providers that can
 // validate tokens minted outside the interactive login flow.
 type ExternalTokenValidator interface {

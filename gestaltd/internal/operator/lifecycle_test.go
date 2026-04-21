@@ -2461,7 +2461,7 @@ func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testin
 	const source = "github.com/testowner/gestalt-providers/plugins/auth-only"
 	const version = "0.0.1-alpha.1"
 	pkgPath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
-		Kind:       providermanifestv1.KindAuth,
+		Kind:       providermanifestv1.KindAuthentication,
 		Source:     source,
 		Version:    version,
 		Spec:       &providermanifestv1.Spec{},
@@ -2557,7 +2557,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	authArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth-plugin"))
 	authManifestPath := filepath.Join(dir, "auth-manifest.yaml")
 	authManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindAuth,
+		Kind:    providermanifestv1.KindAuthentication,
 		Source:  "github.com/testowner/plugins/local-auth",
 		Version: "0.0.1-alpha.1",
 		Spec:    &providermanifestv1.Spec{},
@@ -2657,7 +2657,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	authManifestPath := filepath.Join(dir, "auth-manifest.yaml")
 	writeTestSourceFile("auth.go", []byte(testutil.GeneratedAuthPackageSource()), 0o644)
 	authManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindAuth,
+		Kind:    providermanifestv1.KindAuthentication,
 		Source:  "github.com/testowner/plugins/local-source-auth",
 		Version: "0.0.1-alpha.1",
 		Spec:    &providermanifestv1.Spec{},
@@ -3857,8 +3857,8 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if authEntry.Source != "" {
 		t.Fatalf("authentication source = %q, want omitted portable source", authEntry.Source)
 	}
-	if authEntry.Kind != providermanifestv1.KindAuth {
-		t.Fatalf("authentication kind = %q, want %q", authEntry.Kind, providermanifestv1.KindAuth)
+	if authEntry.Kind != providermanifestv1.KindAuthentication {
+		t.Fatalf("authentication kind = %q, want %q", authEntry.Kind, providermanifestv1.KindAuthentication)
 	}
 	if authEntry.Runtime != providerLockRuntimeExecutable {
 		t.Fatalf("authentication runtime = %q, want %q", authEntry.Runtime, providerLockRuntimeExecutable)

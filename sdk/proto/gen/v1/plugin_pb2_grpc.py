@@ -7,7 +7,8 @@ from v1 import plugin_pb2 as v1_dot_plugin__pb2
 
 
 class IntegrationProviderStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """IntegrationProvider models the shared Gestalt integration-provider protocol.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -43,7 +44,8 @@ class IntegrationProviderStub(object):
 
 
 class IntegrationProviderServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """IntegrationProvider models the shared Gestalt integration-provider protocol.
+    """
 
     def GetMetadata(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -112,7 +114,8 @@ def add_IntegrationProviderServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class IntegrationProvider(object):
-    """Missing associated documentation comment in .proto file."""
+    """IntegrationProvider models the shared Gestalt integration-provider protocol.
+    """
 
     @staticmethod
     def GetMetadata(request,
@@ -239,6 +242,78 @@ class IntegrationProvider(object):
             '/gestalt.provider.v1.IntegrationProvider/PostConnect',
             v1_dot_plugin__pb2.PostConnectRequest.SerializeToString,
             v1_dot_plugin__pb2.PostConnectResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+
+class PluginInvokerStub(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.Invoke = channel.unary_unary(
+                '/gestalt.provider.v1.PluginInvoker/Invoke',
+                request_serializer=v1_dot_plugin__pb2.PluginInvokeRequest.SerializeToString,
+                response_deserializer=v1_dot_plugin__pb2.OperationResult.FromString,
+                _registered_method=True)
+
+
+class PluginInvokerServicer(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def Invoke(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_PluginInvokerServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'Invoke': grpc.unary_unary_rpc_method_handler(
+                    servicer.Invoke,
+                    request_deserializer=v1_dot_plugin__pb2.PluginInvokeRequest.FromString,
+                    response_serializer=v1_dot_plugin__pb2.OperationResult.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'gestalt.provider.v1.PluginInvoker', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('gestalt.provider.v1.PluginInvoker', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class PluginInvoker(object):
+    """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def Invoke(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.PluginInvoker/Invoke',
+            v1_dot_plugin__pb2.PluginInvokeRequest.SerializeToString,
+            v1_dot_plugin__pb2.OperationResult.FromString,
             options,
             channel_credentials,
             insecure,

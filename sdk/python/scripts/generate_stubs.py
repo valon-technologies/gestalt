@@ -6,7 +6,6 @@ from pathlib import Path
 
 PROTO_MODULES = (
     "authentication",
-    "auth",
     "cache",
     "datastore",
     "plugin",
@@ -20,8 +19,6 @@ GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX = "from . import "
 
 
 def grpc_pb2_import_module(module_name: str) -> str:
-    if module_name == "authentication":
-        return "auth"
     return module_name
 
 

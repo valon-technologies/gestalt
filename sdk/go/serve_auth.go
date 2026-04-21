@@ -14,12 +14,5 @@ func ServeAuthenticationProvider(ctx context.Context, auth AuthenticationProvide
 		server := newAuthenticationProviderServer(auth)
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindAuthentication, auth))
 		proto.RegisterAuthenticationProviderServer(srv, server)
-		proto.RegisterAuthProviderServer(srv, server)
 	})
-}
-
-// ServeAuthProvider is a deprecated compatibility wrapper for
-// [ServeAuthenticationProvider].
-func ServeAuthProvider(ctx context.Context, auth AuthProvider) error {
-	return ServeAuthenticationProvider(ctx, auth)
 }

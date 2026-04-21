@@ -4,7 +4,7 @@ import grpc
 import warnings
 
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
-from . import auth_pb2 as v1_dot_auth__pb2
+from . import authentication_pb2 as v1_dot_authentication__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
@@ -39,23 +39,23 @@ class AuthenticationProviderStub(object):
         """
         self.BeginLogin = channel.unary_unary(
                 '/gestalt.provider.v1.AuthenticationProvider/BeginLogin',
-                request_serializer=v1_dot_auth__pb2.BeginLoginRequest.SerializeToString,
-                response_deserializer=v1_dot_auth__pb2.BeginLoginResponse.FromString,
+                request_serializer=v1_dot_authentication__pb2.BeginLoginRequest.SerializeToString,
+                response_deserializer=v1_dot_authentication__pb2.BeginLoginResponse.FromString,
                 _registered_method=True)
         self.CompleteLogin = channel.unary_unary(
                 '/gestalt.provider.v1.AuthenticationProvider/CompleteLogin',
-                request_serializer=v1_dot_auth__pb2.CompleteLoginRequest.SerializeToString,
-                response_deserializer=v1_dot_auth__pb2.AuthenticatedUser.FromString,
+                request_serializer=v1_dot_authentication__pb2.CompleteLoginRequest.SerializeToString,
+                response_deserializer=v1_dot_authentication__pb2.AuthenticatedUser.FromString,
                 _registered_method=True)
         self.ValidateExternalToken = channel.unary_unary(
                 '/gestalt.provider.v1.AuthenticationProvider/ValidateExternalToken',
-                request_serializer=v1_dot_auth__pb2.ValidateExternalTokenRequest.SerializeToString,
-                response_deserializer=v1_dot_auth__pb2.AuthenticatedUser.FromString,
+                request_serializer=v1_dot_authentication__pb2.ValidateExternalTokenRequest.SerializeToString,
+                response_deserializer=v1_dot_authentication__pb2.AuthenticatedUser.FromString,
                 _registered_method=True)
         self.GetSessionSettings = channel.unary_unary(
                 '/gestalt.provider.v1.AuthenticationProvider/GetSessionSettings',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-                response_deserializer=v1_dot_auth__pb2.AuthSessionSettings.FromString,
+                response_deserializer=v1_dot_authentication__pb2.AuthSessionSettings.FromString,
                 _registered_method=True)
 
 
@@ -93,23 +93,23 @@ def add_AuthenticationProviderServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'BeginLogin': grpc.unary_unary_rpc_method_handler(
                     servicer.BeginLogin,
-                    request_deserializer=v1_dot_auth__pb2.BeginLoginRequest.FromString,
-                    response_serializer=v1_dot_auth__pb2.BeginLoginResponse.SerializeToString,
+                    request_deserializer=v1_dot_authentication__pb2.BeginLoginRequest.FromString,
+                    response_serializer=v1_dot_authentication__pb2.BeginLoginResponse.SerializeToString,
             ),
             'CompleteLogin': grpc.unary_unary_rpc_method_handler(
                     servicer.CompleteLogin,
-                    request_deserializer=v1_dot_auth__pb2.CompleteLoginRequest.FromString,
-                    response_serializer=v1_dot_auth__pb2.AuthenticatedUser.SerializeToString,
+                    request_deserializer=v1_dot_authentication__pb2.CompleteLoginRequest.FromString,
+                    response_serializer=v1_dot_authentication__pb2.AuthenticatedUser.SerializeToString,
             ),
             'ValidateExternalToken': grpc.unary_unary_rpc_method_handler(
                     servicer.ValidateExternalToken,
-                    request_deserializer=v1_dot_auth__pb2.ValidateExternalTokenRequest.FromString,
-                    response_serializer=v1_dot_auth__pb2.AuthenticatedUser.SerializeToString,
+                    request_deserializer=v1_dot_authentication__pb2.ValidateExternalTokenRequest.FromString,
+                    response_serializer=v1_dot_authentication__pb2.AuthenticatedUser.SerializeToString,
             ),
             'GetSessionSettings': grpc.unary_unary_rpc_method_handler(
                     servicer.GetSessionSettings,
                     request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                    response_serializer=v1_dot_auth__pb2.AuthSessionSettings.SerializeToString,
+                    response_serializer=v1_dot_authentication__pb2.AuthSessionSettings.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -139,8 +139,8 @@ class AuthenticationProvider(object):
             request,
             target,
             '/gestalt.provider.v1.AuthenticationProvider/BeginLogin',
-            v1_dot_auth__pb2.BeginLoginRequest.SerializeToString,
-            v1_dot_auth__pb2.BeginLoginResponse.FromString,
+            v1_dot_authentication__pb2.BeginLoginRequest.SerializeToString,
+            v1_dot_authentication__pb2.BeginLoginResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -166,8 +166,8 @@ class AuthenticationProvider(object):
             request,
             target,
             '/gestalt.provider.v1.AuthenticationProvider/CompleteLogin',
-            v1_dot_auth__pb2.CompleteLoginRequest.SerializeToString,
-            v1_dot_auth__pb2.AuthenticatedUser.FromString,
+            v1_dot_authentication__pb2.CompleteLoginRequest.SerializeToString,
+            v1_dot_authentication__pb2.AuthenticatedUser.FromString,
             options,
             channel_credentials,
             insecure,
@@ -193,8 +193,8 @@ class AuthenticationProvider(object):
             request,
             target,
             '/gestalt.provider.v1.AuthenticationProvider/ValidateExternalToken',
-            v1_dot_auth__pb2.ValidateExternalTokenRequest.SerializeToString,
-            v1_dot_auth__pb2.AuthenticatedUser.FromString,
+            v1_dot_authentication__pb2.ValidateExternalTokenRequest.SerializeToString,
+            v1_dot_authentication__pb2.AuthenticatedUser.FromString,
             options,
             channel_credentials,
             insecure,
@@ -221,7 +221,7 @@ class AuthenticationProvider(object):
             target,
             '/gestalt.provider.v1.AuthenticationProvider/GetSessionSettings',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            v1_dot_auth__pb2.AuthSessionSettings.FromString,
+            v1_dot_authentication__pb2.AuthSessionSettings.FromString,
             options,
             channel_credentials,
             insecure,

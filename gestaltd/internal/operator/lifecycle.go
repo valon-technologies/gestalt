@@ -957,7 +957,7 @@ func inspectPreparedInstall(destDir string) (*preparedInstall, error) {
 func providerManifestKind(kind config.HostProviderKind) string {
 	switch kind {
 	case config.HostProviderKindAuthentication:
-		return providermanifestv1.KindAuth
+		return providermanifestv1.KindAuthentication
 	case config.HostProviderKindAuthorization:
 		return providermanifestv1.KindAuthorization
 	case config.HostProviderKindSecrets:
@@ -1290,7 +1290,7 @@ func lockEntryDestDir(paths initPaths, kind, name string) string {
 	switch kind {
 	case providermanifestv1.KindPlugin:
 		return providerDestDir(paths, name)
-	case providermanifestv1.KindAuth:
+	case providermanifestv1.KindAuthentication:
 		return authDestDir(paths, name)
 	case providermanifestv1.KindAuthorization:
 		return authorizationDestDir(paths, name)

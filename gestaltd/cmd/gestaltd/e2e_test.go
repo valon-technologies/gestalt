@@ -610,11 +610,11 @@ func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactPath), err)
 	}
-	if _, err := providerpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, providermanifestv1.KindAuth, runtime.GOOS, runtime.GOARCH); err != nil {
+	if _, err := providerpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, providermanifestv1.KindAuthentication, runtime.GOOS, runtime.GOARCH); err != nil {
 		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
 	}
 	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindAuth,
+		Kind:        providermanifestv1.KindAuthentication,
 		Source:      "github.com/test/providers/auth/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Test Auth " + name,
@@ -690,8 +690,8 @@ func authIndexedDBConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
 `, datastoreName)
 	if authName != "" {
 		authManifestPath := componentProviderManifestPath(t, setupAuthProviderDir(t, dir, authName))
-		serverProvidersBlock += fmt.Sprintf("    auth: %s\n", authName)
-		authBlock = fmt.Sprintf(`  auth:
+		serverProvidersBlock += fmt.Sprintf("    authentication: %s\n", authName)
+		authBlock = fmt.Sprintf(`  authentication:
     %s:
       source:
         path: %s
@@ -1818,10 +1818,10 @@ plugins:
 `, port, filepath.ToSlash(indexedDBRel), filepath.ToSlash(pluginRel))
 	overrideCfg := fmt.Sprintf(`server:
   providers:
-    auth: local
+    authentication: local
   artifactsDir: ../artifacts/local
 providers:
-  auth:
+  authentication:
     local:
       source:
         path: %s

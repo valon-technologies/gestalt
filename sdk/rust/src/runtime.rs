@@ -22,8 +22,6 @@ use crate::env::{
 };
 use crate::error::{Error, Result};
 #[cfg(unix)]
-use crate::generated::v1::auth_provider_server::AuthProviderServer;
-#[cfg(unix)]
 use crate::generated::v1::authentication_provider_server::AuthenticationProviderServer;
 #[cfg(unix)]
 use crate::generated::v1::cache_server::CacheServer;
@@ -68,11 +66,6 @@ pub fn run_provider<P: Provider>(provider: Arc<P>, router: Router<P>) -> Result<
 /// Runs an authentication provider on the Unix socket exposed by `gestaltd`.
 pub fn run_authentication_provider<P: AuthenticationProvider>(provider: Arc<P>) -> Result<()> {
     build_runtime_and_block_on(|| serve_authentication_provider(provider))
-}
-
-/// Runs an authentication provider on the Unix socket exposed by `gestaltd`.
-pub fn run_auth_provider<P: AuthenticationProvider>(provider: Arc<P>) -> Result<()> {
-    run_authentication_provider(provider)
 }
 
 /// Runs a cache provider on the Unix socket exposed by `gestaltd`.
@@ -156,8 +149,7 @@ where
                 .add_service(ProviderLifecycleServer::new(
                     RuntimeServer::for_authentication(Arc::clone(&provider)),
                 ))
-                .add_service(AuthenticationProviderServer::new(auth_server.clone()))
-                .add_service(AuthProviderServer::new(auth_server))
+                .add_service(AuthenticationProviderServer::new(auth_server))
                 .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
         },
         |provider| async move { provider.close().await },
@@ -165,27 +157,8 @@ where
     .await
 }
 
-#[cfg(unix)]
-/// Serves an authentication provider over the configured Unix socket.
-pub async fn serve_auth_provider<P>(provider: Arc<P>) -> Result<()>
-where
-    P: AuthenticationProvider,
-{
-    serve_authentication_provider(provider).await
-}
-
 #[cfg(not(unix))]
 pub async fn serve_authentication_provider<P>(_provider: Arc<P>) -> Result<()>
-where
-    P: AuthenticationProvider,
-{
-    Err(Error::internal(
-        "unix sockets are unsupported on this platform",
-    ))
-}
-
-#[cfg(not(unix))]
-pub async fn serve_auth_provider<P>(_provider: Arc<P>) -> Result<()>
 where
     P: AuthenticationProvider,
 {

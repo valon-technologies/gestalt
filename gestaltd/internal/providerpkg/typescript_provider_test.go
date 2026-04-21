@@ -225,7 +225,7 @@ func TestDetectTypeScriptComponentTarget(t *testing.T) {
 	}{
 		{
 			name:   "auth",
-			kind:   providermanifestv1.KindAuth,
+			kind:   providermanifestv1.KindAuthentication,
 			target: typeScriptTestAuthTarget,
 		},
 		{
@@ -267,7 +267,7 @@ func TestDetectTypeScriptComponentTarget_InvalidTarget(t *testing.T) {
 		typeScriptProviderKey: "auth:auth.ts",
 	})
 
-	_, err := DetectTypeScriptComponentTarget(root, providermanifestv1.KindAuth)
+	_, err := DetectTypeScriptComponentTarget(root, providermanifestv1.KindAuthentication)
 	if err == nil {
 		t.Fatal("expected invalid TypeScript auth target error")
 	}
@@ -280,9 +280,9 @@ func TestHasSourceComponentPackage_TypeScript(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	mustWriteTypeScriptComponentPackage(t, root, providermanifestv1.KindAuth, typeScriptTestAuthTarget)
+	mustWriteTypeScriptComponentPackage(t, root, providermanifestv1.KindAuthentication, typeScriptTestAuthTarget)
 
-	ok, err := HasSourceComponentPackage(root, providermanifestv1.KindAuth)
+	ok, err := HasSourceComponentPackage(root, providermanifestv1.KindAuthentication)
 	if err != nil {
 		t.Fatalf("HasSourceComponentPackage(auth): %v", err)
 	}
@@ -365,7 +365,7 @@ func TestSourceComponentExecutionCommand_TypeScript(t *testing.T) {
 	}{
 		{
 			name:   "auth",
-			kind:   providermanifestv1.KindAuth,
+			kind:   providermanifestv1.KindAuthentication,
 			target: typeScriptTestAuthTarget,
 		},
 		{
@@ -454,7 +454,7 @@ func TestValidateSourceComponentRelease_TypeScript(t *testing.T) {
 	}{
 		{
 			name:   "auth",
-			kind:   providermanifestv1.KindAuth,
+			kind:   providermanifestv1.KindAuthentication,
 			target: typeScriptTestAuthTarget,
 		},
 		{
@@ -521,7 +521,7 @@ func TestBuildSourceComponentReleaseBinary_TypeScript(t *testing.T) {
 	}{
 		{
 			name:       "auth",
-			kind:       providermanifestv1.KindAuth,
+			kind:       providermanifestv1.KindAuthentication,
 			target:     typeScriptTestAuthTarget,
 			pluginName: "ts-auth-release",
 		},

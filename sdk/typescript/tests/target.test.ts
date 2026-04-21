@@ -44,7 +44,7 @@ test("provider target parsing supports plugin defaults and kind prefixes", () =>
     modulePath: "./provider.ts",
     exportName: "plugin",
   });
-  expect(parseProviderTarget("auth:./auth.ts#provider")).toEqual({
+  expect(parseProviderTarget("authentication:./auth.ts#provider")).toEqual({
     kind: "authentication",
     modulePath: "./auth.ts",
     exportName: "provider",
@@ -56,6 +56,9 @@ test("provider target parsing supports plugin defaults and kind prefixes", () =>
   });
   expect(() => parseProviderTarget("integration:./provider.ts#plugin")).toThrow(
     'unsupported provider kind "integration"',
+  );
+  expect(() => parseProviderTarget("auth:./auth.ts#provider")).toThrow(
+    'unsupported provider kind "auth"',
   );
   expect(parseProviderTarget("workflow:./workflow.ts#provider")).toEqual({
     kind: "workflow",

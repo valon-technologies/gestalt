@@ -7,7 +7,6 @@ const PROTO_FILES: &[&str] = &[
     "authentication.proto",
     "plugin.proto",
     "runtime.proto",
-    "auth.proto",
     "cache.proto",
     "secrets.proto",
     "datastore.proto",

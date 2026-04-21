@@ -11,7 +11,7 @@ import {
   BeginLoginRequestSchema,
   CompleteLoginRequestSchema,
   ValidateExternalTokenRequestSchema,
-} from "../gen/v1/auth_pb.ts";
+} from "../gen/v1/authentication_pb.ts";
 import {
   CacheDeleteManyRequestSchema,
   CacheDeleteRequestSchema,
@@ -208,7 +208,7 @@ test("loadProviderFromTarget formats package target in errors when explicit targ
         name: "broken-provider",
         gestalt: {
           provider: {
-            kind: "auth",
+            kind: "authentication",
             target: "./provider.ts#missing",
           },
         },

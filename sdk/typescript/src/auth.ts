@@ -49,8 +49,6 @@ export interface AuthenticationSessionSettings {
   sessionTtlSeconds: number | bigint;
 }
 
-export type AuthSessionSettings = AuthenticationSessionSettings
-
 /**
  * Runtime hooks required to implement a Gestalt authentication provider.
  */
@@ -66,8 +64,6 @@ export interface AuthenticationProviderOptions extends RuntimeProviderOptions {
   ) => MaybePromise<AuthenticatedUser | null | undefined>;
   sessionSettings?: () => MaybePromise<AuthenticationSessionSettings>;
 }
-
-export type AuthProviderOptions = AuthenticationProviderOptions
 
 /**
  * Authentication provider implementation consumed by the Gestalt runtime.
@@ -108,7 +104,7 @@ export class AuthenticationProvider extends RuntimeProvider {
     return this.sessionSettingsHandler !== undefined;
   }
 
-  async sessionSettings(): Promise<AuthSessionSettings | undefined> {
+  async sessionSettings(): Promise<AuthenticationSessionSettings | undefined> {
     return await this.sessionSettingsHandler?.();
   }
 }
@@ -151,14 +147,8 @@ export function isAuthenticationProvider(
     (typeof value === "object" &&
       value !== null &&
       "kind" in value &&
-      ["authentication", "auth"].includes(
-        String((value as { kind?: unknown }).kind ?? ""),
-      ) &&
+      String((value as { kind?: unknown }).kind ?? "") === "authentication" &&
       "beginLogin" in value &&
       "completeLogin" in value)
   );
 }
-
-export const defineAuthProvider = defineAuthenticationProvider;
-export const isAuthProvider = isAuthenticationProvider;
-export { AuthenticationProvider as AuthProvider };

@@ -14,8 +14,6 @@ import (
 const (
 	KindPlugin         = "plugin"
 	KindAuthentication = "authentication"
-	KindAuth           = KindAuthentication
-	LegacyKindAuth     = "auth"
 	KindAuthorization  = "authorization"
 	KindIndexedDB      = "indexeddb"
 	KindCache          = "cache"
@@ -27,7 +25,7 @@ const (
 
 func NormalizeKind(kind string) string {
 	switch strings.TrimSpace(strings.ToLower(kind)) {
-	case KindAuthentication, LegacyKindAuth:
+	case KindAuthentication:
 		return KindAuthentication
 	case KindPlugin:
 		return KindPlugin

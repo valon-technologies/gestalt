@@ -11,8 +11,6 @@ type AuthenticationProvider interface {
 	ValidateToken(ctx context.Context, token string) (*UserIdentity, error)
 }
 
-type AuthProvider = AuthenticationProvider
-
 // LoginURLContextProvider is an optional extension that lets authentication
 // providers participate in request-scoped cancellation and tracing during login
 // start.

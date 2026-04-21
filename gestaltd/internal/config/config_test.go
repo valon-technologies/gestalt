@@ -279,18 +279,18 @@ plugins:
 	}
 }
 
-func TestLoadConfigAcceptsAuthenticationAliases(t *testing.T) {
+func TestLoadConfigAcceptsAuthenticationConfig(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
 apiVersion: gestaltd.config/v3
 server:
   providers:
-    auth: local
+    authentication: local
     indexeddb: sqlite
   encryptionKey: server-key
 providers:
-  auth:
+  authentication:
     local:
       source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
   indexeddb:
@@ -316,7 +316,7 @@ providers:
 	}
 }
 
-func TestLoadConfigRejectsConflictingAuthenticationProviderKeys(t *testing.T) {
+func TestLoadConfigRejectsLegacyAuthenticationProviderKey(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
@@ -334,12 +334,12 @@ providers:
 `)
 
 	_, err := Load(path)
-	if err == nil || !strings.Contains(err.Error(), "providers.authentication and providers.auth cannot both be set") {
-		t.Fatalf("Load error = %v, want providers.authentication/providers.auth conflict", err)
+	if err == nil || !strings.Contains(err.Error(), "field auth not found") {
+		t.Fatalf("Load error = %v, want unknown legacy providers.auth field", err)
 	}
 }
 
-func TestLoadConfigRejectsConflictingServerAuthenticationSelectorKeys(t *testing.T) {
+func TestLoadConfigRejectsLegacyServerAuthenticationSelectorKey(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
@@ -359,8 +359,8 @@ providers:
 `)
 
 	_, err := Load(path)
-	if err == nil || !strings.Contains(err.Error(), "server.providers.authentication and server.providers.auth cannot both be set") {
-		t.Fatalf("Load error = %v, want server.providers.authentication/server.providers.auth conflict", err)
+	if err == nil || !strings.Contains(err.Error(), "field auth not found") {
+		t.Fatalf("Load error = %v, want unknown legacy server.providers.auth field", err)
 	}
 }
 
@@ -1194,9 +1194,9 @@ plugins:
 apiVersion: gestaltd.config/v3
 server:
   providers:
-    auth: corporate
+    authentication: corporate
 providers:
-  auth:
+  authentication:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
 plugins:
@@ -1273,9 +1273,9 @@ plugins:
 apiVersion: gestaltd.config/v3
 server:
   providers:
-    auth: corporate
+    authentication: corporate
 providers:
-  auth:
+  authentication:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
 plugins:
@@ -3243,9 +3243,9 @@ plugins:
 apiVersion: gestaltd.config/v3
 server:
   providers:
-    auth: corporate
+    authentication: corporate
 providers:
-  auth:
+  authentication:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
 plugins:
@@ -3273,7 +3273,7 @@ plugins:
 			yaml: `
 apiVersion: gestaltd.config/v3
 providers:
-  auth:
+  authentication:
     primary:
       source:
         url: https://example.com/providers/test-auth/provider-release.yaml
@@ -3589,9 +3589,9 @@ plugins:
 apiVersion: gestaltd.config/v3
 server:
   providers:
-    auth: corporate
+    authentication: corporate
 providers:
-  auth:
+  authentication:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
 plugins:
@@ -3665,9 +3665,9 @@ plugins:
 apiVersion: gestaltd.config/v3
 server:
   providers:
-    auth: corporate
+    authentication: corporate
 providers:
-  auth:
+  authentication:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
 plugins:

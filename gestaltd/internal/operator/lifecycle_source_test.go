@@ -1983,7 +1983,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	binaryContent := "fake-auth-binary"
 	bootstrapManifestPath := writeBootstrapSecretsManifest(t, dir, "github.com/acme/tools/bootstrap-secrets", "0.1.0")
 
-	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, providermanifestv1.KindAuth, "auth-plugin", binaryContent)
+	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, providermanifestv1.KindAuthentication, "auth-plugin", binaryContent)
 	archiveData, err := os.ReadFile(archivePath)
 	if err != nil {
 		t.Fatalf("read archive: %v", err)
@@ -2007,7 +2007,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       source,
-				Kind:          providermanifestv1.KindAuth,
+				Kind:          providermanifestv1.KindAuthentication,
 				Version:       version,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -2155,7 +2155,7 @@ func TestSourceAuthPluginInitAllowsMissingEnvPlaceholderInNonStringField(t *test
 	portEnv := "GESTALT_TEST_PORT_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
 	bootstrapManifestPath := writeBootstrapSecretsManifest(t, dir, "github.com/acme/tools/bootstrap-secrets", "0.1.0")
 
-	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, providermanifestv1.KindAuth, "auth-plugin", "fake-auth-binary")
+	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, providermanifestv1.KindAuthentication, "auth-plugin", "fake-auth-binary")
 	archiveData, err := os.ReadFile(archivePath)
 	if err != nil {
 		t.Fatalf("read archive: %v", err)
@@ -2178,7 +2178,7 @@ func TestSourceAuthPluginInitAllowsMissingEnvPlaceholderInNonStringField(t *test
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       source,
-				Kind:          providermanifestv1.KindAuth,
+				Kind:          providermanifestv1.KindAuthentication,
 				Version:       version,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -2727,7 +2727,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 		"auth-src",
 		authSource,
 		authVersion,
-		providermanifestv1.KindAuth,
+		providermanifestv1.KindAuthentication,
 		"auth-plugin",
 		"fake-auth-binary",
 	)
@@ -2798,7 +2798,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       authSource,
-				Kind:          providermanifestv1.KindAuth,
+				Kind:          providermanifestv1.KindAuthentication,
 				Version:       authVersion,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -2992,7 +2992,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataInitPreparesOnce(t *tes
 		"auth-metadata-src",
 		authSource,
 		authVersion,
-		providermanifestv1.KindAuth,
+		providermanifestv1.KindAuthentication,
 		"auth-plugin",
 		"fake-auth-binary",
 	)
@@ -3030,7 +3030,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataInitPreparesOnce(t *tes
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       authSource,
-				Kind:          providermanifestv1.KindAuth,
+				Kind:          providermanifestv1.KindAuthentication,
 				Version:       authVersion,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{

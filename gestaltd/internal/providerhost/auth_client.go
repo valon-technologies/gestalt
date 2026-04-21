@@ -38,21 +38,18 @@ type AuthenticationExecConfig struct {
 	SessionKey   []byte
 }
 
-type AuthExecConfig = AuthenticationExecConfig
-
 const defaultSessionTokenTTL = 24 * time.Hour
 
 type remoteAuthenticationProvider struct {
-	runtime      proto.ProviderLifecycleClient
-	client       authenticationRPCClient
-	legacyClient authenticationRPCClient
-	name         string
-	displayName  string
-	description  string
-	callbackURL  string
-	sessionTTL   time.Duration
-	sessionKey   []byte
-	closer       io.Closer
+	runtime     proto.ProviderLifecycleClient
+	client      authenticationRPCClient
+	name        string
+	displayName string
+	description string
+	callbackURL string
+	sessionTTL  time.Duration
+	sessionKey  []byte
+	closer      io.Closer
 }
 
 func NewExecutableAuthenticationProvider(ctx context.Context, cfg AuthenticationExecConfig) (core.AuthenticationProvider, error) {
@@ -71,8 +68,7 @@ func NewExecutableAuthenticationProvider(ctx context.Context, cfg Authentication
 
 	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
 	client := proto.NewAuthenticationProviderClient(proc.conn)
-	legacyClient := proto.NewAuthProviderClient(proc.conn)
-	provider, err := newRemoteAuthenticationProvider(ctx, runtimeClient, client, legacyClient, cfg)
+	provider, err := newRemoteAuthenticationProvider(ctx, runtimeClient, client, cfg)
 	if err != nil {
 		_ = proc.Close()
 		return nil, err
@@ -81,19 +77,14 @@ func NewExecutableAuthenticationProvider(ctx context.Context, cfg Authentication
 	return provider, nil
 }
 
-func NewExecutableAuthProvider(ctx context.Context, cfg AuthExecConfig) (core.AuthenticationProvider, error) {
-	return NewExecutableAuthenticationProvider(ctx, cfg)
-}
-
-func newRemoteAuthenticationProvider(ctx context.Context, runtimeClient proto.ProviderLifecycleClient, client authenticationRPCClient, legacyClient authenticationRPCClient, cfg AuthenticationExecConfig) (*remoteAuthenticationProvider, error) {
+func newRemoteAuthenticationProvider(ctx context.Context, runtimeClient proto.ProviderLifecycleClient, client authenticationRPCClient, cfg AuthenticationExecConfig) (*remoteAuthenticationProvider, error) {
 	provider := &remoteAuthenticationProvider{
-		runtime:      runtimeClient,
-		client:       client,
-		legacyClient: legacyClient,
-		name:         cfg.Name,
-		callbackURL:  cfg.CallbackURL,
-		sessionKey:   append([]byte(nil), cfg.SessionKey...),
-		sessionTTL:   defaultSessionTokenTTL,
+		runtime:     runtimeClient,
+		client:      client,
+		name:        cfg.Name,
+		callbackURL: cfg.CallbackURL,
+		sessionKey:  append([]byte(nil), cfg.SessionKey...),
+		sessionTTL:  defaultSessionTokenTTL,
 	}
 	if err := provider.configure(ctx, cfg.Name, cfg.Config); err != nil {
 		return nil, err
@@ -117,7 +108,7 @@ func (p *remoteAuthenticationProvider) configure(ctx context.Context, name strin
 		p.displayName = meta.DisplayName
 		p.description = meta.Description
 	}
-	if ttl := getAuthenticationSessionTTL(ctx, p.client, p.legacyClient); ttl > 0 {
+	if ttl := getAuthenticationSessionTTL(ctx, p.client); ttl > 0 {
 		p.sessionTTL = ttl
 	}
 	return nil
@@ -150,11 +141,9 @@ func (p *remoteAuthenticationProvider) LoginURLContext(ctx context.Context, stat
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
-	resp, err := callAuthenticationClient(ctx, p.client, p.legacyClient, func(client authenticationRPCClient) (*proto.BeginLoginResponse, error) {
-		return client.BeginLogin(ctx, &proto.BeginLoginRequest{
-			CallbackUrl: p.callbackURL,
-			HostState:   state,
-		})
+	resp, err := p.client.BeginLogin(ctx, &proto.BeginLoginRequest{
+		CallbackUrl: p.callbackURL,
+		HostState:   state,
 	})
 	if err != nil {
 		return "", fmt.Errorf("begin login: %w", err)
@@ -211,12 +200,10 @@ func (p *remoteAuthenticationProvider) HandleCallbackRequest(ctx context.Context
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
-	resp, err := callAuthenticationClient(ctx, p.client, p.legacyClient, func(client authenticationRPCClient) (*proto.AuthenticatedUser, error) {
-		return client.CompleteLogin(ctx, &proto.CompleteLoginRequest{
-			Query:         firstQueryValues(normalizedQuery),
-			ProviderState: append([]byte(nil), providerState...),
-			CallbackUrl:   p.callbackURL,
-		})
+	resp, err := p.client.CompleteLogin(ctx, &proto.CompleteLoginRequest{
+		Query:         firstQueryValues(normalizedQuery),
+		ProviderState: append([]byte(nil), providerState...),
+		CallbackUrl:   p.callbackURL,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("complete login: %w", err)
@@ -237,9 +224,7 @@ func (p *remoteAuthenticationProvider) ValidateToken(ctx context.Context, token 
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
-	user, err := callAuthenticationClient(ctx, p.client, p.legacyClient, func(client authenticationRPCClient) (*proto.AuthenticatedUser, error) {
-		return client.ValidateExternalToken(ctx, &proto.ValidateExternalTokenRequest{Token: token})
-	})
+	user, err := p.client.ValidateExternalToken(ctx, &proto.ValidateExternalTokenRequest{Token: token})
 	if err != nil {
 		if status.Code(err) == codes.Unimplemented {
 			if jwtErr != nil && jwtErr != session.ErrNotJWT {
@@ -270,16 +255,14 @@ func (p *remoteAuthenticationProvider) validateSessionToken(token string) (*core
 	return session.ValidateToken(token, p.sessionKey)
 }
 
-func getAuthenticationSessionTTL(ctx context.Context, client authenticationRPCClient, legacyClient authenticationRPCClient) time.Duration {
+func getAuthenticationSessionTTL(ctx context.Context, client authenticationRPCClient) time.Duration {
 	if client == nil {
 		return 0
 	}
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
-	resp, err := callAuthenticationClient(ctx, client, legacyClient, func(client authenticationRPCClient) (*proto.AuthSessionSettings, error) {
-		return client.GetSessionSettings(ctx, &emptypb.Empty{})
-	})
+	resp, err := client.GetSessionSettings(ctx, &emptypb.Empty{})
 	if err != nil {
 		if status.Code(err) == codes.Unimplemented {
 			return 0
@@ -290,14 +273,6 @@ func getAuthenticationSessionTTL(ctx context.Context, client authenticationRPCCl
 		return 0
 	}
 	return time.Duration(resp.GetSessionTtlSeconds()) * time.Second
-}
-
-func callAuthenticationClient[T any](ctx context.Context, client authenticationRPCClient, legacyClient authenticationRPCClient, fn func(authenticationRPCClient) (T, error)) (T, error) {
-	result, err := fn(client)
-	if err == nil || status.Code(err) != codes.Unimplemented || legacyClient == nil {
-		return result, err
-	}
-	return fn(legacyClient)
 }
 
 func authenticatedUserFromProto(user *proto.AuthenticatedUser) *core.UserIdentity {

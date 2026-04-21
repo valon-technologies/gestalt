@@ -61,7 +61,6 @@ from ._plugin import Plugin, operation, session_catalog
 from ._providers import (
     AuthenticatedUser,
     AuthenticationProvider,
-    AuthProvider,
     BeginLoginRequest,
     BeginLoginResponse,
     CacheProvider,
@@ -109,7 +108,6 @@ from ._workflow import (
 __all__ = [
     "AlreadyExistsError",
     "AuthenticationProvider",
-    "AuthProvider",
     "AuthenticatedUser",
     "Cache",
     "CacheEntry",

@@ -40,8 +40,7 @@ from ._providers import (
     WorkflowProvider,
 )
 from ._serialization import json_body
-from .gen.v1 import auth_pb2 as _auth_pb2
-from .gen.v1 import auth_pb2_grpc as _auth_pb2_grpc
+from .gen.v1 import authentication_pb2 as _authentication_pb2
 from .gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
 from .gen.v1 import cache_pb2 as _cache_pb2
 from .gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
@@ -61,8 +60,7 @@ plugin_pb2: Any = _plugin_pb2
 plugin_pb2_grpc: Any = _plugin_pb2_grpc
 runtime_pb2: Any = _runtime_pb2
 runtime_pb2_grpc: Any = _runtime_pb2_grpc
-auth_pb2: Any = _auth_pb2
-auth_pb2_grpc: Any = _auth_pb2_grpc
+authentication_pb2: Any = _authentication_pb2
 cache_pb2: Any = _cache_pb2
 cache_pb2_grpc: Any = _cache_pb2_grpc
 s3_pb2_grpc: Any = _s3_pb2_grpc
@@ -339,14 +337,6 @@ def _register_authentication_services(server: Any, provider: PluginProvider) -> 
         _authentication_servicer(provider=provider),
         server,
     )
-    auth_pb2_grpc.add_AuthProviderServicer_to_server(
-        _authentication_servicer(provider=provider),
-        server,
-    )
-
-
-_auth_runtime_plugin = _authentication_runtime_plugin
-_register_auth_services = _register_authentication_services
 
 
 def _s3_runtime_plugin(provider: S3Provider) -> PluginProviderAdapter:
@@ -537,10 +527,7 @@ def _runtime_servicer(*, provider: PluginProvider, kind: ProviderKind) -> Any:
 def _authentication_servicer(*, provider: PluginProvider) -> Any:
     auth_provider = cast(AuthenticationProvider, provider)
 
-    class AuthenticationServicer(
-        _authentication_pb2_grpc.AuthenticationProviderServicer,
-        auth_pb2_grpc.AuthProviderServicer,
-    ):
+    class AuthenticationServicer(_authentication_pb2_grpc.AuthenticationProviderServicer):
         @_grpc_handler("begin login")
         def BeginLogin(self, request: Any, context: Any) -> Any:
             response = auth_provider.begin_login(request)
@@ -592,12 +579,9 @@ def _authentication_servicer(*, provider: PluginProvider) -> Any:
             seconds = int(ttl.total_seconds())
             if seconds < 0:
                 seconds = 0
-            return auth_pb2.AuthSessionSettings(session_ttl_seconds=seconds)
+            return authentication_pb2.AuthSessionSettings(session_ttl_seconds=seconds)
 
     return AuthenticationServicer()
-
-
-_auth_servicer = _authentication_servicer
 
 
 def _secrets_servicer(*, provider: PluginProvider) -> Any:

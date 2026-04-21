@@ -36,7 +36,7 @@ func TestDetectSourceComponent_WorkspaceCargoManifestIsMiss(t *testing.T) {
 	root := t.TempDir()
 	writeRustWorkspaceCargoToml(t, root)
 
-	_, _, err := detectSourceComponent(root, providermanifestv1.KindAuth, runtime.GOOS, runtime.GOARCH)
+	_, _, err := detectSourceComponent(root, providermanifestv1.KindAuthentication, runtime.GOOS, runtime.GOARCH)
 	if !errors.Is(err, ErrNoSourceComponentPackage) {
 		t.Fatalf("error = %v, want %v", err, ErrNoSourceComponentPackage)
 	}

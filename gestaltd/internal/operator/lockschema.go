@@ -157,7 +157,7 @@ func mergePortableLockEntries(primary, legacy map[string]portableLockEntry) map[
 func providerLockKinds() []string {
 	return []string{
 		providermanifestv1.KindPlugin,
-		providermanifestv1.KindAuth,
+		providermanifestv1.KindAuthentication,
 		providermanifestv1.KindAuthorization,
 		providermanifestv1.KindIndexedDB,
 		providermanifestv1.KindCache,
@@ -177,7 +177,7 @@ func lockEntriesForProviderKind(lock *Lockfile, kind string) map[string]LockEntr
 	switch kind {
 	case providermanifestv1.KindPlugin:
 		return lock.Providers
-	case providermanifestv1.KindAuth:
+	case providermanifestv1.KindAuthentication:
 		return lock.Authentication
 	case providermanifestv1.KindAuthorization:
 		return lock.Authorization
@@ -210,7 +210,7 @@ func providerLockfileFromLockfile(lock *Lockfile) *providerLockfile {
 		Revision:      providerLockRevision,
 		Providers: providerLockBuckets{
 			Plugin:         portableEntriesFromLockEntries(lock.Providers, providermanifestv1.KindPlugin),
-			Authentication: portableEntriesFromLockEntries(lock.Authentication, providermanifestv1.KindAuth),
+			Authentication: portableEntriesFromLockEntries(lock.Authentication, providermanifestv1.KindAuthentication),
 			Authorization:  portableEntriesFromLockEntries(lock.Authorization, providermanifestv1.KindAuthorization),
 			IndexedDB:      portableEntriesFromLockEntries(lock.IndexedDBs, providermanifestv1.KindIndexedDB),
 			Cache:          portableEntriesFromLockEntries(lock.Caches, providermanifestv1.KindCache),

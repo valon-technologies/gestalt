@@ -7,8 +7,10 @@ import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { expect, test } from "bun:test";
 
-import { BeginLoginRequestSchema } from "../gen/v1/auth_pb.ts";
-import { AuthenticationProvider as AuthenticationProviderService } from "../gen/v1/authentication_pb.ts";
+import {
+  AuthenticationProvider as AuthenticationProviderService,
+  BeginLoginRequestSchema,
+} from "../gen/v1/authentication_pb.ts";
 import { Cache as CacheService } from "../gen/v1/cache_pb.ts";
 import {
   AccessContextSchema,

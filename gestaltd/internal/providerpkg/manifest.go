@@ -78,7 +78,6 @@ func decodeManifest(data []byte, format string, sourceMode bool) (*providermanif
 var validManifestKinds = map[string]bool{
 	providermanifestv1.KindPlugin:         true,
 	providermanifestv1.KindAuthentication: true,
-	providermanifestv1.LegacyKindAuth:     true,
 	providermanifestv1.KindAuthorization:  true,
 	providermanifestv1.KindIndexedDB:      true,
 	providermanifestv1.KindCache:          true,

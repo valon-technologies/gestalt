@@ -198,14 +198,14 @@ The manifest is the source of truth for display name, description, the connectio
     }
     ```
 
-    A string `gestalt.provider` target defaults to a plugin provider. For auth
+    A string `gestalt.provider` target defaults to a plugin provider. For authentication
     or datastore providers, use an object with an explicit kind:
 
     ```json
     {
       "gestalt": {
         "provider": {
-          "kind": "auth",
+          "kind": "authentication",
           "target": "./auth.ts#provider"
         }
       }
@@ -379,7 +379,7 @@ The following example defines a `conversations.getMessage` operation that fetche
     The `package.json` field `gestalt.provider` points Gestalt at the provider
     module and optional export. Use a string target such as
     `./provider.ts#plugin` for plugin providers, or an object with `kind` and
-    `target` for auth and datastore providers.
+    `target` for authentication and datastore providers.
   </Tabs.Tab>
 </Tabs>
 

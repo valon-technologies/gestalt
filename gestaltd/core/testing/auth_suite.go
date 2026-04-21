@@ -86,7 +86,3 @@ func RunAuthenticationProviderTests(t *testing.T, newProvider func(t *testing.T,
 		}
 	})
 }
-
-func RunAuthProviderTests(t *testing.T, newProvider func(t *testing.T, mockURL string) core.AuthenticationProvider, mockServer *httptest.Server) {
-	RunAuthenticationProviderTests(t, newProvider, mockServer)
-}

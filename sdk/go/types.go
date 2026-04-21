@@ -16,9 +16,6 @@ const (
 	// ProviderKindAuthentication serves interactive login and token-validation
 	// flows.
 	ProviderKindAuthentication ProviderKind = "authentication"
-	// ProviderKindAuth is a deprecated compatibility alias for
-	// ProviderKindAuthentication.
-	ProviderKindAuth ProviderKind = ProviderKindAuthentication
 	// ProviderKindAuthorization serves authorization decision and control-plane flows.
 	ProviderKindAuthorization ProviderKind = "authorization"
 	// ProviderKindIndexedDB serves the IndexedDB-style datastore surface.

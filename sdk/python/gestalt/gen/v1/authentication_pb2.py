@@ -23,10 +23,9 @@ _sym_db = _symbol_database.Default()
 
 
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
-from v1 import auth_pb2 as v1_dot_auth__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17v1/authentication.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\rv1/auth.proto2\xa7\x03\n\x16\x41uthenticationProvider\x12]\n\nBeginLogin\x12&.gestalt.provider.v1.BeginLoginRequest\x1a\'.gestalt.provider.v1.BeginLoginResponse\x12\x62\n\rCompleteLogin\x12).gestalt.provider.v1.CompleteLoginRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\x12r\n\x15ValidateExternalToken\x12\x31.gestalt.provider.v1.ValidateExternalTokenRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\x12V\n\x12GetSessionSettings\x12\x16.google.protobuf.Empty\x1a(.gestalt.provider.v1.AuthSessionSettingsB;Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;protob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17v1/authentication.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\"\xb3\x02\n\x11\x41uthenticatedUser\x12\x18\n\x07subject\x18\x01 \x01(\tR\x07subject\x12\x14\n\x05\x65mail\x18\x02 \x01(\tR\x05\x65mail\x12%\n\x0e\x65mail_verified\x18\x03 \x01(\x08R\remailVerified\x12!\n\x0c\x64isplay_name\x18\x04 \x01(\tR\x0b\x64isplayName\x12\x1d\n\navatar_url\x18\x05 \x01(\tR\tavatarUrl\x12J\n\x06\x63laims\x18\x06 \x03(\x0b\x32\x32.gestalt.provider.v1.AuthenticatedUser.ClaimsEntryR\x06\x63laims\x1a\x39\n\x0b\x43laimsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\"\xf8\x01\n\x11\x42\x65ginLoginRequest\x12!\n\x0c\x63\x61llback_url\x18\x01 \x01(\tR\x0b\x63\x61llbackUrl\x12\x1d\n\nhost_state\x18\x02 \x01(\tR\thostState\x12\x16\n\x06scopes\x18\x03 \x03(\tR\x06scopes\x12M\n\x07options\x18\x04 \x03(\x0b\x32\x33.gestalt.provider.v1.BeginLoginRequest.OptionsEntryR\x07options\x1a:\n\x0cOptionsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\"h\n\x12\x42\x65ginLoginResponse\x12+\n\x11\x61uthorization_url\x18\x01 \x01(\tR\x10\x61uthorizationUrl\x12%\n\x0eprovider_state\x18\x02 \x01(\x0cR\rproviderState\"\xe6\x01\n\x14\x43ompleteLoginRequest\x12J\n\x05query\x18\x01 \x03(\x0b\x32\x34.gestalt.provider.v1.CompleteLoginRequest.QueryEntryR\x05query\x12%\n\x0eprovider_state\x18\x02 \x01(\x0cR\rproviderState\x12!\n\x0c\x63\x61llback_url\x18\x03 \x01(\tR\x0b\x63\x61llbackUrl\x1a\x38\n\nQueryEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\"4\n\x1cValidateExternalTokenRequest\x12\x14\n\x05token\x18\x01 \x01(\tR\x05token\"E\n\x13\x41uthSessionSettings\x12.\n\x13session_ttl_seconds\x18\x01 \x01(\x03R\x11sessionTtlSeconds2\xa7\x03\n\x16\x41uthenticationProvider\x12]\n\nBeginLogin\x12&.gestalt.provider.v1.BeginLoginRequest\x1a\'.gestalt.provider.v1.BeginLoginResponse\x12\x62\n\rCompleteLogin\x12).gestalt.provider.v1.CompleteLoginRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\x12r\n\x15ValidateExternalToken\x12\x31.gestalt.provider.v1.ValidateExternalTokenRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\x12V\n\x12GetSessionSettings\x12\x16.google.protobuf.Empty\x1a(.gestalt.provider.v1.AuthSessionSettingsB;Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;protob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,6 +33,30 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'v1.authentication_pb2', _gl
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto'
-  _globals['_AUTHENTICATIONPROVIDER']._serialized_start=93
-  _globals['_AUTHENTICATIONPROVIDER']._serialized_end=516
+  _globals['_AUTHENTICATEDUSER_CLAIMSENTRY']._loaded_options = None
+  _globals['_AUTHENTICATEDUSER_CLAIMSENTRY']._serialized_options = b'8\001'
+  _globals['_BEGINLOGINREQUEST_OPTIONSENTRY']._loaded_options = None
+  _globals['_BEGINLOGINREQUEST_OPTIONSENTRY']._serialized_options = b'8\001'
+  _globals['_COMPLETELOGINREQUEST_QUERYENTRY']._loaded_options = None
+  _globals['_COMPLETELOGINREQUEST_QUERYENTRY']._serialized_options = b'8\001'
+  _globals['_AUTHENTICATEDUSER']._serialized_start=78
+  _globals['_AUTHENTICATEDUSER']._serialized_end=385
+  _globals['_AUTHENTICATEDUSER_CLAIMSENTRY']._serialized_start=328
+  _globals['_AUTHENTICATEDUSER_CLAIMSENTRY']._serialized_end=385
+  _globals['_BEGINLOGINREQUEST']._serialized_start=388
+  _globals['_BEGINLOGINREQUEST']._serialized_end=636
+  _globals['_BEGINLOGINREQUEST_OPTIONSENTRY']._serialized_start=578
+  _globals['_BEGINLOGINREQUEST_OPTIONSENTRY']._serialized_end=636
+  _globals['_BEGINLOGINRESPONSE']._serialized_start=638
+  _globals['_BEGINLOGINRESPONSE']._serialized_end=742
+  _globals['_COMPLETELOGINREQUEST']._serialized_start=745
+  _globals['_COMPLETELOGINREQUEST']._serialized_end=975
+  _globals['_COMPLETELOGINREQUEST_QUERYENTRY']._serialized_start=919
+  _globals['_COMPLETELOGINREQUEST_QUERYENTRY']._serialized_end=975
+  _globals['_VALIDATEEXTERNALTOKENREQUEST']._serialized_start=977
+  _globals['_VALIDATEEXTERNALTOKENREQUEST']._serialized_end=1029
+  _globals['_AUTHSESSIONSETTINGS']._serialized_start=1031
+  _globals['_AUTHSESSIONSETTINGS']._serialized_end=1100
+  _globals['_AUTHENTICATIONPROVIDER']._serialized_start=1103
+  _globals['_AUTHENTICATIONPROVIDER']._serialized_end=1526
 # @@protoc_insertion_point(module_scope)

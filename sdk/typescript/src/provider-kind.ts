@@ -15,9 +15,9 @@ const PROVIDER_KIND_DEFINITIONS = {
     label: "plugin provider",
   },
   authentication: {
-    tokens: ["authentication", "auth"],
+    tokens: ["authentication"],
     formatToken: "authentication",
-    defaultExportNames: ["authentication", "auth", "provider"],
+    defaultExportNames: ["authentication", "provider"],
     label: "authentication provider",
   },
   cache: {

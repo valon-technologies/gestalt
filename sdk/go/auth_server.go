@@ -12,7 +12,6 @@ import (
 
 type authServer struct {
 	proto.UnimplementedAuthenticationProviderServer
-	proto.UnimplementedAuthProviderServer
 	auth AuthenticationProvider
 }
 
