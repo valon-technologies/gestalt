@@ -50,6 +50,18 @@ type MountedWebUI struct {
 	builtInAdmin        bool
 }
 
+type MountedHTTPBinding struct {
+	Name         string
+	PluginName   string
+	Path         string
+	Method       string
+	Target       string
+	RequestBody  *providermanifestv1.HTTPRequestBody
+	Ack          *providermanifestv1.HTTPAck
+	SecurityName string
+	Security     *providermanifestv1.HTTPSecurityScheme
+}
+
 type AdminRouteConfig struct {
 	AuthorizationPolicy string
 	AllowedRoles        []string
@@ -61,51 +73,53 @@ type BuiltinAdminUIOptions struct {
 }
 
 type Server struct {
-	router                chi.Router
-	handler               http.Handler
-	auth                  core.AuthenticationProvider
-	authProviders         map[string]core.AuthenticationProvider
-	serverAuthProvider    string
-	auditSink             core.AuditSink
-	users                 *coredata.UserService
-	tokens                *coredata.TokenService
-	apiTokens             *coredata.APITokenService
-	managedIdentities     *coredata.ManagedIdentityService
-	identityMemberships   *coredata.ManagedIdentityMembershipService
-	identityGrants        *coredata.ManagedIdentityGrantService
-	workspaceRoles        *coredata.WorkspaceRoleService
-	identityPluginAccess  *coredata.IdentityPluginAccessService
-	workflowExecutionRefs *coredata.WorkflowExecutionRefService
-	workflowSchedules     *workflowmanager.Manager
-	authorizationProvider core.AuthorizationProvider
-	managedIdentityMu     sync.Mutex
-	providers             *registry.ProviderMap[core.Provider]
-	workflow              bootstrap.WorkflowControl
-	resolver              *principal.Resolver
-	authResolvers         map[string]*principal.Resolver
-	invoker               invocation.Invoker
-	defaultConnection     map[string]string
-	catalogConnection     map[string]string
-	connectionAuth        func() map[string]map[string]bootstrap.OAuthHandler
-	pluginDefs            map[string]*config.ProviderEntry
-	authorizer            authorization.RuntimeAuthorizer
-	noAuth                bool
-	anonymousPrincipal    *principal.Principal
-	publicBaseURL         string
-	managementBaseURL     string
-	secureCookies         bool
-	encryptor             *cryptoutil.AESGCMEncryptor
-	sessionIssuer         []byte
-	stateCodec            *integrationOAuthStateCodec
-	apiTokenTTL           time.Duration
-	now                   func() time.Time
-	readiness             ReadinessChecker
-	prometheusMetrics     http.Handler
-	mcpHandler            http.Handler
-	mountedWebUIs         []MountedWebUI
-	adminRoute            AdminRouteConfig
-	adminUI               http.Handler
-	routeProfile          RouteProfile
+	router                 chi.Router
+	handler                http.Handler
+	auth                   core.AuthenticationProvider
+	authProviders          map[string]core.AuthenticationProvider
+	serverAuthProvider     string
+	auditSink              core.AuditSink
+	users                  *coredata.UserService
+	tokens                 *coredata.TokenService
+	apiTokens              *coredata.APITokenService
+	managedIdentities      *coredata.ManagedIdentityService
+	identityMemberships    *coredata.ManagedIdentityMembershipService
+	identityGrants         *coredata.ManagedIdentityGrantService
+	workspaceRoles         *coredata.WorkspaceRoleService
+	identityPluginAccess   *coredata.IdentityPluginAccessService
+	workflowExecutionRefs  *coredata.WorkflowExecutionRefService
+	workflowSchedules      *workflowmanager.Manager
+	authorizationProvider  core.AuthorizationProvider
+	managedIdentityMu      sync.Mutex
+	providers              *registry.ProviderMap[core.Provider]
+	workflow               bootstrap.WorkflowControl
+	resolver               *principal.Resolver
+	authResolvers          map[string]*principal.Resolver
+	invoker                invocation.Invoker
+	defaultConnection      map[string]string
+	catalogConnection      map[string]string
+	connectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
+	pluginDefs             map[string]*config.ProviderEntry
+	authorizer             authorization.RuntimeAuthorizer
+	noAuth                 bool
+	anonymousPrincipal     *principal.Principal
+	publicBaseURL          string
+	managementBaseURL      string
+	secureCookies          bool
+	encryptor              *cryptoutil.AESGCMEncryptor
+	sessionIssuer          []byte
+	stateCodec             *integrationOAuthStateCodec
+	apiTokenTTL            time.Duration
+	now                    func() time.Time
+	readiness              ReadinessChecker
+	prometheusMetrics      http.Handler
+	mcpHandler             http.Handler
+	mountedHTTPBindings    []MountedHTTPBinding
+	mountedWebUIs          []MountedWebUI
+	adminRoute             AdminRouteConfig
+	adminUI                http.Handler
+	routeProfile           RouteProfile
+	httpBindingReplayStore httpBindingReplayStore
 }
 
 func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
@@ -201,6 +215,10 @@ func New(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	mountedHTTPBindings, err := mountedHTTPBindingsFromEntries(cfg.PluginDefs, cfg.Providers, mountedWebUIs)
+	if err != nil {
+		return nil, err
+	}
 	adminUI := cfg.AdminUI
 	if adminUI == nil && cfg.BuiltinAdminUI != nil {
 		adminUI, err = resolveBuiltinAdminUI(*cfg.BuiltinAdminUI)
@@ -242,48 +260,50 @@ func New(cfg Config) (*Server, error) {
 		otelOptions = append(otelOptions, otelhttp.WithMeterProvider(cfg.MeterProvider))
 	}
 	s := &Server{
-		router:                router,
-		handler:               withRequestMeterProvider(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider),
-		auth:                  cfg.Auth,
-		authProviders:         authProviders,
-		serverAuthProvider:    serverAuthProvider,
-		auditSink:             cfg.AuditSink,
-		users:                 users,
-		tokens:                tokens,
-		apiTokens:             apiTokens,
-		managedIdentities:     managedIdentities,
-		identityMemberships:   identityMemberships,
-		identityGrants:        identityGrants,
-		workspaceRoles:        workspaceRoles,
-		identityPluginAccess:  identityPluginAccess,
-		workflowExecutionRefs: workflowExecutionRefs,
-		authorizationProvider: cfg.AuthorizationProvider,
-		providers:             cfg.Providers,
-		workflow:              cfg.Workflow,
-		resolver:              resolver,
-		authResolvers:         authResolvers,
-		invoker:               cfg.Invoker,
-		defaultConnection:     cfg.DefaultConnection,
-		catalogConnection:     cfg.CatalogConnection,
-		connectionAuth:        cfg.ConnectionAuth,
-		pluginDefs:            cfg.PluginDefs,
-		authorizer:            cfg.Authorizer,
-		noAuth:                noAuth,
-		publicBaseURL:         strings.TrimRight(cfg.PublicBaseURL, "/"),
-		managementBaseURL:     strings.TrimRight(cfg.ManagementBaseURL, "/"),
-		secureCookies:         cfg.SecureCookies,
-		encryptor:             encryptor,
-		sessionIssuer:         cfg.StateSecret,
-		stateCodec:            stateCodec,
-		apiTokenTTL:           cfg.APITokenTTL,
-		now:                   now,
-		readiness:             cfg.Readiness,
-		prometheusMetrics:     cfg.PrometheusMetrics,
-		mcpHandler:            cfg.MCPHandler,
-		mountedWebUIs:         mountedWebUIs,
-		adminRoute:            adminRoute,
-		adminUI:               adminUI,
-		routeProfile:          cfg.RouteProfile,
+		router:                 router,
+		handler:                withRequestMeterProvider(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider),
+		auth:                   cfg.Auth,
+		authProviders:          authProviders,
+		serverAuthProvider:     serverAuthProvider,
+		auditSink:              cfg.AuditSink,
+		users:                  users,
+		tokens:                 tokens,
+		apiTokens:              apiTokens,
+		managedIdentities:      managedIdentities,
+		identityMemberships:    identityMemberships,
+		identityGrants:         identityGrants,
+		workspaceRoles:         workspaceRoles,
+		identityPluginAccess:   identityPluginAccess,
+		workflowExecutionRefs:  workflowExecutionRefs,
+		authorizationProvider:  cfg.AuthorizationProvider,
+		providers:              cfg.Providers,
+		workflow:               cfg.Workflow,
+		resolver:               resolver,
+		authResolvers:          authResolvers,
+		invoker:                cfg.Invoker,
+		defaultConnection:      cfg.DefaultConnection,
+		catalogConnection:      cfg.CatalogConnection,
+		connectionAuth:         cfg.ConnectionAuth,
+		pluginDefs:             cfg.PluginDefs,
+		authorizer:             cfg.Authorizer,
+		noAuth:                 noAuth,
+		publicBaseURL:          strings.TrimRight(cfg.PublicBaseURL, "/"),
+		managementBaseURL:      strings.TrimRight(cfg.ManagementBaseURL, "/"),
+		secureCookies:          cfg.SecureCookies,
+		encryptor:              encryptor,
+		sessionIssuer:          cfg.StateSecret,
+		stateCodec:             stateCodec,
+		apiTokenTTL:            cfg.APITokenTTL,
+		now:                    now,
+		readiness:              cfg.Readiness,
+		prometheusMetrics:      cfg.PrometheusMetrics,
+		mcpHandler:             cfg.MCPHandler,
+		mountedHTTPBindings:    mountedHTTPBindings,
+		mountedWebUIs:          mountedWebUIs,
+		adminRoute:             adminRoute,
+		adminUI:                adminUI,
+		routeProfile:           cfg.RouteProfile,
+		httpBindingReplayStore: newMemoryHTTPBindingReplayStore(),
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
 		Providers:             cfg.Providers,

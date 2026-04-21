@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -78,6 +79,8 @@ type Spec struct {
 
 	// Plugin-specific fields
 	RouteAuth         *RouteAuthRef                         `json:"auth,omitempty" yaml:"auth,omitempty"`
+	SecuritySchemes   map[string]*HTTPSecurityScheme        `json:"securitySchemes,omitempty" yaml:"securitySchemes,omitempty"`
+	HTTP              map[string]*HTTPBinding               `json:"http,omitempty" yaml:"http,omitempty"`
 	MCP               bool                                  `json:"mcp,omitempty" yaml:"mcp,omitempty"`
 	Headers           map[string]string                     `json:"headers,omitempty" yaml:"headers,omitempty"`
 	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
@@ -97,6 +100,66 @@ type Spec struct {
 
 type RouteAuthRef struct {
 	Provider string `json:"provider,omitempty" yaml:"provider,omitempty"`
+}
+
+type HTTPSecuritySchemeType string
+
+const (
+	HTTPSecuritySchemeTypeSlackSignature HTTPSecuritySchemeType = "slack_signature"
+	HTTPSecuritySchemeTypeAPIKey         HTTPSecuritySchemeType = "apiKey"
+	HTTPSecuritySchemeTypeHTTP           HTTPSecuritySchemeType = "http"
+	HTTPSecuritySchemeTypeNone           HTTPSecuritySchemeType = "none"
+)
+
+type HTTPIn string
+
+const (
+	HTTPInHeader HTTPIn = "header"
+	HTTPInQuery  HTTPIn = "query"
+)
+
+type HTTPAuthScheme string
+
+const (
+	HTTPAuthSchemeBasic  HTTPAuthScheme = "basic"
+	HTTPAuthSchemeBearer HTTPAuthScheme = "bearer"
+)
+
+type HTTPBinding struct {
+	Path        string           `json:"path" yaml:"path"`
+	Method      string           `json:"method" yaml:"method"`
+	RequestBody *HTTPRequestBody `json:"requestBody,omitempty" yaml:"requestBody,omitempty"`
+	Security    string           `json:"security,omitempty" yaml:"security,omitempty"`
+	Target      string           `json:"target" yaml:"target"`
+	Ack         *HTTPAck         `json:"ack,omitempty" yaml:"ack,omitempty"`
+}
+
+type HTTPRequestBody struct {
+	Required bool                      `json:"required,omitempty" yaml:"required,omitempty"`
+	Content  map[string]*HTTPMediaType `json:"content,omitempty" yaml:"content,omitempty"`
+}
+
+type HTTPMediaType struct {
+}
+
+type HTTPAck struct {
+	Status  int               `json:"status,omitempty" yaml:"status,omitempty"`
+	Headers map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Body    any               `json:"body,omitempty" yaml:"body,omitempty"`
+}
+
+type HTTPSecurityScheme struct {
+	Type        HTTPSecuritySchemeType `json:"type,omitempty" yaml:"type,omitempty"`
+	Description string                 `json:"description,omitempty" yaml:"description,omitempty"`
+	Name        string                 `json:"name,omitempty" yaml:"name,omitempty"`
+	In          HTTPIn                 `json:"in,omitempty" yaml:"in,omitempty"`
+	Scheme      HTTPAuthScheme         `json:"scheme,omitempty" yaml:"scheme,omitempty"`
+	Secret      *HTTPSecretRef         `json:"secret,omitempty" yaml:"secret,omitempty"`
+}
+
+type HTTPSecretRef struct {
+	Env    string `json:"env,omitempty" yaml:"env,omitempty"`
+	Secret string `json:"secret,omitempty" yaml:"secret,omitempty"`
 }
 
 type OwnedUI struct {
@@ -416,6 +479,8 @@ type Entrypoint struct {
 type specJSONWire struct {
 	ConfigSchemaPath  string                                `json:"configSchemaPath,omitempty"`
 	Auth              *RouteAuthRef                         `json:"auth,omitempty"`
+	SecuritySchemes   map[string]*HTTPSecurityScheme        `json:"securitySchemes,omitempty"`
+	HTTP              map[string]*HTTPBinding               `json:"http,omitempty"`
 	MCP               bool                                  `json:"mcp,omitempty"`
 	Headers           map[string]string                     `json:"headers,omitempty"`
 	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty"`
@@ -434,6 +499,8 @@ type specJSONWire struct {
 type specYAMLWire struct {
 	ConfigSchemaPath  string                                `yaml:"configSchemaPath,omitempty"`
 	Auth              *RouteAuthRef                         `yaml:"auth,omitempty"`
+	SecuritySchemes   map[string]*HTTPSecurityScheme        `yaml:"securitySchemes,omitempty"`
+	HTTP              map[string]*HTTPBinding               `yaml:"http,omitempty"`
 	MCP               bool                                  `yaml:"mcp,omitempty"`
 	Headers           map[string]string                     `yaml:"headers,omitempty"`
 	ManagedParameters []ManagedParameter                    `yaml:"managedParameters,omitempty"`
@@ -452,6 +519,8 @@ type specYAMLWire struct {
 type specWire struct {
 	ConfigSchemaPath  string                                `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
 	Auth              *RouteAuthRef                         `json:"auth,omitempty" yaml:"auth,omitempty"`
+	SecuritySchemes   map[string]*HTTPSecurityScheme        `json:"securitySchemes,omitempty" yaml:"securitySchemes,omitempty"`
+	HTTP              map[string]*HTTPBinding               `json:"http,omitempty" yaml:"http,omitempty"`
 	MCP               bool                                  `json:"mcp,omitempty" yaml:"mcp,omitempty"`
 	Headers           map[string]string                     `json:"headers,omitempty" yaml:"headers,omitempty"`
 	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
@@ -480,6 +549,8 @@ func (s *Spec) UnmarshalJSON(data []byte) error {
 	spec := Spec{
 		ConfigSchemaPath:  raw.ConfigSchemaPath,
 		RouteAuth:         raw.Auth,
+		SecuritySchemes:   cloneHTTPSecuritySchemes(raw.SecuritySchemes),
+		HTTP:              cloneHTTPBindings(raw.HTTP),
 		MCP:               raw.MCP,
 		Headers:           raw.Headers,
 		ManagedParameters: raw.ManagedParameters,
@@ -527,6 +598,8 @@ func (s *Spec) UnmarshalYAML(value *yaml.Node) error {
 	spec := Spec{
 		ConfigSchemaPath:  raw.ConfigSchemaPath,
 		RouteAuth:         raw.Auth,
+		SecuritySchemes:   cloneHTTPSecuritySchemes(raw.SecuritySchemes),
+		HTTP:              cloneHTTPBindings(raw.HTTP),
 		MCP:               raw.MCP,
 		Headers:           raw.Headers,
 		ManagedParameters: raw.ManagedParameters,
@@ -557,6 +630,8 @@ func (s Spec) canonicalWire() (specWire, error) {
 	return specWire{
 		ConfigSchemaPath:  s.ConfigSchemaPath,
 		Auth:              s.RouteAuth,
+		SecuritySchemes:   cloneHTTPSecuritySchemes(s.SecuritySchemes),
+		HTTP:              cloneHTTPBindings(s.HTTP),
 		MCP:               s.MCP,
 		Headers:           s.Headers,
 		ManagedParameters: s.ManagedParameters,
@@ -587,6 +662,146 @@ func cloneManifestConnections(src map[string]*ManifestConnectionDef) map[string]
 		cloned[name] = &copyDef
 	}
 	return cloned
+}
+
+func cloneHTTPSecuritySchemes(src map[string]*HTTPSecurityScheme) map[string]*HTTPSecurityScheme {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]*HTTPSecurityScheme, len(src))
+	for name, scheme := range src {
+		cloned[name] = cloneHTTPSecurityScheme(scheme)
+	}
+	return cloned
+}
+
+func cloneHTTPSecurityScheme(src *HTTPSecurityScheme) *HTTPSecurityScheme {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	cloned.Secret = cloneHTTPSecretRef(src.Secret)
+	return &cloned
+}
+
+func cloneHTTPSecretRef(src *HTTPSecretRef) *HTTPSecretRef {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	return &cloned
+}
+
+func cloneHTTPBindings(src map[string]*HTTPBinding) map[string]*HTTPBinding {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]*HTTPBinding, len(src))
+	for name, binding := range src {
+		cloned[name] = cloneHTTPBinding(binding)
+	}
+	return cloned
+}
+
+func cloneHTTPBinding(src *HTTPBinding) *HTTPBinding {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	cloned.RequestBody = cloneHTTPRequestBody(src.RequestBody)
+	cloned.Ack = cloneHTTPAck(src.Ack)
+	return &cloned
+}
+
+func cloneHTTPRequestBody(src *HTTPRequestBody) *HTTPRequestBody {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	if src.Content != nil {
+		cloned.Content = make(map[string]*HTTPMediaType, len(src.Content))
+		for name, mediaType := range src.Content {
+			cloned.Content[name] = cloneHTTPMediaType(mediaType)
+		}
+	}
+	return &cloned
+}
+
+func cloneHTTPMediaType(src *HTTPMediaType) *HTTPMediaType {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	return &cloned
+}
+
+func cloneHTTPAck(src *HTTPAck) *HTTPAck {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	if src.Headers != nil {
+		cloned.Headers = make(map[string]string, len(src.Headers))
+		for name, value := range src.Headers {
+			cloned.Headers[name] = value
+		}
+	}
+	cloned.Body = cloneHTTPBodyValue(src.Body)
+	return &cloned
+}
+
+func cloneHTTPBodyValue(src any) any {
+	if src == nil {
+		return nil
+	}
+	return cloneHTTPBodyReflectValue(reflect.ValueOf(src)).Interface()
+}
+
+func cloneHTTPBodyReflectValue(value reflect.Value) reflect.Value {
+	if !value.IsValid() {
+		return reflect.Value{}
+	}
+	switch value.Kind() {
+	case reflect.Interface:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		return cloneHTTPBodyReflectValue(value.Elem())
+	case reflect.Pointer:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		cloned := reflect.New(value.Type().Elem())
+		cloned.Elem().Set(cloneHTTPBodyReflectValue(value.Elem()))
+		return cloned
+	case reflect.Map:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		cloned := reflect.MakeMapWithSize(value.Type(), value.Len())
+		iter := value.MapRange()
+		for iter.Next() {
+			cloned.SetMapIndex(cloneHTTPBodyReflectValue(iter.Key()), cloneHTTPBodyReflectValue(iter.Value()))
+		}
+		return cloned
+	case reflect.Slice:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		cloned := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
+		for i := 0; i < value.Len(); i++ {
+			cloned.Index(i).Set(cloneHTTPBodyReflectValue(value.Index(i)))
+		}
+		return cloned
+	case reflect.Array:
+		cloned := reflect.New(value.Type()).Elem()
+		for i := 0; i < value.Len(); i++ {
+			cloned.Index(i).Set(cloneHTTPBodyReflectValue(value.Index(i)))
+		}
+		return cloned
+	default:
+		return value
+	}
 }
 
 func decodeJSONKnownFields(data []byte, out any) error {
@@ -637,6 +852,8 @@ func validateYAMLWireObjectFields(node *yaml.Node, allowed map[string]struct{}, 
 var specWireFields = map[string]struct{}{
 	"configSchemaPath":  {},
 	"auth":              {},
+	"securitySchemes":   {},
+	"http":              {},
 	"mcp":               {},
 	"headers":           {},
 	"managedParameters": {},

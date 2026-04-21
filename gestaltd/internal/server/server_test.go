@@ -3,6 +3,7 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
@@ -11618,6 +11619,685 @@ func TestExecuteOperation_POST(t *testing.T) {
 	}
 }
 
+func TestHostedHTTPBinding_SlackSignatureAckDispatchesOperationAndRejectsReplay(t *testing.T) {
+	t.Setenv("SLACK_SIGNING_SECRET", "super-secret")
+
+	type bindingInvocation struct {
+		Params   map[string]any
+		Workflow map[string]any
+	}
+
+	invocations := make(chan bindingInvocation, 1)
+	provider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(ctx context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
+				if op != "handle_command" {
+					t.Fatalf("operation = %q, want %q", op, "handle_command")
+				}
+				invocations <- bindingInvocation{
+					Params:   cloneAnyMapForTest(params),
+					Workflow: invocation.WorkflowContextFromContext(ctx),
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "handle_command", Method: http.MethodPost}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"slack": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"slack": {
+						Type: providermanifestv1.HTTPSecuritySchemeTypeSlackSignature,
+						Secret: &providermanifestv1.HTTPSecretRef{
+							Env: "SLACK_SIGNING_SECRET",
+						},
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"command": {
+						Path:   "/command",
+						Method: http.MethodPost,
+						RequestBody: &providermanifestv1.HTTPRequestBody{
+							Required: true,
+							Content: map[string]*providermanifestv1.HTTPMediaType{
+								"application/x-www-form-urlencoded": {},
+							},
+						},
+						Security: "slack",
+						Target:   "handle_command",
+						Ack: &providermanifestv1.HTTPAck{
+							Body: map[string]any{
+								"response_type": "ephemeral",
+								"text":          "Working on it...",
+							},
+						},
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := "text=hello&response_url=https%3A%2F%2Fhooks.example.test%2Fresponse"
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+body)
+
+	makeRequest := func() *http.Request {
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/slack/command?source=query", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("X-Slack-Request-Timestamp", timestamp)
+		req.Header.Set("X-Slack-Signature", signature)
+		return req
+	}
+
+	resp, err := http.DefaultClient.Do(makeRequest())
+	if err != nil {
+		t.Fatalf("http binding request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var ack map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&ack); err != nil {
+		t.Fatalf("decode ack: %v", err)
+	}
+	if got, want := ack["response_type"], "ephemeral"; got != want {
+		t.Fatalf("response_type = %#v, want %q", got, want)
+	}
+	if got, want := ack["text"], "Working on it..."; got != want {
+		t.Fatalf("text = %#v, want %q", got, want)
+	}
+
+	select {
+	case invocation := <-invocations:
+		if got, want := invocation.Params["text"], "hello"; got != want {
+			t.Fatalf("params[text] = %#v, want %q", got, want)
+		}
+		if got, want := invocation.Params["response_url"], "https://hooks.example.test/response"; got != want {
+			t.Fatalf("params[response_url] = %#v, want %q", got, want)
+		}
+		if got, want := invocation.Params["source"], "query"; got != want {
+			t.Fatalf("params[source] = %#v, want %q", got, want)
+		}
+		httpCtx, ok := invocation.Workflow["http"].(map[string]any)
+		if !ok {
+			t.Fatalf("workflow http context = %#v", invocation.Workflow)
+		}
+		if got, want := httpCtx["name"], "command"; got != want {
+			t.Fatalf("http context name = %#v, want %q", got, want)
+		}
+		if got, want := httpCtx["path"], "/api/v1/slack/command"; got != want {
+			t.Fatalf("http context path = %#v, want %q", got, want)
+		}
+		if got, want := httpCtx["security"], "slack"; got != want {
+			t.Fatalf("http context security = %#v, want %q", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for async http binding dispatch")
+	}
+
+	resp, err = http.DefaultClient.Do(makeRequest())
+	if err != nil {
+		t.Fatalf("duplicate http binding request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("duplicate status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var duplicateAck map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&duplicateAck); err != nil {
+		t.Fatalf("decode duplicate ack: %v", err)
+	}
+	if got, want := duplicateAck["response_type"], "ephemeral"; got != want {
+		t.Fatalf("duplicate response_type = %#v, want %q", got, want)
+	}
+	select {
+	case invocation := <-invocations:
+		t.Fatalf("unexpected duplicate async dispatch: %#v", invocation)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+func TestHostedHTTPBinding_MergesManifestAndConfigOverrides(t *testing.T) {
+	t.Setenv("SLACK_SIGNING_SECRET", "super-secret")
+
+	invocations := make(chan map[string]any, 1)
+	provider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
+				if op != "handle_command" {
+					t.Fatalf("operation = %q, want %q", op, "handle_command")
+				}
+				invocations <- cloneAnyMapForTest(params)
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "handle_command", Method: http.MethodPost}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"slack": {
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{
+						SecuritySchemes: map[string]*providermanifestv1.HTTPSecurityScheme{
+							"slack": {Type: providermanifestv1.HTTPSecuritySchemeTypeSlackSignature},
+						},
+						HTTP: map[string]*providermanifestv1.HTTPBinding{
+							"command": {
+								Path:   "/command",
+								Method: http.MethodPost,
+								RequestBody: &providermanifestv1.HTTPRequestBody{
+									Required: true,
+									Content: map[string]*providermanifestv1.HTTPMediaType{
+										"application/x-www-form-urlencoded": {},
+									},
+								},
+								Security: "slack",
+								Target:   "handle_command",
+							},
+						},
+					},
+				},
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"slack": {
+						Secret: &providermanifestv1.HTTPSecretRef{Env: "SLACK_SIGNING_SECRET"},
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"command": {
+						Ack: &providermanifestv1.HTTPAck{
+							Body: map[string]any{
+								"response_type": "ephemeral",
+								"text":          "Merged from config",
+							},
+						},
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := "text=hello"
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+body)
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/slack/command", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Slack-Request-Timestamp", timestamp)
+	req.Header.Set("X-Slack-Signature", signature)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http binding request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var ack map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&ack); err != nil {
+		t.Fatalf("decode ack: %v", err)
+	}
+	if got, want := ack["text"], "Merged from config"; got != want {
+		t.Fatalf("ack text = %#v, want %q", got, want)
+	}
+
+	select {
+	case params := <-invocations:
+		if got, want := params["text"], "hello"; got != want {
+			t.Fatalf("params[text] = %#v, want %q", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for merged hosted http binding invocation")
+	}
+}
+
+func TestHostedHTTPBinding_SlackSignatureSyncRetriesReinvokeOperation(t *testing.T) {
+	t.Setenv("SLACK_SIGNING_SECRET", "super-secret")
+
+	invocations := make(chan map[string]any, 2)
+	provider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
+				if op != "handle_command" {
+					t.Fatalf("operation = %q, want %q", op, "handle_command")
+				}
+				invocations <- cloneAnyMapForTest(params)
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"text":"pong"}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "handle_command", Method: http.MethodPost}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"slack": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"slack": {
+						Type:   providermanifestv1.HTTPSecuritySchemeTypeSlackSignature,
+						Secret: &providermanifestv1.HTTPSecretRef{Env: "SLACK_SIGNING_SECRET"},
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"command": {
+						Path:   "/command",
+						Method: http.MethodPost,
+						RequestBody: &providermanifestv1.HTTPRequestBody{
+							Required: true,
+							Content: map[string]*providermanifestv1.HTTPMediaType{
+								"application/x-www-form-urlencoded": {},
+							},
+						},
+						Security: "slack",
+						Target:   "handle_command",
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := "text=ping"
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+body)
+
+	makeRequest := func() *http.Request {
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/slack/command", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("X-Slack-Request-Timestamp", timestamp)
+		req.Header.Set("X-Slack-Signature", signature)
+		return req
+	}
+
+	for i := 0; i < 2; i++ {
+		resp, err := http.DefaultClient.Do(makeRequest())
+		if err != nil {
+			t.Fatalf("sync slack request %d: %v", i, err)
+		}
+		var result map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			_ = resp.Body.Close()
+			t.Fatalf("decode sync result %d: %v", i, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("sync status %d = %d, want %d", i, resp.StatusCode, http.StatusOK)
+		}
+		if got, want := result["text"], "pong"; got != want {
+			t.Fatalf("sync result %d text = %#v, want %q", i, got, want)
+		}
+	}
+
+	for i := 0; i < 2; i++ {
+		select {
+		case params := <-invocations:
+			if got, want := params["text"], "ping"; got != want {
+				t.Fatalf("invocation %d text = %#v, want %q", i, got, want)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timed out waiting for sync invocation %d", i)
+		}
+	}
+}
+
+func TestHostedHTTPBinding_APIKeySyncInvokesOperation(t *testing.T) {
+	t.Parallel()
+
+	type bindingInvocation struct {
+		Params   map[string]any
+		Workflow map[string]any
+	}
+
+	invocations := make(chan bindingInvocation, 1)
+	provider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "events",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(ctx context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
+				if op != "handle_event" {
+					t.Fatalf("operation = %q, want %q", op, "handle_event")
+				}
+				invocations <- bindingInvocation{
+					Params:   cloneAnyMapForTest(params),
+					Workflow: invocation.WorkflowContextFromContext(ctx),
+				}
+				return &core.OperationResult{Status: http.StatusCreated, Body: `{"accepted":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "handle_event", Method: http.MethodPost}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"events": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"eventKey": {
+						Type:   providermanifestv1.HTTPSecuritySchemeTypeAPIKey,
+						Name:   "X-Webhook-Key",
+						In:     providermanifestv1.HTTPInHeader,
+						Secret: &providermanifestv1.HTTPSecretRef{Secret: "shared-key"},
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:   "/event",
+						Method: http.MethodPost,
+						RequestBody: &providermanifestv1.HTTPRequestBody{
+							Required: true,
+							Content: map[string]*providermanifestv1.HTTPMediaType{
+								"application/json": {},
+							},
+						},
+						Security: "eventKey",
+						Target:   "handle_event",
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/events/event?source=query", strings.NewReader(`{"event":"opened"}`))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Webhook-Key", "shared-key")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http binding request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if got, want := result["accepted"], true; got != want {
+		t.Fatalf("accepted = %#v, want %#v", got, want)
+	}
+
+	select {
+	case invocation := <-invocations:
+		if got, want := invocation.Params["event"], "opened"; got != want {
+			t.Fatalf("params[event] = %#v, want %q", got, want)
+		}
+		if got, want := invocation.Params["source"], "query"; got != want {
+			t.Fatalf("params[source] = %#v, want %q", got, want)
+		}
+		httpCtx, ok := invocation.Workflow["http"].(map[string]any)
+		if !ok {
+			t.Fatalf("workflow http context = %#v", invocation.Workflow)
+		}
+		if got, want := httpCtx["name"], "event"; got != want {
+			t.Fatalf("http context name = %#v, want %q", got, want)
+		}
+		if got, want := httpCtx["contentType"], "application/json"; got != want {
+			t.Fatalf("http context contentType = %#v, want %q", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for sync http binding invocation")
+	}
+}
+
+func TestHostedHTTPBinding_APIKeyQueryDoesNotLeakCredentialParam(t *testing.T) {
+	t.Parallel()
+
+	invocations := make(chan map[string]any, 1)
+	provider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "events",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
+				if op != "handle_event" {
+					t.Fatalf("operation = %q, want %q", op, "handle_event")
+				}
+				invocations <- cloneAnyMapForTest(params)
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"accepted":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "handle_event", Method: http.MethodPost}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"events": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"eventKey": {
+						Type:   providermanifestv1.HTTPSecuritySchemeTypeAPIKey,
+						Name:   "token",
+						In:     providermanifestv1.HTTPInQuery,
+						Secret: &providermanifestv1.HTTPSecretRef{Secret: "shared-key"},
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:     "/event",
+						Method:   http.MethodPost,
+						Security: "eventKey",
+						Target:   "handle_event",
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/events/event?source=query&token=shared-key", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http binding request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	select {
+	case params := <-invocations:
+		if got, want := params["source"], "query"; got != want {
+			t.Fatalf("params[source] = %#v, want %q", got, want)
+		}
+		if _, exists := params["token"]; exists {
+			t.Fatalf("params[token] should be stripped from query apiKey binding: %#v", params)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for query apiKey http binding invocation")
+	}
+}
+
+func TestHostedHTTPBinding_RejectsGenericOperationRouteConflicts(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	providers := testutil.NewProviderRegistry(t, &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "reports",
+			ConnMode: core.ConnectionModeNone,
+		},
+		ops: []core.Operation{
+			{Name: "status", Method: http.MethodGet},
+			{Name: "handle_status", Method: http.MethodGet},
+		},
+	})
+	cfg := server.Config{
+		Auth:        &coretesting.StubAuthProvider{N: "none"},
+		Services:    svc,
+		Providers:   providers,
+		Invoker:     invocation.NewBroker(providers, svc.Users, svc.Tokens),
+		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+		PluginDefs: map[string]*config.ProviderEntry{
+			"reports": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"none": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"status_binding": {
+						Path:     "/status",
+						Method:   http.MethodGet,
+						Security: "none",
+						Target:   "handle_status",
+					},
+				},
+			},
+		},
+	}
+
+	_, err := server.New(cfg)
+	if err == nil {
+		t.Fatal("expected generic operation route conflict")
+	}
+	if !strings.Contains(err.Error(), "generic operation route") {
+		t.Fatalf("error = %v, want generic operation route conflict", err)
+	}
+}
+
+func TestHostedHTTPBinding_RejectsInvalidConfigBindings(t *testing.T) {
+	t.Parallel()
+
+	baseConfig := func(t *testing.T) server.Config {
+		svc := coretesting.NewStubServices(t)
+		providers := testutil.NewProviderRegistry(t, &stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "events",
+				ConnMode: core.ConnectionModeNone,
+			},
+			ops: []core.Operation{{Name: "handle_event", Method: http.MethodPost}},
+		})
+		return server.Config{
+			Auth:        &coretesting.StubAuthProvider{N: "none"},
+			Services:    svc,
+			Providers:   providers,
+			Invoker:     invocation.NewBroker(providers, svc.Users, svc.Tokens),
+			StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+		}
+	}
+
+	tests := []struct {
+		name    string
+		entry   *config.ProviderEntry
+		wantErr string
+	}{
+		{
+			name: "invalid ack status",
+			entry: &config.ProviderEntry{
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"none": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:     "/event",
+						Method:   http.MethodPost,
+						Security: "none",
+						Target:   "handle_event",
+						Ack:      &providermanifestv1.HTTPAck{Status: http.StatusInternalServerError},
+					},
+				},
+			},
+			wantErr: "ack.status must be a 2xx status",
+		},
+		{
+			name: "missing api key secret",
+			entry: &config.ProviderEntry{
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"eventKey": {
+						Type: providermanifestv1.HTTPSecuritySchemeTypeAPIKey,
+						Name: "X-Webhook-Key",
+						In:   providermanifestv1.HTTPInHeader,
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:     "/event",
+						Method:   http.MethodPost,
+						Security: "eventKey",
+						Target:   "handle_event",
+					},
+				},
+			},
+			wantErr: "secret is required",
+		},
+		{
+			name: "duplicate normalized content types",
+			entry: &config.ProviderEntry{
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"none": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:   "/event",
+						Method: http.MethodPost,
+						RequestBody: &providermanifestv1.HTTPRequestBody{
+							Content: map[string]*providermanifestv1.HTTPMediaType{
+								"application/json":                {},
+								"application/json; charset=utf-8": {},
+							},
+						},
+						Security: "none",
+						Target:   "handle_event",
+					},
+				},
+			},
+			wantErr: `requestBody.content "application/json" is duplicated after normalization`,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := baseConfig(t)
+			cfg.PluginDefs = map[string]*config.ProviderEntry{"events": tt.entry}
+
+			_, err := server.New(cfg)
+			if err == nil {
+				t.Fatal("expected invalid hosted http config")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error = %v, want substring %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestAuthInfo(t *testing.T) {
 	t.Parallel()
 
@@ -12020,6 +12700,23 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	slices.Sort(keys)
 	return keys
+}
+
+func cloneAnyMapForTest(src map[string]any) map[string]any {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]any, len(src))
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
+}
+
+func httpBindingTestSignature(secret, payload string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(payload))
+	return "v0=" + hex.EncodeToString(mac.Sum(nil))
 }
 
 func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {

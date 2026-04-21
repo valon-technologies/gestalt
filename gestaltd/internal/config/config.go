@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -303,15 +304,17 @@ func (g GitHubReleaseSourceDef) Location() string {
 
 // ProviderEntry is the universal configuration for any provider.
 type ProviderEntry struct {
-	Source       ProviderSource    `yaml:"source"`
-	Config       yaml.Node         `yaml:"config,omitempty"`
-	Default      bool              `yaml:"default,omitempty"`
-	Env          map[string]string `yaml:"env,omitempty"`
-	AllowedHosts []string          `yaml:"allowedHosts,omitempty"`
-	DisplayName  string            `yaml:"displayName,omitempty"`
-	Description  string            `yaml:"description,omitempty"`
-	IconFile     string            `yaml:"iconFile,omitempty"`
-	RouteAuth    *RouteAuthDef     `yaml:"-"`
+	Source          ProviderSource                 `yaml:"source"`
+	Config          yaml.Node                      `yaml:"config,omitempty"`
+	Default         bool                           `yaml:"default,omitempty"`
+	Env             map[string]string              `yaml:"env,omitempty"`
+	AllowedHosts    []string                       `yaml:"allowedHosts,omitempty"`
+	DisplayName     string                         `yaml:"displayName,omitempty"`
+	Description     string                         `yaml:"description,omitempty"`
+	IconFile        string                         `yaml:"iconFile,omitempty"`
+	RouteAuth       *RouteAuthDef                  `yaml:"-"`
+	SecuritySchemes map[string]*HTTPSecurityScheme `yaml:"securitySchemes,omitempty"`
+	HTTP            map[string]*HTTPBinding        `yaml:"http,omitempty"`
 	// AuthorizationPolicy binds this provider to a shared human access policy.
 	AuthorizationPolicy string `yaml:"authorizationPolicy,omitempty"`
 
@@ -392,6 +395,9 @@ type ProviderSurfaceOverrides struct {
 	GraphQL *ProviderGraphQLSurfaceOverride `yaml:"graphql,omitempty"`
 	MCP     *ProviderMCPSurfaceOverride     `yaml:"mcp,omitempty"`
 }
+
+type HTTPSecurityScheme = providermanifestv1.HTTPSecurityScheme
+type HTTPBinding = providermanifestv1.HTTPBinding
 
 type PluginIndexedDBConfig struct {
 	Provider     string   `yaml:"provider,omitempty"`
@@ -548,6 +554,232 @@ func providerEntryFieldsFromEntry(e ProviderEntry) providerEntryFields {
 	return providerEntryFields(e)
 }
 
+func cloneHTTPSecuritySchemes(src map[string]*HTTPSecurityScheme) map[string]*HTTPSecurityScheme {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]*HTTPSecurityScheme, len(src))
+	for name, scheme := range src {
+		if scheme == nil {
+			cloned[name] = nil
+			continue
+		}
+		copyScheme := *scheme
+		copyScheme.Secret = cloneHTTPSecretRef(scheme.Secret)
+		cloned[name] = &copyScheme
+	}
+	return cloned
+}
+
+func cloneHTTPSecretRef(src *providermanifestv1.HTTPSecretRef) *providermanifestv1.HTTPSecretRef {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	return &cloned
+}
+
+func cloneHTTPBindings(src map[string]*HTTPBinding) map[string]*HTTPBinding {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]*HTTPBinding, len(src))
+	for name, binding := range src {
+		if binding == nil {
+			cloned[name] = nil
+			continue
+		}
+		copyBinding := *binding
+		copyBinding.RequestBody = cloneHTTPRequestBody(binding.RequestBody)
+		copyBinding.Ack = cloneHTTPAck(binding.Ack)
+		cloned[name] = &copyBinding
+	}
+	return cloned
+}
+
+func cloneHTTPRequestBody(src *providermanifestv1.HTTPRequestBody) *providermanifestv1.HTTPRequestBody {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	if src.Content != nil {
+		cloned.Content = make(map[string]*providermanifestv1.HTTPMediaType, len(src.Content))
+		for mediaType, value := range src.Content {
+			if value == nil {
+				cloned.Content[mediaType] = nil
+				continue
+			}
+			copyMediaType := *value
+			cloned.Content[mediaType] = &copyMediaType
+		}
+	}
+	return &cloned
+}
+
+func cloneHTTPAck(src *providermanifestv1.HTTPAck) *providermanifestv1.HTTPAck {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	if src.Headers != nil {
+		cloned.Headers = maps.Clone(src.Headers)
+	}
+	cloned.Body = cloneHTTPBodyValue(src.Body)
+	return &cloned
+}
+
+func cloneHTTPBodyValue(src any) any {
+	if src == nil {
+		return nil
+	}
+	return cloneHTTPBodyReflectValue(reflect.ValueOf(src)).Interface()
+}
+
+func cloneHTTPBodyReflectValue(value reflect.Value) reflect.Value {
+	if !value.IsValid() {
+		return reflect.Value{}
+	}
+	switch value.Kind() {
+	case reflect.Interface:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		return cloneHTTPBodyReflectValue(value.Elem())
+	case reflect.Pointer:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		cloned := reflect.New(value.Type().Elem())
+		cloned.Elem().Set(cloneHTTPBodyReflectValue(value.Elem()))
+		return cloned
+	case reflect.Map:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		cloned := reflect.MakeMapWithSize(value.Type(), value.Len())
+		iter := value.MapRange()
+		for iter.Next() {
+			cloned.SetMapIndex(cloneHTTPBodyReflectValue(iter.Key()), cloneHTTPBodyReflectValue(iter.Value()))
+		}
+		return cloned
+	case reflect.Slice:
+		if value.IsNil() {
+			return reflect.Zero(value.Type())
+		}
+		cloned := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
+		for i := 0; i < value.Len(); i++ {
+			cloned.Index(i).Set(cloneHTTPBodyReflectValue(value.Index(i)))
+		}
+		return cloned
+	case reflect.Array:
+		cloned := reflect.New(value.Type()).Elem()
+		for i := 0; i < value.Len(); i++ {
+			cloned.Index(i).Set(cloneHTTPBodyReflectValue(value.Index(i)))
+		}
+		return cloned
+	default:
+		return value
+	}
+}
+
+func mergeHTTPSecurityScheme(base, override *HTTPSecurityScheme) *HTTPSecurityScheme {
+	if base == nil {
+		if override == nil {
+			return nil
+		}
+		cloned := cloneHTTPSecuritySchemes(map[string]*HTTPSecurityScheme{"_": override})
+		return cloned["_"]
+	}
+	if override == nil {
+		cloned := cloneHTTPSecuritySchemes(map[string]*HTTPSecurityScheme{"_": base})
+		return cloned["_"]
+	}
+	merged := *base
+	if override.Type != "" {
+		merged.Type = override.Type
+	}
+	if override.Description != "" {
+		merged.Description = override.Description
+	}
+	if override.Name != "" {
+		merged.Name = override.Name
+	}
+	if override.In != "" {
+		merged.In = override.In
+	}
+	if override.Scheme != "" {
+		merged.Scheme = override.Scheme
+	}
+	if override.Secret != nil {
+		merged.Secret = cloneHTTPSecretRef(override.Secret)
+	}
+	return &merged
+}
+
+func mergeHTTPBinding(base, override *HTTPBinding) *HTTPBinding {
+	if base == nil {
+		if override == nil {
+			return nil
+		}
+		cloned := cloneHTTPBindings(map[string]*HTTPBinding{"_": override})
+		return cloned["_"]
+	}
+	if override == nil {
+		cloned := cloneHTTPBindings(map[string]*HTTPBinding{"_": base})
+		return cloned["_"]
+	}
+	merged := *base
+	if override.Path != "" {
+		merged.Path = override.Path
+	}
+	if override.Method != "" {
+		merged.Method = override.Method
+	}
+	if override.Security != "" {
+		merged.Security = override.Security
+	}
+	if override.Target != "" {
+		merged.Target = override.Target
+	}
+	if override.RequestBody != nil {
+		if merged.RequestBody == nil {
+			merged.RequestBody = cloneHTTPRequestBody(override.RequestBody)
+		} else {
+			requestBody := *merged.RequestBody
+			if override.RequestBody.Required {
+				requestBody.Required = true
+			}
+			if override.RequestBody.Content != nil {
+				requestBody.Content = cloneHTTPRequestBody(override.RequestBody).Content
+			}
+			merged.RequestBody = &requestBody
+		}
+	}
+	if override.Ack != nil {
+		if merged.Ack == nil {
+			merged.Ack = cloneHTTPAck(override.Ack)
+		} else {
+			ack := cloneHTTPAck(merged.Ack)
+			if override.Ack.Status != 0 {
+				ack.Status = override.Ack.Status
+			}
+			if override.Ack.Headers != nil {
+				if ack.Headers == nil {
+					ack.Headers = map[string]string{}
+				}
+				for key, value := range override.Ack.Headers {
+					ack.Headers[key] = value
+				}
+			}
+			if override.Ack.Body != nil {
+				ack.Body = cloneHTTPBodyValue(override.Ack.Body)
+			}
+			merged.Ack = ack
+		}
+	}
+	return &merged
+}
+
 func (e *ProviderEntry) HasMetadataSource() bool {
 	return e != nil && (e.Source.IsMetadataURL() || e.Source.IsGitHubRelease())
 }
@@ -631,6 +863,48 @@ func (e *ProviderEntry) ManifestSpec() *providermanifestv1.Spec {
 		return nil
 	}
 	return e.ResolvedManifest.Spec
+}
+
+func (e *ProviderEntry) EffectiveHTTPSecuritySchemes() map[string]*HTTPSecurityScheme {
+	var merged map[string]*HTTPSecurityScheme
+	if spec := e.ManifestSpec(); spec != nil && spec.SecuritySchemes != nil {
+		merged = cloneHTTPSecuritySchemes(spec.SecuritySchemes)
+	}
+	if e == nil || e.SecuritySchemes == nil {
+		return merged
+	}
+	if merged == nil {
+		merged = map[string]*HTTPSecurityScheme{}
+	}
+	for name, scheme := range e.SecuritySchemes {
+		if scheme == nil {
+			merged[name] = nil
+			continue
+		}
+		merged[name] = mergeHTTPSecurityScheme(merged[name], scheme)
+	}
+	return merged
+}
+
+func (e *ProviderEntry) EffectiveHTTPBindings() map[string]*HTTPBinding {
+	var merged map[string]*HTTPBinding
+	if spec := e.ManifestSpec(); spec != nil && spec.HTTP != nil {
+		merged = cloneHTTPBindings(spec.HTTP)
+	}
+	if e == nil || e.HTTP == nil {
+		return merged
+	}
+	if merged == nil {
+		merged = map[string]*HTTPBinding{}
+	}
+	for name, binding := range e.HTTP {
+		if binding == nil {
+			merged[name] = nil
+			continue
+		}
+		merged[name] = mergeHTTPBinding(merged[name], binding)
+	}
+	return merged
 }
 
 func (e *ProviderEntry) DeclaresMCP() bool {
