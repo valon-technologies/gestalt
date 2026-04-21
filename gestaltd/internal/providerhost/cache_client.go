@@ -30,7 +30,7 @@ type remoteCache struct {
 }
 
 func NewExecutableCache(ctx context.Context, cfg CacheExecConfig) (corecache.Cache, error) {
-	proc, err := startProviderProcess(ctx, ExecConfig{
+	execCfg := ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,
@@ -38,7 +38,8 @@ func NewExecutableCache(ctx context.Context, cfg CacheExecConfig) (corecache.Cac
 		AllowedHosts: cfg.AllowedHosts,
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
-	})
+	}
+	proc, err := startProviderProcess(ctx, execCfg.processConfig())
 	if err != nil {
 		return nil, err
 	}

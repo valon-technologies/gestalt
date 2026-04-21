@@ -28,6 +28,18 @@ const (
 	processShutdownTimeout = 2 * time.Second
 )
 
+type ProcessConfig struct {
+	Command       string
+	Args          []string
+	Env           map[string]string
+	AllowedHosts  []string
+	DefaultAction egress.PolicyAction
+	HostBinary    string
+	Cleanup       func()
+	HostServices  []HostService
+	SocketDir     string
+}
+
 type ExecConfig struct {
 	Command          string
 	Args             []string
@@ -62,29 +74,75 @@ type providerProcess struct {
 	closeErr       error
 }
 
+type PluginProcess struct {
+	proc *providerProcess
+}
+
 func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, error) {
-	proc, err := startProviderProcess(ctx, cfg)
+	proc, err := startProviderProcess(ctx, cfg.processConfig())
 	if err != nil {
 		return nil, err
 	}
 
-	client := proto.NewIntegrationProviderClient(proc.conn)
-	opts := []RemoteProviderOption{WithCloser(proc)}
+	conn := &PluginProcess{proc: proc}
+	opts := []RemoteProviderOption{WithCloser(conn)}
 	if cfg.RequestSnapshots != nil {
 		opts = append(opts, WithRequestSnapshots(cfg.RequestSnapshots))
 	}
 	prov, err := NewRemoteProvider(
 		ctx,
-		client,
+		conn.Integration(),
 		cfg.StaticSpec,
 		cfg.Config,
 		opts...,
 	)
 	if err != nil {
-		_ = proc.Close()
+		_ = conn.Close()
 		return nil, err
 	}
 	return prov, nil
+}
+
+func (c ExecConfig) processConfig() ProcessConfig {
+	return ProcessConfig{
+		Command:       c.Command,
+		Args:          c.Args,
+		Env:           c.Env,
+		AllowedHosts:  c.AllowedHosts,
+		DefaultAction: c.DefaultAction,
+		HostBinary:    c.HostBinary,
+		Cleanup:       c.Cleanup,
+		HostServices:  c.HostServices,
+	}
+}
+
+func StartPluginProcess(ctx context.Context, cfg ProcessConfig) (*PluginProcess, error) {
+	proc, err := startProviderProcess(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &PluginProcess{proc: proc}, nil
+}
+
+func (p *PluginProcess) Lifecycle() proto.ProviderLifecycleClient {
+	if p == nil || p.proc == nil {
+		return nil
+	}
+	return proto.NewProviderLifecycleClient(p.proc.conn)
+}
+
+func (p *PluginProcess) Integration() proto.IntegrationProviderClient {
+	if p == nil || p.proc == nil {
+		return nil
+	}
+	return proto.NewIntegrationProviderClient(p.proc.conn)
+}
+
+func (p *PluginProcess) Close() error {
+	if p == nil || p.proc == nil {
+		return nil
+	}
+	return p.proc.Close()
 }
 
 func ServeProvider(ctx context.Context, provider core.Provider) error {
@@ -129,16 +187,22 @@ func serveProvider(ctx context.Context, register func(*grpc.Server)) error {
 	return err
 }
 
-func startProviderProcess(ctx context.Context, cfg ExecConfig) (*providerProcess, error) {
+func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProcess, error) {
 	if cfg.Command == "" {
 		return nil, fmt.Errorf("plugin command is required")
 	}
 
 	sandboxActive := len(cfg.AllowedHosts) > 0 || cfg.DefaultAction == egress.PolicyDeny
 
-	dir, err := newSocketDir()
-	if err != nil {
-		return nil, err
+	dir := strings.TrimSpace(cfg.SocketDir)
+	if dir == "" {
+		var err error
+		dir, err = newSocketDir()
+		if err != nil {
+			return nil, err
+		}
+	} else if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("create socket dir: %w", err)
 	}
 	pluginSocket := filepath.Join(dir, "plugin.sock")
 	env := mergeExecEnv(cfg.Env, map[string]string{
@@ -155,7 +219,16 @@ func startProviderProcess(ctx context.Context, cfg ExecConfig) (*providerProcess
 		hostSocket := filepath.Join(dir, fmt.Sprintf("host-%d.sock", i))
 		lis, err := net.Listen("unix", hostSocket)
 		if err != nil {
-			_ = os.RemoveAll(dir)
+			cleanupStartupHostServices(proc)
+			if cleanupErr := os.Remove(hostSocket); cleanupErr != nil && !os.IsNotExist(cleanupErr) {
+				return nil, errors.Join(
+					fmt.Errorf("listen on host socket: %w", err),
+					fmt.Errorf("cleanup failed host socket %q: %w", hostSocket, cleanupErr),
+				)
+			}
+			if cfg.SocketDir == "" {
+				_ = os.RemoveAll(dir)
+			}
 			return nil, fmt.Errorf("listen on host socket: %w", err)
 		}
 		srv := grpc.NewServer()
@@ -346,8 +419,32 @@ func (p *providerProcess) Close() error {
 	return p.closeErr
 }
 
+func cleanupStartupHostServices(proc *providerProcess) {
+	if proc == nil {
+		return
+	}
+	for _, hostSrv := range proc.hostSrvs {
+		hostSrv.Stop()
+	}
+	for _, hostLis := range proc.hostLiss {
+		if hostLis == nil {
+			continue
+		}
+		_ = hostLis.Close()
+		socketPath := strings.TrimSpace(hostLis.Addr().String())
+		if socketPath == "" {
+			continue
+		}
+		_ = os.Remove(socketPath)
+	}
+}
+
+func NewPluginTempDir(pattern string) (string, error) {
+	return newPluginTempDir(pattern)
+}
+
 func newSocketDir() (string, error) {
-	return newPluginTempDir("gstp-")
+	return NewPluginTempDir("gstp-")
 }
 
 func newPluginTempDir(pattern string) (string, error) {

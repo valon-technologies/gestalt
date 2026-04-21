@@ -29,7 +29,7 @@ type remoteAuthorizationProvider struct {
 }
 
 func NewExecutableAuthorizationProvider(ctx context.Context, cfg AuthorizationExecConfig) (core.AuthorizationProvider, error) {
-	proc, err := startProviderProcess(ctx, ExecConfig{
+	execCfg := ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,
@@ -38,7 +38,8 @@ func NewExecutableAuthorizationProvider(ctx context.Context, cfg AuthorizationEx
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
 		HostServices: cfg.HostServices,
-	})
+	}
+	proc, err := startProviderProcess(ctx, execCfg.processConfig())
 	if err != nil {
 		return nil, err
 	}

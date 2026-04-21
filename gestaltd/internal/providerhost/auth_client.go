@@ -53,7 +53,7 @@ type remoteAuthenticationProvider struct {
 }
 
 func NewExecutableAuthenticationProvider(ctx context.Context, cfg AuthenticationExecConfig) (core.AuthenticationProvider, error) {
-	proc, err := startProviderProcess(ctx, ExecConfig{
+	execCfg := ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,
@@ -61,7 +61,8 @@ func NewExecutableAuthenticationProvider(ctx context.Context, cfg Authentication
 		AllowedHosts: cfg.AllowedHosts,
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
-	})
+	}
+	proc, err := startProviderProcess(ctx, execCfg.processConfig())
 	if err != nil {
 		return nil, err
 	}
