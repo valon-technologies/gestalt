@@ -98,7 +98,14 @@
           "type": "boolean"
         },
         "auth": {
-          "$ref": "#/$defs/providerAuth"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/routeAuthRef"
+            },
+            {
+              "$ref": "#/$defs/providerAuth"
+            }
+          ]
         },
         "connectionMode": {
           "type": "string",
@@ -172,6 +179,19 @@
           "items": {
             "$ref": "#/$defs/webuiRoute"
           }
+        }
+      }
+    },
+    "routeAuthRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },

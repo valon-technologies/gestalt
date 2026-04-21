@@ -65,14 +65,16 @@ The `spec` block for a `kind: plugin` manifest describes a plugin. It supports d
 | Field | Type | Purpose |
 | --- | --- | --- |
 | `configSchemaPath` | string | Path to a JSON/YAML schema that validates `plugins.<name>.config` in the server config. |
-| `auth` | ProviderAuth | Default connection auth when no `connections` map is defined. |
-| `connectionMode` | string | Default connection mode when no `connections` map is defined. One of `none`, `user`, `identity`. |
+| `auth` | RouteAuthRef | Optional plugin route-auth reference. Use `auth.provider` to bind the plugin’s mounted routes to a named request-auth provider. |
 | `mcp` | bool | When true, the plugin exposes its operations as MCP tools. |
 | `headers` | map[string]string | Static headers injected into every outbound request. |
 | `surfaces` | Surfaces | Spec-loaded and declarative REST surfaces. See [Surfaces](#surfaces). |
+| `connections` | map[string]ConnectionDef | Canonical upstream auth and connection definitions. Put upstream OAuth/manual/bearer auth here, typically under `connections.default`. |
 | `defaultConnection` | string | Name of the connection to use when none is specified. |
 | `requires` | string[] | Provider source identifiers that this provider depends on. Gestalt ensures the listed providers are available before starting this provider. |
 | `ui` | OwnedUIRef | Optional owned web UI reference for plugins that publish a mounted UI. |
+
+Legacy manifests may still use top-level `spec.auth`, `spec.connectionMode`, `spec.connectionParams`, and `spec.discovery` for upstream auth. Gestalt accepts that input for compatibility and normalizes it into `spec.connections.default`, but canonical manifests should declare upstream auth only under `spec.connections`.
 
 ### Owned UI
 
@@ -97,7 +99,11 @@ source: github.com/acme/plugins/roadmap-review
 version: 1.0.0
 spec:
   auth:
-    type: none
+    provider: server
+  connections:
+    default:
+      auth:
+        type: none
   ui:
     path: ../ui/manifest.yaml
 ```
@@ -110,7 +116,11 @@ source: github.com/acme/plugins/roadmap-review
 version: 1.0.0
 spec:
   auth:
-    type: none
+    provider: server
+  connections:
+    default:
+      auth:
+        type: none
   ui:
     ref: github.com/acme/web/roadmap-review
     version: 1.0.0
@@ -169,7 +179,7 @@ The `rest`/`openapi`/`graphql` surface types are mutually exclusive (use `surfac
 
 ### Auth Types
 
-The `auth.type` field on a connection accepts these values:
+`spec.auth.provider` selects a route-auth provider for mounted plugin routes. Upstream auth still lives on `spec.connections.<name>.auth`, and the `auth.type` field on a connection accepts these values:
 
 | Type | Purpose |
 | --- | --- |
@@ -183,23 +193,25 @@ Manual auth in provider manifests also supports `authMapping`, using the same `v
 
 ```yaml
 spec:
-  auth:
-    type: manual
-    credentials:
-      - name: organization_id
-        label: Organization ID
-      - name: api_key
-        label: API Key
-    authMapping:
-      basic:
-        username:
-          valueFrom:
-            credentialFieldRef:
-              name: organization_id
-        password:
-          valueFrom:
-            credentialFieldRef:
-              name: api_key
+  connections:
+    default:
+      auth:
+        type: manual
+        credentials:
+          - name: organization_id
+            label: Organization ID
+          - name: api_key
+            label: API Key
+        authMapping:
+          basic:
+            username:
+              valueFrom:
+                credentialFieldRef:
+                  name: organization_id
+            password:
+              valueFrom:
+                credentialFieldRef:
+                  name: api_key
 ```
 
 ### Pagination
@@ -570,11 +582,13 @@ displayName: Support API
 description: Small ticket API
 iconFile: assets/icon.svg
 spec:
-  auth:
-    type: bearer
-    credentials:
-      - name: token
-        label: API Token
+  connections:
+    default:
+      auth:
+        type: bearer
+        credentials:
+          - name: token
+            label: API Token
   surfaces:
     rest:
       baseUrl: https://api.support.example.com

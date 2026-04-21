@@ -1717,11 +1717,11 @@ func TestRun_ProviderReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *
 	if filepath.Base(manifestPath) != "manifest.yaml" {
 		t.Fatalf("released manifest = %q, want manifest.yaml", filepath.Base(manifestPath))
 	}
-	if manifest.Spec == nil || len(manifest.Spec.ConnectionParams) != 1 || !manifest.Spec.ConnectionParams["tenant"].Required {
+	if manifest.Spec == nil || manifest.Spec.Connections["default"] == nil || len(manifest.Spec.Connections["default"].Params) != 1 || !manifest.Spec.Connections["default"].Params["tenant"].Required {
 		t.Fatalf("provider connection_params = %+v", manifest.Spec)
 	}
-	if manifest.Spec.ConnectionMode != "identity" {
-		t.Fatalf("provider connection_mode = %q, want %q", manifest.Spec.ConnectionMode, "identity")
+	if manifest.Spec.Connections["default"].Mode != "identity" {
+		t.Fatalf("provider default connection mode = %q, want %q", manifest.Spec.Connections["default"].Mode, "identity")
 	}
 
 	manifestData, err := os.ReadFile(manifestPath)
@@ -1730,14 +1730,24 @@ func TestRun_ProviderReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *
 	}
 	for _, expected := range []string{
 		"spec:",
-		"connectionMode: identity",
-		"connectionParams:",
+		"connections:",
+		"default:",
+		"mode: identity",
+		"params:",
 		"mcp: true",
 		"entrypoint:",
 		"artifactPath:",
 	} {
 		if !strings.Contains(string(manifestData), expected) {
 			t.Fatalf("expected released manifest to contain canonical field %q, got: %s", expected, manifestData)
+		}
+	}
+	for _, legacy := range []string{
+		"connectionMode:",
+		"connectionParams:",
+	} {
+		if strings.Contains(string(manifestData), legacy) {
+			t.Fatalf("expected released manifest to omit legacy field %q, got: %s", legacy, manifestData)
 		}
 	}
 }

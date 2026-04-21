@@ -401,17 +401,45 @@ func validateProviderAuth(path string, auth *providermanifestv1.ProviderAuth) er
 	return nil
 }
 
+func validateRouteAuthRef(path string, auth *providermanifestv1.RouteAuthRef) error {
+	if auth == nil {
+		return nil
+	}
+	if strings.TrimSpace(auth.Provider) == "" {
+		return fmt.Errorf("%s.provider is required", path)
+	}
+	return nil
+}
+
+func cloneManifestConnections(src map[string]*providermanifestv1.ManifestConnectionDef) map[string]*providermanifestv1.ManifestConnectionDef {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]*providermanifestv1.ManifestConnectionDef, len(src))
+	for name, def := range src {
+		if def == nil {
+			cloned[name] = nil
+			continue
+		}
+		copyDef := *def
+		cloned[name] = &copyDef
+	}
+	return cloned
+}
+
 func validateExecutableProviderMetadata(provider *providermanifestv1.Spec) error {
 	if provider == nil {
 		return nil
 	}
-	if err := validateProviderAuth("provider.auth", provider.Auth); err != nil {
+	normalized := *provider
+	normalized.Connections = cloneManifestConnections(provider.Connections)
+	if err := normalized.NormalizeLegacyConnections(); err != nil {
 		return err
 	}
-	if provider.Auth != nil && provider.Auth.Type == providermanifestv1.AuthTypeMCPOAuth && provider.MCPURL() == "" {
-		return fmt.Errorf("provider.auth.type %q requires an MCP surface", providermanifestv1.AuthTypeMCPOAuth)
+	if err := validateRouteAuthRef("provider.auth", normalized.RouteAuth); err != nil {
+		return err
 	}
-	for name, conn := range provider.Connections {
+	for name, conn := range normalized.Connections {
 		if conn == nil {
 			continue
 		}
@@ -430,18 +458,13 @@ func validateExecutableProviderMetadata(provider *providermanifestv1.Spec) error
 			return fmt.Errorf("unsupported provider.connections.%s.mode %q", name, conn.Mode)
 		}
 	}
-	switch provider.ConnectionMode {
-	case "", "none", "user", "identity":
-	default:
-		return fmt.Errorf("unsupported provider.connectionMode %q", provider.ConnectionMode)
-	}
-	if provider.DefaultConnection != "" {
-		if _, ok := provider.Connections[provider.DefaultConnection]; !ok {
-			return fmt.Errorf("provider.defaultConnection %q references undefined provider.connections entry", provider.DefaultConnection)
+	if normalized.DefaultConnection != "" {
+		if _, ok := normalized.Connections[normalized.DefaultConnection]; !ok {
+			return fmt.Errorf("provider.defaultConnection %q references undefined provider.connections entry", normalized.DefaultConnection)
 		}
 	}
-	if len(provider.Connections) > 0 {
-		for name := range provider.Connections {
+	if len(normalized.Connections) > 0 {
+		for name := range normalized.Connections {
 			if strings.TrimSpace(name) == "" {
 				return fmt.Errorf("provider.connections keys must be non-empty")
 			}
