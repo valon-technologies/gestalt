@@ -230,13 +230,13 @@ func (s *Server) adminAuthorizationDynamicRowFromProviderRelationship(ctx contex
 	}
 
 	switch strings.TrimSpace(rel.GetSubject().GetType()) {
-	case authorization.ProviderSubjectTypeUser:
-		userID := strings.TrimSpace(rel.GetSubject().GetId())
-		if userID == "" {
+	case authorization.ProviderSubjectTypeSubject:
+		subjectID := strings.TrimSpace(rel.GetSubject().GetId())
+		if principal.UserIDFromSubjectID(subjectID) == "" {
 			return adminAuthorizationMemberRow{}, false, nil
 		}
 		row.SelectorKind = "subject_id"
-		row.SelectorValue = principal.UserSubjectID(userID)
+		row.SelectorValue = subjectID
 	default:
 		return adminAuthorizationMemberRow{}, false, nil
 	}

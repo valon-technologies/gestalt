@@ -16,7 +16,6 @@ const (
 	ProviderResourceIDAdminDynamicGlobal  = "global"
 
 	ProviderSubjectTypeSubject = "subject"
-	ProviderSubjectTypeUser    = "user"
 )
 
 const (
@@ -28,7 +27,6 @@ const (
 	resourceIDAdminDynamicGlobal  = ProviderResourceIDAdminDynamicGlobal
 
 	subjectTypeSubject = ProviderSubjectTypeSubject
-	subjectTypeUser    = ProviderSubjectTypeUser
 )
 
 func IsManagedProviderRelationship(rel *core.Relationship) bool {
@@ -69,7 +67,7 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
 		buildProviderAuthorizationResourceType(
 			resourceTypePluginDynamic,
-			resourceTypesForRoles(unionRoleLists(state.pluginDynamicRoles), subjectTypeUser),
+			resourceTypesForRoles(unionRoleLists(state.pluginDynamicRoles), subjectTypeSubject),
 			unionRoleLists(state.pluginDynamicRoles),
 		),
 	)
@@ -83,7 +81,7 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
 		buildProviderAuthorizationResourceType(
 			resourceTypeAdminDynamic,
-			resourceTypesForRoles(state.adminDynamicRoles, subjectTypeUser),
+			resourceTypesForRoles(state.adminDynamicRoles, subjectTypeSubject),
 			state.adminDynamicRoles,
 		),
 	)

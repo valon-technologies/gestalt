@@ -928,7 +928,7 @@ func seedProviderDynamicAdminMembership(t *testing.T, svc *coredata.Services, au
 		t.Fatal("seedProviderDynamicAdminMembership: provider has no active model")
 	}
 	provider.putRelationship(provider.activeModelID, &core.Relationship{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeUser, Id: user.ID},
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(user.ID)},
 		Relation: role,
 		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAdminDynamic, Id: authorization.ProviderResourceIDAdminDynamicGlobal},
 	})
@@ -950,7 +950,7 @@ func seedProviderPluginAuthorization(t *testing.T, svc *coredata.Services, authz
 		t.Fatal("seedProviderPluginAuthorization: provider has no active model")
 	}
 	provider.putRelationship(provider.activeModelID, &core.Relationship{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeUser, Id: user.ID},
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(user.ID)},
 		Relation: role,
 		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: plugin},
 	})
