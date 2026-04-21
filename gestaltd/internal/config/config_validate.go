@@ -14,6 +14,7 @@ import (
 	"time"
 
 	cronv3 "github.com/robfig/cron/v3"
+	modalruntime "github.com/valon-technologies/gestalt-providers/runtime/modal"
 	"github.com/valon-technologies/gestalt/server/internal/providerenv"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -411,6 +412,14 @@ func validateRuntimeConfig(cfg *Config) error {
 		}
 		if entry.Driver == RuntimeProviderDriverLocal && entry.Config.Kind != 0 {
 			return fmt.Errorf("config validation: runtime.providers.%s.config is not supported when driver is %q", name, RuntimeProviderDriverLocal)
+		}
+		if entry.Driver == RuntimeProviderDriverModal {
+			if entry.Config.Kind == 0 {
+				return fmt.Errorf("config validation: runtime.providers.%s.config is required when driver is %q", name, RuntimeProviderDriverModal)
+			}
+			if _, err := modalruntime.DecodeConfig(entry.Config); err != nil {
+				return fmt.Errorf("config validation: runtime.providers.%s.config: %w", name, err)
+			}
 		}
 	}
 	if _, _, err := cfg.SelectedRuntimeProvider(); err != nil {

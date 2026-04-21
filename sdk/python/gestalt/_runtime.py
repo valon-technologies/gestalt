@@ -122,15 +122,19 @@ def serve(
     *,
     runtime_kind: ProviderKind | str | None = None,
 ) -> None:
-    socket_path = _socket_path_from_env()
-    _remove_stale_socket(socket_path)
+    network, address = _listen_target_from_env()
+    if network == "unix":
+        _remove_stale_socket(pathlib.Path(address))
 
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=GRPC_SERVER_MAX_WORKERS)
     )
     servable = _servable_target(target, runtime_kind=runtime_kind)
     _register_services(server=server, servable=servable)
-    server.add_insecure_port(f"unix:{socket_path}")
+    if network == "unix":
+        server.add_insecure_port(f"unix:{address}")
+    else:
+        server.add_insecure_port(address)
     close_provider = _close_once_callable(servable)
     server.start()
     _register_shutdown_handlers(server, close_provider)
@@ -245,11 +249,25 @@ def _module_target(
     return None
 
 
-def _socket_path_from_env() -> pathlib.Path:
-    socket_path = os.environ.get(ENV_PROVIDER_SOCKET)
-    if not socket_path:
+def _listen_target_from_env() -> tuple[str, str]:
+    raw = os.environ.get(ENV_PROVIDER_SOCKET)
+    if not raw:
         raise RuntimeError(f"{ENV_PROVIDER_SOCKET} is required")
-    return pathlib.Path(socket_path)
+    if raw.startswith("tcp://"):
+        address = raw.removeprefix("tcp://").strip()
+        if not address:
+            raise RuntimeError(
+                f"{ENV_PROVIDER_SOCKET} tcp target must include host:port"
+            )
+        return ("tcp", address)
+    if raw.startswith("unix://"):
+        path_value = raw.removeprefix("unix://").strip()
+        if not path_value:
+            raise RuntimeError(
+                f"{ENV_PROVIDER_SOCKET} unix target must include a socket path"
+            )
+        return ("unix", path_value)
+    return ("unix", raw)
 
 
 def _remove_stale_socket(socket_path: pathlib.Path) -> None:

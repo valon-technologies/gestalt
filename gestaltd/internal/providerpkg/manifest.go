@@ -299,16 +299,20 @@ func ValidatePolicyBoundWebUIRoutes(routes []providermanifestv1.WebUIRoute) erro
 }
 
 func CurrentPlatformArtifact(manifest *providermanifestv1.Manifest) (*providermanifestv1.Artifact, error) {
+	return ArtifactForPlatform(manifest, runtime.GOOS, runtime.GOARCH)
+}
+
+func ArtifactForPlatform(manifest *providermanifestv1.Manifest, goos, goarch string) (*providermanifestv1.Artifact, error) {
 	if manifest == nil {
 		return nil, fmt.Errorf("manifest is required")
 	}
 	for i := range manifest.Artifacts {
 		a := &manifest.Artifacts[i]
-		if a.OS == runtime.GOOS && a.Arch == runtime.GOARCH {
+		if a.OS == goos && a.Arch == goarch {
 			return a, nil
 		}
 	}
-	return nil, fmt.Errorf("no artifact for current platform %s/%s", runtime.GOOS, runtime.GOARCH)
+	return nil, fmt.Errorf("no artifact for platform %s/%s", goos, goarch)
 }
 
 func EntrypointForKind(manifest *providermanifestv1.Manifest, _ string) *providermanifestv1.Entrypoint {

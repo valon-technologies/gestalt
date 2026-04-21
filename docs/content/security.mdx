@@ -76,16 +76,31 @@ plugins:
 Wildcards are supported (`*.example.com` matches `api.example.com`). The same
 check applies uniformly to REST, GraphQL, and MCP providers.
 
-### OS-level sandbox
+### Plugin runtimes and isolation
 
-Executable plugin providers can run with additional OS-level isolation when
+Executable plugin providers run locally by default. A plugin only moves into a
+hosted runtime when it sets `plugins.<name>.runtime`.
+
+When a plugin stays local, `gestaltd` can still add host-local isolation when
 `allowedHosts` is configured or when `server.egress.defaultAction` is `deny`.
-That isolation currently depends on host-specific runtime support, so it should
-not be treated as a portable security boundary by itself.
+That path depends on host-specific runtime support, so it should not be treated
+as a portable security boundary by itself.
 
 **Filesystem.** On Linux, [Landlock](https://docs.kernel.org/userspace-api/landlock.html) restricts file access to system libraries, SSL certificates, and DNS configuration. Writes are limited to the socket directory and an isolated temp directory. On macOS, equivalent restrictions are applied via `sandbox-exec`.
 
 **Network.** `gestaltd` starts a local HTTP proxy and sets `HTTP_PROXY`/`HTTPS_PROXY` in the provider's environment. The proxy checks each request's hostname against the same `allowedHosts` and `defaultAction` rules used by all other provider types.
+
+Hosted runtimes must preserve that same hostname-based policy model before
+Gestalt will use them for plugins that declare `allowedHosts`. A backend that
+only exposes CIDR or firewall controls cannot faithfully reproduce rules such
+as `api.github.com` versus another hostname on shared infrastructure, so
+Gestalt rejects those combinations rather than silently weakening policy.
+
+The current `modal` runtime falls into that category: it provides hosted
+execution and gRPC tunneling, but not hostname-aware egress enforcement or host
+service tunnels. Gestalt therefore only uses Modal for plain executable
+plugins that do not require those controls, including workflow-manager access
+when workflows are configured.
 
 **Process group.** Sandboxed providers run in their own process group. On shutdown, `gestaltd` signals the entire group to ensure child processes are also cleaned up.
 

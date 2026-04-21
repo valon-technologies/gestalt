@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"google.golang.org/grpc"
 )
@@ -61,6 +63,9 @@ func (p *LocalProvider) Capabilities(context.Context) (Capabilities, error) {
 		HostServiceTunnels:  true,
 		ProviderGRPCTunnel:  true,
 		HostnameProxyEgress: true,
+		HostPathExecution:   true,
+		ExecutionGOOS:       runtime.GOOS,
+		ExecutionGOARCH:     runtime.GOARCH,
 	}, nil
 }
 
@@ -207,7 +212,7 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 		Args:          req.Args,
 		Env:           req.Env,
 		AllowedHosts:  req.AllowedHosts,
-		DefaultAction: req.DefaultAction,
+		DefaultAction: egress.PolicyAction(req.DefaultAction),
 		HostBinary:    req.HostBinary,
 		Cleanup:       req.Cleanup,
 		HostServices:  hostServices,

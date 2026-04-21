@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -53,21 +54,29 @@ func withProviderCloser(ctx context.Context, provider any) context.Context {
 }
 
 func serveProvider(ctx context.Context, register func(*grpc.Server)) error {
-	socket := os.Getenv(proto.EnvProviderSocket)
-	if socket == "" {
+	listenTarget := os.Getenv(proto.EnvProviderSocket)
+	if listenTarget == "" {
 		return fmt.Errorf("%s is required", proto.EnvProviderSocket)
 	}
-	if err := os.Remove(socket); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove stale socket %q: %w", socket, err)
-	}
 
-	lis, err := net.Listen("unix", socket)
+	network, address, err := providerListenTarget(listenTarget)
 	if err != nil {
-		return fmt.Errorf("listen on plugin socket %q: %w", socket, err)
+		return err
+	}
+	if network == "unix" {
+		if err := os.Remove(address); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove stale socket %q: %w", address, err)
+		}
+	}
+	lis, err := net.Listen(network, address)
+	if err != nil {
+		return fmt.Errorf("listen on plugin %s %q: %w", network, address, err)
 	}
 	defer func() {
 		_ = lis.Close()
-		_ = os.Remove(socket)
+		if network == "unix" {
+			_ = os.Remove(address)
+		}
 	}()
 
 	srv := grpc.NewServer()
@@ -99,6 +108,27 @@ func serveProvider(ctx context.Context, register func(*grpc.Server)) error {
 		return nil
 	}
 	return err
+}
+
+func providerListenTarget(raw string) (network string, address string, err error) {
+	if strings.HasPrefix(raw, "tcp://") {
+		address = strings.TrimSpace(strings.TrimPrefix(raw, "tcp://"))
+		if address == "" {
+			return "", "", fmt.Errorf("provider tcp listen target %q is missing host:port", raw)
+		}
+		return "tcp", address, nil
+	}
+	if strings.HasPrefix(raw, "unix://") {
+		address = strings.TrimSpace(strings.TrimPrefix(raw, "unix://"))
+		if address == "" {
+			return "", "", fmt.Errorf("provider unix listen target %q is missing a socket path", raw)
+		}
+		return "unix", address, nil
+	}
+	if strings.Contains(raw, "://") {
+		return "", "", fmt.Errorf("unsupported provider listen target %q", raw)
+	}
+	return "unix", filepath.Clean(raw), nil
 }
 
 func providerParentPID() int {

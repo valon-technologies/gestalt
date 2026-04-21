@@ -88,6 +88,7 @@ func RunIntegrationTests(t *testing.T, newIntegration func(t *testing.T, mockURL
 		}
 		if resp == nil {
 			t.Fatal("RefreshToken returned nil")
+			return
 		}
 		if resp.AccessToken == "" {
 			t.Error("AccessToken is empty")
@@ -103,6 +104,7 @@ func RunIntegrationTests(t *testing.T, newIntegration func(t *testing.T, mockURL
 		cat := integration.Catalog()
 		if cat == nil {
 			t.Fatal("Catalog returned nil")
+			return
 		}
 		if len(cat.Operations) == 0 {
 			t.Fatal("Catalog returned empty operations")

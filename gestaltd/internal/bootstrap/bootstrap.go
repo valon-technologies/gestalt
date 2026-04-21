@@ -181,6 +181,7 @@ func NewFactoryRegistry() *FactoryRegistry {
 			config.RuntimeProviderDriverLocal: func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
 				return pluginruntime.NewLocalProvider(), nil
 			},
+			config.RuntimeProviderDriverModal: buildModalPluginRuntime,
 		},
 		Telemetry: make(map[string]TelemetryFactory),
 	}

@@ -109,6 +109,15 @@ func (r *workflowRuntime) StartupWaitTracker() *startupWaitTracker {
 	return r.startupWaits
 }
 
+func (r *workflowRuntime) HasConfiguredProviders() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.providers) > 0
+}
+
 func (r *workflowRuntime) SetInvoker(invoker invocation.Invoker) {
 	if r == nil {
 		return

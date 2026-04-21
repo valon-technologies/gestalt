@@ -5,9 +5,10 @@ import { Tabs } from 'nextra/components'
 Every `gestaltd` deployment reads one or more YAML config files. When you pass
 multiple `--config` flags, Gestalt merges them left-to-right before validation
 and bootstrap. The top-level keys are `server` (listener, encryption, egress,
-and host-provider selection), `authorization` (shared human/workload access
-policy), `providers` (named authentication, secrets, telemetry, audit, UI,
-indexeddb, authorization, workflow, cache, and s3 entries), `workflows`
+host-provider selection, and runtime defaults), `authorization` (shared
+human/workload access policy), `providers` (named authentication, secrets,
+telemetry, audit, UI, indexeddb, authorization, workflow, cache, and s3
+entries), `runtime` (named plugin runtime backends), `workflows`
 (config-managed schedules and event triggers), and `plugins` (executable
 integrations and optional plugin-backed UI mounts):
 
@@ -28,6 +29,8 @@ providers:
   telemetry: {}
   ui: {}
   workflow: {}
+runtime:
+  providers: {}
 workflows:
   schedules: {}
   eventTriggers: {}
@@ -116,6 +119,8 @@ server:
     authorization: indexeddb
     authentication: oidc
     indexeddb: main
+  runtime:
+    provider: local
 authorization:
   policies:
     support_staff:
@@ -176,12 +181,83 @@ Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `a
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
 | `artifactsDir` | config directory | Directory for prepared `init` artifacts. |
 | `providers.audit` / `providers.authentication` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
+| `runtime.provider` | | Default runtime-provider selector for plugins that opt into `plugins.<name>.runtime`. This does not move plugins into hosted runtimes by itself. |
 | `admin.authorizationPolicy` | | Shared human access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
 | `authorization.policies` | | Shared human access policies resolved by canonical `subjectID`. |
 | `authorization.workloads` | | Workload bearer tokens, per-provider allowlists, and workload-owned credential bindings. |
 
 When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener. When `server.admin.authorizationPolicy` is set, Gestalt does apply browser session auth plus role-based policy checks to `/admin` and `/admin/api/v1/*`.
+
+## `runtime`
+
+`runtime.providers` defines named execution backends for executable plugins.
+These backends are only used when a plugin opts into `plugins.<name>.runtime`.
+If a plugin omits `runtime`, it still runs on the same machine as `gestaltd`.
+
+```yaml
+runtime:
+  providers:
+    local:
+      driver: local
+    modal:
+      driver: modal
+      default: true
+      config:
+        app: gestalt-runtime
+        environment: main
+```
+
+`server.runtime.provider` supplies the default runtime name for plugins that set
+`plugins.<name>.runtime` without an explicit `provider`.
+
+| Field | Description |
+| --- | --- |
+| `providers.<name>.driver` | **Required.** Runtime driver identifier such as `local` or `modal`. |
+| `providers.<name>.default` | Marks the runtime as the default selection when `server.runtime.provider` is omitted. Only one runtime may be default. |
+| `providers.<name>.config` | Driver-specific config blob. Some drivers, such as `local`, reject custom config entirely. |
+
+### `runtime.providers.*.config` for `modal`
+
+The built-in `modal` runtime creates hosted Linux sandboxes in a Modal app and
+connects to the plugin over a gRPC tunnel.
+
+```yaml
+runtime:
+  providers:
+    modal:
+      driver: modal
+      config:
+        app: gestalt-runtime
+        environment: main
+        cpu: 2
+        memoryMiB: 4096
+        memoryLimitMiB: 6144
+        timeout: 30m
+        idleTimeout: 10m
+        cloud: aws
+        regions:
+          - us-east-1
+```
+
+| Field | Description |
+| --- | --- |
+| `app` | **Required.** Modal app name used to create or reuse sandboxes. |
+| `environment` | Optional Modal environment name. |
+| `cpu` | Optional CPU allocation for each sandbox. Must be non-negative. |
+| `memoryMiB` | Optional memory request in MiB. Must be non-negative. |
+| `memoryLimitMiB` | Optional memory limit in MiB. Must be non-negative. |
+| `timeout` | Optional absolute sandbox timeout. |
+| `idleTimeout` | Optional idle timeout before Modal reclaims the sandbox. |
+| `cloud` | Optional cloud selector passed through to Modal. |
+| `regions` | Optional region allowlist passed through to Modal. |
+
+When a plugin uses the `modal` runtime, `plugins.<name>.runtime.image` is
+required. The current backend does not support host-service tunnels or
+Gestalt's hostname-based egress model, so Gestalt rejects Modal for plugins
+that need `indexeddb`, `cache`, `s3`, workflow-manager access when workflows
+are configured, nested `invokes`, `allowedHosts`, or a server-wide default-deny
+egress policy.
 
 ## `providers.authentication`
 
@@ -243,7 +319,7 @@ Authentication providers use the same `ProviderEntry` shape under `providers.aut
 | `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the authentication provider. |
 | `env` | Extra environment variables passed to the provider process. |
-| `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when the selected runtime preserves hostname-based egress controls. |
 
 ## `providers.indexeddb`
 
@@ -321,7 +397,7 @@ The exact config fields depend on the selected authorization provider package. T
 | `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the authorization provider. |
 | `env` | Extra environment variables passed to the provider process. |
-| `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when the selected runtime preserves hostname-based egress controls. |
 
 ## `providers.workflow`
 
@@ -385,7 +461,7 @@ allowlist logical stores exposed through that binding.
 | `config` | Provider-specific config passed into the workflow provider. |
 | `indexeddb` | Optional host IndexedDB binding for the workflow provider, including `provider`, optional `db`, and optional `objectStores`. |
 | `env` | Extra environment variables passed to the provider process. |
-| `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when the selected runtime preserves hostname-based egress controls. |
 
 ## `workflows`
 
@@ -481,7 +557,7 @@ First-party cache providers are published at
 | `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Arbitrary provider-specific config passed through to the cache provider. |
 | `env` | Extra environment variables passed to the provider process. |
-| `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when the selected runtime preserves hostname-based egress controls. |
 
 ## `providers.s3`
 
@@ -819,10 +895,41 @@ plugins:
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
 | `indexeddb` | Optional plugin IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the plugin's single IndexedDB SDK socket; when omitted, the plugin inherits the selected/default host IndexedDB. `indexeddb.db` overrides the plugin-visible database name and defaults to the plugin key. Schema-capable backends derive plugin scoping from that `db` name. `indexeddb.objectStores` optionally allowlists the logical object stores the plugin may use. Plugins then call `new IndexedDB()` (or the equivalent SDK helper) against `GESTALT_INDEXEDDB_SOCKET`; they do not choose arbitrary schemas or DSNs at runtime. |
+| `runtime` | Optional hosted-runtime config. Setting this opts the plugin into runtime-backed execution. See `plugins.*.runtime` below. |
 | `s3` | Optional list of named `providers.s3` bindings exposed to the executable plugin through the SDK transport. A single binding also populates the default S3 SDK env var for compatibility. |
 
 S3 bindings are exposed as `GESTALT_S3_SOCKET_<NAME>`. When exactly one S3
 binding is configured, Gestalt also sets `GESTALT_S3_SOCKET`.
+
+### `plugins.*.runtime`
+
+`plugins.<name>.runtime` opts an executable plugin into a hosted runtime. The
+plugin stays host-local when this block is omitted.
+
+```yaml
+plugins:
+  support:
+    source: ./plugins/support/manifest.yaml
+    runtime:
+      provider: local
+      template: python-dev
+      image: ghcr.io/example/support-plugin:2026-04-21
+      metadata:
+        environment: production
+        owner: support-platform
+```
+
+When `provider` is omitted, Gestalt uses `server.runtime.provider` or the one
+`runtime.providers.<name>` entry marked `default: true`. `template`, `image`,
+and `metadata` are passed through to the runtime backend as opaque backend-
+specific selectors or labels.
+
+| Field | Description |
+| --- | --- |
+| `provider` | Named entry from `runtime.providers`. Optional when `server.runtime.provider` or one runtime default is available. |
+| `template` | Optional runtime-specific template name forwarded when the session starts. |
+| `image` | Optional runtime-specific image identifier forwarded when the session starts. |
+| `metadata` | Optional string map forwarded to the runtime backend. Keys must be non-empty. |
 
 ### `plugins.*.source`
 
@@ -927,7 +1034,7 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
 | `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs, `source.githubRelease`, and local `provider-release.yaml` metadata. |
 | `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either `server` or a named `providers.authentication` entry. Gestalt enforces this on plugin HTTP operation routes and on plugin-backed mounted UIs. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
 | `env` | Extra environment variables passed to the provider process. |
-| `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when the selected runtime preserves hostname-based egress controls. |
 
 ### `connections`
 
@@ -1088,7 +1195,9 @@ connections:
 `server.egress` sets the server-wide default for outbound network access.
 Per-provider `allowedHosts` lists declare which hosts each provider may reach.
 For executable plugins, that declaration is only a complete enforcement
-boundary when the deployment is using a supported sandboxed runtime.
+boundary when the selected runtime preserves Gestalt's hostname-based policy
+model. Runtimes that expose only CIDR or firewall controls cannot silently
+stand in for `allowedHosts`.
 
 ```yaml
 server:
@@ -1114,8 +1223,9 @@ When `allowedHosts` is set on a provider, Gestalt applies that allowlist to
 host-mediated outbound checks using exact matches and `*.suffix` wildcards. When
 `allowedHosts` is empty, `defaultAction` decides: `allow` permits outbound
 requests, `deny` blocks them. For executable plugins, those rules are only a
-complete security boundary when the plugin is running inside a supported
-sandboxed runtime rather than relying on host-specific OS wrappers alone.
+complete security boundary when the plugin is running inside a runtime backend
+that preserves hostname-based egress controls rather than relying on
+host-specific OS wrappers alone.
 
 ## `providers.ui`
 
@@ -1175,6 +1285,15 @@ Mounted UI bundles are served on the public listener only. The built-in admin UI
 `authorization.policies.<name>.default` must be `allow` or `deny` when set. Each policy member must set a non-empty `subjectID` and a non-empty `role`.
 
 Server listener ports must be greater than zero. When `server.management` is configured, it must differ from `server.public`.
+
+Each `runtime.providers.<name>` entry must set `driver`. At most one runtime
+entry may set `default: true`. `server.runtime.provider` must reference an
+existing `runtime.providers.<name>` entry when set. `plugins.<name>.runtime`
+must reference an existing runtime entry unless `server.runtime.provider` or a
+runtime default can satisfy the selection. `plugins.<name>.runtime.metadata`
+keys must be non-empty. Driver-specific `runtime.providers.<name>.config`
+validation depends on the selected driver; for example, the built-in `local`
+driver rejects custom config.
 
 ### Runtime
 

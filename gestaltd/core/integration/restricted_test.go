@@ -105,6 +105,7 @@ func TestCatalogFiltersCanOverrideAllowedRoles(t *testing.T) {
 	cat := r.Catalog()
 	if cat == nil {
 		t.Fatal("Catalog() returned nil")
+		return
 	}
 	if len(cat.Operations) != 2 {
 		t.Fatalf("Catalog().Operations: got %d, want 2", len(cat.Operations))

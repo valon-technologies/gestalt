@@ -318,12 +318,12 @@ export async function runBundledProvider(
  * Starts serving a provider over the Gestalt Unix socket transport.
  */
 export async function serve(provider: LoadedProvider): Promise<void> {
-  const socketPath = process.env[ENV_PROVIDER_SOCKET];
-  if (!socketPath) {
+  const target = providerListenTarget(process.env[ENV_PROVIDER_SOCKET]);
+  if (!target) {
     throw new Error(`${ENV_PROVIDER_SOCKET} is required`);
   }
-  if (existsSync(socketPath)) {
-    rmSync(socketPath);
+  if (target.network === "unix" && existsSync(target.address)) {
+    rmSync(target.address);
   }
 
   const handler = connectNodeAdapter({
@@ -351,8 +351,8 @@ export async function serve(provider: LoadedProvider): Promise<void> {
             server.close(() => resolveClose());
           });
         } finally {
-          if (existsSync(socketPath)) {
-            rmSync(socketPath);
+          if (target.network === "unix" && existsSync(target.address)) {
+            rmSync(target.address);
           }
         }
       }
@@ -362,7 +362,15 @@ export async function serve(provider: LoadedProvider): Promise<void> {
 
   await new Promise<void>((resolveListen, rejectListen) => {
     server.once("error", rejectListen);
-    server.listen(socketPath, () => {
+    if (target.network === "unix") {
+      server.listen(target.address, () => {
+        server.off("error", rejectListen);
+        resolveListen();
+      });
+      return;
+    }
+    const [host, portRaw] = splitHostPort(target.address);
+    server.listen(Number.parseInt(portRaw, 10), host, () => {
       server.off("error", rejectListen);
       resolveListen();
     });
@@ -381,6 +389,52 @@ export async function serve(provider: LoadedProvider): Promise<void> {
   if (shutdownError) {
     throw shutdownError;
   }
+}
+
+type ProviderListenTarget = {
+  network: "unix" | "tcp";
+  address: string;
+};
+
+function providerListenTarget(raw: string | undefined): ProviderListenTarget | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  if (raw.startsWith("tcp://")) {
+    const address = raw.slice("tcp://".length).trim();
+    if (!address) {
+      throw new Error(`${ENV_PROVIDER_SOCKET} tcp target must include host:port`);
+    }
+    return { network: "tcp", address };
+  }
+  if (raw.startsWith("unix://")) {
+    const address = raw.slice("unix://".length).trim();
+    if (!address) {
+      throw new Error(`${ENV_PROVIDER_SOCKET} unix target must include a socket path`);
+    }
+    return { network: "unix", address };
+  }
+  return { network: "unix", address: raw };
+}
+
+export function splitHostPort(address: string): [string, string] {
+  if (address.startsWith("[")) {
+    const end = address.indexOf("]");
+    if (end <= 0 || end === address.length - 1 || address[end + 1] !== ":") {
+      throw new Error(`${ENV_PROVIDER_SOCKET} tcp target must include host:port`);
+    }
+    const host = address.slice(1, end);
+    const port = address.slice(end + 2);
+    if (!host || !port) {
+      throw new Error(`${ENV_PROVIDER_SOCKET} tcp target must include host:port`);
+    }
+    return [host, port];
+  }
+  const lastColon = address.lastIndexOf(":");
+  if (lastColon < 0 || lastColon === address.length - 1) {
+    throw new Error(`${ENV_PROVIDER_SOCKET} tcp target must include host:port`);
+  }
+  return [address.slice(0, lastColon), address.slice(lastColon + 1)];
 }
 
 /**

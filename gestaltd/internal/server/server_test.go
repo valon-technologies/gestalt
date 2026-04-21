@@ -6176,8 +6176,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		}
 
 		if !reflect.DeepEqual(got[config.PluginConnectionAlias].AuthTypes, []string{"manual"}) || !reflect.DeepEqual(got[config.PluginConnectionAlias].CredentialFields, []credentialField{
-			{Name: "plugin_token", Label: "Plugin Manifest Token", Description: "Plugin Config Description"},
-			{Name: "plugin_manifest_only", Label: "Plugin Manifest Only", Description: "Plugin Manifest Only Description"},
+			{Name: "plugin_token", Label: "", Description: "Plugin Config Description"},
 			{Name: "plugin_local_only", Label: "Plugin Local Only", Description: "Plugin Local Only Description"},
 		}) {
 			t.Fatalf("plugin connection info = %+v", got[config.PluginConnectionAlias])

@@ -57,6 +57,7 @@ import {
   loadProviderFromTarget,
   main,
   parseRuntimeArgs,
+  splitHostPort,
 } from "../src/runtime.ts";
 import {
   PresignMethod,
@@ -96,6 +97,12 @@ test("runtime arg parsing requires root and target", () => {
     target: "plugin:./provider.ts#plugin",
   });
   expect(parseRuntimeArgs(["root"])).toBeUndefined();
+});
+
+test("runtime tcp listener parsing strips IPv6 brackets", () => {
+  expect(splitHostPort("[::1]:50051")).toEqual(["::1", "50051"]);
+  expect(splitHostPort("127.0.0.1:50051")).toEqual(["127.0.0.1", "50051"]);
+  expect(splitHostPort(":50051")).toEqual(["", "50051"]);
 });
 
 test("runtime main writes a static catalog in catalog mode", async () => {

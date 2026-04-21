@@ -86,6 +86,7 @@ type RuntimeConfig struct {
 type RuntimeProviderDriver string
 
 const RuntimeProviderDriverLocal RuntimeProviderDriver = "local"
+const RuntimeProviderDriverModal RuntimeProviderDriver = "modal"
 
 type RuntimeProviderEntry struct {
 	Driver  RuntimeProviderDriver `yaml:"driver,omitempty"`

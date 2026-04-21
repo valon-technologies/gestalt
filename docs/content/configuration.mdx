@@ -4,7 +4,7 @@ Gestalt is configured from one or more YAML files. This page covers the key conc
 
 ## Config file structure
 
-A Gestalt config has five top-level keys: `server` for host settings and host-provider selection, `authorization` for shared human/workload access policy, `providers` for named host-scoped providers and web UIs, `workflows` for config-managed schedules and event triggers, and `plugins` for executable integrations and optional plugin-backed UI mounts.
+A Gestalt config has six top-level keys: `server` for host settings and host-provider selection, `authorization` for shared human/workload access policy, `providers` for named host-scoped providers and web UIs, `runtime` for named plugin runtime backends, `workflows` for config-managed schedules and event triggers, and `plugins` for executable integrations and optional plugin-backed UI mounts.
 
 ```yaml
 authorization:
@@ -58,6 +58,10 @@ providers:
   workflow:
     <name>: ...             # each is a ProviderEntry
 
+runtime:
+  providers:
+    <name>: ...             # each is a RuntimeProviderEntry
+
 workflows:
   schedules: {}             # config-managed schedules
   eventTriggers: {}         # config-managed event triggers
@@ -87,17 +91,21 @@ server:
     secrets: ...
     telemetry: ...
 
+  # default runtime selection for plugins that opt in
+  runtime:
+    provider: ...
+
   # public listener (default port 8080)
   public:
     host: ...
     port: ...
 ```
 
-ProviderEntry-backed entries accept `source` (where to load it from), `config` (provider-specific settings), `allowedHosts`, and optional metadata fields. Plugin entries additionally support plugin-only fields such as `connections`, `allowedOperations`, `mountPath`, and `ui`. See the [Config File](/reference/config-file) reference for every field.
+ProviderEntry-backed entries accept `source` (where to load it from), `config` (provider-specific settings), `allowedHosts`, and optional metadata fields. Plugin entries additionally support plugin-only fields such as `connections`, `allowedOperations`, `mountPath`, `ui`, and `runtime`. See the [Config File](/reference/config-file) reference for every field.
 
 ## Key concepts
 
-Gestalt has nine core concepts you configure in YAML:
+Gestalt has ten core concepts you configure in YAML:
 
 - **[Plugin.](/providers/plugins)** A tool backed by a provider package. Plugins expose operations that agents and users invoke over HTTP, MCP, or the CLI. Plugins can come from published packages or local source.
 - **Connection.** How Gestalt authenticates to an upstream API on behalf of a user or service. Connections handle OAuth flows, API keys, and manual credentials.
@@ -108,6 +116,7 @@ Gestalt has nine core concepts you configure in YAML:
 - **[Secrets.](/providers/secrets)** Resolves structured secret refs in the config at startup. Backed by environment variables, files, or cloud secret managers.
 - **[Workflow.](/providers/workflow)** Global workflow runs, schedules, and event triggers backed by a workflow provider and optional host IndexedDB storage.
 - **[UI.](/providers/web-uis)** Public static UI bundles served under configured path prefixes, either directly from `providers.ui` or through `plugins.<name>.mountPath`. Omit `providers.ui` to run headless.
+- **Runtime.** Optional execution backends for executable plugins. Plugins stay host-local by default; `plugins.<name>.runtime` opts a plugin into hosted execution and `runtime.providers` names the available backends.
 
 ## Adding a plugin
 
@@ -173,9 +182,11 @@ Each entry can set an `alias` to rename the operation as it appears to callers.
 Every provider supports `allowedHosts` to declare which upstream hosts it can
 reach. When `server.egress.defaultAction` is `deny`, providers without an
 explicit allowlist are blocked from host-mediated outbound requests. Executable
-plugin providers may also use OS-level sandboxing when egress restrictions are
-active, but that path depends on runtime support and is not yet a portable
-security boundary.
+plugin providers may also use runtime-backed isolation when egress restrictions
+are active, but the runtime has to preserve Gestalt's hostname-based policy
+model. Backends that only support CIDR or firewall controls cannot faithfully
+implement `allowedHosts` by themselves, so Gestalt rejects those
+runtime/plugin combinations instead of silently weakening policy.
 
 ```yaml
 plugins:
@@ -185,6 +196,60 @@ plugins:
       - api.example.com
       - cdn.example.com
 ```
+
+## Choosing a plugin runtime
+
+Executable plugins run on the same machine as `gestaltd` unless the plugin opts
+into a hosted runtime. Runtime selection is two-step:
+
+- define named backends under `runtime.providers`
+- opt an individual plugin in with `plugins.<name>.runtime`
+
+`server.runtime.provider` is only a default selector for plugins that already
+set `plugins.<name>.runtime`; it does not move every plugin into a hosted
+runtime automatically.
+
+```yaml
+runtime:
+  providers:
+    modal:
+      driver: modal
+      default: true
+      config:
+        app: gestalt-runtime
+        environment: main
+
+server:
+  runtime:
+    provider: modal
+
+plugins:
+  support:
+    source: ./plugins/support/manifest.yaml
+    runtime:
+      template: python-dev
+      image: ghcr.io/example/support-plugin:2026-04-21
+      metadata:
+        environment: production
+        owner: support-platform
+```
+
+`plugins.<name>.runtime.template`, `image`, and `metadata` are forwarded to the
+selected runtime backend. Their meaning is backend-specific: a local runtime may
+ignore them, while a hosted runtime may use them to choose a sandbox template,
+container image, or labels/tags for lifecycle management.
+
+The built-in runtime drivers are:
+
+- `local` for same-machine execution
+- `modal` for hosted Linux sandboxes reached over a gRPC tunnel
+
+The current Modal backend requires `runtime.providers.<name>.config.app` and
+`plugins.<name>.runtime.image`. It does not currently support host-service
+tunnels (`indexeddb`, `cache`, `s3`, workflow-manager access when workflows are
+configured, nested `invokes`) or Gestalt's
+hostname-based egress model, so Gestalt rejects Modal for plugins that require
+those capabilities.
 
 ## Binding S3 object stores
 
