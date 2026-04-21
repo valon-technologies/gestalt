@@ -64,7 +64,7 @@ func TestServeAuthenticationProviderClosesProviderOnShutdown(t *testing.T) {
 	auth := &closeableStubAuthenticationProvider{}
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- gestalt.ServeAuthenticationProvider(ctx, auth)
+		errCh <- gestalt.ServeLegacyAuthenticationProvider(ctx, auth)
 	}()
 	t.Cleanup(func() {
 		cancel()

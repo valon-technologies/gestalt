@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"strings"
 	"time"
@@ -192,12 +193,45 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 		if !ok || shouldHidePassiveNamedConnection(plan, name, conn, integrationAuthTypes) {
 			continue
 		}
+		if name == config.PluginConnectionName {
+			conn = advertisedPluginConnectionDef(plugin, plugin.ManifestSpec())
+		}
 		if info, ok := s.connectionInfoFromAuth(integration, userFacingConnectionName(name), conn, integrationAuthTypes, defaultCredentialFields, name != config.PluginConnectionName); ok {
 			infos = append(infos, info)
 		}
 	}
 
 	return infos
+}
+
+func advertisedPluginConnectionDef(plugin *config.ProviderEntry, manifestPlugin *providermanifestv1.Spec) config.ConnectionDef {
+	conn := config.ConnectionDef{}
+	if manifestPlugin != nil {
+		if def := manifestPlugin.DefaultConnectionDef(); def != nil {
+			conn.Mode = def.Mode
+			if len(def.Params) > 0 {
+				conn.ConnectionParams = maps.Clone(def.Params)
+			}
+			if def.Auth != nil {
+				config.MergeConnectionAuth(&conn.Auth, config.ManifestAuthToConnectionAuthDef(def.Auth))
+			}
+			if def.Discovery != nil {
+				conn.Discovery = def.Discovery
+			}
+		}
+	}
+	if plugin != nil {
+		override := &config.ConnectionDef{
+			Mode:             plugin.ConnectionMode,
+			ConnectionParams: plugin.ConnectionParams,
+			Discovery:        plugin.Discovery,
+		}
+		if plugin.Auth != nil {
+			override.Auth = *plugin.Auth
+		}
+		config.MergeConnectionDef(&conn, override)
+	}
+	return conn
 }
 
 func userFacingConnectionName(name string) string {

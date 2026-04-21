@@ -643,6 +643,7 @@ class AuthenticationRuntimeTests(unittest.TestCase):
             legacy_login.authorization_url,
             "https://auth.example.test/login?state=host-state",
         )
+        self.assertEqual(legacy_login.DESCRIPTOR.name, "BeginLoginResponse")
         self.assertEqual(bytes(legacy_login.provider_state), b"provider-state")
         self.assertEqual(
             provider.begin_request_names,
@@ -672,6 +673,81 @@ class AuthenticationRuntimeTests(unittest.TestCase):
 
         session_settings = auth_servicer.GetSessionSettings(mock.Mock(), mock.Mock())
         self.assertEqual(session_settings.session_ttl_seconds, 45 * 60)
+
+    def test_authentication_provider_base_bridges_legacy_and_new_messages(self) -> None:
+        class LegacyOnlyProvider(AuthenticationProvider):
+            def __init__(self) -> None:
+                self.begin_request_names: list[str] = []
+                self.complete_request_names: list[str] = []
+
+            def begin_login(self, request: Any) -> Any:
+                self.begin_request_names.append(request.DESCRIPTOR.name)
+                return authentication_pb2.BeginLoginResponse(
+                    authorization_url="https://auth.example.test/legacy",
+                    provider_state=b"legacy-state",
+                )
+
+            def complete_login(self, request: Any) -> Any:
+                self.complete_request_names.append(request.DESCRIPTOR.name)
+                return authentication_pb2.AuthenticatedUser(
+                    email=request.query.get("email", ""),
+                )
+
+        class NewOnlyProvider(AuthenticationProvider):
+            def __init__(self) -> None:
+                self.begin_request_names: list[str] = []
+                self.complete_request_names: list[str] = []
+
+            def begin_authentication(self, request: Any) -> Any:
+                self.begin_request_names.append(request.DESCRIPTOR.name)
+                return authentication_pb2.BeginAuthenticationResponse(
+                    authorization_url="https://auth.example.test/new",
+                    provider_state=b"new-state",
+                )
+
+            def complete_authentication(self, request: Any) -> Any:
+                self.complete_request_names.append(request.DESCRIPTOR.name)
+                return authentication_pb2.AuthenticatedUser(
+                    email=request.query.get("email", ""),
+                )
+
+        legacy = LegacyOnlyProvider()
+        begin_authentication = legacy.begin_authentication(
+            authentication_pb2.BeginAuthenticationRequest(
+                callback_url="https://cb.example.test",
+                host_state="host-state",
+            )
+        )
+        self.assertEqual(begin_authentication.DESCRIPTOR.name, "BeginAuthenticationResponse")
+        self.assertEqual(legacy.begin_request_names, ["BeginLoginRequest"])
+
+        complete_authentication = legacy.complete_authentication(
+            authentication_pb2.CompleteAuthenticationRequest(
+                query={"email": "legacy@example.com"},
+                callback_url="https://cb.example.test",
+            )
+        )
+        self.assertEqual(complete_authentication.email, "legacy@example.com")
+        self.assertEqual(legacy.complete_request_names, ["CompleteLoginRequest"])
+
+        new = NewOnlyProvider()
+        begin_login = new.begin_login(
+            authentication_pb2.BeginLoginRequest(
+                callback_url="https://cb.example.test",
+                host_state="host-state",
+            )
+        )
+        self.assertEqual(begin_login.DESCRIPTOR.name, "BeginLoginResponse")
+        self.assertEqual(new.begin_request_names, ["BeginAuthenticationRequest"])
+
+        complete_login = new.complete_login(
+            authentication_pb2.CompleteLoginRequest(
+                query={"email": "new@example.com"},
+                callback_url="https://cb.example.test",
+            )
+        )
+        self.assertEqual(complete_login.email, "new@example.com")
+        self.assertEqual(new.complete_request_names, ["CompleteAuthenticationRequest"])
 
     def test_auth_validator_missing_or_unknown_token(self) -> None:
         class NoValidator(AuthenticationProvider):

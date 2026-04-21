@@ -51,14 +51,14 @@ func (p *fullAuthenticationProvider) SessionTTL() time.Duration {
 	return 30 * time.Minute
 }
 
-func (p *fullAuthenticationProvider) BeginLogin(_ context.Context, _ *gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
-	return &gestalt.BeginLoginResponse{
+func (p *fullAuthenticationProvider) BeginAuthentication(_ context.Context, _ *gestalt.BeginAuthenticationRequest) (*gestalt.BeginAuthenticationResponse, error) {
+	return &gestalt.BeginAuthenticationResponse{
 		AuthorizationUrl: "https://auth.example.test/login",
 		ProviderState:    []byte("state-data"),
 	}, nil
 }
 
-func (p *fullAuthenticationProvider) CompleteLogin(_ context.Context, _ *gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
+func (p *fullAuthenticationProvider) CompleteAuthentication(_ context.Context, _ *gestalt.CompleteAuthenticationRequest) (*gestalt.AuthenticatedUser, error) {
 	return testAuthUser(), nil
 }
 

@@ -596,7 +596,14 @@ def _authentication_servicer(*, provider: PluginProvider) -> Any:
                 scopes=request.scopes,
                 options=request.options,
             )
-            return self.BeginAuthentication(begin_authentication_request, context)
+            begin_authentication_response = self.BeginAuthentication(
+                begin_authentication_request,
+                context,
+            )
+            return authentication_pb2.BeginLoginResponse(
+                authorization_url=begin_authentication_response.authorization_url,
+                provider_state=begin_authentication_response.provider_state,
+            )
 
         @_grpc_handler("complete login")
         def CompleteLogin(self, request: Any, context: Any) -> Any:

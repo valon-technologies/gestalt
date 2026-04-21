@@ -27,6 +27,46 @@ BeginLoginResponse: Any = _authentication_pb2.BeginLoginResponse  # ty: ignore[u
 CompleteLoginRequest: Any = _authentication_pb2.CompleteLoginRequest  # ty: ignore[unresolved-attribute]
 
 
+def _begin_login_request_from_authentication_request(request: Any) -> Any:
+    return BeginLoginRequest(
+        callback_url=request.callback_url,
+        host_state=request.host_state,
+        scopes=request.scopes,
+        options=request.options,
+    )
+
+
+def _begin_authentication_request_from_login_request(request: Any) -> Any:
+    return BeginAuthenticationRequest(
+        callback_url=request.callback_url,
+        host_state=request.host_state,
+        scopes=request.scopes,
+        options=request.options,
+    )
+
+
+def _begin_authentication_response_from_login_response(response: Any) -> Any:
+    return BeginAuthenticationResponse(
+        authorization_url=response.authorization_url,
+        provider_state=response.provider_state,
+    )
+
+
+def _begin_login_response_from_authentication_response(response: Any) -> Any:
+    return BeginLoginResponse(
+        authorization_url=response.authorization_url,
+        provider_state=response.provider_state,
+    )
+
+
+def _complete_login_request_from_authentication_request(request: Any) -> Any:
+    return CompleteLoginRequest(
+        query=request.query,
+        provider_state=request.provider_state,
+        callback_url=request.callback_url,
+    )
+
+
 class ProviderKind(str, Enum):
     """Runtime kinds supported by the Python SDK."""
 
@@ -137,28 +177,42 @@ class AuthenticationProvider(PluginProvider):
         """Begin an interactive authentication flow."""
 
         if type(self).begin_login is not AuthenticationProvider.begin_login:
-            return self.begin_login(request)
+            response = self.begin_login(
+                _begin_login_request_from_authentication_request(request)
+            )
+            return _begin_authentication_response_from_login_response(response)
         raise NotImplementedError
 
     def complete_authentication(self, request: Any) -> Any:
         """Complete an interactive authentication flow."""
 
         if type(self).complete_login is not AuthenticationProvider.complete_login:
-            return self.complete_login(request)
+            return self.complete_login(
+                _complete_login_request_from_authentication_request(request)
+            )
         raise NotImplementedError
 
     def begin_login(self, request: Any) -> Any:
         """Begin an interactive login flow."""
 
         if type(self).begin_authentication is not AuthenticationProvider.begin_authentication:
-            return self.begin_authentication(request)
+            response = self.begin_authentication(
+                _begin_authentication_request_from_login_request(request)
+            )
+            return _begin_login_response_from_authentication_response(response)
         raise NotImplementedError
 
     def complete_login(self, request: Any) -> Any:
         """Complete an interactive login flow."""
 
         if type(self).complete_authentication is not AuthenticationProvider.complete_authentication:
-            return self.complete_authentication(request)
+            return self.complete_authentication(
+                CompleteAuthenticationRequest(
+                    query=request.query,
+                    provider_state=request.provider_state,
+                    callback_url=request.callback_url,
+                )
+            )
         raise NotImplementedError
 
     def serve(self) -> None:
