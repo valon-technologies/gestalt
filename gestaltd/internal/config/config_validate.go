@@ -440,9 +440,6 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 	if err := validatePluginCacheBindings(cfg, name, entry); err != nil {
 		return err
 	}
-	if err := validatePluginWorkflowConfig(cfg, name, entry); err != nil {
-		return err
-	}
 	if err := validatePluginS3Bindings(cfg, name, entry); err != nil {
 		return err
 	}
@@ -557,9 +554,6 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	if len(entry.Invokes) > 0 {
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
 	}
-	if entry.Workflow != nil {
-		return fmt.Errorf("config validation: %s.workflow has moved to top-level workflows.bindings, workflows.schedules, and workflows.eventTriggers", subject)
-	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
 	}
@@ -607,9 +601,6 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	}
 	if len(entry.Invokes) > 0 {
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
-	}
-	if entry.Workflow != nil {
-		return fmt.Errorf("config validation: %s.workflow has moved to top-level workflows.bindings, workflows.schedules, and workflows.eventTriggers", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
@@ -789,13 +780,6 @@ func validatePluginS3Bindings(cfg *Config, name string, entry *ProviderEntry) er
 	return nil
 }
 
-func validatePluginWorkflowConfig(_ *Config, name string, entry *ProviderEntry) error {
-	if entry == nil || entry.Workflow == nil {
-		return nil
-	}
-	return fmt.Errorf("config validation: plugins.%s.workflow has moved to top-level workflows.bindings, workflows.schedules, and workflows.eventTriggers", name)
-}
-
 var workflowScheduleCronParser = cronv3.NewParser(
 	cronv3.Minute | cronv3.Hour | cronv3.Dom | cronv3.Month | cronv3.Dow,
 )
@@ -881,10 +865,6 @@ func validateWorkflowsConfig(cfg *Config) error {
 			}
 			schedule.Connection = strings.TrimSpace(schedule.Connection)
 			schedule.Instance = strings.TrimSpace(schedule.Instance)
-			schedule.ManagedKey = strings.TrimSpace(schedule.ManagedKey)
-			if schedule.ManagedKey == "" {
-				schedule.ManagedKey = key
-			}
 			schedule.Timezone = strings.TrimSpace(schedule.Timezone)
 			if schedule.Timezone == "" {
 				schedule.Timezone = "UTC"
@@ -937,10 +917,6 @@ func validateWorkflowsConfig(cfg *Config) error {
 			}
 			trigger.Connection = strings.TrimSpace(trigger.Connection)
 			trigger.Instance = strings.TrimSpace(trigger.Instance)
-			trigger.ManagedKey = strings.TrimSpace(trigger.ManagedKey)
-			if trigger.ManagedKey == "" {
-				trigger.ManagedKey = key
-			}
 			normalized[key] = trigger
 		}
 		cfg.Workflows.EventTriggers = normalized

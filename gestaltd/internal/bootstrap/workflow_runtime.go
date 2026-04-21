@@ -73,11 +73,10 @@ func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 		if pluginName == "" {
 			continue
 		}
-		managedKey := workflowConfigScheduleManagedKey(scheduleKey, schedule)
 		if runtime.managedScheduleIDs[pluginName] == nil {
 			runtime.managedScheduleIDs[pluginName] = map[string]struct{}{}
 		}
-		runtime.managedScheduleIDs[pluginName][workflowConfigScheduleID(pluginName, managedKey)] = struct{}{}
+		runtime.managedScheduleIDs[pluginName][workflowConfigScheduleID(scheduleKey)] = struct{}{}
 	}
 	for triggerKey := range cfg.Workflows.EventTriggers {
 		trigger := cfg.Workflows.EventTriggers[triggerKey]
@@ -85,11 +84,10 @@ func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 		if pluginName == "" {
 			continue
 		}
-		managedKey := workflowConfigEventTriggerManagedKey(triggerKey, trigger)
 		if runtime.managedEventTriggerIDs[pluginName] == nil {
 			runtime.managedEventTriggerIDs[pluginName] = map[string]struct{}{}
 		}
-		runtime.managedEventTriggerIDs[pluginName][workflowConfigEventTriggerID(pluginName, managedKey)] = struct{}{}
+		runtime.managedEventTriggerIDs[pluginName][workflowConfigEventTriggerID(triggerKey)] = struct{}{}
 	}
 	return runtime, nil
 }

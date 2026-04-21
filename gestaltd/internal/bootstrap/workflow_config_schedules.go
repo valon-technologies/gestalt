@@ -122,7 +122,6 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 	for _, scheduleKey := range slices.Sorted(maps.Keys(cfg.Workflows.Schedules)) {
 		schedule := cfg.Workflows.Schedules[scheduleKey]
 		pluginName := schedule.Plugin
-		managedKey := workflowConfigScheduleManagedKey(scheduleKey, schedule)
 		provider, allowed, err := runtime.ResolvePlugin(pluginName)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedules for plugin %q: %w", pluginName, err)
@@ -131,7 +130,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if _, ok := allowed[schedule.Operation]; !ok {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q targets disabled operation %q", scheduleKey, pluginName, schedule.Operation)
 		}
-		rowID := workflowConfigScheduleStateID(pluginName, managedKey)
+		rowID := workflowConfigScheduleStateID(scheduleKey)
 		desiredEntry := desired[rowID]
 		prev, owned := previous[rowID]
 		existingExecutionRef := ""
@@ -228,7 +227,6 @@ func desiredWorkflowConfigSchedules(cfg *config.Config) (map[string]desiredWorkf
 	now := time.Now()
 	for _, scheduleKey := range slices.Sorted(maps.Keys(cfg.Workflows.Schedules)) {
 		schedule := cfg.Workflows.Schedules[scheduleKey]
-		managedKey := workflowConfigScheduleManagedKey(scheduleKey, schedule)
 		binding, err := cfg.EffectiveWorkflowBinding(schedule.Plugin)
 		if err != nil {
 			return nil, err
@@ -236,14 +234,14 @@ func desiredWorkflowConfigSchedules(cfg *config.Config) (map[string]desiredWorkf
 		if !binding.Enabled {
 			continue
 		}
-		rowID := workflowConfigScheduleStateID(schedule.Plugin, managedKey)
+		rowID := workflowConfigScheduleStateID(scheduleKey)
 		desired[rowID] = desiredWorkflowConfigSchedule{
 			state: workflowConfigScheduleState{
 				ID:           rowID,
 				PluginName:   schedule.Plugin,
-				ScheduleKey:  managedKey,
+				ScheduleKey:  scheduleKey,
 				ProviderName: binding.ProviderName,
-				ScheduleID:   workflowConfigScheduleID(schedule.Plugin, managedKey),
+				ScheduleID:   workflowConfigScheduleID(scheduleKey),
 				UpdatedAt:    now,
 			},
 			schedule: schedule,
@@ -361,19 +359,12 @@ func workflowConfigActor(pluginName string) coreworkflow.Actor {
 	}
 }
 
-func workflowConfigScheduleManagedKey(scheduleKey string, schedule config.WorkflowScheduleConfig) string {
-	if managedKey := strings.TrimSpace(schedule.ManagedKey); managedKey != "" {
-		return managedKey
-	}
+func workflowConfigScheduleStateID(scheduleKey string) string {
 	return strings.TrimSpace(scheduleKey)
 }
 
-func workflowConfigScheduleStateID(pluginName, scheduleKey string) string {
-	return pluginName + "\x00" + scheduleKey
-}
-
-func workflowConfigScheduleID(pluginName, scheduleKey string) string {
-	sum := sha256.Sum256([]byte(pluginName + "\x00" + scheduleKey))
+func workflowConfigScheduleID(scheduleKey string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(scheduleKey)))
 	return coreworkflow.ConfigManagedSchedulePrefix + hex.EncodeToString(sum[:])
 }
 
