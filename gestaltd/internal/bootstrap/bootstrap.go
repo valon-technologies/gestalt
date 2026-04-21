@@ -248,9 +248,11 @@ func (r *Result) Close(ctx context.Context) error {
 	}
 
 	var errs []error
-	authCloseErr := closeAuth(r.Auth)
+	authCloseErr := error(nil)
 	if len(r.AuthProviders) != 0 {
 		authCloseErr = closeAuthProviders(r.AuthProviders)
+	} else {
+		authCloseErr = closeAuth(r.Auth)
 	}
 	errs = append(errs,
 		closeAuthorizer(r.Authorizer),
@@ -633,9 +635,11 @@ func (p *preparedCore) Close(ctx context.Context) error {
 	}
 
 	var errs []error
-	authCloseErr := closeAuth(p.Auth)
+	authCloseErr := error(nil)
 	if len(p.AuthProviders) != 0 {
 		authCloseErr = closeAuthProviders(p.AuthProviders)
+	} else {
+		authCloseErr = closeAuth(p.Auth)
 	}
 	errs = append(errs,
 		authCloseErr,

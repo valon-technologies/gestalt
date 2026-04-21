@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"sort"
 	"strings"
@@ -239,14 +240,16 @@ func (m *Manager) ListSchedules(ctx context.Context, p *principal.Principal) ([]
 		}
 		provider, err := m.resolveProviderByName(strings.TrimSpace(ref.ProviderName))
 		if err != nil {
-			return nil, err
+			slog.WarnContext(ctx, "skipping workflow schedule with unavailable provider", "provider", strings.TrimSpace(ref.ProviderName), "schedule_id", scheduleID, "error", err)
+			continue
 		}
 		schedule, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{ScheduleID: scheduleID})
 		if err != nil {
 			if errors.Is(err, core.ErrNotFound) {
 				continue
 			}
-			return nil, err
+			slog.WarnContext(ctx, "skipping workflow schedule after provider lookup failed", "provider", strings.TrimSpace(ref.ProviderName), "plugin", strings.TrimSpace(ref.Target.PluginName), "schedule_id", scheduleID, "error", err)
+			continue
 		}
 		if !scheduleMatchesExecutionRef(ref.ProviderName, schedule, ref) {
 			continue

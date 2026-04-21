@@ -23,6 +23,15 @@ func mustAuthorizer(t *testing.T, cfg config.AuthorizationConfig, providers *reg
 	return authz
 }
 
+func mustAuthorizerWithDefaults(t *testing.T, cfg config.AuthorizationConfig, providers *registry.ProviderMap[core.Provider], defaultConnections map[string]string) *authorization.Authorizer {
+	t.Helper()
+	authz, err := authorization.New(cfg, nil, providers, defaultConnections)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	return authz
+}
+
 func TestBrokerResolveToken_ConnectionModeNoneResolvesSessionUserSubject(t *testing.T) {
 	t.Parallel()
 
@@ -148,5 +157,83 @@ func TestBrokerResolveToken_ManagedIdentityDoesNotBypassSelectorBinding(t *testi
 	}
 	if got, want := err.Error(), "workloads may not override connection or instance bindings"; got == "" || !strings.Contains(got, want) {
 		t.Fatalf("ResolveToken error = %q, want substring %q", got, want)
+	}
+}
+
+func TestBrokerResolveToken_ManagedIdentityUsesDefaultBindingSelectors(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name                 string
+		mode                 core.ConnectionMode
+		credentialSubjectID  string
+		storedTokenSubjectID string
+		wantMode             core.ConnectionMode
+	}{
+		{
+			name:                 "user",
+			mode:                 core.ConnectionModeUser,
+			credentialSubjectID:  principal.UserSubjectID("user-123"),
+			storedTokenSubjectID: principal.UserSubjectID("user-123"),
+			wantMode:             core.ConnectionModeUser,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := coretesting.NewStubServices(t)
+			providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+				N:        "sampledb",
+				ConnMode: tc.mode,
+			})
+			authz := mustAuthorizerWithDefaults(t, config.AuthorizationConfig{}, providers, map[string]string{
+				"sampledb": "workspace",
+			})
+			broker := NewBroker(providers, svc.Users, svc.Tokens, WithAuthorizer(authz))
+
+			if err := svc.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+				ID:          "tok-default",
+				SubjectID:   tc.storedTokenSubjectID,
+				Integration: "sampledb",
+				Connection:  "workspace",
+				Instance:    "default",
+				AccessToken: "bound-token",
+			}); err != nil {
+				t.Fatalf("StoreToken: %v", err)
+			}
+
+			p := &principal.Principal{
+				SubjectID:           principal.ManagedIdentitySubjectID("bot-123"),
+				CredentialSubjectID: tc.credentialSubjectID,
+				Kind:                principal.KindWorkload,
+				Source:              principal.SourceWorkloadToken,
+				TokenPermissions: principal.CompilePermissions([]core.AccessPermission{
+					{Plugin: "sampledb"},
+				}),
+			}
+
+			ctx, token, err := broker.ResolveToken(context.Background(), p, "sampledb", "", "")
+			if err != nil {
+				t.Fatalf("ResolveToken: %v", err)
+			}
+			if token != "bound-token" {
+				t.Fatalf("token = %q, want %q", token, "bound-token")
+			}
+			credentialCtx := CredentialContextFromContext(ctx)
+			if credentialCtx.Connection != "workspace" {
+				t.Fatalf("connection = %q, want %q", credentialCtx.Connection, "workspace")
+			}
+			if credentialCtx.Instance != "default" {
+				t.Fatalf("instance = %q, want %q", credentialCtx.Instance, "default")
+			}
+			if credentialCtx.Mode != tc.wantMode {
+				t.Fatalf("mode = %q, want %q", credentialCtx.Mode, tc.wantMode)
+			}
+			if credentialCtx.SubjectID != tc.storedTokenSubjectID {
+				t.Fatalf("subjectID = %q, want %q", credentialCtx.SubjectID, tc.storedTokenSubjectID)
+			}
+		})
 	}
 }

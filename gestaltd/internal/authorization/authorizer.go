@@ -57,6 +57,7 @@ type Authorizer struct {
 	policies             map[string]*HumanPolicy
 	providerPolicies     map[string]string
 	providerModes        map[string]core.ConnectionMode
+	defaultConnections   map[string]string
 }
 
 func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], defaultConnections map[string]string) (*Authorizer, error) {
@@ -66,6 +67,7 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 		policies:             map[string]*HumanPolicy{},
 		providerPolicies:     map[string]string{},
 		providerModes:        map[string]core.ConnectionMode{},
+		defaultConnections:   defaultConnections,
 	}
 
 	for policyID, def := range cfg.Policies {
@@ -224,24 +226,7 @@ func (a *Authorizer) AllowOperation(ctx context.Context, p *principal.Principal,
 
 func (a *Authorizer) Binding(p *principal.Principal, provider string) (CredentialBinding, bool) {
 	if a.isManagedIdentityPrincipal(p) {
-		if !a.allowManagedIdentityProvider(p, provider) {
-			return CredentialBinding{}, false
-		}
-		switch core.NormalizeConnectionMode(a.providerModes[provider]) {
-		case core.ConnectionModeNone:
-			return CredentialBinding{Mode: core.ConnectionModeNone}, true
-		case core.ConnectionModeUser:
-			subjectID := principal.EffectiveCredentialSubjectID(p)
-			if subjectID == "" {
-				return CredentialBinding{}, false
-			}
-			return CredentialBinding{
-				Mode:                core.ConnectionModeUser,
-				CredentialSubjectID: subjectID,
-			}, true
-		default:
-			return CredentialBinding{}, false
-		}
+		return a.managedIdentityBinding(p, provider)
 	}
 	if !a.IsWorkload(p) {
 		return CredentialBinding{}, false
@@ -557,6 +542,37 @@ func (a *Authorizer) allowManagedIdentityProvider(p *principal.Principal, provid
 	default:
 		return false
 	}
+}
+
+func (a *Authorizer) managedIdentityBinding(p *principal.Principal, provider string) (CredentialBinding, bool) {
+	if !a.allowManagedIdentityProvider(p, provider) {
+		return CredentialBinding{}, false
+	}
+	switch core.NormalizeConnectionMode(a.providerModes[provider]) {
+	case core.ConnectionModeNone:
+		return CredentialBinding{Mode: core.ConnectionModeNone}, true
+	case core.ConnectionModeUser:
+		return a.managedIdentityCredentialBinding(principal.EffectiveCredentialSubjectID(p), core.ConnectionModeUser, provider)
+	default:
+		return CredentialBinding{}, false
+	}
+}
+
+func (a *Authorizer) managedIdentityCredentialBinding(subjectID string, mode core.ConnectionMode, provider string) (CredentialBinding, bool) {
+	subjectID = strings.TrimSpace(subjectID)
+	if subjectID == "" {
+		return CredentialBinding{}, false
+	}
+	connection := ""
+	if a != nil {
+		connection = config.ResolveConnectionAlias(strings.TrimSpace(a.defaultConnections[provider]))
+	}
+	return CredentialBinding{
+		Mode:                mode,
+		CredentialSubjectID: subjectID,
+		Connection:          connection,
+		Instance:            defaultInstance,
+	}, true
 }
 
 func providerMode(provider string, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider]) (core.ConnectionMode, bool, error) {

@@ -1204,6 +1204,91 @@ func TestGlobalWorkflowScheduleLookupIgnoresUnrelatedProviderFailures(t *testing
 	}
 }
 
+func TestGlobalWorkflowScheduleListSkipsMissingProviderReferences(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryWorkflowProvider()
+	now := time.Now().UTC().Truncate(time.Second)
+	provider.schedules["sched-ada-basic"] = &coreworkflow.Schedule{
+		ID:           "sched-ada-basic",
+		Cron:         "*/5 * * * *",
+		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		ExecutionRef: "workflow_schedule:sched-ada-basic:ref-basic",
+		CreatedAt:    &now,
+		UpdatedAt:    &now,
+	}
+	for _, ref := range []*coreworkflow.ExecutionReference{
+		{
+			ID:           "workflow_schedule:sched-ada-basic:ref-basic",
+			ProviderName: "basic",
+			Target:       provider.schedules["sched-ada-basic"].Target,
+			SubjectID:    principal.UserSubjectID(user.ID),
+		},
+		{
+			ID:           "workflow_schedule:sched-missing:ref-missing",
+			ProviderName: "missing",
+			Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+			SubjectID:    principal.UserSubjectID(user.ID),
+		},
+	} {
+		if _, err := services.WorkflowExecutionRefs.Put(context.Background(), ref); err != nil {
+			t.Fatalf("Put execution ref %q: %v", ref.ID, err)
+		}
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{
+				Name: "roadmap",
+				Operations: []catalog.CatalogOperation{
+					{ID: "sync", Method: http.MethodPost},
+				},
+			},
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			providers: map[string]coreworkflow.Provider{
+				"basic": provider,
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
+	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(listResp.Body)
+		t.Fatalf("expected 200, got %d: %s", listResp.StatusCode, body)
+	}
+
+	var listed []workflowScheduleResponse
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed) != 1 || listed[0].ID != "sched-ada-basic" {
+		t.Fatalf("listed schedules = %#v", listed)
+	}
+}
+
 func TestGlobalWorkflowScheduleRejectsDuplicateActiveExecutionRefs(t *testing.T) {
 	t.Parallel()
 

@@ -32,7 +32,7 @@ starts it with the permissions and request context it needs.
 - Use `source: https://.../provider-release.yaml` to consume a published provider package.
 - Use `source.githubRelease` when the published `provider-release.yaml` lives in
   a private GitHub Release and you want checked-in config to stay readable.
-- Use sibling `auth.token` when a remote release source, including
+- Use `source.auth.token` when a remote release source, including
   `source.githubRelease`, needs authenticated metadata or archive fetches.
 - Executable providers run as child processes and connect back to the host over
   gRPC on a temporary Unix socket.

@@ -78,14 +78,11 @@ The `spec` block for a `kind: plugin` manifest describes a plugin. It supports d
 
 Plugins that back mounted apps may declare their UI artifact in the plugin manifest. Deployment config still chooses whether to mount the app, which public path to use, and which authorization policy to bind. The manifest only says which UI bundle belongs to the plugin.
 
-`spec.ui` supports two mutually exclusive forms:
+`spec.ui` currently supports a single packaged-path form:
 
-| Field        | Type   | Purpose                                                                                                                                                                            |
-| ------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `path`       | string | Relative path to a co-packaged `kind: webui` manifest. Source releases may point at sibling UI packages; `gestaltd provider release` rewrites them into the archive automatically. |
-| `ref`        | string | Managed provider source ref for the owned UI bundle.                                                                                                                               |
-| `version`    | string | Optional version for `ref`. Defaults to the plugin manifest version when omitted.                                                                                                  |
-| `auth.token` | string | Optional source token used when resolving a private managed `ref`. Only valid with `ref`.                                                                                          |
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `path` | string | Relative path to a co-packaged `kind: webui` manifest. Source releases may point at sibling UI packages; `gestaltd provider release` rewrites them into the archive automatically. |
 
 When a deployment sets `plugins.<name>.mountPath` and omits `plugins.<name>.ui`, Gestalt synthesizes the mounted UI binding from this block.
 
@@ -106,7 +103,7 @@ spec:
     path: ../ui/manifest.yaml
 ```
 
-Published-manifest example:
+Packaged-manifest example:
 
 ```yaml
 kind: plugin
@@ -120,13 +117,7 @@ spec:
       auth:
         type: none
   ui:
-    ref: github.com/acme/web/roadmap-review
-    version: 1.0.0
-    auth:
-      token:
-        secret:
-          provider: default
-          name: roadmap-review-ui-source-token
+    path: ui/manifest.yaml
 ```
 
 ### Connections

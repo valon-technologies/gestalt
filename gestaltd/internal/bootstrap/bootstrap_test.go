@@ -414,11 +414,17 @@ func stubTelemetryFactory() bootstrap.TelemetryFactory {
 
 type closableAuthProvider struct {
 	*coretesting.StubAuthProvider
-	closed *atomic.Bool
+	closed     *atomic.Bool
+	closeCount *atomic.Int32
 }
 
 func (p *closableAuthProvider) Close() error {
-	p.closed.Store(true)
+	if p.closed != nil {
+		p.closed.Store(true)
+	}
+	if p.closeCount != nil {
+		p.closeCount.Add(1)
+	}
 	return nil
 }
 
@@ -3517,6 +3523,51 @@ func TestResultCloseClosesAuthProvider(t *testing.T) {
 	}
 	if !closed.Load() {
 		t.Fatal("authentication provider was not closed")
+	}
+}
+
+func TestResultCloseClosesEachAuthProviderOnce(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Auth["secondary"] = &config.ProviderEntry{
+		Source: config.NewMetadataSource("https://example.invalid/github-com-valon-technologies-gestalt-providers-auth-google/v0.0.1-alpha.1/provider-release.yaml"),
+		Config: yaml.Node{Kind: yaml.MappingNode},
+	}
+	cfg.Server.Providers.Auth = "secondary"
+
+	var builds atomic.Int32
+	var firstClosed atomic.Int32
+	var secondClosed atomic.Int32
+
+	factories := validFactories()
+	factories.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
+		provider := &closableAuthProvider{
+			StubAuthProvider: &coretesting.StubAuthProvider{N: "test-auth"},
+		}
+		switch builds.Add(1) {
+		case 1:
+			provider.closeCount = &firstClosed
+		case 2:
+			provider.closeCount = &secondClosed
+		default:
+			t.Fatalf("unexpected auth build count %d", builds.Load())
+		}
+		return provider, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if err := result.Close(context.Background()); err != nil {
+		t.Fatalf("Result.Close: %v", err)
+	}
+	if got := firstClosed.Load(); got != 1 {
+		t.Fatalf("first auth close count = %d, want 1", got)
+	}
+	if got := secondClosed.Load(); got != 1 {
+		t.Fatalf("second auth close count = %d, want 1", got)
 	}
 }
 
