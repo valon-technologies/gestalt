@@ -458,17 +458,17 @@ func validatePluginRouteAuth(cfg *Config, name string, entry *ProviderEntry) err
 		return fmt.Errorf("config validation: plugins.%s.auth.provider is required", name)
 	}
 	if entry.RouteAuth.Provider == "server" {
-		_, authProvider, err := cfg.SelectedAuthProvider()
+		_, authProvider, err := cfg.SelectedAuthenticationProvider()
 		if err != nil {
 			return err
 		}
 		if authProvider == nil {
-			return fmt.Errorf("config validation: plugins.%s.auth.provider %q requires a configured platform auth provider", name, entry.RouteAuth.Provider)
+			return fmt.Errorf("config validation: plugins.%s.auth.provider %q requires a configured platform authentication provider", name, entry.RouteAuth.Provider)
 		}
 		return nil
 	}
-	if _, ok := cfg.Providers.Auth[entry.RouteAuth.Provider]; !ok {
-		return fmt.Errorf("config validation: plugins.%s.auth.provider references unknown auth provider %q", name, entry.RouteAuth.Provider)
+	if _, ok := cfg.Providers.Authentication[entry.RouteAuth.Provider]; !ok {
+		return fmt.Errorf("config validation: plugins.%s.auth.provider references unknown authentication provider %q", name, entry.RouteAuth.Provider)
 	}
 	return nil
 }

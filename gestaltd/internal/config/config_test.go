@@ -3705,7 +3705,7 @@ plugins:
       auth:
         provider: missing
 `,
-			wantErr: `plugins.external.auth.provider references unknown auth provider "missing"`,
+			wantErr: `plugins.external.auth.provider references unknown authentication provider "missing"`,
 		},
 		{
 			name: "plugin auth override rejects server alias without configured auth provider",
@@ -3718,7 +3718,7 @@ plugins:
       auth:
         provider: server
 `,
-			wantErr: `plugins.external.auth.provider "server" requires a configured platform auth provider`,
+			wantErr: `plugins.external.auth.provider "server" requires a configured platform authentication provider`,
 		},
 		{
 			name: "apiVersion local source rejects sibling auth",

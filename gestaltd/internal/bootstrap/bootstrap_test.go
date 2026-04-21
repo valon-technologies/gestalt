@@ -4718,7 +4718,9 @@ func TestBootstrapWorkflowAuthorizationAllowsNormalizedCredentialedProvider(t *t
 		return &stubWorkflowProvider{}, nil
 	}
 
-	if _, err := bootstrap.Bootstrap(context.Background(), cfg, factories); err != nil {
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	t.Cleanup(func() { _ = result.Close(context.Background()) })
 }
