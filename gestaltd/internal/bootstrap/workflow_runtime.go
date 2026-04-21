@@ -39,15 +39,15 @@ type workflowRuntime struct {
 
 func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 	runtime := &workflowRuntime{
-		bindings:               make(map[string]workflowBinding, len(cfg.Plugins)),
+		bindings:               make(map[string]workflowBinding, len(cfg.Workflows.Bindings)),
 		managedScheduleIDs:     make(map[string]map[string]struct{}, len(cfg.Plugins)),
 		managedEventTriggerIDs: make(map[string]map[string]struct{}, len(cfg.Plugins)),
-		workloadTokens:         make(map[string]string, len(cfg.Plugins)),
+		workloadTokens:         make(map[string]string, len(cfg.Workflows.Bindings)),
 		providers:              map[string]coreworkflow.Provider{},
 		startupWaits:           newStartupWaitTracker(),
 	}
-	for pluginName, entry := range cfg.Plugins {
-		effective, err := cfg.EffectivePluginWorkflow(pluginName, entry)
+	for pluginName := range cfg.Workflows.Bindings {
+		effective, err := cfg.EffectiveWorkflowBinding(pluginName)
 		if err != nil {
 			return nil, err
 		}
@@ -62,20 +62,34 @@ func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 			providerName: effective.ProviderName,
 			operations:   allowed,
 		}
-		managedSchedules := make(map[string]struct{}, len(effective.Schedules))
-		for scheduleKey := range effective.Schedules {
-			managedSchedules[workflowConfigScheduleID(pluginName, scheduleKey)] = struct{}{}
-		}
-		runtime.managedScheduleIDs[pluginName] = managedSchedules
-		managedEventTriggers := make(map[string]struct{}, len(effective.EventTriggers))
-		for triggerKey := range effective.EventTriggers {
-			managedEventTriggers[workflowConfigEventTriggerID(pluginName, triggerKey)] = struct{}{}
-		}
-		runtime.managedEventTriggerIDs[pluginName] = managedEventTriggers
 		runtime.workloadTokens[pluginName], err = workflowWorkloadToken()
 		if err != nil {
 			return nil, err
 		}
+	}
+	for scheduleKey := range cfg.Workflows.Schedules {
+		schedule := cfg.Workflows.Schedules[scheduleKey]
+		pluginName := strings.TrimSpace(schedule.Plugin)
+		if pluginName == "" {
+			continue
+		}
+		managedKey := workflowConfigScheduleManagedKey(scheduleKey, schedule)
+		if runtime.managedScheduleIDs[pluginName] == nil {
+			runtime.managedScheduleIDs[pluginName] = map[string]struct{}{}
+		}
+		runtime.managedScheduleIDs[pluginName][workflowConfigScheduleID(pluginName, managedKey)] = struct{}{}
+	}
+	for triggerKey := range cfg.Workflows.EventTriggers {
+		trigger := cfg.Workflows.EventTriggers[triggerKey]
+		pluginName := strings.TrimSpace(trigger.Plugin)
+		if pluginName == "" {
+			continue
+		}
+		managedKey := workflowConfigEventTriggerManagedKey(triggerKey, trigger)
+		if runtime.managedEventTriggerIDs[pluginName] == nil {
+			runtime.managedEventTriggerIDs[pluginName] = map[string]struct{}{}
+		}
+		runtime.managedEventTriggerIDs[pluginName][workflowConfigEventTriggerID(pluginName, managedKey)] = struct{}{}
 	}
 	return runtime, nil
 }

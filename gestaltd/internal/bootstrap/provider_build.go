@@ -713,7 +713,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		execCfg.HostServices = append(execCfg.HostServices, hostServices...)
 		cleanup = chainCleanup(cleanup, cacheCleanup)
 	}
-	if entry.Workflow != nil {
+	if deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasBinding(name) {
 		hostServices, err := buildPluginWorkflowHostServices(name, deps)
 		if err != nil {
 			return nil, err
