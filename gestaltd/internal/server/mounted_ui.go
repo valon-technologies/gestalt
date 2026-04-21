@@ -302,7 +302,7 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 		return nil, false
 	}
 
-	p, authenticated, err := s.resolveMountedWebUIPrincipal(r)
+	p, authenticated, err := s.resolveMountedWebUIPrincipal(r, mounted)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
 		return nil, false
@@ -352,12 +352,16 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 	return ctx, true
 }
 
-func (s *Server) resolveMountedWebUIPrincipal(r *http.Request) (*principal.Principal, bool, error) {
-	if s.noAuth {
-		return s.anonymousPrincipal, true, nil
+func (s *Server) resolveMountedWebUIPrincipal(r *http.Request, mounted MountedWebUI) (*principal.Principal, bool, error) {
+	auth, err := s.mountedWebUIAuthRuntime(mounted)
+	if err != nil {
+		return nil, false, err
+	}
+	if auth.noAuth {
+		return auth.anonymous, true, nil
 	}
 
-	p, err := s.resolveRequestPrincipal(r)
+	p, err := s.resolveRequestPrincipalWithResolver(r, auth.resolver)
 	switch {
 	case err == nil && p != nil:
 		enriched, enrichErr := s.resolvePrincipalUserID(r.Context(), p)

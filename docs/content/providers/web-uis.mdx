@@ -117,6 +117,9 @@ dashboard and a plugin authorization workspace at `/admin/?tab=members`.
 Plugin-backed mounted UIs inherit the owning plugin's dynamic grants when that
 plugin declares `authorizationPolicy`; direct `providers.ui.<name>.authorizationPolicy`
 bindings remain static-only.
+Plugin-backed mounted UIs also inherit the owning plugin's route-auth provider
+when that plugin declares `auth.provider`; direct `providers.ui` bundles and
+the built-in admin UI continue using the server-wide auth provider.
 
 ## Building your own web UI bundle
 

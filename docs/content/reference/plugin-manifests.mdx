@@ -177,7 +177,7 @@ The `rest`/`openapi`/`graphql` surface types are mutually exclusive (use `surfac
 
 ### Authentication Types
 
-`spec.auth.provider` selects a route-auth provider for plugin HTTP operation routes. Gestalt currently enforces it on `/api/v1/integrations/{name}/operations` and `/api/v1/{integration}/{operation}` only; browser login, mounted UIs, integration OAuth helper routes, and `/mcp` still use the server-wide auth provider. Upstream auth still lives on `spec.connections.<name>.auth`, and the `auth.type` field on a connection accepts these values:
+`spec.auth.provider` selects a route-auth provider for plugin HTTP routes. Gestalt currently enforces it on `/api/v1/integrations/{name}/operations`, `/api/v1/{integration}/{operation}`, and plugin-backed mounted UIs, including browser-login flows whose `next` path resolves into that plugin's mounted UI. Standalone `providers.ui` bundles, the built-in admin UI/admin API, integration OAuth helper routes, and `/mcp` still use the server-wide auth provider. Upstream auth still lives on `spec.connections.<name>.auth`, and the `auth.type` field on a connection accepts these values:
 
 | Type        | Purpose                                                                                                                                                            |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
