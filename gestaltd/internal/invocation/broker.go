@@ -34,7 +34,7 @@ const (
 	attrProvider       = attribute.Key("gestalt.provider")
 	attrOperation      = attribute.Key("gestalt.operation")
 	attrTransport      = attribute.Key("gestalt.transport")
-	attrUserID         = attribute.Key("gestalt.user_id")
+	attrSubjectID      = attribute.Key("gestalt.subject_id")
 	attrConnectionMode = attribute.Key("gestalt.connection_mode")
 )
 
@@ -181,6 +181,18 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
+	setSubjectAttribute := func(p *principal.Principal) {
+		if p == nil {
+			return
+		}
+		subjectID := strings.TrimSpace(p.SubjectID)
+		if subjectID == "" && strings.TrimSpace(p.UserID) != "" {
+			subjectID = principal.UserSubjectID(strings.TrimSpace(p.UserID))
+		}
+		if subjectID != "" {
+			span.SetAttributes(attrSubjectID.String(subjectID))
+		}
+	}
 
 	prov, err := b.providers.Get(providerName)
 	if err != nil {
@@ -199,10 +211,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if p == nil {
 		return fail(ErrNotAuthenticated)
 	}
-
-	if p.UserID != "" {
-		span.SetAttributes(attrUserID.String(p.UserID))
-	}
+	setSubjectAttribute(p)
 
 	if !principal.AllowsProviderPermission(p, providerName) {
 		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
@@ -211,9 +220,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(err)
 	}
 	ctx = withResolvedPrincipal(ctx, p)
-	if p.UserID != "" {
-		span.SetAttributes(attrUserID.String(p.UserID))
-	}
+	setSubjectAttribute(p)
 	if b.authorizer != nil {
 		access, allowed := b.authorizer.ResolveAccess(ctx, p, providerName)
 		if access.Policy != "" || access.Role != "" {

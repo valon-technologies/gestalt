@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"go.opentelemetry.io/otel"
@@ -45,7 +46,15 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) { //nolint:paralleltest // mut
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv, err := server.New(server.Config{
-		Auth:        &coretesting.StubAuthProvider{N: "none"},
+		Auth: &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "trace@example.com"}, nil
+			},
+		},
 		Services:    ds,
 		Providers:   providers,
 		Invoker:     broker,
@@ -58,6 +67,7 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) { //nolint:paralleltest // mut
 	t.Cleanup(ts.Close)
 
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tracer-prov/ping", bytes.NewBufferString(`{}`))
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -88,9 +98,15 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) { //nolint:paralleltest // mut
 	if brokerSpan == nil {
 		t.Fatal("expected broker span named 'broker.invoke'")
 	}
+	dbUser, err := ds.Users.FindOrCreateUser(context.Background(), "trace@example.com")
+	if err != nil {
+		t.Fatalf("resolve trace user: %v", err)
+	}
 	assertSpanHasAttr(t, brokerSpan, "gestalt.provider", "tracer-prov")
 	assertSpanHasAttr(t, brokerSpan, "gestalt.operation", "ping")
+	assertSpanHasAttr(t, brokerSpan, "gestalt.subject_id", principal.UserSubjectID(dbUser.ID))
 	assertSpanHasAttr(t, brokerSpan, "gestalt.connection_mode", "none")
+	assertSpanLacksAttr(t, brokerSpan, "gestalt.user_id")
 
 	if brokerSpan.Parent.TraceID() != httpSpan.SpanContext.TraceID() {
 		t.Errorf("broker span should share trace ID with HTTP span: broker=%s http=%s",
@@ -195,4 +211,14 @@ func assertSpanHasAttr(t *testing.T, span *tracetest.SpanStub, key, expected str
 		}
 	}
 	t.Errorf("span %q: missing attribute %q", span.Name, key)
+}
+
+func assertSpanLacksAttr(t *testing.T, span *tracetest.SpanStub, key string) {
+	t.Helper()
+	for _, attr := range span.Attributes {
+		if string(attr.Key) == key {
+			t.Errorf("span %q: unexpected attribute %q=%q", span.Name, key, attr.Value.AsString())
+			return
+		}
+	}
 }

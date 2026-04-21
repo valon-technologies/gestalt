@@ -104,8 +104,11 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 	if record["auth_source"] != "session" {
 		t.Errorf("expected auth_source=session, got %v", record["auth_source"])
 	}
-	if uid, ok := record["user_id"].(string); !ok || uid == "" {
-		t.Errorf("expected non-empty user_id, got %v", record["user_id"])
+	if subjectID, ok := record["subject_id"].(string); !ok || subjectID == "" {
+		t.Errorf("expected non-empty subject_id, got %v", record["subject_id"])
+	}
+	if _, ok := record["user_id"]; ok {
+		t.Errorf("expected emitted audit record to omit user_id, got %v", record["user_id"])
 	}
 	if record["allowed"] != true {
 		t.Errorf("expected allowed=true, got %v", record["allowed"])

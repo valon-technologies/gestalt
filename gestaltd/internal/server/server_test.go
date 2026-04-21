@@ -7114,8 +7114,11 @@ func TestLoginCallback_LegacyMixedCaseRepairFailureStillSucceeds(t *testing.T) {
 	if auditRecord["operation"] != "auth.login.complete" {
 		t.Fatalf("expected audit operation auth.login.complete, got %v", auditRecord["operation"])
 	}
-	if uid, ok := auditRecord["user_id"].(string); !ok || uid != existing.ID {
-		t.Fatalf("expected audit user_id %q, got %v", existing.ID, auditRecord["user_id"])
+	if subjectID, ok := auditRecord["subject_id"].(string); !ok || subjectID != principal.UserSubjectID(existing.ID) {
+		t.Fatalf("expected audit subject_id %q, got %v", principal.UserSubjectID(existing.ID), auditRecord["subject_id"])
+	}
+	if _, ok := auditRecord["user_id"]; ok {
+		t.Fatalf("expected emitted audit record to omit user_id, got %v", auditRecord["user_id"])
 	}
 }
 
@@ -10246,8 +10249,11 @@ func TestLoginCallback(t *testing.T) {
 	if auditRecord["auth_source"] != "session" {
 		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
 	}
-	if uid, ok := auditRecord["user_id"].(string); !ok || uid != existing.ID {
-		t.Fatalf("expected audit user_id %q, got %v", existing.ID, auditRecord["user_id"])
+	if subjectID, ok := auditRecord["subject_id"].(string); !ok || subjectID != principal.UserSubjectID(existing.ID) {
+		t.Fatalf("expected audit subject_id %q, got %v", principal.UserSubjectID(existing.ID), auditRecord["subject_id"])
+	}
+	if _, ok := auditRecord["user_id"]; ok {
+		t.Fatalf("expected emitted audit record to omit user_id, got %v", auditRecord["user_id"])
 	}
 }
 
@@ -10431,8 +10437,11 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	if tokenAudit["auth_source"] != "session" {
 		t.Fatalf("expected token audit auth_source session, got %v", tokenAudit["auth_source"])
 	}
-	if uid, ok := tokenAudit["user_id"].(string); !ok || uid != u.ID {
-		t.Fatalf("expected token audit user_id %q, got %v", u.ID, tokenAudit["user_id"])
+	if subjectID, ok := tokenAudit["subject_id"].(string); !ok || subjectID != principal.UserSubjectID(u.ID) {
+		t.Fatalf("expected token audit subject_id %q, got %v", principal.UserSubjectID(u.ID), tokenAudit["subject_id"])
+	}
+	if _, ok := tokenAudit["user_id"]; ok {
+		t.Fatalf("expected emitted token audit record to omit user_id, got %v", tokenAudit["user_id"])
 	}
 	if tokenAudit["allowed"] != true {
 		t.Fatalf("expected token audit allowed=true, got %v", tokenAudit["allowed"])
@@ -10445,8 +10454,11 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	if loginAudit["operation"] != "auth.login.complete" {
 		t.Fatalf("expected auth.login.complete audit operation, got %v", loginAudit["operation"])
 	}
-	if uid, ok := loginAudit["user_id"].(string); !ok || uid != u.ID {
-		t.Fatalf("expected login audit user_id %q, got %v", u.ID, loginAudit["user_id"])
+	if subjectID, ok := loginAudit["subject_id"].(string); !ok || subjectID != principal.UserSubjectID(u.ID) {
+		t.Fatalf("expected login audit subject_id %q, got %v", principal.UserSubjectID(u.ID), loginAudit["subject_id"])
+	}
+	if _, ok := loginAudit["user_id"]; ok {
+		t.Fatalf("expected emitted login audit record to omit user_id, got %v", loginAudit["user_id"])
 	}
 }
 
@@ -10881,8 +10893,11 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		if auditRecord["auth_source"] != "session" {
 			t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
 		}
-		if uid, ok := auditRecord["user_id"].(string); !ok || uid == "" {
-			t.Fatalf("expected non-empty audit user_id, got %v", auditRecord["user_id"])
+		if subjectID, ok := auditRecord["subject_id"].(string); !ok || subjectID != principal.UserSubjectID(u.ID) {
+			t.Fatalf("expected audit subject_id %q, got %v", principal.UserSubjectID(u.ID), auditRecord["subject_id"])
+		}
+		if _, ok := auditRecord["user_id"]; ok {
+			t.Fatalf("expected emitted audit record to omit user_id, got %v", auditRecord["user_id"])
 		}
 		if auditRecord["target_kind"] != "connection" {
 			t.Fatalf("expected audit target_kind connection, got %v", auditRecord["target_kind"])
@@ -11351,8 +11366,11 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	if auditRecord["auth_source"] != "session" {
 		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
 	}
-	if uid, ok := auditRecord["user_id"].(string); !ok || uid != existing.ID {
-		t.Fatalf("expected audit user_id %q, got %v", existing.ID, auditRecord["user_id"])
+	if subjectID, ok := auditRecord["subject_id"].(string); !ok || subjectID != principal.UserSubjectID(existing.ID) {
+		t.Fatalf("expected audit subject_id %q, got %v", principal.UserSubjectID(existing.ID), auditRecord["subject_id"])
+	}
+	if _, ok := auditRecord["user_id"]; ok {
+		t.Fatalf("expected emitted audit record to omit user_id, got %v", auditRecord["user_id"])
 	}
 	if auditRecord["allowed"] != true {
 		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])
@@ -12977,8 +12995,8 @@ func TestConnectManual(t *testing.T) {
 		if noAuthAudit["allowed"] != false {
 			t.Fatalf("expected denied pending connection audit, got %v", noAuthAudit["allowed"])
 		}
-		if userID, ok := noAuthAudit["user_id"]; ok && userID != "" {
-			t.Fatalf("expected unauthenticated denied selection to omit user_id, got %v", userID)
+		if subjectID, ok := noAuthAudit["subject_id"]; ok && subjectID != "" {
+			t.Fatalf("expected unauthenticated denied selection to omit subject_id, got %v", subjectID)
 		}
 		if noAuthAudit["target_kind"] != "connection" {
 			t.Fatalf("expected pending connection target_kind connection, got %v", noAuthAudit["target_kind"])
@@ -13020,8 +13038,8 @@ func TestConnectManual(t *testing.T) {
 		if mismatchAudit["allowed"] != false {
 			t.Fatalf("expected denied pending connection audit, got %v", mismatchAudit["allowed"])
 		}
-		if mismatchAudit["user_id"] == "u1" {
-			t.Fatalf("expected denied selection not to be attributed to token owner, got %v", mismatchAudit["user_id"])
+		if mismatchAudit["subject_id"] == principal.UserSubjectID("u1") {
+			t.Fatalf("expected denied selection not to be attributed to token owner, got %v", mismatchAudit["subject_id"])
 		}
 		form := url.Values{
 			"pending_token":   {connectResult.PendingToken},
@@ -14086,8 +14104,11 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 	if auditRecord["auth_source"] != "session" {
 		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
 	}
-	if uid, ok := auditRecord["user_id"].(string); !ok || uid == "" {
-		t.Fatalf("expected non-empty audit user_id, got %v", auditRecord["user_id"])
+	if subjectID, ok := auditRecord["subject_id"].(string); !ok || subjectID == "" {
+		t.Fatalf("expected non-empty audit subject_id, got %v", auditRecord["subject_id"])
+	}
+	if _, ok := auditRecord["user_id"]; ok {
+		t.Fatalf("expected emitted audit record to omit user_id, got %v", auditRecord["user_id"])
 	}
 	if auditRecord["allowed"] != true {
 		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])
@@ -15093,8 +15114,11 @@ func TestLogout(t *testing.T) {
 	if auditRecord["auth_source"] != "session" {
 		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
 	}
-	if uid, ok := auditRecord["user_id"].(string); !ok || uid == "" {
-		t.Fatalf("expected non-empty audit user_id, got %v", auditRecord["user_id"])
+	if subjectID, ok := auditRecord["subject_id"].(string); !ok || subjectID == "" {
+		t.Fatalf("expected non-empty audit subject_id, got %v", auditRecord["subject_id"])
+	}
+	if _, ok := auditRecord["user_id"]; ok {
+		t.Fatalf("expected emitted audit record to omit user_id, got %v", auditRecord["user_id"])
 	}
 	if auditRecord["allowed"] != true {
 		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])

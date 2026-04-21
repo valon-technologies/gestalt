@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -47,6 +48,7 @@ func newLoggerAuditSink(logger *slog.Logger, respectLevel bool) *SlogAuditSink {
 }
 
 func buildAuditEntry(ctx context.Context, p *principal.Principal, source, providerName, operation string, meta *InvocationMeta) core.AuditEntry {
+	p = principal.Canonicalized(p)
 	reqMeta := RequestMetaFromContext(ctx)
 	entry := core.AuditEntry{
 		Timestamp:  time.Now(),
@@ -107,6 +109,11 @@ func SetCredentialAudit(ctx context.Context, mode core.ConnectionMode, subjectID
 }
 
 func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
+	auditPrincipal := principal.Canonicalized(&principal.Principal{
+		UserID:    strings.TrimSpace(entry.UserID),
+		SubjectID: strings.TrimSpace(entry.SubjectID),
+		Kind:      principal.Kind(strings.TrimSpace(entry.SubjectKind)),
+	})
 	attrs := []slog.Attr{
 		slog.String("log.type", auditLogType),
 		slog.Time("event_time", entry.Timestamp),
@@ -121,14 +128,11 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 	if entry.AuthSource != "" {
 		attrs = append(attrs, slog.String("auth_source", entry.AuthSource))
 	}
-	if entry.UserID != "" {
-		attrs = append(attrs, slog.String("user_id", entry.UserID))
+	if auditPrincipal.SubjectID != "" {
+		attrs = append(attrs, slog.String("subject_id", auditPrincipal.SubjectID))
 	}
-	if entry.SubjectID != "" {
-		attrs = append(attrs, slog.String("subject_id", entry.SubjectID))
-	}
-	if entry.SubjectKind != "" {
-		attrs = append(attrs, slog.String("subject_kind", entry.SubjectKind))
+	if auditPrincipal.Kind != "" {
+		attrs = append(attrs, slog.String("subject_kind", string(auditPrincipal.Kind)))
 	}
 	if entry.AccessPolicy != "" {
 		attrs = append(attrs, slog.String("access_policy", entry.AccessPolicy))
