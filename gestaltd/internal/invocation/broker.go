@@ -490,7 +490,7 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 }
 
 func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principal) error {
-	if p == nil || p.UserID != "" || p.Kind == principal.KindWorkload || p.Identity == nil || p.Identity.Email == "" {
+	if p == nil || p.UserID != "" || !p.HasUserContext() {
 		return nil
 	}
 	if b.users == nil {
@@ -557,7 +557,7 @@ func (b *Broker) resolveBoundToken(ctx context.Context, prov core.Provider, p *p
 			subjectID,
 		)
 	default:
-		return ctx, "", fmt.Errorf("%w: workloads may only use credentialed or none providers", ErrAuthorizationDenied)
+		return ctx, "", fmt.Errorf("%w: callers with bound credentials may only use credentialed or none providers", ErrAuthorizationDenied)
 	}
 }
 

@@ -186,7 +186,7 @@ func (a *Authorizer) ResolveWorkloadToken(token string) (*principal.ResolvedWork
 }
 
 func (a *Authorizer) IsWorkload(p *principal.Principal) bool {
-	return p != nil && p.Kind == principal.KindWorkload
+	return p != nil && (p.IsStaticWorkloadToken() || a.isManagedIdentityPrincipal(p))
 }
 
 func (a *Authorizer) AllowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
@@ -537,7 +537,7 @@ func normalizeAllowedOperations(ops []string) map[string]struct{} {
 }
 
 func (a *Authorizer) isManagedIdentityPrincipal(p *principal.Principal) bool {
-	return a.IsWorkload(p) && principal.ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID)) != ""
+	return p != nil && principal.ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID)) != ""
 }
 
 func (a *Authorizer) allowManagedIdentityProvider(p *principal.Principal, provider string) bool {

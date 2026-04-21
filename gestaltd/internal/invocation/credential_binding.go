@@ -89,7 +89,7 @@ func resolveCredentialBinding(authz authorization.RuntimeAuthorizer, p *principa
 }
 
 func bindingSelectorOverrideError() error {
-	return fmt.Errorf("%w: workloads may not override connection or instance bindings", ErrAuthorizationDenied)
+	return fmt.Errorf("%w: callers with bound credentials may not override connection or instance bindings", ErrAuthorizationDenied)
 }
 
 func ResolveTokenForBinding(ctx context.Context, resolver TokenResolver, p *principal.Principal, providerName, connection, instance string, boundCredential CredentialBindingResolution) (context.Context, string, error) {

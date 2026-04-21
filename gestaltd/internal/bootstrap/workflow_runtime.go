@@ -252,11 +252,15 @@ func workflowExecutionPrincipal(ref *coreworkflow.ExecutionReference) *principal
 		return nil
 	}
 	permissions := principal.CompilePermissions(ref.Permissions)
-	return principal.Canonicalize(&principal.Principal{
+	value := &principal.Principal{
 		SubjectID:        strings.TrimSpace(ref.SubjectID),
 		Scopes:           principal.PermissionPlugins(permissions),
 		TokenPermissions: permissions,
-	})
+	}
+	if strings.HasPrefix(value.SubjectID, principal.WorkloadSubjectID("")) {
+		value.Source = principal.SourceWorkloadToken
+	}
+	return principal.Canonicalize(value)
 }
 
 func workflowRequestPrincipal(req coreworkflow.InvokeOperationRequest) *principal.Principal {

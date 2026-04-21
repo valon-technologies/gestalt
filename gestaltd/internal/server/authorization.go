@@ -41,7 +41,7 @@ func (s *Server) workloadBinding(p *principal.Principal, provider string) (autho
 }
 
 func rejectWorkloadSelectors(w http.ResponseWriter, p *principal.Principal, connection, instance string) error {
-	if p == nil || p.Kind != principal.KindWorkload {
+	if p == nil || !p.IsStaticWorkloadToken() {
 		return nil
 	}
 	if connection == "" && instance == "" {

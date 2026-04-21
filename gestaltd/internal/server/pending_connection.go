@@ -257,7 +257,7 @@ func (s *Server) resolvePendingConnectionUserID(r *http.Request) (string, bool, 
 	if p == nil {
 		return "", false, nil
 	}
-	if p.Kind == principal.KindWorkload {
+	if !p.HasUserContext() {
 		return "", true, errWorkloadForbidden
 	}
 	subjectID := strings.TrimSpace(p.SubjectID)
@@ -295,7 +295,7 @@ func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Reque
 	subjectID, authenticated, err := s.resolvePendingConnectionUserID(r)
 	if err != nil {
 		if errors.Is(err, errWorkloadForbidden) {
-			writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
+			writeError(w, http.StatusForbidden, errWorkloadForbidden.Error())
 			return false
 		}
 		if errors.Is(err, principal.ErrInvalidToken) {

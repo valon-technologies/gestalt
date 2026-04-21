@@ -41,9 +41,9 @@ const defaultSessionCookieTTL = 24 * time.Hour
 var (
 	errNotAuthenticated  = errors.New("not authenticated")
 	errResolveUser       = errors.New("failed to resolve user")
-	errWorkloadForbidden = errors.New("workload callers are not allowed on this route")
+	errWorkloadForbidden = errors.New("headless callers are not allowed on this route")
 	errOperationAccess   = errors.New("operation access denied")
-	errWorkloadSelector  = errors.New("workload callers may not override connection or instance bindings")
+	errWorkloadSelector  = errors.New("callers with bound credentials may not override connection or instance bindings")
 )
 
 var (
@@ -90,8 +90,8 @@ type connectionParamInfo struct {
 }
 
 func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, error) {
-	if p := PrincipalFromContext(r.Context()); p != nil && p.Kind == principal.KindWorkload {
-		writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
+	if p := PrincipalFromContext(r.Context()); p != nil && !p.HasUserContext() {
+		writeError(w, http.StatusForbidden, errWorkloadForbidden.Error())
 		return "", errWorkloadForbidden
 	}
 	user := UserFromContext(r.Context())
@@ -127,7 +127,7 @@ func (s *Server) readinessCheck(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	p := PrincipalFromContext(r.Context())
 	connected := map[string][]instanceInfo{}
-	if p == nil || p.Kind != principal.KindWorkload {
+	if p == nil || p.HasUserContext() {
 		var err error
 		connected, err = s.userConnectedIntegrations(r)
 		if err != nil {
@@ -164,7 +164,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
 			info.MountedPath = strings.TrimSpace(entry.MountPath)
 		}
-		if p != nil && p.Kind == principal.KindWorkload {
+		if p != nil && !p.HasUserContext() {
 			if binding, ok := s.workloadBinding(p, name); ok {
 				bindingConnected, err := s.workloadBindingConnected(r.Context(), binding, name)
 				if err != nil {

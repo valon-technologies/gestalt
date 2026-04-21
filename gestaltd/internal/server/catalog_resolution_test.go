@@ -292,7 +292,7 @@ func TestResolveCatalog_ModeNoneBoundPrincipalUsesEffectiveBindingSelectors(t *t
 		prov,
 		"bound-none-api",
 		resolver,
-		&principal.Principal{Kind: principal.KindWorkload, SubjectID: principal.WorkloadSubjectID("triage-bot")},
+		&principal.Principal{Kind: principal.KindWorkload, SubjectID: principal.WorkloadSubjectID("triage-bot"), Source: principal.SourceWorkloadToken},
 		"workspace",
 		"team-a",
 	)
@@ -616,6 +616,7 @@ func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing
 	p := &principal.Principal{
 		Kind:      principal.KindWorkload,
 		SubjectID: principal.WorkloadSubjectID("triage-bot"),
+		Source:    principal.SourceWorkloadToken,
 	}
 	cat, err := invocation.ResolveCatalog(context.Background(), prov, "clash-api", &stubTokenResolver{token: "tok_456"}, p, "default", "")
 	if err != nil {

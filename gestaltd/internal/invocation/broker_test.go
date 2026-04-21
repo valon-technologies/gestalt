@@ -119,7 +119,7 @@ func TestBrokerResolveToken_WorkflowContextDoesNotBypassWorkloadIdentityBinding(
 	if err == nil {
 		t.Fatal("expected binding override to be rejected")
 	}
-	if got, want := err.Error(), "workloads may not override connection or instance bindings"; got == "" || !strings.Contains(got, want) {
+	if got, want := err.Error(), "callers with bound credentials may not override connection or instance bindings"; got == "" || !strings.Contains(got, want) {
 		t.Fatalf("ResolveToken error = %q, want substring %q", got, want)
 	}
 }
@@ -146,7 +146,7 @@ func TestBrokerResolveToken_ManagedIdentityDoesNotBypassSelectorBinding(t *testi
 	if err == nil {
 		t.Fatal("expected managed identity selector override to be rejected")
 	}
-	if got, want := err.Error(), "workloads may not override connection or instance bindings"; got == "" || !strings.Contains(got, want) {
+	if got, want := err.Error(), "callers with bound credentials may not override connection or instance bindings"; got == "" || !strings.Contains(got, want) {
 		t.Fatalf("ResolveToken error = %q, want substring %q", got, want)
 	}
 }

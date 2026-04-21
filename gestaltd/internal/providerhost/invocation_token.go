@@ -254,7 +254,7 @@ func claimsFromContext(ctx context.Context, pluginName string, grants map[string
 		},
 		DelegationExpiresAt: jwt.NewNumericDate(delegationExpiresAt),
 		CallerPlugin:        strings.TrimSpace(pluginName),
-		SubjectKind:         string(subjectKindForInvocationClaims(p)),
+		SubjectKind:         subjectKindForInvocationClaims(p),
 		Email:               emailForInvocationClaims(p),
 		DisplayName:         displayNameForInvocationClaims(p),
 		AuthSource:          authSourceForInvocationClaims(p),
@@ -320,7 +320,7 @@ func restoreInvocationTokenContext(ctx context.Context, tokenCtx invocationToken
 }
 
 func shouldInheritCredentialSelectors(p *principal.Principal) bool {
-	return p == nil || p.Kind != principal.KindWorkload
+	return p == nil || !p.IsStaticWorkloadToken()
 }
 
 func subjectIDForInvocationClaims(p *principal.Principal) string {
@@ -336,20 +336,11 @@ func subjectIDForInvocationClaims(p *principal.Principal) string {
 	return ""
 }
 
-func subjectKindForInvocationClaims(p *principal.Principal) principal.Kind {
+func subjectKindForInvocationClaims(p *principal.Principal) string {
 	if p == nil {
 		return ""
 	}
-	if p.Kind != "" {
-		return p.Kind
-	}
-	if strings.HasPrefix(strings.TrimSpace(p.SubjectID), string(principal.KindUser)+":") {
-		return principal.KindUser
-	}
-	if strings.HasPrefix(strings.TrimSpace(p.SubjectID), string(principal.KindWorkload)+":") {
-		return principal.KindWorkload
-	}
-	return ""
+	return p.LegacySubjectKind()
 }
 
 func displayNameForInvocationClaims(p *principal.Principal) string {
@@ -414,9 +405,11 @@ func principalFromInvocationClaims(claims *invocationTokenClaims) *principal.Pri
 		SubjectID:           strings.TrimSpace(claims.Subject),
 		CredentialSubjectID: strings.TrimSpace(claims.CredentialSubjectID),
 		DisplayName:         strings.TrimSpace(claims.DisplayName),
-		Kind:                principal.Kind(strings.TrimSpace(claims.SubjectKind)),
 		Source:              source,
 		TokenPermissions:    tokenPerms,
+	}
+	if strings.TrimSpace(claims.SubjectKind) == string(principal.KindUser) {
+		p.Kind = principal.KindUser
 	}
 	if strings.TrimSpace(claims.Email) != "" || strings.TrimSpace(claims.DisplayName) != "" {
 		p.Identity = &core.UserIdentity{

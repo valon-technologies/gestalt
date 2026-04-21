@@ -468,7 +468,7 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 		return coreworkflow.Target{}, fmt.Errorf("instance name contains invalid characters")
 	}
 	if m.authorizer != nil && m.authorizer.IsWorkload(p) && (connection != "" || instance != "") {
-		return coreworkflow.Target{}, fmt.Errorf("%w: workloads may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
+		return coreworkflow.Target{}, fmt.Errorf("%w: callers with bound credentials may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
 	}
 
 	ctx = invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, pluginName))
@@ -742,7 +742,7 @@ func workflowActorFromPrincipal(p *principal.Principal) coreworkflow.Actor {
 	}
 	return coreworkflow.Actor{
 		SubjectID:   strings.TrimSpace(p.SubjectID),
-		SubjectKind: string(p.Kind),
+		SubjectKind: p.LegacySubjectKind(),
 		DisplayName: workflowActorDisplayName(p),
 		AuthSource:  p.AuthSource(),
 	}

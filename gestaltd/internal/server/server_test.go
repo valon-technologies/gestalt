@@ -5657,7 +5657,7 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 	if auditRecord["subject_id"] != "workload:triage-bot" {
 		t.Fatalf("expected workload subject_id, got %v", auditRecord["subject_id"])
 	}
-	if auditRecord["error"] != "workload callers may not override connection or instance bindings" {
+	if auditRecord["error"] != "callers with bound credentials may not override connection or instance bindings" {
 		t.Fatalf("unexpected audit error: %v", auditRecord["error"])
 	}
 
@@ -8866,7 +8866,7 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 	if selectorAudit["subject_id"] != "workload:triage-bot" {
 		t.Fatalf("expected selector audit subject_id workload:triage-bot, got %v", selectorAudit["subject_id"])
 	}
-	if selectorAudit["error"] != "workload callers may not override connection or instance bindings" {
+	if selectorAudit["error"] != "callers with bound credentials may not override connection or instance bindings" {
 		t.Fatalf("unexpected selector audit error: %v", selectorAudit["error"])
 	}
 }

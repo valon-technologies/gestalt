@@ -112,16 +112,15 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 	switch subject.GetKind() {
 	case string(principal.KindUser):
 		p.Kind = principal.KindUser
-	case string(principal.KindWorkload):
-		p.Kind = principal.KindWorkload
+	case "workload":
+		// Backward-compatible read of older snapshots. Current runtimes rely on
+		// subject ID and auth source instead of a workload kind.
 	}
 	if strings.HasPrefix(subject.GetId(), "user:") {
 		p.UserID = strings.TrimPrefix(subject.GetId(), "user:")
 		if p.Kind == "" {
 			p.Kind = principal.KindUser
 		}
-	} else if strings.HasPrefix(subject.GetId(), "workload:") && p.Kind == "" {
-		p.Kind = principal.KindWorkload
 	}
 	if p.Kind == principal.KindUser && subject.GetDisplayName() != "" {
 		p.Identity = &core.UserIdentity{

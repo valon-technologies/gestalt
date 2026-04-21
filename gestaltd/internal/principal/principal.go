@@ -20,6 +20,7 @@ const (
 
 const IdentityPrincipal = "__identity__"
 const managedIdentitySubjectPrefix = "managed_identity:"
+const workloadSubjectPrefix = "workload:"
 
 type Kind string
 
@@ -82,6 +83,41 @@ func (p *Principal) AuthSource() string {
 	return p.Source.String()
 }
 
+func (p *Principal) HasUserContext() bool {
+	if p == nil {
+		return false
+	}
+	if strings.TrimSpace(p.UserID) != "" {
+		return true
+	}
+	return p.Identity != nil && strings.TrimSpace(p.Identity.Email) != ""
+}
+
+func (p *Principal) IsStaticWorkloadToken() bool {
+	return p != nil && p.Source == SourceWorkloadToken
+}
+
+func (p *Principal) LegacySubjectKind() string {
+	if p == nil {
+		return ""
+	}
+	if p.Kind != "" {
+		return string(p.Kind)
+	}
+	switch {
+	case p.IsStaticWorkloadToken(),
+		strings.HasPrefix(strings.TrimSpace(p.SubjectID), workloadSubjectPrefix),
+		ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID)) != "":
+		return string(KindWorkload)
+	case strings.TrimSpace(p.UserID) != "",
+		p.Identity != nil,
+		strings.HasPrefix(strings.TrimSpace(p.SubjectID), string(KindUser)+":"):
+		return string(KindUser)
+	default:
+		return ""
+	}
+}
+
 func UserSubjectID(userID string) string {
 	if userID == "" {
 		return ""
@@ -100,7 +136,7 @@ func WorkloadSubjectID(workloadID string) string {
 	if workloadID == "" {
 		return ""
 	}
-	return string(KindWorkload) + ":" + workloadID
+	return workloadSubjectPrefix + workloadID
 }
 
 func IdentitySubjectID() string {
@@ -367,14 +403,6 @@ func Canonicalize(p *Principal) *Principal {
 			if p.Kind == "" {
 				p.Kind = KindUser
 			}
-		}
-	}
-	if p.Kind == "" {
-		switch {
-		case strings.HasPrefix(p.SubjectID, string(KindWorkload)+":"),
-			ManagedIdentityIDFromSubjectID(p.SubjectID) != "",
-			p.SubjectID == IdentitySubjectID():
-			p.Kind = KindWorkload
 		}
 	}
 	if p.SubjectID == "" && p.UserID != "" {

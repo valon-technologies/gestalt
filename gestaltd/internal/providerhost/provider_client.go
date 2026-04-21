@@ -339,19 +339,7 @@ func subjectKindForPrincipal(p *principal.Principal) string {
 	if p == nil {
 		return ""
 	}
-	if p.Kind != "" {
-		return string(p.Kind)
-	}
-	switch {
-	case strings.HasPrefix(p.SubjectID, string(principal.KindUser)+":"):
-		return string(principal.KindUser)
-	case strings.HasPrefix(p.SubjectID, string(principal.KindWorkload)+":"):
-		return string(principal.KindWorkload)
-	}
-	if p.UserID != "" || p.Identity != nil {
-		return string(principal.KindUser)
-	}
-	return ""
+	return p.LegacySubjectKind()
 }
 
 func subjectDisplayName(p *principal.Principal) string {

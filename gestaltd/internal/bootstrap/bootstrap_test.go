@@ -4377,6 +4377,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		workloadPrincipal := &principal.Principal{
 			SubjectID: principal.WorkloadSubjectID("triage-bot"),
 			Kind:      principal.KindWorkload,
+			Source:    principal.SourceWorkloadToken,
 		}
 		access, allowed := result.Authorizer.ResolveAccess(ctx, workloadPrincipal, "roadmap")
 		if allowed {

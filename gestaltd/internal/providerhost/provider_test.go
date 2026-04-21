@@ -215,8 +215,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Kind:        principal.KindWorkload,
 				Source:      principal.SourceWorkloadToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|workload:triage-bot|workload|Triage Bot|false|workload_token|user|workload:triage-bot|roadmap|admin",
-			wantSessionCatalog: "token-123|workload:triage-bot|workload|Triage Bot|false|workload_token|user|roadmap|admin",
+			wantExecuteBody:    "echo|secret-token|hi|acme|workload:triage-bot||Triage Bot|false|workload_token|user|workload:triage-bot|roadmap|admin",
+			wantSessionCatalog: "token-123|workload:triage-bot||Triage Bot|false|workload_token|user|roadmap|admin",
 		},
 	}
 
@@ -355,6 +355,9 @@ func TestPrincipalFromProto_WorkloadDisplayNameDoesNotCreateIdentity(t *testing.
 	}
 	if p.DisplayName != "Triage Bot" {
 		t.Fatalf("display name = %q, want %q", p.DisplayName, "Triage Bot")
+	}
+	if p.Kind != "" {
+		t.Fatalf("principal kind = %q, want empty", p.Kind)
 	}
 	if p.Identity != nil {
 		t.Fatalf("expected workload identity to remain nil, got %#v", p.Identity)
