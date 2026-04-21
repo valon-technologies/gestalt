@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -105,13 +104,11 @@ type EffectiveWorkflowIndexedDB struct {
 	ObjectStores []string
 }
 
-type EffectivePluginWorkflow struct {
-	Enabled       bool
-	ProviderName  string
-	Provider      *ProviderEntry
-	Operations    []string
-	Schedules     map[string]PluginWorkflowSchedule
-	EventTriggers map[string]PluginWorkflowEventTrigger
+type EffectiveWorkflowBinding struct {
+	Enabled      bool
+	ProviderName string
+	Provider     *ProviderEntry
+	Operations   []string
 }
 
 func (c *Config) EffectivePluginIndexedDB(pluginName string, entry *ProviderEntry) (EffectivePluginIndexedDB, error) {
@@ -122,16 +119,20 @@ func (c *Config) EffectivePluginIndexedDB(pluginName string, entry *ProviderEntr
 	return ResolveEffectivePluginIndexedDB(pluginName, entry, selectedName, c.Providers.IndexedDB)
 }
 
-func (c *Config) EffectivePluginWorkflow(pluginName string, entry *ProviderEntry) (EffectivePluginWorkflow, error) {
+func (c *Config) EffectiveWorkflowBinding(pluginName string) (EffectiveWorkflowBinding, error) {
+	binding := (*WorkflowBindingConfig)(nil)
+	if c != nil {
+		binding = c.Workflows.Bindings[pluginName]
+	}
 	selectedName := ""
-	if entry != nil && entry.Workflow != nil && strings.TrimSpace(entry.Workflow.Provider) == "" {
+	if binding != nil && strings.TrimSpace(binding.Provider) == "" {
 		var err error
 		selectedName, _, err = c.SelectedWorkflowProvider()
 		if err != nil {
-			return EffectivePluginWorkflow{}, err
+			return EffectiveWorkflowBinding{}, err
 		}
 	}
-	return ResolveEffectivePluginWorkflow(pluginName, entry, selectedName, c.Providers.Workflow)
+	return ResolveEffectiveWorkflowBinding(pluginName, binding, selectedName, c.Providers.Workflow)
 }
 
 func (c *Config) EffectiveWorkflowIndexedDB(name string, entry *ProviderEntry) (EffectiveWorkflowIndexedDB, error) {
@@ -210,56 +211,30 @@ func ResolveEffectiveWorkflowIndexedDB(name string, entry *ProviderEntry, entrie
 	}, nil
 }
 
-func ResolveEffectivePluginWorkflow(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*ProviderEntry) (EffectivePluginWorkflow, error) {
-	if entry == nil || entry.Workflow == nil {
-		return EffectivePluginWorkflow{}, nil
+func ResolveEffectiveWorkflowBinding(pluginName string, binding *WorkflowBindingConfig, selectedName string, entries map[string]*ProviderEntry) (EffectiveWorkflowBinding, error) {
+	if binding == nil {
+		return EffectiveWorkflowBinding{}, nil
 	}
 
-	providerName := strings.TrimSpace(entry.Workflow.Provider)
+	providerName := strings.TrimSpace(binding.Provider)
 	if providerName == "" {
 		providerName = strings.TrimSpace(selectedName)
 	}
 	if providerName == "" {
-		return EffectivePluginWorkflow{}, fmt.Errorf("config validation: plugins.%s.workflow requires workflow.provider or a selected/default providers.workflow entry", pluginName)
+		return EffectiveWorkflowBinding{}, fmt.Errorf("config validation: workflows.bindings.%s requires provider or a selected/default providers.workflow entry", pluginName)
 	}
 
 	provider, ok := entries[providerName]
 	if !ok || provider == nil {
-		return EffectivePluginWorkflow{}, fmt.Errorf("config validation: plugins.%s.workflow.provider references unknown workflow %q", pluginName, providerName)
+		return EffectiveWorkflowBinding{}, fmt.Errorf("config validation: workflows.bindings.%s.provider references unknown workflow %q", pluginName, providerName)
 	}
 
-	return EffectivePluginWorkflow{
-		Enabled:       true,
-		ProviderName:  providerName,
-		Provider:      provider,
-		Operations:    slices.Clone(entry.Workflow.Operations),
-		Schedules:     clonePluginWorkflowSchedules(entry.Workflow.Schedules),
-		EventTriggers: clonePluginWorkflowEventTriggers(entry.Workflow.EventTriggers),
+	return EffectiveWorkflowBinding{
+		Enabled:      true,
+		ProviderName: providerName,
+		Provider:     provider,
+		Operations:   slices.Clone(binding.Operations),
 	}, nil
-}
-
-func clonePluginWorkflowSchedules(src map[string]PluginWorkflowSchedule) map[string]PluginWorkflowSchedule {
-	if len(src) == 0 {
-		return nil
-	}
-	dst := make(map[string]PluginWorkflowSchedule, len(src))
-	for key, schedule := range src {
-		schedule.Input = maps.Clone(schedule.Input)
-		dst[key] = schedule
-	}
-	return dst
-}
-
-func clonePluginWorkflowEventTriggers(src map[string]PluginWorkflowEventTrigger) map[string]PluginWorkflowEventTrigger {
-	if len(src) == 0 {
-		return nil
-	}
-	dst := make(map[string]PluginWorkflowEventTrigger, len(src))
-	for key, trigger := range src {
-		trigger.Input = maps.Clone(trigger.Input)
-		dst[key] = trigger
-	}
-	return dst
 }
 
 func ResolveSelectedHostProvider(kind HostProviderKind, explicit string, entries map[string]*ProviderEntry) (string, *ProviderEntry, error) {

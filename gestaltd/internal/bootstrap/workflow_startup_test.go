@@ -241,14 +241,16 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 			ResolvedManifest:     newExecutableManifest("Roadmap", "Delayed startup provider"),
 			ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 			ConnectionMode:       providermanifestv1.ConnectionModeIdentity,
-			Workflow: &config.PluginWorkflowConfig{
-				Provider:   "temporal",
-				Operations: []string{"status"},
-			},
 		},
 	}
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Workflows.Bindings = map[string]*config.WorkflowBindingConfig{
+		"roadmap": {
+			Provider:   "temporal",
+			Operations: []string{"status"},
+		},
 	}
 
 	factories := workflowStartupTestFactories()
@@ -308,14 +310,16 @@ func TestBootstrapPluginStartupWorkflowCallWaitsForWorkflowProvider(t *testing.T
 			Command:              bin,
 			ResolvedManifest:     newExecutableManifest("Roadmap", "Workflow startup client"),
 			ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-			Workflow: &config.PluginWorkflowConfig{
-				Provider:   "temporal",
-				Operations: []string{"status"},
-			},
 		},
 	}
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Workflows.Bindings = map[string]*config.WorkflowBindingConfig{
+		"roadmap": {
+			Provider:   "temporal",
+			Operations: []string{"status"},
+		},
 	}
 
 	factories := workflowStartupTestFactories()
@@ -377,14 +381,16 @@ func TestValidatePluginStartupWorkflowCallWaitsForWorkflowProvider(t *testing.T)
 			Command:              bin,
 			ResolvedManifest:     newExecutableManifest("Roadmap", "Workflow startup client"),
 			ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-			Workflow: &config.PluginWorkflowConfig{
-				Provider:   "temporal",
-				Operations: []string{"status"},
-			},
 		},
 	}
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Workflows.Bindings = map[string]*config.WorkflowBindingConfig{
+		"roadmap": {
+			Provider:   "temporal",
+			Operations: []string{"status"},
+		},
 	}
 
 	factories := workflowStartupTestFactories()
@@ -425,14 +431,16 @@ func TestBootstrapFailsPendingWorkflowStartupClientsOnAuthorizationErrors(t *tes
 			Command:              bin,
 			ResolvedManifest:     newExecutableManifest("Roadmap", "Workflow startup client"),
 			ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-			Workflow: &config.PluginWorkflowConfig{
-				Provider:   "temporal",
-				Operations: []string{"status"},
-			},
 		},
 	}
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Workflows.Bindings = map[string]*config.WorkflowBindingConfig{
+		"roadmap": {
+			Provider:   "temporal",
+			Operations: []string{"status"},
+		},
 	}
 	cfg.Authorization = config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
@@ -479,14 +487,16 @@ func TestBootstrapFailsWorkflowStartupDependencyCycles(t *testing.T) {
 			ResolvedManifest:     newExecutableManifest("Roadmap", "Workflow startup client"),
 			ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 			ConnectionMode:       providermanifestv1.ConnectionModeIdentity,
-			Workflow: &config.PluginWorkflowConfig{
-				Provider:   "temporal",
-				Operations: []string{"status"},
-			},
 		},
 	}
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Workflows.Bindings = map[string]*config.WorkflowBindingConfig{
+		"roadmap": {
+			Provider:   "temporal",
+			Operations: []string{"status"},
+		},
 	}
 
 	factories := workflowStartupTestFactories()

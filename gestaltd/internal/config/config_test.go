@@ -2388,7 +2388,7 @@ server:
 		}
 	})
 
-	t.Run("plugin accepts workflow bindings", func(t *testing.T) {
+	t.Run("top-level workflows config is canonicalized", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2396,26 +2396,30 @@ plugins:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
-    workflow:
+workflows:
+  bindings:
+    roadmap:
       provider: temporal
       operations:
         - nightly_sync
         - backfill_items
-      schedules:
-        nightly:
-          cron: "0 2 * * *"
-          operation: nightly_sync
-          input:
-            source: yaml
-      eventTriggers:
-        task_updated:
-          match:
-            type: roadmap.task.updated
-            source: roadmap
-          operation: backfill_items
-          paused: true
-          input:
-            source: event
+  schedules:
+    nightly:
+      plugin: roadmap
+      cron: "0 2 * * *"
+      operation: nightly_sync
+      input:
+        source: yaml
+  eventTriggers:
+    task_updated:
+      plugin: roadmap
+      match:
+        type: roadmap.task.updated
+        source: roadmap
+      operation: backfill_items
+      paused: true
+      input:
+        source: event
 providers:
   workflow:
     temporal:
@@ -2435,39 +2439,45 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		want := &PluginWorkflowConfig{
+		wantBinding := &WorkflowBindingConfig{
 			Provider:   "temporal",
 			Operations: []string{"nightly_sync", "backfill_items"},
-			Schedules: map[string]PluginWorkflowSchedule{
-				"nightly": {
-					Cron:      "0 2 * * *",
-					Timezone:  "UTC",
-					Operation: "nightly_sync",
-					Input: map[string]any{
-						"source": "yaml",
-					},
-				},
-			},
-			EventTriggers: map[string]PluginWorkflowEventTrigger{
-				"task_updated": {
-					Match: PluginWorkflowEventMatch{
-						Type:   "roadmap.task.updated",
-						Source: "roadmap",
-					},
-					Operation: "backfill_items",
-					Paused:    true,
-					Input: map[string]any{
-						"source": "event",
-					},
-				},
+		}
+		if got := cfg.Workflows.Bindings["roadmap"]; !reflect.DeepEqual(got, wantBinding) {
+			t.Fatalf("Workflows.Bindings[roadmap] = %#v, want %#v", got, wantBinding)
+		}
+		wantSchedule := WorkflowScheduleConfig{
+			ManagedKey: "nightly",
+			Plugin:     "roadmap",
+			Cron:       "0 2 * * *",
+			Timezone:   "UTC",
+			Operation:  "nightly_sync",
+			Input: map[string]any{
+				"source": "yaml",
 			},
 		}
-		if got := cfg.Plugins["roadmap"].Workflow; !reflect.DeepEqual(got, want) {
-			t.Fatalf("Plugins[roadmap].Workflow = %#v, want %#v", got, want)
+		if got := cfg.Workflows.Schedules["nightly"]; !reflect.DeepEqual(got, wantSchedule) {
+			t.Fatalf("Workflows.Schedules[nightly] = %#v, want %#v", got, wantSchedule)
+		}
+		wantTrigger := WorkflowEventTriggerConfig{
+			ManagedKey: "task_updated",
+			Plugin:     "roadmap",
+			Match: WorkflowEventMatch{
+				Type:   "roadmap.task.updated",
+				Source: "roadmap",
+			},
+			Operation: "backfill_items",
+			Paused:    true,
+			Input: map[string]any{
+				"source": "event",
+			},
+		}
+		if got := cfg.Workflows.EventTriggers["task_updated"]; !reflect.DeepEqual(got, wantTrigger) {
+			t.Fatalf("Workflows.EventTriggers[task_updated] = %#v, want %#v", got, wantTrigger)
 		}
 	})
 
-	t.Run("plugin workflow binding can select an explicit provider when multiple workflow providers exist", func(t *testing.T) {
+	t.Run("legacy plugin workflow config is canonicalized into top-level workflows", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2476,6 +2486,117 @@ plugins:
     source:
       path: ./plugin/manifest.yaml
     workflow:
+      provider: temporal
+      operations:
+        - nightly_sync
+      schedules:
+        nightly:
+          cron: "0 2 * * *"
+          operation: nightly_sync
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Plugins["roadmap"].Workflow != nil {
+			t.Fatalf("Plugins[roadmap].Workflow = %#v, want nil after canonicalization", cfg.Plugins["roadmap"].Workflow)
+		}
+		if got := cfg.Workflows.Bindings["roadmap"]; got == nil || got.Provider != "temporal" || !reflect.DeepEqual(got.Operations, []string{"nightly_sync"}) {
+			t.Fatalf("Workflows.Bindings[roadmap] = %#v", got)
+		}
+		schedule, ok := cfg.Workflows.Schedules["nightly"]
+		if !ok {
+			t.Fatalf("Workflows.Schedules = %#v, want nightly", cfg.Workflows.Schedules)
+		}
+		if schedule.Plugin != "roadmap" || schedule.ManagedKey != "nightly" || schedule.Operation != "nightly_sync" {
+			t.Fatalf("Workflows.Schedules[nightly] = %#v", schedule)
+		}
+	})
+
+	t.Run("legacy duplicate workflow keys are lifted deterministically", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  alpha:
+    source:
+      path: ./plugin/manifest.yaml
+    workflow:
+      provider: temporal
+      operations:
+        - sync
+      schedules:
+        nightly:
+          cron: "0 2 * * *"
+          operation: sync
+  beta:
+    source:
+      path: ./plugin/manifest.yaml
+    workflow:
+      provider: temporal
+      operations:
+        - sync
+      schedules:
+        nightly:
+          cron: "0 3 * * *"
+          operation: sync
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		alpha := cfg.Workflows.Schedules["nightly"]
+		if alpha.Plugin != "alpha" || alpha.ManagedKey != "nightly" {
+			t.Fatalf("Workflows.Schedules[nightly] = %#v", alpha)
+		}
+		beta, ok := cfg.Workflows.Schedules["beta.nightly"]
+		if !ok {
+			t.Fatalf("Workflows.Schedules = %#v, want beta.nightly", cfg.Workflows.Schedules)
+		}
+		if beta.Plugin != "beta" || beta.ManagedKey != "nightly" {
+			t.Fatalf("Workflows.Schedules[beta.nightly] = %#v", beta)
+		}
+	})
+
+	t.Run("workflow binding can select an explicit provider when multiple workflow providers exist", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+workflows:
+  bindings:
+    roadmap:
       provider: temporal
       operations:
         - nightly_sync
@@ -2501,9 +2622,9 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		effective, err := cfg.EffectivePluginWorkflow("roadmap", cfg.Plugins["roadmap"])
+		effective, err := cfg.EffectiveWorkflowBinding("roadmap")
 		if err != nil {
-			t.Fatalf("EffectivePluginWorkflow: %v", err)
+			t.Fatalf("EffectiveWorkflowBinding: %v", err)
 		}
 		if effective.ProviderName != "temporal" {
 			t.Fatalf("ProviderName = %q, want %q", effective.ProviderName, "temporal")
@@ -2542,7 +2663,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `ui.root.workflow is only supported on plugins.*`) {
+		if !strings.Contains(err.Error(), `ui.root.workflow has moved to top-level workflows.bindings, workflows.schedules, and workflows.eventTriggers`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2555,7 +2676,9 @@ plugins:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
-    workflow:
+workflows:
+  bindings:
+    roadmap:
       provider: missing
       operations:
         - nightly_sync
@@ -2578,7 +2701,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `plugins.roadmap.workflow.provider references unknown workflow "missing"`) {
+		if !strings.Contains(err.Error(), `workflows.bindings.roadmap.provider references unknown workflow "missing"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2591,7 +2714,9 @@ plugins:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
-    workflow:
+workflows:
+  bindings:
+    roadmap:
       provider: temporal
       operations:
         - nightly_sync
@@ -2632,14 +2757,17 @@ plugins:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
-    workflow:
+workflows:
+  bindings:
+    roadmap:
       provider: temporal
       operations:
         - nightly_sync
-      schedules:
-        invalid:
-          cron: "*/5 * * * *"
-          operation: backfill_items
+  schedules:
+    invalid:
+      plugin: roadmap
+      cron: "*/5 * * * *"
+      operation: backfill_items
 providers:
   workflow:
     temporal:
@@ -2659,7 +2787,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `workflow.schedules.invalid.operation "backfill_items" must be listed`) {
+		if !strings.Contains(err.Error(), `workflows.schedules.invalid.operation "backfill_items" must be listed`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2672,15 +2800,18 @@ plugins:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
-    workflow:
+workflows:
+  bindings:
+    roadmap:
       provider: temporal
       operations:
         - nightly_sync
-      eventTriggers:
-        invalid:
-          match:
-            type: roadmap.task.updated
-          operation: backfill_items
+  eventTriggers:
+    invalid:
+      plugin: roadmap
+      match:
+        type: roadmap.task.updated
+      operation: backfill_items
 providers:
   workflow:
     temporal:
@@ -2700,7 +2831,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `workflow.eventTriggers.invalid.operation "backfill_items" must be listed`) {
+		if !strings.Contains(err.Error(), `workflows.eventTriggers.invalid.operation "backfill_items" must be listed`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2713,15 +2844,18 @@ plugins:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
-    workflow:
+workflows:
+  bindings:
+    roadmap:
       provider: temporal
       operations:
         - nightly_sync
-      eventTriggers:
-        invalid:
-          match:
-            source: roadmap
-          operation: nightly_sync
+  eventTriggers:
+    invalid:
+      plugin: roadmap
+      match:
+        source: roadmap
+      operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -2741,7 +2875,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `workflow.eventTriggers.invalid.match.type is required`) {
+		if !strings.Contains(err.Error(), `workflows.eventTriggers.invalid.match.type is required`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2754,15 +2888,18 @@ plugins:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
-    workflow:
+workflows:
+  bindings:
+    roadmap:
       provider: temporal
       operations:
         - nightly_sync
-      schedules:
-        invalid:
-          cron: "0 0 0 * * *"
-          timezone: Mars/Olympus
-          operation: nightly_sync
+  schedules:
+    invalid:
+      plugin: roadmap
+      cron: "0 0 0 * * *"
+      timezone: Mars/Olympus
+      operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -2782,7 +2919,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `workflow.schedules.invalid.cron`) {
+		if !strings.Contains(err.Error(), `workflows.schedules.invalid.cron`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

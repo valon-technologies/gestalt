@@ -136,7 +136,7 @@ func ValidateCanonicalStructure(cfg *Config) error {
 			return err
 		}
 	}
-	return nil
+	return validateWorkflowsConfig(cfg)
 }
 
 func validateAPIVersion(cfg *Config) error {
@@ -558,7 +558,7 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
 	}
 	if entry.Workflow != nil {
-		return fmt.Errorf("config validation: %s.workflow is only supported on plugins.*", subject)
+		return fmt.Errorf("config validation: %s.workflow has moved to top-level workflows.bindings, workflows.schedules, and workflows.eventTriggers", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
@@ -609,7 +609,7 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
 	}
 	if entry.Workflow != nil {
-		return fmt.Errorf("config validation: %s.workflow is only supported on plugins.*", subject)
+		return fmt.Errorf("config validation: %s.workflow has moved to top-level workflows.bindings, workflows.schedules, and workflows.eventTriggers", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
@@ -789,101 +789,161 @@ func validatePluginS3Bindings(cfg *Config, name string, entry *ProviderEntry) er
 	return nil
 }
 
-func validatePluginWorkflowConfig(cfg *Config, name string, entry *ProviderEntry) error {
+func validatePluginWorkflowConfig(_ *Config, name string, entry *ProviderEntry) error {
 	if entry == nil || entry.Workflow == nil {
 		return nil
 	}
-	entry.Workflow.Provider = strings.TrimSpace(entry.Workflow.Provider)
-	seenOps := make(map[string]struct{}, len(entry.Workflow.Operations))
-	for i, op := range entry.Workflow.Operations {
-		op = strings.TrimSpace(op)
-		if op == "" {
-			return fmt.Errorf("config validation: plugins.%s.workflow.operations[%d] is required", name, i)
-		}
-		if _, exists := seenOps[op]; exists {
-			return fmt.Errorf("config validation: plugins.%s.workflow.operations[%d] duplicates %q", name, i, op)
-		}
-		seenOps[op] = struct{}{}
-		entry.Workflow.Operations[i] = op
-	}
-	if len(entry.Workflow.Operations) == 0 {
-		return fmt.Errorf("config validation: plugins.%s.workflow.operations must not be empty", name)
-	}
-	if len(entry.Workflow.Schedules) > 0 {
-		normalized := make(map[string]PluginWorkflowSchedule, len(entry.Workflow.Schedules))
-		for key, schedule := range entry.Workflow.Schedules {
-			key = strings.TrimSpace(key)
-			if key == "" {
-				return fmt.Errorf("config validation: plugins.%s.workflow.schedules keys must not be empty", name)
-			}
-			if _, exists := normalized[key]; exists {
-				return fmt.Errorf("config validation: plugins.%s.workflow.schedules duplicates %q", name, key)
-			}
-			schedule.Cron = strings.TrimSpace(schedule.Cron)
-			if schedule.Cron == "" {
-				return fmt.Errorf("config validation: plugins.%s.workflow.schedules.%s.cron is required", name, key)
-			}
-			if err := validateWorkflowScheduleCron(name, key, schedule.Cron); err != nil {
-				return err
-			}
-			schedule.Operation = strings.TrimSpace(schedule.Operation)
-			if schedule.Operation == "" {
-				return fmt.Errorf("config validation: plugins.%s.workflow.schedules.%s.operation is required", name, key)
-			}
-			if _, exists := seenOps[schedule.Operation]; !exists {
-				return fmt.Errorf("config validation: plugins.%s.workflow.schedules.%s.operation %q must be listed in plugins.%s.workflow.operations", name, key, schedule.Operation, name)
-			}
-			schedule.Timezone = strings.TrimSpace(schedule.Timezone)
-			if schedule.Timezone == "" {
-				schedule.Timezone = "UTC"
-			}
-			if _, err := time.LoadLocation(schedule.Timezone); err != nil {
-				return fmt.Errorf("config validation: plugins.%s.workflow.schedules.%s.timezone %q is invalid: %w", name, key, schedule.Timezone, err)
-			}
-			normalized[key] = schedule
-		}
-		entry.Workflow.Schedules = normalized
-	}
-	if len(entry.Workflow.EventTriggers) > 0 {
-		normalized := make(map[string]PluginWorkflowEventTrigger, len(entry.Workflow.EventTriggers))
-		for key, trigger := range entry.Workflow.EventTriggers {
-			key = strings.TrimSpace(key)
-			if key == "" {
-				return fmt.Errorf("config validation: plugins.%s.workflow.eventTriggers keys must not be empty", name)
-			}
-			if _, exists := normalized[key]; exists {
-				return fmt.Errorf("config validation: plugins.%s.workflow.eventTriggers duplicates %q", name, key)
-			}
-			trigger.Match.Type = strings.TrimSpace(trigger.Match.Type)
-			if trigger.Match.Type == "" {
-				return fmt.Errorf("config validation: plugins.%s.workflow.eventTriggers.%s.match.type is required", name, key)
-			}
-			trigger.Match.Source = strings.TrimSpace(trigger.Match.Source)
-			trigger.Match.Subject = strings.TrimSpace(trigger.Match.Subject)
-			trigger.Operation = strings.TrimSpace(trigger.Operation)
-			if trigger.Operation == "" {
-				return fmt.Errorf("config validation: plugins.%s.workflow.eventTriggers.%s.operation is required", name, key)
-			}
-			if _, exists := seenOps[trigger.Operation]; !exists {
-				return fmt.Errorf("config validation: plugins.%s.workflow.eventTriggers.%s.operation %q must be listed in plugins.%s.workflow.operations", name, key, trigger.Operation, name)
-			}
-			normalized[key] = trigger
-		}
-		entry.Workflow.EventTriggers = normalized
-	}
-	if _, err := cfg.EffectivePluginWorkflow(name, entry); err != nil {
-		return err
-	}
-	return nil
+	return fmt.Errorf("config validation: plugins.%s.workflow has moved to top-level workflows.bindings, workflows.schedules, and workflows.eventTriggers", name)
 }
 
 var workflowScheduleCronParser = cronv3.NewParser(
 	cronv3.Minute | cronv3.Hour | cronv3.Dom | cronv3.Month | cronv3.Dow,
 )
 
-func validateWorkflowScheduleCron(pluginName, scheduleKey, spec string) error {
+func validateWorkflowScheduleCron(scheduleKey, spec string) error {
 	if _, err := workflowScheduleCronParser.Parse(spec); err != nil {
-		return fmt.Errorf("config validation: plugins.%s.workflow.schedules.%s.cron %q is invalid: %w", pluginName, scheduleKey, spec, err)
+		return fmt.Errorf("config validation: workflows.schedules.%s.cron %q is invalid: %w", scheduleKey, spec, err)
+	}
+	return nil
+}
+
+func validateWorkflowsConfig(cfg *Config) error {
+	for pluginName, binding := range cfg.Workflows.Bindings {
+		pluginName = strings.TrimSpace(pluginName)
+		if pluginName == "" {
+			return fmt.Errorf("config validation: workflows.bindings keys must not be empty")
+		}
+		if _, ok := cfg.Plugins[pluginName]; !ok {
+			return fmt.Errorf("config validation: workflows.bindings.%s references unknown plugin %q", pluginName, pluginName)
+		}
+		if binding == nil {
+			return fmt.Errorf("config validation: workflows.bindings.%s is required", pluginName)
+		}
+		binding.Provider = strings.TrimSpace(binding.Provider)
+		seenOps := make(map[string]struct{}, len(binding.Operations))
+		for i, op := range binding.Operations {
+			op = strings.TrimSpace(op)
+			if op == "" {
+				return fmt.Errorf("config validation: workflows.bindings.%s.operations[%d] is required", pluginName, i)
+			}
+			if _, exists := seenOps[op]; exists {
+				return fmt.Errorf("config validation: workflows.bindings.%s.operations[%d] duplicates %q", pluginName, i, op)
+			}
+			seenOps[op] = struct{}{}
+			binding.Operations[i] = op
+		}
+		if len(binding.Operations) == 0 {
+			return fmt.Errorf("config validation: workflows.bindings.%s.operations must not be empty", pluginName)
+		}
+		if _, err := cfg.EffectiveWorkflowBinding(pluginName); err != nil {
+			return err
+		}
+	}
+
+	if len(cfg.Workflows.Schedules) > 0 {
+		normalized := make(map[string]WorkflowScheduleConfig, len(cfg.Workflows.Schedules))
+		for key := range cfg.Workflows.Schedules {
+			schedule := cfg.Workflows.Schedules[key]
+			key = strings.TrimSpace(key)
+			if key == "" {
+				return fmt.Errorf("config validation: workflows.schedules keys must not be empty")
+			}
+			if _, exists := normalized[key]; exists {
+				return fmt.Errorf("config validation: workflows.schedules duplicates %q", key)
+			}
+			schedule.Plugin = strings.TrimSpace(schedule.Plugin)
+			if schedule.Plugin == "" {
+				return fmt.Errorf("config validation: workflows.schedules.%s.plugin is required", key)
+			}
+			if _, ok := cfg.Plugins[schedule.Plugin]; !ok {
+				return fmt.Errorf("config validation: workflows.schedules.%s.plugin references unknown plugin %q", key, schedule.Plugin)
+			}
+			binding, err := cfg.EffectiveWorkflowBinding(schedule.Plugin)
+			if err != nil {
+				return err
+			}
+			if !binding.Enabled {
+				return fmt.Errorf("config validation: workflows.schedules.%s.plugin %q does not have a workflow binding", key, schedule.Plugin)
+			}
+			schedule.Cron = strings.TrimSpace(schedule.Cron)
+			if schedule.Cron == "" {
+				return fmt.Errorf("config validation: workflows.schedules.%s.cron is required", key)
+			}
+			if err := validateWorkflowScheduleCron(key, schedule.Cron); err != nil {
+				return err
+			}
+			schedule.Operation = strings.TrimSpace(schedule.Operation)
+			if schedule.Operation == "" {
+				return fmt.Errorf("config validation: workflows.schedules.%s.operation is required", key)
+			}
+			if !slices.Contains(binding.Operations, schedule.Operation) {
+				return fmt.Errorf("config validation: workflows.schedules.%s.operation %q must be listed in workflows.bindings.%s.operations", key, schedule.Operation, schedule.Plugin)
+			}
+			schedule.Connection = strings.TrimSpace(schedule.Connection)
+			schedule.Instance = strings.TrimSpace(schedule.Instance)
+			schedule.ManagedKey = strings.TrimSpace(schedule.ManagedKey)
+			if schedule.ManagedKey == "" {
+				schedule.ManagedKey = key
+			}
+			schedule.Timezone = strings.TrimSpace(schedule.Timezone)
+			if schedule.Timezone == "" {
+				schedule.Timezone = "UTC"
+			}
+			if _, err := time.LoadLocation(schedule.Timezone); err != nil {
+				return fmt.Errorf("config validation: workflows.schedules.%s.timezone %q is invalid: %w", key, schedule.Timezone, err)
+			}
+			normalized[key] = schedule
+		}
+		cfg.Workflows.Schedules = normalized
+	}
+
+	if len(cfg.Workflows.EventTriggers) > 0 {
+		normalized := make(map[string]WorkflowEventTriggerConfig, len(cfg.Workflows.EventTriggers))
+		for key := range cfg.Workflows.EventTriggers {
+			trigger := cfg.Workflows.EventTriggers[key]
+			key = strings.TrimSpace(key)
+			if key == "" {
+				return fmt.Errorf("config validation: workflows.eventTriggers keys must not be empty")
+			}
+			if _, exists := normalized[key]; exists {
+				return fmt.Errorf("config validation: workflows.eventTriggers duplicates %q", key)
+			}
+			trigger.Plugin = strings.TrimSpace(trigger.Plugin)
+			if trigger.Plugin == "" {
+				return fmt.Errorf("config validation: workflows.eventTriggers.%s.plugin is required", key)
+			}
+			if _, ok := cfg.Plugins[trigger.Plugin]; !ok {
+				return fmt.Errorf("config validation: workflows.eventTriggers.%s.plugin references unknown plugin %q", key, trigger.Plugin)
+			}
+			binding, err := cfg.EffectiveWorkflowBinding(trigger.Plugin)
+			if err != nil {
+				return err
+			}
+			if !binding.Enabled {
+				return fmt.Errorf("config validation: workflows.eventTriggers.%s.plugin %q does not have a workflow binding", key, trigger.Plugin)
+			}
+			trigger.Match.Type = strings.TrimSpace(trigger.Match.Type)
+			if trigger.Match.Type == "" {
+				return fmt.Errorf("config validation: workflows.eventTriggers.%s.match.type is required", key)
+			}
+			trigger.Match.Source = strings.TrimSpace(trigger.Match.Source)
+			trigger.Match.Subject = strings.TrimSpace(trigger.Match.Subject)
+			trigger.Operation = strings.TrimSpace(trigger.Operation)
+			if trigger.Operation == "" {
+				return fmt.Errorf("config validation: workflows.eventTriggers.%s.operation is required", key)
+			}
+			if !slices.Contains(binding.Operations, trigger.Operation) {
+				return fmt.Errorf("config validation: workflows.eventTriggers.%s.operation %q must be listed in workflows.bindings.%s.operations", key, trigger.Operation, trigger.Plugin)
+			}
+			trigger.Connection = strings.TrimSpace(trigger.Connection)
+			trigger.Instance = strings.TrimSpace(trigger.Instance)
+			trigger.ManagedKey = strings.TrimSpace(trigger.ManagedKey)
+			if trigger.ManagedKey == "" {
+				trigger.ManagedKey = key
+			}
+			normalized[key] = trigger
+		}
+		cfg.Workflows.EventTriggers = normalized
 	}
 	return nil
 }

@@ -60,6 +60,7 @@ type Config struct {
 	Server        ServerConfig              `yaml:"server"`
 	Authorization AuthorizationConfig       `yaml:"authorization,omitempty"`
 	Providers     ProvidersConfig           `yaml:"providers"`
+	Workflows     WorkflowsConfig           `yaml:"workflows,omitempty"`
 	Plugins       map[string]*ProviderEntry `yaml:"plugins,omitempty"`
 }
 
@@ -316,6 +317,46 @@ type PluginIndexedDBConfig struct {
 	Provider     string   `yaml:"provider,omitempty"`
 	DB           string   `yaml:"db,omitempty"`
 	ObjectStores []string `yaml:"objectStores,omitempty"`
+}
+
+type WorkflowsConfig struct {
+	Bindings      map[string]*WorkflowBindingConfig     `yaml:"bindings,omitempty"`
+	Schedules     map[string]WorkflowScheduleConfig     `yaml:"schedules,omitempty"`
+	EventTriggers map[string]WorkflowEventTriggerConfig `yaml:"eventTriggers,omitempty"`
+}
+
+type WorkflowBindingConfig struct {
+	Provider   string   `yaml:"provider,omitempty"`
+	Operations []string `yaml:"operations,omitempty"`
+}
+
+type WorkflowScheduleConfig struct {
+	ManagedKey string         `yaml:"-"`
+	Plugin     string         `yaml:"plugin,omitempty"`
+	Cron       string         `yaml:"cron,omitempty"`
+	Timezone   string         `yaml:"timezone,omitempty"`
+	Operation  string         `yaml:"operation,omitempty"`
+	Connection string         `yaml:"connection,omitempty"`
+	Instance   string         `yaml:"instance,omitempty"`
+	Input      map[string]any `yaml:"input,omitempty"`
+	Paused     bool           `yaml:"paused,omitempty"`
+}
+
+type WorkflowEventTriggerConfig struct {
+	ManagedKey string             `yaml:"-"`
+	Plugin     string             `yaml:"plugin,omitempty"`
+	Match      WorkflowEventMatch `yaml:"match,omitempty"`
+	Operation  string             `yaml:"operation,omitempty"`
+	Connection string             `yaml:"connection,omitempty"`
+	Instance   string             `yaml:"instance,omitempty"`
+	Input      map[string]any     `yaml:"input,omitempty"`
+	Paused     bool               `yaml:"paused,omitempty"`
+}
+
+type WorkflowEventMatch struct {
+	Type    string `yaml:"type,omitempty"`
+	Source  string `yaml:"source,omitempty"`
+	Subject string `yaml:"subject,omitempty"`
 }
 
 type PluginWorkflowConfig struct {
@@ -922,7 +963,105 @@ func NormalizeCompatibility(cfg *Config) error {
 	if err := normalizeAdminConfig(cfg); err != nil {
 		return err
 	}
+	if err := normalizeLegacyPluginWorkflows(cfg); err != nil {
+		return err
+	}
 	return applyPluginMountBindings(cfg)
+}
+
+func normalizeLegacyPluginWorkflows(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	if cfg.Workflows.Bindings == nil {
+		cfg.Workflows.Bindings = map[string]*WorkflowBindingConfig{}
+	}
+	if cfg.Workflows.Schedules == nil {
+		cfg.Workflows.Schedules = map[string]WorkflowScheduleConfig{}
+	}
+	if cfg.Workflows.EventTriggers == nil {
+		cfg.Workflows.EventTriggers = map[string]WorkflowEventTriggerConfig{}
+	}
+
+	usedScheduleKeys := make(map[string]struct{}, len(cfg.Workflows.Schedules))
+	for key := range cfg.Workflows.Schedules {
+		usedScheduleKeys[key] = struct{}{}
+	}
+	usedTriggerKeys := make(map[string]struct{}, len(cfg.Workflows.EventTriggers))
+	for key := range cfg.Workflows.EventTriggers {
+		usedTriggerKeys[key] = struct{}{}
+	}
+
+	for _, pluginName := range slices.Sorted(maps.Keys(cfg.Plugins)) {
+		entry := cfg.Plugins[pluginName]
+		if entry == nil || entry.Workflow == nil {
+			continue
+		}
+		legacy := entry.Workflow
+		if _, exists := cfg.Workflows.Bindings[pluginName]; exists {
+			return fmt.Errorf("config validation: workflows.bindings.%s conflicts with legacy plugins.%s.workflow", pluginName, pluginName)
+		}
+		cfg.Workflows.Bindings[pluginName] = &WorkflowBindingConfig{
+			Provider:   legacy.Provider,
+			Operations: slices.Clone(legacy.Operations),
+		}
+		for _, key := range slices.Sorted(maps.Keys(legacy.Schedules)) {
+			schedule := legacy.Schedules[key]
+			globalKey := uniqueWorkflowObjectKey(usedScheduleKeys, pluginName, key)
+			cfg.Workflows.Schedules[globalKey] = WorkflowScheduleConfig{
+				ManagedKey: key,
+				Plugin:     pluginName,
+				Cron:       schedule.Cron,
+				Timezone:   schedule.Timezone,
+				Operation:  schedule.Operation,
+				Input:      maps.Clone(schedule.Input),
+				Paused:     schedule.Paused,
+			}
+		}
+		for _, key := range slices.Sorted(maps.Keys(legacy.EventTriggers)) {
+			trigger := legacy.EventTriggers[key]
+			globalKey := uniqueWorkflowObjectKey(usedTriggerKeys, pluginName, key)
+			cfg.Workflows.EventTriggers[globalKey] = WorkflowEventTriggerConfig{
+				ManagedKey: key,
+				Plugin:     pluginName,
+				Match: WorkflowEventMatch{
+					Type:    trigger.Match.Type,
+					Source:  trigger.Match.Source,
+					Subject: trigger.Match.Subject,
+				},
+				Operation: trigger.Operation,
+				Input:     maps.Clone(trigger.Input),
+				Paused:    trigger.Paused,
+			}
+		}
+		entry.Workflow = nil
+	}
+	return nil
+}
+
+func uniqueWorkflowObjectKey(used map[string]struct{}, pluginName, key string) string {
+	key = strings.TrimSpace(key)
+	if _, exists := used[key]; !exists {
+		used[key] = struct{}{}
+		return key
+	}
+	base := strings.TrimSpace(pluginName)
+	if base == "" {
+		base = "workflow"
+	}
+	candidate := base + "." + key
+	if _, exists := used[candidate]; !exists {
+		used[candidate] = struct{}{}
+		return candidate
+	}
+	for i := 2; ; i++ {
+		candidate = fmt.Sprintf("%s.%s.%d", base, key, i)
+		if _, exists := used[candidate]; exists {
+			continue
+		}
+		used[candidate] = struct{}{}
+		return candidate
+	}
 }
 
 func OverlayRemotePluginConfig(path string, cfg *Config) error {
@@ -1635,6 +1774,9 @@ func applyDefaults(cfg *Config) {
 		cfg.Server.Public.Port = 8080
 	}
 	cfg.Plugins = nonNilProviderEntryMap(cfg.Plugins)
+	cfg.Workflows.Bindings = nonNilWorkflowBindingMap(cfg.Workflows.Bindings)
+	cfg.Workflows.Schedules = nonNilWorkflowScheduleMap(cfg.Workflows.Schedules)
+	cfg.Workflows.EventTriggers = nonNilWorkflowEventTriggerMap(cfg.Workflows.EventTriggers)
 	cfg.Providers.UI = nonNilUIEntryMap(cfg.Providers.UI)
 	cfg.Providers.Auth = nonNilProviderEntryMap(cfg.Providers.Auth)
 	cfg.Providers.Authorization = nonNilProviderEntryMap(cfg.Providers.Authorization)
@@ -1645,6 +1787,27 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.Cache = nonNilProviderEntryMap(cfg.Providers.Cache)
 	cfg.Providers.S3 = nonNilProviderEntryMap(cfg.Providers.S3)
 	cfg.Providers.Workflow = nonNilProviderEntryMap(cfg.Providers.Workflow)
+}
+
+func nonNilWorkflowBindingMap(in map[string]*WorkflowBindingConfig) map[string]*WorkflowBindingConfig {
+	if in == nil {
+		return map[string]*WorkflowBindingConfig{}
+	}
+	return in
+}
+
+func nonNilWorkflowScheduleMap(in map[string]WorkflowScheduleConfig) map[string]WorkflowScheduleConfig {
+	if in == nil {
+		return map[string]WorkflowScheduleConfig{}
+	}
+	return in
+}
+
+func nonNilWorkflowEventTriggerMap(in map[string]WorkflowEventTriggerConfig) map[string]WorkflowEventTriggerConfig {
+	if in == nil {
+		return map[string]WorkflowEventTriggerConfig{}
+	}
+	return in
 }
 
 func normalizeProviderSourceShapes(cfg *Config) {

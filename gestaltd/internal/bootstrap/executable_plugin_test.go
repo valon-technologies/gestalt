@@ -1859,7 +1859,11 @@ func TestPluginWorkflowBindingsExposeHostSocketEnv(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Workflow: &config.PluginWorkflowConfig{
+			},
+		},
+		Workflows: config.WorkflowsConfig{
+			Bindings: map[string]*config.WorkflowBindingConfig{
+				"echoext": {
 					Provider:   "temporal",
 					Operations: []string{"read_env"},
 				},
