@@ -7,7 +7,6 @@ import coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 type WorkflowControl interface {
 	ResolveProvider(name string) (coreworkflow.Provider, error)
 	ResolveProviderSelection(name string) (providerName string, provider coreworkflow.Provider, err error)
-	ProviderNames() []string
 }
 
 var _ WorkflowControl = (*workflowRuntime)(nil)

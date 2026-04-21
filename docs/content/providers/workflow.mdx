@@ -1,20 +1,25 @@
 # Workflow
 
-Workflow providers back plugin-scoped workflow runs, schedules, and event
-triggers. They are configured under `providers.workflow`, then bound per plugin
-through `plugins.<name>.workflow`.
+Workflow providers back global workflow runs, schedules, and event triggers.
+Configure them under `providers.workflow`, then use them from either:
+
+- top-level `workflows.schedules` and `workflows.eventTriggers` for
+  config-managed workflows
+- the global workflow API and CLI for user-owned schedules:
+  `/api/v1/workflow/schedules` and `gestalt workflows ...`
 
 ## How workflow providers work
 
-Workflow providers are selected per plugin, not globally. A plugin chooses a
-workflow provider with `plugins.<name>.workflow.provider`, or inherits the
-sole/default `providers.workflow` entry when that field is omitted.
+Workflow provider selection is global, not plugin-scoped.
 
-`plugins.<name>.workflow.operations` allowlists which plugin operations the
-workflow provider may invoke for that plugin. `workflow.schedules` and
-`workflow.eventTriggers` declare config-owned schedules and event triggers that
-Gestalt reconciles into the provider at startup. A workflow provider may also
-bind a host IndexedDB provider through `providers.workflow.<name>.indexeddb`.
+- Config-managed workflow objects choose a provider with `provider`, or inherit
+  the sole/default `providers.workflow` entry when that field is omitted.
+- User-owned schedules use the same provider pool through the global HTTP API
+  and CLI.
+- Workflow targets are explicit: `plugin`, `operation`, and optional
+  `connection`, `instance`, and `input`.
+- A workflow provider may bind a host IndexedDB provider through
+  `providers.workflow.<name>.indexeddb`.
 
 ## First-party workflow providers
 
@@ -23,7 +28,7 @@ First-party workflow providers live under
 
 | Provider | Repository | Package path | Use case |
 | --- | --- | --- | --- |
-| IndexedDB Workflow Provider | [`workflow/indexeddb`](https://github.com/valon-technologies/gestalt-providers/tree/main/workflow/indexeddb) | `github.com/valon-technologies/gestalt-providers/workflow/indexeddb` | Stores workflow runs, schedules, and event triggers in IndexedDB and invokes plugin operations through the workflow host |
+| IndexedDB Workflow Provider | [`workflow/indexeddb`](https://github.com/valon-technologies/gestalt-providers/tree/main/workflow/indexeddb) | `github.com/valon-technologies/gestalt-providers/workflow/indexeddb` | Stores workflow runs, schedules, and event triggers in IndexedDB and invokes target plugin operations through the workflow host |
 
 ## Configuring `providers.workflow`
 
@@ -38,52 +43,58 @@ providers:
   workflow:
     local:
       source: https://artifacts.example.com/workflow/indexeddb/v0.0.1-alpha.1/provider-release.yaml
+      default: true
       indexeddb:
         provider: workflow_state
         db: workflow
       config:
         pollInterval: 1s
 
-plugins:
-  roadmap:
-    source: https://artifacts.example.com/plugin/roadmap/v0.0.1-alpha.1/provider-release.yaml
-    workflow:
-      provider: local
-      operations:
-        - sync_items
-      schedules:
-        nightly_sync:
-          cron: "0 3 * * *"
-          timezone: America/New_York
-          operation: sync_items
-      eventTriggers:
-        item_updated:
-          match:
-            type: roadmap.item.updated
-          operation: sync_items
+workflows:
+  schedules:
+    nightly_sync:
+      plugin: roadmap
+      cron: "0 3 * * *"
+      timezone: America/New_York
+      operation: sync_items
+
+  eventTriggers:
+    item_updated:
+      plugin: roadmap
+      match:
+        type: roadmap.item.updated
+      operation: sync_items
 ```
 
-If a plugin omits `workflow.provider`, Gestalt falls back to the sole/default
-entry under `providers.workflow`.
+With that config in place, operators get config-managed workflows from
+`workflows:` and users can create their own schedules with the same provider:
+
+```sh
+gestalt workflows create \
+  --plugin roadmap \
+  --operation sync_items \
+  --cron "0 6 * * 1-5"
+```
 
 ## Operational notes
 
-- A workflow provider is required only for plugins that configure
-  `plugins.<name>.workflow`.
-- Config-owned schedules and event triggers are reconciled into the provider at
-  startup and removed when deleted from config.
-- Workflow providers may invoke only the operations listed in
-  `plugins.<name>.workflow.operations`.
+- A workflow provider is required only when you use global workflows.
+- Config-managed schedules and event triggers are reconciled into the provider
+  at startup and removed when deleted from config.
+- User-owned schedules are global resources, not nested under plugins.
 
 ## Building your own workflow provider
 
 Implementation details for the workflow runtime surface, host callbacks, and
-release flow now live under
+release flow live under
 [Custom Providers > Workflow](/custom-providers/workflow).
 
 ## What to read next
 
 - [Configuration](/configuration): server and provider config structure
-- [Config File](/reference/config-file): full `providers.workflow` and plugin workflow reference
-- [Built-in Providers](/reference/built-in-providers): first-party workflow provider reference
-- [Custom Workflow Providers](/custom-providers/workflow): advanced authoring docs
+- [Config File](/reference/config-file): full `providers.workflow` and
+  `workflows.*` reference
+- [Built-in Providers](/reference/built-in-providers): first-party workflow
+  provider reference
+- [Custom Workflow Providers](/custom-providers/workflow): advanced authoring
+  docs
