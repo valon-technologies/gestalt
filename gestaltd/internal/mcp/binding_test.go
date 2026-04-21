@@ -965,7 +965,7 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 	}
 
 	prov := &directCallerProvider{
-		StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeIdentity},
+		StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeUser},
 		cat:             staticCat,
 		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			if token != "identity-token" {
@@ -1793,7 +1793,7 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 	prov := &directCallerProvider{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "clickhouse",
-			ConnMode: core.ConnectionModeIdentity,
+			ConnMode: core.ConnectionModeUser,
 		},
 		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			sessionCatalogCalls++
@@ -1888,7 +1888,7 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 	prov := &directCallerProvider{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "sampledb",
-			ConnMode: core.ConnectionModeIdentity,
+			ConnMode: core.ConnectionModeUser,
 		},
 		cat: &catalog.Catalog{
 			Name: "sampledb",

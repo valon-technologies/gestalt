@@ -9,18 +9,14 @@ import (
 type ConnectionMode string
 
 const (
-	ConnectionModeNone     ConnectionMode = "none"
-	ConnectionModeUser     ConnectionMode = "user"
-	ConnectionModeIdentity ConnectionMode = "identity"
-	ConnectionModeEither   ConnectionMode = "either"
+	ConnectionModeNone ConnectionMode = "none"
+	ConnectionModeUser ConnectionMode = "user"
 )
 
 func NormalizeConnectionMode(mode ConnectionMode) ConnectionMode {
 	switch mode {
-	case "", ConnectionModeUser, ConnectionModeEither:
+	case "", ConnectionModeUser:
 		return ConnectionModeUser
-	case ConnectionModeIdentity:
-		return ConnectionModeIdentity
 	case ConnectionModeNone:
 		return ConnectionModeNone
 	default:

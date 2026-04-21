@@ -164,45 +164,23 @@ func (plan StaticConnectionPlan) AdvertisedConnectionNames() []string {
 }
 
 func (plan StaticConnectionPlan) ConnectionMode() core.ConnectionMode {
-	needUser := false
-	needIdentity := false
-
-	addMode := func(mode core.ConnectionMode) {
-		switch core.NormalizeConnectionMode(mode) {
-		case core.ConnectionModeUser:
-			needUser = true
-		case core.ConnectionModeIdentity:
-			needIdentity = true
-		}
-	}
-
-	addMode(connectionModeForConnection(plan.pluginConnection))
-	for _, name := range plan.NamedConnectionNames() {
-		addMode(connectionModeForConnection(plan.namedConnections[name]))
-	}
-
-	switch {
-	case needUser:
+	if connectionModeForConnection(plan.pluginConnection) == core.ConnectionModeUser {
 		return core.ConnectionModeUser
-	case needIdentity:
-		return core.ConnectionModeIdentity
+	}
+	for _, name := range plan.NamedConnectionNames() {
+		if connectionModeForConnection(plan.namedConnections[name]) == core.ConnectionModeUser {
+			return core.ConnectionModeUser
+		}
 	}
 	return core.ConnectionModeNone
 }
 
 func (plan StaticConnectionPlan) validateConnectionModes() error {
-	needUser := false
-	needIdentity := false
-
 	addMode := func(scope string, mode core.ConnectionMode) error {
 		switch core.NormalizeConnectionMode(mode) {
 		case core.ConnectionModeNone:
 			return nil
 		case core.ConnectionModeUser:
-			needUser = true
-			return nil
-		case core.ConnectionModeIdentity:
-			needIdentity = true
 			return nil
 		default:
 			return fmt.Errorf("%s uses unsupported connection mode %q", scope, mode)
@@ -216,9 +194,6 @@ func (plan StaticConnectionPlan) validateConnectionModes() error {
 		if err := addMode(fmt.Sprintf("connection %q", name), connectionModeForConnection(plan.namedConnections[name])); err != nil {
 			return err
 		}
-	}
-	if needUser && needIdentity {
-		return fmt.Errorf("plugins may not mix %q and %q connection modes across connections", core.ConnectionModeUser, core.ConnectionModeIdentity)
 	}
 	return nil
 }

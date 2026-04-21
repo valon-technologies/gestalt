@@ -25,6 +25,7 @@ type workflowRuntime struct {
 	mu                  sync.RWMutex
 	defaultProviderName string
 	configPermissions   map[string]map[string]struct{}
+	configConnections   map[string]string
 	configProviderModes map[string]core.ConnectionMode
 	configWorkloadToken string
 	providers           map[string]coreworkflow.Provider
@@ -36,6 +37,7 @@ type workflowRuntime struct {
 func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 	runtime := &workflowRuntime{
 		configPermissions:   map[string]map[string]struct{}{},
+		configConnections:   map[string]string{},
 		configProviderModes: map[string]core.ConnectionMode{},
 		providers:           map[string]coreworkflow.Provider{},
 		startupWaits:        newStartupWaitTracker(),
@@ -47,10 +49,11 @@ func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 		}
 		for _, pluginName := range slices.Sorted(maps.Keys(cfg.Plugins)) {
 			entry := cfg.Plugins[pluginName]
-			spec, _, err := buildStartupProviderSpec(pluginName, entry)
+			spec, operationConnections, err := buildStartupProviderSpec(pluginName, entry)
 			if err != nil || spec.Catalog == nil {
 				continue
 			}
+			runtime.configConnections[pluginName] = workflowBindingConnection(operationConnections)
 			runtime.configProviderModes[pluginName] = spec.ConnectionMode
 			for i := range spec.Catalog.Operations {
 				runtime.addConfigPermission(pluginName, spec.Catalog.Operations[i].ID)
@@ -475,15 +478,16 @@ func (r *workflowRuntime) AugmentAuthorization(cfg config.AuthorizationConfig) (
 	}
 	providers := make(map[string]config.WorkloadProviderDef, len(r.configPermissions))
 	for pluginName, operations := range r.configPermissions {
-		if r.configProviderModes[pluginName] == core.ConnectionModeUser {
-			continue
-		}
 		allow := make([]string, 0, len(operations))
 		for operation := range operations {
 			allow = append(allow, operation)
 		}
 		slices.Sort(allow)
-		providers[pluginName] = config.WorkloadProviderDef{Allow: allow}
+		binding := config.WorkloadProviderDef{Allow: allow}
+		if r.configProviderModes[pluginName] == core.ConnectionModeUser {
+			binding.Connection = r.configConnections[pluginName]
+		}
+		providers[pluginName] = binding
 	}
 	if len(providers) == 0 {
 		return cfg, nil
@@ -497,6 +501,27 @@ func (r *workflowRuntime) AugmentAuthorization(cfg config.AuthorizationConfig) (
 		Providers:   providers,
 	}
 	return cfg, nil
+}
+
+func workflowBindingConnection(operationConnections map[string]string) string {
+	if len(operationConnections) == 0 {
+		return ""
+	}
+	connection := ""
+	for _, raw := range operationConnections {
+		resolved := config.ResolveConnectionAlias(strings.TrimSpace(raw))
+		if resolved == "" {
+			continue
+		}
+		if connection == "" {
+			connection = resolved
+			continue
+		}
+		if connection != resolved {
+			return ""
+		}
+	}
+	return connection
 }
 
 func workflowWorkloadPrincipal() *principal.Principal {

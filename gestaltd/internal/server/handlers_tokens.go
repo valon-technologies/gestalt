@@ -189,7 +189,7 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 	infos := make([]connectionDefInfo, 0, len(names))
 	for _, name := range names {
 		conn, ok := plan.LookupConnection(name)
-		if !ok || !userFacingConnection(conn) || shouldHidePassiveNamedConnection(plan, name, conn, integrationAuthTypes) {
+		if !ok || shouldHidePassiveNamedConnection(plan, name, conn, integrationAuthTypes) {
 			continue
 		}
 		if info, ok := s.connectionInfoFromAuth(integration, userFacingConnectionName(name), conn, integrationAuthTypes, defaultCredentialFields, name != config.PluginConnectionName); ok {
@@ -292,10 +292,6 @@ func (s *Server) connectionInfoFromAuth(integration, name string, conn config.Co
 		info.CredentialFields = defaultManualCredentialFieldInfos()
 	}
 	return info, true
-}
-
-func userFacingConnection(conn config.ConnectionDef) bool {
-	return conn.Mode != providermanifestv1.ConnectionModeIdentity
 }
 
 func shouldHidePassiveNamedConnection(plan config.StaticConnectionPlan, name string, conn config.ConnectionDef, integrationAuthTypes []string) bool {

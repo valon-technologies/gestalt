@@ -579,7 +579,7 @@ func TestHTTPDiscoveryMetrics(t *testing.T) {
 
 	prov := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: providerName, ConnMode: core.ConnectionModeIdentity},
+			StubIntegration: coretesting.StubIntegration{N: providerName, ConnMode: core.ConnectionModeUser},
 		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			if token != "identity-token" {
@@ -595,7 +595,8 @@ func TestHTTPDiscoveryMetrics(t *testing.T) {
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, providerName, testDefaultConnection, "default", "identity-token")
+	u := seedUser(t, svc, "user@example.com")
+	seedSubjectToken(t, svc, principal.UserSubjectID(u.ID), providerName, testDefaultConnection, "default", "identity-token")
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.MeterProvider = metrics.Provider
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -628,7 +629,7 @@ func TestHTTPDiscoveryMetrics(t *testing.T) {
 	attrs := map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.action":          "list_operations",
-		"gestalt.connection_mode": "identity",
+		"gestalt.connection_mode": "user",
 	}
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.discovery.count", 1, attrs)
 	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.discovery.error_count", attrs)
@@ -643,7 +644,7 @@ func TestHTTPDiscoveryMetrics_FailureRecordsErrorCount(t *testing.T) {
 
 	prov := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: providerName, ConnMode: core.ConnectionModeIdentity},
+			StubIntegration: coretesting.StubIntegration{N: providerName, ConnMode: core.ConnectionModeUser},
 		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			if token != "identity-token" {
@@ -654,7 +655,8 @@ func TestHTTPDiscoveryMetrics_FailureRecordsErrorCount(t *testing.T) {
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, providerName, testDefaultConnection, "default", "identity-token")
+	u := seedUser(t, svc, "user@example.com")
+	seedSubjectToken(t, svc, principal.UserSubjectID(u.ID), providerName, testDefaultConnection, "default", "identity-token")
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.MeterProvider = metrics.Provider
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -687,7 +689,7 @@ func TestHTTPDiscoveryMetrics_FailureRecordsErrorCount(t *testing.T) {
 	attrs := map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.action":          "list_operations",
-		"gestalt.connection_mode": "identity",
+		"gestalt.connection_mode": "user",
 	}
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.discovery.count", 1, attrs)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.discovery.error_count", 1, attrs)

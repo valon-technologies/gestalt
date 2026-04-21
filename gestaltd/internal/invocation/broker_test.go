@@ -67,7 +67,7 @@ func TestBrokerResolveToken_WorkflowContextDoesNotBypassWorkloadIdentityBinding(
 	svc := coretesting.NewStubServices(t)
 	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 		N:        "slack",
-		ConnMode: core.ConnectionModeIdentity,
+		ConnMode: core.ConnectionModeUser,
 	})
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{

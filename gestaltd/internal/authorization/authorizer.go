@@ -230,11 +230,6 @@ func (a *Authorizer) Binding(p *principal.Principal, provider string) (Credentia
 		switch core.NormalizeConnectionMode(a.providerModes[provider]) {
 		case core.ConnectionModeNone:
 			return CredentialBinding{Mode: core.ConnectionModeNone}, true
-		case core.ConnectionModeIdentity:
-			return CredentialBinding{
-				Mode:                core.ConnectionModeIdentity,
-				CredentialSubjectID: principal.IdentitySubjectID(),
-			}, true
 		case core.ConnectionModeUser:
 			subjectID := principal.EffectiveCredentialSubjectID(p)
 			if subjectID == "" {
@@ -486,7 +481,7 @@ func buildBinding(mode core.ConnectionMode, workloadID, provider string, def con
 				Mode: core.ConnectionModeNone,
 			},
 		}, nil
-	case core.ConnectionModeIdentity:
+	case core.ConnectionModeUser:
 		connection := strings.TrimSpace(def.Connection)
 		if connection == "" {
 			connection = defaultConnections[provider]
@@ -509,14 +504,12 @@ func buildBinding(mode core.ConnectionMode, workloadID, provider string, def con
 
 		return WorkloadProviderBinding{
 			CredentialBinding: CredentialBinding{
-				Mode:                core.ConnectionModeIdentity,
-				CredentialSubjectID: principal.IdentitySubjectID(),
+				Mode:                core.ConnectionModeUser,
+				CredentialSubjectID: principal.WorkloadSubjectID(workloadID),
 				Connection:          connection,
 				Instance:            instance,
 			},
 		}, nil
-	case core.ConnectionModeUser:
-		return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q uses unsupported connection mode %q in v1", workloadID, provider, mode)
 	default:
 		return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q uses unknown connection mode %q", workloadID, provider, mode)
 	}
@@ -550,10 +543,8 @@ func (a *Authorizer) allowManagedIdentityProvider(p *principal.Principal, provid
 		return false
 	}
 	switch core.NormalizeConnectionMode(mode) {
-	case core.ConnectionModeNone, core.ConnectionModeIdentity:
+	case core.ConnectionModeNone, core.ConnectionModeUser:
 		return true
-	case core.ConnectionModeUser:
-		return principal.EffectiveCredentialSubjectID(p) != ""
 	default:
 		return false
 	}

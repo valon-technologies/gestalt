@@ -1699,7 +1699,7 @@ func TestRun_ProviderReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *
 			MCP:              true,
 			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 				"default": {
-					Mode: providermanifestv1.ConnectionModeIdentity,
+					Mode: providermanifestv1.ConnectionModeUser,
 					Params: map[string]providermanifestv1.ProviderConnectionParam{
 						"tenant": {Required: true},
 					},
@@ -1728,8 +1728,8 @@ func TestRun_ProviderReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *
 	if manifest.Spec == nil || manifest.Spec.Connections["default"] == nil || len(manifest.Spec.Connections["default"].Params) != 1 || !manifest.Spec.Connections["default"].Params["tenant"].Required {
 		t.Fatalf("provider connection_params = %+v", manifest.Spec)
 	}
-	if manifest.Spec.Connections["default"].Mode != "identity" {
-		t.Fatalf("provider default connection mode = %q, want %q", manifest.Spec.Connections["default"].Mode, "identity")
+	if manifest.Spec.Connections["default"].Mode != "user" {
+		t.Fatalf("provider default connection mode = %q, want %q", manifest.Spec.Connections["default"].Mode, "user")
 	}
 
 	manifestData, err := os.ReadFile(manifestPath)
@@ -1740,7 +1740,7 @@ func TestRun_ProviderReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *
 		"spec:",
 		"connections:",
 		"default:",
-		"mode: identity",
+		"mode: user",
 		"params:",
 		"mcp: true",
 		"entrypoint:",

@@ -238,7 +238,7 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 			Command:              bin,
 			ResolvedManifest:     newExecutableManifest("Roadmap", "Delayed startup provider"),
 			ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-			ConnectionMode:       providermanifestv1.ConnectionModeIdentity,
+			ConnectionMode:       providermanifestv1.ConnectionModeUser,
 		},
 	}
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
@@ -251,7 +251,7 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.IdentitySubjectID(),
+			SubjectID:   principal.WorkloadSubjectID("workflow.config"),
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",

@@ -502,7 +502,7 @@ func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing
 		stubCatalogProvider: stubCatalogProvider{
 			stubProvider: stubProvider{
 				name:     "clash-api",
-				connMode: core.ConnectionModeIdentity,
+				connMode: core.ConnectionModeUser,
 			},
 			cat: &catalog.Catalog{
 				Name: "clash-api",

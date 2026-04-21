@@ -795,7 +795,7 @@ func workflowStartupCallbackConfig(baseURL string) *config.Config {
 	cfg := validConfig()
 	cfg.Plugins = map[string]*config.ProviderEntry{
 		"roadmap": {
-			ConnectionMode: providermanifestv1.ConnectionModeIdentity,
+			ConnectionMode: providermanifestv1.ConnectionModeUser,
 			ResolvedManifest: &providermanifestv1.Manifest{
 				Spec: &providermanifestv1.Spec{
 					Surfaces: &providermanifestv1.ProviderSurfaces{
@@ -2993,7 +2993,7 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.IdentitySubjectID(),
+			SubjectID:   principal.WorkloadSubjectID("workflow.config"),
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
@@ -3047,7 +3047,7 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.IdentitySubjectID(),
+			SubjectID:   principal.WorkloadSubjectID("workflow.config"),
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
@@ -3102,7 +3102,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 			cfg.Plugins = map[string]*config.ProviderEntry{
 				"roadmap": {
 					Source:         tc.source,
-					ConnectionMode: providermanifestv1.ConnectionModeIdentity,
+					ConnectionMode: providermanifestv1.ConnectionModeUser,
 					ResolvedManifest: &providermanifestv1.Manifest{
 						DisplayName: "Roadmap",
 						Description: "Managed roadmap plugin",
@@ -3134,7 +3134,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 					return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 				}
 				if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-					SubjectID:   principal.IdentitySubjectID(),
+					SubjectID:   principal.WorkloadSubjectID("workflow.config"),
 					Integration: "roadmap",
 					Connection:  config.PluginConnectionName,
 					Instance:    "default",
@@ -3190,7 +3190,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 	cfg.Plugins = map[string]*config.ProviderEntry{
 		"roadmap": {
 			Source:               config.NewMetadataSource("https://example.invalid/github-com-example-roadmap/v0.0.1/provider-release.yaml"),
-			ConnectionMode:       providermanifestv1.ConnectionModeIdentity,
+			ConnectionMode:       providermanifestv1.ConnectionModeUser,
 			ResolvedManifestPath: filepath.Join(root, "manifest.yaml"),
 			ResolvedManifest: &providermanifestv1.Manifest{
 				DisplayName: "Roadmap",
@@ -3229,7 +3229,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 			connection = config.PluginConnectionName
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.IdentitySubjectID(),
+			SubjectID:   principal.WorkloadSubjectID("workflow.config"),
 			Integration: "roadmap",
 			Connection:  connection,
 			Instance:    "default",
@@ -3425,7 +3425,7 @@ func TestValidate(t *testing.T) {
 		cfg := validConfig()
 		cfg.Plugins = map[string]*config.ProviderEntry{
 			"svc": {
-				ConnectionMode: providermanifestv1.ConnectionMode("either"),
+				ConnectionMode: providermanifestv1.ConnectionModeUser,
 				ResolvedManifest: &providermanifestv1.Manifest{
 					Spec: &providermanifestv1.Spec{
 						Surfaces: &providermanifestv1.ProviderSurfaces{
@@ -4725,8 +4725,9 @@ func TestBootstrapRejectsBuiltinEitherProviderWithoutAuthorizationConfig(t *test
 		&coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionMode("either")},
 	}
 
-	if _, err := bootstrap.Bootstrap(context.Background(), cfg, factories); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil || !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
+		t.Fatalf("Bootstrap error = %v, want unsupported connection mode either", err)
 	}
 }
 
@@ -4742,7 +4743,7 @@ func TestBootstrapWorkflowAuthorizationSkipsNormalizedCredentialedProvider(t *te
 	cfg := validConfig()
 	cfg.Plugins = map[string]*config.ProviderEntry{
 		"svc": {
-			ConnectionMode: providermanifestv1.ConnectionMode("either"),
+			ConnectionMode: providermanifestv1.ConnectionModeUser,
 			ResolvedManifest: &providermanifestv1.Manifest{
 				Spec: &providermanifestv1.Spec{
 					Surfaces: &providermanifestv1.ProviderSurfaces{

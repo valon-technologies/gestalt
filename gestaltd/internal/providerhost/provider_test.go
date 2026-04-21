@@ -139,7 +139,7 @@ func manualOnlyStaticSpec() StaticProviderSpec {
 		Name:           "manual-only",
 		DisplayName:    "Manual Only",
 		Description:    "manual auth provider",
-		ConnectionMode: core.ConnectionModeIdentity,
+		ConnectionMode: core.ConnectionModeUser,
 		Catalog: &catalog.Catalog{
 			Name:        "manual-only",
 			DisplayName: "Manual Only",
@@ -204,8 +204,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Identity:    &core.UserIdentity{DisplayName: "Ada"},
 				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|true|api_token|identity|identity:__identity__|roadmap|admin",
-			wantSessionCatalog: "token-123|user:user-123|user|Ada|true|api_token|identity|roadmap|admin",
+			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|true|api_token|user|user:user-123|roadmap|admin",
+			wantSessionCatalog: "token-123|user:user-123|user|Ada|true|api_token|user|roadmap|admin",
 		},
 		{
 			name: "workload subject",
@@ -215,8 +215,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Kind:        principal.KindWorkload,
 				Source:      principal.SourceWorkloadToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|workload:triage-bot|workload|Triage Bot|false|workload_token|identity|identity:__identity__|roadmap|admin",
-			wantSessionCatalog: "token-123|workload:triage-bot|workload|Triage Bot|false|workload_token|identity|roadmap|admin",
+			wantExecuteBody:    "echo|secret-token|hi|acme|workload:triage-bot|workload|Triage Bot|false|workload_token|user|workload:triage-bot|roadmap|admin",
+			wantSessionCatalog: "token-123|workload:triage-bot|workload|Triage Bot|false|workload_token|user|roadmap|admin",
 		},
 	}
 
@@ -228,8 +228,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			ctx := core.WithConnectionParams(context.Background(), map[string]string{"tenant": "acme"})
 			ctx = principal.WithPrincipal(ctx, tc.principal)
 			ctx = invocation.WithCredentialContext(ctx, invocation.CredentialContext{
-				Mode:       core.ConnectionModeIdentity,
-				SubjectID:  "identity:__identity__",
+				Mode:       core.ConnectionModeUser,
+				SubjectID:  principal.EffectiveCredentialSubjectID(tc.principal),
 				Connection: "workspace",
 				Instance:   "default",
 			})

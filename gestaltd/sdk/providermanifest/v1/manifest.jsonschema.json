@@ -202,8 +202,7 @@
           "type": "string",
           "enum": [
             "none",
-            "user",
-            "identity"
+            "user"
           ]
         },
         "auth": {
