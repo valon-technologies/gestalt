@@ -824,8 +824,8 @@ paths:
 	if err != nil {
 		t.Fatalf("providers.Get(hybrid): %v", err)
 	}
-	if got := prov.ConnectionForOperation("echo"); got != config.PluginConnectionName {
-		t.Fatalf("echo connection = %q, want %q", got, config.PluginConnectionName)
+	if got := prov.ConnectionForOperation("echo"); got != "default" {
+		t.Fatalf("echo connection = %q, want %q", got, "default")
 	}
 	if got := prov.ConnectionForOperation("status"); got != "default" {
 		t.Fatalf("status connection = %q, want %q", got, "default")
@@ -835,11 +835,108 @@ paths:
 	if err != nil {
 		t.Fatalf("buildStartupProviderSpec: %v", err)
 	}
-	if got := operationConnections["echo"]; got != config.PluginConnectionName {
-		t.Fatalf("startup echo connection = %q, want %q", got, config.PluginConnectionName)
+	if got := operationConnections["echo"]; got != "default" {
+		t.Fatalf("startup echo connection = %q, want %q", got, "default")
 	}
 	if _, ok := operationConnections["status"]; ok {
 		t.Fatalf("startup catalog unexpectedly exposed spec-loaded status operation")
+	}
+}
+
+func TestHybridDeclarativeExecutableProviderUsesNamedDefaultConnectionForPluginOperations(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "hybrid",
+		Operations: []catalog.CatalogOperation{
+			{ID: "echo", Method: http.MethodPost, Parameters: []catalog.CatalogParameter{{Name: "message", Type: "string", Required: true}}},
+		},
+	})
+
+	manifest := newExecutableManifest("Hybrid", "Hybrid provider")
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: "ignored-for-command-mode"}
+	manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
+		REST: &providermanifestv1.RESTSurface{
+			BaseURL: "https://example.invalid",
+			Operations: []providermanifestv1.ProviderOperation{
+				{
+					Name:   "status",
+					Method: http.MethodGet,
+					Path:   "/status",
+				},
+			},
+		},
+	}
+	manifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
+		"default": {
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+		},
+	}
+	manifestPath := filepath.Join(manifestRoot, "manifest.yaml")
+
+	entry := &config.ProviderEntry{
+		Command:              bin,
+		Args:                 []string{"provider"},
+		ResolvedManifest:     manifest,
+		ResolvedManifestPath: manifestPath,
+	}
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"hybrid": entry,
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("hybrid")
+	if err != nil {
+		t.Fatalf("providers.Get(hybrid): %v", err)
+	}
+	if got := prov.ConnectionForOperation("echo"); got != "default" {
+		t.Fatalf("echo connection = %q, want %q", got, "default")
+	}
+	if got := prov.ConnectionForOperation("status"); got != "default" {
+		t.Fatalf("status connection = %q, want %q", got, "default")
+	}
+
+	services := coretesting.NewStubServices(t)
+	subjectID := principal.UserSubjectID("u-hybrid")
+	if err := services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+		SubjectID:   subjectID,
+		Integration: "hybrid",
+		Connection:  "default",
+		Instance:    "default",
+		AccessToken: "tok-default",
+	}); err != nil {
+		t.Fatalf("StoreToken(default): %v", err)
+	}
+
+	result, err := invocation.NewBroker(providers, services.Users, services.Tokens).Invoke(
+		context.Background(),
+		&principal.Principal{
+			UserID: "u-hybrid",
+			Kind:   principal.KindUser,
+			Scopes: []string{"hybrid"},
+		},
+		"hybrid",
+		"",
+		"echo",
+		map[string]any{"message": "hello"},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(hybrid.echo): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+	if result.Body != `{"message":"hello"}` {
+		t.Fatalf("body = %q, want %q", result.Body, `{"message":"hello"}`)
 	}
 }
 
@@ -1295,9 +1392,9 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 	if !ok {
 		t.Fatal("expected connection auth entry for echoauth")
 	}
-	handler, ok := handlers[config.PluginConnectionName]
+	handler, ok := handlers["default"]
 	if !ok {
-		t.Fatalf("expected handler for connection %q", config.PluginConnectionName)
+		t.Fatalf("expected handler for connection %q", "default")
 	}
 	if handler.AuthorizationBaseURL() != "https://example.com/authorize" {
 		t.Fatalf("authorization URL = %q, want %q", handler.AuthorizationBaseURL(), "https://example.com/authorize")

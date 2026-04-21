@@ -989,22 +989,8 @@ func cloneAuthValue(src AuthValueDef) AuthValueDef {
 	return dst
 }
 
-func EffectivePluginConnectionDef(plugin *ProviderEntry, manifestPlugin *providermanifestv1.Spec) ConnectionDef {
+func EffectivePluginConnectionDef(plugin *ProviderEntry) ConnectionDef {
 	conn := ConnectionDef{}
-	if manifestPlugin != nil {
-		if def := manifestPlugin.DefaultConnectionDef(); def != nil {
-			conn.Mode = def.Mode
-			if len(def.Params) > 0 {
-				conn.ConnectionParams = maps.Clone(def.Params)
-			}
-			if def.Auth != nil {
-				MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(def.Auth))
-			}
-			if def.Discovery != nil {
-				conn.Discovery = def.Discovery
-			}
-		}
-	}
 	if plugin != nil {
 		override := &ConnectionDef{
 			Mode:             plugin.ConnectionMode,

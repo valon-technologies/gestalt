@@ -29,7 +29,7 @@ func BuildStaticConnectionPlan(plugin *ProviderEntry, manifestPlugin *providerma
 	declaredNames := namedConnectionNames(plugin, manifestPlugin)
 	plan := StaticConnectionPlan{
 		manifestBacked:   manifestPlugin != nil && manifestPlugin.IsManifestBacked(),
-		pluginConnection: EffectivePluginConnectionDef(plugin, manifestPlugin),
+		pluginConnection: EffectivePluginConnectionDef(plugin),
 		namedConnections: make(map[string]ConnectionDef),
 		surfaces:         make(map[SpecSurface]ResolvedSpecSurface),
 	}
