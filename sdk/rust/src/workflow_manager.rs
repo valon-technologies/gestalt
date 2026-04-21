@@ -1,0 +1,103 @@
+use hyper_util::rt::TokioIo;
+use tokio::net::UnixStream;
+use tonic::transport::{Channel, Endpoint, Uri};
+use tower::service_fn;
+
+use crate::generated::v1::{
+    self as pb,
+    workflow_manager_host_client::WorkflowManagerHostClient as ProtoWorkflowManagerHostClient,
+};
+
+pub const ENV_WORKFLOW_MANAGER_SOCKET: &str = "GESTALT_WORKFLOW_MANAGER_SOCKET";
+
+#[derive(Debug, thiserror::Error)]
+pub enum WorkflowManagerError {
+    #[error("workflow manager: request handle is not available")]
+    MissingRequestHandle,
+    #[error("{0}")]
+    Transport(#[from] tonic::transport::Error),
+    #[error("{0}")]
+    Status(#[from] tonic::Status),
+    #[error("{0}")]
+    Env(String),
+}
+
+pub struct WorkflowManager {
+    client: ProtoWorkflowManagerHostClient<Channel>,
+    request_handle: String,
+}
+
+impl WorkflowManager {
+    pub async fn connect(
+        request_handle: impl AsRef<str>,
+    ) -> std::result::Result<Self, WorkflowManagerError> {
+        let request_handle = request_handle.as_ref().trim().to_owned();
+        if request_handle.is_empty() {
+            return Err(WorkflowManagerError::MissingRequestHandle);
+        }
+
+        let socket_path = std::env::var(ENV_WORKFLOW_MANAGER_SOCKET).map_err(|_| {
+            WorkflowManagerError::Env(format!("{ENV_WORKFLOW_MANAGER_SOCKET} is not set"))
+        })?;
+        let channel = Endpoint::try_from("http://[::]:50051")?
+            .connect_with_connector(service_fn(move |_: Uri| {
+                let path = socket_path.clone();
+                async move { UnixStream::connect(path).await.map(TokioIo::new) }
+            }))
+            .await?;
+
+        Ok(Self {
+            client: ProtoWorkflowManagerHostClient::new(channel),
+            request_handle,
+        })
+    }
+
+    pub async fn create_schedule(
+        &mut self,
+        mut request: pb::WorkflowManagerCreateScheduleRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
+        request.request_handle = self.request_handle.clone();
+        Ok(self.client.create_schedule(request).await?.into_inner())
+    }
+
+    pub async fn get_schedule(
+        &mut self,
+        mut request: pb::WorkflowManagerGetScheduleRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
+        request.request_handle = self.request_handle.clone();
+        Ok(self.client.get_schedule(request).await?.into_inner())
+    }
+
+    pub async fn update_schedule(
+        &mut self,
+        mut request: pb::WorkflowManagerUpdateScheduleRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
+        request.request_handle = self.request_handle.clone();
+        Ok(self.client.update_schedule(request).await?.into_inner())
+    }
+
+    pub async fn delete_schedule(
+        &mut self,
+        mut request: pb::WorkflowManagerDeleteScheduleRequest,
+    ) -> std::result::Result<(), WorkflowManagerError> {
+        request.request_handle = self.request_handle.clone();
+        self.client.delete_schedule(request).await?;
+        Ok(())
+    }
+
+    pub async fn pause_schedule(
+        &mut self,
+        mut request: pb::WorkflowManagerPauseScheduleRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
+        request.request_handle = self.request_handle.clone();
+        Ok(self.client.pause_schedule(request).await?.into_inner())
+    }
+
+    pub async fn resume_schedule(
+        &mut self,
+        mut request: pb::WorkflowManagerResumeScheduleRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
+        request.request_handle = self.request_handle.clone();
+        Ok(self.client.resume_schedule(request).await?.into_inner())
+    }
+}

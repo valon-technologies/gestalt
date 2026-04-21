@@ -65,6 +65,17 @@ export {
   type PluginInvokeOptions,
 } from "./invoker.ts";
 export {
+  ENV_WORKFLOW_MANAGER_SOCKET,
+  WorkflowManager,
+  type ManagedWorkflowScheduleMessage,
+  type WorkflowManagerCreateScheduleInput,
+  type WorkflowManagerDeleteScheduleInput,
+  type WorkflowManagerGetScheduleInput,
+  type WorkflowManagerPauseScheduleInput,
+  type WorkflowManagerResumeScheduleInput,
+  type WorkflowManagerUpdateScheduleInput,
+} from "./workflow-manager.ts";
+export {
   AuthenticationProvider,
   defineAuthenticationProvider,
   isAuthenticationProvider,

@@ -213,6 +213,50 @@ message InvokeWorkflowOperationResponse {
   string body = 2;
 }
 
+message ManagedWorkflowSchedule {
+  string provider_name = 1;
+  BoundWorkflowSchedule schedule = 2;
+}
+
+message WorkflowManagerCreateScheduleRequest {
+  string request_handle = 1;
+  string provider_name = 2;
+  string cron = 3;
+  string timezone = 4;
+  BoundWorkflowTarget target = 5;
+  bool paused = 6;
+}
+
+message WorkflowManagerGetScheduleRequest {
+  string request_handle = 1;
+  string schedule_id = 2;
+}
+
+message WorkflowManagerUpdateScheduleRequest {
+  string request_handle = 1;
+  string schedule_id = 2;
+  string provider_name = 3;
+  string cron = 4;
+  string timezone = 5;
+  BoundWorkflowTarget target = 6;
+  bool paused = 7;
+}
+
+message WorkflowManagerDeleteScheduleRequest {
+  string request_handle = 1;
+  string schedule_id = 2;
+}
+
+message WorkflowManagerPauseScheduleRequest {
+  string request_handle = 1;
+  string schedule_id = 2;
+}
+
+message WorkflowManagerResumeScheduleRequest {
+  string request_handle = 1;
+  string schedule_id = 2;
+}
+
 service WorkflowProvider {
   rpc StartRun(StartWorkflowProviderRunRequest) returns (BoundWorkflowRun);
   rpc GetRun(GetWorkflowProviderRunRequest) returns (BoundWorkflowRun);
@@ -238,4 +282,13 @@ service WorkflowProvider {
 
 service WorkflowHost {
   rpc InvokeOperation(InvokeWorkflowOperationRequest) returns (InvokeWorkflowOperationResponse);
+}
+
+service WorkflowManagerHost {
+  rpc CreateSchedule(WorkflowManagerCreateScheduleRequest) returns (ManagedWorkflowSchedule);
+  rpc GetSchedule(WorkflowManagerGetScheduleRequest) returns (ManagedWorkflowSchedule);
+  rpc UpdateSchedule(WorkflowManagerUpdateScheduleRequest) returns (ManagedWorkflowSchedule);
+  rpc DeleteSchedule(WorkflowManagerDeleteScheduleRequest) returns (google.protobuf.Empty);
+  rpc PauseSchedule(WorkflowManagerPauseScheduleRequest) returns (ManagedWorkflowSchedule);
+  rpc ResumeSchedule(WorkflowManagerResumeScheduleRequest) returns (ManagedWorkflowSchedule);
 }

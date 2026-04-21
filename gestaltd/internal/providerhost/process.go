@@ -358,7 +358,7 @@ func (p *providerProcess) Close() error {
 			hostSrv.Stop()
 		}
 		for _, hostLis := range p.hostLiss {
-			if err := hostLis.Close(); err != nil {
+			if err := hostLis.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 				errs = append(errs, fmt.Errorf("close runtime host listener: %w", err))
 			}
 		}

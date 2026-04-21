@@ -61,6 +61,12 @@ impl Request {
     ) -> std::result::Result<crate::PluginInvoker, crate::PluginInvokerError> {
         crate::PluginInvoker::connect(self.request_handle()).await
     }
+
+    pub async fn workflow_manager(
+        &self,
+    ) -> std::result::Result<crate::WorkflowManager, crate::WorkflowManagerError> {
+        crate::WorkflowManager::connect(self.request_handle()).await
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

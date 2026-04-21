@@ -37,6 +37,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
+	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
@@ -982,10 +983,10 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		}
 		hostServices = append(hostServices, services...)
 	}
+	snapshots = providerhost.NewRequestSnapshotStore()
+	hostServices = append(hostServices, buildPluginWorkflowManagerHostService(deps, snapshots))
 	if len(entry.Invokes) > 0 {
-		hostService, requestSnapshots := buildPluginInvokerHostService(name, entry, deps)
-		hostServices = append(hostServices, hostService)
-		snapshots = requestSnapshots
+		hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, snapshots))
 	}
 	return hostServices, snapshots, cleanup, nil
 }
@@ -1110,24 +1111,66 @@ func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveW
 	}, nil
 }
 
-func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps) (providerhost.HostService, *providerhost.RequestSnapshotStore) {
+func buildPluginWorkflowManagerHostService(deps Deps, snapshots *providerhost.RequestSnapshotStore) providerhost.HostService {
+	manager := deps.WorkflowManager
+	if manager == nil {
+		manager = unavailableWorkflowManager{}
+	}
+	return providerhost.HostService{
+		EnvVar: providerhost.DefaultWorkflowManagerSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterWorkflowManagerHostServer(srv, providerhost.NewWorkflowManagerServer(manager, snapshots))
+		},
+	}
+}
+
+func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps, snapshots *providerhost.RequestSnapshotStore) providerhost.HostService {
 	invoker := deps.PluginInvoker
 	if invoker == nil {
 		invoker = unavailablePluginInvoker{}
 	}
-	snapshots := providerhost.NewRequestSnapshotStore()
 	return providerhost.HostService{
 		EnvVar: providerhost.DefaultPluginInvokerSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterPluginInvokerServer(srv, providerhost.NewPluginInvokerServer(pluginName, entry.Invokes, invoker, snapshots))
 		},
-	}, snapshots
+	}
 }
 
 type unavailablePluginInvoker struct{}
 
 func (unavailablePluginInvoker) Invoke(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
 	return nil, fmt.Errorf("plugin invoker is not available")
+}
+
+type unavailableWorkflowManager struct{}
+
+func (unavailableWorkflowManager) ListSchedules(context.Context, *principal.Principal) ([]*workflowmanager.ManagedSchedule, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) CreateSchedule(context.Context, *principal.Principal, workflowmanager.ScheduleUpsert) (*workflowmanager.ManagedSchedule, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) GetSchedule(context.Context, *principal.Principal, string) (*workflowmanager.ManagedSchedule, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) UpdateSchedule(context.Context, *principal.Principal, string, workflowmanager.ScheduleUpsert) (*workflowmanager.ManagedSchedule, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) DeleteSchedule(context.Context, *principal.Principal, string) error {
+	return fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) PauseSchedule(context.Context, *principal.Principal, string) (*workflowmanager.ManagedSchedule, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) ResumeSchedule(context.Context, *principal.Principal, string) (*workflowmanager.ManagedSchedule, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
 }
 
 func buildPluginScopedIndexedDB(pluginName string, effective config.EffectivePluginIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {

@@ -216,6 +216,7 @@ describe("S3 transport", () => {
   });
 
   test("copy, delete, exists, and presign round-trip", async () => {
+    const s3 = client();
     const sourceRef = {
       bucket: "copy-bucket",
       key: "source.txt",
@@ -224,8 +225,8 @@ describe("S3 transport", () => {
       bucket: "copy-bucket",
       key: "copied.txt",
     } as const;
-    const source = client().object(sourceRef.bucket, sourceRef.key);
-    const destination = client().object(destinationRef.bucket, destinationRef.key);
+    const source = s3.object(sourceRef.bucket, sourceRef.key);
+    const destination = s3.object(destinationRef.bucket, destinationRef.key);
 
     await source.writeString("copy me", {
       contentType: "text/plain",
@@ -234,12 +235,12 @@ describe("S3 transport", () => {
       },
     });
 
-    const copied = await client().copyObject(sourceRef, destinationRef);
+    const copied = await s3.copyObject(sourceRef, destinationRef);
     expect(copied.ref.bucket).toBe("copy-bucket");
     expect(copied.ref.key).toBe("copied.txt");
-    expect(await client().object(destinationRef.bucket, destinationRef.key).text()).toBe("copy me");
+    expect(await destination.text()).toBe("copy me");
 
-    const presigned = await client().object(destinationRef.bucket, destinationRef.key).presign({
+    const presigned = await destination.presign({
       method: PresignMethod.Put,
       expiresSeconds: 60,
       contentType: "text/plain",
@@ -253,12 +254,10 @@ describe("S3 transport", () => {
     expect(presigned.headers).toEqual({ "x-test-header": "present" });
     expect(presigned.expiresAt).toBeInstanceOf(Date);
 
-    expect(await client().object(destinationRef.bucket, destinationRef.key).exists()).toBe(true);
-    await client().object(destinationRef.bucket, destinationRef.key).delete();
-    expect(await client().object(destinationRef.bucket, destinationRef.key).exists()).toBe(false);
-    await expect(
-      client().object(destinationRef.bucket, destinationRef.key).stat(),
-    ).rejects.toBeInstanceOf(S3NotFoundError);
+    expect(await destination.exists()).toBe(true);
+    await destination.delete();
+    expect(await destination.exists()).toBe(false);
+    await expect(destination.stat()).rejects.toBeInstanceOf(S3NotFoundError);
   });
 
   test("partial stream consumption can be cancelled by the caller", async () => {

@@ -11,9 +11,12 @@ import (
 	"strings"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type proxyProvider struct {
@@ -27,6 +30,38 @@ type invokePluginInput struct {
 	Instance      string         `json:"instance,omitempty"`
 	RequestHandle string         `json:"request_handle,omitempty"`
 	Params        map[string]any `json:"params,omitempty"`
+}
+
+type workflowScheduleTargetInput struct {
+	Plugin     string         `json:"plugin"`
+	Operation  string         `json:"operation"`
+	Connection string         `json:"connection,omitempty"`
+	Instance   string         `json:"instance,omitempty"`
+	Input      map[string]any `json:"input,omitempty"`
+}
+
+type createWorkflowScheduleInput struct {
+	ProviderName  string                      `json:"provider_name,omitempty"`
+	Cron          string                      `json:"cron"`
+	Timezone      string                      `json:"timezone,omitempty"`
+	Target        workflowScheduleTargetInput `json:"target"`
+	Paused        bool                        `json:"paused,omitempty"`
+	RequestHandle string                      `json:"request_handle,omitempty"`
+}
+
+type getWorkflowScheduleInput struct {
+	ScheduleID    string `json:"schedule_id"`
+	RequestHandle string `json:"request_handle,omitempty"`
+}
+
+type updateWorkflowScheduleInput struct {
+	ScheduleID    string                      `json:"schedule_id"`
+	ProviderName  string                      `json:"provider_name,omitempty"`
+	Cron          string                      `json:"cron"`
+	Timezone      string                      `json:"timezone,omitempty"`
+	Target        workflowScheduleTargetInput `json:"target"`
+	Paused        bool                        `json:"paused,omitempty"`
+	RequestHandle string                      `json:"request_handle,omitempty"`
 }
 
 func newProxyProvider(inner core.Provider) *proxyProvider {
@@ -99,6 +134,12 @@ func (p *proxyProvider) Catalog() *catalog.Catalog {
 				{Name: "params", Type: "object", Description: "Nested params forwarded to the target operation"},
 			},
 		},
+		catalog.CatalogOperation{ID: "create_workflow_schedule", Method: http.MethodPost, Transport: catalog.TransportPlugin},
+		catalog.CatalogOperation{ID: "get_workflow_schedule", Method: http.MethodGet, Transport: catalog.TransportPlugin},
+		catalog.CatalogOperation{ID: "update_workflow_schedule", Method: http.MethodPost, Transport: catalog.TransportPlugin},
+		catalog.CatalogOperation{ID: "delete_workflow_schedule", Method: http.MethodPost, Transport: catalog.TransportPlugin},
+		catalog.CatalogOperation{ID: "pause_workflow_schedule", Method: http.MethodPost, Transport: catalog.TransportPlugin},
+		catalog.CatalogOperation{ID: "resume_workflow_schedule", Method: http.MethodPost, Transport: catalog.TransportPlugin},
 		catalog.CatalogOperation{
 			ID:        "indexeddb_roundtrip",
 			Method:    http.MethodPost,
@@ -180,6 +221,130 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		envelope["status"] = result.Status
 		envelope["body"] = decodeResultBody(result.Body)
 		return jsonResult(http.StatusOK, envelope), nil
+
+	case "create_workflow_schedule":
+		input, err := decodeJSONParams[createWorkflowScheduleInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowManagerFromContext(ctx, input.RequestHandle)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		target, err := workflowTargetInputToProto(input.Target)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		result, err := client.CreateSchedule(ctx, &proto.WorkflowManagerCreateScheduleRequest{
+			ProviderName: input.ProviderName,
+			Cron:         input.Cron,
+			Timezone:     input.Timezone,
+			Target:       target,
+			Paused:       input.Paused,
+		})
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, managedWorkflowScheduleBody(result)), nil
+
+	case "get_workflow_schedule":
+		input, err := decodeJSONParams[getWorkflowScheduleInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowManagerFromContext(ctx, input.RequestHandle)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		result, err := client.GetSchedule(ctx, &proto.WorkflowManagerGetScheduleRequest{
+			ScheduleId: input.ScheduleID,
+		})
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, managedWorkflowScheduleBody(result)), nil
+
+	case "update_workflow_schedule":
+		input, err := decodeJSONParams[updateWorkflowScheduleInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowManagerFromContext(ctx, input.RequestHandle)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		target, err := workflowTargetInputToProto(input.Target)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		result, err := client.UpdateSchedule(ctx, &proto.WorkflowManagerUpdateScheduleRequest{
+			ScheduleId:   input.ScheduleID,
+			ProviderName: input.ProviderName,
+			Cron:         input.Cron,
+			Timezone:     input.Timezone,
+			Target:       target,
+			Paused:       input.Paused,
+		})
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, managedWorkflowScheduleBody(result)), nil
+
+	case "delete_workflow_schedule":
+		input, err := decodeJSONParams[getWorkflowScheduleInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowManagerFromContext(ctx, input.RequestHandle)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		if err := client.DeleteSchedule(ctx, &proto.WorkflowManagerDeleteScheduleRequest{
+			ScheduleId: input.ScheduleID,
+		}); err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, map[string]any{"deleted": true, "schedule_id": input.ScheduleID}), nil
+
+	case "pause_workflow_schedule":
+		input, err := decodeJSONParams[getWorkflowScheduleInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowManagerFromContext(ctx, input.RequestHandle)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		result, err := client.PauseSchedule(ctx, &proto.WorkflowManagerPauseScheduleRequest{
+			ScheduleId: input.ScheduleID,
+		})
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, managedWorkflowScheduleBody(result)), nil
+
+	case "resume_workflow_schedule":
+		input, err := decodeJSONParams[getWorkflowScheduleInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowManagerFromContext(ctx, input.RequestHandle)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		result, err := client.ResumeSchedule(ctx, &proto.WorkflowManagerResumeScheduleRequest{
+			ScheduleId: input.ScheduleID,
+		})
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, managedWorkflowScheduleBody(result)), nil
 
 	case "read_env":
 		name, _ := params["name"].(string)
@@ -321,18 +486,96 @@ func (p *proxyProvider) Close() error {
 }
 
 func decodeInvokePluginInput(params map[string]any) (invokePluginInput, error) {
+	return decodeJSONParams[invokePluginInput](params)
+}
+
+func decodeJSONParams[T any](params map[string]any) (T, error) {
 	if params == nil {
 		params = map[string]any{}
 	}
-	var input invokePluginInput
+	var input T
 	data, err := json.Marshal(params)
 	if err != nil {
-		return invokePluginInput{}, err
+		return input, err
 	}
 	if err := json.Unmarshal(data, &input); err != nil {
-		return invokePluginInput{}, err
+		return input, err
 	}
 	return input, nil
+}
+
+func workflowManagerFromContext(ctx context.Context, requestHandle string) (*gestalt.WorkflowManagerClient, error) {
+	handle := strings.TrimSpace(requestHandle)
+	if handle == "" {
+		handle = providerhost.RequestHandleFromContext(ctx)
+	}
+	return gestalt.WorkflowManager(handle)
+}
+
+func workflowTargetInputToProto(target workflowScheduleTargetInput) (*proto.BoundWorkflowTarget, error) {
+	input, err := structpb.NewStruct(target.Input)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.BoundWorkflowTarget{
+		PluginName: target.Plugin,
+		Operation:  target.Operation,
+		Connection: target.Connection,
+		Instance:   target.Instance,
+		Input:      input,
+	}, nil
+}
+
+func managedWorkflowScheduleBody(value *proto.ManagedWorkflowSchedule) map[string]any {
+	if value == nil {
+		return map[string]any{}
+	}
+	schedule := value.GetSchedule()
+	body := map[string]any{
+		"provider_name": value.GetProviderName(),
+	}
+	if schedule == nil {
+		return body
+	}
+	target := schedule.GetTarget()
+	body["schedule"] = map[string]any{
+		"id":         schedule.GetId(),
+		"cron":       schedule.GetCron(),
+		"timezone":   schedule.GetTimezone(),
+		"paused":     schedule.GetPaused(),
+		"created_at": timestampBody(schedule.GetCreatedAt()),
+		"updated_at": timestampBody(schedule.GetUpdatedAt()),
+		"next_run_at": func() any {
+			if schedule.GetNextRunAt() == nil {
+				return nil
+			}
+			return schedule.GetNextRunAt().AsTime()
+		}(),
+		"target": map[string]any{
+			"plugin":     "",
+			"operation":  "",
+			"connection": "",
+			"instance":   "",
+			"input":      map[string]any{},
+		},
+	}
+	if target != nil {
+		body["schedule"].(map[string]any)["target"] = map[string]any{
+			"plugin":     target.GetPluginName(),
+			"operation":  target.GetOperation(),
+			"connection": target.GetConnection(),
+			"instance":   target.GetInstance(),
+			"input":      target.GetInput().AsMap(),
+		}
+	}
+	return body
+}
+
+func timestampBody(value *timestamppb.Timestamp) any {
+	if value == nil {
+		return nil
+	}
+	return value.AsTime()
 }
 
 func decodeResultBody(body string) any {

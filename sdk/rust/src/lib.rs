@@ -24,6 +24,7 @@ pub mod s3;
 mod secrets;
 mod secrets_server;
 mod workflow;
+mod workflow_manager;
 
 /// Generated protobuf and gRPC bindings for the Gestalt provider protocol.
 pub mod proto {
@@ -51,6 +52,7 @@ pub use s3::{S3, S3Error, S3Provider};
 pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
 pub use workflow::{ENV_WORKFLOW_HOST_SOCKET, WorkflowHost, WorkflowHostError, WorkflowProvider};
+pub use workflow_manager::{ENV_WORKFLOW_MANAGER_SOCKET, WorkflowManager, WorkflowManagerError};
 
 #[doc(hidden)]
 pub trait IntoRouterResult<P> {

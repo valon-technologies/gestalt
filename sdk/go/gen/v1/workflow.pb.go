@@ -2100,6 +2100,442 @@ func (x *InvokeWorkflowOperationResponse) GetBody() string {
 	return ""
 }
 
+type ManagedWorkflowSchedule struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProviderName  string                 `protobuf:"bytes,1,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
+	Schedule      *BoundWorkflowSchedule `protobuf:"bytes,2,opt,name=schedule,proto3" json:"schedule,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ManagedWorkflowSchedule) Reset() {
+	*x = ManagedWorkflowSchedule{}
+	mi := &file_v1_workflow_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ManagedWorkflowSchedule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ManagedWorkflowSchedule) ProtoMessage() {}
+
+func (x *ManagedWorkflowSchedule) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_workflow_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ManagedWorkflowSchedule.ProtoReflect.Descriptor instead.
+func (*ManagedWorkflowSchedule) Descriptor() ([]byte, []int) {
+	return file_v1_workflow_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ManagedWorkflowSchedule) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
+}
+
+func (x *ManagedWorkflowSchedule) GetSchedule() *BoundWorkflowSchedule {
+	if x != nil {
+		return x.Schedule
+	}
+	return nil
+}
+
+type WorkflowManagerCreateScheduleRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestHandle string                 `protobuf:"bytes,1,opt,name=request_handle,json=requestHandle,proto3" json:"request_handle,omitempty"`
+	ProviderName  string                 `protobuf:"bytes,2,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
+	Cron          string                 `protobuf:"bytes,3,opt,name=cron,proto3" json:"cron,omitempty"`
+	Timezone      string                 `protobuf:"bytes,4,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	Target        *BoundWorkflowTarget   `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
+	Paused        bool                   `protobuf:"varint,6,opt,name=paused,proto3" json:"paused,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowManagerCreateScheduleRequest) Reset() {
+	*x = WorkflowManagerCreateScheduleRequest{}
+	mi := &file_v1_workflow_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowManagerCreateScheduleRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowManagerCreateScheduleRequest) ProtoMessage() {}
+
+func (x *WorkflowManagerCreateScheduleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_workflow_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowManagerCreateScheduleRequest.ProtoReflect.Descriptor instead.
+func (*WorkflowManagerCreateScheduleRequest) Descriptor() ([]byte, []int) {
+	return file_v1_workflow_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *WorkflowManagerCreateScheduleRequest) GetRequestHandle() string {
+	if x != nil {
+		return x.RequestHandle
+	}
+	return ""
+}
+
+func (x *WorkflowManagerCreateScheduleRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
+}
+
+func (x *WorkflowManagerCreateScheduleRequest) GetCron() string {
+	if x != nil {
+		return x.Cron
+	}
+	return ""
+}
+
+func (x *WorkflowManagerCreateScheduleRequest) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
+func (x *WorkflowManagerCreateScheduleRequest) GetTarget() *BoundWorkflowTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *WorkflowManagerCreateScheduleRequest) GetPaused() bool {
+	if x != nil {
+		return x.Paused
+	}
+	return false
+}
+
+type WorkflowManagerGetScheduleRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestHandle string                 `protobuf:"bytes,1,opt,name=request_handle,json=requestHandle,proto3" json:"request_handle,omitempty"`
+	ScheduleId    string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowManagerGetScheduleRequest) Reset() {
+	*x = WorkflowManagerGetScheduleRequest{}
+	mi := &file_v1_workflow_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowManagerGetScheduleRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowManagerGetScheduleRequest) ProtoMessage() {}
+
+func (x *WorkflowManagerGetScheduleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_workflow_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowManagerGetScheduleRequest.ProtoReflect.Descriptor instead.
+func (*WorkflowManagerGetScheduleRequest) Descriptor() ([]byte, []int) {
+	return file_v1_workflow_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *WorkflowManagerGetScheduleRequest) GetRequestHandle() string {
+	if x != nil {
+		return x.RequestHandle
+	}
+	return ""
+}
+
+func (x *WorkflowManagerGetScheduleRequest) GetScheduleId() string {
+	if x != nil {
+		return x.ScheduleId
+	}
+	return ""
+}
+
+type WorkflowManagerUpdateScheduleRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestHandle string                 `protobuf:"bytes,1,opt,name=request_handle,json=requestHandle,proto3" json:"request_handle,omitempty"`
+	ScheduleId    string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	ProviderName  string                 `protobuf:"bytes,3,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
+	Cron          string                 `protobuf:"bytes,4,opt,name=cron,proto3" json:"cron,omitempty"`
+	Timezone      string                 `protobuf:"bytes,5,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	Target        *BoundWorkflowTarget   `protobuf:"bytes,6,opt,name=target,proto3" json:"target,omitempty"`
+	Paused        bool                   `protobuf:"varint,7,opt,name=paused,proto3" json:"paused,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowManagerUpdateScheduleRequest) Reset() {
+	*x = WorkflowManagerUpdateScheduleRequest{}
+	mi := &file_v1_workflow_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowManagerUpdateScheduleRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowManagerUpdateScheduleRequest) ProtoMessage() {}
+
+func (x *WorkflowManagerUpdateScheduleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_workflow_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowManagerUpdateScheduleRequest.ProtoReflect.Descriptor instead.
+func (*WorkflowManagerUpdateScheduleRequest) Descriptor() ([]byte, []int) {
+	return file_v1_workflow_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *WorkflowManagerUpdateScheduleRequest) GetRequestHandle() string {
+	if x != nil {
+		return x.RequestHandle
+	}
+	return ""
+}
+
+func (x *WorkflowManagerUpdateScheduleRequest) GetScheduleId() string {
+	if x != nil {
+		return x.ScheduleId
+	}
+	return ""
+}
+
+func (x *WorkflowManagerUpdateScheduleRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
+}
+
+func (x *WorkflowManagerUpdateScheduleRequest) GetCron() string {
+	if x != nil {
+		return x.Cron
+	}
+	return ""
+}
+
+func (x *WorkflowManagerUpdateScheduleRequest) GetTimezone() string {
+	if x != nil {
+		return x.Timezone
+	}
+	return ""
+}
+
+func (x *WorkflowManagerUpdateScheduleRequest) GetTarget() *BoundWorkflowTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *WorkflowManagerUpdateScheduleRequest) GetPaused() bool {
+	if x != nil {
+		return x.Paused
+	}
+	return false
+}
+
+type WorkflowManagerDeleteScheduleRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestHandle string                 `protobuf:"bytes,1,opt,name=request_handle,json=requestHandle,proto3" json:"request_handle,omitempty"`
+	ScheduleId    string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowManagerDeleteScheduleRequest) Reset() {
+	*x = WorkflowManagerDeleteScheduleRequest{}
+	mi := &file_v1_workflow_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowManagerDeleteScheduleRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowManagerDeleteScheduleRequest) ProtoMessage() {}
+
+func (x *WorkflowManagerDeleteScheduleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_workflow_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowManagerDeleteScheduleRequest.ProtoReflect.Descriptor instead.
+func (*WorkflowManagerDeleteScheduleRequest) Descriptor() ([]byte, []int) {
+	return file_v1_workflow_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *WorkflowManagerDeleteScheduleRequest) GetRequestHandle() string {
+	if x != nil {
+		return x.RequestHandle
+	}
+	return ""
+}
+
+func (x *WorkflowManagerDeleteScheduleRequest) GetScheduleId() string {
+	if x != nil {
+		return x.ScheduleId
+	}
+	return ""
+}
+
+type WorkflowManagerPauseScheduleRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestHandle string                 `protobuf:"bytes,1,opt,name=request_handle,json=requestHandle,proto3" json:"request_handle,omitempty"`
+	ScheduleId    string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowManagerPauseScheduleRequest) Reset() {
+	*x = WorkflowManagerPauseScheduleRequest{}
+	mi := &file_v1_workflow_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowManagerPauseScheduleRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowManagerPauseScheduleRequest) ProtoMessage() {}
+
+func (x *WorkflowManagerPauseScheduleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_workflow_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowManagerPauseScheduleRequest.ProtoReflect.Descriptor instead.
+func (*WorkflowManagerPauseScheduleRequest) Descriptor() ([]byte, []int) {
+	return file_v1_workflow_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *WorkflowManagerPauseScheduleRequest) GetRequestHandle() string {
+	if x != nil {
+		return x.RequestHandle
+	}
+	return ""
+}
+
+func (x *WorkflowManagerPauseScheduleRequest) GetScheduleId() string {
+	if x != nil {
+		return x.ScheduleId
+	}
+	return ""
+}
+
+type WorkflowManagerResumeScheduleRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestHandle string                 `protobuf:"bytes,1,opt,name=request_handle,json=requestHandle,proto3" json:"request_handle,omitempty"`
+	ScheduleId    string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowManagerResumeScheduleRequest) Reset() {
+	*x = WorkflowManagerResumeScheduleRequest{}
+	mi := &file_v1_workflow_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowManagerResumeScheduleRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowManagerResumeScheduleRequest) ProtoMessage() {}
+
+func (x *WorkflowManagerResumeScheduleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_workflow_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowManagerResumeScheduleRequest.ProtoReflect.Descriptor instead.
+func (*WorkflowManagerResumeScheduleRequest) Descriptor() ([]byte, []int) {
+	return file_v1_workflow_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *WorkflowManagerResumeScheduleRequest) GetRequestHandle() string {
+	if x != nil {
+		return x.RequestHandle
+	}
+	return ""
+}
+
+func (x *WorkflowManagerResumeScheduleRequest) GetScheduleId() string {
+	if x != nil {
+		return x.ScheduleId
+	}
+	return ""
+}
+
 var File_v1_workflow_proto protoreflect.FileDescriptor
 
 const file_v1_workflow_proto_rawDesc = "" +
@@ -2274,7 +2710,42 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\rexecution_ref\x18\b \x01(\tR\fexecutionRef\"M\n" +
 	"\x1fInvokeWorkflowOperationResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\x05R\x06status\x12\x12\n" +
-	"\x04body\x18\x02 \x01(\tR\x04body*\xdf\x01\n" +
+	"\x04body\x18\x02 \x01(\tR\x04body\"\x86\x01\n" +
+	"\x17ManagedWorkflowSchedule\x12#\n" +
+	"\rprovider_name\x18\x01 \x01(\tR\fproviderName\x12F\n" +
+	"\bschedule\x18\x02 \x01(\v2*.gestalt.provider.v1.BoundWorkflowScheduleR\bschedule\"\xfc\x01\n" +
+	"$WorkflowManagerCreateScheduleRequest\x12%\n" +
+	"\x0erequest_handle\x18\x01 \x01(\tR\rrequestHandle\x12#\n" +
+	"\rprovider_name\x18\x02 \x01(\tR\fproviderName\x12\x12\n" +
+	"\x04cron\x18\x03 \x01(\tR\x04cron\x12\x1a\n" +
+	"\btimezone\x18\x04 \x01(\tR\btimezone\x12@\n" +
+	"\x06target\x18\x05 \x01(\v2(.gestalt.provider.v1.BoundWorkflowTargetR\x06target\x12\x16\n" +
+	"\x06paused\x18\x06 \x01(\bR\x06paused\"k\n" +
+	"!WorkflowManagerGetScheduleRequest\x12%\n" +
+	"\x0erequest_handle\x18\x01 \x01(\tR\rrequestHandle\x12\x1f\n" +
+	"\vschedule_id\x18\x02 \x01(\tR\n" +
+	"scheduleId\"\x9d\x02\n" +
+	"$WorkflowManagerUpdateScheduleRequest\x12%\n" +
+	"\x0erequest_handle\x18\x01 \x01(\tR\rrequestHandle\x12\x1f\n" +
+	"\vschedule_id\x18\x02 \x01(\tR\n" +
+	"scheduleId\x12#\n" +
+	"\rprovider_name\x18\x03 \x01(\tR\fproviderName\x12\x12\n" +
+	"\x04cron\x18\x04 \x01(\tR\x04cron\x12\x1a\n" +
+	"\btimezone\x18\x05 \x01(\tR\btimezone\x12@\n" +
+	"\x06target\x18\x06 \x01(\v2(.gestalt.provider.v1.BoundWorkflowTargetR\x06target\x12\x16\n" +
+	"\x06paused\x18\a \x01(\bR\x06paused\"n\n" +
+	"$WorkflowManagerDeleteScheduleRequest\x12%\n" +
+	"\x0erequest_handle\x18\x01 \x01(\tR\rrequestHandle\x12\x1f\n" +
+	"\vschedule_id\x18\x02 \x01(\tR\n" +
+	"scheduleId\"m\n" +
+	"#WorkflowManagerPauseScheduleRequest\x12%\n" +
+	"\x0erequest_handle\x18\x01 \x01(\tR\rrequestHandle\x12\x1f\n" +
+	"\vschedule_id\x18\x02 \x01(\tR\n" +
+	"scheduleId\"n\n" +
+	"$WorkflowManagerResumeScheduleRequest\x12%\n" +
+	"\x0erequest_handle\x18\x01 \x01(\tR\rrequestHandle\x12\x1f\n" +
+	"\vschedule_id\x18\x02 \x01(\tR\n" +
+	"scheduleId*\xdf\x01\n" +
 	"\x11WorkflowRunStatus\x12#\n" +
 	"\x1fWORKFLOW_RUN_STATUS_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bWORKFLOW_RUN_STATUS_PENDING\x10\x01\x12\x1f\n" +
@@ -2301,7 +2772,14 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x12ResumeEventTrigger\x12>.gestalt.provider.v1.ResumeWorkflowProviderEventTriggerRequest\x1a..gestalt.provider.v1.BoundWorkflowEventTrigger\x12`\n" +
 	"\fPublishEvent\x128.gestalt.provider.v1.PublishWorkflowProviderEventRequest\x1a\x16.google.protobuf.Empty2\x8c\x01\n" +
 	"\fWorkflowHost\x12|\n" +
-	"\x0fInvokeOperation\x123.gestalt.provider.v1.InvokeWorkflowOperationRequest\x1a4.gestalt.provider.v1.InvokeWorkflowOperationResponseB\xd1\x01\n" +
+	"\x0fInvokeOperation\x123.gestalt.provider.v1.InvokeWorkflowOperationRequest\x1a4.gestalt.provider.v1.InvokeWorkflowOperationResponse2\xd9\x05\n" +
+	"\x13WorkflowManagerHost\x12y\n" +
+	"\x0eCreateSchedule\x129.gestalt.provider.v1.WorkflowManagerCreateScheduleRequest\x1a,.gestalt.provider.v1.ManagedWorkflowSchedule\x12s\n" +
+	"\vGetSchedule\x126.gestalt.provider.v1.WorkflowManagerGetScheduleRequest\x1a,.gestalt.provider.v1.ManagedWorkflowSchedule\x12y\n" +
+	"\x0eUpdateSchedule\x129.gestalt.provider.v1.WorkflowManagerUpdateScheduleRequest\x1a,.gestalt.provider.v1.ManagedWorkflowSchedule\x12c\n" +
+	"\x0eDeleteSchedule\x129.gestalt.provider.v1.WorkflowManagerDeleteScheduleRequest\x1a\x16.google.protobuf.Empty\x12w\n" +
+	"\rPauseSchedule\x128.gestalt.provider.v1.WorkflowManagerPauseScheduleRequest\x1a,.gestalt.provider.v1.ManagedWorkflowSchedule\x12y\n" +
+	"\x0eResumeSchedule\x129.gestalt.provider.v1.WorkflowManagerResumeScheduleRequest\x1a,.gestalt.provider.v1.ManagedWorkflowScheduleB\xd1\x01\n" +
 	"\x17com.gestalt.provider.v1B\rWorkflowProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
@@ -2317,7 +2795,7 @@ func file_v1_workflow_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_workflow_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
 var file_v1_workflow_proto_goTypes = []any{
 	(WorkflowRunStatus)(0),                            // 0: gestalt.provider.v1.WorkflowRunStatus
 	(*BoundWorkflowTarget)(nil),                       // 1: gestalt.provider.v1.BoundWorkflowTarget
@@ -2353,18 +2831,25 @@ var file_v1_workflow_proto_goTypes = []any{
 	(*PublishWorkflowProviderEventRequest)(nil),       // 31: gestalt.provider.v1.PublishWorkflowProviderEventRequest
 	(*InvokeWorkflowOperationRequest)(nil),            // 32: gestalt.provider.v1.InvokeWorkflowOperationRequest
 	(*InvokeWorkflowOperationResponse)(nil),           // 33: gestalt.provider.v1.InvokeWorkflowOperationResponse
-	nil,                                               // 34: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry
-	(*structpb.Struct)(nil),                           // 35: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),                     // 36: google.protobuf.Timestamp
-	(*structpb.Value)(nil),                            // 37: google.protobuf.Value
-	(*emptypb.Empty)(nil),                             // 38: google.protobuf.Empty
+	(*ManagedWorkflowSchedule)(nil),                   // 34: gestalt.provider.v1.ManagedWorkflowSchedule
+	(*WorkflowManagerCreateScheduleRequest)(nil),      // 35: gestalt.provider.v1.WorkflowManagerCreateScheduleRequest
+	(*WorkflowManagerGetScheduleRequest)(nil),         // 36: gestalt.provider.v1.WorkflowManagerGetScheduleRequest
+	(*WorkflowManagerUpdateScheduleRequest)(nil),      // 37: gestalt.provider.v1.WorkflowManagerUpdateScheduleRequest
+	(*WorkflowManagerDeleteScheduleRequest)(nil),      // 38: gestalt.provider.v1.WorkflowManagerDeleteScheduleRequest
+	(*WorkflowManagerPauseScheduleRequest)(nil),       // 39: gestalt.provider.v1.WorkflowManagerPauseScheduleRequest
+	(*WorkflowManagerResumeScheduleRequest)(nil),      // 40: gestalt.provider.v1.WorkflowManagerResumeScheduleRequest
+	nil,                           // 41: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry
+	(*structpb.Struct)(nil),       // 42: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil), // 43: google.protobuf.Timestamp
+	(*structpb.Value)(nil),        // 44: google.protobuf.Value
+	(*emptypb.Empty)(nil),         // 45: google.protobuf.Empty
 }
 var file_v1_workflow_proto_depIdxs = []int32{
-	35, // 0: gestalt.provider.v1.BoundWorkflowTarget.input:type_name -> google.protobuf.Struct
-	36, // 1: gestalt.provider.v1.WorkflowEvent.time:type_name -> google.protobuf.Timestamp
-	35, // 2: gestalt.provider.v1.WorkflowEvent.data:type_name -> google.protobuf.Struct
-	34, // 3: gestalt.provider.v1.WorkflowEvent.extensions:type_name -> gestalt.provider.v1.WorkflowEvent.ExtensionsEntry
-	36, // 4: gestalt.provider.v1.WorkflowScheduleTrigger.scheduled_for:type_name -> google.protobuf.Timestamp
+	42, // 0: gestalt.provider.v1.BoundWorkflowTarget.input:type_name -> google.protobuf.Struct
+	43, // 1: gestalt.provider.v1.WorkflowEvent.time:type_name -> google.protobuf.Timestamp
+	42, // 2: gestalt.provider.v1.WorkflowEvent.data:type_name -> google.protobuf.Struct
+	41, // 3: gestalt.provider.v1.WorkflowEvent.extensions:type_name -> gestalt.provider.v1.WorkflowEvent.ExtensionsEntry
+	43, // 4: gestalt.provider.v1.WorkflowScheduleTrigger.scheduled_for:type_name -> google.protobuf.Timestamp
 	3,  // 5: gestalt.provider.v1.WorkflowEventTriggerInvocation.event:type_name -> gestalt.provider.v1.WorkflowEvent
 	5,  // 6: gestalt.provider.v1.WorkflowRunTrigger.manual:type_name -> gestalt.provider.v1.WorkflowManualTrigger
 	6,  // 7: gestalt.provider.v1.WorkflowRunTrigger.schedule:type_name -> gestalt.provider.v1.WorkflowScheduleTrigger
@@ -2372,19 +2857,19 @@ var file_v1_workflow_proto_depIdxs = []int32{
 	0,  // 9: gestalt.provider.v1.BoundWorkflowRun.status:type_name -> gestalt.provider.v1.WorkflowRunStatus
 	1,  // 10: gestalt.provider.v1.BoundWorkflowRun.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
 	8,  // 11: gestalt.provider.v1.BoundWorkflowRun.trigger:type_name -> gestalt.provider.v1.WorkflowRunTrigger
-	36, // 12: gestalt.provider.v1.BoundWorkflowRun.created_at:type_name -> google.protobuf.Timestamp
-	36, // 13: gestalt.provider.v1.BoundWorkflowRun.started_at:type_name -> google.protobuf.Timestamp
-	36, // 14: gestalt.provider.v1.BoundWorkflowRun.completed_at:type_name -> google.protobuf.Timestamp
+	43, // 12: gestalt.provider.v1.BoundWorkflowRun.created_at:type_name -> google.protobuf.Timestamp
+	43, // 13: gestalt.provider.v1.BoundWorkflowRun.started_at:type_name -> google.protobuf.Timestamp
+	43, // 14: gestalt.provider.v1.BoundWorkflowRun.completed_at:type_name -> google.protobuf.Timestamp
 	2,  // 15: gestalt.provider.v1.BoundWorkflowRun.created_by:type_name -> gestalt.provider.v1.WorkflowActor
 	1,  // 16: gestalt.provider.v1.BoundWorkflowSchedule.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	36, // 17: gestalt.provider.v1.BoundWorkflowSchedule.created_at:type_name -> google.protobuf.Timestamp
-	36, // 18: gestalt.provider.v1.BoundWorkflowSchedule.updated_at:type_name -> google.protobuf.Timestamp
-	36, // 19: gestalt.provider.v1.BoundWorkflowSchedule.next_run_at:type_name -> google.protobuf.Timestamp
+	43, // 17: gestalt.provider.v1.BoundWorkflowSchedule.created_at:type_name -> google.protobuf.Timestamp
+	43, // 18: gestalt.provider.v1.BoundWorkflowSchedule.updated_at:type_name -> google.protobuf.Timestamp
+	43, // 19: gestalt.provider.v1.BoundWorkflowSchedule.next_run_at:type_name -> google.protobuf.Timestamp
 	2,  // 20: gestalt.provider.v1.BoundWorkflowSchedule.created_by:type_name -> gestalt.provider.v1.WorkflowActor
 	4,  // 21: gestalt.provider.v1.BoundWorkflowEventTrigger.match:type_name -> gestalt.provider.v1.WorkflowEventMatch
 	1,  // 22: gestalt.provider.v1.BoundWorkflowEventTrigger.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	36, // 23: gestalt.provider.v1.BoundWorkflowEventTrigger.created_at:type_name -> google.protobuf.Timestamp
-	36, // 24: gestalt.provider.v1.BoundWorkflowEventTrigger.updated_at:type_name -> google.protobuf.Timestamp
+	43, // 23: gestalt.provider.v1.BoundWorkflowEventTrigger.created_at:type_name -> google.protobuf.Timestamp
+	43, // 24: gestalt.provider.v1.BoundWorkflowEventTrigger.updated_at:type_name -> google.protobuf.Timestamp
 	2,  // 25: gestalt.provider.v1.BoundWorkflowEventTrigger.created_by:type_name -> gestalt.provider.v1.WorkflowActor
 	1,  // 26: gestalt.provider.v1.StartWorkflowProviderRunRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
 	2,  // 27: gestalt.provider.v1.StartWorkflowProviderRunRequest.created_by:type_name -> gestalt.provider.v1.WorkflowActor
@@ -2399,51 +2884,66 @@ var file_v1_workflow_proto_depIdxs = []int32{
 	3,  // 36: gestalt.provider.v1.PublishWorkflowProviderEventRequest.event:type_name -> gestalt.provider.v1.WorkflowEvent
 	1,  // 37: gestalt.provider.v1.InvokeWorkflowOperationRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
 	8,  // 38: gestalt.provider.v1.InvokeWorkflowOperationRequest.trigger:type_name -> gestalt.provider.v1.WorkflowRunTrigger
-	35, // 39: gestalt.provider.v1.InvokeWorkflowOperationRequest.input:type_name -> google.protobuf.Struct
-	35, // 40: gestalt.provider.v1.InvokeWorkflowOperationRequest.metadata:type_name -> google.protobuf.Struct
+	42, // 39: gestalt.provider.v1.InvokeWorkflowOperationRequest.input:type_name -> google.protobuf.Struct
+	42, // 40: gestalt.provider.v1.InvokeWorkflowOperationRequest.metadata:type_name -> google.protobuf.Struct
 	2,  // 41: gestalt.provider.v1.InvokeWorkflowOperationRequest.created_by:type_name -> gestalt.provider.v1.WorkflowActor
-	37, // 42: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry.value:type_name -> google.protobuf.Value
-	12, // 43: gestalt.provider.v1.WorkflowProvider.StartRun:input_type -> gestalt.provider.v1.StartWorkflowProviderRunRequest
-	13, // 44: gestalt.provider.v1.WorkflowProvider.GetRun:input_type -> gestalt.provider.v1.GetWorkflowProviderRunRequest
-	14, // 45: gestalt.provider.v1.WorkflowProvider.ListRuns:input_type -> gestalt.provider.v1.ListWorkflowProviderRunsRequest
-	16, // 46: gestalt.provider.v1.WorkflowProvider.CancelRun:input_type -> gestalt.provider.v1.CancelWorkflowProviderRunRequest
-	17, // 47: gestalt.provider.v1.WorkflowProvider.UpsertSchedule:input_type -> gestalt.provider.v1.UpsertWorkflowProviderScheduleRequest
-	18, // 48: gestalt.provider.v1.WorkflowProvider.GetSchedule:input_type -> gestalt.provider.v1.GetWorkflowProviderScheduleRequest
-	19, // 49: gestalt.provider.v1.WorkflowProvider.ListSchedules:input_type -> gestalt.provider.v1.ListWorkflowProviderSchedulesRequest
-	21, // 50: gestalt.provider.v1.WorkflowProvider.DeleteSchedule:input_type -> gestalt.provider.v1.DeleteWorkflowProviderScheduleRequest
-	22, // 51: gestalt.provider.v1.WorkflowProvider.PauseSchedule:input_type -> gestalt.provider.v1.PauseWorkflowProviderScheduleRequest
-	23, // 52: gestalt.provider.v1.WorkflowProvider.ResumeSchedule:input_type -> gestalt.provider.v1.ResumeWorkflowProviderScheduleRequest
-	24, // 53: gestalt.provider.v1.WorkflowProvider.UpsertEventTrigger:input_type -> gestalt.provider.v1.UpsertWorkflowProviderEventTriggerRequest
-	25, // 54: gestalt.provider.v1.WorkflowProvider.GetEventTrigger:input_type -> gestalt.provider.v1.GetWorkflowProviderEventTriggerRequest
-	26, // 55: gestalt.provider.v1.WorkflowProvider.ListEventTriggers:input_type -> gestalt.provider.v1.ListWorkflowProviderEventTriggersRequest
-	28, // 56: gestalt.provider.v1.WorkflowProvider.DeleteEventTrigger:input_type -> gestalt.provider.v1.DeleteWorkflowProviderEventTriggerRequest
-	29, // 57: gestalt.provider.v1.WorkflowProvider.PauseEventTrigger:input_type -> gestalt.provider.v1.PauseWorkflowProviderEventTriggerRequest
-	30, // 58: gestalt.provider.v1.WorkflowProvider.ResumeEventTrigger:input_type -> gestalt.provider.v1.ResumeWorkflowProviderEventTriggerRequest
-	31, // 59: gestalt.provider.v1.WorkflowProvider.PublishEvent:input_type -> gestalt.provider.v1.PublishWorkflowProviderEventRequest
-	32, // 60: gestalt.provider.v1.WorkflowHost.InvokeOperation:input_type -> gestalt.provider.v1.InvokeWorkflowOperationRequest
-	9,  // 61: gestalt.provider.v1.WorkflowProvider.StartRun:output_type -> gestalt.provider.v1.BoundWorkflowRun
-	9,  // 62: gestalt.provider.v1.WorkflowProvider.GetRun:output_type -> gestalt.provider.v1.BoundWorkflowRun
-	15, // 63: gestalt.provider.v1.WorkflowProvider.ListRuns:output_type -> gestalt.provider.v1.ListWorkflowProviderRunsResponse
-	9,  // 64: gestalt.provider.v1.WorkflowProvider.CancelRun:output_type -> gestalt.provider.v1.BoundWorkflowRun
-	10, // 65: gestalt.provider.v1.WorkflowProvider.UpsertSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
-	10, // 66: gestalt.provider.v1.WorkflowProvider.GetSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
-	20, // 67: gestalt.provider.v1.WorkflowProvider.ListSchedules:output_type -> gestalt.provider.v1.ListWorkflowProviderSchedulesResponse
-	38, // 68: gestalt.provider.v1.WorkflowProvider.DeleteSchedule:output_type -> google.protobuf.Empty
-	10, // 69: gestalt.provider.v1.WorkflowProvider.PauseSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
-	10, // 70: gestalt.provider.v1.WorkflowProvider.ResumeSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
-	11, // 71: gestalt.provider.v1.WorkflowProvider.UpsertEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
-	11, // 72: gestalt.provider.v1.WorkflowProvider.GetEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
-	27, // 73: gestalt.provider.v1.WorkflowProvider.ListEventTriggers:output_type -> gestalt.provider.v1.ListWorkflowProviderEventTriggersResponse
-	38, // 74: gestalt.provider.v1.WorkflowProvider.DeleteEventTrigger:output_type -> google.protobuf.Empty
-	11, // 75: gestalt.provider.v1.WorkflowProvider.PauseEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
-	11, // 76: gestalt.provider.v1.WorkflowProvider.ResumeEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
-	38, // 77: gestalt.provider.v1.WorkflowProvider.PublishEvent:output_type -> google.protobuf.Empty
-	33, // 78: gestalt.provider.v1.WorkflowHost.InvokeOperation:output_type -> gestalt.provider.v1.InvokeWorkflowOperationResponse
-	61, // [61:79] is the sub-list for method output_type
-	43, // [43:61] is the sub-list for method input_type
-	43, // [43:43] is the sub-list for extension type_name
-	43, // [43:43] is the sub-list for extension extendee
-	0,  // [0:43] is the sub-list for field type_name
+	10, // 42: gestalt.provider.v1.ManagedWorkflowSchedule.schedule:type_name -> gestalt.provider.v1.BoundWorkflowSchedule
+	1,  // 43: gestalt.provider.v1.WorkflowManagerCreateScheduleRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
+	1,  // 44: gestalt.provider.v1.WorkflowManagerUpdateScheduleRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
+	44, // 45: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry.value:type_name -> google.protobuf.Value
+	12, // 46: gestalt.provider.v1.WorkflowProvider.StartRun:input_type -> gestalt.provider.v1.StartWorkflowProviderRunRequest
+	13, // 47: gestalt.provider.v1.WorkflowProvider.GetRun:input_type -> gestalt.provider.v1.GetWorkflowProviderRunRequest
+	14, // 48: gestalt.provider.v1.WorkflowProvider.ListRuns:input_type -> gestalt.provider.v1.ListWorkflowProviderRunsRequest
+	16, // 49: gestalt.provider.v1.WorkflowProvider.CancelRun:input_type -> gestalt.provider.v1.CancelWorkflowProviderRunRequest
+	17, // 50: gestalt.provider.v1.WorkflowProvider.UpsertSchedule:input_type -> gestalt.provider.v1.UpsertWorkflowProviderScheduleRequest
+	18, // 51: gestalt.provider.v1.WorkflowProvider.GetSchedule:input_type -> gestalt.provider.v1.GetWorkflowProviderScheduleRequest
+	19, // 52: gestalt.provider.v1.WorkflowProvider.ListSchedules:input_type -> gestalt.provider.v1.ListWorkflowProviderSchedulesRequest
+	21, // 53: gestalt.provider.v1.WorkflowProvider.DeleteSchedule:input_type -> gestalt.provider.v1.DeleteWorkflowProviderScheduleRequest
+	22, // 54: gestalt.provider.v1.WorkflowProvider.PauseSchedule:input_type -> gestalt.provider.v1.PauseWorkflowProviderScheduleRequest
+	23, // 55: gestalt.provider.v1.WorkflowProvider.ResumeSchedule:input_type -> gestalt.provider.v1.ResumeWorkflowProviderScheduleRequest
+	24, // 56: gestalt.provider.v1.WorkflowProvider.UpsertEventTrigger:input_type -> gestalt.provider.v1.UpsertWorkflowProviderEventTriggerRequest
+	25, // 57: gestalt.provider.v1.WorkflowProvider.GetEventTrigger:input_type -> gestalt.provider.v1.GetWorkflowProviderEventTriggerRequest
+	26, // 58: gestalt.provider.v1.WorkflowProvider.ListEventTriggers:input_type -> gestalt.provider.v1.ListWorkflowProviderEventTriggersRequest
+	28, // 59: gestalt.provider.v1.WorkflowProvider.DeleteEventTrigger:input_type -> gestalt.provider.v1.DeleteWorkflowProviderEventTriggerRequest
+	29, // 60: gestalt.provider.v1.WorkflowProvider.PauseEventTrigger:input_type -> gestalt.provider.v1.PauseWorkflowProviderEventTriggerRequest
+	30, // 61: gestalt.provider.v1.WorkflowProvider.ResumeEventTrigger:input_type -> gestalt.provider.v1.ResumeWorkflowProviderEventTriggerRequest
+	31, // 62: gestalt.provider.v1.WorkflowProvider.PublishEvent:input_type -> gestalt.provider.v1.PublishWorkflowProviderEventRequest
+	32, // 63: gestalt.provider.v1.WorkflowHost.InvokeOperation:input_type -> gestalt.provider.v1.InvokeWorkflowOperationRequest
+	35, // 64: gestalt.provider.v1.WorkflowManagerHost.CreateSchedule:input_type -> gestalt.provider.v1.WorkflowManagerCreateScheduleRequest
+	36, // 65: gestalt.provider.v1.WorkflowManagerHost.GetSchedule:input_type -> gestalt.provider.v1.WorkflowManagerGetScheduleRequest
+	37, // 66: gestalt.provider.v1.WorkflowManagerHost.UpdateSchedule:input_type -> gestalt.provider.v1.WorkflowManagerUpdateScheduleRequest
+	38, // 67: gestalt.provider.v1.WorkflowManagerHost.DeleteSchedule:input_type -> gestalt.provider.v1.WorkflowManagerDeleteScheduleRequest
+	39, // 68: gestalt.provider.v1.WorkflowManagerHost.PauseSchedule:input_type -> gestalt.provider.v1.WorkflowManagerPauseScheduleRequest
+	40, // 69: gestalt.provider.v1.WorkflowManagerHost.ResumeSchedule:input_type -> gestalt.provider.v1.WorkflowManagerResumeScheduleRequest
+	9,  // 70: gestalt.provider.v1.WorkflowProvider.StartRun:output_type -> gestalt.provider.v1.BoundWorkflowRun
+	9,  // 71: gestalt.provider.v1.WorkflowProvider.GetRun:output_type -> gestalt.provider.v1.BoundWorkflowRun
+	15, // 72: gestalt.provider.v1.WorkflowProvider.ListRuns:output_type -> gestalt.provider.v1.ListWorkflowProviderRunsResponse
+	9,  // 73: gestalt.provider.v1.WorkflowProvider.CancelRun:output_type -> gestalt.provider.v1.BoundWorkflowRun
+	10, // 74: gestalt.provider.v1.WorkflowProvider.UpsertSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
+	10, // 75: gestalt.provider.v1.WorkflowProvider.GetSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
+	20, // 76: gestalt.provider.v1.WorkflowProvider.ListSchedules:output_type -> gestalt.provider.v1.ListWorkflowProviderSchedulesResponse
+	45, // 77: gestalt.provider.v1.WorkflowProvider.DeleteSchedule:output_type -> google.protobuf.Empty
+	10, // 78: gestalt.provider.v1.WorkflowProvider.PauseSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
+	10, // 79: gestalt.provider.v1.WorkflowProvider.ResumeSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
+	11, // 80: gestalt.provider.v1.WorkflowProvider.UpsertEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
+	11, // 81: gestalt.provider.v1.WorkflowProvider.GetEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
+	27, // 82: gestalt.provider.v1.WorkflowProvider.ListEventTriggers:output_type -> gestalt.provider.v1.ListWorkflowProviderEventTriggersResponse
+	45, // 83: gestalt.provider.v1.WorkflowProvider.DeleteEventTrigger:output_type -> google.protobuf.Empty
+	11, // 84: gestalt.provider.v1.WorkflowProvider.PauseEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
+	11, // 85: gestalt.provider.v1.WorkflowProvider.ResumeEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
+	45, // 86: gestalt.provider.v1.WorkflowProvider.PublishEvent:output_type -> google.protobuf.Empty
+	33, // 87: gestalt.provider.v1.WorkflowHost.InvokeOperation:output_type -> gestalt.provider.v1.InvokeWorkflowOperationResponse
+	34, // 88: gestalt.provider.v1.WorkflowManagerHost.CreateSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
+	34, // 89: gestalt.provider.v1.WorkflowManagerHost.GetSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
+	34, // 90: gestalt.provider.v1.WorkflowManagerHost.UpdateSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
+	45, // 91: gestalt.provider.v1.WorkflowManagerHost.DeleteSchedule:output_type -> google.protobuf.Empty
+	34, // 92: gestalt.provider.v1.WorkflowManagerHost.PauseSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
+	34, // 93: gestalt.provider.v1.WorkflowManagerHost.ResumeSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
+	70, // [70:94] is the sub-list for method output_type
+	46, // [46:70] is the sub-list for method input_type
+	46, // [46:46] is the sub-list for extension type_name
+	46, // [46:46] is the sub-list for extension extendee
+	0,  // [0:46] is the sub-list for field type_name
 }
 
 func init() { file_v1_workflow_proto_init() }
@@ -2462,9 +2962,9 @@ func file_v1_workflow_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_workflow_proto_rawDesc), len(file_v1_workflow_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   34,
+			NumMessages:   41,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   3,
 		},
 		GoTypes:           file_v1_workflow_proto_goTypes,
 		DependencyIndexes: file_v1_workflow_proto_depIdxs,

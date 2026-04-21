@@ -19,6 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
+	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/metric"
@@ -75,6 +76,7 @@ type Server struct {
 	workspaceRoles        *coredata.WorkspaceRoleService
 	identityPluginAccess  *coredata.IdentityPluginAccessService
 	workflowExecutionRefs *coredata.WorkflowExecutionRefService
+	workflowSchedules     *workflowmanager.Manager
 	authorizationProvider core.AuthorizationProvider
 	managedIdentityMu     sync.Mutex
 	providers             *registry.ProviderMap[core.Provider]
@@ -104,6 +106,15 @@ type Server struct {
 	adminRoute            AdminRouteConfig
 	adminUI               http.Handler
 	routeProfile          RouteProfile
+}
+
+func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
+	return invocation.CatalogSelectorConfig{
+		Authorizer:        s.authorizer,
+		Invoker:           s.invoker,
+		CatalogConnection: s.catalogConnection,
+		DefaultConnection: s.defaultConnection,
+	}
 }
 
 type Config struct {
@@ -274,6 +285,16 @@ func New(cfg Config) (*Server, error) {
 		adminUI:               adminUI,
 		routeProfile:          cfg.RouteProfile,
 	}
+	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
+		Providers:             cfg.Providers,
+		Workflow:              cfg.Workflow,
+		WorkflowExecutionRefs: workflowExecutionRefs,
+		Invoker:               cfg.Invoker,
+		Authorizer:            cfg.Authorizer,
+		DefaultConnection:     cfg.DefaultConnection,
+		CatalogConnection:     cfg.CatalogConnection,
+		Now:                   now,
+	})
 	if noAuth || hasAnonymousAuthProvider(authProviders) {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)
 	}
