@@ -49,10 +49,7 @@ pub use router::{Operation, Router};
 pub use s3::{S3, S3Error, S3Provider};
 pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
-pub use workflow::{
-    ENV_WORKFLOW_HOST_SOCKET, ENV_WORKFLOW_SOCKET, Workflow, WorkflowError, WorkflowHost,
-    WorkflowHostError, WorkflowProvider,
-};
+pub use workflow::{ENV_WORKFLOW_HOST_SOCKET, WorkflowHost, WorkflowHostError, WorkflowProvider};
 
 #[doc(hidden)]
 pub trait IntoRouterResult<P> {

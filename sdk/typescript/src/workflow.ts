@@ -18,54 +18,36 @@ import {
   ListWorkflowProviderEventTriggersResponseSchema,
   ListWorkflowProviderRunsResponseSchema,
   ListWorkflowProviderSchedulesResponseSchema,
-  Workflow as WorkflowService,
   WorkflowHost as WorkflowHostService,
   WorkflowProvider as WorkflowProviderService,
   type BoundWorkflowEventTrigger,
   type BoundWorkflowRun,
   type BoundWorkflowSchedule,
   type CancelWorkflowProviderRunRequest,
-  type CancelWorkflowRunRequest,
   type DeleteWorkflowProviderEventTriggerRequest,
   type DeleteWorkflowProviderScheduleRequest,
-  type DeleteWorkflowScheduleRequest,
-  type GetWorkflowEventTriggerRequest,
   type GetWorkflowProviderEventTriggerRequest,
   type GetWorkflowProviderRunRequest,
   type GetWorkflowProviderScheduleRequest,
-  type GetWorkflowRunRequest,
-  type GetWorkflowScheduleRequest,
   type InvokeWorkflowOperationRequest,
   type InvokeWorkflowOperationResponse,
   type ListWorkflowProviderEventTriggersRequest,
   type ListWorkflowProviderRunsRequest,
   type ListWorkflowProviderSchedulesRequest,
-  type PauseWorkflowEventTriggerRequest,
   type PauseWorkflowProviderEventTriggerRequest,
   type PauseWorkflowProviderScheduleRequest,
-  type PauseWorkflowScheduleRequest,
-  type PublishWorkflowEventRequest,
   type PublishWorkflowProviderEventRequest,
-  type ResumeWorkflowEventTriggerRequest,
   type ResumeWorkflowProviderEventTriggerRequest,
   type ResumeWorkflowProviderScheduleRequest,
-  type ResumeWorkflowScheduleRequest,
   type StartWorkflowProviderRunRequest,
-  type StartWorkflowRunRequest,
-  type UpsertWorkflowEventTriggerRequest,
   type UpsertWorkflowProviderEventTriggerRequest,
   type UpsertWorkflowProviderScheduleRequest,
-  type UpsertWorkflowScheduleRequest,
   type WorkflowEvent,
-  type WorkflowEventTrigger,
-  type WorkflowRun,
   WorkflowRunStatus,
-  type WorkflowSchedule,
 } from "../gen/v1/workflow_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 
-export const ENV_WORKFLOW_SOCKET = "GESTALT_WORKFLOW_SOCKET";
 export const ENV_WORKFLOW_HOST_SOCKET = "GESTALT_WORKFLOW_HOST_SOCKET";
 
 export type {
@@ -73,41 +55,25 @@ export type {
   BoundWorkflowRun,
   BoundWorkflowSchedule,
   CancelWorkflowProviderRunRequest,
-  CancelWorkflowRunRequest,
   DeleteWorkflowProviderEventTriggerRequest,
   DeleteWorkflowProviderScheduleRequest,
-  DeleteWorkflowScheduleRequest,
-  GetWorkflowEventTriggerRequest,
   GetWorkflowProviderEventTriggerRequest,
   GetWorkflowProviderRunRequest,
   GetWorkflowProviderScheduleRequest,
-  GetWorkflowRunRequest,
-  GetWorkflowScheduleRequest,
   InvokeWorkflowOperationRequest,
   InvokeWorkflowOperationResponse,
   ListWorkflowProviderEventTriggersRequest,
   ListWorkflowProviderRunsRequest,
   ListWorkflowProviderSchedulesRequest,
-  PauseWorkflowEventTriggerRequest,
   PauseWorkflowProviderEventTriggerRequest,
   PauseWorkflowProviderScheduleRequest,
-  PauseWorkflowScheduleRequest,
-  PublishWorkflowEventRequest,
   PublishWorkflowProviderEventRequest,
-  ResumeWorkflowEventTriggerRequest,
   ResumeWorkflowProviderEventTriggerRequest,
   ResumeWorkflowProviderScheduleRequest,
-  ResumeWorkflowScheduleRequest,
   StartWorkflowProviderRunRequest,
-  StartWorkflowRunRequest,
-  UpsertWorkflowEventTriggerRequest,
   UpsertWorkflowProviderEventTriggerRequest,
   UpsertWorkflowProviderScheduleRequest,
-  UpsertWorkflowScheduleRequest,
   WorkflowEvent,
-  WorkflowEventTrigger,
-  WorkflowRun,
-  WorkflowSchedule,
 };
 export { WorkflowRunStatus };
 
@@ -343,119 +309,6 @@ export function isWorkflowProvider(value: unknown): value is WorkflowProvider {
   );
 }
 
-export class Workflow {
-  private readonly client: Client<typeof WorkflowService>;
-
-  constructor() {
-    const socketPath = process.env[ENV_WORKFLOW_SOCKET];
-    if (!socketPath) {
-      throw new Error(`workflow: ${ENV_WORKFLOW_SOCKET} is not set`);
-    }
-    const transport = createGrpcTransport({
-      baseUrl: "http://localhost",
-      nodeOptions: {
-        createConnection: () => connect(socketPath),
-      },
-    });
-    this.client = createClient(WorkflowService, transport);
-  }
-
-  async startRun(request: StartWorkflowRunRequest): Promise<WorkflowRun> {
-    return await this.client.startRun(request);
-  }
-
-  async getRun(runId: string): Promise<WorkflowRun> {
-    return await this.client.getRun({
-      runId,
-    });
-  }
-
-  async listRuns(): Promise<WorkflowRun[]> {
-    return (await this.client.listRuns({})).runs;
-  }
-
-  async cancelRun(runId: string, reason = ""): Promise<WorkflowRun> {
-    return await this.client.cancelRun({
-      runId,
-      reason,
-    });
-  }
-
-  async upsertSchedule(
-    request: UpsertWorkflowScheduleRequest,
-  ): Promise<WorkflowSchedule> {
-    return await this.client.upsertSchedule(request);
-  }
-
-  async getSchedule(scheduleId: string): Promise<WorkflowSchedule> {
-    return await this.client.getSchedule({
-      scheduleId,
-    });
-  }
-
-  async listSchedules(): Promise<WorkflowSchedule[]> {
-    return (await this.client.listSchedules({})).schedules;
-  }
-
-  async deleteSchedule(scheduleId: string): Promise<void> {
-    await this.client.deleteSchedule({
-      scheduleId,
-    });
-  }
-
-  async pauseSchedule(scheduleId: string): Promise<WorkflowSchedule> {
-    return await this.client.pauseSchedule({
-      scheduleId,
-    });
-  }
-
-  async resumeSchedule(scheduleId: string): Promise<WorkflowSchedule> {
-    return await this.client.resumeSchedule({
-      scheduleId,
-    });
-  }
-
-  async upsertEventTrigger(
-    request: UpsertWorkflowEventTriggerRequest,
-  ): Promise<WorkflowEventTrigger> {
-    return await this.client.upsertEventTrigger(request);
-  }
-
-  async getEventTrigger(triggerId: string): Promise<WorkflowEventTrigger> {
-    return await this.client.getEventTrigger({
-      triggerId,
-    });
-  }
-
-  async listEventTriggers(): Promise<WorkflowEventTrigger[]> {
-    return (await this.client.listEventTriggers({})).triggers;
-  }
-
-  async deleteEventTrigger(triggerId: string): Promise<void> {
-    await this.client.deleteEventTrigger({
-      triggerId,
-    });
-  }
-
-  async pauseEventTrigger(triggerId: string): Promise<WorkflowEventTrigger> {
-    return await this.client.pauseEventTrigger({
-      triggerId,
-    });
-  }
-
-  async resumeEventTrigger(triggerId: string): Promise<WorkflowEventTrigger> {
-    return await this.client.resumeEventTrigger({
-      triggerId,
-    });
-  }
-
-  async publishEvent(event: WorkflowEvent): Promise<void> {
-    await this.client.publishEvent({
-      event,
-    });
-  }
-}
-
 export class WorkflowHost {
   private readonly client: Client<typeof WorkflowHostService>;
 
@@ -480,7 +333,7 @@ export class WorkflowHost {
   }
 }
 
-export function createWorkflowService(
+export function createWorkflowProviderService(
   provider: WorkflowProvider,
 ): Partial<ServiceImpl<typeof WorkflowProviderService>> {
   return {

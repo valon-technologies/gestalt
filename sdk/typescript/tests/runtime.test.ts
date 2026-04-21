@@ -52,7 +52,7 @@ import {
   createAuthService,
   createProviderService,
   createRuntimeService,
-  createWorkflowService,
+  createWorkflowProviderService,
   loadProviderFromTarget,
   main,
   parseRuntimeArgs,
@@ -965,7 +965,7 @@ test("s3 provider target resolves and serves runtime metadata plus object operat
 test("workflow provider target resolves and serves runtime metadata plus workflow operations", async () => {
   const provider = await loadProviderFromTarget(fixturePath("workflow-provider"));
   const runtime = createRuntimeService(provider);
-  const workflow = createWorkflowService(provider as any);
+  const workflow = createWorkflowProviderService(provider as any);
 
   await (runtime.configureProvider as any)(
     create(ConfigureProviderRequestSchema, {

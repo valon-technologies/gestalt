@@ -82,7 +82,7 @@ import { type ProviderKind, slugName } from "./provider.ts";
 import { S3Provider, createS3Service, isS3Provider } from "./s3.ts";
 import {
   WorkflowProvider,
-  createWorkflowService,
+  createWorkflowProviderService,
   isWorkflowProvider,
 } from "./workflow.ts";
 import {
@@ -114,7 +114,7 @@ export const CURRENT_PROTOCOL_VERSION = 2;
  * Command-line usage for the runtime entrypoint.
  */
 export const USAGE = "usage: bun run runtime.ts ROOT PROVIDER_TARGET";
-export { createWorkflowService } from "./workflow.ts";
+export { createWorkflowProviderService } from "./workflow.ts";
 
 /**
  * Parsed arguments for the runtime entrypoint.
@@ -197,7 +197,7 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
     registerService(router, provider) {
       router.service(
         WorkflowProviderService,
-        createWorkflowService(provider as WorkflowProvider),
+        createWorkflowProviderService(provider as WorkflowProvider),
       );
     },
   },

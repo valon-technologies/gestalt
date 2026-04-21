@@ -814,15 +814,13 @@ func workflowStartupCallbackConfig(baseURL string) *config.Config {
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
 	}
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 	})
 	return cfg
 }
 
 type workflowFixture struct {
 	Provider      string
-	Operations    []string
 	Schedules     map[string]workflowFixtureSchedule
 	EventTriggers map[string]workflowFixtureEventTrigger
 }
@@ -1588,8 +1586,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
 			"nightly_sync": {
 				Cron:      "0 2 * * *",
@@ -1663,8 +1660,7 @@ func TestValidateDoesNotApplyConfiguredWorkflowSchedules(t *testing.T) {
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
 			"nightly_sync": {
 				Cron:      "0 2 * * *",
@@ -1717,8 +1713,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
 			"nightly_sync": {
 				Cron:      "0 2 * * *",
@@ -1746,8 +1741,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 	})
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
@@ -1788,8 +1782,7 @@ func TestBootstrapIgnoresUserSchedulesThatOnlyShareCfgPrefix(t *testing.T) {
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 	})
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
@@ -1836,8 +1829,7 @@ func TestBootstrapMovesConfiguredWorkflowSchedulesToNewProvider(t *testing.T) {
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
 			"nightly_sync": {
 				Cron:      "0 2 * * *",
@@ -1866,8 +1858,7 @@ func TestBootstrapMovesConfiguredWorkflowSchedulesToNewProvider(t *testing.T) {
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "backup",
-		Operations: []string{"sync"},
+		Provider: "backup",
 		Schedules: map[string]workflowFixtureSchedule{
 			"nightly_sync": {
 				Cron:      "0 2 * * *",
@@ -1925,8 +1916,7 @@ func TestBootstrapClosesWorkflowProvidersWhenConfigScheduleReconcileFails(t *tes
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 	})
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
@@ -1957,8 +1947,7 @@ func TestBootstrapClosesWorkflowProvidersWhenConfigScheduleReconcileFails(t *tes
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "backup",
-		Operations: []string{"sync"},
+		Provider: "backup",
 		Schedules: map[string]workflowFixtureSchedule{
 			"nightly_sync": {
 				Cron:      "0 2 * * *",
@@ -1988,8 +1977,7 @@ func TestBootstrapDoesNotApplyConfiguredWorkflowSchedulesWhenAuditBuildFails(t *
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
 			"nightly_sync": {
 				Cron:      "0 2 * * *",
@@ -2031,8 +2019,7 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowScheduleID(t *testing.T) {
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
 			"nightly_sync": {
 				Cron:      "0 2 * * *",
@@ -2077,8 +2064,7 @@ func TestBootstrapReAdoptsManagedSchedulesWhenOwnershipStateIsMissing(t *testing
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
 			"nightly_sync": {
 				Cron:      "0 2 * * *",
@@ -2141,8 +2127,7 @@ func TestBootstrapReusesConfiguredWorkflowExecutionRefAcrossUnchangedBootstrap(t
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
 			"nightly_sync": {
 				Cron:      "0 2 * * *",
@@ -2198,8 +2183,7 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowSchedule(t *testing.T) 
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
 			"nightly_sync": {
 				Cron:      "0 2 * * *",
@@ -2222,8 +2206,7 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowSchedule(t *testing.T) 
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 	})
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
@@ -2271,8 +2254,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedulesWhenProviderDropsExec
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
 			"nightly_sync": {
 				Cron:      "0 2 * * *",
@@ -2295,8 +2277,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedulesWhenProviderDropsExec
 	provider.omitScheduleExecutionRef = true
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 	})
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
@@ -2335,8 +2316,7 @@ func TestBootstrapIgnoresMissingOldScheduleDuringWorkflowProviderMove(t *testing
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		Schedules: map[string]workflowFixtureSchedule{
 			"nightly_sync": {
 				Cron:      "0 2 * * *",
@@ -2360,8 +2340,7 @@ func TestBootstrapIgnoresMissingOldScheduleDuringWorkflowProviderMove(t *testing
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "backup",
-		Operations: []string{"sync"},
+		Provider: "backup",
 		Schedules: map[string]workflowFixtureSchedule{
 			"nightly_sync": {
 				Cron:      "0 2 * * *",
@@ -2402,8 +2381,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
 			"task_updated": {
 				Match: workflowFixtureEventMatch{
@@ -2466,8 +2444,7 @@ func TestValidateDoesNotApplyConfiguredWorkflowEventTriggers(t *testing.T) {
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
 			"task_updated": {
 				Match: workflowFixtureEventMatch{
@@ -2521,8 +2498,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowEventTriggers(t *testing.T) {
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
 			"task_updated": {
 				Match: workflowFixtureEventMatch{
@@ -2547,8 +2523,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowEventTriggers(t *testing.T) {
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 	})
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
@@ -2592,8 +2567,7 @@ func TestBootstrapMovesConfiguredWorkflowEventTriggersToNewProvider(t *testing.T
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
 			"task_updated": {
 				Match: workflowFixtureEventMatch{
@@ -2619,8 +2593,7 @@ func TestBootstrapMovesConfiguredWorkflowEventTriggersToNewProvider(t *testing.T
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "backup",
-		Operations: []string{"sync"},
+		Provider: "backup",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
 			"task_updated": {
 				Match: workflowFixtureEventMatch{
@@ -2671,8 +2644,7 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowEventTriggerIDDuringProviderMo
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
 			"task_updated": {
 				Match: workflowFixtureEventMatch{
@@ -2695,8 +2667,7 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowEventTriggerIDDuringProviderMo
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "backup",
-		Operations: []string{"sync"},
+		Provider: "backup",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
 			"task_updated": {
 				Match: workflowFixtureEventMatch{
@@ -2728,8 +2699,7 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowEventTriggerID(t *testing.T) {
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
 			"task_updated": {
 				Match: workflowFixtureEventMatch{
@@ -2775,8 +2745,7 @@ func TestBootstrapReAdoptsManagedEventTriggersWhenOwnershipStateIsMissing(t *tes
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
 			"task_updated": {
 				Match: workflowFixtureEventMatch{
@@ -2838,8 +2807,7 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowEventTrigger(t *testing
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
 			"task_updated": {
 				Match: workflowFixtureEventMatch{
@@ -2862,8 +2830,7 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowEventTrigger(t *testing
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 	})
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
@@ -2908,8 +2875,7 @@ func TestBootstrapIgnoresMissingOldEventTriggerDuringWorkflowProviderMove(t *tes
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
 			"task_updated": {
 				Match: workflowFixtureEventMatch{
@@ -2933,8 +2899,7 @@ func TestBootstrapIgnoresMissingOldEventTriggerDuringWorkflowProviderMove(t *tes
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "backup",
-		Operations: []string{"sync"},
+		Provider: "backup",
 		EventTriggers: map[string]workflowFixtureEventTrigger{
 			"task_updated": {
 				Match: workflowFixtureEventMatch{
@@ -3124,8 +3089,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 				"temporal": {Source: config.ProviderSource{Path: "stub"}},
 			}
 			setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-				Provider:   "temporal",
-				Operations: []string{"sync"},
+				Provider: "temporal",
 			})
 
 			factories := validFactories()
@@ -3211,8 +3175,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
 	}
 	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"sync"},
+		Provider: "temporal",
 	})
 
 	factories := validFactories()
@@ -3413,103 +3376,6 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("workflow managed workloads skip normalized credentialed providers", func(t *testing.T) {
-		t.Parallel()
-
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"ok":true}`))
-		}))
-		defer srv.Close()
-
-		cfg := validConfig()
-		cfg.Plugins = map[string]*config.ProviderEntry{
-			"svc": {
-				ConnectionMode: providermanifestv1.ConnectionMode("either"),
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Spec: &providermanifestv1.Spec{
-						Surfaces: &providermanifestv1.ProviderSurfaces{
-							REST: &providermanifestv1.RESTSurface{
-								BaseURL: srv.URL,
-								Operations: []providermanifestv1.ProviderOperation{
-									{Name: "run", Method: http.MethodPost, Path: "/run"},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-		cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-			"temporal": {Source: config.ProviderSource{Path: "stub"}},
-		}
-		setWorkflowFixture(cfg, "svc", &workflowFixture{
-			Provider:   "temporal",
-			Operations: []string{"run"},
-		})
-
-		factories := validFactories()
-		factories.Workflow = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
-			return &stubWorkflowProvider{}, nil
-		}
-
-		if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
-			t.Fatalf("Validate: %v", err)
-		}
-	})
-
-	t.Run("workflow managed workload tokens stay unique across similar plugin names", func(t *testing.T) {
-		t.Parallel()
-
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"ok":true}`))
-		}))
-		defer srv.Close()
-
-		manifest := &providermanifestv1.Manifest{
-			Spec: &providermanifestv1.Spec{
-				Surfaces: &providermanifestv1.ProviderSurfaces{
-					REST: &providermanifestv1.RESTSurface{
-						BaseURL: srv.URL,
-						Operations: []providermanifestv1.ProviderOperation{
-							{Name: "run", Method: http.MethodPost, Path: "/run"},
-						},
-					},
-				},
-			},
-		}
-
-		cfg := validConfig()
-		cfg.Plugins = map[string]*config.ProviderEntry{
-			"foo-bar": {
-				ResolvedManifest: manifest,
-			},
-			"foo_bar": {
-				ResolvedManifest: manifest,
-			},
-		}
-		cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-			"temporal": {Source: config.ProviderSource{Path: "stub"}},
-		}
-		setWorkflowFixture(cfg, "foo-bar", &workflowFixture{
-			Provider:   "temporal",
-			Operations: []string{"run"},
-		})
-		setWorkflowFixture(cfg, "foo_bar", &workflowFixture{
-			Provider:   "temporal",
-			Operations: []string{"run"},
-		})
-
-		factories := validFactories()
-		factories.Workflow = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
-			return &stubWorkflowProvider{}, nil
-		}
-
-		if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
-			t.Fatalf("Validate: %v", err)
-		}
-	})
 }
 
 func TestBootstrapNoIntegrations(t *testing.T) {
@@ -4727,51 +4593,5 @@ func TestBootstrapRejectsBuiltinEitherProviderWithoutAuthorizationConfig(t *test
 
 	if _, err := bootstrap.Bootstrap(context.Background(), cfg, factories); err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestBootstrapWorkflowAuthorizationSkipsNormalizedCredentialedProvider(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer srv.Close()
-
-	cfg := validConfig()
-	cfg.Plugins = map[string]*config.ProviderEntry{
-		"svc": {
-			ConnectionMode: providermanifestv1.ConnectionMode("either"),
-			ResolvedManifest: &providermanifestv1.Manifest{
-				Spec: &providermanifestv1.Spec{
-					Surfaces: &providermanifestv1.ProviderSurfaces{
-						REST: &providermanifestv1.RESTSurface{
-							BaseURL: srv.URL,
-							Operations: []providermanifestv1.ProviderOperation{
-								{Name: "run", Method: http.MethodPost, Path: "/run"},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"temporal": {Source: config.ProviderSource{Path: "stub"}},
-	}
-	cfg.Authorization = config.AuthorizationConfig{}
-	setWorkflowFixture(cfg, "svc", &workflowFixture{
-		Provider:   "temporal",
-		Operations: []string{"run"},
-	})
-
-	factories := validFactories()
-	factories.Workflow = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
-		return &stubWorkflowProvider{}, nil
-	}
-
-	if _, err := bootstrap.Bootstrap(context.Background(), cfg, factories); err != nil {
-		t.Fatalf("Bootstrap: %v", err)
 	}
 }

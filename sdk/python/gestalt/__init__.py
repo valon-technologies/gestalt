@@ -102,8 +102,6 @@ from ._s3 import (
 )
 from ._workflow import (
     ENV_WORKFLOW_HOST_SOCKET,
-    ENV_WORKFLOW_SOCKET,
-    Workflow,
     WorkflowHost,
 )
 
@@ -132,7 +130,6 @@ __all__ = [
     "ENV_S3_SOCKET",
     "ENV_PLUGIN_INVOKER_SOCKET",
     "ENV_WORKFLOW_HOST_SOCKET",
-    "ENV_WORKFLOW_SOCKET",
     "ExternalTokenValidator",
     "HealthChecker",
     "Index",
@@ -174,7 +171,6 @@ __all__ = [
     "SessionCatalogProvider",
     "SessionTTLProvider",
     "WorkflowProvider",
-    "Workflow",
     "WorkflowHost",
     "WarningsProvider",
     "cache_socket_env",
