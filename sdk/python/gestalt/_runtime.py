@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime as dt
 import functools
 import importlib
@@ -11,14 +13,10 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Final, cast
 
-import grpc
-from google.protobuf import duration_pb2 as _duration_pb2
-from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import json_format
 
 from ._api import Access, Credential, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
-from ._cache import CacheEntry
 from ._catalog import catalog_to_proto
 from ._operations import INTERNAL_ERROR_MESSAGE
 from ._plugin import Plugin, _module_plugin
@@ -40,43 +38,90 @@ from ._providers import (
     WorkflowProvider,
 )
 from ._serialization import json_body
-from .gen.v1 import authentication_pb2 as _authentication_pb2
-from .gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
-from .gen.v1 import cache_pb2 as _cache_pb2
-from .gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
-from .gen.v1 import plugin_pb2 as _plugin_pb2
-from .gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
-from .gen.v1 import runtime_pb2 as _runtime_pb2
-from .gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
-from .gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
-from .gen.v1 import secrets_pb2 as _secrets_pb2
-from .gen.v1 import secrets_pb2_grpc as _secrets_pb2_grpc
-from .gen.v1 import workflow_pb2 as _workflow_pb2
-from .gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
-empty_pb2: Any = _empty_pb2
-duration_pb2: Any = _duration_pb2
-plugin_pb2: Any = _plugin_pb2
-plugin_pb2_grpc: Any = _plugin_pb2_grpc
-runtime_pb2: Any = _runtime_pb2
-runtime_pb2_grpc: Any = _runtime_pb2_grpc
-authentication_pb2: Any = _authentication_pb2
-cache_pb2: Any = _cache_pb2
-cache_pb2_grpc: Any = _cache_pb2_grpc
-s3_pb2_grpc: Any = _s3_pb2_grpc
-secrets_pb2: Any = _secrets_pb2
-secrets_pb2_grpc: Any = _secrets_pb2_grpc
-workflow_pb2: Any = _workflow_pb2
-workflow_pb2_grpc: Any = _workflow_pb2_grpc
+grpc: Any = None
+empty_pb2: Any = None
+duration_pb2: Any = None
+plugin_pb2: Any = None
+plugin_pb2_grpc: Any = None
+runtime_pb2: Any = None
+runtime_pb2_grpc: Any = None
+authentication_pb2: Any = None
+authentication_pb2_grpc: Any = None
+cache_pb2: Any = None
+cache_pb2_grpc: Any = None
+s3_pb2_grpc: Any = None
+secrets_pb2: Any = None
+secrets_pb2_grpc: Any = None
+workflow_pb2: Any = None
+workflow_pb2_grpc: Any = None
 
 ENV_PROVIDER_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
 ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
+ENV_WRITE_MANIFEST_METADATA: Final[str] = "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA"
 CURRENT_PROTOCOL_VERSION: Final[int] = 3
 GRPC_SERVER_MAX_WORKERS: Final[int] = 4
 GRPC_SHUTDOWN_GRACE_SECONDS: Final[int] = 2
 USAGE: Final[str] = (
     "usage: python -m gestalt._runtime ROOT MODULE[:ATTRIBUTE] [RUNTIME_KIND]"
 )
+
+
+def _ensure_grpc_runtime() -> None:
+    global authentication_pb2
+    global authentication_pb2_grpc
+    global cache_pb2
+    global cache_pb2_grpc
+    global duration_pb2
+    global empty_pb2
+    global grpc
+    global plugin_pb2
+    global plugin_pb2_grpc
+    global runtime_pb2
+    global runtime_pb2_grpc
+    global s3_pb2_grpc
+    global secrets_pb2
+    global secrets_pb2_grpc
+    global workflow_pb2
+    global workflow_pb2_grpc
+
+    if grpc is not None:
+        return
+
+    import grpc as _grpc
+    from google.protobuf import duration_pb2 as _duration_pb2
+    from google.protobuf import empty_pb2 as _empty_pb2
+
+    from .gen.v1 import authentication_pb2 as _authentication_pb2
+    from .gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
+    from .gen.v1 import cache_pb2 as _cache_pb2
+    from .gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
+    from .gen.v1 import plugin_pb2 as _plugin_pb2
+    from .gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
+    from .gen.v1 import runtime_pb2 as _runtime_pb2
+    from .gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
+    from .gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
+    from .gen.v1 import secrets_pb2 as _secrets_pb2
+    from .gen.v1 import secrets_pb2_grpc as _secrets_pb2_grpc
+    from .gen.v1 import workflow_pb2 as _workflow_pb2
+    from .gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
+
+    grpc = _grpc
+    duration_pb2 = _duration_pb2
+    empty_pb2 = _empty_pb2
+    plugin_pb2 = _plugin_pb2
+    plugin_pb2_grpc = _plugin_pb2_grpc
+    runtime_pb2 = _runtime_pb2
+    runtime_pb2_grpc = _runtime_pb2_grpc
+    authentication_pb2 = _authentication_pb2
+    authentication_pb2_grpc = _authentication_pb2_grpc
+    cache_pb2 = _cache_pb2
+    cache_pb2_grpc = _cache_pb2_grpc
+    s3_pb2_grpc = _s3_pb2_grpc
+    secrets_pb2 = _secrets_pb2
+    secrets_pb2_grpc = _secrets_pb2_grpc
+    workflow_pb2 = _workflow_pb2
+    workflow_pb2_grpc = _workflow_pb2_grpc
 
 
 @dataclass(frozen=True)
@@ -91,6 +136,7 @@ def _grpc_handler(label: str):
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(self, request, context):
+            _ensure_grpc_runtime()
             try:
                 return fn(self, request, context)
             except Exception as error:
@@ -108,6 +154,7 @@ def _abort_if_protocol_version_mismatch(
     protocol_version: int,
     context: Any,
 ) -> bool:
+    _ensure_grpc_runtime()
     if protocol_version == CURRENT_PROTOCOL_VERSION:
         return False
     context.abort(
@@ -122,6 +169,7 @@ def serve(
     *,
     runtime_kind: ProviderKind | str | None = None,
 ) -> None:
+    _ensure_grpc_runtime()
     socket_path = _socket_path_from_env()
     _remove_stale_socket(socket_path)
 
@@ -151,12 +199,16 @@ def main(argv: list[str] | None = None) -> int:
         target.name = runtime_args.plugin_name
 
     catalog_path = os.environ.get(ENV_WRITE_CATALOG)
-    if catalog_path:
+    manifest_metadata_path = os.environ.get(ENV_WRITE_MANIFEST_METADATA)
+    if catalog_path or manifest_metadata_path:
         if not isinstance(target, Plugin):
             raise RuntimeError(
-                "catalog export is only supported for integration plugins"
+                "catalog and manifest metadata export are only supported for integration plugins"
             )
-        target.write_catalog(catalog_path)
+        if catalog_path:
+            target.write_catalog(catalog_path)
+        if manifest_metadata_path:
+            target.write_manifest_metadata(manifest_metadata_path)
         return 0
 
     serve(target, runtime_kind=runtime_args.runtime_kind)
@@ -269,6 +321,7 @@ def _register_shutdown_handlers(server: Any, close_provider: Any) -> None:
 def _register_services(
     *, server: Any, servable: Plugin | PluginProviderAdapter
 ) -> None:
+    _ensure_grpc_runtime()
     if isinstance(servable, Plugin):
         plugin_pb2_grpc.add_IntegrationProviderServicer_to_server(
             _provider_servicer(plugin=servable),
@@ -329,11 +382,12 @@ def _authentication_runtime_plugin(
 
 
 def _register_authentication_services(server: Any, provider: PluginProvider) -> None:
+    _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
         _runtime_servicer(provider=provider, kind=ProviderKind.AUTHENTICATION),
         server,
     )
-    _authentication_pb2_grpc.add_AuthenticationProviderServicer_to_server(
+    authentication_pb2_grpc.add_AuthenticationProviderServicer_to_server(
         _authentication_servicer(provider=provider),
         server,
     )
@@ -348,6 +402,7 @@ def _s3_runtime_plugin(provider: S3Provider) -> PluginProviderAdapter:
 
 
 def _register_s3_services(server: Any, provider: PluginProvider) -> None:
+    _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
         _runtime_servicer(provider=provider, kind=ProviderKind.S3),
         server,
@@ -364,6 +419,7 @@ def _workflow_runtime_plugin(provider: WorkflowProvider) -> PluginProviderAdapte
 
 
 def _register_workflow_services(server: Any, provider: PluginProvider) -> None:
+    _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
         _runtime_servicer(provider=provider, kind=ProviderKind.WORKFLOW),
         server,
@@ -380,6 +436,7 @@ def _secrets_runtime_plugin(provider: SecretsProvider) -> PluginProviderAdapter:
 
 
 def _register_secrets_services(server: Any, provider: PluginProvider) -> None:
+    _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
         _runtime_servicer(provider=provider, kind=ProviderKind.SECRETS),
         server,
@@ -399,6 +456,7 @@ def _cache_runtime_plugin(provider: CacheProvider) -> PluginProviderAdapter:
 
 
 def _register_cache_services(server: Any, provider: PluginProvider) -> None:
+    _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
         _runtime_servicer(provider=provider, kind=ProviderKind.CACHE),
         server,
@@ -410,6 +468,7 @@ def _register_cache_services(server: Any, provider: PluginProvider) -> None:
 
 
 def _provider_servicer(*, plugin: Plugin) -> Any:
+    _ensure_grpc_runtime()
     class ProviderServicer(plugin_pb2_grpc.IntegrationProviderServicer):
         def GetMetadata(self, _request: Any, _context: Any) -> Any:
             return plugin_pb2.ProviderMetadata(
@@ -481,6 +540,7 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
 
 
 def _runtime_servicer(*, provider: PluginProvider, kind: ProviderKind) -> Any:
+    _ensure_grpc_runtime()
     class RuntimeServicer(runtime_pb2_grpc.ProviderLifecycleServicer):
         def GetProviderIdentity(self, _request: Any, _context: Any) -> Any:
             metadata = _provider_metadata(provider=provider, kind=kind)
@@ -525,9 +585,10 @@ def _runtime_servicer(*, provider: PluginProvider, kind: ProviderKind) -> Any:
 
 
 def _authentication_servicer(*, provider: PluginProvider) -> Any:
+    _ensure_grpc_runtime()
     auth_provider = cast(AuthenticationProvider, provider)
 
-    class AuthenticationServicer(_authentication_pb2_grpc.AuthenticationProviderServicer):
+    class AuthenticationServicer(authentication_pb2_grpc.AuthenticationProviderServicer):
         @_grpc_handler("begin login")
         def BeginLogin(self, request: Any, context: Any) -> Any:
             response = auth_provider.begin_login(request)
@@ -585,6 +646,7 @@ def _authentication_servicer(*, provider: PluginProvider) -> Any:
 
 
 def _secrets_servicer(*, provider: PluginProvider) -> Any:
+    _ensure_grpc_runtime()
     secrets_provider = cast(SecretsProvider, provider)
 
     class SecretsServicer(secrets_pb2_grpc.SecretsProviderServicer):
@@ -597,6 +659,9 @@ def _secrets_servicer(*, provider: PluginProvider) -> Any:
 
 
 def _cache_servicer(*, provider: PluginProvider) -> Any:
+    _ensure_grpc_runtime()
+    from ._cache import CacheEntry
+
     cache_provider = cast(CacheProvider, provider)
 
     class CacheServicer(cache_pb2_grpc.CacheServicer):
@@ -765,6 +830,7 @@ def _provider_warnings(provider: PluginProvider) -> list[str]:
 
 
 def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
+    _ensure_grpc_runtime()
     normalized = _normalized_runtime_kind(kind)
     return {
         ProviderKind.INTEGRATION: runtime_pb2.ProviderKind.PROVIDER_KIND_INTEGRATION,

@@ -13,6 +13,7 @@ mod generated;
 /// IndexedDB-style datastore client and provider helpers.
 pub mod indexeddb;
 mod invoker;
+mod manifest_metadata;
 mod provider_server;
 mod router;
 mod rpc_status;
@@ -41,11 +42,15 @@ pub use cache::{
     cache_socket_env,
 };
 pub use catalog::{Catalog, CatalogOperation};
-pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
+pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET, ENV_WRITE_MANIFEST_METADATA};
 pub use error::{Error, Result};
 pub use indexeddb::{Cursor, CursorDirection, IndexedDB, IndexedDBError};
 pub use invoker::{
     ENV_PLUGIN_INVOKER_SOCKET, InvocationGrant, InvokeOptions, PluginInvoker, PluginInvokerError,
+};
+pub use manifest_metadata::{
+    HTTPAck, HTTPAuthScheme, HTTPBinding, HTTPIn, HTTPMediaType, HTTPRequestBody, HTTPSecretRef,
+    HTTPSecurityScheme, HTTPSecuritySchemeType, PluginManifestMetadata,
 };
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
@@ -94,7 +99,14 @@ macro_rules! export_provider {
 
         pub fn __gestalt_write_catalog(name: &str, path: &str) -> $crate::Result<()> {
             let router = $crate::into_router_result($router())?.with_name(name);
-            $crate::runtime::write_catalog_path(&router, path)
+            $crate::runtime::write_catalog_path(&router, path)?;
+            $crate::runtime::maybe_write_manifest_metadata(&router)?;
+            Ok(())
+        }
+
+        pub fn __gestalt_write_manifest_metadata(_name: &str, path: &str) -> $crate::Result<()> {
+            let router = $crate::into_router_result($router())?;
+            $crate::runtime::write_manifest_metadata_path(&router, path)
         }
     };
 }

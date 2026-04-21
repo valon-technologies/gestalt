@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -87,6 +88,100 @@ func TestServeAuthenticationProviderClosesProviderOnShutdown(t *testing.T) {
 	if resp.GetAuthorizationUrl() == "" {
 		t.Fatal("BeginLogin returned empty authorization URL")
 	}
+}
+
+func TestServeProviderWritesStaticArtifacts(t *testing.T) {
+	t.Run("catalog and manifest metadata", func(t *testing.T) {
+		outputDir := filepath.Join(t.TempDir(), "generated")
+		catalogPath := filepath.Join(outputDir, "catalog.yaml")
+		metadataPath := filepath.Join(outputDir, "manifest-metadata.yaml")
+		t.Setenv("GESTALT_PLUGIN_WRITE_CATALOG", catalogPath)
+		t.Setenv("GESTALT_PLUGIN_WRITE_MANIFEST_METADATA", metadataPath)
+
+		router := stubRouter.WithManifestMetadata(gestalt.ManifestMetadata{
+			SecuritySchemes: map[string]gestalt.HTTPSecurityScheme{
+				"slack": {
+					Type: gestalt.HTTPSecuritySchemeTypeSlackSignature,
+					Secret: &gestalt.HTTPSecretRef{
+						Env: "SLACK_SIGNING_SECRET",
+					},
+				},
+			},
+			HTTP: map[string]gestalt.HTTPBinding{
+				"command": {
+					Path:     "/command",
+					Method:   "POST",
+					Security: "slack",
+					Target:   "test_op",
+					RequestBody: &gestalt.HTTPRequestBody{
+						Required: true,
+						Content: map[string]gestalt.HTTPMediaType{
+							"application/x-www-form-urlencoded": {},
+						},
+					},
+					Ack: &gestalt.HTTPAck{
+						Status: 200,
+						Body: map[string]any{
+							"response_type": "ephemeral",
+							"text":          "Working on it...",
+						},
+					},
+				},
+			},
+		})
+
+		if err := gestalt.ServeProvider(context.Background(), &stubProvider{}, router); err != nil {
+			t.Fatalf("ServeProvider: %v", err)
+		}
+
+		catalogData, err := os.ReadFile(catalogPath)
+		if err != nil {
+			t.Fatalf("ReadFile(catalog): %v", err)
+		}
+		catalogYAML := string(catalogData)
+		for _, want := range []string{
+			"operations:",
+			"id: test_op",
+			"method: POST",
+		} {
+			if !strings.Contains(catalogYAML, want) {
+				t.Fatalf("catalog YAML missing %q:\n%s", want, catalogYAML)
+			}
+		}
+
+		metadataData, err := os.ReadFile(metadataPath)
+		if err != nil {
+			t.Fatalf("ReadFile(manifest metadata): %v", err)
+		}
+		metadataYAML := string(metadataData)
+		for _, want := range []string{
+			"securitySchemes:",
+			"type: slack_signature",
+			"env: SLACK_SIGNING_SECRET",
+			"http:",
+			"path: /command",
+			"target: test_op",
+			"application/x-www-form-urlencoded",
+			"response_type: ephemeral",
+		} {
+			if !strings.Contains(metadataYAML, want) {
+				t.Fatalf("manifest metadata YAML missing %q:\n%s", want, metadataYAML)
+			}
+		}
+	})
+
+	t.Run("manifest metadata omitted when unset on router", func(t *testing.T) {
+		metadataPath := filepath.Join(t.TempDir(), "manifest-metadata.yaml")
+		t.Setenv("GESTALT_PLUGIN_WRITE_MANIFEST_METADATA", metadataPath)
+
+		if err := gestalt.ServeProvider(context.Background(), &stubProvider{}, stubRouter); err != nil {
+			t.Fatalf("ServeProvider: %v", err)
+		}
+
+		if _, err := os.Stat(metadataPath); !os.IsNotExist(err) {
+			t.Fatalf("manifest metadata file exists, err = %v, want not exists", err)
+		}
+	})
 }
 
 type closeTracker struct {

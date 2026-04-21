@@ -1,11 +1,13 @@
 """Plugin registration and decorator helpers for integration providers."""
 
+import copy
 import inspect
 import json
 import pathlib
 import re
 import sys
 import types
+from collections.abc import Mapping
 from typing import Any, Final
 
 import yaml
@@ -17,6 +19,13 @@ from ._catalog import (
     build_catalog,
     catalog_to_dict,
     write_catalog,
+)
+from ._manifest_metadata import (
+    HTTPBinding,
+    HTTPSecurityScheme,
+    PluginManifestMetadata,
+    has_plugin_manifest_metadata,
+    write_manifest_metadata,
 )
 from ._operations import (
     OperationDefinition,
@@ -49,12 +58,51 @@ class Plugin(SessionCatalogProvider):
             return {"query": params.query}
     """
 
-    def __init__(self, name: str, *, module_name: str | None = None) -> None:
+    def __init__(
+        self,
+        name: str,
+        *,
+        module_name: str | None = None,
+        security_schemes: Mapping[str, HTTPSecurityScheme] | None = None,
+        securitySchemes: Mapping[str, HTTPSecurityScheme] | None = None,
+        http: Mapping[str, HTTPBinding] | None = None,
+    ) -> None:
+        if security_schemes is not None and securitySchemes is not None:
+            raise ValueError(
+                "security_schemes and securitySchemes cannot both be provided"
+            )
+
         self.name = _slug_name(name)
         self._module_name = module_name
         self._operations: dict[str, OperationDefinition] = {}
         self._configure_handler: Any = None
         self._session_catalog_handler: tuple[Any, bool] | None = None
+        self._security_schemes = copy.deepcopy(
+            dict(
+                security_schemes
+                if security_schemes is not None
+                else securitySchemes or {}
+            )
+        )
+        self._http = copy.deepcopy(dict(http or {}))
+
+    @property
+    def security_schemes(self) -> dict[str, HTTPSecurityScheme]:
+        """Return generated manifest security schemes."""
+
+        return copy.deepcopy(self._security_schemes)
+
+    @property
+    def securitySchemes(self) -> dict[str, HTTPSecurityScheme]:
+        """TypeScript-shaped alias for generated manifest security schemes."""
+
+        return self.security_schemes
+
+    @property
+    def http(self) -> dict[str, HTTPBinding]:
+        """Return generated hosted HTTP binding metadata."""
+
+        return copy.deepcopy(self._http)
 
     @classmethod
     def from_manifest(
@@ -160,6 +208,29 @@ class Plugin(SessionCatalogProvider):
         """Write the static plugin catalog to disk."""
 
         write_catalog(path, catalog=self._static_catalog())
+
+    def static_manifest_metadata(self) -> PluginManifestMetadata:
+        """Return generated manifest-backed HTTP/security metadata."""
+
+        metadata: PluginManifestMetadata = {}
+        if self._security_schemes:
+            metadata["securitySchemes"] = copy.deepcopy(self._security_schemes)
+        if self._http:
+            metadata["http"] = copy.deepcopy(self._http)
+        return metadata
+
+    def supports_manifest_metadata(self) -> bool:
+        """Report whether the plugin exposes generated manifest metadata."""
+
+        return has_plugin_manifest_metadata(self.static_manifest_metadata())
+
+    def write_manifest_metadata(self, path: str | pathlib.Path) -> None:
+        """Write generated manifest metadata to disk as YAML."""
+
+        metadata = self.static_manifest_metadata()
+        if not has_plugin_manifest_metadata(metadata):
+            return
+        write_manifest_metadata(path, metadata=metadata)
 
     def supports_session_catalog(self) -> bool:
         """Report whether the plugin exposes a session catalog hook."""

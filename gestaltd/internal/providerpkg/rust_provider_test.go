@@ -277,6 +277,102 @@ func TestPrepareSourceManifest_GeneratesStaticCatalogForRustProvider(t *testing.
 	}
 }
 
+func TestPrepareSourceManifest_MergesGeneratedRustManifestMetadata(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake cargo test fixture is POSIX-only")
+	}
+
+	root := t.TempDir()
+	copyRustProviderFixture(t, root)
+
+	targetTriple, err := rustTargetTriple(runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		t.Fatalf("rustTargetTriple(host): %v", err)
+	}
+
+	fakeCargoDir := t.TempDir()
+	writeFakeCargo(t, filepath.Join(fakeCargoDir, "cargo"), fakeCargoConfig{
+		ExpectedPluginName:   "provider-rust",
+		ExpectedTarget:       targetTriple,
+		ExpectedServeExport:  "__gestalt_serve",
+		ExpectedCatalogWrite: true,
+		GeneratedCatalog:     "provider-rust",
+		GeneratedManifestMetadata: `securitySchemes:
+  slack:
+    type: slack_signature
+    secret:
+      env: SLACK_SIGNING_SECRET
+http:
+  command:
+    path: /command
+    method: POST
+    security: slack
+    target: handle_command
+    requestBody:
+      required: true
+      content:
+        application/x-www-form-urlencoded: {}
+    ack:
+      status: 200
+      body:
+        response_type: ephemeral
+        text: Working on it...`,
+	})
+	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	manifestPath := filepath.Join(root, "manifest.yaml")
+	preparedData, preparedManifest, err := PrepareSourceManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("PrepareSourceManifest: %v", err)
+	}
+	if preparedManifest == nil || preparedManifest.Spec == nil {
+		t.Fatalf("prepared manifest = %+v, want provider metadata", preparedManifest)
+	}
+	if !containsString(string(preparedData), "securitySchemes:") {
+		t.Fatalf("prepared manifest data = %q, want merged security scheme metadata", string(preparedData))
+	}
+	if !containsString(string(preparedData), "path: /command") {
+		t.Fatalf("prepared manifest data = %q, want merged HTTP binding metadata", string(preparedData))
+	}
+
+	scheme := preparedManifest.Spec.SecuritySchemes["slack"]
+	if scheme == nil {
+		t.Fatal(`manifest.Spec.SecuritySchemes["slack"] = nil, want generated scheme`)
+	}
+	if scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeSlackSignature {
+		t.Fatalf("scheme.Type = %q, want %q", scheme.Type, providermanifestv1.HTTPSecuritySchemeTypeSlackSignature)
+	}
+	if scheme.Secret == nil || scheme.Secret.Env != "SLACK_SIGNING_SECRET" {
+		t.Fatalf("scheme.Secret = %+v, want env-backed secret", scheme.Secret)
+	}
+
+	binding := preparedManifest.Spec.HTTP["command"]
+	if binding == nil {
+		t.Fatal(`manifest.Spec.HTTP["command"] = nil, want generated binding`)
+	}
+	if binding.Path != "/command" {
+		t.Fatalf("binding.Path = %q, want %q", binding.Path, "/command")
+	}
+	if binding.Method != "POST" {
+		t.Fatalf("binding.Method = %q, want %q", binding.Method, "POST")
+	}
+	if binding.Security != "slack" {
+		t.Fatalf("binding.Security = %q, want %q", binding.Security, "slack")
+	}
+	if binding.Target != "handle_command" {
+		t.Fatalf("binding.Target = %q, want %q", binding.Target, "handle_command")
+	}
+	if binding.RequestBody == nil {
+		t.Fatal("binding.RequestBody = nil, want request body metadata")
+	}
+	if _, ok := binding.RequestBody.Content["application/x-www-form-urlencoded"]; !ok {
+		t.Fatalf("binding.RequestBody.Content = %#v, want form content type", binding.RequestBody.Content)
+	}
+	if binding.Ack == nil || binding.Ack.Status != 200 {
+		t.Fatalf("binding.Ack = %+v, want 200 ack metadata", binding.Ack)
+	}
+}
+
 func TestRustTargetTriple(t *testing.T) {
 	t.Parallel()
 
@@ -331,11 +427,12 @@ members = ["provider"]
 }
 
 type fakeCargoConfig struct {
-	ExpectedPluginName   string
-	ExpectedTarget       string
-	ExpectedServeExport  string
-	ExpectedCatalogWrite bool
-	GeneratedCatalog     string
+	ExpectedPluginName        string
+	ExpectedTarget            string
+	ExpectedServeExport       string
+	ExpectedCatalogWrite      bool
+	GeneratedCatalog          string
+	GeneratedManifestMetadata string
 }
 
 func writeFakeCargo(t *testing.T, path string, cfg fakeCargoConfig) {
@@ -405,6 +502,7 @@ operations:
     method: GET
 YAML
 fi
+` + fakeCargoManifestMetadataWrite(cfg.GeneratedManifestMetadata) + `
 exit 0
 EOF
 chmod +x "$binary"
@@ -454,6 +552,17 @@ fi`
 	return `if grep -Fq 'provider_plugin::__gestalt_write_catalog(PLUGIN_NAME, &path)?' "$main_rs"; then
   echo "unexpected write-catalog export in wrapper source" >&2
   exit 1
+fi`
+}
+
+func fakeCargoManifestMetadataWrite(metadata string) string {
+	if strings.TrimSpace(metadata) == "" {
+		return ""
+	}
+	return `if [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
+  cat > "$GESTALT_PLUGIN_WRITE_MANIFEST_METADATA" <<'YAML'
+` + metadata + `
+YAML
 fi`
 }
 

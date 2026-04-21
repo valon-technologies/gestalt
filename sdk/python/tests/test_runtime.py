@@ -223,8 +223,37 @@ class RequestTests(unittest.TestCase):
 
 
 class MainEntrypointTests(unittest.TestCase):
-    def test_writes_catalog_when_env_is_set(self) -> None:
-        plugin = Plugin("test-plugin")
+    def test_writes_catalog_and_manifest_metadata_when_envs_are_set(self) -> None:
+        plugin = Plugin(
+            "test-plugin",
+            securitySchemes={
+                "slack": {
+                    "type": "slack_signature",
+                    "secret": {"env": "SLACK_SIGNING_SECRET"},
+                }
+            },
+            http={
+                "command": {
+                    "path": "/command",
+                    "method": "POST",
+                    "security": "slack",
+                    "target": "noop",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/x-www-form-urlencoded": {},
+                        },
+                    },
+                    "ack": {
+                        "status": 200,
+                        "body": {
+                            "response_type": "ephemeral",
+                            "text": "Working on it...",
+                        },
+                    },
+                }
+            },
+        )
 
         @plugin.operation
         def noop() -> str:
@@ -232,11 +261,15 @@ class MainEntrypointTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             catalog_path = pathlib.Path(tmpdir) / "catalog.yaml"
+            metadata_path = pathlib.Path(tmpdir) / "manifest-metadata.yaml"
             with (
                 mock.patch.object(_runtime, "_load_target", return_value=plugin),
                 mock.patch.dict(
                     _runtime.os.environ,
-                    {_runtime.ENV_WRITE_CATALOG: str(catalog_path)},
+                    {
+                        _runtime.ENV_WRITE_CATALOG: str(catalog_path),
+                        _runtime.ENV_WRITE_MANIFEST_METADATA: str(metadata_path),
+                    },
                     clear=True,
                 ),
             ):
@@ -244,6 +277,16 @@ class MainEntrypointTests(unittest.TestCase):
 
             self.assertEqual(result, 0)
             self.assertTrue(catalog_path.exists())
+            self.assertTrue(metadata_path.exists())
+            metadata = metadata_path.read_text(encoding="utf-8")
+            self.assertIn("securitySchemes:", metadata)
+            self.assertIn("type: slack_signature", metadata)
+            self.assertIn("env: SLACK_SIGNING_SECRET", metadata)
+            self.assertIn("http:", metadata)
+            self.assertIn("path: /command", metadata)
+            self.assertIn("target: noop", metadata)
+            self.assertIn("application/x-www-form-urlencoded", metadata)
+            self.assertIn("response_type: ephemeral", metadata)
 
     def test_returns_usage_error_for_bad_args(self) -> None:
         result = _runtime.main(["/only-one-arg"])

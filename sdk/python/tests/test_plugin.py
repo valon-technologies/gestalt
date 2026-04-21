@@ -234,6 +234,58 @@ class PluginCatalogTests(unittest.TestCase):
             content = path.read_text(encoding="utf-8")
             self.assertIn("test-plugin", content)
 
+    def test_static_manifest_metadata(self) -> None:
+        plugin = Plugin(
+            "test-plugin",
+            securitySchemes={
+                "slack": {
+                    "type": "slack_signature",
+                    "secret": {"env": "SLACK_SIGNING_SECRET"},
+                }
+            },
+            http={
+                "command": {
+                    "path": "/command",
+                    "method": "POST",
+                    "security": "slack",
+                    "target": "handle_command",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/x-www-form-urlencoded": {},
+                        },
+                    },
+                    "ack": {
+                        "status": 200,
+                        "body": {
+                            "response_type": "ephemeral",
+                            "text": "Working on it...",
+                        },
+                    },
+                }
+            },
+        )
+
+        self.assertTrue(plugin.supports_manifest_metadata())
+        self.assertEqual(
+            plugin.securitySchemes["slack"]["secret"]["env"],
+            "SLACK_SIGNING_SECRET",
+        )
+        self.assertEqual(plugin.http["command"]["path"], "/command")
+
+        metadata = plugin.static_manifest_metadata()
+        self.assertEqual(
+            metadata["securitySchemes"]["slack"]["type"],
+            "slack_signature",
+        )
+        self.assertEqual(metadata["http"]["command"]["target"], "handle_command")
+
+        metadata["securitySchemes"]["slack"]["type"] = "none"
+        self.assertEqual(
+            plugin.static_manifest_metadata()["securitySchemes"]["slack"]["type"],
+            "slack_signature",
+        )
+
 
 class PluginNameTests(unittest.TestCase):
     """Tests for plugin name normalization."""
