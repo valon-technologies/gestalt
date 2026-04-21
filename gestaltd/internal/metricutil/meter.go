@@ -75,10 +75,7 @@ func NewFloat64Histogram(meter metric.Meter, name, desc, unit string) metric.Flo
 }
 
 func NormalizeConnectionMode(mode core.ConnectionMode) string {
-	if mode == "" {
-		return string(core.ConnectionModeUser)
-	}
-	return string(mode)
+	return string(core.NormalizeConnectionMode(mode))
 }
 
 func meterProviderCacheKey(provider metric.MeterProvider) (string, bool) {

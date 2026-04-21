@@ -18,20 +18,22 @@ func (s *Server) nowUTCSecond() time.Time {
 
 func (s *Server) issueAPIToken(ctx context.Context, userID, name, scopes string, nonExpiring bool) (*core.APIToken, string, error) {
 	return s.issueOwnedAPIToken(ctx, &core.APIToken{
-		UserID:    userID,
-		OwnerKind: core.APITokenOwnerKindUser,
-		OwnerID:   userID,
-		Name:      name,
-		Scopes:    scopes,
+		UserID:              userID,
+		OwnerKind:           core.APITokenOwnerKindUser,
+		OwnerID:             userID,
+		CredentialSubjectID: principal.UserSubjectID(userID),
+		Name:                name,
+		Scopes:              scopes,
 	}, nonExpiring)
 }
 
-func (s *Server) issueManagedIdentityAPIToken(ctx context.Context, identityID, name string, permissions []core.AccessPermission, nonExpiring bool) (*core.APIToken, string, error) {
+func (s *Server) issueManagedIdentityAPIToken(ctx context.Context, identityID, credentialSubjectID, name string, permissions []core.AccessPermission, nonExpiring bool) (*core.APIToken, string, error) {
 	return s.issueOwnedAPIToken(ctx, &core.APIToken{
-		OwnerKind:   core.APITokenOwnerKindManagedIdentity,
-		OwnerID:     identityID,
-		Name:        name,
-		Permissions: append([]core.AccessPermission(nil), permissions...),
+		OwnerKind:           core.APITokenOwnerKindManagedIdentity,
+		OwnerID:             identityID,
+		CredentialSubjectID: credentialSubjectID,
+		Name:                name,
+		Permissions:         append([]core.AccessPermission(nil), permissions...),
 	}, nonExpiring)
 }
 

@@ -168,7 +168,7 @@ func (plan StaticConnectionPlan) ConnectionMode() core.ConnectionMode {
 	needIdentity := false
 
 	addMode := func(mode core.ConnectionMode) {
-		switch mode {
+		switch core.NormalizeConnectionMode(mode) {
 		case core.ConnectionModeUser:
 			needUser = true
 		case core.ConnectionModeIdentity:
@@ -186,9 +186,8 @@ func (plan StaticConnectionPlan) ConnectionMode() core.ConnectionMode {
 		return core.ConnectionModeUser
 	case needIdentity:
 		return core.ConnectionModeIdentity
-	default:
-		return core.ConnectionModeNone
 	}
+	return core.ConnectionModeNone
 }
 
 func (plan StaticConnectionPlan) validateConnectionModes() error {
@@ -196,8 +195,8 @@ func (plan StaticConnectionPlan) validateConnectionModes() error {
 	needIdentity := false
 
 	addMode := func(scope string, mode core.ConnectionMode) error {
-		switch mode {
-		case "", core.ConnectionModeNone:
+		switch core.NormalizeConnectionMode(mode) {
+		case core.ConnectionModeNone:
 			return nil
 		case core.ConnectionModeUser:
 			needUser = true
@@ -332,7 +331,7 @@ func namedConnectionNames(plugin *ProviderEntry, manifestPlugin *providermanifes
 
 func connectionModeForConnection(conn ConnectionDef) core.ConnectionMode {
 	if conn.Mode != "" {
-		return core.ConnectionMode(conn.Mode)
+		return core.NormalizeConnectionMode(core.ConnectionMode(conn.Mode))
 	}
 	switch conn.Auth.Type {
 	case "", providermanifestv1.AuthTypeNone:

@@ -16,6 +16,7 @@ type User struct {
 type IntegrationToken struct {
 	ID                string
 	UserID            string
+	SubjectID         string
 	Integration       string
 	Connection        string
 	Instance          string
@@ -36,19 +37,20 @@ type AccessPermission struct {
 }
 
 type APIToken struct {
-	ID          string
-	IdentityID  string
-	UserID      string
-	OwnerKind   string
-	OwnerID     string
-	TokenKind   string
-	Name        string
-	HashedToken string
-	Scopes      string
-	Permissions []AccessPermission
-	ExpiresAt   *time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID                  string
+	IdentityID          string
+	UserID              string
+	OwnerKind           string
+	OwnerID             string
+	CredentialSubjectID string
+	TokenKind           string
+	Name                string
+	HashedToken         string
+	Scopes              string
+	Permissions         []AccessPermission
+	ExpiresAt           *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 const (

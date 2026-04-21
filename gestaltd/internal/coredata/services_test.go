@@ -662,7 +662,7 @@ func TestTokenService(t *testing.T) {
 			t.Fatalf("StoreToken: %v", err)
 		}
 
-		got, err := svc.Tokens.Token(ctx, user.ID, "test-svc", "default", "inst-1")
+		got, err := svc.Tokens.Token(ctx, principal.UserSubjectID(user.ID), "test-svc", "default", "inst-1")
 		if err != nil {
 			t.Fatalf("Token: %v", err)
 		}
@@ -721,7 +721,7 @@ func TestTokenService(t *testing.T) {
 			}
 		}
 
-		tokens, err := svc.Tokens.ListTokens(ctx, userA.ID)
+		tokens, err := svc.Tokens.ListTokens(ctx, principal.UserSubjectID(userA.ID))
 		if err != nil {
 			t.Fatalf("ListTokens: %v", err)
 		}
@@ -746,7 +746,7 @@ func TestTokenService(t *testing.T) {
 			}
 		}
 
-		tokens, err := svc.Tokens.ListTokensForIntegration(ctx, user.ID, "svc-a")
+		tokens, err := svc.Tokens.ListTokensForIntegration(ctx, principal.UserSubjectID(user.ID), "svc-a")
 		if err != nil {
 			t.Fatalf("ListTokensForIntegration: %v", err)
 		}
@@ -771,7 +771,7 @@ func TestTokenService(t *testing.T) {
 			}
 		}
 
-		tokens, err := svc.Tokens.ListTokensForConnection(ctx, user.ID, "svc", "conn-a")
+		tokens, err := svc.Tokens.ListTokensForConnection(ctx, principal.UserSubjectID(user.ID), "svc", "conn-a")
 		if err != nil {
 			t.Fatalf("ListTokensForConnection: %v", err)
 		}
@@ -799,7 +799,7 @@ func TestTokenService(t *testing.T) {
 			t.Fatalf("DeleteToken: %v", err)
 		}
 
-		_, err := svc.Tokens.Token(ctx, user.ID, "svc", "default", "i1")
+		_, err := svc.Tokens.Token(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
 		if err != core.ErrNotFound {
 			t.Fatalf("Token after delete = %v, want ErrNotFound", err)
 		}
@@ -838,7 +838,7 @@ func TestTokenService(t *testing.T) {
 			t.Fatalf("second StoreToken: %v", err)
 		}
 
-		got, err := svc.Tokens.Token(ctx, user.ID, "svc", "default", "i1")
+		got, err := svc.Tokens.Token(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
 		if err != nil {
 			t.Fatalf("Token: %v", err)
 		}
@@ -849,7 +849,7 @@ func TestTokenService(t *testing.T) {
 			t.Errorf("AccessToken = %q, want %q", got.AccessToken, "updated")
 		}
 
-		tokens, err := svc.Tokens.ListTokensForConnection(ctx, user.ID, "svc", "default")
+		tokens, err := svc.Tokens.ListTokensForConnection(ctx, principal.UserSubjectID(user.ID), "svc", "default")
 		if err != nil {
 			t.Fatalf("ListTokensForConnection: %v", err)
 		}
@@ -918,7 +918,7 @@ func TestTokenService(t *testing.T) {
 			t.Fatalf("Put duplicate raw token: %v", err)
 		}
 
-		tokens, err := svc.Tokens.ListTokensForConnection(ctx, user.ID, "svc", "default")
+		tokens, err := svc.Tokens.ListTokensForConnection(ctx, principal.UserSubjectID(user.ID), "svc", "default")
 		if err != nil {
 			t.Fatalf("ListTokensForConnection: %v", err)
 		}
@@ -1128,7 +1128,7 @@ func TestTokenService(t *testing.T) {
 			}
 		}
 
-		tokens, err := svc.Tokens.ListTokens(ctx, user.ID)
+		tokens, err := svc.Tokens.ListTokens(ctx, principal.UserSubjectID(user.ID))
 		if err != nil {
 			t.Fatalf("ListTokens: %v", err)
 		}
@@ -1176,7 +1176,7 @@ func TestTokenService(t *testing.T) {
 			t.Error("refresh_token_encrypted should not be empty")
 		}
 
-		got, err := svc.Tokens.Token(ctx, user.ID, "svc", "default", "i1")
+		got, err := svc.Tokens.Token(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
 		if err != nil {
 			t.Fatalf("Token: %v", err)
 		}

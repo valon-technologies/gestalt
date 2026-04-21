@@ -114,7 +114,13 @@ func (s *Server) createManagedIdentityToken(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	apiToken, plaintext, err := s.issueManagedIdentityAPIToken(r.Context(), actor.Identity.ID, req.Name, permissions, false)
+	credentialSubjectID := principal.EffectiveCredentialSubjectID(viewer)
+	if credentialSubjectID == "" {
+		auditErr = errors.New("viewer subject is required")
+		writeError(w, http.StatusBadRequest, "viewer subject is required")
+		return
+	}
+	apiToken, plaintext, err := s.issueManagedIdentityAPIToken(r.Context(), actor.Identity.ID, credentialSubjectID, req.Name, permissions, false)
 	if err != nil {
 		auditErr = errors.New("failed to generate identity token")
 		writeError(w, http.StatusInternalServerError, "failed to generate identity token")
@@ -193,9 +199,6 @@ func (s *Server) validateManagedIdentityTokenPermissions(ctx context.Context, id
 	for _, permission := range permissions {
 		if !s.managedIdentityGrantPluginVisible(ctx, permission.Plugin, viewer) {
 			return fmt.Errorf("plugin %q is not available", permission.Plugin)
-		}
-		if !s.managedIdentityInvocationSupported(permission.Plugin) {
-			return fmt.Errorf("plugin %q does not yet support managed-identity invocation in this phase", permission.Plugin)
 		}
 		if len(permission.Operations) > 0 {
 			if err := s.validateManagedIdentityPermissionOperations(ctx, permission.Plugin, permission.Operations, viewer); err != nil {

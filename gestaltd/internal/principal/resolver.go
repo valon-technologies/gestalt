@@ -152,10 +152,11 @@ func (r *Resolver) resolveAPIToken(ctx context.Context, token string) (*Principa
 			Email:       user.Email,
 			DisplayName: user.DisplayName,
 		},
-		UserID:    user.ID,
-		SubjectID: UserSubjectID(user.ID),
-		Kind:      KindUser,
-		Source:    SourceAPIToken,
+		UserID:              user.ID,
+		SubjectID:           UserSubjectID(user.ID),
+		CredentialSubjectID: apiToken.CredentialSubjectID,
+		Kind:                KindUser,
+		Source:              SourceAPIToken,
 	}
 	if perms := permissionsForAPIToken(apiToken); perms != nil {
 		p.TokenPermissions = perms
@@ -196,12 +197,13 @@ func (r *Resolver) resolveManagedIdentityAPIToken(ctx context.Context, apiToken 
 	}
 
 	return &Principal{
-		SubjectID:        ManagedIdentitySubjectID(identity.ID),
-		DisplayName:      identity.DisplayName,
-		Kind:             KindWorkload,
-		Source:           SourceAPIToken,
-		Scopes:           PermissionPlugins(effectivePerms),
-		TokenPermissions: effectivePerms,
+		SubjectID:           ManagedIdentitySubjectID(identity.ID),
+		CredentialSubjectID: apiToken.CredentialSubjectID,
+		DisplayName:         identity.DisplayName,
+		Kind:                KindWorkload,
+		Source:              SourceAPIToken,
+		Scopes:              PermissionPlugins(effectivePerms),
+		TokenPermissions:    effectivePerms,
 	}, nil
 }
 
