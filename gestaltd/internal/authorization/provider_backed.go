@@ -212,7 +212,7 @@ func (a *ProviderBackedAuthorizer) AllowProvider(ctx context.Context, p *princip
 	if a == nil {
 		return true
 	}
-	if a.base.IsWorkload(p) || a.base.isManagedIdentityPrincipal(p) {
+	if a.base.IsWorkload(p) || a.base.isManagedIdentityPrincipal(p) || principal.IsSystemPrincipal(p) {
 		return a.base.AllowProvider(ctx, p, provider)
 	}
 	_, allowed := a.ResolveAccess(ctx, p, provider)
@@ -223,7 +223,7 @@ func (a *ProviderBackedAuthorizer) AllowOperation(ctx context.Context, p *princi
 	if a == nil {
 		return true
 	}
-	if a.base.IsWorkload(p) || a.base.isManagedIdentityPrincipal(p) {
+	if a.base.IsWorkload(p) || a.base.isManagedIdentityPrincipal(p) || principal.IsSystemPrincipal(p) {
 		return a.base.AllowOperation(ctx, p, provider, operation)
 	}
 	return a.AllowProvider(ctx, p, provider)
@@ -240,7 +240,7 @@ func (a *ProviderBackedAuthorizer) ResolveAccess(ctx context.Context, p *princip
 	if a == nil {
 		return AccessContext{}, true
 	}
-	if a.base.isManagedIdentityPrincipal(p) || a.base.IsWorkload(p) {
+	if a.base.isManagedIdentityPrincipal(p) || a.base.IsWorkload(p) || principal.IsSystemPrincipal(p) {
 		return a.base.ResolveAccess(ctx, p, provider)
 	}
 
@@ -365,7 +365,7 @@ func (a *ProviderBackedAuthorizer) AllowCatalogOperation(ctx context.Context, p 
 	if a == nil {
 		return true
 	}
-	if a.base.IsWorkload(p) || a.base.isManagedIdentityPrincipal(p) {
+	if a.base.IsWorkload(p) || a.base.isManagedIdentityPrincipal(p) || principal.IsSystemPrincipal(p) {
 		return a.base.AllowCatalogOperation(ctx, p, provider, op)
 	}
 

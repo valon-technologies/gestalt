@@ -56,16 +56,11 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return warnings, err
 	}
-	authzCfg, err := prepared.Deps.WorkflowRuntime.AugmentAuthorization(cfg.Authorization)
-	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-		return warnings, err
-	}
 	if _, _, err := cfg.SelectedAuthorizationProvider(); err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return warnings, err
 	}
-	authz, err := authorization.New(authzCfg, cfg.Plugins, providers, connMaps.DefaultConnection)
+	authz, err := authorization.New(cfg.Authorization, cfg.Plugins, providers, connMaps.DefaultConnection)
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return warnings, err

@@ -106,13 +106,14 @@ type Schedule struct {
 }
 
 type EventTrigger struct {
-	ID        string
-	Match     EventMatch
-	Target    Target
-	Paused    bool
-	CreatedBy Actor
-	CreatedAt *time.Time
-	UpdatedAt *time.Time
+	ID           string
+	Match        EventMatch
+	Target       Target
+	Paused       bool
+	ExecutionRef string
+	CreatedBy    Actor
+	CreatedAt    *time.Time
+	UpdatedAt    *time.Time
 }
 
 type StartRunRequest struct {
@@ -162,11 +163,12 @@ type ResumeScheduleRequest struct {
 }
 
 type UpsertEventTriggerRequest struct {
-	TriggerID   string
-	Match       EventMatch
-	Target      Target
-	Paused      bool
-	RequestedBy Actor
+	TriggerID    string
+	Match        EventMatch
+	Target       Target
+	Paused       bool
+	RequestedBy  Actor
+	ExecutionRef string
 }
 
 type ListEventTriggersRequest struct{}

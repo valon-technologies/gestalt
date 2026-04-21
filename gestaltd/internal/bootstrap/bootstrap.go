@@ -665,12 +665,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
 	}
-	authzCfg, err := prepared.Deps.WorkflowRuntime.AugmentAuthorization(cfg.Authorization)
-	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-		return nil, err
-	}
-	baseAuthz, err := authorization.New(authzCfg, cfg.Plugins, providers, connMaps.DefaultConnection)
+	baseAuthz, err := authorization.New(cfg.Authorization, cfg.Plugins, providers, connMaps.DefaultConnection)
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err

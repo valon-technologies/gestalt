@@ -2,17 +2,13 @@ package bootstrap
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
-	"slices"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -24,10 +20,6 @@ import (
 type workflowRuntime struct {
 	mu                  sync.RWMutex
 	defaultProviderName string
-	configPermissions   map[string]map[string]struct{}
-	configConnections   map[string]string
-	configProviderModes map[string]core.ConnectionMode
-	configWorkloadToken string
 	providers           map[string]coreworkflow.Provider
 	startupWaits        *startupWaitTracker
 	invoker             invocation.Invoker
@@ -36,61 +28,16 @@ type workflowRuntime struct {
 
 func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 	runtime := &workflowRuntime{
-		configPermissions:   map[string]map[string]struct{}{},
-		configConnections:   map[string]string{},
-		configProviderModes: map[string]core.ConnectionMode{},
-		providers:           map[string]coreworkflow.Provider{},
-		startupWaits:        newStartupWaitTracker(),
+		providers:    map[string]coreworkflow.Provider{},
+		startupWaits: newStartupWaitTracker(),
 	}
 	if cfg != nil {
 		selectedProviderName, _, err := cfg.SelectedWorkflowProvider()
 		if err == nil {
 			runtime.defaultProviderName = strings.TrimSpace(selectedProviderName)
 		}
-		for _, pluginName := range slices.Sorted(maps.Keys(cfg.Plugins)) {
-			entry := cfg.Plugins[pluginName]
-			spec, operationConnections, err := buildStartupProviderSpec(pluginName, entry)
-			if err != nil || spec.Catalog == nil {
-				continue
-			}
-			runtime.configConnections[pluginName] = workflowBindingConnection(operationConnections)
-			runtime.configProviderModes[pluginName] = spec.ConnectionMode
-			for i := range spec.Catalog.Operations {
-				runtime.addConfigPermission(pluginName, spec.Catalog.Operations[i].ID)
-			}
-		}
-		for _, scheduleKey := range slices.Sorted(maps.Keys(cfg.Workflows.Schedules)) {
-			schedule := cfg.Workflows.Schedules[scheduleKey]
-			runtime.addConfigPermission(schedule.Plugin, schedule.Operation)
-		}
-		for _, triggerKey := range slices.Sorted(maps.Keys(cfg.Workflows.EventTriggers)) {
-			trigger := cfg.Workflows.EventTriggers[triggerKey]
-			runtime.addConfigPermission(trigger.Plugin, trigger.Operation)
-		}
-		if len(runtime.configPermissions) > 0 {
-			token, err := workflowWorkloadToken()
-			if err != nil {
-				return nil, err
-			}
-			runtime.configWorkloadToken = token
-		}
 	}
 	return runtime, nil
-}
-
-func (r *workflowRuntime) addConfigPermission(pluginName, operation string) {
-	if r == nil {
-		return
-	}
-	pluginName = strings.TrimSpace(pluginName)
-	operation = strings.TrimSpace(operation)
-	if pluginName == "" || operation == "" {
-		return
-	}
-	if r.configPermissions[pluginName] == nil {
-		r.configPermissions[pluginName] = map[string]struct{}{}
-	}
-	r.configPermissions[pluginName][operation] = struct{}{}
 }
 
 func (r *workflowRuntime) InitProviderPlaceholders(defs map[string]*config.ProviderEntry) {
@@ -228,7 +175,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 	if targetPluginName == "" {
 		return nil, fmt.Errorf("workflow target plugin is required")
 	}
-	principalValue := workflowWorkloadPrincipal()
+	principalValue := workflowStartupPrincipal(req)
 	target := req.Target
 	invokeConnection := ""
 	invokeInstance := ""
@@ -304,6 +251,16 @@ func workflowExecutionPrincipal(ref *coreworkflow.ExecutionReference) *principal
 		SubjectID:        strings.TrimSpace(ref.SubjectID),
 		Scopes:           principal.PermissionPlugins(permissions),
 		TokenPermissions: permissions,
+	})
+}
+
+func workflowStartupPrincipal(req coreworkflow.InvokeOperationRequest) *principal.Principal {
+	permissions := principal.CompilePermissions(workflowExecutionRefPermissionsForTarget(req.Target))
+	return principal.Canonicalize(&principal.Principal{
+		SubjectID:           "system:workflow-startup",
+		CredentialSubjectID: principal.IdentitySubjectID(),
+		Scopes:              principal.PermissionPlugins(permissions),
+		TokenPermissions:    permissions,
 	})
 }
 
@@ -443,89 +400,4 @@ func workflowActorContext(actor coreworkflow.Actor) map[string]any {
 		value["authSource"] = actor.AuthSource
 	}
 	return value
-}
-
-func (r *workflowRuntime) AugmentAuthorization(cfg config.AuthorizationConfig) (config.AuthorizationConfig, error) {
-	if r == nil || len(r.configPermissions) == 0 {
-		return cfg, nil
-	}
-	cfg.Policies = maps.Clone(cfg.Policies)
-	cfg.Workloads = maps.Clone(cfg.Workloads)
-	if cfg.Workloads == nil {
-		cfg.Workloads = map[string]config.WorkloadDef{}
-	}
-	workloadID := workflowWorkloadID()
-	if _, exists := cfg.Workloads[workloadID]; exists {
-		return config.AuthorizationConfig{}, fmt.Errorf("authorization validation: managed workflow workload %q conflicts with configured workload", workloadID)
-	}
-	providers := make(map[string]config.WorkloadProviderDef, len(r.configPermissions))
-	for pluginName, operations := range r.configPermissions {
-		allow := make([]string, 0, len(operations))
-		for operation := range operations {
-			allow = append(allow, operation)
-		}
-		slices.Sort(allow)
-		binding := config.WorkloadProviderDef{Allow: allow}
-		if r.configProviderModes[pluginName] == core.ConnectionModeUser {
-			binding.Connection = r.configConnections[pluginName]
-		}
-		providers[pluginName] = binding
-	}
-	if len(providers) == 0 {
-		return cfg, nil
-	}
-	if strings.TrimSpace(r.configWorkloadToken) == "" {
-		return config.AuthorizationConfig{}, fmt.Errorf("authorization validation: managed workflow workload %q is missing a token", workloadID)
-	}
-	cfg.Workloads[workloadID] = config.WorkloadDef{
-		DisplayName: workflowWorkloadDisplayName(),
-		Token:       r.configWorkloadToken,
-		Providers:   providers,
-	}
-	return cfg, nil
-}
-
-func workflowBindingConnection(operationConnections map[string]string) string {
-	if len(operationConnections) == 0 {
-		return ""
-	}
-	connection := ""
-	for _, raw := range operationConnections {
-		resolved := config.ResolveConnectionAlias(strings.TrimSpace(raw))
-		if resolved == "" {
-			continue
-		}
-		if connection == "" {
-			connection = resolved
-			continue
-		}
-		if connection != resolved {
-			return ""
-		}
-	}
-	return connection
-}
-
-func workflowWorkloadPrincipal() *principal.Principal {
-	return &principal.Principal{
-		Kind:      principal.KindWorkload,
-		SubjectID: principal.WorkloadSubjectID(workflowWorkloadID()),
-		Source:    principal.SourceWorkloadToken,
-	}
-}
-
-func workflowWorkloadID() string {
-	return "workflow.config"
-}
-
-func workflowWorkloadDisplayName() string {
-	return "workflow config"
-}
-
-func workflowWorkloadToken() (string, error) {
-	var raw [16]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", fmt.Errorf("generate managed workflow workload token: %w", err)
-	}
-	return "gst_wld_" + hex.EncodeToString(raw[:]), nil
 }

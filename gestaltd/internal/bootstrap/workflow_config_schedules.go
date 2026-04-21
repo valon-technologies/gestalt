@@ -20,7 +20,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -152,13 +151,17 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if existing != nil {
 			existingExecutionRef = workflowScheduleExecutionRef(existing, prev.ExecutionRef)
 		}
-		desiredExecutionRef := &coreworkflow.ExecutionReference{
-			ProviderName: providerName,
-			Target:       target,
-			SubjectID:    principal.WorkloadSubjectID(workflowWorkloadID()),
-			Permissions:  workflowExecutionRefPermissionsForTarget(target),
+		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target)
+		if err != nil {
+			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", scheduleKey, pluginName, err)
 		}
-		executionRefID, createdExecutionRef, err := workflowEnsureConfigScheduleExecutionRef(ctx, executionRefs, desiredEntry.state.ScheduleID, desiredExecutionRef, existingExecutionRef)
+		executionRefID, createdExecutionRef, err := workflowEnsureConfigExecutionRef(
+			ctx,
+			executionRefs,
+			desiredExecutionRef,
+			workflowConfigScheduleExecutionRefID(desiredEntry.state.ScheduleID),
+			existingExecutionRef,
+		)
 		if err != nil {
 			return fmt.Errorf("bootstrap: store workflow execution ref for schedule %q on plugin %q: %w", scheduleKey, pluginName, err)
 		}
@@ -347,7 +350,7 @@ func workflowConfigScheduleTarget(schedule config.WorkflowScheduleConfig) corewo
 
 func workflowConfigActor() coreworkflow.Actor {
 	return coreworkflow.Actor{
-		SubjectID:   "config:workflow",
+		SubjectID:   workflowConfigOwnerSubjectID(),
 		SubjectKind: "system",
 		DisplayName: "Workflow Config",
 		AuthSource:  "config",
@@ -376,15 +379,19 @@ func workflowScheduleExecutionRef(existing *coreworkflow.Schedule, fallback stri
 	return strings.TrimSpace(fallback)
 }
 
-func workflowEnsureConfigScheduleExecutionRef(
+func workflowEnsureConfigExecutionRef(
 	ctx context.Context,
 	service *coredata.WorkflowExecutionRefService,
-	scheduleID string,
 	desired *coreworkflow.ExecutionReference,
+	refID string,
 	candidateIDs ...string,
 ) (string, bool, error) {
 	if service == nil {
 		return "", false, fmt.Errorf("workflow execution refs are not configured")
+	}
+	refID = strings.TrimSpace(refID)
+	if refID == "" {
+		return "", false, fmt.Errorf("workflow execution ref id is required")
 	}
 	for _, candidateID := range candidateIDs {
 		candidateID = strings.TrimSpace(candidateID)
@@ -402,7 +409,6 @@ func workflowEnsureConfigScheduleExecutionRef(
 			return candidateID, false, nil
 		}
 	}
-	refID := workflowConfigScheduleExecutionRefID(scheduleID)
 	desired.ID = refID
 	if _, err := service.Put(ctx, desired); err != nil {
 		return "", false, err
@@ -420,6 +426,43 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target) []core
 		Plugin:     pluginName,
 		Operations: []string{operation},
 	}}
+}
+
+func workflowConfigExecutionReference(cfg *config.Config, providerName string, target coreworkflow.Target) (*coreworkflow.ExecutionReference, error) {
+	ref := &coreworkflow.ExecutionReference{
+		ProviderName: providerName,
+		Target:       target,
+		SubjectID:    workflowConfigOwnerSubjectID(),
+		Permissions:  workflowExecutionRefPermissionsForTarget(target),
+	}
+	mode, err := workflowConfigTargetConnectionMode(cfg, target.PluginName)
+	if err != nil {
+		return nil, err
+	}
+	switch mode {
+	case core.ConnectionModeNone:
+		return ref, nil
+	case core.ConnectionModeUser:
+		return nil, fmt.Errorf("config-managed workflows do not support user-credentialed plugin %q", strings.TrimSpace(target.PluginName))
+	default:
+		return nil, fmt.Errorf("unsupported connection mode %q for config-managed workflow target %q", mode, strings.TrimSpace(target.PluginName))
+	}
+}
+
+func workflowConfigTargetConnectionMode(cfg *config.Config, pluginName string) (core.ConnectionMode, error) {
+	if cfg == nil {
+		return core.ConnectionModeNone, fmt.Errorf("workflow config is not available")
+	}
+	pluginName = strings.TrimSpace(pluginName)
+	entry := cfg.Plugins[pluginName]
+	if entry == nil {
+		return core.ConnectionModeNone, fmt.Errorf("workflow target plugin %q is not configured", pluginName)
+	}
+	return core.NormalizeConnectionMode(core.ConnectionMode(entry.ConnectionMode)), nil
+}
+
+func workflowConfigOwnerSubjectID() string {
+	return "system:config"
 }
 
 func workflowConfigExecutionRefMatches(existing, desired *coreworkflow.ExecutionReference) bool {

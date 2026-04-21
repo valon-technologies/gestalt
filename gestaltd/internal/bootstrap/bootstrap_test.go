@@ -582,11 +582,12 @@ func (p *recordingWorkflowProvider) ResumeSchedule(context.Context, coreworkflow
 func (p *recordingWorkflowProvider) UpsertEventTrigger(_ context.Context, req coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
 	p.upsertedEventTriggers = append(p.upsertedEventTriggers, req)
 	trigger := &coreworkflow.EventTrigger{
-		ID:        req.TriggerID,
-		Match:     req.Match,
-		Target:    req.Target,
-		Paused:    req.Paused,
-		CreatedBy: req.RequestedBy,
+		ID:           req.TriggerID,
+		Match:        req.Match,
+		Target:       req.Target,
+		Paused:       req.Paused,
+		ExecutionRef: req.ExecutionRef,
+		CreatedBy:    req.RequestedBy,
 	}
 	if p.eventTriggers == nil {
 		p.eventTriggers = map[string]*coreworkflow.EventTrigger{}
@@ -795,7 +796,7 @@ func workflowStartupCallbackConfig(baseURL string) *config.Config {
 	cfg := validConfig()
 	cfg.Plugins = map[string]*config.ProviderEntry{
 		"roadmap": {
-			ConnectionMode: providermanifestv1.ConnectionModeUser,
+			ConnectionMode: providermanifestv1.ConnectionModeNone,
 			ResolvedManifest: &providermanifestv1.Manifest{
 				Spec: &providermanifestv1.Spec{
 					Surfaces: &providermanifestv1.ProviderSurfaces{
@@ -1637,7 +1638,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	if got.Target.Input["source"] != "yaml" {
 		t.Fatalf("target input = %#v", got.Target.Input)
 	}
-	if got.RequestedBy.SubjectID != "config:workflow" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
+	if got.RequestedBy.SubjectID != "system:config" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", got.RequestedBy)
 	}
 	if strings.TrimSpace(got.ExecutionRef) == "" {
@@ -1647,8 +1648,8 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get execution ref: %v", err)
 	}
-	if ref.SubjectID != principal.WorkloadSubjectID("workflow.config") {
-		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, principal.WorkloadSubjectID("workflow.config"))
+	if ref.SubjectID != "system:config" {
+		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, "system:config")
 	}
 	if len(ref.Permissions) != 1 || ref.Permissions[0].Plugin != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
 		t.Fatalf("permissions = %#v", ref.Permissions)
@@ -1695,6 +1696,36 @@ func TestValidateDoesNotApplyConfiguredWorkflowSchedules(t *testing.T) {
 	}
 	if len(recorder.deletedSchedules) != 0 {
 		t.Fatalf("deleted schedules = %d, want 0", len(recorder.deletedSchedules))
+	}
+}
+
+func TestBootstrapRejectsConfiguredWorkflowSchedulesForUserCredentialedPlugins(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	})
+
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return &recordingWorkflowProvider{}, nil
+	}
+
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil {
+		t.Fatal("expected Bootstrap to reject user-credentialed config-managed schedules")
+	}
+	if !strings.Contains(err.Error(), `config-managed workflows do not support user-credentialed plugin "roadmap"`) {
+		t.Fatalf("Bootstrap error = %v", err)
 	}
 }
 
@@ -2434,8 +2465,18 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	if got.Target.Input["source"] != "yaml" {
 		t.Fatalf("target input = %#v", got.Target.Input)
 	}
-	if got.RequestedBy.SubjectID != "config:workflow" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
+	if got.RequestedBy.SubjectID != "system:config" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", got.RequestedBy)
+	}
+	if strings.TrimSpace(got.ExecutionRef) == "" {
+		t.Fatal("execution ref = empty")
+	}
+	ref, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), got.ExecutionRef)
+	if err != nil {
+		t.Fatalf("Get execution ref: %v", err)
+	}
+	if ref.SubjectID != "system:config" {
+		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, "system:config")
 	}
 }
 
@@ -2958,7 +2999,7 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.WorkloadSubjectID("workflow.config"),
+			SubjectID:   principal.IdentitySubjectID(),
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
@@ -3012,7 +3053,7 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.WorkloadSubjectID("workflow.config"),
+			SubjectID:   principal.IdentitySubjectID(),
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
@@ -3037,6 +3078,153 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 
 	if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
 		t.Fatalf("Validate: %v", err)
+	}
+	if got, _ := requestPath.Load().(string); got != "/sync" {
+		t.Fatalf("request path = %q, want %q", got, "/sync")
+	}
+}
+
+func TestBootstrapStartupWorkflowCallbackIgnoresProviderCreatedByForAuthorization(t *testing.T) {
+	t.Parallel()
+
+	var requestPath atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPath.Store(r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	cfg := workflowStartupCallbackConfig(srv.URL)
+	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Plugins["roadmap"].AuthorizationPolicy = "roadmap-policy"
+	cfg.Plugins["roadmap"].ResolvedManifest.Spec.Surfaces.REST.Operations[0].AllowedRoles = []string{"viewer"}
+	cfg.Authorization.Policies = map[string]config.HumanPolicyDef{
+		"roadmap-policy": {
+			Members: []config.HumanPolicyMemberDef{{
+				SubjectID: principal.UserSubjectID("viewer-user"),
+				Role:      "viewer",
+			}},
+		},
+	}
+
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+		if name != "temporal" {
+			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
+		}
+		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+			SubjectID:   principal.IdentitySubjectID(),
+			Integration: "roadmap",
+			Connection:  config.PluginConnectionName,
+			Instance:    "default",
+			AccessToken: "workflow-startup-token",
+		}); err != nil {
+			return nil, fmt.Errorf("store identity token: %w", err)
+		}
+		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
+			Target: &proto.BoundWorkflowTarget{
+				PluginName: "roadmap",
+				Operation:  "sync",
+			},
+			CreatedBy: &proto.WorkflowActor{
+				SubjectId:   principal.UserSubjectID("spoofed-user"),
+				SubjectKind: string(principal.KindUser),
+				DisplayName: "Spoofed User",
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("startup callback: %w", err)
+		}
+		if resp.GetStatus() != http.StatusAccepted || resp.GetBody() != `{"ok":true}` {
+			return nil, fmt.Errorf("startup callback response = %#v", resp)
+		}
+		return &stubWorkflowProvider{}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if got, _ := requestPath.Load().(string); got != "/sync" {
+		t.Fatalf("request path = %q, want %q", got, "/sync")
+	}
+}
+
+func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedPlugin(t *testing.T) {
+	t.Parallel()
+
+	var requestPath atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPath.Store(r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	cfg := workflowStartupCallbackConfig(srv.URL)
+	cfg.Plugins["roadmap"].AuthorizationPolicy = "roadmap-policy"
+	cfg.Plugins["roadmap"].ResolvedManifest.Spec.Surfaces.REST.Operations[0].AllowedRoles = []string{"viewer"}
+	cfg.Authorization.Policies = map[string]config.HumanPolicyDef{
+		"roadmap-policy": {
+			Members: []config.HumanPolicyMemberDef{{
+				SubjectID: principal.UserSubjectID("viewer-user"),
+				Role:      "viewer",
+			}},
+		},
+	}
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		Schedules: map[string]workflowFixtureSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Operation: "sync",
+			},
+		},
+	})
+
+	recorder := &recordingWorkflowProvider{}
+	var hostServices []providerhost.HostService
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, services []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		if name != "temporal" {
+			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
+		}
+		hostServices = append([]providerhost.HostService(nil), services...)
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(recorder.upsertedSchedules) != 1 {
+		t.Fatalf("upserted schedules = %d, want 1", len(recorder.upsertedSchedules))
+	}
+	executionRef := recorder.upsertedSchedules[0].ExecutionRef
+	if executionRef == "" {
+		t.Fatal("execution ref is empty")
+	}
+	resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
+		Target: &proto.BoundWorkflowTarget{
+			PluginName: "roadmap",
+			Operation:  "sync",
+		},
+		ExecutionRef: executionRef,
+	})
+	if err != nil {
+		t.Fatalf("invoke workflow host callback: %v", err)
+	}
+	if resp.GetStatus() != http.StatusAccepted || resp.GetBody() != `{"ok":true}` {
+		t.Fatalf("workflow host callback response = %#v", resp)
 	}
 	if got, _ := requestPath.Load().(string); got != "/sync" {
 		t.Fatalf("request path = %q, want %q", got, "/sync")
@@ -3098,7 +3286,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 					return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 				}
 				if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-					SubjectID:   principal.WorkloadSubjectID("workflow.config"),
+					SubjectID:   principal.IdentitySubjectID(),
 					Integration: "roadmap",
 					Connection:  config.PluginConnectionName,
 					Instance:    "default",
@@ -3192,7 +3380,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 			connection = config.PluginConnectionName
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.WorkloadSubjectID("workflow.config"),
+			SubjectID:   principal.IdentitySubjectID(),
 			Integration: "roadmap",
 			Connection:  connection,
 			Instance:    "default",
@@ -4037,6 +4225,82 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 		if adminAccess.Role != "admin" {
 			t.Fatalf("dynamic admin role = %q, want %q", adminAccess.Role, "admin")
+		}
+	})
+
+	t.Run("authorization provider honors system workflow principals", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Authorization = config.AuthorizationConfig{
+			Policies: map[string]config.HumanPolicyDef{
+				"roadmap-policy": {Default: "deny"},
+			},
+		}
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"roadmap": {
+				AuthorizationPolicy: "roadmap-policy",
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{},
+				},
+			},
+		}
+		cfg.Providers.Authorization = map[string]*config.ProviderEntry{
+			"indexeddb": {Source: config.ProviderSource{Path: "stub"}},
+		}
+		cfg.Server.Providers.Authorization = "indexeddb"
+
+		provider := newMemoryAuthorizationProvider("memory-authorization")
+		factories := validFactories()
+		factories.Authorization = memoryAuthorizationFactory(provider)
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		t.Cleanup(func() { _ = result.Close(context.Background()) })
+		<-result.ProvidersReady
+		if err := result.Start(ctx); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+
+		configPrincipal := &principal.Principal{
+			SubjectID:           "system:config",
+			CredentialSubjectID: principal.IdentitySubjectID(),
+			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
+				Plugin:     "roadmap",
+				Operations: []string{"sync"},
+			}}),
+		}
+		if !result.Authorizer.AllowProvider(ctx, configPrincipal, "roadmap") {
+			t.Fatal("expected config workflow principal to be allowed for roadmap provider")
+		}
+		if !result.Authorizer.AllowOperation(ctx, configPrincipal, "roadmap", "sync") {
+			t.Fatal("expected config workflow principal to be allowed for roadmap.sync")
+		}
+		if result.Authorizer.AllowOperation(ctx, configPrincipal, "roadmap", "status") {
+			t.Fatal("expected config workflow principal to be denied for roadmap.status")
+		}
+		if !result.Authorizer.AllowCatalogOperation(ctx, configPrincipal, "roadmap", catalog.CatalogOperation{ID: "sync"}) {
+			t.Fatal("expected config workflow principal to be allowed for sync catalog operation")
+		}
+		if result.Authorizer.AllowCatalogOperation(ctx, configPrincipal, "roadmap", catalog.CatalogOperation{ID: "status"}) {
+			t.Fatal("expected config workflow principal to be denied for status catalog operation")
+		}
+
+		startupPrincipal := &principal.Principal{
+			SubjectID:           "system:workflow-startup",
+			CredentialSubjectID: principal.IdentitySubjectID(),
+			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
+				Plugin:     "roadmap",
+				Operations: []string{"status"},
+			}}),
+		}
+		if !result.Authorizer.AllowOperation(ctx, startupPrincipal, "roadmap", "status") {
+			t.Fatal("expected workflow startup principal to be allowed for roadmap.status")
+		}
+		if result.Authorizer.AllowOperation(ctx, startupPrincipal, "roadmap", "sync") {
+			t.Fatal("expected workflow startup principal to be denied for roadmap.sync")
 		}
 	})
 
