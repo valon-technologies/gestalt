@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -31,10 +32,67 @@ func (s *Server) webhookPrincipal(mounted MountedWebhook, verified *verifiedWebh
 	return principal.Canonicalize(p)
 }
 
-func webhookContextValue(mounted MountedWebhook, verified *verifiedWebhookSender) map[string]any {
+func webhookInvocationContext(mounted MountedWebhook, verified *verifiedWebhookSender, parsed *parsedWebhookRequest, header http.Header) *invocation.WebhookContext {
+	ctx := &invocation.WebhookContext{
+		Name: mounted.Name,
+		Path: mounted.Path,
+	}
+	if mounted.Method != "" {
+		ctx.Method = mounted.Method
+	}
+	if parsed != nil {
+		ctx.ContentType = parsed.ContentType
+		ctx.RawBody = append([]byte(nil), parsed.RawBody...)
+	}
+	if len(header) > 0 {
+		ctx.Headers = make(map[string][]string, len(header))
+		for key, values := range header {
+			ctx.Headers[key] = append([]string(nil), values...)
+		}
+	}
+	if verified != nil {
+		ctx.VerifiedScheme = verified.Scheme
+		ctx.VerifiedSubject = verified.Subject
+		ctx.DeliveryID = verified.DeliveryID
+		if len(verified.Claims) > 0 {
+			ctx.Claims = make(map[string]string, len(verified.Claims))
+			for key, value := range verified.Claims {
+				ctx.Claims[key] = value
+			}
+		}
+	}
+	return ctx
+}
+
+func webhookContextValue(mounted MountedWebhook, verified *verifiedWebhookSender, webhook *invocation.WebhookContext) map[string]any {
 	value := map[string]any{
 		"name":   mounted.Name,
 		"plugin": mounted.PluginName,
+	}
+	if webhook != nil {
+		if webhook.Path != "" {
+			value["path"] = webhook.Path
+		}
+		if webhook.Method != "" {
+			value["method"] = webhook.Method
+		}
+		if webhook.ContentType != "" {
+			value["contentType"] = webhook.ContentType
+		}
+		if len(webhook.RawBody) > 0 {
+			value["rawBody"] = string(webhook.RawBody)
+		}
+		if len(webhook.Headers) > 0 {
+			headers := make(map[string]any, len(webhook.Headers))
+			for key, values := range webhook.Headers {
+				items := make([]any, 0, len(values))
+				for _, item := range values {
+					items = append(items, item)
+				}
+				headers[key] = items
+			}
+			value["headers"] = headers
+		}
 	}
 	if verified == nil {
 		return map[string]any{"webhook": value}
@@ -58,7 +116,7 @@ func webhookContextValue(mounted MountedWebhook, verified *verifiedWebhookSender
 	return map[string]any{"webhook": value}
 }
 
-func (s *Server) webhookOperationInvocation(ctx context.Context, mounted MountedWebhook, verified *verifiedWebhookSender, params map[string]any) (*core.OperationResult, error) {
+func (s *Server) webhookOperationInvocation(ctx context.Context, mounted MountedWebhook, verified *verifiedWebhookSender, webhook *invocation.WebhookContext, params map[string]any) (*core.OperationResult, error) {
 	p := s.webhookPrincipal(mounted, verified)
 	instance := ""
 	if raw, ok := params[httpInstanceParam].(string); ok {
@@ -84,7 +142,8 @@ func (s *Server) webhookOperationInvocation(ctx context.Context, mounted Mounted
 
 	ctx = principal.WithPrincipal(ctx, p)
 	ctx = invocation.WithAccessContext(ctx, s.providerAccessContextWithContext(ctx, p, mounted.PluginName))
-	ctx = invocation.WithWorkflowContext(ctx, webhookContextValue(mounted, verified))
+	ctx = invocation.WithWorkflowContext(ctx, webhookContextValue(mounted, verified, webhook))
+	ctx = invocation.WithWebhookContext(ctx, webhook)
 	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTP)
 	if connection != "" {
 		ctx = invocation.WithConnection(ctx, connection)
@@ -92,7 +151,7 @@ func (s *Server) webhookOperationInvocation(ctx context.Context, mounted Mounted
 	return s.invoker.Invoke(ctx, p, mounted.PluginName, instance, mounted.Target.Operation, params)
 }
 
-func (s *Server) startWebhookWorkflowRun(ctx context.Context, mounted MountedWebhook, verified *verifiedWebhookSender, params map[string]any) (*coreworkflow.Run, error) {
+func (s *Server) startWebhookWorkflowRun(ctx context.Context, mounted MountedWebhook, verified *verifiedWebhookSender, webhook *invocation.WebhookContext, params map[string]any) (*coreworkflow.Run, error) {
 	if s.workflow == nil {
 		return nil, fmt.Errorf("workflow runtime is not configured")
 	}
@@ -111,7 +170,7 @@ func (s *Server) startWebhookWorkflowRun(ctx context.Context, mounted MountedWeb
 	for key, value := range target.Input {
 		input[key] = value
 	}
-	input["_gestaltWebhook"] = webhookContextValue(mounted, verified)["webhook"]
+	input["_gestaltWebhook"] = webhookContextValue(mounted, verified, webhook)["webhook"]
 	return provider.StartRun(ctx, coreworkflow.StartRunRequest{
 		Target: coreworkflow.Target{
 			PluginName: strings.TrimSpace(target.Plugin),
@@ -145,16 +204,16 @@ func verifiedDisplayName(verified *verifiedWebhookSender) string {
 	return verified.Subject
 }
 
-func (s *Server) dispatchWebhookAsync(mounted MountedWebhook, verified *verifiedWebhookSender, params map[string]any) {
+func (s *Server) dispatchWebhookAsync(mounted MountedWebhook, verified *verifiedWebhookSender, webhook *invocation.WebhookContext, params map[string]any) {
 	go func() {
 		ctx := invocation.WithRequestMeta(context.Background(), invocation.RequestMeta{})
 		switch {
 		case mounted.Target != nil && strings.TrimSpace(mounted.Target.Operation) != "":
-			if _, err := s.webhookOperationInvocation(ctx, mounted, verified, cloneMap(params)); err != nil {
+			if _, err := s.webhookOperationInvocation(ctx, mounted, verified, webhook, cloneMap(params)); err != nil {
 				slog.Error("webhook async operation failed", "plugin", mounted.PluginName, "webhook", mounted.Name, "operation", mounted.Target.Operation, "error", err)
 			}
 		case mounted.Target != nil && mounted.Target.Workflow != nil:
-			if _, err := s.startWebhookWorkflowRun(ctx, mounted, verified, cloneMap(params)); err != nil {
+			if _, err := s.startWebhookWorkflowRun(ctx, mounted, verified, webhook, cloneMap(params)); err != nil {
 				slog.Error("webhook async workflow failed", "plugin", mounted.PluginName, "webhook", mounted.Name, "workflow_plugin", mounted.Target.Workflow.Plugin, "workflow_operation", mounted.Target.Workflow.Operation, "error", err)
 			}
 		default:

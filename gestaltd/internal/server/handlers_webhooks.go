@@ -39,6 +39,7 @@ func (s *Server) handleWebhook(mounted MountedWebhook, w http.ResponseWriter, r 
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	webhook := webhookInvocationContext(mounted, verified, parsed, r.Header)
 
 	executionMode := providermanifestv1.WebhookExecutionModeSync
 	if mounted.Execution != nil && mounted.Execution.Mode != "" {
@@ -47,7 +48,7 @@ func (s *Server) handleWebhook(mounted MountedWebhook, w http.ResponseWriter, r 
 
 	switch executionMode {
 	case providermanifestv1.WebhookExecutionModeAsyncAck:
-		s.dispatchWebhookAsync(mounted, verified, parsed.Params)
+		s.dispatchWebhookAsync(mounted, verified, webhook, parsed.Params)
 		responseCode := strings.TrimSpace(mounted.Execution.AcceptedResponse)
 		response := mounted.Operation.Responses[responseCode]
 		if err := writeWebhookResponse(w, responseCode, response); err != nil {
@@ -58,7 +59,7 @@ func (s *Server) handleWebhook(mounted MountedWebhook, w http.ResponseWriter, r 
 	default:
 		switch {
 		case mounted.Target != nil && strings.TrimSpace(mounted.Target.Operation) != "":
-			result, err := s.webhookOperationInvocation(r.Context(), mounted, verified, parsed.Params)
+			result, err := s.webhookOperationInvocation(r.Context(), mounted, verified, webhook, parsed.Params)
 			if err != nil {
 				s.writeInvocationError(w, r, mounted.PluginName, mounted.Target.Operation, err)
 				return
@@ -66,7 +67,7 @@ func (s *Server) handleWebhook(mounted MountedWebhook, w http.ResponseWriter, r 
 			writeOperationResult(w, result)
 			return
 		case mounted.Target != nil && mounted.Target.Workflow != nil:
-			run, err := s.startWebhookWorkflowRun(r.Context(), mounted, verified, parsed.Params)
+			run, err := s.startWebhookWorkflowRun(r.Context(), mounted, verified, webhook, parsed.Params)
 			if err != nil {
 				slog.ErrorContext(r.Context(), "webhook workflow start failed", "plugin", mounted.PluginName, "webhook", mounted.Name, "error", err)
 				writeError(w, http.StatusBadGateway, "workflow start failed")

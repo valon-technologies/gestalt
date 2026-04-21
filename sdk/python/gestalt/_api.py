@@ -59,6 +59,9 @@ class Request:
     # as runId, target.pluginName, trigger.scheduleId, and
     # trigger.event.specVersion.
     workflow: dict[str, Any] = dataclasses.field(default_factory=dict)
+    # Hosted webhook metadata uses a JSON-style lowerCamelCase object such as
+    # verifiedSubject, deliveryId, headers, and claims.
+    webhook: dict[str, Any] = dataclasses.field(default_factory=dict)
 
     def connection_param(self, name: str) -> str | None:
         """Return a connection parameter by name if the host supplied it."""

@@ -755,6 +755,38 @@ pub struct AccessContext {
     #[prost(string, tag = "2")]
     pub role: ::prost::alloc::string::String,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Header {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "2")]
+    pub values: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// WebhookContext carries inbound hosted-webhook request metadata for one
+/// operation.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WebhookContext {
+    #[prost(string, tag = "1")]
+    pub webhook: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub path: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub method: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub content_type: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "5")]
+    pub raw_body: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, repeated, tag = "6")]
+    pub headers: ::prost::alloc::vec::Vec<Header>,
+    #[prost(string, tag = "7")]
+    pub verified_scheme: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub verified_subject: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub delivery_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "10")]
+    pub claims: ::core::option::Option<::prost_types::Struct>,
+}
 /// RequestContext bundles the caller, credential, and access metadata for one
 /// operation.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -767,6 +799,8 @@ pub struct RequestContext {
     pub access: ::core::option::Option<AccessContext>,
     #[prost(message, optional, tag = "4")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "5")]
+    pub webhook: ::core::option::Option<WebhookContext>,
 }
 /// ExecuteRequest invokes one executable operation.
 #[derive(Clone, PartialEq, ::prost::Message)]

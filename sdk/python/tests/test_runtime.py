@@ -11,6 +11,7 @@ from google.protobuf import duration_pb2 as _duration_pb2
 from google.protobuf import json_format
 from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
+import yaml
 
 from gestalt import (
     AuthenticationProvider,
@@ -28,6 +29,12 @@ from gestalt import (
     Request,
     S3Provider,
     SessionTTLProvider,
+    Webhook,
+    WebhookExecution,
+    WebhookOperation,
+    WebhookResponse,
+    WebhookSecurityScheme,
+    WebhookTarget,
     WarningsProvider,
     WorkflowProvider,
     _bootstrap,
@@ -220,7 +227,43 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(request.access.role, "")
         self.assertEqual(request.request_handle, "")
         self.assertEqual(request.workflow, {})
-        self.assertEqual(request.request_handle, "")
+        self.assertEqual(request.webhook, {})
+
+    def test_plugin_request_extracts_webhook_context_when_available(self) -> None:
+        webhook = struct_pb2.Struct()
+        webhook.update(
+            {
+                "name": "slackCommand",
+                "verifiedSubject": "T123",
+                "deliveryId": "evt-123",
+            }
+        )
+
+        class FakeContext:
+            def __init__(self, webhook_message: Any) -> None:
+                self.webhook = webhook_message
+
+            def HasField(self, field_name: str) -> bool:
+                return field_name == "webhook"
+
+        class FakeRequest:
+            token = "secret-token"
+            connection_params = {"tenant": "acme"}
+            request_handle = "request-123"
+            context = FakeContext(webhook)
+
+        request = _runtime._plugin_request(FakeRequest())
+
+        self.assertEqual(request.token, "secret-token")
+        self.assertEqual(request.connection_param("tenant"), "acme")
+        self.assertEqual(
+            request.webhook,
+            {
+                "name": "slackCommand",
+                "verifiedSubject": "T123",
+                "deliveryId": "evt-123",
+            },
+        )
 
 
 class MainEntrypointTests(unittest.TestCase):
@@ -245,6 +288,64 @@ class MainEntrypointTests(unittest.TestCase):
 
             self.assertEqual(result, 0)
             self.assertTrue(catalog_path.exists())
+
+    def test_writes_manifest_metadata_when_env_is_set(self) -> None:
+        plugin = Plugin("test-plugin")
+        plugin.security_scheme(
+            "slackSignature",
+            WebhookSecurityScheme(type="hmac"),
+        )
+        plugin.webhook(
+            "slackCommand",
+            Webhook(
+                path="/webhooks/slack/command",
+                post=WebhookOperation(
+                    operationId="slackCommand",
+                    responses={
+                        "200": WebhookResponse(description="Accepted"),
+                    },
+                ),
+                target=WebhookTarget(operation="handle_command"),
+                execution=WebhookExecution(
+                    mode="async_ack",
+                    acceptedResponse="200",
+                ),
+            ),
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            metadata_path = pathlib.Path(tmpdir) / "manifest-metadata.yaml"
+            with (
+                mock.patch.object(_runtime, "_load_target", return_value=plugin),
+                mock.patch.dict(
+                    _runtime.os.environ,
+                    {_runtime.ENV_WRITE_MANIFEST_METADATA: str(metadata_path)},
+                    clear=True,
+                ),
+            ):
+                result = _runtime.main(["/tmp/plugin", "example.plugin:PLUGIN"])
+
+            self.assertEqual(result, 0)
+            self.assertEqual(
+                yaml.safe_load(metadata_path.read_text(encoding="utf-8")),
+                {
+                    "securitySchemes": {"slackSignature": {"type": "hmac"}},
+                    "webhooks": {
+                        "slackCommand": {
+                            "path": "/webhooks/slack/command",
+                            "post": {
+                                "operationId": "slackCommand",
+                                "responses": {"200": {"description": "Accepted"}},
+                            },
+                            "target": {"operation": "handle_command"},
+                            "execution": {
+                                "mode": "async_ack",
+                                "acceptedResponse": "200",
+                            },
+                        }
+                    },
+                },
+            )
 
     def test_returns_usage_error_for_bad_args(self) -> None:
         result = _runtime.main(["/only-one-arg"])

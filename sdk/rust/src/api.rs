@@ -32,6 +32,21 @@ pub struct Access {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
+/// Carries hosted-webhook request metadata into typed operation handlers.
+pub struct Webhook {
+    pub name: String,
+    pub path: String,
+    pub method: String,
+    pub content_type: String,
+    pub raw_body: Vec<u8>,
+    pub headers: BTreeMap<String, Vec<String>>,
+    pub verified_scheme: String,
+    pub verified_subject: String,
+    pub delivery_id: String,
+    pub claims: BTreeMap<String, String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Carries execution-scoped metadata into typed operation handlers.
 pub struct Request {
     pub token: String,
@@ -39,6 +54,7 @@ pub struct Request {
     pub subject: Subject,
     pub credential: Credential,
     pub access: Access,
+    pub webhook: Webhook,
     /// Workflow callback metadata uses a JSON-style lowerCamelCase object
     /// such as `runId`, `target.pluginName`, `trigger.scheduleId`, and
     /// `trigger.event.specVersion`.

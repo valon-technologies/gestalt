@@ -18,6 +18,7 @@ from ._catalog import (
     catalog_to_dict,
     write_catalog,
 )
+from ._manifest import manifest_metadata_dict, write_manifest_metadata
 from ._operations import (
     OperationDefinition,
     OperationResult,
@@ -53,6 +54,8 @@ class Plugin(SessionCatalogProvider):
         self.name = _slug_name(name)
         self._module_name = module_name
         self._operations: dict[str, OperationDefinition] = {}
+        self._security_schemes: dict[str, Any] = {}
+        self._webhooks: dict[str, Any] = {}
         self._configure_handler: Any = None
         self._session_catalog_handler: tuple[Any, bool] | None = None
 
@@ -82,6 +85,28 @@ class Plugin(SessionCatalogProvider):
 
         self._session_catalog_handler = (func, _inspect_session_catalog_handler(func))
         return func
+
+    def security_scheme(self, name: str, scheme: Any, /) -> Any:
+        """Register a hosted webhook security scheme on this plugin."""
+
+        scheme_name = name.strip()
+        if not scheme_name:
+            raise ValueError("security scheme name is required")
+        if scheme_name in self._security_schemes:
+            raise ValueError(f"duplicate security scheme {scheme_name!r}")
+        self._security_schemes[scheme_name] = scheme
+        return scheme
+
+    def webhook(self, name: str, webhook: Any, /) -> Any:
+        """Register a hosted webhook definition on this plugin."""
+
+        webhook_name = name.strip()
+        if not webhook_name:
+            raise ValueError("webhook name is required")
+        if webhook_name in self._webhooks:
+            raise ValueError(f"duplicate webhook {webhook_name!r}")
+        self._webhooks[webhook_name] = webhook
+        return webhook
 
     def operation(
         self,
@@ -160,6 +185,23 @@ class Plugin(SessionCatalogProvider):
         """Write the static plugin catalog to disk."""
 
         write_catalog(path, catalog=self._static_catalog())
+
+    def manifest_metadata_dict(self) -> dict[str, Any]:
+        """Return hosted webhook metadata as a manifest fragment."""
+
+        return manifest_metadata_dict(
+            security_schemes=self._security_schemes,
+            webhooks=self._webhooks,
+        )
+
+    def write_manifest_metadata(self, path: str | pathlib.Path) -> None:
+        """Write hosted webhook metadata to disk as YAML."""
+
+        write_manifest_metadata(
+            path,
+            security_schemes=self._security_schemes,
+            webhooks=self._webhooks,
+        )
 
     def supports_session_catalog(self) -> bool:
         """Report whether the plugin exposes a session catalog hook."""

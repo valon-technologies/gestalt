@@ -49,6 +49,7 @@ import {
   CURRENT_PROTOCOL_VERSION,
   createCacheService,
   ENV_WRITE_CATALOG,
+  ENV_WRITE_MANIFEST_METADATA,
   ENV_PROVIDER_SOCKET,
   createAuthenticationService,
   createProviderService,
@@ -65,6 +66,7 @@ import {
   defineCacheProvider,
   definePlugin,
   defineS3Provider,
+  s,
 } from "../src/index.ts";
 import { createS3Service } from "../src/s3.ts";
 import {
@@ -98,10 +100,12 @@ test("runtime arg parsing requires root and target", () => {
   expect(parseRuntimeArgs(["root"])).toBeUndefined();
 });
 
-test("runtime main writes a static catalog in catalog mode", async () => {
+test("runtime main writes a static catalog and manifest metadata in export mode", async () => {
   const root = makeTempDir("gestalt-typescript-runtime-catalog-");
   const catalogPath = join(root, "catalog.yaml");
+  const manifestMetadataPath = join(root, "manifest-metadata.yaml");
   const previousCatalog = process.env[ENV_WRITE_CATALOG];
+  const previousManifestMetadata = process.env[ENV_WRITE_MANIFEST_METADATA];
 
   try {
     const indexPath = join(import.meta.dir, "..", "src", "index.ts");
@@ -124,6 +128,52 @@ test("runtime main writes a static catalog in catalog mode", async () => {
 
 export const plugin = definePlugin({
   displayName: "Catalog Provider",
+  securitySchemes: {
+    slackSignature: {
+      type: "hmac",
+      signature: {
+        algorithm: "sha256",
+        signatureHeader: "X-Slack-Signature",
+      },
+      replay: {
+        maxAge: "5m",
+      },
+    },
+  },
+  webhooks: {
+    slackCommand: {
+      path: "/webhooks/catalog-provider/command",
+      post: {
+        operationId: "slackCommand",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: s.object({
+                text: s.string(),
+              }),
+            },
+          },
+        },
+        responses: {
+          "202": {
+            description: "Accepted",
+            body: {
+              ok: true,
+            },
+          },
+        },
+        security: [{ slackSignature: [] }],
+      },
+      target: {
+        operation: "ping",
+      },
+      execution: {
+        mode: "async_ack",
+        acceptedResponse: "202",
+      },
+    },
+  },
   operations: [
     {
       id: "ping",
@@ -146,9 +196,11 @@ export const plugin = definePlugin({
     );
 
     process.env[ENV_WRITE_CATALOG] = catalogPath;
+    process.env[ENV_WRITE_MANIFEST_METADATA] = manifestMetadataPath;
     const code = await main([root, "plugin:./provider.ts#plugin"]);
     expect(code).toBe(0);
     const catalog = readFileSync(catalogPath, "utf8");
+    const manifestMetadata = readFileSync(manifestMetadataPath, "utf8");
     expect(catalog).toContain("name: catalog-provider");
     expect(catalog).toContain("displayName: Catalog Provider");
     expect(catalog).toContain("id: ping");
@@ -160,11 +212,27 @@ export const plugin = definePlugin({
     expect(catalog).not.toContain("display_name:");
     expect(catalog).not.toContain("input_schema:");
     expect(catalog).not.toContain("output_schema:");
+    expect(manifestMetadata).toContain("securitySchemes:");
+    expect(manifestMetadata).toContain("slackSignature:");
+    expect(manifestMetadata).toContain("type: hmac");
+    expect(manifestMetadata).toContain("signatureHeader: X-Slack-Signature");
+    expect(manifestMetadata).toContain("webhooks:");
+    expect(manifestMetadata).toContain("slackCommand:");
+    expect(manifestMetadata).toContain("path: /webhooks/catalog-provider/command");
+    expect(manifestMetadata).toContain("operationId: slackCommand");
+    expect(manifestMetadata).toContain("application/json:");
+    expect(manifestMetadata).toContain("text:");
+    expect(manifestMetadata).toContain("acceptedResponse: \"202\"");
   } finally {
     if (previousCatalog === undefined) {
       delete process.env[ENV_WRITE_CATALOG];
     } else {
       process.env[ENV_WRITE_CATALOG] = previousCatalog;
+    }
+    if (previousManifestMetadata === undefined) {
+      delete process.env[ENV_WRITE_MANIFEST_METADATA];
+    } else {
+      process.env[ENV_WRITE_MANIFEST_METADATA] = previousManifestMetadata;
     }
     removeTempDir(root);
   }
@@ -507,6 +575,77 @@ test("integration provider service exposes metadata, configure, execute, and ses
   expect(sessionCatalog.catalog?.operations[0].title).toBe(
     "Session Hello ops user:user-123 identity viewer",
   );
+});
+
+test("integration provider service forwards webhook request context when present", async () => {
+  const plugin = definePlugin({
+    displayName: "Webhook Context Provider",
+    operations: [
+      {
+        id: "inspectWebhook",
+        output: s.object({
+          webhook: s.string(),
+          path: s.string(),
+          verifiedScheme: s.string(),
+          rawBody: s.string(),
+          firstHeader: s.string(),
+          teamId: s.string(),
+        }),
+        handler(_input, request) {
+          const rawBody = request.webhook?.rawBody
+            ? new TextDecoder().decode(request.webhook.rawBody)
+            : "";
+          return {
+            webhook: request.webhook?.webhook ?? "",
+            path: request.webhook?.path ?? "",
+            verifiedScheme: request.webhook?.verifiedScheme ?? "",
+            rawBody,
+            firstHeader: request.webhook?.headers["x-slack-signature"]?.[0] ?? "",
+            teamId: String(request.webhook?.claims.teamId ?? ""),
+          };
+        },
+      },
+    ],
+  });
+  const service = createProviderService(plugin);
+
+  const result = await (service.execute as any)({
+    operation: "inspectWebhook",
+    params: {},
+    token: "token-123",
+    connectionParams: {},
+    context: {
+      webhook: {
+        webhook: "slackCommand",
+        path: "/webhooks/slack/command",
+        method: "POST",
+        contentType: "application/x-www-form-urlencoded",
+        rawBody: new TextEncoder().encode("text=hello"),
+        headers: [
+          {
+            name: "x-slack-signature",
+            values: ["v0=abc123"],
+          },
+        ],
+        verifiedScheme: "slackSignature",
+        verifiedSubject: "team:T123",
+        deliveryId: "evt-123",
+        claims: {
+          teamId: "T123",
+        },
+      },
+    },
+    requestHandle: "request-handle-456",
+  });
+
+  expect(JSON.parse(result.body)).toEqual({
+    webhook: "slackCommand",
+    path: "/webhooks/slack/command",
+    verifiedScheme: "slackSignature",
+    rawBody: "text=hello",
+    firstHeader: "v0=abc123",
+    teamId: "T123",
+  });
 });
 
 test("integration provider service preserves body-shaped outputs and explicit responses", async () => {

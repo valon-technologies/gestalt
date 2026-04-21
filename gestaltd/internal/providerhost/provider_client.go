@@ -312,11 +312,55 @@ func requestContextProto(ctx context.Context) (*proto.RequestContext, error) {
 		}
 		out.Workflow = value
 	}
+	if webhook := invocation.WebhookContextFromContext(ctx); webhook != nil {
+		value, err := webhookContextProto(webhook)
+		if err != nil {
+			return nil, fmt.Errorf("webhook request context: %w", err)
+		}
+		out.Webhook = value
+	}
 
-	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil {
+	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil && out.Webhook == nil {
 		return nil, nil
 	}
 	return &out, nil
+}
+
+func webhookContextProto(webhook *invocation.WebhookContext) (*proto.WebhookContext, error) {
+	if webhook == nil {
+		return nil, nil
+	}
+	out := &proto.WebhookContext{
+		Webhook:         webhook.Name,
+		Path:            webhook.Path,
+		Method:          webhook.Method,
+		ContentType:     webhook.ContentType,
+		RawBody:         append([]byte(nil), webhook.RawBody...),
+		VerifiedScheme:  webhook.VerifiedScheme,
+		VerifiedSubject: webhook.VerifiedSubject,
+		DeliveryId:      webhook.DeliveryID,
+	}
+	if len(webhook.Headers) > 0 {
+		out.Headers = make([]*proto.Header, 0, len(webhook.Headers))
+		for name, values := range webhook.Headers {
+			out.Headers = append(out.Headers, &proto.Header{
+				Name:   name,
+				Values: append([]string(nil), values...),
+			})
+		}
+	}
+	if len(webhook.Claims) > 0 {
+		claims := make(map[string]any, len(webhook.Claims))
+		for key, value := range webhook.Claims {
+			claims[key] = value
+		}
+		value, err := structFromMap(claims)
+		if err != nil {
+			return nil, err
+		}
+		out.Claims = value
+	}
+	return out, nil
 }
 
 func subjectIDForPrincipal(p *principal.Principal) string {

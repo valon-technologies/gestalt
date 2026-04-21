@@ -252,6 +252,7 @@ func TestPrepareSourceManifest_GeneratesStaticCatalogForRustProvider(t *testing.
 		ExpectedServeExport:  "__gestalt_serve",
 		ExpectedCatalogWrite: true,
 		GeneratedCatalog:     "provider-rust",
+		GeneratedWebhookPath: "/webhooks/provider-rust/command",
 	})
 	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
@@ -274,6 +275,13 @@ func TestPrepareSourceManifest_GeneratesStaticCatalogForRustProvider(t *testing.
 	}
 	if !strings.Contains(string(data), "id: greet") {
 		t.Fatalf("catalog = %q, want greet operation", data)
+	}
+	if manifest.Spec.SecuritySchemes["slackSignature"] == nil {
+		t.Fatalf("security scheme = %#v, want slackSignature", manifest.Spec.SecuritySchemes)
+	}
+	webhook := manifest.Spec.Webhooks["slackCommand"]
+	if webhook == nil || webhook.Post == nil || webhook.Path != "/webhooks/provider-rust/command" {
+		t.Fatalf("webhook = %#v, want hosted webhook metadata", webhook)
 	}
 }
 
@@ -336,6 +344,7 @@ type fakeCargoConfig struct {
 	ExpectedServeExport  string
 	ExpectedCatalogWrite bool
 	GeneratedCatalog     string
+	GeneratedWebhookPath string
 }
 
 func writeFakeCargo(t *testing.T, path string, cfg fakeCargoConfig) {
@@ -404,6 +413,32 @@ operations:
   - id: greet
     method: GET
 YAML
+fi
+if [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
+  cat > "$GESTALT_PLUGIN_WRITE_MANIFEST_METADATA" <<'JSON'
+{
+  "securitySchemes": {
+    "slackSignature": {
+      "type": "hmac"
+    }
+  },
+  "webhooks": {
+    "slackCommand": {
+      "path": "` + cfg.GeneratedWebhookPath + `",
+      "post": {
+        "responses": {
+          "200": {
+            "description": "accepted"
+          }
+        }
+      },
+      "target": {
+        "operation": "greet"
+      }
+    }
+  }
+}
+JSON
 fi
 exit 0
 EOF

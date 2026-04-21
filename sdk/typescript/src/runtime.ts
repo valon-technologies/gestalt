@@ -59,7 +59,7 @@ import {
 } from "../gen/v1/runtime_pb.ts";
 import { S3 as S3Service } from "../gen/v1/s3_pb.ts";
 import { WorkflowProvider as WorkflowProviderService } from "../gen/v1/workflow_pb.ts";
-import { errorMessage, type Request } from "./api.ts";
+import { errorMessage, type Request, type WebhookRequest } from "./api.ts";
 import {
   AuthenticationProvider,
   isAuthenticationProvider,
@@ -106,6 +106,11 @@ export const ENV_PROVIDER_PARENT_PID = "GESTALT_PLUGIN_PARENT_PID";
  * Environment variable used to request static catalog generation.
  */
 export const ENV_WRITE_CATALOG = "GESTALT_PLUGIN_WRITE_CATALOG";
+/**
+ * Environment variable used to request hosted webhook/security manifest metadata.
+ */
+export const ENV_WRITE_MANIFEST_METADATA =
+  "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA";
 /**
  * Protocol version currently implemented by the TypeScript runtime.
  */
@@ -288,13 +293,19 @@ export async function runLoadedProvider(
   }
 
   const catalogPath = process.env[ENV_WRITE_CATALOG];
-  if (catalogPath) {
+  const manifestMetadataPath = process.env[ENV_WRITE_MANIFEST_METADATA];
+  if (catalogPath || manifestMetadataPath) {
     if (!isPluginProvider(provider)) {
       throw new Error(
-        "static catalog generation is only supported for plugin providers",
+        "catalog and manifest metadata generation are only supported for plugin providers",
       );
     }
-    writeFileSync(catalogPath, catalogToYaml(provider.staticCatalog()), "utf8");
+    if (catalogPath) {
+      writeFileSync(catalogPath, catalogToYaml(provider.staticCatalog()), "utf8");
+    }
+    if (manifestMetadataPath) {
+      provider.writeManifestMetadata(manifestMetadataPath);
+    }
     return;
   }
 
@@ -713,6 +724,9 @@ function providerRequest(
   const subject = requestContext?.subject;
   const credential = requestContext?.credential;
   const access = requestContext?.access;
+  const webhook = webhookRequestFromProto(
+    (requestContext as { webhook?: unknown } | undefined)?.webhook,
+  );
   return {
     token,
     connectionParams: {
@@ -738,7 +752,86 @@ function providerRequest(
       ...(requestContext?.workflow ?? {}),
     },
     requestHandle,
+    ...(webhook ? { webhook } : {}),
   };
+}
+
+function webhookRequestFromProto(value: unknown): WebhookRequest | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const input = value as {
+    webhook?: unknown;
+    path?: unknown;
+    method?: unknown;
+    contentType?: unknown;
+    rawBody?: unknown;
+    headers?: unknown;
+    verifiedScheme?: unknown;
+    verifiedSubject?: unknown;
+    deliveryId?: unknown;
+    claims?: unknown;
+  };
+  const rawBody =
+    input.rawBody instanceof Uint8Array
+      ? new Uint8Array(input.rawBody)
+      : new Uint8Array();
+  const headers = webhookHeadersFromProto(input.headers);
+  const claims =
+    typeof input.claims === "object" && input.claims !== null
+      ? {
+          ...(input.claims as Record<string, unknown>),
+        }
+      : {};
+  const hasValue =
+    typeof input.webhook === "string" ||
+    typeof input.path === "string" ||
+    typeof input.method === "string" ||
+    typeof input.contentType === "string" ||
+    rawBody.length > 0 ||
+    Object.keys(headers).length > 0 ||
+    typeof input.verifiedScheme === "string" ||
+    typeof input.verifiedSubject === "string" ||
+    typeof input.deliveryId === "string" ||
+    Object.keys(claims).length > 0;
+  if (!hasValue) {
+    return undefined;
+  }
+  return {
+    webhook: typeof input.webhook === "string" ? input.webhook : "",
+    path: typeof input.path === "string" ? input.path : "",
+    method: typeof input.method === "string" ? input.method : "",
+    contentType: typeof input.contentType === "string" ? input.contentType : "",
+    rawBody,
+    headers,
+    verifiedScheme:
+      typeof input.verifiedScheme === "string" ? input.verifiedScheme : "",
+    verifiedSubject:
+      typeof input.verifiedSubject === "string" ? input.verifiedSubject : "",
+    deliveryId: typeof input.deliveryId === "string" ? input.deliveryId : "",
+    claims,
+  };
+}
+
+function webhookHeadersFromProto(
+  value: unknown,
+): Record<string, string[]> {
+  if (!Array.isArray(value)) {
+    return {};
+  }
+  const output: Record<string, string[]> = {};
+  for (const entry of value) {
+    if (typeof entry !== "object" || entry === null) {
+      continue;
+    }
+    const name = (entry as { name?: unknown }).name;
+    const values = (entry as { values?: unknown }).values;
+    if (typeof name !== "string" || !Array.isArray(values)) {
+      continue;
+    }
+    output[name] = values.filter((item): item is string => typeof item === "string");
+  }
+  return output;
 }
 
 function providerRuntimeEntry(

@@ -13,6 +13,7 @@ import (
 )
 
 const envWriteCatalog = "GESTALT_PLUGIN_WRITE_CATALOG"
+const envWriteManifestMetadata = "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA"
 
 func PrepareSourceManifest(manifestPath string) ([]byte, *providermanifestv1.Manifest, error) {
 	data, manifest, err := ReadSourceManifestFile(manifestPath)
@@ -20,6 +21,9 @@ func PrepareSourceManifest(manifestPath string) ([]byte, *providermanifestv1.Man
 		return nil, nil, err
 	}
 	if err := EnsureSourceStaticCatalog(manifestPath, manifest); err != nil {
+		return nil, nil, err
+	}
+	if err := ApplySourceRuntimeManifestMetadata(manifestPath, manifest); err != nil {
 		return nil, nil, err
 	}
 	return data, manifest, nil

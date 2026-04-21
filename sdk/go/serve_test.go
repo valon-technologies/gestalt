@@ -30,6 +30,19 @@ type stubOutput struct {
 	AccessRole          string `json:"access_role"`
 }
 
+type webhookOutput struct {
+	Name            string              `json:"name"`
+	Path            string              `json:"path"`
+	Method          string              `json:"method"`
+	ContentType     string              `json:"content_type"`
+	RawBody         string              `json:"raw_body"`
+	VerifiedScheme  string              `json:"verified_scheme"`
+	VerifiedSubject string              `json:"verified_subject"`
+	DeliveryID      string              `json:"delivery_id"`
+	Headers         map[string][]string `json:"headers"`
+	Claims          map[string]string   `json:"claims"`
+}
+
 type decodeInput struct {
 	Count int `json:"count"`
 }
@@ -68,6 +81,16 @@ var sessionCatalogStubRouter = gestalt.MustRouter(
 	),
 )
 
+var webhookStubRouter = gestalt.MustRouter(
+	gestalt.Register(
+		gestalt.Operation[stubInput, webhookOutput]{
+			ID:     "webhook_op",
+			Method: http.MethodPost,
+		},
+		(*stubProvider).webhookOp,
+	),
+)
+
 func (p *stubProvider) Configure(_ context.Context, _ string, _ map[string]any) error {
 	return nil
 }
@@ -81,6 +104,24 @@ func (p *stubProvider) testOp(_ context.Context, _ stubInput, req gestalt.Reques
 		CredentialSubjectID: req.Credential.SubjectID,
 		AccessPolicy:        req.Access.Policy,
 		AccessRole:          req.Access.Role,
+	}), nil
+}
+
+func (p *stubProvider) webhookOp(_ context.Context, _ stubInput, req gestalt.Request) (gestalt.Response[webhookOutput], error) {
+	if req.Webhook == nil {
+		return gestalt.OK(webhookOutput{}), nil
+	}
+	return gestalt.OK(webhookOutput{
+		Name:            req.Webhook.Name,
+		Path:            req.Webhook.Path,
+		Method:          req.Webhook.Method,
+		ContentType:     req.Webhook.ContentType,
+		RawBody:         string(req.Webhook.RawBody),
+		VerifiedScheme:  req.Webhook.VerifiedScheme,
+		VerifiedSubject: req.Webhook.VerifiedSubject,
+		DeliveryID:      req.Webhook.DeliveryID,
+		Headers:         req.Webhook.Headers,
+		Claims:          req.Webhook.Claims,
 	}), nil
 }
 
@@ -344,6 +385,40 @@ func TestProviderServerExecute(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestProviderServerExecute_PreservesWebhookContext(t *testing.T) {
+	t.Parallel()
+
+	client := newIntegrationProviderClient(t, &stubProvider{}, webhookStubRouter)
+	claims, _ := structpb.NewStruct(map[string]any{"scheme": "slackSignature"})
+	resp, err := client.Execute(context.Background(), &proto.ExecuteRequest{
+		Operation: "webhook_op",
+		Context: &proto.RequestContext{
+			Webhook: &proto.WebhookContext{
+				Webhook:         "slackCommand",
+				Path:            "/webhooks/slack-agent/command",
+				Method:          http.MethodPost,
+				ContentType:     "application/x-www-form-urlencoded",
+				RawBody:         []byte("text=hello"),
+				Headers:         []*proto.Header{{Name: "X-Slack-Signature", Values: []string{"v0=abc"}}},
+				VerifiedScheme:  "slackSignature",
+				VerifiedSubject: "slack-agent/slackCommand#slackSignature",
+				DeliveryId:      "delivery-123",
+				Claims:          claims,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if resp.GetStatus() != http.StatusOK {
+		t.Fatalf("Status = %d, want %d", resp.GetStatus(), http.StatusOK)
+	}
+	want := `{"name":"slackCommand","path":"/webhooks/slack-agent/command","method":"POST","content_type":"application/x-www-form-urlencoded","raw_body":"text=hello","verified_scheme":"slackSignature","verified_subject":"slack-agent/slackCommand#slackSignature","delivery_id":"delivery-123","headers":{"X-Slack-Signature":["v0=abc"]},"claims":{"scheme":"slackSignature"}}`
+	if resp.GetBody() != want {
+		t.Fatalf("Body = %q, want %q", resp.GetBody(), want)
 	}
 }
 

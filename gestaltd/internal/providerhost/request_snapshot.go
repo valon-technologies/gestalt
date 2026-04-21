@@ -25,6 +25,7 @@ type requestSnapshot struct {
 	requestMeta invocation.RequestMeta
 	credential  invocation.CredentialContext
 	invocation  *invocation.InvocationMeta
+	webhook     *invocation.WebhookContext
 	surface     invocation.InvocationSurface
 	connection  string
 }
@@ -96,6 +97,7 @@ func captureRequestSnapshot(ctx context.Context, handle string) requestSnapshot 
 		requestMeta: invocation.RequestMetaFromContext(ctx),
 		credential:  invocation.CredentialContextFromContext(ctx),
 		invocation:  cloneInvocationMeta(meta),
+		webhook:     invocation.WebhookContextFromContext(ctx),
 		surface:     invocation.InvocationSurfaceFromContext(ctx),
 		connection:  invocation.ConnectionFromContext(ctx),
 	}
@@ -107,6 +109,7 @@ func cloneRequestSnapshot(snapshot requestSnapshot) requestSnapshot {
 		requestMeta: snapshot.requestMeta,
 		credential:  snapshot.credential,
 		invocation:  cloneInvocationMeta(snapshot.invocation),
+		webhook:     cloneWebhookContext(snapshot.webhook),
 		surface:     snapshot.surface,
 		connection:  snapshot.connection,
 	}
@@ -137,6 +140,29 @@ func cloneInvocationMeta(src *invocation.InvocationMeta) *invocation.InvocationM
 	}
 }
 
+func cloneWebhookContext(src *invocation.WebhookContext) *invocation.WebhookContext {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	if len(src.RawBody) > 0 {
+		dst.RawBody = append([]byte(nil), src.RawBody...)
+	}
+	if len(src.Headers) > 0 {
+		dst.Headers = make(map[string][]string, len(src.Headers))
+		for key, values := range src.Headers {
+			dst.Headers[key] = append([]string(nil), values...)
+		}
+	}
+	if len(src.Claims) > 0 {
+		dst.Claims = make(map[string]string, len(src.Claims))
+		for key, value := range src.Claims {
+			dst.Claims[key] = value
+		}
+	}
+	return &dst
+}
+
 func restoreRequestSnapshotContext(ctx context.Context, snapshot requestSnapshot, connectionOverride string) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
@@ -152,6 +178,9 @@ func restoreRequestSnapshotContext(ctx context.Context, snapshot requestSnapshot
 	}
 	if snapshot.credential != (invocation.CredentialContext{}) {
 		ctx = invocation.WithCredentialContext(ctx, snapshot.credential)
+	}
+	if snapshot.webhook != nil {
+		ctx = invocation.WithWebhookContext(ctx, snapshot.webhook)
 	}
 	if snapshot.surface != "" {
 		ctx = invocation.WithInvocationSurface(ctx, snapshot.surface)

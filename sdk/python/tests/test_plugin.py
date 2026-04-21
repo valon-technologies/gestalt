@@ -4,7 +4,29 @@ import tempfile
 import unittest
 from dataclasses import dataclass
 
-from gestalt import OK, Access, Credential, Error, Plugin, Request, Response, Subject
+import yaml
+
+from gestalt import (
+    OK,
+    Access,
+    Credential,
+    Error,
+    Plugin,
+    Request,
+    Response,
+    Subject,
+    Webhook,
+    WebhookExecution,
+    WebhookMediaType,
+    WebhookOperation,
+    WebhookReplayConfig,
+    WebhookRequestBody,
+    WebhookResponse,
+    WebhookSecretRef,
+    WebhookSecurityScheme,
+    WebhookSignatureConfig,
+    WebhookTarget,
+)
 
 
 class PluginOperationTests(unittest.TestCase):
@@ -230,6 +252,93 @@ class PluginCatalogTests(unittest.TestCase):
             self.assertTrue(path.exists())
             content = path.read_text(encoding="utf-8")
             self.assertIn("test-plugin", content)
+
+    def test_manifest_metadata_dict_and_write(self) -> None:
+        plugin = Plugin("test-plugin")
+        plugin.security_scheme(
+            "slackSignature",
+            WebhookSecurityScheme(
+                type="hmac",
+                secret=WebhookSecretRef(env="SLACK_SIGNING_SECRET"),
+                signature=WebhookSignatureConfig(
+                    algorithm="sha256",
+                    signatureHeader="X-Slack-Signature",
+                    timestampHeader="X-Slack-Request-Timestamp",
+                    payloadTemplate="v0:{header.X-Slack-Request-Timestamp}:{raw_body}",
+                    digestPrefix="v0=",
+                ),
+                replay=WebhookReplayConfig(maxAge="5m"),
+            ),
+        )
+        plugin.webhook(
+            "slackCommand",
+            Webhook(
+                path="/webhooks/slack/command",
+                post=WebhookOperation(
+                    operationId="slackCommand",
+                    requestBody=WebhookRequestBody(
+                        required=True,
+                        content={
+                            "application/x-www-form-urlencoded": WebhookMediaType(
+                                schema={"type": "object"}
+                            )
+                        },
+                    ),
+                    responses={
+                        "200": WebhookResponse(
+                            description="Accepted",
+                            headers={"Content-Type": "application/json"},
+                            body={
+                                "response_type": "ephemeral",
+                                "text": "Working on it...",
+                            },
+                        )
+                    },
+                    security=[{"slackSignature": []}],
+                ),
+                target=WebhookTarget(operation="handle_command"),
+                execution=WebhookExecution(
+                    mode="async_ack",
+                    acceptedResponse="200",
+                ),
+            ),
+        )
+
+        manifest_metadata = plugin.manifest_metadata_dict()
+
+        self.assertEqual(
+            manifest_metadata["securitySchemes"]["slackSignature"]["type"],
+            "hmac",
+        )
+        self.assertEqual(
+            manifest_metadata["securitySchemes"]["slackSignature"]["secret"]["env"],
+            "SLACK_SIGNING_SECRET",
+        )
+        self.assertEqual(
+            manifest_metadata["webhooks"]["slackCommand"]["post"]["operationId"],
+            "slackCommand",
+        )
+        self.assertNotIn(
+            "description",
+            manifest_metadata["webhooks"]["slackCommand"],
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = pathlib.Path(tmpdir) / "manifest-metadata.yaml"
+            plugin.write_manifest_metadata(path)
+            written = yaml.safe_load(path.read_text(encoding="utf-8"))
+
+        self.assertEqual(written, manifest_metadata)
+
+    def test_manifest_metadata_registration_rejects_duplicates(self) -> None:
+        plugin = Plugin("test-plugin")
+        plugin.security_scheme("slackSignature", {"type": "hmac"})
+        plugin.webhook("slackCommand", {"path": "/webhooks/slack/command"})
+
+        with self.assertRaisesRegex(ValueError, "duplicate security scheme"):
+            plugin.security_scheme("slackSignature", {"type": "apiKey"})
+        with self.assertRaisesRegex(ValueError, "duplicate webhook"):
+            plugin.webhook("slackCommand", {"path": "/webhooks/slack/events"})
 
 
 class PluginNameTests(unittest.TestCase):

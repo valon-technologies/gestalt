@@ -21,6 +21,7 @@ type Request struct {
 	Subject          Subject
 	Credential       Credential
 	Access           Access
+	Webhook          *WebhookContext
 	requestHandle    string
 }
 
@@ -121,8 +122,9 @@ func Register[P any, In any, Out any](
 // Router dispatches provider Execute calls against typed handlers and derives
 // the corresponding static executable catalog.
 type Router[P any] struct {
-	catalog  *proto.Catalog
-	handlers map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error)
+	catalog          *proto.Catalog
+	manifestMetadata *ManifestMetadata
+	handlers         map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error)
 }
 
 // NewRouter constructs a typed router from registrations. Source-provider flows
@@ -185,9 +187,37 @@ func (r *Router[P]) WithName(name string) *Router[P] {
 		handlers[opID] = handler
 	}
 	return &Router[P]{
-		catalog:  cat,
-		handlers: handlers,
+		catalog:          cat,
+		manifestMetadata: cloneManifestMetadata(r.manifestMetadata),
+		handlers:         handlers,
 	}
+}
+
+// WithManifestMetadata returns a copy of r with hosted-webhook manifest
+// metadata attached for build-time export.
+func (r *Router[P]) WithManifestMetadata(metadata *ManifestMetadata) *Router[P] {
+	if r == nil {
+		return nil
+	}
+	cat := cloneCatalog(r.catalog)
+	handlers := make(map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error), len(r.handlers))
+	for opID, handler := range r.handlers {
+		handlers[opID] = handler
+	}
+	return &Router[P]{
+		catalog:          cat,
+		manifestMetadata: cloneManifestMetadata(metadata),
+		handlers:         handlers,
+	}
+}
+
+// ManifestMetadata returns a defensive copy of the router's build-time manifest
+// metadata fragment.
+func (r *Router[P]) ManifestMetadata() *ManifestMetadata {
+	if r == nil {
+		return nil
+	}
+	return cloneManifestMetadata(r.manifestMetadata)
 }
 
 func cloneCatalog(src *proto.Catalog) *proto.Catalog {
@@ -214,6 +244,7 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 			Subject:          SubjectFromContext(ctx),
 			Credential:       CredentialFromContext(ctx),
 			Access:           AccessFromContext(ctx),
+			Webhook:          WebhookContextFromContext(ctx),
 			requestHandle:    requestHandleFromContext(ctx),
 		})
 	})

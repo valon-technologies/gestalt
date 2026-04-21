@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 
 use gestalt::proto::v1::integration_provider_client::IntegrationProviderClient;
 use gestalt::proto::v1::{
-    AccessContext, CredentialContext, ExecuteRequest, GetSessionCatalogRequest, PostConnectRequest,
-    RequestContext, StartProviderRequest, SubjectContext,
+    AccessContext, CredentialContext, ExecuteRequest, GetSessionCatalogRequest, Header,
+    PostConnectRequest, RequestContext, StartProviderRequest, SubjectContext, WebhookContext,
 };
 use gestalt::{Catalog, CatalogOperation, Operation, Provider, Request, Response, Router, ok};
 use hyper_util::rt::tokio::TokioIo;
@@ -92,6 +92,10 @@ struct Output {
     credential_mode: String,
     access_role: String,
     request_handle: String,
+    webhook_name: String,
+    webhook_delivery_id: String,
+    webhook_signature: String,
+    webhook_raw_body: String,
     workflow_run_id: String,
     workflow_trigger_id: String,
     workflow_event_spec_version: String,
@@ -120,6 +124,17 @@ async fn serves_provider_requests_over_unix_socket() {
                     credential_mode,
                     access_role,
                     request_handle,
+                    webhook_name: request.webhook.name.clone(),
+                    webhook_delivery_id: request.webhook.delivery_id.clone(),
+                    webhook_signature: request
+                        .webhook
+                        .headers
+                        .get("X-Slack-Signature")
+                        .and_then(|values| values.first())
+                        .cloned()
+                        .unwrap_or_default(),
+                    webhook_raw_body: String::from_utf8_lossy(&request.webhook.raw_body)
+                        .into_owned(),
                     workflow_run_id: request
                         .workflow
                         .get("runId")
@@ -260,6 +275,23 @@ async fn serves_provider_requests_over_unix_socket() {
                     policy: "sample_policy".to_string(),
                     role: "admin".to_string(),
                 }),
+                webhook: Some(WebhookContext {
+                    webhook: "slackCommand".to_string(),
+                    path: "/webhooks/slack-agent/command".to_string(),
+                    method: "POST".to_string(),
+                    content_type: "application/x-www-form-urlencoded".to_string(),
+                    raw_body: b"text=Rust".to_vec(),
+                    headers: vec![Header {
+                        name: "X-Slack-Signature".to_string(),
+                        values: vec!["v0=abc".to_string()],
+                    }],
+                    verified_scheme: "slackSignature".to_string(),
+                    verified_subject: "slack-agent/slackCommand#slackSignature".to_string(),
+                    delivery_id: "delivery-123".to_string(),
+                    claims: Some(helpers::struct_from_json(serde_json::json!({
+                        "scheme": "slackSignature"
+                    }))),
+                }),
                 workflow: Some(helpers::struct_from_json(serde_json::json!({
                     "runId": "run-123",
                     "createdBy": {
@@ -289,7 +321,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"identity","access_role":"admin","request_handle":"handle-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"identity","access_role":"admin","request_handle":"handle-123","webhook_name":"slackCommand","webhook_delivery_id":"delivery-123","webhook_signature":"v0=abc","webhook_raw_body":"text=Rust","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123"}"#
     );
 
     let session_catalog = client
@@ -313,6 +345,7 @@ async fn serves_provider_requests_over_unix_socket() {
                     policy: "sample_policy".to_string(),
                     role: "viewer".to_string(),
                 }),
+                webhook: None,
                 workflow: Some(helpers::struct_from_json(serde_json::json!({
                     "runId": "run-999",
                     "trigger": {"kind": "schedule"}

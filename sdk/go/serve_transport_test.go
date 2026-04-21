@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -53,6 +54,54 @@ func TestServeProviderRoundTrip(t *testing.T) {
 	}
 	if meta.GetSupportsSessionCatalog() {
 		t.Fatalf("unexpected metadata: %+v", meta)
+	}
+}
+
+func TestServeProvider_WritesManifestMetadata(t *testing.T) {
+	metadataPath := filepath.Join(t.TempDir(), "manifest-metadata.json")
+	t.Setenv("GESTALT_PLUGIN_WRITE_MANIFEST_METADATA", metadataPath)
+
+	router := gestalt.MustRouter(
+		gestalt.Register(
+			gestalt.Operation[stubInput, stubOutput]{
+				ID:     "test_op",
+				Method: "POST",
+			},
+			(*closeableStubProvider).testOp,
+		),
+	).WithManifestMetadata(&gestalt.ManifestMetadata{
+		SecuritySchemes: map[string]*gestalt.WebhookSecurityScheme{
+			"slackSignature": {
+				Type: "hmac",
+				Secret: &gestalt.SecretRef{
+					Env: "SLACK_SIGNING_SECRET",
+				},
+				Signature: &gestalt.SignatureConfig{
+					Algorithm:       "sha256",
+					SignatureHeader: "X-Slack-Signature",
+				},
+			},
+		},
+		Webhooks: map[string]*gestalt.WebhookDef{
+			"slackCommand": {
+				Path: "/webhooks/slack-agent/command",
+				Post: &gestalt.WebhookOperation{
+					Security: []gestalt.SecurityRequirement{{"slackSignature": nil}},
+				},
+				Target: &gestalt.WebhookTarget{Operation: "handle_command"},
+			},
+		},
+	})
+
+	if err := gestalt.ServeProvider(context.Background(), &closeableStubProvider{}, router); err != nil {
+		t.Fatalf("ServeProvider: %v", err)
+	}
+	data, err := os.ReadFile(metadataPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", metadataPath, err)
+	}
+	if !strings.Contains(string(data), "\"securitySchemes\"") || !strings.Contains(string(data), "\"webhooks\"") {
+		t.Fatalf("manifest metadata = %s, want securitySchemes and webhooks", data)
 	}
 }
 

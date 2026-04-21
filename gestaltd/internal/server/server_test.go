@@ -11631,6 +11631,7 @@ func TestHostedWebhook_HMACAsyncAckDispatchesOperationAndRejectsReplay(t *testin
 	type webhookInvocation struct {
 		Params   map[string]any
 		Workflow map[string]any
+		Webhook  *invocation.WebhookContext
 	}
 
 	invocations := make(chan webhookInvocation, 1)
@@ -11645,6 +11646,7 @@ func TestHostedWebhook_HMACAsyncAckDispatchesOperationAndRejectsReplay(t *testin
 				invocations <- webhookInvocation{
 					Params:   cloneMap(params),
 					Workflow: invocation.WorkflowContextFromContext(ctx),
+					Webhook:  invocation.WebhookContextFromContext(ctx),
 				}
 				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
 			},
@@ -11762,12 +11764,60 @@ func TestHostedWebhook_HMACAsyncAckDispatchesOperationAndRejectsReplay(t *testin
 		if got, want := invocation.Params["source"], "query"; got != want {
 			t.Fatalf("params[source] = %#v, want %q", got, want)
 		}
+		if invocation.Webhook == nil {
+			t.Fatal("expected webhook context on operation invocation")
+		}
+		if got, want := invocation.Webhook.Name, "slack_command"; got != want {
+			t.Fatalf("webhook name = %q, want %q", got, want)
+		}
+		if got, want := invocation.Webhook.Path, "/webhooks/slack-agent/command"; got != want {
+			t.Fatalf("webhook path = %q, want %q", got, want)
+		}
+		if got, want := invocation.Webhook.Method, http.MethodPost; got != want {
+			t.Fatalf("webhook method = %q, want %q", got, want)
+		}
+		if got, want := invocation.Webhook.ContentType, "application/x-www-form-urlencoded"; got != want {
+			t.Fatalf("webhook content type = %q, want %q", got, want)
+		}
+		if got, want := string(invocation.Webhook.RawBody), body; got != want {
+			t.Fatalf("webhook raw body = %q, want %q", got, want)
+		}
+		if got, want := invocation.Webhook.VerifiedScheme, "slackSignature"; got != want {
+			t.Fatalf("webhook verified scheme = %q, want %q", got, want)
+		}
+		if got, want := invocation.Webhook.VerifiedSubject, "slack_agent/slack_command#slackSignature"; got != want {
+			t.Fatalf("webhook verified subject = %q, want %q", got, want)
+		}
+		if got, want := invocation.Webhook.DeliveryID, "delivery-1"; got != want {
+			t.Fatalf("webhook delivery ID = %q, want %q", got, want)
+		}
+		if got, want := invocation.Webhook.Headers["X-Slack-Signature"][0], signature; got != want {
+			t.Fatalf("webhook signature header = %q, want %q", got, want)
+		}
 		webhookCtx, ok := invocation.Workflow["webhook"].(map[string]any)
 		if !ok {
 			t.Fatalf("workflow webhook context = %#v", invocation.Workflow)
 		}
 		if got, want := webhookCtx["name"], "slack_command"; got != want {
 			t.Fatalf("workflow webhook name = %#v, want %q", got, want)
+		}
+		if got, want := webhookCtx["path"], "/webhooks/slack-agent/command"; got != want {
+			t.Fatalf("workflow webhook path = %#v, want %q", got, want)
+		}
+		if got, want := webhookCtx["method"], http.MethodPost; got != want {
+			t.Fatalf("workflow webhook method = %#v, want %q", got, want)
+		}
+		if got, want := webhookCtx["contentType"], "application/x-www-form-urlencoded"; got != want {
+			t.Fatalf("workflow webhook content type = %#v, want %q", got, want)
+		}
+		if got, want := webhookCtx["rawBody"], body; got != want {
+			t.Fatalf("workflow webhook raw body = %#v, want %q", got, want)
+		}
+		if got, want := webhookCtx["scheme"], "slackSignature"; got != want {
+			t.Fatalf("workflow webhook scheme = %#v, want %q", got, want)
+		}
+		if got, want := webhookCtx["subject"], "slack_agent/slack_command#slackSignature"; got != want {
+			t.Fatalf("workflow webhook subject = %#v, want %q", got, want)
 		}
 		if got, want := webhookCtx["deliveryId"], "delivery-1"; got != want {
 			t.Fatalf("workflow webhook deliveryId = %#v, want %q", got, want)
@@ -11913,6 +11963,24 @@ func TestHostedWebhook_APIKeySyncStartsWorkflowRun(t *testing.T) {
 	}
 	if got, want := webhookMeta["name"], "slack_event"; got != want {
 		t.Fatalf("workflow webhook name = %#v, want %q", got, want)
+	}
+	if got, want := webhookMeta["path"], "/webhooks/slack-agent/events"; got != want {
+		t.Fatalf("workflow webhook path = %#v, want %q", got, want)
+	}
+	if got, want := webhookMeta["method"], http.MethodPost; got != want {
+		t.Fatalf("workflow webhook method = %#v, want %q", got, want)
+	}
+	if got, want := webhookMeta["contentType"], "application/json"; got != want {
+		t.Fatalf("workflow webhook content type = %#v, want %q", got, want)
+	}
+	if got, want := webhookMeta["rawBody"], `{"event":"opened","kind":"attacker"}`; got != want {
+		t.Fatalf("workflow webhook raw body = %#v, want %q", got, want)
+	}
+	if got, want := webhookMeta["scheme"], "eventKey"; got != want {
+		t.Fatalf("workflow webhook scheme = %#v, want %q", got, want)
+	}
+	if got, want := webhookMeta["subject"], "slack_agent/slack_event#eventKey"; got != want {
+		t.Fatalf("workflow webhook subject = %#v, want %q", got, want)
 	}
 }
 

@@ -71,6 +71,7 @@ workflow_pb2_grpc: Any = _workflow_pb2_grpc
 
 ENV_PROVIDER_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
 ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
+ENV_WRITE_MANIFEST_METADATA: Final[str] = "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA"
 CURRENT_PROTOCOL_VERSION: Final[int] = 2
 GRPC_SERVER_MAX_WORKERS: Final[int] = 4
 GRPC_SHUTDOWN_GRACE_SECONDS: Final[int] = 2
@@ -151,12 +152,16 @@ def main(argv: list[str] | None = None) -> int:
         target.name = runtime_args.plugin_name
 
     catalog_path = os.environ.get(ENV_WRITE_CATALOG)
-    if catalog_path:
+    metadata_path = os.environ.get(ENV_WRITE_MANIFEST_METADATA)
+    if catalog_path or metadata_path:
         if not isinstance(target, Plugin):
             raise RuntimeError(
-                "catalog export is only supported for integration plugins"
+                "catalog and manifest metadata export are only supported for integration plugins"
             )
-        target.write_catalog(catalog_path)
+        if catalog_path:
+            target.write_catalog(catalog_path)
+        if metadata_path:
+            target.write_manifest_metadata(metadata_path)
         return 0
 
     serve(target, runtime_kind=runtime_args.runtime_kind)
@@ -672,6 +677,7 @@ def _plugin_request(request: Any) -> Request:
         credential=_credential_from_proto(getattr(request, "context", None)),
         access=_access_from_proto(getattr(request, "context", None)),
         workflow=_workflow_from_proto(getattr(request, "context", None)),
+        webhook=_webhook_from_proto(getattr(request, "context", None)),
         request_handle=getattr(request, "request_handle", ""),
     )
 
@@ -728,6 +734,30 @@ def _workflow_from_proto(request_context: Any) -> dict[str, Any]:
         dict[str, Any],
         json_format.MessageToDict(
             workflow,
+            preserving_proto_field_name=True,
+        ),
+    )
+
+
+def _webhook_from_proto(request_context: Any) -> dict[str, Any]:
+    if request_context is None:
+        return {}
+    if hasattr(request_context, "HasField"):
+        try:
+            if not request_context.HasField("webhook"):
+                return {}
+        except ValueError:
+            pass
+
+    webhook = getattr(request_context, "webhook", None)
+    if webhook is None:
+        return {}
+    if isinstance(webhook, dict):
+        return cast(dict[str, Any], webhook)
+    return cast(
+        dict[str, Any],
+        json_format.MessageToDict(
+            webhook,
             preserving_proto_field_name=True,
         ),
     )

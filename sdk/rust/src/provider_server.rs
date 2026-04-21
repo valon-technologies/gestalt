@@ -4,7 +4,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::api::{Access, Credential, Request, Response, Subject};
+use crate::api::{Access, Credential, Request, Response, Subject, Webhook};
 use crate::catalog::object_map;
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::{Error, HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE};
@@ -114,6 +114,7 @@ where
                     subject: request_subject(request.context.as_ref()),
                     credential: request_credential(request.context.as_ref()),
                     access: request_access(request.context.as_ref()),
+                    webhook: request_webhook(request.context.as_ref()),
                     workflow: request_workflow(request.context.as_ref()),
                     request_handle: request.request_handle,
                 },
@@ -143,6 +144,7 @@ where
             subject: request_subject(request.context.as_ref()),
             credential: request_credential(request.context.as_ref()),
             access: request_access(request.context.as_ref()),
+            webhook: request_webhook(request.context.as_ref()),
             workflow: request_workflow(request.context.as_ref()),
             request_handle: String::new(),
         };
@@ -215,4 +217,36 @@ fn request_workflow(
         return serde_json::Map::new();
     };
     crate::catalog::object_map(context.workflow.clone())
+}
+
+fn request_webhook(context: Option<&crate::generated::v1::RequestContext>) -> Webhook {
+    let Some(context) = context else {
+        return Webhook::default();
+    };
+    let Some(webhook) = context.webhook.as_ref() else {
+        return Webhook::default();
+    };
+    let mut headers = std::collections::BTreeMap::new();
+    for header in &webhook.headers {
+        if header.name.is_empty() {
+            continue;
+        }
+        headers.insert(header.name.clone(), header.values.clone());
+    }
+    let claims = crate::catalog::object_map(webhook.claims.clone())
+        .into_iter()
+        .filter_map(|(key, value)| value.as_str().map(|text| (key, text.to_string())))
+        .collect();
+    Webhook {
+        name: webhook.webhook.clone(),
+        path: webhook.path.clone(),
+        method: webhook.method.clone(),
+        content_type: webhook.content_type.clone(),
+        raw_body: webhook.raw_body.clone(),
+        headers,
+        verified_scheme: webhook.verified_scheme.clone(),
+        verified_subject: webhook.verified_subject.clone(),
+        delivery_id: webhook.delivery_id.clone(),
+        claims,
+    }
 }

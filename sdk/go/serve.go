@@ -27,6 +27,18 @@ func ServeProvider[P any, PP interface {
 	*P
 	Provider
 }](ctx context.Context, provider PP, router *Router[P]) error {
+	if metadataPath := os.Getenv(envWriteManifestMetadata); metadataPath != "" {
+		var metadata *ManifestMetadata
+		if router != nil {
+			metadata = router.ManifestMetadata()
+		}
+		if err := writeManifestMetadataJSON(metadata, metadataPath); err != nil {
+			return err
+		}
+		if os.Getenv(envWriteCatalog) == "" {
+			return nil
+		}
+	}
 	if catalogPath := os.Getenv(envWriteCatalog); catalogPath != "" {
 		cat := router.Catalog()
 		if cat == nil {

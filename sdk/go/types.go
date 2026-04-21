@@ -100,6 +100,21 @@ type Access struct {
 	Role   string
 }
 
+// WebhookContext carries inbound hosted-webhook request metadata for the
+// current operation, when applicable.
+type WebhookContext struct {
+	Name            string
+	Path            string
+	Method          string
+	ContentType     string
+	RawBody         []byte
+	Headers         map[string][]string
+	VerifiedScheme  string
+	VerifiedSubject string
+	DeliveryID      string
+	Claims          map[string]string
+}
+
 // OperationResult is the serialized result returned by the provider runtime.
 type OperationResult struct {
 	Status int
@@ -112,6 +127,7 @@ type credentialKey struct{}
 type accessKey struct{}
 type requestHandleKey struct{}
 type workflowKey struct{}
+type webhookKey struct{}
 
 // WithConnectionParams returns a child context carrying the given connection
 // parameters. The host calls this before invoking an executable operation so
@@ -162,6 +178,18 @@ func AccessFromContext(ctx context.Context) Access {
 	return access
 }
 
+// WithWebhookContext returns a child context carrying hosted-webhook request
+// metadata for the current execution.
+func WithWebhookContext(ctx context.Context, webhook *WebhookContext) context.Context {
+	return context.WithValue(ctx, webhookKey{}, cloneWebhookContext(webhook))
+}
+
+// WebhookContextFromContext extracts hosted-webhook request metadata from ctx.
+func WebhookContextFromContext(ctx context.Context) *WebhookContext {
+	webhook, _ := ctx.Value(webhookKey{}).(*WebhookContext)
+	return cloneWebhookContext(webhook)
+}
+
 func withRequestHandle(ctx context.Context, handle string) context.Context {
 	return context.WithValue(ctx, requestHandleKey{}, handle)
 }
@@ -189,4 +217,27 @@ func WithWorkflowContext(ctx context.Context, workflow map[string]any) context.C
 func WorkflowContextFromContext(ctx context.Context) map[string]any {
 	workflow, _ := ctx.Value(workflowKey{}).(map[string]any)
 	return workflow
+}
+
+func cloneWebhookContext(src *WebhookContext) *WebhookContext {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	if len(src.RawBody) > 0 {
+		dst.RawBody = append([]byte(nil), src.RawBody...)
+	}
+	if len(src.Headers) > 0 {
+		dst.Headers = make(map[string][]string, len(src.Headers))
+		for key, values := range src.Headers {
+			dst.Headers[key] = append([]string(nil), values...)
+		}
+	}
+	if len(src.Claims) > 0 {
+		dst.Claims = make(map[string]string, len(src.Claims))
+		for key, value := range src.Claims {
+			dst.Claims[key] = value
+		}
+	}
+	return &dst
 }

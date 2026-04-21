@@ -147,6 +147,26 @@ message AccessContext {
   string role = 2;
 }
 
+message Header {
+  string name = 1;
+  repeated string values = 2;
+}
+
+// WebhookContext carries inbound hosted-webhook request metadata for one
+// operation.
+message WebhookContext {
+  string webhook = 1;
+  string path = 2;
+  string method = 3;
+  string content_type = 4;
+  bytes raw_body = 5;
+  repeated Header headers = 6;
+  string verified_scheme = 7;
+  string verified_subject = 8;
+  string delivery_id = 9;
+  google.protobuf.Struct claims = 10;
+}
+
 // RequestContext bundles the caller, credential, and access metadata for one
 // operation.
 message RequestContext {
@@ -154,6 +174,7 @@ message RequestContext {
   CredentialContext credential = 2;
   AccessContext access = 3;
   google.protobuf.Struct workflow = 4;
+  WebhookContext webhook = 5;
 }
 
 // ExecuteRequest invokes one executable operation.

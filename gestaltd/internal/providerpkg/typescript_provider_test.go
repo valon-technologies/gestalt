@@ -433,6 +433,13 @@ func TestPrepareSourceManifest_GeneratesTypeScriptStaticCatalog(t *testing.T) {
 	if !containsString(string(data), "name: ts-release") {
 		t.Fatalf("catalog = %q, want provider name", string(data))
 	}
+	if manifest.Spec.SecuritySchemes["slackSignature"] == nil {
+		t.Fatalf("security scheme = %#v, want slackSignature", manifest.Spec.SecuritySchemes)
+	}
+	webhook := manifest.Spec.Webhooks["slackCommand"]
+	if webhook == nil || webhook.Post == nil || webhook.Path != "/webhooks/ts-release/command" {
+		t.Fatalf("webhook = %#v, want hosted webhook metadata", webhook)
+	}
 }
 
 func TestValidateSourceProviderRelease_TypeScript(t *testing.T) {
@@ -723,16 +730,30 @@ case "$entry_base" in
       echo "unexpected runtime target: $target" >&2
       exit 1
     fi
-    if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
-      echo "missing GESTALT_PLUGIN_WRITE_CATALOG" >&2
-      exit 1
+    if [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
+      cat > "$GESTALT_PLUGIN_WRITE_MANIFEST_METADATA" <<'EOF'
+securitySchemes:
+  slackSignature:
+    type: hmac
+webhooks:
+  slackCommand:
+    path: /webhooks/` + pluginName + `/command
+    post:
+      responses:
+        "200":
+          description: accepted
+    target:
+      operation: greet
+EOF
     fi
-    cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
+    if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
+      cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
 name: ` + pluginName + `
 operations:
   - id: greet
     method: GET
 EOF
+    fi
     exit 0
     ;;
   gestalt-ts-build|build.ts)

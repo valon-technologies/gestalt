@@ -37,10 +37,12 @@ func DirectoryDigest(dirPath, manifestPath string, manifest *providermanifestv1.
 			return "", fmt.Errorf("digest manifest: %w", err)
 		}
 	}
-	manifestSum, err := FileSHA256(manifestPath)
+	manifestData, err := EncodeSourceManifestFormat(manifest, ManifestFormatFromPath(manifestPath))
 	if err != nil {
-		return "", fmt.Errorf("digest manifest: %w", err)
+		return "", fmt.Errorf("encode manifest for digest: %w", err)
 	}
+	manifestHash := sha256.Sum256(manifestData)
+	manifestSum := hex.EncodeToString(manifestHash[:])
 	digests = append(digests, manifestSum)
 
 	for _, artifact := range manifest.Artifacts {

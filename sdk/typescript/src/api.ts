@@ -27,6 +27,22 @@ export interface Access {
 }
 
 /**
+ * Webhook request metadata forwarded by hosted webhook ingress.
+ */
+export interface WebhookRequest {
+  webhook: string;
+  path: string;
+  method: string;
+  contentType: string;
+  rawBody: Uint8Array;
+  headers: Record<string, string[]>;
+  verifiedScheme: string;
+  verifiedSubject: string;
+  deliveryId: string;
+  claims: Record<string, unknown>;
+}
+
+/**
  * Request metadata forwarded to provider handlers by the Gestalt runtime.
  */
 export interface Request {
@@ -39,6 +55,7 @@ export interface Request {
   // runId, target.pluginName, trigger.scheduleId, and trigger.event.specVersion.
   workflow: Record<string, unknown>;
   requestHandle: string;
+  webhook?: WebhookRequest;
 }
 
 /**
@@ -104,7 +121,9 @@ export function request(
   access: Partial<Access> = {},
   requestHandle = "",
   workflow: Record<string, unknown> = {},
+  webhook: Partial<WebhookRequest> | undefined = undefined,
 ): Request {
+  const normalizedWebhook = normalizeWebhookRequest(webhook);
   return {
     token,
     connectionParams: {
@@ -130,6 +149,7 @@ export function request(
       ...workflow,
     },
     requestHandle,
+    ...(normalizedWebhook ? { webhook: normalizedWebhook } : {}),
   };
 }
 
@@ -151,4 +171,50 @@ export function errorMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function normalizeWebhookRequest(
+  webhook: Partial<WebhookRequest> | undefined,
+): WebhookRequest | undefined {
+  if (!webhook) {
+    return undefined;
+  }
+  const headers = Object.fromEntries(
+    Object.entries(webhook.headers ?? {}).map(([name, values]) => [
+      name,
+      [...values],
+    ]),
+  );
+  const claims = {
+    ...(webhook.claims ?? {}),
+  };
+  const rawBody = webhook.rawBody
+    ? new Uint8Array(webhook.rawBody)
+    : new Uint8Array();
+  const hasValue =
+    Boolean(webhook.webhook) ||
+    Boolean(webhook.path) ||
+    Boolean(webhook.method) ||
+    Boolean(webhook.contentType) ||
+    rawBody.length > 0 ||
+    Object.keys(headers).length > 0 ||
+    Boolean(webhook.verifiedScheme) ||
+    Boolean(webhook.verifiedSubject) ||
+    Boolean(webhook.deliveryId) ||
+    Object.keys(claims).length > 0;
+  if (!hasValue) {
+    return undefined;
+  }
+  return {
+    webhook: webhook.webhook ?? "",
+    path: webhook.path ?? "",
+    method: webhook.method ?? "",
+    contentType: webhook.contentType ?? "",
+    rawBody,
+    headers,
+    verifiedScheme: webhook.verifiedScheme ?? "",
+    verifiedSubject: webhook.verifiedSubject ?? "",
+    deliveryId: webhook.deliveryId ?? "",
+    claims,
+  };
 }

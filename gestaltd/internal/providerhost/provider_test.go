@@ -341,6 +341,47 @@ func TestRequestContextProto_PreservesWorkflowContext(t *testing.T) {
 	}
 }
 
+func TestRequestContextProto_PreservesWebhookContext(t *testing.T) {
+	t.Parallel()
+
+	ctx := invocation.WithWebhookContext(context.Background(), &invocation.WebhookContext{
+		Name:            "slackCommand",
+		Path:            "/webhooks/slack-agent/command",
+		Method:          http.MethodPost,
+		ContentType:     "application/x-www-form-urlencoded",
+		RawBody:         []byte("text=hello"),
+		Headers:         map[string][]string{"X-Slack-Signature": {"v0=abc"}},
+		VerifiedScheme:  "slackSignature",
+		VerifiedSubject: "slack-agent/slackCommand#slackSignature",
+		DeliveryID:      "delivery-123",
+		Claims:          map[string]string{"scheme": "slackSignature"},
+	})
+
+	reqCtx, err := requestContextProto(ctx)
+	if err != nil {
+		t.Fatalf("requestContextProto: %v", err)
+	}
+	if reqCtx == nil || reqCtx.GetWebhook() == nil {
+		t.Fatal("expected webhook request context")
+	}
+	if got := reqCtx.GetWebhook().GetWebhook(); got != "slackCommand" {
+		t.Fatalf("webhook name = %q, want %q", got, "slackCommand")
+	}
+	if got := string(reqCtx.GetWebhook().GetRawBody()); got != "text=hello" {
+		t.Fatalf("webhook raw body = %q, want %q", got, "text=hello")
+	}
+	if got := reqCtx.GetWebhook().GetHeaders()[0].GetName(); got != "X-Slack-Signature" {
+		t.Fatalf("webhook header name = %q, want %q", got, "X-Slack-Signature")
+	}
+	restored := webhookContextFromProto(reqCtx.GetWebhook())
+	if restored == nil {
+		t.Fatal("expected restored webhook context")
+	}
+	if restored.VerifiedScheme != "slackSignature" || restored.DeliveryID != "delivery-123" {
+		t.Fatalf("unexpected restored webhook context: %#v", restored)
+	}
+}
+
 func TestPrincipalFromProto_WorkloadDisplayNameDoesNotCreateIdentity(t *testing.T) {
 	t.Parallel()
 

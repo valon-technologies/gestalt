@@ -13,6 +13,7 @@ mod generated;
 /// IndexedDB-style datastore client and provider helpers.
 pub mod indexeddb;
 mod invoker;
+mod manifest;
 mod provider_server;
 mod router;
 mod rpc_status;
@@ -31,7 +32,9 @@ pub mod proto {
     pub use crate::generated::v1;
 }
 
-pub use api::{Access, Credential, Provider, Request, Response, RuntimeMetadata, Subject, ok};
+pub use api::{
+    Access, Credential, Provider, Request, Response, RuntimeMetadata, Subject, Webhook, ok,
+};
 pub use auth::{
     AuthenticatedUser, AuthenticationProvider, BeginLoginRequest, BeginLoginResponse,
     CompleteLoginRequest,
@@ -41,10 +44,15 @@ pub use cache::{
     cache_socket_env,
 };
 pub use catalog::{Catalog, CatalogOperation};
-pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
+pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET, ENV_WRITE_MANIFEST_METADATA};
 pub use error::{Error, Result};
 pub use indexeddb::{Cursor, CursorDirection, IndexedDB, IndexedDBError};
 pub use invoker::{ENV_PLUGIN_INVOKER_SOCKET, InvokeOptions, PluginInvoker, PluginInvokerError};
+pub use manifest::{
+    MTLSConfig, ManifestMetadata, ReplayConfig, SecretRef, SecurityRequirement, SignatureConfig,
+    WebhookDef, WebhookExecution, WebhookMediaType, WebhookOperation, WebhookRequestBody,
+    WebhookResponse, WebhookSecurityScheme, WebhookTarget, WebhookWorkflowTarget,
+};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};

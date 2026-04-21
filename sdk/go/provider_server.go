@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // ProviderServer adapts a [Provider] implementation to the gRPC
@@ -144,5 +145,49 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 	if workflow := reqCtx.GetWorkflow(); workflow != nil {
 		ctx = WithWorkflowContext(ctx, workflow.AsMap())
 	}
+	if webhook := reqCtx.GetWebhook(); webhook != nil {
+		ctx = WithWebhookContext(ctx, &WebhookContext{
+			Name:            webhook.GetWebhook(),
+			Path:            webhook.GetPath(),
+			Method:          webhook.GetMethod(),
+			ContentType:     webhook.GetContentType(),
+			RawBody:         append([]byte(nil), webhook.GetRawBody()...),
+			Headers:         headersFromProto(webhook.GetHeaders()),
+			VerifiedScheme:  webhook.GetVerifiedScheme(),
+			VerifiedSubject: webhook.GetVerifiedSubject(),
+			DeliveryID:      webhook.GetDeliveryId(),
+			Claims:          claimsFromStruct(webhook.GetClaims()),
+		})
+	}
 	return ctx
+}
+
+func headersFromProto(headers []*proto.Header) map[string][]string {
+	if len(headers) == 0 {
+		return nil
+	}
+	values := make(map[string][]string, len(headers))
+	for _, header := range headers {
+		if header == nil || header.GetName() == "" {
+			continue
+		}
+		values[header.GetName()] = append([]string(nil), header.GetValues()...)
+	}
+	return values
+}
+
+func claimsFromStruct(value *structpb.Struct) map[string]string {
+	if value == nil {
+		return nil
+	}
+	items := value.AsMap()
+	if len(items) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(items))
+	for key, item := range items {
+		text, _ := item.(string)
+		out[key] = text
+	}
+	return out
 }

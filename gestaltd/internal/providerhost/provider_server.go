@@ -88,7 +88,46 @@ func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) cont
 	if workflow := reqCtx.GetWorkflow(); workflow != nil {
 		ctx = invocation.WithWorkflowContext(ctx, workflow.AsMap())
 	}
+	if webhook := reqCtx.GetWebhook(); webhook != nil {
+		ctx = invocation.WithWebhookContext(ctx, webhookContextFromProto(webhook))
+	}
 	return ctx
+}
+
+func webhookContextFromProto(webhook *proto.WebhookContext) *invocation.WebhookContext {
+	if webhook == nil {
+		return nil
+	}
+	out := &invocation.WebhookContext{
+		Name:            webhook.GetWebhook(),
+		Path:            webhook.GetPath(),
+		Method:          webhook.GetMethod(),
+		ContentType:     webhook.GetContentType(),
+		RawBody:         append([]byte(nil), webhook.GetRawBody()...),
+		VerifiedScheme:  webhook.GetVerifiedScheme(),
+		VerifiedSubject: webhook.GetVerifiedSubject(),
+		DeliveryID:      webhook.GetDeliveryId(),
+	}
+	if len(webhook.GetHeaders()) > 0 {
+		out.Headers = make(map[string][]string, len(webhook.GetHeaders()))
+		for _, header := range webhook.GetHeaders() {
+			if header == nil || header.GetName() == "" {
+				continue
+			}
+			out.Headers[header.GetName()] = append([]string(nil), header.GetValues()...)
+		}
+	}
+	if claims := webhook.GetClaims(); claims != nil {
+		raw := claims.AsMap()
+		if len(raw) > 0 {
+			out.Claims = make(map[string]string, len(raw))
+			for key, value := range raw {
+				text, _ := value.(string)
+				out.Claims[key] = text
+			}
+		}
+	}
+	return out
 }
 
 func WithRequestHandle(ctx context.Context, handle string) context.Context {

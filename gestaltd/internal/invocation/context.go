@@ -53,10 +53,24 @@ type CredentialContext struct {
 	Instance   string
 }
 
+type WebhookContext struct {
+	Name            string
+	Path            string
+	Method          string
+	ContentType     string
+	RawBody         []byte
+	Headers         map[string][]string
+	VerifiedScheme  string
+	VerifiedSubject string
+	DeliveryID      string
+	Claims          map[string]string
+}
+
 type invocationSurfaceCtxKey struct{}
 type credentialCtxKey struct{}
 type accessCtxKey struct{}
 type workflowCtxKey struct{}
+type webhookCtxKey struct{}
 
 type InvocationSurface string
 
@@ -130,6 +144,18 @@ func WorkflowContextFromContext(ctx context.Context) map[string]any {
 	return workflow
 }
 
+func WithWebhookContext(ctx context.Context, webhook *WebhookContext) context.Context {
+	if webhook == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, webhookCtxKey{}, cloneWebhookContext(webhook))
+}
+
+func WebhookContextFromContext(ctx context.Context) *WebhookContext {
+	webhook, _ := ctx.Value(webhookCtxKey{}).(*WebhookContext)
+	return cloneWebhookContext(webhook)
+}
+
 func WorkflowContextMap(value map[string]any, key string) map[string]any {
 	raw, ok := value[key]
 	if !ok {
@@ -155,6 +181,29 @@ func WithInvocationSurface(ctx context.Context, surface InvocationSurface) conte
 func InvocationSurfaceFromContext(ctx context.Context) InvocationSurface {
 	surface, _ := ctx.Value(invocationSurfaceCtxKey{}).(InvocationSurface)
 	return surface
+}
+
+func cloneWebhookContext(src *WebhookContext) *WebhookContext {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	if len(src.RawBody) > 0 {
+		dst.RawBody = append([]byte(nil), src.RawBody...)
+	}
+	if len(src.Headers) > 0 {
+		dst.Headers = make(map[string][]string, len(src.Headers))
+		for key, values := range src.Headers {
+			dst.Headers[key] = append([]string(nil), values...)
+		}
+	}
+	if len(src.Claims) > 0 {
+		dst.Claims = make(map[string]string, len(src.Claims))
+		for key, value := range src.Claims {
+			dst.Claims[key] = value
+		}
+	}
+	return &dst
 }
 
 const xForwardedForHeader = "X-Forwarded-For"

@@ -13,6 +13,7 @@ use serde_json::Value;
 use crate::api::{IntoResponse, Request};
 use crate::catalog::{Catalog, CatalogOperation, schema_json, schema_parameters};
 use crate::error::{Error, INTERNAL_ERROR_MESSAGE, Result};
+use crate::manifest::ManifestMetadata;
 use crate::provider_server::OperationResult;
 
 #[derive(Clone, Debug)]
@@ -104,6 +105,7 @@ type Handler<P> = Arc<
 /// Dispatches typed operations and exposes the corresponding static catalog.
 pub struct Router<P> {
     catalog: Catalog,
+    manifest_metadata: ManifestMetadata,
     handlers: BTreeMap<String, Handler<P>>,
 }
 
@@ -111,6 +113,7 @@ impl<P> Clone for Router<P> {
     fn clone(&self) -> Self {
         Self {
             catalog: self.catalog.clone(),
+            manifest_metadata: self.manifest_metadata.clone(),
             handlers: self.handlers.clone(),
         }
     }
@@ -127,6 +130,7 @@ impl<P> Router<P> {
     pub fn new() -> Self {
         Self {
             catalog: Catalog::default(),
+            manifest_metadata: ManifestMetadata::default(),
             handlers: BTreeMap::new(),
         }
     }
@@ -143,6 +147,18 @@ impl<P> Router<P> {
     /// Returns the router's derived static catalog.
     pub fn catalog(&self) -> &Catalog {
         &self.catalog
+    }
+
+    /// Returns the router's derived hosted-webhook manifest metadata.
+    pub fn manifest_metadata(&self) -> &ManifestMetadata {
+        &self.manifest_metadata
+    }
+
+    /// Returns a copy of the router with hosted-webhook manifest metadata
+    /// attached for build-time export.
+    pub fn with_manifest_metadata(mut self, metadata: ManifestMetadata) -> Self {
+        self.manifest_metadata = metadata;
+        self
     }
 
     /// Executes one named operation against provider.
