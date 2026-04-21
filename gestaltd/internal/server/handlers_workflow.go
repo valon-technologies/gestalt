@@ -84,7 +84,7 @@ func (s *Server) listGlobalWorkflowSchedules(w http.ResponseWriter, r *http.Requ
 			if errors.Is(err, core.ErrNotFound) {
 				continue
 			}
-			s.writeWorkflowScheduleProviderError(w, r.Context(), strings.TrimSpace(ref.Target.PluginName), scheduleID, err)
+			s.writeWorkflowScheduleProviderError(r.Context(), w, strings.TrimSpace(ref.Target.PluginName), scheduleID, err)
 			return
 		}
 		if !workflowScheduleMatchesExecutionRef(ref.ProviderName, schedule, ref) {
@@ -153,7 +153,7 @@ func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 	})
 	if err != nil {
 		s.revokeWorkflowExecutionRef(r.Context(), ref)
-		s.writeWorkflowScheduleProviderError(w, r.Context(), pluginName, scheduleID, err)
+		s.writeWorkflowScheduleProviderError(r.Context(), w, pluginName, scheduleID, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, workflowScheduleInfoFromCore(schedule, providerName))
@@ -225,7 +225,7 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 	})
 	if err != nil {
 		s.revokeWorkflowExecutionRef(r.Context(), nextRef)
-		s.writeWorkflowScheduleProviderError(w, r.Context(), pluginName, strings.TrimSpace(existing.ID), err)
+		s.writeWorkflowScheduleProviderError(r.Context(), w, pluginName, strings.TrimSpace(existing.ID), err)
 		return
 	}
 	if currentProviderName != nextProviderName {
@@ -236,7 +236,7 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 				ScheduleID: strings.TrimSpace(existing.ID),
 			})
 			s.revokeWorkflowExecutionRef(r.Context(), nextRef)
-			s.writeWorkflowScheduleProviderError(w, r.Context(), strings.TrimSpace(existing.Target.PluginName), strings.TrimSpace(existing.ID), err)
+			s.writeWorkflowScheduleProviderError(r.Context(), w, strings.TrimSpace(existing.Target.PluginName), strings.TrimSpace(existing.ID), err)
 			return
 		}
 	}
@@ -258,7 +258,7 @@ func (s *Server) deleteGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 	if err := provider.DeleteSchedule(r.Context(), coreworkflow.DeleteScheduleRequest{
 		ScheduleID: strings.TrimSpace(schedule.ID),
 	}); err != nil {
-		s.writeWorkflowScheduleProviderError(w, r.Context(), strings.TrimSpace(schedule.Target.PluginName), strings.TrimSpace(schedule.ID), err)
+		s.writeWorkflowScheduleProviderError(r.Context(), w, strings.TrimSpace(schedule.Target.PluginName), strings.TrimSpace(schedule.ID), err)
 		return
 	}
 	if ref != nil && ref.ID != "" {
@@ -280,7 +280,7 @@ func (s *Server) pauseGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Requ
 		ScheduleID: strings.TrimSpace(schedule.ID),
 	})
 	if err != nil {
-		s.writeWorkflowScheduleProviderError(w, r.Context(), strings.TrimSpace(schedule.Target.PluginName), strings.TrimSpace(schedule.ID), err)
+		s.writeWorkflowScheduleProviderError(r.Context(), w, strings.TrimSpace(schedule.Target.PluginName), strings.TrimSpace(schedule.ID), err)
 		return
 	}
 	writeJSON(w, http.StatusOK, workflowScheduleInfoFromCore(value, providerName))
@@ -299,7 +299,7 @@ func (s *Server) resumeGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 		ScheduleID: strings.TrimSpace(schedule.ID),
 	})
 	if err != nil {
-		s.writeWorkflowScheduleProviderError(w, r.Context(), strings.TrimSpace(schedule.Target.PluginName), strings.TrimSpace(schedule.ID), err)
+		s.writeWorkflowScheduleProviderError(r.Context(), w, strings.TrimSpace(schedule.Target.PluginName), strings.TrimSpace(schedule.ID), err)
 		return
 	}
 	writeJSON(w, http.StatusOK, workflowScheduleInfoFromCore(value, providerName))
@@ -443,7 +443,7 @@ func (s *Server) requireOwnedWorkflowScheduleGlobal(
 	}
 	schedule, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{ScheduleID: scheduleID})
 	if err != nil {
-		s.writeWorkflowScheduleProviderError(w, ctx, strings.TrimSpace(ref.Target.PluginName), scheduleID, err)
+		s.writeWorkflowScheduleProviderError(ctx, w, strings.TrimSpace(ref.Target.PluginName), scheduleID, err)
 		return nil, nil, "", nil, false
 	}
 	if !workflowScheduleMatchesExecutionRef(ref.ProviderName, schedule, ref) {
@@ -657,7 +657,7 @@ func (s *Server) revokeWorkflowExecutionRef(ctx context.Context, ref *coreworkfl
 	_, _ = s.workflowExecutionRefs.Put(ctx, &cloned)
 }
 
-func (s *Server) writeWorkflowScheduleProviderError(w http.ResponseWriter, ctx context.Context, pluginName, scheduleID string, err error) {
+func (s *Server) writeWorkflowScheduleProviderError(ctx context.Context, w http.ResponseWriter, pluginName, scheduleID string, err error) {
 	switch {
 	case errors.Is(err, core.ErrNotFound):
 		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow schedule %q not found", scheduleID))
