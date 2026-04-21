@@ -147,6 +147,18 @@ func ctxWithWorkloadPrincipal(workloadID string) context.Context {
 	return principal.WithPrincipal(context.Background(), p)
 }
 
+func ctxWithManagedIdentityPrincipal(identityID, credentialSubjectID string, permissions principal.PermissionSet) context.Context {
+	p := &principal.Principal{
+		Kind:                principal.KindWorkload,
+		SubjectID:           principal.ManagedIdentitySubjectID(identityID),
+		CredentialSubjectID: credentialSubjectID,
+		Source:              principal.SourceAPIToken,
+		Scopes:              principal.PermissionPlugins(permissions),
+		TokenPermissions:    permissions,
+	}
+	return principal.WithPrincipal(context.Background(), p)
+}
+
 func mustAuthorizer(t *testing.T, cfg config.AuthorizationConfig, providers *registry.ProviderMap[core.Provider]) *authorization.Authorizer {
 	t.Helper()
 	authz, err := authorization.New(cfg, nil, providers, map[string]string{})
@@ -1973,6 +1985,98 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 	}
 	if sessionCatalogCalls != 0 {
 		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 0)
+	}
+}
+
+func TestNewServer_ManagedIdentityCallToolUsesConfiguredMCPConnection(t *testing.T) {
+	t.Parallel()
+
+	var sessionCatalogCalls int
+	var called bool
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "sampledb",
+			ConnMode: core.ConnectionModeUser,
+		},
+		cat: &catalog.Catalog{
+			Name: "sampledb",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "run_query",
+					Description: "run a query",
+					Transport:   catalog.TransportMCPPassthrough,
+				},
+			},
+		},
+		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			sessionCatalogCalls++
+			if token != "creator-workspace-token" {
+				t.Fatalf("session catalog token = %q, want %q", token, "creator-workspace-token")
+			}
+			return &catalog.Catalog{
+				Name: "sampledb",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "run_query",
+						Description: "run a query",
+						Transport:   catalog.TransportMCPPassthrough,
+					},
+				},
+			}, nil
+		},
+		callFn: func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+			called = true
+			return mcpgo.NewToolResultText("ok"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds := coretesting.NewStubServices(t)
+	ctx := context.Background()
+	if err := ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
+		ID:          "tok-managed-identity",
+		SubjectID:   principal.UserSubjectID("creator-user"),
+		Integration: "sampledb",
+		Connection:  "workspace",
+		Instance:    "default",
+		AccessToken: "creator-workspace-token",
+	}); err != nil {
+		t.Fatalf("StoreToken: %v", err)
+	}
+
+	authz := mustAuthorizer(t, config.AuthorizationConfig{}, providers)
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+		Authorizer:    authz,
+		MCPConnection: map[string]string{"sampledb": "workspace"},
+	})
+
+	permissions := principal.PermissionSet{
+		"sampledb": {"run_query": {}},
+	}
+	result := callToolForSession(
+		t,
+		srv,
+		ctxWithManagedIdentityPrincipal("ops-bot", principal.UserSubjectID("creator-user"), permissions),
+		newTestSessionWithTools(),
+		"sampledb_run_query",
+		map[string]any{"sql": "select 1"},
+	)
+	if result.IsError {
+		t.Fatalf("expected success result, got %+v", result)
+	}
+	text, ok := result.Content[0].(mcpgo.TextContent)
+	if !ok || text.Text != "ok" {
+		t.Fatalf("unexpected MCP success content: %+v", result.Content)
+	}
+	if !called {
+		t.Fatal("expected managed identity tool call to reach provider")
+	}
+	if sessionCatalogCalls != 1 {
+		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 1)
 	}
 }
 

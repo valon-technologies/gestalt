@@ -114,8 +114,11 @@ func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov 
 		if cfg.TokenResolver != nil {
 			p := principal.FromContext(ctx)
 			if p != nil {
-				connection, instance := sessionTokenSelectors(cfg, p, provName, instanceOverride)
-				sessionCtx, token, err := cfg.TokenResolver.ResolveToken(ctx, p, provName, connection, instance)
+				connection, instance, boundCredential, err := sessionTokenSelectors(cfg, p, provName, instanceOverride)
+				if err != nil {
+					return ctx, "", connection, err
+				}
+				sessionCtx, token, err := resolveSessionCredentialToken(ctx, cfg, p, provName, connection, instance, boundCredential)
 				if err != nil {
 					return sessionCtx, token, connection, err
 				}
@@ -131,8 +134,11 @@ func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov 
 	if p == nil {
 		return ctx, "", "", fmt.Errorf("not authenticated")
 	}
-	connection, instance := sessionTokenSelectors(cfg, p, provName, instanceOverride)
-	sessionCtx, token, err := cfg.TokenResolver.ResolveToken(ctx, p, provName, connection, instance)
+	connection, instance, boundCredential, err := sessionTokenSelectors(cfg, p, provName, instanceOverride)
+	if err != nil {
+		return ctx, "", connection, err
+	}
+	sessionCtx, token, err := resolveSessionCredentialToken(ctx, cfg, p, provName, connection, instance, boundCredential)
 	if err != nil {
 		return sessionCtx, token, connection, err
 	}
@@ -386,16 +392,29 @@ func internalSessionToolHandler(context.Context, mcpgo.CallToolRequest) (*mcpgo.
 	return mcpgo.NewToolResultError("tool not found"), nil
 }
 
-func sessionTokenSelectors(cfg Config, p *principal.Principal, provName, instanceOverride string) (string, string) {
+func resolveSessionCredentialToken(ctx context.Context, cfg Config, p *principal.Principal, provName, connection, instance string, boundCredential invocation.CredentialBindingResolution) (context.Context, string, error) {
+	type bindingTokenResolver interface {
+		ResolveTokenWithBinding(ctx context.Context, p *principal.Principal, providerName, connection, instance string, boundCredential invocation.CredentialBindingResolution) (context.Context, string, error)
+	}
+	if boundCredential.HasBinding {
+		if resolver, ok := cfg.TokenResolver.(bindingTokenResolver); ok {
+			return resolver.ResolveTokenWithBinding(ctx, p, provName, connection, instance, boundCredential)
+		}
+	}
+	return cfg.TokenResolver.ResolveToken(ctx, p, provName, connection, instance)
+}
+
+func sessionTokenSelectors(cfg Config, p *principal.Principal, provName, instanceOverride string) (string, string, invocation.CredentialBindingResolution, error) {
 	connection := cfg.MCPConnection[provName]
 	instance := normalizedSessionCatalogInstance(instanceOverride)
-	if cfg.Authorizer == nil || !cfg.Authorizer.IsWorkload(p) {
-		return connection, instance
+	boundCredential, err := invocation.ResolveEffectiveCredentialBinding(cfg.Authorizer, p, provName, connection, instance)
+	if err != nil {
+		return connection, instance, invocation.CredentialBindingResolution{}, err
 	}
-	if binding, ok := cfg.Authorizer.Binding(p, provName); ok {
-		return binding.Connection, binding.Instance
+	if boundCredential.HasBinding {
+		return boundCredential.Connection, boundCredential.Instance, boundCredential, nil
 	}
-	return connection, ""
+	return connection, instance, invocation.CredentialBindingResolution{}, nil
 }
 
 func encodeSessionCatalogMarkerSegment(value string) string {
@@ -436,6 +455,10 @@ func normalizedSessionCatalogInstance(value any) string {
 	return strings.TrimSpace(instance)
 }
 
-func workloadInstanceOverrideRequested(authz authorization.RuntimeAuthorizer, p *principal.Principal, instance string) bool {
-	return authz != nil && p != nil && authz.IsWorkload(p) && instance != ""
+func workloadInstanceOverrideRequested(authz authorization.RuntimeAuthorizer, p *principal.Principal, provider, instance string) bool {
+	if authz == nil || p == nil || strings.TrimSpace(instance) == "" {
+		return false
+	}
+	_, err := invocation.ResolveRequestedCredentialBinding(authz, p, provider, "", instance)
+	return err != nil
 }

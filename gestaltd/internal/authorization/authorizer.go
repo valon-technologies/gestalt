@@ -264,11 +264,14 @@ func (a *Authorizer) ResolveAccess(_ context.Context, p *principal.Principal, pr
 		return AccessContext{}, principal.AllowsProviderPermission(p, provider)
 	}
 	policyName := strings.TrimSpace(a.providerPolicies[provider])
+	if a.IsWorkload(p) {
+		if policyName == "" {
+			return AccessContext{}, false
+		}
+		return AccessContext{Policy: policyName}, false
+	}
 	if policyName == "" {
 		return AccessContext{}, true
-	}
-	if a.IsWorkload(p) {
-		return a.ResolvePolicyAccess(context.Background(), p, policyName)
 	}
 
 	policy := a.policies[policyName]

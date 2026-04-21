@@ -221,22 +221,33 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
+	conn := ConnectionFromContext(ctx)
+	boundCredential, err := b.ResolveEffectiveCredentialBinding(p, providerName, conn, instance)
+	if err != nil {
+		return fail(err)
+	}
 	if b.authorizer != nil {
 		access, allowed := b.authorizer.ResolveAccess(ctx, p, providerName)
 		if access.Policy != "" || access.Role != "" {
 			ctx = WithAccessContext(ctx, access)
 		}
-		if b.authorizer.IsWorkload(p) {
-			if binding, ok := b.authorizer.Binding(p, providerName); ok {
-				SetCredentialAudit(ctx, binding.Mode, binding.CredentialSubjectID, binding.Connection, binding.Instance)
-			}
+		if boundCredential.HasBinding {
+			SetCredentialAudit(
+				ctx,
+				boundCredential.Binding.Mode,
+				boundCredential.CredentialSubjectID,
+				boundCredential.Connection,
+				boundCredential.Instance,
+			)
 		} else if !allowed {
 			return fail(fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName))
 		}
 	}
 
-	conn := ConnectionFromContext(ctx)
-	conn, instance = b.workloadSelectors(p, providerName, conn, instance)
+	if boundCredential.HasBinding {
+		conn = boundCredential.Connection
+		instance = boundCredential.Instance
+	}
 	if b.authorizer != nil && b.authorizer.IsWorkload(p) && !b.authorizer.AllowOperation(ctx, p, providerName, operation) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
 	}
@@ -274,7 +285,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 
 	if transport == catalog.TransportMCPPassthrough {
-		result, err := CallDirectTool(ctx, b, p, prov, providerName, operation, conn, instance, params, mcpupstream.CallToolMetaFromContext(ctx))
+		result, err := CallDirectTool(ctx, b, p, prov, providerName, operation, conn, instance, boundCredential, params, mcpupstream.CallToolMetaFromContext(ctx))
 		if err != nil {
 			return fail(err)
 		}
@@ -288,7 +299,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return opResult, nil
 	}
 
-	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance)
+	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance, boundCredential)
 	if err != nil {
 		return fail(err)
 	}
@@ -329,21 +340,12 @@ func (b *Broker) MCPConnection(providerName string) string {
 	return b.mcpConnection(providerName)
 }
 
-func (b *Broker) workloadSelectors(p *principal.Principal, providerName, connection, instance string) (string, string) {
-	if b.authorizer == nil || !b.authorizer.IsWorkload(p) {
-		return connection, instance
-	}
-	binding, ok := b.authorizer.Binding(p, providerName)
-	if !ok {
-		return connection, instance
-	}
-	if connection == "" {
-		connection = binding.Connection
-	}
-	if instance == "" {
-		instance = binding.Instance
-	}
-	return connection, instance
+func (b *Broker) ResolveEffectiveCredentialBinding(p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error) {
+	return ResolveEffectiveCredentialBinding(b.authorizer, p, providerName, connection, instance)
+}
+
+func (b *Broker) ResolveRequestedCredentialBinding(p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error) {
+	return ResolveRequestedCredentialBinding(b.authorizer, p, providerName, connection, instance)
 }
 
 func toolResultToOperationResult(result *mcpgo.CallToolResult) (*core.OperationResult, error) {
@@ -410,16 +412,56 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 		}
 		return ctx, "", fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
 	}
-	return b.resolveToken(ctx, prov, p, providerName, connection, instance)
+	boundCredential, err := b.ResolveRequestedCredentialBinding(p, providerName, connection, instance)
+	if err != nil {
+		return ctx, "", err
+	}
+	return b.resolveToken(ctx, prov, p, providerName, connection, instance, boundCredential)
 }
 
-func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
+func (b *Broker) ResolveTokenWithBinding(ctx context.Context, p *principal.Principal, providerName, connection, instance string, boundCredential CredentialBindingResolution) (context.Context, string, error) {
+	if !principal.AllowsProviderPermission(p, providerName) {
+		return ctx, "", fmt.Errorf("%w: %s", ErrScopeDenied, providerName)
+	}
+	if err := b.resolveUserPrincipal(ctx, p); err != nil {
+		return ctx, "", err
+	}
+	ctx = withResolvedPrincipal(ctx, p)
+	if b.authorizer != nil && !b.authorizer.AllowProvider(ctx, p, providerName) {
+		return ctx, "", fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
+	}
+	prov, err := b.providers.Get(providerName)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return ctx, "", fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
+		}
+		return ctx, "", fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
+	}
+	return b.resolveToken(ctx, prov, p, providerName, connection, instance, boundCredential)
+}
+
+func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName, connection, instance string, boundCredential CredentialBindingResolution) (context.Context, string, error) {
 	resolved := principal.FromContext(ctx)
 	if resolved != nil {
 		p = resolved
 	}
-	if b.authorizer != nil && b.authorizer.IsWorkload(p) {
-		return b.resolveWorkloadToken(ctx, prov, p, providerName, connection, instance)
+	if !boundCredential.HasBinding {
+		var err error
+		boundCredential, err = b.ResolveEffectiveCredentialBinding(p, providerName, connection, instance)
+		if err != nil {
+			return ctx, "", err
+		}
+	}
+	if boundCredential.HasBinding {
+		if boundCredential.Binding.Mode == core.ConnectionModeUser {
+			if boundCredential.Connection == "" {
+				boundCredential.Connection = strings.TrimSpace(connection)
+			}
+			if boundCredential.Instance == "" {
+				boundCredential.Instance = strings.TrimSpace(instance)
+			}
+		}
+		return b.resolveBoundToken(ctx, prov, p, providerName, boundCredential)
 	}
 	if resolved == nil {
 		if err := b.resolveUserPrincipal(ctx, p); err != nil {
@@ -472,43 +514,48 @@ func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principa
 	return nil
 }
 
-func (b *Broker) resolveWorkloadToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName, requestedConnection, requestedInstance string) (context.Context, string, error) {
-	if b.authorizer == nil {
-		return ctx, "", fmt.Errorf("%w: no workload authorizer configured", ErrAuthorizationDenied)
-	}
-	binding, ok := b.authorizer.Binding(p, providerName)
-	if !ok {
-		return ctx, "", fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
-	}
-
-	switch binding.Mode {
+func (b *Broker) resolveBoundToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName string, boundCredential CredentialBindingResolution) (context.Context, string, error) {
+	switch boundCredential.Binding.Mode {
 	case core.ConnectionModeNone:
-		if requestedConnection != "" || requestedInstance != "" {
-			return ctx, "", fmt.Errorf("%w: workloads may not override connection or instance bindings", ErrAuthorizationDenied)
-		}
-		SetCredentialAudit(ctx, binding.Mode, binding.CredentialSubjectID, binding.Connection, binding.Instance)
+		SetCredentialAudit(
+			ctx,
+			boundCredential.Binding.Mode,
+			boundCredential.CredentialSubjectID,
+			boundCredential.Connection,
+			boundCredential.Instance,
+		)
 		ctx = WithCredentialContext(ctx, CredentialContext{
-			Mode:       binding.Mode,
-			SubjectID:  binding.CredentialSubjectID,
-			Connection: binding.Connection,
-			Instance:   binding.Instance,
+			Mode:       boundCredential.Binding.Mode,
+			SubjectID:  boundCredential.CredentialSubjectID,
+			Connection: boundCredential.Connection,
+			Instance:   boundCredential.Instance,
 		})
 		return ctx, "", nil
 	case core.ConnectionModeUser:
-		connection := binding.Connection
-		instance := binding.Instance
-		if (requestedConnection != "" && requestedConnection != binding.Connection) || (requestedInstance != "" && requestedInstance != binding.Instance) {
-			return ctx, "", fmt.Errorf("%w: workloads may not override connection or instance bindings", ErrAuthorizationDenied)
-		}
-		subjectID := strings.TrimSpace(binding.CredentialSubjectID)
+		subjectID := strings.TrimSpace(boundCredential.CredentialSubjectID)
 		if subjectID == "" {
 			subjectID = principal.EffectiveCredentialSubjectID(p)
 		}
 		if subjectID == "" {
 			return ctx, "", fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
 		}
-		SetCredentialAudit(ctx, binding.Mode, subjectID, connection, instance)
-		return b.resolveSubjectToken(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
+		SetCredentialAudit(
+			ctx,
+			boundCredential.Binding.Mode,
+			subjectID,
+			boundCredential.Connection,
+			boundCredential.Instance,
+		)
+		return b.resolveSubjectToken(
+			ctx,
+			prov,
+			subjectID,
+			providerName,
+			boundCredential.Connection,
+			boundCredential.Instance,
+			core.ConnectionModeUser,
+			subjectID,
+		)
 	default:
 		return ctx, "", fmt.Errorf("%w: workloads may only use credentialed or none providers", ErrAuthorizationDenied)
 	}

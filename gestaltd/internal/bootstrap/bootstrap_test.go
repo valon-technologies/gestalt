@@ -4340,6 +4340,59 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
+	t.Run("workload resolve access keeps policy context but does not signal provider allow", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Authorization = config.AuthorizationConfig{
+			Policies: map[string]config.HumanPolicyDef{
+				"roadmap-policy": {Default: "deny"},
+			},
+			Workloads: map[string]config.WorkloadDef{
+				"triage-bot": {
+					Token: "gst_wld_triage-bot",
+					Providers: map[string]config.WorkloadProviderDef{
+						"roadmap": {Allow: []string{"sync"}},
+					},
+				},
+			},
+		}
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"roadmap": {
+				AuthorizationPolicy: "roadmap-policy",
+				ConnectionMode:      providermanifestv1.ConnectionModeUser,
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{},
+				},
+			},
+		}
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		t.Cleanup(func() { _ = result.Close(context.Background()) })
+		<-result.ProvidersReady
+
+		workloadPrincipal := &principal.Principal{
+			SubjectID: principal.WorkloadSubjectID("triage-bot"),
+			Kind:      principal.KindWorkload,
+		}
+		access, allowed := result.Authorizer.ResolveAccess(ctx, workloadPrincipal, "roadmap")
+		if allowed {
+			t.Fatal("expected workload ResolveAccess to remain denied for provider access checks")
+		}
+		if access.Policy != "roadmap-policy" {
+			t.Fatalf("workload access policy = %q, want %q", access.Policy, "roadmap-policy")
+		}
+		if access.Role != "" {
+			t.Fatalf("workload access role = %q, want empty", access.Role)
+		}
+		if !result.Authorizer.AllowProvider(ctx, workloadPrincipal, "roadmap") {
+			t.Fatal("expected bound workload to be allowed for roadmap provider")
+		}
+	})
+
 	t.Run("dynamic human authorizations require an authorization provider", func(t *testing.T) {
 		t.Parallel()
 

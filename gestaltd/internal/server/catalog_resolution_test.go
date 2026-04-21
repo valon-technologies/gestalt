@@ -98,6 +98,23 @@ func (s *stubConnectionTokenResolver) ResolveToken(ctx context.Context, _ *princ
 	return ctx, "", fmt.Errorf("unexpected connection %q", connection)
 }
 
+type stubBoundTokenResolver struct {
+	token           string
+	boundCredential invocation.CredentialBindingResolution
+	lastConnection  string
+	lastInstance    string
+}
+
+func (s *stubBoundTokenResolver) ResolveToken(ctx context.Context, _ *principal.Principal, _ string, connection, instance string) (context.Context, string, error) {
+	s.lastConnection = connection
+	s.lastInstance = instance
+	return ctx, s.token, nil
+}
+
+func (s *stubBoundTokenResolver) ResolveEffectiveCredentialBinding(_ *principal.Principal, _ string, _ string, _ string) (invocation.CredentialBindingResolution, error) {
+	return s.boundCredential, nil
+}
+
 func TestResolveCatalog_StaticCatalog(t *testing.T) {
 	t.Parallel()
 
@@ -234,6 +251,62 @@ func TestResolveCatalog_SessionAndStaticMerge(t *testing.T) {
 	}
 	if !ids["mcp_op"] {
 		t.Fatal("expected mcp_op in merged catalog")
+	}
+}
+
+func TestResolveCatalog_ModeNoneBoundPrincipalUsesEffectiveBindingSelectors(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubDynamicSessionProvider{
+		stubCatalogProvider: stubCatalogProvider{
+			stubProvider: stubProvider{
+				name:     "bound-none-api",
+				connMode: core.ConnectionModeNone,
+			},
+		},
+		sessionCatFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != "bound-token" {
+				t.Fatalf("token = %q, want %q", token, "bound-token")
+			}
+			return &catalog.Catalog{
+				Name: "bound-none-api",
+				Operations: []catalog.CatalogOperation{
+					{ID: "session_only", Method: http.MethodGet},
+				},
+			}, nil
+		},
+	}
+
+	resolver := &stubBoundTokenResolver{
+		token: "bound-token",
+		boundCredential: invocation.CredentialBindingResolution{
+			HasBinding: true,
+			Binding: authorization.CredentialBinding{
+				Mode: core.ConnectionModeNone,
+			},
+		},
+	}
+
+	cat, err := invocation.ResolveCatalog(
+		context.Background(),
+		prov,
+		"bound-none-api",
+		resolver,
+		&principal.Principal{Kind: principal.KindWorkload, SubjectID: principal.WorkloadSubjectID("triage-bot")},
+		"workspace",
+		"team-a",
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolver.lastConnection != "" {
+		t.Fatalf("resolver connection = %q, want empty", resolver.lastConnection)
+	}
+	if resolver.lastInstance != "" {
+		t.Fatalf("resolver instance = %q, want empty", resolver.lastInstance)
+	}
+	if len(cat.Operations) != 1 || cat.Operations[0].ID != "session_only" {
+		t.Fatalf("catalog operations = %+v, want session_only", cat.Operations)
 	}
 }
 

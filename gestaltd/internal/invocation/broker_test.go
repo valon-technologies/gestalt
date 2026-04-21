@@ -123,3 +123,30 @@ func TestBrokerResolveToken_WorkflowContextDoesNotBypassWorkloadIdentityBinding(
 		t.Fatalf("ResolveToken error = %q, want substring %q", got, want)
 	}
 }
+
+func TestBrokerResolveToken_ManagedIdentityDoesNotBypassSelectorBinding(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+		N:        "slack",
+		ConnMode: core.ConnectionModeUser,
+	})
+	authz := mustAuthorizer(t, config.AuthorizationConfig{}, providers)
+	broker := NewBroker(providers, svc.Users, svc.Tokens, WithAuthorizer(authz))
+
+	identity := &principal.Principal{
+		Kind:                principal.KindWorkload,
+		SubjectID:           principal.ManagedIdentitySubjectID("ops-bot"),
+		CredentialSubjectID: principal.UserSubjectID("creator-user"),
+		Source:              principal.SourceAPIToken,
+	}
+
+	_, _, err := broker.ResolveToken(context.Background(), identity, "slack", "workspace", "team-b")
+	if err == nil {
+		t.Fatal("expected managed identity selector override to be rejected")
+	}
+	if got, want := err.Error(), "workloads may not override connection or instance bindings"; got == "" || !strings.Contains(got, want) {
+		t.Fatalf("ResolveToken error = %q, want substring %q", got, want)
+	}
+}

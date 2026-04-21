@@ -35,6 +35,14 @@ type WorkflowControl interface {
 	ResolveProviderSelection(name string) (providerName string, provider coreworkflow.Provider, err error)
 }
 
+type effectiveCredentialBindingResolver interface {
+	ResolveEffectiveCredentialBinding(p *principal.Principal, providerName, connection, instance string) (invocation.CredentialBindingResolution, error)
+}
+
+type bindingTokenResolver interface {
+	ResolveTokenWithBinding(ctx context.Context, p *principal.Principal, providerName, connection, instance string, boundCredential invocation.CredentialBindingResolution) (context.Context, string, error)
+}
+
 type Service interface {
 	ListSchedules(ctx context.Context, p *principal.Principal) ([]*ManagedSchedule, error)
 	CreateSchedule(ctx context.Context, p *principal.Principal, req ScheduleUpsert) (*ManagedSchedule, error)
@@ -467,11 +475,21 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 	if instance != "" && !config.SafeInstanceValue(instance) {
 		return coreworkflow.Target{}, fmt.Errorf("instance name contains invalid characters")
 	}
+	if m.authorizer != nil && m.authorizer.IsWorkload(p) && (connection != "" || instance != "") {
+		return coreworkflow.Target{}, fmt.Errorf("%w: workloads may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
+	}
 
 	ctx = invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, pluginName))
 	var resolver invocation.TokenResolver
 	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
+	}
+	boundCredential := invocation.CredentialBindingResolution{}
+	if bindingResolver, ok := m.invoker.(effectiveCredentialBindingResolver); ok {
+		boundCredential, err = bindingResolver.ResolveEffectiveCredentialBinding(p, pluginName, connection, instance)
+		if err != nil {
+			return coreworkflow.Target{}, err
+		}
 	}
 	boundConnections, sessionInstance := m.catalogSelectorConfig().BoundSessionCatalogConnections(pluginName, p, connection, instance)
 	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, pluginName, resolver, p, operation, boundConnections, sessionInstance)
@@ -488,7 +506,15 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 		connection = resolvedConnection
 	}
 	if resolver != nil && sessionInstance == "" {
-		resolvedCtx, _, err := resolver.ResolveToken(ctx, p, pluginName, connection, sessionInstance)
+		resolveToken := resolver.ResolveToken
+		if boundCredential.HasBinding {
+			if bindingResolver, ok := resolver.(bindingTokenResolver); ok {
+				resolveToken = func(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
+					return bindingResolver.ResolveTokenWithBinding(ctx, p, providerName, connection, instance, boundCredential)
+				}
+			}
+		}
+		resolvedCtx, _, err := resolveToken(ctx, p, pluginName, connection, sessionInstance)
 		if err != nil {
 			return coreworkflow.Target{}, err
 		}

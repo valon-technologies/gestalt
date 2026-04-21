@@ -10,6 +10,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -83,6 +84,9 @@ func (s *PluginInvokerServer) Invoke(ctx context.Context, req *proto.PluginInvok
 	}
 
 	instance := strings.TrimSpace(req.GetInstance())
+	if tokenCtx.principal != nil && tokenCtx.principal.Kind == principal.KindWorkload && (connection != "" || instance != "") {
+		return nil, status.Error(codes.PermissionDenied, "workloads may not override connection or instance bindings")
+	}
 	if instance == "" && connection == "" && shouldInheritCredentialSelectors(tokenCtx.principal) {
 		instance = tokenCtx.credential.Instance
 	}
