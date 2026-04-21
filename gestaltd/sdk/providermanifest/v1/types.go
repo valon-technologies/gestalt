@@ -78,6 +78,8 @@ type Spec struct {
 
 	// Plugin-specific fields
 	RouteAuth         *RouteAuthRef                         `json:"auth,omitempty" yaml:"auth,omitempty"`
+	SecuritySchemes   map[string]*WebhookSecurityScheme     `json:"securitySchemes,omitempty" yaml:"securitySchemes,omitempty"`
+	Webhooks          map[string]*WebhookDef                `json:"webhooks,omitempty" yaml:"webhooks,omitempty"`
 	MCP               bool                                  `json:"mcp,omitempty" yaml:"mcp,omitempty"`
 	Headers           map[string]string                     `json:"headers,omitempty" yaml:"headers,omitempty"`
 	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
@@ -97,6 +99,129 @@ type Spec struct {
 
 type RouteAuthRef struct {
 	Provider string `json:"provider,omitempty" yaml:"provider,omitempty"`
+}
+
+type WebhookExecutionMode string
+
+const (
+	WebhookExecutionModeSync     WebhookExecutionMode = "sync"
+	WebhookExecutionModeAsyncAck WebhookExecutionMode = "async_ack"
+)
+
+type WebhookSecuritySchemeType string
+
+const (
+	WebhookSecuritySchemeTypeHMAC      WebhookSecuritySchemeType = "hmac"
+	WebhookSecuritySchemeTypeAPIKey    WebhookSecuritySchemeType = "apiKey"
+	WebhookSecuritySchemeTypeHTTP      WebhookSecuritySchemeType = "http"
+	WebhookSecuritySchemeTypeMutualTLS WebhookSecuritySchemeType = "mutualTLS"
+	WebhookSecuritySchemeTypeNone      WebhookSecuritySchemeType = "none"
+)
+
+type WebhookIn string
+
+const (
+	WebhookInHeader WebhookIn = "header"
+	WebhookInQuery  WebhookIn = "query"
+)
+
+type WebhookHTTPScheme string
+
+const (
+	WebhookHTTPSchemeBasic  WebhookHTTPScheme = "basic"
+	WebhookHTTPSchemeBearer WebhookHTTPScheme = "bearer"
+)
+
+type WebhookDef struct {
+	Summary     string            `json:"summary,omitempty" yaml:"summary,omitempty"`
+	Description string            `json:"description,omitempty" yaml:"description,omitempty"`
+	Path        string            `json:"path,omitempty" yaml:"path,omitempty"`
+	Get         *WebhookOperation `json:"get,omitempty" yaml:"get,omitempty"`
+	Post        *WebhookOperation `json:"post,omitempty" yaml:"post,omitempty"`
+	Put         *WebhookOperation `json:"put,omitempty" yaml:"put,omitempty"`
+	Delete      *WebhookOperation `json:"delete,omitempty" yaml:"delete,omitempty"`
+	Target      *WebhookTarget    `json:"target,omitempty" yaml:"target,omitempty"`
+	Execution   *WebhookExecution `json:"execution,omitempty" yaml:"execution,omitempty"`
+}
+
+type WebhookOperation struct {
+	OperationID string                      `json:"operationId,omitempty" yaml:"operationId,omitempty"`
+	Summary     string                      `json:"summary,omitempty" yaml:"summary,omitempty"`
+	Description string                      `json:"description,omitempty" yaml:"description,omitempty"`
+	RequestBody *WebhookRequestBody         `json:"requestBody,omitempty" yaml:"requestBody,omitempty"`
+	Responses   map[string]*WebhookResponse `json:"responses,omitempty" yaml:"responses,omitempty"`
+	Security    []SecurityRequirement       `json:"security,omitempty" yaml:"security,omitempty"`
+}
+
+type WebhookRequestBody struct {
+	Required bool                         `json:"required,omitempty" yaml:"required,omitempty"`
+	Content  map[string]*WebhookMediaType `json:"content,omitempty" yaml:"content,omitempty"`
+}
+
+type WebhookMediaType struct {
+	Schema any `json:"schema,omitempty" yaml:"schema,omitempty"`
+}
+
+type WebhookResponse struct {
+	Description string                       `json:"description,omitempty" yaml:"description,omitempty"`
+	Headers     map[string]string            `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Content     map[string]*WebhookMediaType `json:"content,omitempty" yaml:"content,omitempty"`
+	Body        any                          `json:"body,omitempty" yaml:"body,omitempty"`
+}
+
+type SecurityRequirement map[string][]string
+
+type WebhookTarget struct {
+	Operation string                 `json:"operation,omitempty" yaml:"operation,omitempty"`
+	Workflow  *WebhookWorkflowTarget `json:"workflow,omitempty" yaml:"workflow,omitempty"`
+}
+
+type WebhookWorkflowTarget struct {
+	Provider   string         `json:"provider,omitempty" yaml:"provider,omitempty"`
+	Plugin     string         `json:"plugin,omitempty" yaml:"plugin,omitempty"`
+	Operation  string         `json:"operation,omitempty" yaml:"operation,omitempty"`
+	Connection string         `json:"connection,omitempty" yaml:"connection,omitempty"`
+	Instance   string         `json:"instance,omitempty" yaml:"instance,omitempty"`
+	Input      map[string]any `json:"input,omitempty" yaml:"input,omitempty"`
+}
+
+type WebhookExecution struct {
+	Mode             WebhookExecutionMode `json:"mode,omitempty" yaml:"mode,omitempty"`
+	AcceptedResponse string               `json:"acceptedResponse,omitempty" yaml:"acceptedResponse,omitempty"`
+}
+
+type WebhookSecurityScheme struct {
+	Type        WebhookSecuritySchemeType `json:"type,omitempty" yaml:"type,omitempty"`
+	Description string                    `json:"description,omitempty" yaml:"description,omitempty"`
+	Name        string                    `json:"name,omitempty" yaml:"name,omitempty"`
+	In          WebhookIn                 `json:"in,omitempty" yaml:"in,omitempty"`
+	Scheme      WebhookHTTPScheme         `json:"scheme,omitempty" yaml:"scheme,omitempty"`
+	Secret      *WebhookSecretRef         `json:"secret,omitempty" yaml:"secret,omitempty"`
+	Signature   *WebhookSignatureConfig   `json:"signature,omitempty" yaml:"signature,omitempty"`
+	Replay      *WebhookReplayConfig      `json:"replay,omitempty" yaml:"replay,omitempty"`
+	MTLS        *WebhookMTLSConfig        `json:"mtls,omitempty" yaml:"mtls,omitempty"`
+}
+
+type WebhookSecretRef struct {
+	Env    string `json:"env,omitempty" yaml:"env,omitempty"`
+	Secret string `json:"secret,omitempty" yaml:"secret,omitempty"`
+}
+
+type WebhookSignatureConfig struct {
+	Algorithm        string `json:"algorithm,omitempty" yaml:"algorithm,omitempty"`
+	SignatureHeader  string `json:"signatureHeader,omitempty" yaml:"signatureHeader,omitempty"`
+	TimestampHeader  string `json:"timestampHeader,omitempty" yaml:"timestampHeader,omitempty"`
+	DeliveryIDHeader string `json:"deliveryIdHeader,omitempty" yaml:"deliveryIdHeader,omitempty"`
+	PayloadTemplate  string `json:"payloadTemplate,omitempty" yaml:"payloadTemplate,omitempty"`
+	DigestPrefix     string `json:"digestPrefix,omitempty" yaml:"digestPrefix,omitempty"`
+}
+
+type WebhookReplayConfig struct {
+	MaxAge string `json:"maxAge,omitempty" yaml:"maxAge,omitempty"`
+}
+
+type WebhookMTLSConfig struct {
+	SubjectAltName string `json:"subjectAltName,omitempty" yaml:"subjectAltName,omitempty"`
 }
 
 type OwnedUI struct {
@@ -416,6 +541,8 @@ type Entrypoint struct {
 type specJSONWire struct {
 	ConfigSchemaPath  string                                `json:"configSchemaPath,omitempty"`
 	Auth              *RouteAuthRef                         `json:"auth,omitempty"`
+	SecuritySchemes   map[string]*WebhookSecurityScheme     `json:"securitySchemes,omitempty"`
+	Webhooks          map[string]*WebhookDef                `json:"webhooks,omitempty"`
 	MCP               bool                                  `json:"mcp,omitempty"`
 	Headers           map[string]string                     `json:"headers,omitempty"`
 	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty"`
@@ -434,6 +561,8 @@ type specJSONWire struct {
 type specYAMLWire struct {
 	ConfigSchemaPath  string                                `yaml:"configSchemaPath,omitempty"`
 	Auth              *RouteAuthRef                         `yaml:"auth,omitempty"`
+	SecuritySchemes   map[string]*WebhookSecurityScheme     `yaml:"securitySchemes,omitempty"`
+	Webhooks          map[string]*WebhookDef                `yaml:"webhooks,omitempty"`
 	MCP               bool                                  `yaml:"mcp,omitempty"`
 	Headers           map[string]string                     `yaml:"headers,omitempty"`
 	ManagedParameters []ManagedParameter                    `yaml:"managedParameters,omitempty"`
@@ -452,6 +581,8 @@ type specYAMLWire struct {
 type specWire struct {
 	ConfigSchemaPath  string                                `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
 	Auth              *RouteAuthRef                         `json:"auth,omitempty" yaml:"auth,omitempty"`
+	SecuritySchemes   map[string]*WebhookSecurityScheme     `json:"securitySchemes,omitempty" yaml:"securitySchemes,omitempty"`
+	Webhooks          map[string]*WebhookDef                `json:"webhooks,omitempty" yaml:"webhooks,omitempty"`
 	MCP               bool                                  `json:"mcp,omitempty" yaml:"mcp,omitempty"`
 	Headers           map[string]string                     `json:"headers,omitempty" yaml:"headers,omitempty"`
 	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
@@ -480,6 +611,8 @@ func (s *Spec) UnmarshalJSON(data []byte) error {
 	spec := Spec{
 		ConfigSchemaPath:  raw.ConfigSchemaPath,
 		RouteAuth:         raw.Auth,
+		SecuritySchemes:   cloneWebhookSecuritySchemes(raw.SecuritySchemes),
+		Webhooks:          cloneWebhookDefs(raw.Webhooks),
 		MCP:               raw.MCP,
 		Headers:           raw.Headers,
 		ManagedParameters: raw.ManagedParameters,
@@ -527,6 +660,8 @@ func (s *Spec) UnmarshalYAML(value *yaml.Node) error {
 	spec := Spec{
 		ConfigSchemaPath:  raw.ConfigSchemaPath,
 		RouteAuth:         raw.Auth,
+		SecuritySchemes:   cloneWebhookSecuritySchemes(raw.SecuritySchemes),
+		Webhooks:          cloneWebhookDefs(raw.Webhooks),
 		MCP:               raw.MCP,
 		Headers:           raw.Headers,
 		ManagedParameters: raw.ManagedParameters,
@@ -557,6 +692,8 @@ func (s Spec) canonicalWire() (specWire, error) {
 	return specWire{
 		ConfigSchemaPath:  s.ConfigSchemaPath,
 		Auth:              s.RouteAuth,
+		SecuritySchemes:   cloneWebhookSecuritySchemes(s.SecuritySchemes),
+		Webhooks:          cloneWebhookDefs(s.Webhooks),
 		MCP:               s.MCP,
 		Headers:           s.Headers,
 		ManagedParameters: s.ManagedParameters,
@@ -587,6 +724,167 @@ func cloneManifestConnections(src map[string]*ManifestConnectionDef) map[string]
 		cloned[name] = &copyDef
 	}
 	return cloned
+}
+
+func cloneWebhookSecuritySchemes(src map[string]*WebhookSecurityScheme) map[string]*WebhookSecurityScheme {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]*WebhookSecurityScheme, len(src))
+	for name, scheme := range src {
+		if scheme == nil {
+			cloned[name] = nil
+			continue
+		}
+		copyScheme := *scheme
+		if scheme.Secret != nil {
+			copySecret := *scheme.Secret
+			copyScheme.Secret = &copySecret
+		}
+		if scheme.Signature != nil {
+			copySignature := *scheme.Signature
+			copyScheme.Signature = &copySignature
+		}
+		if scheme.Replay != nil {
+			copyReplay := *scheme.Replay
+			copyScheme.Replay = &copyReplay
+		}
+		if scheme.MTLS != nil {
+			copyMTLS := *scheme.MTLS
+			copyScheme.MTLS = &copyMTLS
+		}
+		cloned[name] = &copyScheme
+	}
+	return cloned
+}
+
+func cloneWebhookDefs(src map[string]*WebhookDef) map[string]*WebhookDef {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]*WebhookDef, len(src))
+	for name, def := range src {
+		cloned[name] = cloneWebhookDef(def)
+	}
+	return cloned
+}
+
+func cloneWebhookDef(src *WebhookDef) *WebhookDef {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	cloned.Get = cloneWebhookOperation(src.Get)
+	cloned.Post = cloneWebhookOperation(src.Post)
+	cloned.Put = cloneWebhookOperation(src.Put)
+	cloned.Delete = cloneWebhookOperation(src.Delete)
+	cloned.Target = cloneWebhookTarget(src.Target)
+	cloned.Execution = cloneWebhookExecution(src.Execution)
+	return &cloned
+}
+
+func cloneWebhookOperation(src *WebhookOperation) *WebhookOperation {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	cloned.RequestBody = cloneWebhookRequestBody(src.RequestBody)
+	cloned.Responses = cloneWebhookResponses(src.Responses)
+	cloned.Security = cloneSecurityRequirements(src.Security)
+	return &cloned
+}
+
+func cloneWebhookRequestBody(src *WebhookRequestBody) *WebhookRequestBody {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	cloned.Content = cloneWebhookMediaTypes(src.Content)
+	return &cloned
+}
+
+func cloneWebhookResponses(src map[string]*WebhookResponse) map[string]*WebhookResponse {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]*WebhookResponse, len(src))
+	for code, resp := range src {
+		if resp == nil {
+			cloned[code] = nil
+			continue
+		}
+		copyResp := *resp
+		if resp.Headers != nil {
+			copyResp.Headers = make(map[string]string, len(resp.Headers))
+			for key, value := range resp.Headers {
+				copyResp.Headers[key] = value
+			}
+		}
+		copyResp.Content = cloneWebhookMediaTypes(resp.Content)
+		cloned[code] = &copyResp
+	}
+	return cloned
+}
+
+func cloneWebhookMediaTypes(src map[string]*WebhookMediaType) map[string]*WebhookMediaType {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]*WebhookMediaType, len(src))
+	for name, mediaType := range src {
+		if mediaType == nil {
+			cloned[name] = nil
+			continue
+		}
+		copyMediaType := *mediaType
+		cloned[name] = &copyMediaType
+	}
+	return cloned
+}
+
+func cloneSecurityRequirements(src []SecurityRequirement) []SecurityRequirement {
+	if src == nil {
+		return nil
+	}
+	cloned := make([]SecurityRequirement, 0, len(src))
+	for _, requirement := range src {
+		if requirement == nil {
+			cloned = append(cloned, nil)
+			continue
+		}
+		copyRequirement := make(SecurityRequirement, len(requirement))
+		for name, scopes := range requirement {
+			copyRequirement[name] = append([]string(nil), scopes...)
+		}
+		cloned = append(cloned, copyRequirement)
+	}
+	return cloned
+}
+
+func cloneWebhookTarget(src *WebhookTarget) *WebhookTarget {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	if src.Workflow != nil {
+		copyWorkflow := *src.Workflow
+		if src.Workflow.Input != nil {
+			copyWorkflow.Input = make(map[string]any, len(src.Workflow.Input))
+			for key, value := range src.Workflow.Input {
+				copyWorkflow.Input[key] = value
+			}
+		}
+		cloned.Workflow = &copyWorkflow
+	}
+	return &cloned
+}
+
+func cloneWebhookExecution(src *WebhookExecution) *WebhookExecution {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	return &cloned
 }
 
 func decodeJSONKnownFields(data []byte, out any) error {
@@ -637,6 +935,8 @@ func validateYAMLWireObjectFields(node *yaml.Node, allowed map[string]struct{}, 
 var specWireFields = map[string]struct{}{
 	"configSchemaPath":  {},
 	"auth":              {},
+	"securitySchemes":   {},
+	"webhooks":          {},
 	"mcp":               {},
 	"headers":           {},
 	"managedParameters": {},

@@ -19,6 +19,7 @@ func (s *Server) routes() {
 		s.mountCoreRoutes(r, metricsHidden)
 		s.mountMCPRoutes(r)
 		s.mountAPIRoutes(r)
+		s.mountWebhookRoutes(r)
 		s.mountMountedWebUIRoutes(r)
 		s.mountManagementHiddenRoutes(r)
 	case RouteProfileManagement:
@@ -30,6 +31,7 @@ func (s *Server) routes() {
 		s.mountCoreRoutes(r, metricsAuthenticated)
 		s.mountMCPRoutes(r)
 		s.mountAPIRoutes(r)
+		s.mountWebhookRoutes(r)
 		s.mountMountedWebUIRoutes(r)
 		s.mountAdminAPIRoutes(r)
 		s.mountAdminUIRoutes(r)

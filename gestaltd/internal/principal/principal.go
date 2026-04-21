@@ -15,6 +15,7 @@ const (
 	SourceSession
 	SourceAPIToken
 	SourceWorkloadToken
+	SourceWebhook
 	SourceEnv
 )
 
@@ -50,6 +51,8 @@ func (s Source) String() string {
 		return "api_token"
 	case SourceWorkloadToken:
 		return "workload_token"
+	case SourceWebhook:
+		return "webhook"
 	case SourceEnv:
 		return "env"
 	default:
@@ -65,6 +68,8 @@ func ParseSource(value string) Source {
 		return SourceAPIToken
 	case SourceWorkloadToken.String():
 		return SourceWorkloadToken
+	case SourceWebhook.String():
+		return SourceWebhook
 	case SourceEnv.String():
 		return SourceEnv
 	default:

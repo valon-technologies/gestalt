@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -413,12 +416,237 @@ func validateRouteAuthRef(path string, auth *providermanifestv1.RouteAuthRef) er
 	return nil
 }
 
+func validateWebhookSecurityScheme(path string, scheme *providermanifestv1.WebhookSecurityScheme) error {
+	if scheme == nil {
+		return fmt.Errorf("%s is required", path)
+	}
+	switch scheme.Type {
+	case providermanifestv1.WebhookSecuritySchemeTypeHMAC:
+		if scheme.Signature == nil {
+			return fmt.Errorf("%s.signature is required for hmac security schemes", path)
+		}
+		if strings.TrimSpace(scheme.Signature.Algorithm) == "" {
+			return fmt.Errorf("%s.signature.algorithm is required", path)
+		}
+		if strings.TrimSpace(scheme.Signature.SignatureHeader) == "" {
+			return fmt.Errorf("%s.signature.signatureHeader is required", path)
+		}
+		if scheme.Secret == nil || (strings.TrimSpace(scheme.Secret.Env) == "" && strings.TrimSpace(scheme.Secret.Secret) == "") {
+			return fmt.Errorf("%s.secret.env or %s.secret.secret is required for hmac security schemes", path, path)
+		}
+		if scheme.Replay != nil && strings.TrimSpace(scheme.Replay.MaxAge) != "" {
+			if _, err := time.ParseDuration(strings.TrimSpace(scheme.Replay.MaxAge)); err != nil {
+				return fmt.Errorf("%s.replay.maxAge is invalid: %w", path, err)
+			}
+		}
+	case providermanifestv1.WebhookSecuritySchemeTypeAPIKey:
+		if strings.TrimSpace(scheme.Name) == "" {
+			return fmt.Errorf("%s.name is required for apiKey security schemes", path)
+		}
+		switch scheme.In {
+		case providermanifestv1.WebhookInHeader, providermanifestv1.WebhookInQuery:
+		default:
+			return fmt.Errorf("%s.in must be %q or %q for apiKey security schemes", path, providermanifestv1.WebhookInHeader, providermanifestv1.WebhookInQuery)
+		}
+		if scheme.Secret == nil || (strings.TrimSpace(scheme.Secret.Env) == "" && strings.TrimSpace(scheme.Secret.Secret) == "") {
+			return fmt.Errorf("%s.secret.env or %s.secret.secret is required for apiKey security schemes", path, path)
+		}
+	case providermanifestv1.WebhookSecuritySchemeTypeHTTP:
+		switch scheme.Scheme {
+		case providermanifestv1.WebhookHTTPSchemeBasic, providermanifestv1.WebhookHTTPSchemeBearer:
+		default:
+			return fmt.Errorf("%s.scheme must be %q or %q for http security schemes", path, providermanifestv1.WebhookHTTPSchemeBasic, providermanifestv1.WebhookHTTPSchemeBearer)
+		}
+		if scheme.Secret == nil || (strings.TrimSpace(scheme.Secret.Env) == "" && strings.TrimSpace(scheme.Secret.Secret) == "") {
+			return fmt.Errorf("%s.secret.env or %s.secret.secret is required for http security schemes", path, path)
+		}
+	case providermanifestv1.WebhookSecuritySchemeTypeMutualTLS:
+		if scheme.Secret != nil || scheme.Signature != nil || scheme.Replay != nil {
+			return fmt.Errorf("%s.mutualTLS does not support secret, signature, or replay configuration", path)
+		}
+	case providermanifestv1.WebhookSecuritySchemeTypeNone:
+	default:
+		return fmt.Errorf("%s.type %q is unsupported", path, scheme.Type)
+	}
+	return nil
+}
+
+func webhookOperationMethod(def *providermanifestv1.WebhookDef) (string, *providermanifestv1.WebhookOperation, int) {
+	if def == nil {
+		return "", nil, 0
+	}
+	var (
+		method string
+		op     *providermanifestv1.WebhookOperation
+		count  int
+	)
+	for _, candidate := range []struct {
+		method string
+		op     *providermanifestv1.WebhookOperation
+	}{
+		{method: http.MethodGet, op: def.Get},
+		{method: http.MethodPost, op: def.Post},
+		{method: http.MethodPut, op: def.Put},
+		{method: http.MethodDelete, op: def.Delete},
+	} {
+		if candidate.op == nil {
+			continue
+		}
+		method = candidate.method
+		op = candidate.op
+		count++
+	}
+	return method, op, count
+}
+
+func validateWebhookOperation(path string, op *providermanifestv1.WebhookOperation, schemes map[string]*providermanifestv1.WebhookSecurityScheme) error {
+	if op == nil {
+		return fmt.Errorf("%s is required", path)
+	}
+	if len(op.Security) == 0 {
+		return fmt.Errorf("%s.security is required", path)
+	}
+	for i, requirement := range op.Security {
+		if len(requirement) == 0 {
+			return fmt.Errorf("%s.security[%d] must declare at least one security scheme", path, i)
+		}
+		for name := range requirement {
+			if _, ok := schemes[name]; !ok {
+				return fmt.Errorf("%s.security[%d] references unknown security scheme %q", path, i, name)
+			}
+		}
+	}
+	if op.RequestBody != nil && op.RequestBody.Required && len(op.RequestBody.Content) == 0 {
+		return fmt.Errorf("%s.requestBody.content is required when requestBody.required is true", path)
+	}
+	if len(op.Responses) == 0 {
+		return fmt.Errorf("%s.responses is required", path)
+	}
+	for code, response := range op.Responses {
+		if strings.TrimSpace(code) == "" {
+			return fmt.Errorf("%s.responses codes must be non-empty", path)
+		}
+		status, err := strconv.Atoi(code)
+		if err != nil || status < 100 || status > 599 || http.StatusText(status) == "" && status < 600 {
+			return fmt.Errorf("%s.responses.%s must be a valid HTTP status code", path, code)
+		}
+		if response == nil {
+			return fmt.Errorf("%s.responses.%s is required", path, code)
+		}
+		if response.Body != nil && len(response.Content) > 1 {
+			return fmt.Errorf("%s.responses.%s.body requires at most one content entry", path, code)
+		}
+	}
+	return nil
+}
+
+func validateWebhookTarget(path string, target *providermanifestv1.WebhookTarget) error {
+	if target == nil {
+		return fmt.Errorf("%s is required", path)
+	}
+	count := 0
+	if strings.TrimSpace(target.Operation) != "" {
+		count++
+	}
+	if target.Workflow != nil {
+		count++
+	}
+	if count != 1 {
+		return fmt.Errorf("%s must declare exactly one of operation or workflow", path)
+	}
+	if target.Workflow != nil {
+		if strings.TrimSpace(target.Workflow.Plugin) == "" {
+			return fmt.Errorf("%s.workflow.plugin is required", path)
+		}
+		if strings.TrimSpace(target.Workflow.Operation) == "" {
+			return fmt.Errorf("%s.workflow.operation is required", path)
+		}
+	}
+	return nil
+}
+
+func validateWebhookExecution(path string, execution *providermanifestv1.WebhookExecution, responses map[string]*providermanifestv1.WebhookResponse) error {
+	if execution == nil {
+		return nil
+	}
+	switch execution.Mode {
+	case "", providermanifestv1.WebhookExecutionModeSync, providermanifestv1.WebhookExecutionModeAsyncAck:
+	default:
+		return fmt.Errorf("%s.mode %q is unsupported", path, execution.Mode)
+	}
+	if execution.Mode != providermanifestv1.WebhookExecutionModeAsyncAck {
+		if strings.TrimSpace(execution.AcceptedResponse) != "" {
+			return fmt.Errorf("%s.acceptedResponse is only supported when mode is %q", path, providermanifestv1.WebhookExecutionModeAsyncAck)
+		}
+		return nil
+	}
+	code := strings.TrimSpace(execution.AcceptedResponse)
+	if code == "" {
+		return fmt.Errorf("%s.acceptedResponse is required when mode is %q", path, providermanifestv1.WebhookExecutionModeAsyncAck)
+	}
+	parsed, err := strconv.Atoi(code)
+	if err != nil || parsed < 200 || parsed >= 300 {
+		return fmt.Errorf("%s.acceptedResponse must reference a 2xx response when mode is %q", path, providermanifestv1.WebhookExecutionModeAsyncAck)
+	}
+	if _, ok := responses[code]; !ok {
+		return fmt.Errorf("%s.acceptedResponse references undefined response %q", path, code)
+	}
+	return nil
+}
+
+func validateWebhookDef(path string, def *providermanifestv1.WebhookDef, schemes map[string]*providermanifestv1.WebhookSecurityScheme) error {
+	if def == nil {
+		return fmt.Errorf("%s is required", path)
+	}
+	if strings.TrimSpace(def.Path) == "" {
+		return fmt.Errorf("%s.path is required", path)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(def.Path), "/") {
+		return fmt.Errorf("%s.path must start with \"/\"", path)
+	}
+	if strings.Contains(def.Path, "*") {
+		return fmt.Errorf("%s.path must not contain wildcards", path)
+	}
+	method, op, methodCount := webhookOperationMethod(def)
+	if methodCount != 1 {
+		return fmt.Errorf("%s must declare exactly one HTTP method in the first pass", path)
+	}
+	if err := validateWebhookOperation(path+"."+strings.ToLower(method), op, schemes); err != nil {
+		return err
+	}
+	if err := validateWebhookTarget(path+".target", def.Target); err != nil {
+		return err
+	}
+	if err := validateWebhookExecution(path+".execution", def.Execution, op.Responses); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ValidateWebhookSecurityScheme(path string, scheme *providermanifestv1.WebhookSecurityScheme) error {
+	return validateWebhookSecurityScheme(path, scheme)
+}
+
+func ValidateWebhookDef(path string, def *providermanifestv1.WebhookDef, schemes map[string]*providermanifestv1.WebhookSecurityScheme) error {
+	return validateWebhookDef(path, def, schemes)
+}
+
 func validateExecutableProviderMetadata(provider *providermanifestv1.Spec) error {
 	if provider == nil {
 		return nil
 	}
 	if err := validateRouteAuthRef("provider.auth", provider.RouteAuth); err != nil {
 		return err
+	}
+	for name, scheme := range provider.SecuritySchemes {
+		if err := validateWebhookSecurityScheme(fmt.Sprintf("provider.securitySchemes.%s", name), scheme); err != nil {
+			return err
+		}
+	}
+	for name, webhook := range provider.Webhooks {
+		if err := validateWebhookDef(fmt.Sprintf("provider.webhooks.%s", name), webhook, provider.SecuritySchemes); err != nil {
+			return err
+		}
 	}
 	for name, conn := range provider.Connections {
 		if conn == nil {

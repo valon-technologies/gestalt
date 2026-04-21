@@ -66,6 +66,8 @@ The `spec` block for a `kind: plugin` manifest describes a plugin. It supports d
 | --- | --- | --- |
 | `configSchemaPath` | string | Path to a JSON/YAML schema that validates `plugins.<name>.config` in the server config. |
 | `auth` | RouteAuthRef | Optional plugin route-auth reference. Use `auth.provider` to bind the plugin’s mounted routes to a named request-auth provider. Legacy manifests may also use `spec.auth` for upstream connection auth when no `connections` map is defined. |
+| `securitySchemes` | map[string]WebhookSecurityScheme | Reusable hosted-webhook verification schemes such as HMAC, API key, HTTP auth, or mTLS. |
+| `webhooks` | map[string]WebhookDef | Hosted inbound webhook routes that Gestalt mounts directly and dispatches to plugin operations or workflow runs. |
 | `mcp` | bool | When true, the plugin exposes its operations as MCP tools. |
 | `headers` | map[string]string | Static headers injected into every outbound request. |
 | `surfaces` | Surfaces | Spec-loaded and declarative REST surfaces. See [Surfaces](#surfaces). |
@@ -139,6 +141,91 @@ The `connections` map defines named connection profiles. Deployment config can o
 | `auth` | ProviderAuth | Authentication configuration for this connection. |
 | `params` | map[string]ConnectionParam | Connection parameters populated during or after connect. |
 | `discovery` | Discovery | Post-connect discovery configuration. |
+
+### Hosted Webhooks
+
+Hosted webhooks are separate from normal plugin HTTP operation routes. They are mounted directly on the public router and use webhook verification from `spec.securitySchemes`, not `spec.auth`.
+
+Use `spec.securitySchemes` for reusable verification config:
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `type` | string | One of `hmac`, `apiKey`, `http`, `mutualTLS`, or `none`. |
+| `secret.env` | string | Environment variable that contains the shared secret. |
+| `secret.secret` | string | Inline shared secret value. Useful for local testing. |
+| `signature.*` | object | HMAC signature settings such as headers, payload template, and digest prefix. |
+| `replay.maxAge` | string | Optional replay window such as `5m`. |
+| `name` / `in` | string | API-key header or query configuration. |
+| `scheme` | string | HTTP auth scheme, either `basic` or `bearer`. |
+| `mtls.subjectAltName` | string | Optional client-certificate SAN to require for mTLS webhook auth. |
+
+Use `spec.webhooks` to bind a public route to either a plugin operation or a workflow run:
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `path` | string | Absolute public route Gestalt mounts for the webhook. |
+| `get` / `post` / `put` / `delete` | WebhookOperation | Exactly one HTTP method per webhook in the first pass. |
+| `target.operation` | string | Plugin operation to invoke. |
+| `target.workflow` | WebhookWorkflowTarget | Workflow run target with `provider`, `plugin`, `operation`, and optional `connection`, `instance`, `input`. |
+| `execution.mode` | string | Either `sync` or `async_ack`. |
+| `execution.acceptedResponse` | string | Response code to return immediately in `async_ack` mode. |
+
+Each webhook method supports:
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `requestBody.content` | map[string]WebhookMediaType | Declares supported inbound media types such as `application/json` or `application/x-www-form-urlencoded`. |
+| `responses` | map[string]WebhookResponse | Declares response codes and optional static response bodies Gestalt can return. |
+| `security` | SecurityRequirement[] | OpenAPI-style OR-of-AND security requirements referencing `spec.securitySchemes`. |
+
+Example:
+
+```yaml
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+
+  securitySchemes:
+    slackSignature:
+      type: hmac
+      secret:
+        env: SLACK_SIGNING_SECRET
+      signature:
+        algorithm: sha256
+        signatureHeader: X-Slack-Signature
+        timestampHeader: X-Slack-Request-Timestamp
+        deliveryIdHeader: X-Slack-Delivery-ID
+        payloadTemplate: "v0:{header.X-Slack-Request-Timestamp}:{raw_body}"
+        digestPrefix: "v0="
+      replay:
+        maxAge: 5m
+
+  webhooks:
+    slackCommand:
+      path: /webhooks/slack-agent/command
+      post:
+        requestBody:
+          required: true
+          content:
+            application/x-www-form-urlencoded: {}
+        responses:
+          "200":
+            description: accepted
+            content:
+              application/json: {}
+            body:
+              response_type: ephemeral
+              text: Working on it...
+        security:
+          - slackSignature: []
+      target:
+        operation: handle_command
+      execution:
+        mode: async_ack
+        acceptedResponse: "200"
+```
 
 ### Surfaces
 

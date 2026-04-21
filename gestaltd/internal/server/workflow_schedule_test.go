@@ -62,6 +62,9 @@ func (s *stubWorkflowControl) ResolveProvider(name string) (coreworkflow.Provide
 }
 
 type memoryWorkflowProvider struct {
+	startRunReqs  []coreworkflow.StartRunRequest
+	nextStartRun  *coreworkflow.Run
+	startRunErr   error
 	schedules     map[string]*coreworkflow.Schedule
 	upsertReqs    []coreworkflow.UpsertScheduleRequest
 	deleteReqs    []coreworkflow.DeleteScheduleRequest
@@ -76,8 +79,22 @@ func newMemoryWorkflowProvider() *memoryWorkflowProvider {
 	return &memoryWorkflowProvider{schedules: map[string]*coreworkflow.Schedule{}}
 }
 
-func (p *memoryWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
-	return nil, errors.New("not implemented")
+func (p *memoryWorkflowProvider) StartRun(_ context.Context, req coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
+	p.startRunReqs = append(p.startRunReqs, req)
+	if p.startRunErr != nil {
+		return nil, p.startRunErr
+	}
+	if p.nextStartRun != nil {
+		return cloneWorkflowRun(p.nextStartRun), nil
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	return &coreworkflow.Run{
+		ID:        "run-1",
+		Status:    coreworkflow.RunStatusPending,
+		Target:    cloneWorkflowTarget(req.Target),
+		CreatedBy: req.CreatedBy,
+		CreatedAt: &now,
+	}, nil
 }
 
 func (p *memoryWorkflowProvider) GetRun(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
@@ -228,6 +245,33 @@ func cloneWorkflowSchedule(schedule *coreworkflow.Schedule) *coreworkflow.Schedu
 		cloned.NextRunAt = &value
 	}
 	return &cloned
+}
+
+func cloneWorkflowRun(run *coreworkflow.Run) *coreworkflow.Run {
+	if run == nil {
+		return nil
+	}
+	cloned := *run
+	cloned.Target = cloneWorkflowTarget(run.Target)
+	if run.CreatedAt != nil {
+		value := *run.CreatedAt
+		cloned.CreatedAt = &value
+	}
+	if run.StartedAt != nil {
+		value := *run.StartedAt
+		cloned.StartedAt = &value
+	}
+	if run.CompletedAt != nil {
+		value := *run.CompletedAt
+		cloned.CompletedAt = &value
+	}
+	return &cloned
+}
+
+func cloneWorkflowTarget(target coreworkflow.Target) coreworkflow.Target {
+	cloned := target
+	cloned.Input = cloneMap(target.Input)
+	return cloned
 }
 
 func cloneMap(src map[string]any) map[string]any {

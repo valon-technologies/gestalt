@@ -316,17 +316,19 @@ type ProviderEntry struct {
 	AuthorizationPolicy string `yaml:"authorizationPolicy,omitempty"`
 
 	// Plugin-specific config fields (parsed from YAML, only valid on plugin entries)
-	MountPath         string                        `yaml:"mountPath,omitempty"`
-	UI                string                        `yaml:"ui,omitempty"`
-	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
-	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
-	Invokes           []PluginInvocationDependency  `yaml:"invokes,omitempty"`
-	IndexedDB         *PluginIndexedDBConfig        `yaml:"indexeddb,omitempty"`
-	Cache             []string                      `yaml:"cache,omitempty"`
-	S3                []string                      `yaml:"s3,omitempty"`
-	Runtime           *PluginRuntimeConfig          `yaml:"runtime,omitempty"`
-	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
-	MCP               bool                          `yaml:"mcp,omitempty"`
+	MountPath         string                            `yaml:"mountPath,omitempty"`
+	UI                string                            `yaml:"ui,omitempty"`
+	Connections       map[string]*ConnectionDef         `yaml:"connections,omitempty"`
+	AllowedOperations map[string]*OperationOverride     `yaml:"allowedOperations,omitempty"`
+	SecuritySchemes   map[string]*WebhookSecurityScheme `yaml:"securitySchemes,omitempty"`
+	Webhooks          map[string]*WebhookDef            `yaml:"webhooks,omitempty"`
+	Invokes           []PluginInvocationDependency      `yaml:"invokes,omitempty"`
+	IndexedDB         *PluginIndexedDBConfig            `yaml:"indexeddb,omitempty"`
+	Cache             []string                          `yaml:"cache,omitempty"`
+	S3                []string                          `yaml:"s3,omitempty"`
+	Runtime           *PluginRuntimeConfig              `yaml:"runtime,omitempty"`
+	Surfaces          *ProviderSurfaceOverrides         `yaml:"surfaces,omitempty"`
+	MCP               bool                              `yaml:"mcp,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
 	Command              string                                `yaml:"-"`
@@ -540,6 +542,170 @@ func cloneRouteAuthDef(src *RouteAuthDef) *RouteAuthDef {
 	return &cloned
 }
 
+func cloneWebhookSecuritySchemes(src map[string]*providermanifestv1.WebhookSecurityScheme) map[string]*providermanifestv1.WebhookSecurityScheme {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]*providermanifestv1.WebhookSecurityScheme, len(src))
+	for name, scheme := range src {
+		cloned[name] = cloneWebhookSecurityScheme(scheme)
+	}
+	return cloned
+}
+
+func cloneWebhookSecurityScheme(src *providermanifestv1.WebhookSecurityScheme) *providermanifestv1.WebhookSecurityScheme {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	if src.Secret != nil {
+		copySecret := *src.Secret
+		cloned.Secret = &copySecret
+	}
+	if src.Signature != nil {
+		copySignature := *src.Signature
+		cloned.Signature = &copySignature
+	}
+	if src.Replay != nil {
+		copyReplay := *src.Replay
+		cloned.Replay = &copyReplay
+	}
+	if src.MTLS != nil {
+		copyMTLS := *src.MTLS
+		cloned.MTLS = &copyMTLS
+	}
+	return &cloned
+}
+
+func cloneWebhookDefs(src map[string]*providermanifestv1.WebhookDef) map[string]*providermanifestv1.WebhookDef {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]*providermanifestv1.WebhookDef, len(src))
+	for name, def := range src {
+		cloned[name] = cloneWebhookDef(def)
+	}
+	return cloned
+}
+
+func cloneWebhookDef(src *providermanifestv1.WebhookDef) *providermanifestv1.WebhookDef {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	cloned.Get = cloneWebhookOperation(src.Get)
+	cloned.Post = cloneWebhookOperation(src.Post)
+	cloned.Put = cloneWebhookOperation(src.Put)
+	cloned.Delete = cloneWebhookOperation(src.Delete)
+	cloned.Target = cloneWebhookTarget(src.Target)
+	cloned.Execution = cloneWebhookExecution(src.Execution)
+	return &cloned
+}
+
+func cloneWebhookOperation(src *providermanifestv1.WebhookOperation) *providermanifestv1.WebhookOperation {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	cloned.RequestBody = cloneWebhookRequestBody(src.RequestBody)
+	cloned.Responses = cloneWebhookResponses(src.Responses)
+	cloned.Security = cloneWebhookSecurityRequirements(src.Security)
+	return &cloned
+}
+
+func cloneWebhookRequestBody(src *providermanifestv1.WebhookRequestBody) *providermanifestv1.WebhookRequestBody {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	cloned.Content = cloneWebhookMediaTypes(src.Content)
+	return &cloned
+}
+
+func cloneWebhookResponses(src map[string]*providermanifestv1.WebhookResponse) map[string]*providermanifestv1.WebhookResponse {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]*providermanifestv1.WebhookResponse, len(src))
+	for code, resp := range src {
+		if resp == nil {
+			cloned[code] = nil
+			continue
+		}
+		copyResp := *resp
+		if resp.Headers != nil {
+			copyResp.Headers = make(map[string]string, len(resp.Headers))
+			for key, value := range resp.Headers {
+				copyResp.Headers[key] = value
+			}
+		}
+		copyResp.Content = cloneWebhookMediaTypes(resp.Content)
+		cloned[code] = &copyResp
+	}
+	return cloned
+}
+
+func cloneWebhookMediaTypes(src map[string]*providermanifestv1.WebhookMediaType) map[string]*providermanifestv1.WebhookMediaType {
+	if src == nil {
+		return nil
+	}
+	cloned := make(map[string]*providermanifestv1.WebhookMediaType, len(src))
+	for name, mediaType := range src {
+		if mediaType == nil {
+			cloned[name] = nil
+			continue
+		}
+		copyMediaType := *mediaType
+		cloned[name] = &copyMediaType
+	}
+	return cloned
+}
+
+func cloneWebhookSecurityRequirements(src []providermanifestv1.SecurityRequirement) []providermanifestv1.SecurityRequirement {
+	if src == nil {
+		return nil
+	}
+	cloned := make([]providermanifestv1.SecurityRequirement, 0, len(src))
+	for _, requirement := range src {
+		if requirement == nil {
+			cloned = append(cloned, nil)
+			continue
+		}
+		copyRequirement := make(providermanifestv1.SecurityRequirement, len(requirement))
+		for name, scopes := range requirement {
+			copyRequirement[name] = append([]string(nil), scopes...)
+		}
+		cloned = append(cloned, copyRequirement)
+	}
+	return cloned
+}
+
+func cloneWebhookTarget(src *providermanifestv1.WebhookTarget) *providermanifestv1.WebhookTarget {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	if src.Workflow != nil {
+		copyWorkflow := *src.Workflow
+		if src.Workflow.Input != nil {
+			copyWorkflow.Input = make(map[string]any, len(src.Workflow.Input))
+			for key, value := range src.Workflow.Input {
+				copyWorkflow.Input[key] = value
+			}
+		}
+		cloned.Workflow = &copyWorkflow
+	}
+	return &cloned
+}
+
+func cloneWebhookExecution(src *providermanifestv1.WebhookExecution) *providermanifestv1.WebhookExecution {
+	if src == nil {
+		return nil
+	}
+	cloned := *src
+	return &cloned
+}
+
 func (f providerEntryFields) toProviderEntry() ProviderEntry {
 	return ProviderEntry(f)
 }
@@ -631,6 +797,40 @@ func (e *ProviderEntry) ManifestSpec() *providermanifestv1.Spec {
 		return nil
 	}
 	return e.ResolvedManifest.Spec
+}
+
+func (e *ProviderEntry) EffectiveWebhookSecuritySchemes() map[string]*providermanifestv1.WebhookSecurityScheme {
+	var merged map[string]*providermanifestv1.WebhookSecurityScheme
+	if spec := e.ManifestSpec(); spec != nil && spec.SecuritySchemes != nil {
+		merged = cloneWebhookSecuritySchemes(spec.SecuritySchemes)
+	}
+	if e == nil || e.SecuritySchemes == nil {
+		return merged
+	}
+	if merged == nil {
+		merged = map[string]*providermanifestv1.WebhookSecurityScheme{}
+	}
+	for name, scheme := range e.SecuritySchemes {
+		merged[name] = cloneWebhookSecurityScheme(scheme)
+	}
+	return merged
+}
+
+func (e *ProviderEntry) EffectiveWebhooks() map[string]*providermanifestv1.WebhookDef {
+	var merged map[string]*providermanifestv1.WebhookDef
+	if spec := e.ManifestSpec(); spec != nil && spec.Webhooks != nil {
+		merged = cloneWebhookDefs(spec.Webhooks)
+	}
+	if e == nil || e.Webhooks == nil {
+		return merged
+	}
+	if merged == nil {
+		merged = map[string]*providermanifestv1.WebhookDef{}
+	}
+	for name, webhook := range e.Webhooks {
+		merged[name] = cloneWebhookDef(webhook)
+	}
+	return merged
 }
 
 func (e *ProviderEntry) DeclaresMCP() bool {
@@ -1055,6 +1255,10 @@ func EffectiveNamedConnectionDef(plugin *ProviderEntry, manifestPlugin *provider
 
 // OperationOverride holds optional alias and description for an allowed operation.
 type OperationOverride = providermanifestv1.ManifestOperationOverride
+type WebhookSecurityScheme = providermanifestv1.WebhookSecurityScheme
+type WebhookDef = providermanifestv1.WebhookDef
+type WebhookTarget = providermanifestv1.WebhookTarget
+type WebhookWorkflowTarget = providermanifestv1.WebhookWorkflowTarget
 
 type PluginInvocationDependency struct {
 	Plugin    string `yaml:"plugin,omitempty"`

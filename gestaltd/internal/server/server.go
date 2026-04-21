@@ -50,6 +50,17 @@ type MountedWebUI struct {
 	builtInAdmin        bool
 }
 
+type MountedWebhook struct {
+	Name            string
+	PluginName      string
+	Path            string
+	Method          string
+	Operation       *providermanifestv1.WebhookOperation
+	Target          *providermanifestv1.WebhookTarget
+	Execution       *providermanifestv1.WebhookExecution
+	SecuritySchemes map[string]*providermanifestv1.WebhookSecurityScheme
+}
+
 type AdminRouteConfig struct {
 	AuthorizationPolicy string
 	AllowedRoles        []string
@@ -103,9 +114,11 @@ type Server struct {
 	prometheusMetrics     http.Handler
 	mcpHandler            http.Handler
 	mountedWebUIs         []MountedWebUI
+	mountedWebhooks       []MountedWebhook
 	adminRoute            AdminRouteConfig
 	adminUI               http.Handler
 	routeProfile          RouteProfile
+	webhookReplayStore    webhookReplayStore
 }
 
 func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
@@ -201,6 +214,13 @@ func New(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	mountedWebhooks, err := mountedWebhooksFromEntries(cfg.PluginDefs)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateMountedWebhookRoutes(mountedWebhooks, mountedWebUIs); err != nil {
+		return nil, err
+	}
 	adminUI := cfg.AdminUI
 	if adminUI == nil && cfg.BuiltinAdminUI != nil {
 		adminUI, err = resolveBuiltinAdminUI(*cfg.BuiltinAdminUI)
@@ -281,9 +301,11 @@ func New(cfg Config) (*Server, error) {
 		prometheusMetrics:     cfg.PrometheusMetrics,
 		mcpHandler:            cfg.MCPHandler,
 		mountedWebUIs:         mountedWebUIs,
+		mountedWebhooks:       mountedWebhooks,
 		adminRoute:            adminRoute,
 		adminUI:               adminUI,
 		routeProfile:          cfg.RouteProfile,
+		webhookReplayStore:    newMemoryWebhookReplayStore(),
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
 		Providers:             cfg.Providers,

@@ -818,6 +818,8 @@ plugins:
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
+| `securitySchemes` | Optional hosted-webhook security scheme overrides or additions for this plugin. |
+| `webhooks` | Optional hosted-webhook route overrides or additions for this plugin. |
 | `indexeddb` | Optional plugin IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the plugin's single IndexedDB SDK socket; when omitted, the plugin inherits the selected/default host IndexedDB. `indexeddb.db` overrides the plugin-visible database name and defaults to the plugin key. Schema-capable backends derive plugin scoping from that `db` name. `indexeddb.objectStores` optionally allowlists the logical object stores the plugin may use. Plugins then call `new IndexedDB()` (or the equivalent SDK helper) against `GESTALT_INDEXEDDB_SOCKET`; they do not choose arbitrary schemas or DSNs at runtime. |
 | `s3` | Optional list of named `providers.s3` bindings exposed to the executable plugin through the SDK transport. A single binding also populates the default S3 SDK env var for compatibility. |
 
@@ -858,6 +860,57 @@ when its `next` path resolves into that plugin's mounted UI. Standalone
 `providers.ui` bundles, the built-in admin UI/admin API, integration OAuth
 helper routes, and `/mcp` still use the server-wide auth provider in this
 phase.
+
+Hosted webhooks can be supplied or overridden from config too. This uses the
+same shapes as the manifest and merges by name over any manifest-declared
+`spec.securitySchemes` and `spec.webhooks` entries:
+
+```yaml
+plugins:
+  slack_agent:
+    source: ./dist/provider-release.yaml
+    securitySchemes:
+      slackSignature:
+        type: hmac
+        secret:
+          env: SLACK_SIGNING_SECRET
+        signature:
+          algorithm: sha256
+          signatureHeader: X-Slack-Signature
+          timestampHeader: X-Slack-Request-Timestamp
+          deliveryIdHeader: X-Slack-Delivery-ID
+          payloadTemplate: "v0:{header.X-Slack-Request-Timestamp}:{raw_body}"
+          digestPrefix: "v0="
+        replay:
+          maxAge: 5m
+    webhooks:
+      slackCommand:
+        path: /webhooks/slack-agent/command
+        post:
+          requestBody:
+            required: true
+            content:
+              application/x-www-form-urlencoded: {}
+          responses:
+            "200":
+              description: accepted
+              content:
+                application/json: {}
+              body:
+                response_type: ephemeral
+                text: Working on it...
+          security:
+            - slackSignature: []
+        target:
+          operation: handle_command
+        execution:
+          mode: async_ack
+          acceptedResponse: "200"
+```
+
+These routes are mounted directly on the public router. They are not protected
+by plugin `auth.provider`; instead they must declare webhook `security` that
+references one of the configured `securitySchemes`.
 For published providers, `source` can point at a `provider-release.yaml`
 metadata URL directly, or it can describe a GitHub release logically:
 

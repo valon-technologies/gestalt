@@ -100,6 +100,24 @@
         "auth": {
           "$ref": "#/$defs/routeAuthRef"
         },
+        "securitySchemes": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/webhookSecurityScheme"
+          }
+        },
+        "webhooks": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/webhookDef"
+          }
+        },
         "headers": {
           "type": "object",
           "additionalProperties": {
@@ -166,6 +184,302 @@
       ],
       "properties": {
         "provider": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "webhookSecurityScheme": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "hmac",
+            "apiKey",
+            "http",
+            "mutualTLS",
+            "none"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "in": {
+          "type": "string",
+          "enum": [
+            "header",
+            "query"
+          ]
+        },
+        "scheme": {
+          "type": "string",
+          "enum": [
+            "basic",
+            "bearer"
+          ]
+        },
+        "secret": {
+          "$ref": "#/$defs/webhookSecretRef"
+        },
+        "signature": {
+          "$ref": "#/$defs/webhookSignatureConfig"
+        },
+        "replay": {
+          "$ref": "#/$defs/webhookReplayConfig"
+        },
+        "mtls": {
+          "$ref": "#/$defs/webhookMTLSConfig"
+        }
+      }
+    },
+    "webhookSecretRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "env": {
+          "type": "string",
+          "minLength": 1
+        },
+        "secret": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "webhookSignatureConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signatureHeader": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timestampHeader": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deliveryIdHeader": {
+          "type": "string",
+          "minLength": 1
+        },
+        "payloadTemplate": {
+          "type": "string"
+        },
+        "digestPrefix": {
+          "type": "string"
+        }
+      }
+    },
+    "webhookReplayConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxAge": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "webhookMTLSConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "subjectAltName": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "webhookDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "get": {
+          "$ref": "#/$defs/webhookOperation"
+        },
+        "post": {
+          "$ref": "#/$defs/webhookOperation"
+        },
+        "put": {
+          "$ref": "#/$defs/webhookOperation"
+        },
+        "delete": {
+          "$ref": "#/$defs/webhookOperation"
+        },
+        "target": {
+          "$ref": "#/$defs/webhookTarget"
+        },
+        "execution": {
+          "$ref": "#/$defs/webhookExecution"
+        }
+      }
+    },
+    "webhookOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "operationId": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "requestBody": {
+          "$ref": "#/$defs/webhookRequestBody"
+        },
+        "responses": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/webhookResponse"
+          }
+        },
+        "security": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/securityRequirement"
+          }
+        }
+      }
+    },
+    "webhookRequestBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "content": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/webhookMediaType"
+          }
+        }
+      }
+    },
+    "webhookMediaType": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": {}
+      }
+    },
+    "webhookResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "content": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/webhookMediaType"
+          }
+        },
+        "body": {}
+      }
+    },
+    "securityRequirement": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "webhookTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "workflow": {
+          "$ref": "#/$defs/webhookWorkflowTarget"
+        }
+      }
+    },
+    "webhookWorkflowTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "connection": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "input": {
+          "type": "object"
+        }
+      }
+    },
+    "webhookExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "sync",
+            "async_ack"
+          ]
+        },
+        "acceptedResponse": {
           "type": "string",
           "minLength": 1
         }

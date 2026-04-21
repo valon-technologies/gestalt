@@ -496,6 +496,133 @@ spec:
 	}
 }
 
+func TestManifestWorkflow_AcceptsHostedWebhooksAndSecuritySchemes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: plugin
+source: github.com/acme/plugins/slack-agent
+version: 1.0.0
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+  securitySchemes:
+    slackSignature:
+      type: hmac
+      secret:
+        env: SLACK_SIGNING_SECRET
+      signature:
+        algorithm: sha256
+        signatureHeader: X-Slack-Signature
+        timestampHeader: X-Slack-Request-Timestamp
+        payloadTemplate: "v0:{header.X-Slack-Request-Timestamp}:{raw_body}"
+        digestPrefix: "v0="
+      replay:
+        maxAge: 5m
+  webhooks:
+    slackCommand:
+      path: /webhooks/slack-agent/command
+      post:
+        requestBody:
+          required: true
+          content:
+            application/x-www-form-urlencoded: {}
+        responses:
+          "200":
+            description: accepted
+            content:
+              application/json: {}
+            body:
+              response_type: ephemeral
+              text: Working on it...
+        security:
+          - slackSignature: []
+      target:
+        operation: handle_command
+      execution:
+        mode: async_ack
+        acceptedResponse: "200"
+`))
+
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile: %v", err)
+	}
+	if manifest.Spec == nil {
+		t.Fatal("expected plugin spec")
+	}
+	if scheme := manifest.Spec.SecuritySchemes["slackSignature"]; scheme == nil || scheme.Type != providermanifestv1.WebhookSecuritySchemeTypeHMAC {
+		t.Fatalf("unexpected security scheme: %#v", manifest.Spec.SecuritySchemes["slackSignature"])
+	}
+	webhook := manifest.Spec.Webhooks["slackCommand"]
+	if webhook == nil || webhook.Post == nil || webhook.Path != "/webhooks/slack-agent/command" {
+		t.Fatalf("unexpected webhook: %#v", webhook)
+	}
+	if webhook.Execution == nil || webhook.Execution.Mode != providermanifestv1.WebhookExecutionModeAsyncAck {
+		t.Fatalf("unexpected webhook execution: %#v", webhook.Execution)
+	}
+
+	encoded, err := EncodeSourceManifestFormat(manifest, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	rendered := string(encoded)
+	if !strings.Contains(rendered, "securitySchemes:") || !strings.Contains(rendered, "webhooks:") {
+		t.Fatalf("expected encoded manifest to preserve webhook metadata:\n%s", rendered)
+	}
+}
+
+func TestManifestWorkflow_RejectsNon2xxAsyncWebhookAcknowledgements(t *testing.T) {
+	t.Parallel()
+
+	manifestPath := filepath.Join(t.TempDir(), "manifest.yaml")
+	if err := os.WriteFile(manifestPath, []byte(`
+kind: plugin
+source: github.com/acme/plugins/slack-agent
+version: 1.0.0
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+  securitySchemes:
+    slackSignature:
+      type: hmac
+      secret:
+        env: SLACK_SIGNING_SECRET
+      signature:
+        algorithm: sha256
+        signatureHeader: X-Slack-Signature
+  webhooks:
+    slackCommand:
+      path: /webhooks/slack-agent/command
+      post:
+        responses:
+          "500":
+            description: bad ack
+        security:
+          - slackSignature: []
+      target:
+        operation: handle_command
+      execution:
+        mode: async_ack
+        acceptedResponse: "500"
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	_, _, err := ReadSourceManifestFile(manifestPath)
+	if err == nil {
+		t.Fatal("expected non-2xx async webhook acknowledgement to be rejected")
+	}
+	if !strings.Contains(err.Error(), "acceptedResponse must reference a 2xx response") {
+		t.Fatalf("error = %v, want acceptedResponse 2xx validation", err)
+	}
+}
+
 func TestManifestWorkflow_EncodesCanonicalProgrammaticDefaultConnection(t *testing.T) {
 	t.Parallel()
 

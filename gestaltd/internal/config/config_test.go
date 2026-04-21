@@ -1385,6 +1385,78 @@ plugins:
 		}
 	})
 
+	t.Run("apiVersion preserves hosted webhooks and security schemes", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v3
+plugins:
+  slack_agent:
+    source:
+      path: ./plugins/slack-agent/manifest.yaml
+    securitySchemes:
+      slackSignature:
+        type: hmac
+        secret:
+          env: SLACK_SIGNING_SECRET
+        signature:
+          algorithm: sha256
+          signatureHeader: X-Slack-Signature
+          timestampHeader: X-Slack-Request-Timestamp
+          payloadTemplate: "v0:{header.X-Slack-Request-Timestamp}:{raw_body}"
+          digestPrefix: "v0="
+        replay:
+          maxAge: 5m
+    webhooks:
+      slackCommand:
+        path: /webhooks/slack-agent/command
+        post:
+          requestBody:
+            required: true
+            content:
+              application/x-www-form-urlencoded: {}
+          responses:
+            "200":
+              description: accepted
+              content:
+                application/json: {}
+              body:
+                response_type: ephemeral
+                text: Working on it...
+          security:
+            - slackSignature: []
+        target:
+          operation: handle_command
+        execution:
+          mode: async_ack
+          acceptedResponse: "200"
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		entry := cfg.Plugins["slack_agent"]
+		if entry == nil {
+			t.Fatal("expected slack_agent plugin config")
+		}
+		if scheme := entry.SecuritySchemes["slackSignature"]; scheme == nil || scheme.Type != providermanifestv1.WebhookSecuritySchemeTypeHMAC {
+			t.Fatalf("SecuritySchemes[slackSignature] = %#v", entry.SecuritySchemes["slackSignature"])
+		}
+		webhook := entry.Webhooks["slackCommand"]
+		if webhook == nil || webhook.Post == nil || webhook.Path != "/webhooks/slack-agent/command" {
+			t.Fatalf("Webhooks[slackCommand] = %#v", webhook)
+		}
+		marshaled, err := yaml.Marshal(entry)
+		if err != nil {
+			t.Fatalf("yaml.Marshal: %v", err)
+		}
+		rendered := string(marshaled)
+		if !strings.Contains(rendered, "securitySchemes:") || !strings.Contains(rendered, "webhooks:") {
+			t.Fatalf("expected rendered entry to preserve webhook metadata:\n%s", rendered)
+		}
+	})
+
 	t.Run("apiVersion preserves nested source auth on local release metadata sources", func(t *testing.T) {
 		t.Parallel()
 

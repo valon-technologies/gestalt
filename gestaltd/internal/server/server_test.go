@@ -3,6 +3,7 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
@@ -35,6 +36,7 @@ import (
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/adminui"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
@@ -11623,6 +11625,470 @@ func TestExecuteOperation_POST(t *testing.T) {
 	}
 }
 
+func TestHostedWebhook_HMACAsyncAckDispatchesOperationAndRejectsReplay(t *testing.T) {
+	t.Setenv("SLACK_SIGNING_SECRET", "super-secret")
+
+	type webhookInvocation struct {
+		Params   map[string]any
+		Workflow map[string]any
+	}
+
+	invocations := make(chan webhookInvocation, 1)
+	provider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "slack_agent",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(ctx context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
+				if op != "handle_command" {
+					t.Fatalf("operation = %q, want %q", op, "handle_command")
+				}
+				invocations <- webhookInvocation{
+					Params:   cloneMap(params),
+					Workflow: invocation.WorkflowContextFromContext(ctx),
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "handle_command", Method: http.MethodPost}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"slack_agent": {
+				SecuritySchemes: map[string]*config.WebhookSecurityScheme{
+					"slackSignature": {
+						Type: providermanifestv1.WebhookSecuritySchemeTypeHMAC,
+						Secret: &providermanifestv1.WebhookSecretRef{
+							Env: "SLACK_SIGNING_SECRET",
+						},
+						Signature: &providermanifestv1.WebhookSignatureConfig{
+							Algorithm:        "sha256",
+							SignatureHeader:  "X-Slack-Signature",
+							TimestampHeader:  "X-Slack-Request-Timestamp",
+							DeliveryIDHeader: "X-Slack-Delivery-ID",
+							PayloadTemplate:  "v0:{header.X-Slack-Request-Timestamp}:{raw_body}",
+							DigestPrefix:     "v0=",
+						},
+						Replay: &providermanifestv1.WebhookReplayConfig{MaxAge: "5m"},
+					},
+				},
+				Webhooks: map[string]*config.WebhookDef{
+					"slack_command": {
+						Path: "/webhooks/slack-agent/command",
+						Post: &providermanifestv1.WebhookOperation{
+							RequestBody: &providermanifestv1.WebhookRequestBody{
+								Required: true,
+								Content: map[string]*providermanifestv1.WebhookMediaType{
+									"application/x-www-form-urlencoded": {},
+								},
+							},
+							Responses: map[string]*providermanifestv1.WebhookResponse{
+								"200": {
+									Description: "acknowledged",
+									Content: map[string]*providermanifestv1.WebhookMediaType{
+										"application/json": {},
+									},
+									Body: map[string]any{
+										"response_type": "ephemeral",
+										"text":          "Working on it...",
+									},
+								},
+							},
+							Security: []providermanifestv1.SecurityRequirement{
+								{"slackSignature": nil},
+							},
+						},
+						Target: &providermanifestv1.WebhookTarget{
+							Operation: "handle_command",
+						},
+						Execution: &providermanifestv1.WebhookExecution{
+							Mode:             providermanifestv1.WebhookExecutionModeAsyncAck,
+							AcceptedResponse: "200",
+						},
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := "text=hello&response_url=https%3A%2F%2Fhooks.example.test%2Fresponse"
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	signature := webhookTestSignature("super-secret", "v0:"+timestamp+":"+body)
+
+	makeRequest := func(deliveryID string) *http.Request {
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/webhooks/slack-agent/command?source=query", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("X-Slack-Request-Timestamp", timestamp)
+		req.Header.Set("X-Slack-Signature", signature)
+		if deliveryID != "" {
+			req.Header.Set("X-Slack-Delivery-ID", deliveryID)
+		}
+		return req
+	}
+
+	resp, err := http.DefaultClient.Do(makeRequest("delivery-1"))
+	if err != nil {
+		t.Fatalf("webhook request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var ack map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&ack); err != nil {
+		t.Fatalf("decode ack: %v", err)
+	}
+	if got, want := ack["response_type"], "ephemeral"; got != want {
+		t.Fatalf("response_type = %#v, want %q", got, want)
+	}
+	if got, want := ack["text"], "Working on it..."; got != want {
+		t.Fatalf("text = %#v, want %q", got, want)
+	}
+
+	select {
+	case invocation := <-invocations:
+		if got, want := invocation.Params["text"], "hello"; got != want {
+			t.Fatalf("params[text] = %#v, want %q", got, want)
+		}
+		if got, want := invocation.Params["response_url"], "https://hooks.example.test/response"; got != want {
+			t.Fatalf("params[response_url] = %#v, want %q", got, want)
+		}
+		if got, want := invocation.Params["source"], "query"; got != want {
+			t.Fatalf("params[source] = %#v, want %q", got, want)
+		}
+		webhookCtx, ok := invocation.Workflow["webhook"].(map[string]any)
+		if !ok {
+			t.Fatalf("workflow webhook context = %#v", invocation.Workflow)
+		}
+		if got, want := webhookCtx["name"], "slack_command"; got != want {
+			t.Fatalf("workflow webhook name = %#v, want %q", got, want)
+		}
+		if got, want := webhookCtx["deliveryId"], "delivery-1"; got != want {
+			t.Fatalf("workflow webhook deliveryId = %#v, want %q", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for async webhook dispatch")
+	}
+
+	resp, err = http.DefaultClient.Do(makeRequest("delivery-1"))
+	if err != nil {
+		t.Fatalf("duplicate webhook request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("duplicate status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+
+	resp, err = http.DefaultClient.Do(makeRequest(""))
+	if err != nil {
+		t.Fatalf("webhook request without delivery id: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status without delivery id = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	resp, err = http.DefaultClient.Do(makeRequest(""))
+	if err != nil {
+		t.Fatalf("duplicate webhook request without delivery id: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("duplicate status without delivery id = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+}
+
+func TestHostedWebhook_APIKeySyncStartsWorkflowRun(t *testing.T) {
+	t.Parallel()
+
+	workflowProvider := newMemoryWorkflowProvider()
+	workflowProvider.nextStartRun = &coreworkflow.Run{
+		ID:     "run-123",
+		Status: coreworkflow.RunStatusPending,
+		Target: coreworkflow.Target{
+			PluginName: "workflow_target",
+			Operation:  "process_event",
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "jobs",
+			provider:            workflowProvider,
+		}
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"slack_agent": {
+				SecuritySchemes: map[string]*config.WebhookSecurityScheme{
+					"eventKey": {
+						Type: providermanifestv1.WebhookSecuritySchemeTypeAPIKey,
+						Name: "X-Webhook-Key",
+						In:   providermanifestv1.WebhookInHeader,
+						Secret: &providermanifestv1.WebhookSecretRef{
+							Secret: "shared-key",
+						},
+					},
+				},
+				Webhooks: map[string]*config.WebhookDef{
+					"slack_event": {
+						Path: "/webhooks/slack-agent/events",
+						Post: &providermanifestv1.WebhookOperation{
+							RequestBody: &providermanifestv1.WebhookRequestBody{
+								Required: true,
+								Content: map[string]*providermanifestv1.WebhookMediaType{
+									"application/json": {},
+								},
+							},
+							Responses: map[string]*providermanifestv1.WebhookResponse{
+								"202": {Description: "accepted"},
+							},
+							Security: []providermanifestv1.SecurityRequirement{
+								{"eventKey": nil},
+							},
+						},
+						Target: &providermanifestv1.WebhookTarget{
+							Workflow: &providermanifestv1.WebhookWorkflowTarget{
+								Provider:  "jobs",
+								Plugin:    "workflow_target",
+								Operation: "process_event",
+								Input: map[string]any{
+									"kind": "slack",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/webhooks/slack-agent/events", strings.NewReader(`{"event":"opened","kind":"attacker"}`))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Webhook-Key", "shared-key")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("workflow webhook request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
+	}
+
+	var run coreworkflow.Run
+	if err := json.NewDecoder(resp.Body).Decode(&run); err != nil {
+		t.Fatalf("decode run: %v", err)
+	}
+	if got, want := run.ID, "run-123"; got != want {
+		t.Fatalf("run ID = %q, want %q", got, want)
+	}
+	if len(workflowProvider.startRunReqs) != 1 {
+		t.Fatalf("startRunReqs = %d, want 1", len(workflowProvider.startRunReqs))
+	}
+	start := workflowProvider.startRunReqs[0]
+	if got, want := start.Target.PluginName, "workflow_target"; got != want {
+		t.Fatalf("workflow target plugin = %q, want %q", got, want)
+	}
+	if got, want := start.Target.Operation, "process_event"; got != want {
+		t.Fatalf("workflow target operation = %q, want %q", got, want)
+	}
+	if got, want := start.Target.Input["kind"], "slack"; got != want {
+		t.Fatalf("workflow input kind = %#v, want %q", got, want)
+	}
+	if got, want := start.Target.Input["event"], "opened"; got != want {
+		t.Fatalf("workflow input event = %#v, want %q", got, want)
+	}
+	webhookMeta, ok := start.Target.Input["_gestaltWebhook"].(map[string]any)
+	if !ok {
+		t.Fatalf("_gestaltWebhook = %#v", start.Target.Input["_gestaltWebhook"])
+	}
+	if got, want := webhookMeta["name"], "slack_event"; got != want {
+		t.Fatalf("workflow webhook name = %#v, want %q", got, want)
+	}
+}
+
+func TestHostedWebhook_RejectsMountedUIPathConflicts(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	reg := registry.New()
+	cfg := server.Config{
+		Auth:        &coretesting.StubAuthProvider{N: "none"},
+		Services:    svc,
+		Providers:   &reg.Providers,
+		Invoker:     invocation.NewBroker(&reg.Providers, svc.Users, svc.Tokens),
+		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+		PluginDefs: map[string]*config.ProviderEntry{
+			"slack_agent": {
+				SecuritySchemes: map[string]*config.WebhookSecurityScheme{
+					"none": {Type: providermanifestv1.WebhookSecuritySchemeTypeNone},
+				},
+				Webhooks: map[string]*config.WebhookDef{
+					"slack_command": {
+						Path: "/portal/slack",
+						Post: &providermanifestv1.WebhookOperation{
+							Responses: map[string]*providermanifestv1.WebhookResponse{
+								"200": {Description: "ok"},
+							},
+							Security: []providermanifestv1.SecurityRequirement{{"none": nil}},
+						},
+						Target: &providermanifestv1.WebhookTarget{Operation: "handle_command"},
+					},
+				},
+			},
+		},
+		MountedWebUIs: []server.MountedWebUI{{
+			Name:    "portal",
+			Path:    "/portal",
+			Handler: http.NotFoundHandler(),
+		}},
+	}
+
+	_, err := server.New(cfg)
+	if err == nil {
+		t.Fatal("expected mounted UI webhook path conflict")
+	}
+	if !strings.Contains(err.Error(), "conflicts with mounted UI") {
+		t.Fatalf("error = %v, want mounted UI conflict", err)
+	}
+}
+
+func TestHostedWebhook_RejectsAdminAPIPathConflicts(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	reg := registry.New()
+	cfg := server.Config{
+		Auth:        &coretesting.StubAuthProvider{N: "none"},
+		Services:    svc,
+		Providers:   &reg.Providers,
+		Invoker:     invocation.NewBroker(&reg.Providers, svc.Users, svc.Tokens),
+		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+		PluginDefs: map[string]*config.ProviderEntry{
+			"slack_agent": {
+				SecuritySchemes: map[string]*config.WebhookSecurityScheme{
+					"none": {Type: providermanifestv1.WebhookSecuritySchemeTypeNone},
+				},
+				Webhooks: map[string]*config.WebhookDef{
+					"slack_command": {
+						Path: "/admin/api/v1/authorization/plugins",
+						Post: &providermanifestv1.WebhookOperation{
+							Responses: map[string]*providermanifestv1.WebhookResponse{
+								"200": {Description: "ok"},
+							},
+							Security: []providermanifestv1.SecurityRequirement{{"none": nil}},
+						},
+						Target: &providermanifestv1.WebhookTarget{Operation: "handle_command"},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := server.New(cfg)
+	if err == nil {
+		t.Fatal("expected admin route webhook path conflict")
+	}
+	if !strings.Contains(err.Error(), "conflicts with admin route namespace") {
+		t.Fatalf("error = %v, want admin route conflict", err)
+	}
+}
+
+func TestHostedWebhook_WorkflowSyncIgnoresNon2xxStaticResponses(t *testing.T) {
+	t.Parallel()
+
+	workflowProvider := newMemoryWorkflowProvider()
+	workflowProvider.nextStartRun = &coreworkflow.Run{
+		ID:     "run-500",
+		Status: coreworkflow.RunStatusPending,
+		Target: coreworkflow.Target{
+			PluginName: "workflow_target",
+			Operation:  "process_event",
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "jobs",
+			provider:            workflowProvider,
+		}
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"slack_agent": {
+				SecuritySchemes: map[string]*config.WebhookSecurityScheme{
+					"eventKey": {
+						Type: providermanifestv1.WebhookSecuritySchemeTypeAPIKey,
+						Name: "X-Webhook-Key",
+						In:   providermanifestv1.WebhookInHeader,
+						Secret: &providermanifestv1.WebhookSecretRef{
+							Secret: "shared-key",
+						},
+					},
+				},
+				Webhooks: map[string]*config.WebhookDef{
+					"slack_event": {
+						Path: "/webhooks/slack-agent/events",
+						Post: &providermanifestv1.WebhookOperation{
+							RequestBody: &providermanifestv1.WebhookRequestBody{
+								Required: true,
+								Content: map[string]*providermanifestv1.WebhookMediaType{
+									"application/json": {},
+								},
+							},
+							Responses: map[string]*providermanifestv1.WebhookResponse{
+								"500": {Description: "bad static response"},
+							},
+							Security: []providermanifestv1.SecurityRequirement{
+								{"eventKey": nil},
+							},
+						},
+						Target: &providermanifestv1.WebhookTarget{
+							Workflow: &providermanifestv1.WebhookWorkflowTarget{
+								Provider:  "jobs",
+								Plugin:    "workflow_target",
+								Operation: "process_event",
+							},
+						},
+					},
+				},
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/webhooks/slack-agent/events", strings.NewReader(`{"event":"opened"}`))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Webhook-Key", "shared-key")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("workflow webhook request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusAccepted)
+	}
+
+	var run coreworkflow.Run
+	if err := json.NewDecoder(resp.Body).Decode(&run); err != nil {
+		t.Fatalf("decode run: %v", err)
+	}
+	if got, want := run.ID, "run-500"; got != want {
+		t.Fatalf("run ID = %q, want %q", got, want)
+	}
+}
+
 func TestAuthInfo(t *testing.T) {
 	t.Parallel()
 
@@ -11778,6 +12244,12 @@ func (s *stubIntegrationWithSessionCatalog) CallTool(ctx context.Context, name s
 		return s.callFn(ctx, name, args)
 	}
 	return mcpgo.NewToolResultText("passthrough:" + name), nil
+}
+
+func webhookTestSignature(secret, payload string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(payload))
+	return "v0=" + hex.EncodeToString(mac.Sum(nil))
 }
 
 type stubSessionCatalogWithoutManagedIdentitySupport struct {

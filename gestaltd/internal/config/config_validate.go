@@ -476,6 +476,9 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 	if err := validatePluginRouteAuth(cfg, name, entry); err != nil {
 		return err
 	}
+	if err := validatePluginWebhooks(name, entry); err != nil {
+		return err
+	}
 	if err := validatePluginIndexedDBConfig(cfg, name, entry); err != nil {
 		return err
 	}
@@ -514,6 +517,24 @@ func validatePluginRouteAuth(cfg *Config, name string, entry *ProviderEntry) err
 	}
 	if _, ok := cfg.Providers.Authentication[entry.RouteAuth.Provider]; !ok {
 		return fmt.Errorf("config validation: plugins.%s.auth.provider references unknown authentication provider %q", name, entry.RouteAuth.Provider)
+	}
+	return nil
+}
+
+func validatePluginWebhooks(name string, entry *ProviderEntry) error {
+	if entry == nil {
+		return nil
+	}
+	schemes := entry.EffectiveWebhookSecuritySchemes()
+	for schemeName, scheme := range schemes {
+		if err := providerpkg.ValidateWebhookSecurityScheme(fmt.Sprintf("plugins.%s.securitySchemes.%s", name, schemeName), scheme); err != nil {
+			return err
+		}
+	}
+	for webhookName, webhook := range entry.EffectiveWebhooks() {
+		if err := providerpkg.ValidateWebhookDef(fmt.Sprintf("plugins.%s.webhooks.%s", name, webhookName), webhook, schemes); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -685,6 +706,12 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
+	}
+	if len(entry.SecuritySchemes) > 0 {
+		return fmt.Errorf("config validation: %s.securitySchemes is only supported on plugins.*", subject)
+	}
+	if len(entry.Webhooks) > 0 {
+		return fmt.Errorf("config validation: %s.webhooks is only supported on plugins.*", subject)
 	}
 	if entry.AuthorizationPolicy != "" && !strings.HasPrefix(subject, "ui.") {
 		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on plugins.* and ui.*", subject)
