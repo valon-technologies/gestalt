@@ -3,7 +3,7 @@ use gestalt::api::{self, ApiClient};
 use gestalt::cli::{
     AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs, IdentityCommands,
     IdentityGrantCommands, IdentityMemberCommands, IdentityTokenCommands, InvokeArgs,
-    PluginCommands, TokenCommands, WorkflowCommands, WorkflowScheduleCommands,
+    PluginCommands, TokenCommands, WorkflowCommands, WorkflowRunCommands, WorkflowScheduleCommands,
 };
 use gestalt::commands;
 use gestalt::output;
@@ -150,6 +150,17 @@ fn run() -> anyhow::Result<()> {
                     }
                     WorkflowScheduleCommands::Resume { id } => {
                         commands::workflows::resume(&client, &id, format)
+                    }
+                },
+                WorkflowCommands::Runs { command } => match command {
+                    WorkflowRunCommands::List { plugin, status } => commands::workflows::list_runs(
+                        &client,
+                        plugin.as_deref(),
+                        status.as_deref(),
+                        format,
+                    ),
+                    WorkflowRunCommands::Get { id } => {
+                        commands::workflows::get_run(&client, &id, format)
                     }
                 },
             }

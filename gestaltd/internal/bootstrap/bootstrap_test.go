@@ -3388,13 +3388,22 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 		}); err != nil {
 			return nil, fmt.Errorf("store identity token for connection %q: %w", connection, err)
 		}
-		resp, err := deps.WorkflowRuntime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		req := coreworkflow.InvokeOperationRequest{
 			ProviderName: name,
 			Target: coreworkflow.Target{
 				PluginName: "roadmap",
 				Operation:  "sync",
 			},
-		})
+		}
+		startupPrincipal := &principal.Principal{
+			SubjectID:           "system:workflow-startup",
+			CredentialSubjectID: principal.IdentitySubjectID(),
+			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
+				Plugin:     "roadmap",
+				Operations: []string{"sync"},
+			}}),
+		}
+		resp, err := deps.WorkflowRuntime.Invoke(principal.WithPrincipal(context.Background(), startupPrincipal), req)
 		if err != nil {
 			return nil, fmt.Errorf("startup invoke: %w", err)
 		}

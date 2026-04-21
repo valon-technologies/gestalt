@@ -63,6 +63,7 @@ func (s *stubWorkflowControl) ResolveProvider(name string) (coreworkflow.Provide
 
 type memoryWorkflowProvider struct {
 	schedules     map[string]*coreworkflow.Schedule
+	runs          map[string]*coreworkflow.Run
 	upsertReqs    []coreworkflow.UpsertScheduleRequest
 	deleteReqs    []coreworkflow.DeleteScheduleRequest
 	pauseReqs     []coreworkflow.PauseScheduleRequest
@@ -70,22 +71,43 @@ type memoryWorkflowProvider struct {
 	nextUpsertErr error
 	getErr        error
 	listErr       error
+	getRunErr     error
+	listRunsErr   error
 }
 
 func newMemoryWorkflowProvider() *memoryWorkflowProvider {
-	return &memoryWorkflowProvider{schedules: map[string]*coreworkflow.Schedule{}}
+	return &memoryWorkflowProvider{
+		schedules: map[string]*coreworkflow.Schedule{},
+		runs:      map[string]*coreworkflow.Run{},
+	}
 }
 
 func (p *memoryWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (p *memoryWorkflowProvider) GetRun(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
-	return nil, errors.New("not implemented")
+func (p *memoryWorkflowProvider) GetRun(_ context.Context, req coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
+	if p.getRunErr != nil {
+		return nil, p.getRunErr
+	}
+	run, ok := p.runs[req.RunID]
+	if !ok || run == nil {
+		return nil, core.ErrNotFound
+	}
+	return cloneWorkflowRun(run), nil
 }
 
-func (p *memoryWorkflowProvider) ListRuns(context.Context, coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
-	return nil, nil
+func (p *memoryWorkflowProvider) ListRuns(_ context.Context, _ coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
+	if p.listRunsErr != nil {
+		return nil, p.listRunsErr
+	}
+	out := make([]*coreworkflow.Run, 0, len(p.runs))
+	for _, run := range p.runs {
+		if run != nil {
+			out = append(out, cloneWorkflowRun(run))
+		}
+	}
+	return out, nil
 }
 
 func (p *memoryWorkflowProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
@@ -226,6 +248,45 @@ func cloneWorkflowSchedule(schedule *coreworkflow.Schedule) *coreworkflow.Schedu
 	if schedule.NextRunAt != nil {
 		value := *schedule.NextRunAt
 		cloned.NextRunAt = &value
+	}
+	return &cloned
+}
+
+func cloneWorkflowRun(run *coreworkflow.Run) *coreworkflow.Run {
+	if run == nil {
+		return nil
+	}
+	cloned := *run
+	cloned.Target.Input = cloneMap(run.Target.Input)
+	if run.Trigger.Event != nil {
+		event := *run.Trigger.Event
+		event.Event.Data = cloneMap(run.Trigger.Event.Event.Data)
+		event.Event.Extensions = cloneMap(run.Trigger.Event.Event.Extensions)
+		if run.Trigger.Event.Event.Time != nil {
+			value := *run.Trigger.Event.Event.Time
+			event.Event.Time = &value
+		}
+		cloned.Trigger.Event = &event
+	}
+	if run.Trigger.Schedule != nil {
+		schedule := *run.Trigger.Schedule
+		if run.Trigger.Schedule.ScheduledFor != nil {
+			value := *run.Trigger.Schedule.ScheduledFor
+			schedule.ScheduledFor = &value
+		}
+		cloned.Trigger.Schedule = &schedule
+	}
+	if run.CreatedAt != nil {
+		value := *run.CreatedAt
+		cloned.CreatedAt = &value
+	}
+	if run.StartedAt != nil {
+		value := *run.StartedAt
+		cloned.StartedAt = &value
+	}
+	if run.CompletedAt != nil {
+		value := *run.CompletedAt
+		cloned.CompletedAt = &value
 	}
 	return &cloned
 }

@@ -13,17 +13,20 @@ import (
 )
 
 type workflowInvokeFunc func(context.Context, coreworkflow.InvokeOperationRequest) (*coreworkflow.InvokeOperationResponse, error)
+type workflowInvokeContextFunc func(context.Context, coreworkflow.InvokeOperationRequest) context.Context
 
 type WorkflowHostServer struct {
 	proto.UnimplementedWorkflowHostServer
 	providerName string
 	invoke       workflowInvokeFunc
+	prepareCtx   workflowInvokeContextFunc
 }
 
-func NewWorkflowHostServer(providerName string, invoke workflowInvokeFunc) *WorkflowHostServer {
+func NewWorkflowHostServer(providerName string, invoke workflowInvokeFunc, prepareCtx workflowInvokeContextFunc) *WorkflowHostServer {
 	return &WorkflowHostServer{
 		providerName: providerName,
 		invoke:       invoke,
+		prepareCtx:   prepareCtx,
 	}
 }
 
@@ -44,6 +47,9 @@ func (s *WorkflowHostServer) InvokeOperation(ctx context.Context, req *proto.Inv
 		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.operation is required")
 	}
 	value.ProviderName = s.providerName
+	if s.prepareCtx != nil {
+		ctx = s.prepareCtx(ctx, value)
+	}
 	resp, err := s.invoke(ctx, value)
 	if err != nil {
 		return nil, status.Errorf(workflowInvokeErrorCode(err), "workflow invoke operation: %v", err)

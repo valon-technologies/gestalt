@@ -18,6 +18,23 @@ const SCHEDULE_JSON: &str = r#"{
     "nextRunAt":"2026-04-21T00:00:00Z"
 }"#;
 
+const RUN_JSON: &str = r#"{
+    "id":"run-1",
+    "provider":"test-provider",
+    "status":"succeeded",
+    "target":{
+        "plugin":"dummy",
+        "operation":"doit",
+        "input":{"k":"v"}
+    },
+    "trigger":{"kind":"schedule","scheduleId":"sched-1"},
+    "createdAt":"2026-04-20T00:00:00Z",
+    "startedAt":"2026-04-20T00:01:00Z",
+    "completedAt":"2026-04-20T00:02:00Z",
+    "statusMessage":"done",
+    "resultBody":"{\"ok\":true}"
+}"#;
+
 #[test]
 fn test_cli_lists_schedules() {
     let mut server = Server::new();
@@ -259,4 +276,70 @@ fn test_cli_list_schedules_json_format() {
         .success()
         .stdout(predicate::str::contains(r#""id": "sched-1""#))
         .stdout(predicate::str::contains(r#""plugin": "dummy""#));
+}
+
+#[test]
+fn test_cli_lists_runs() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(server, Method::GET, "/api/v1/workflow/runs", StatusCode::OK)
+        .with_body(format!("[{RUN_JSON}]"))
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["workflows", "runs", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("run-1"))
+        .stdout(predicate::str::contains("dummy"))
+        .stdout(predicate::str::contains("succeeded"));
+}
+
+#[test]
+fn test_cli_list_runs_filters() {
+    let body = r#"[
+        {"id":"run-a","status":"running","target":{"plugin":"alpha","operation":"x"},"trigger":{"kind":"manual"}},
+        {"id":"run-b","status":"failed","target":{"plugin":"beta","operation":"y"},"trigger":{"kind":"event","triggerId":"evt-1"}}
+    ]"#;
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(server, Method::GET, "/api/v1/workflow/runs", StatusCode::OK)
+        .with_body(body)
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "workflows",
+            "runs",
+            "list",
+            "--plugin",
+            "beta",
+            "--status",
+            "failed",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("run-b"))
+        .stdout(predicate::str::contains("run-a").not());
+}
+
+#[test]
+fn test_cli_gets_run() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/workflow/runs/run-1",
+        StatusCode::OK
+    )
+    .with_body(RUN_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["workflows", "runs", "get", "run-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("run-1"))
+        .stdout(predicate::str::contains("succeeded"));
 }

@@ -18,6 +18,10 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Post("/{scheduleID}/pause", s.pauseGlobalWorkflowSchedule)
 			r.Post("/{scheduleID}/resume", s.resumeGlobalWorkflowSchedule)
 		})
+		r.Route("/workflow/runs", func(r chi.Router) {
+			r.Get("/", s.listGlobalWorkflowRuns)
+			r.Get("/{runID}", s.getGlobalWorkflowRun)
+		})
 
 		r.Post("/auth/start-oauth", s.startIntegrationOAuth)
 		r.Post("/auth/connect-manual", s.connectManual)

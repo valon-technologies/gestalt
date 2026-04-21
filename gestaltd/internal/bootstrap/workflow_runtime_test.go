@@ -216,7 +216,7 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 		},
 	})
 
-	resp, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+	req := coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		RunID:        "run-123",
 		Target: coreworkflow.Target{
@@ -248,7 +248,8 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 				ScheduledFor: &scheduledFor,
 			},
 		},
-	})
+	}
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), workflowStartupPrincipal(req)), req)
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}

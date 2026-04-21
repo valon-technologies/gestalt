@@ -23,7 +23,8 @@ import (
 var (
 	ErrWorkflowNotConfigured      = errors.New("workflow is not configured")
 	ErrExecutionRefsNotConfigured = errors.New("workflow execution refs are not configured")
-	ErrWorkflowScheduleSubject    = errors.New("workflow schedule subject is required")
+	ErrWorkflowSubjectRequired    = errors.New("workflow subject is required")
+	ErrWorkflowScheduleSubject    = ErrWorkflowSubjectRequired
 	ErrDuplicateExecutionRefs     = errors.New("workflow schedule matched multiple execution references")
 )
 
@@ -81,6 +82,13 @@ type ManagedSchedule struct {
 	provider     coreworkflow.Provider
 }
 
+type ManagedRun struct {
+	ProviderName string
+	Run          *coreworkflow.Run
+	ExecutionRef *coreworkflow.ExecutionReference
+	provider     coreworkflow.Provider
+}
+
 func New(cfg Config) *Manager {
 	now := cfg.Now
 	if now == nil {
@@ -98,8 +106,103 @@ func New(cfg Config) *Manager {
 	}
 }
 
+func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal) ([]*ManagedRun, error) {
+	refs, err := m.listOwnedExecutionRefs(ctx, p, false)
+	if err != nil {
+		return nil, err
+	}
+	refsByProvider := executionRefsByProvider(refs)
+	out := make([]*ManagedRun, 0, len(refs))
+	for providerName, providerRefs := range refsByProvider {
+		provider, err := m.resolveProviderByName(providerName)
+		if err != nil {
+			return nil, err
+		}
+		runs, err := provider.ListRuns(ctx, coreworkflow.ListRunsRequest{})
+		if err != nil {
+			return nil, err
+		}
+		refIndex := executionRefsByID(providerRefs)
+		for _, run := range runs {
+			if run == nil {
+				continue
+			}
+			ref := refIndex[strings.TrimSpace(run.ExecutionRef)]
+			if ref == nil || !m.allowTarget(ctx, p, ref.Target) || !runMatchesExecutionRef(providerName, run, ref) {
+				continue
+			}
+			out = append(out, &ManagedRun{
+				ProviderName: providerName,
+				Run:          run,
+				ExecutionRef: ref,
+				provider:     provider,
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		left := out[i]
+		right := out[j]
+		if left.Run != nil && right.Run != nil && left.Run.CreatedAt != nil && right.Run.CreatedAt != nil && !left.Run.CreatedAt.Equal(*right.Run.CreatedAt) {
+			return left.Run.CreatedAt.After(*right.Run.CreatedAt)
+		}
+		leftID := ""
+		rightID := ""
+		if left.Run != nil {
+			leftID = left.Run.ID
+		}
+		if right.Run != nil {
+			rightID = right.Run.ID
+		}
+		return leftID < rightID
+	})
+	return out, nil
+}
+
+func (m *Manager) GetRun(ctx context.Context, p *principal.Principal, runID string) (*ManagedRun, error) {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return nil, core.ErrNotFound
+	}
+	refs, err := m.listOwnedExecutionRefs(ctx, p, false)
+	if err != nil {
+		return nil, err
+	}
+	refsByProvider := executionRefsByProvider(refs)
+	var firstErr error
+	for providerName, providerRefs := range refsByProvider {
+		provider, err := m.resolveProviderByName(providerName)
+		if err != nil {
+			return nil, err
+		}
+		run, err := provider.GetRun(ctx, coreworkflow.GetRunRequest{RunID: runID})
+		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				continue
+			}
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		ref := executionRefsByID(providerRefs)[strings.TrimSpace(run.ExecutionRef)]
+		if ref == nil || !m.allowTarget(ctx, p, ref.Target) || !runMatchesExecutionRef(providerName, run, ref) {
+			continue
+		}
+		return &ManagedRun{
+			ProviderName: providerName,
+			Run:          run,
+			ExecutionRef: ref,
+			provider:     provider,
+		}, nil
+	}
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return nil, core.ErrNotFound
+}
+
 func (m *Manager) ListSchedules(ctx context.Context, p *principal.Principal) ([]*ManagedSchedule, error) {
-	refs, err := m.listOwnedExecutionRefs(ctx, p)
+	refs, err := m.listOwnedExecutionRefs(ctx, p, true)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +258,7 @@ func (m *Manager) ListSchedules(ctx context.Context, p *principal.Principal) ([]
 func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, req ScheduleUpsert) (*ManagedSchedule, error) {
 	p = principal.Canonicalized(p)
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
-		return nil, ErrWorkflowScheduleSubject
+		return nil, ErrWorkflowSubjectRequired
 	}
 	providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
 	if err != nil {
@@ -200,7 +303,7 @@ func (m *Manager) GetSchedule(ctx context.Context, p *principal.Principal, sched
 func (m *Manager) UpdateSchedule(ctx context.Context, p *principal.Principal, scheduleID string, req ScheduleUpsert) (*ManagedSchedule, error) {
 	p = principal.Canonicalized(p)
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
-		return nil, ErrWorkflowScheduleSubject
+		return nil, ErrWorkflowSubjectRequired
 	}
 	existing, err := m.requireOwnedSchedule(ctx, scheduleID, p)
 	if err != nil {
@@ -415,13 +518,13 @@ func (m *Manager) requireOwnedSchedule(ctx context.Context, scheduleID string, p
 	}, nil
 }
 
-func (m *Manager) listOwnedExecutionRefs(ctx context.Context, p *principal.Principal) ([]*coreworkflow.ExecutionReference, error) {
+func (m *Manager) listOwnedExecutionRefs(ctx context.Context, p *principal.Principal, activeOnly bool) ([]*coreworkflow.ExecutionReference, error) {
 	if m == nil || m.workflowExecutionRefs == nil {
 		return nil, ErrExecutionRefsNotConfigured
 	}
 	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
 	if subjectID == "" {
-		return nil, ErrWorkflowScheduleSubject
+		return nil, ErrWorkflowSubjectRequired
 	}
 	refs, err := m.workflowExecutionRefs.ListBySubject(ctx, subjectID)
 	if err != nil {
@@ -429,7 +532,7 @@ func (m *Manager) listOwnedExecutionRefs(ctx context.Context, p *principal.Princ
 	}
 	out := make([]*coreworkflow.ExecutionReference, 0, len(refs))
 	for _, ref := range refs {
-		if !executionRefActive(ref) || !executionRefOwnedBy(ref, p) {
+		if !executionRefOwnedBy(ref, p) || (activeOnly && !executionRefActive(ref)) {
 			continue
 		}
 		out = append(out, ref)
@@ -438,7 +541,7 @@ func (m *Manager) listOwnedExecutionRefs(ctx context.Context, p *principal.Princ
 }
 
 func (m *Manager) findOwnedExecutionRef(ctx context.Context, scheduleID string, p *principal.Principal) (*coreworkflow.ExecutionReference, error) {
-	refs, err := m.listOwnedExecutionRefs(ctx, p)
+	refs, err := m.listOwnedExecutionRefs(ctx, p, true)
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +569,7 @@ func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerN
 	p = principal.Canonicalized(p)
 	subjectID := strings.TrimSpace(principalSubjectID(p))
 	if subjectID == "" {
-		return nil, ErrWorkflowScheduleSubject
+		return nil, ErrWorkflowSubjectRequired
 	}
 	return m.workflowExecutionRefs.Put(ctx, &coreworkflow.ExecutionReference{
 		ID:           executionRefID,
@@ -542,6 +645,38 @@ func executionRefActive(ref *coreworkflow.ExecutionReference) bool {
 	return ref != nil && (ref.RevokedAt == nil || ref.RevokedAt.IsZero())
 }
 
+func executionRefsByProvider(refs []*coreworkflow.ExecutionReference) map[string][]*coreworkflow.ExecutionReference {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make(map[string][]*coreworkflow.ExecutionReference)
+	for _, ref := range refs {
+		if ref == nil {
+			continue
+		}
+		providerName := strings.TrimSpace(ref.ProviderName)
+		if providerName == "" {
+			continue
+		}
+		out[providerName] = append(out[providerName], ref)
+	}
+	return out
+}
+
+func executionRefsByID(refs []*coreworkflow.ExecutionReference) map[string]*coreworkflow.ExecutionReference {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make(map[string]*coreworkflow.ExecutionReference, len(refs))
+	for _, ref := range refs {
+		if ref == nil || strings.TrimSpace(ref.ID) == "" {
+			continue
+		}
+		out[strings.TrimSpace(ref.ID)] = ref
+	}
+	return out
+}
+
 func scheduleMatchesExecutionRef(providerName string, schedule *coreworkflow.Schedule, ref *coreworkflow.ExecutionReference) bool {
 	if schedule == nil || ref == nil {
 		return false
@@ -553,6 +688,19 @@ func scheduleMatchesExecutionRef(providerName string, schedule *coreworkflow.Sch
 		strings.TrimSpace(schedule.Target.Operation) == strings.TrimSpace(ref.Target.Operation) &&
 		strings.TrimSpace(schedule.Target.Connection) == strings.TrimSpace(ref.Target.Connection) &&
 		strings.TrimSpace(schedule.Target.Instance) == strings.TrimSpace(ref.Target.Instance)
+}
+
+func runMatchesExecutionRef(providerName string, run *coreworkflow.Run, ref *coreworkflow.ExecutionReference) bool {
+	if run == nil || ref == nil {
+		return false
+	}
+	if providerName = strings.TrimSpace(providerName); providerName != "" && strings.TrimSpace(ref.ProviderName) != providerName {
+		return false
+	}
+	return strings.TrimSpace(run.Target.PluginName) == strings.TrimSpace(ref.Target.PluginName) &&
+		strings.TrimSpace(run.Target.Operation) == strings.TrimSpace(ref.Target.Operation) &&
+		strings.TrimSpace(run.Target.Connection) == strings.TrimSpace(ref.Target.Connection) &&
+		strings.TrimSpace(run.Target.Instance) == strings.TrimSpace(ref.Target.Instance)
 }
 
 func workflowActorFromPrincipal(p *principal.Principal) coreworkflow.Actor {
