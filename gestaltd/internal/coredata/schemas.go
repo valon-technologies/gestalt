@@ -99,13 +99,13 @@ var ManagedIdentitiesSchema = indexeddb.ObjectStoreSchema{
 var ManagedIdentityMembershipsSchema = indexeddb.ObjectStoreSchema{
 	Indexes: []indexeddb.IndexSchema{
 		{Name: "by_identity", KeyPath: []string{"identity_id"}},
-		{Name: "by_user", KeyPath: []string{"user_id"}},
-		{Name: "by_identity_user", KeyPath: []string{"identity_id", "user_id"}, Unique: true},
+		{Name: "by_subject", KeyPath: []string{"subject_id"}},
+		{Name: "by_identity_subject", KeyPath: []string{"identity_id", "subject_id"}, Unique: true},
 	},
 	Columns: []indexeddb.ColumnDef{
 		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
 		{Name: "identity_id", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "user_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "subject_id", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "email", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "role", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "created_at", Type: indexeddb.TypeTime},

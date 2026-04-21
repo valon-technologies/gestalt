@@ -70,7 +70,7 @@ fn test_cli_adds_identity_member() {
         r#"{"email":"viewer@example.test","role":"viewer"}"#.to_string(),
     ))
     .with_body(
-        r#"{"userId":"user-2","email":"viewer@example.test","role":"viewer","createdAt":"2026-04-15T00:00:00Z","updatedAt":"2026-04-15T00:00:00Z"}"#,
+        r#"{"subjectId":"user:user-2","email":"viewer@example.test","role":"viewer","createdAt":"2026-04-15T00:00:00Z","updatedAt":"2026-04-15T00:00:00Z"}"#,
     )
     .create();
 
@@ -80,8 +80,6 @@ fn test_cli_adds_identity_member() {
         .arg("--url")
         .arg(server.url())
         .args([
-            "--format",
-            "json",
             "identities",
             "members",
             "add",
@@ -92,10 +90,9 @@ fn test_cli_adds_identity_member() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains(
-            r#""email": "viewer@example.test""#,
-        ))
-        .stdout(predicate::str::contains(r#""role": "viewer""#));
+        .stdout(predicate::str::contains("Subject ID"))
+        .stdout(predicate::str::contains("user:user-2"))
+        .stdout(predicate::str::contains("viewer"));
 }
 
 #[test]

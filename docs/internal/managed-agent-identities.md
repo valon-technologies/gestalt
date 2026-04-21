@@ -70,7 +70,7 @@ Properties:
 
 ### Human sharing model
 
-- Membership is user/email-based only in V1.
+- Membership state is keyed by canonical user `subject_id` in V1, with email preserved as UX metadata and write alias.
 - Membership roles are `viewer`, `editor`, and `admin`.
 - The creator should be seeded as an `admin`.
 
@@ -176,7 +176,7 @@ This matrix captures the minimum V1 surface area.
 | Feature | Backend / Data Model | HTTP API | CLI | Default Web UI | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Identity CRUD | Required | Required | Required | Required | Workspace-owned runtime resources |
-| Membership sharing | Required | Required | Required | Required | User/email-based only |
+| Membership sharing | Required | Required | Required | Required | Canonical user `subject_id` storage, email-friendly writes |
 | Viewer/editor/admin enforcement | Required | Required | Required | Required | UI should mirror server enforcement |
 | Plugin grant management | Required | Required | Required | Required | Plugin-wide or operation-scoped |
 | Visibility filtering by human auth | Required | Required | Required | Required | Hidden, not auto-revoked |

@@ -646,7 +646,7 @@ type ManagedIdentity struct {
 
 type ManagedIdentityMembership struct {
     IdentityID string
-    UserID     string
+    SubjectID  string
     Email      string
     Role       string
 }
