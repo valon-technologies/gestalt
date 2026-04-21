@@ -7,8 +7,9 @@ multiple `--config` flags, Gestalt merges them left-to-right before validation
 and bootstrap. The top-level keys are `server` (listener, encryption, egress,
 and host-provider selection), `authorization` (shared human/workload access
 policy), `providers` (named auth, secrets, telemetry, audit, UI, indexeddb,
-authorization, workflow, cache, and s3 entries), and `plugins` (executable
-integrations and optional plugin-backed UI mounts):
+authorization, workflow, cache, and s3 entries), `workflows` (config-managed
+schedules and event triggers), and `plugins` (executable integrations and
+optional plugin-backed UI mounts):
 
 ```yaml
 server:
@@ -27,6 +28,9 @@ providers:
   workflow: {}
   cache: {}
   s3: {}
+workflows:
+  schedules: {}
+  eventTriggers: {}
 plugins: {}
 ```
 
@@ -254,8 +258,8 @@ Both `google` and `oidc` use the same ProviderEntry shape under `providers.auth.
 | Field | Description |
 | --- | --- |
 | `default` | Marks this named auth entry as the default selection when `server.providers.auth` is omitted. |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the auth provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
@@ -332,20 +336,22 @@ The exact config fields depend on the selected authorization provider package. T
 | Field | Description |
 | --- | --- |
 | `default` | Marks this named authorization entry as the default selection when `server.providers.authorization` is omitted. |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the authorization provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `providers.workflow`
 
-Workflow providers back plugin-scoped runs, schedules, and event triggers.
-Configure one or more named entries under `providers.workflow`, then bind
-plugins to them through `plugins.<name>.workflow`. There is no
-`server.providers.workflow`: each plugin chooses a provider explicitly with
-`plugins.<name>.workflow.provider`, or inherits the sole/default workflow
-provider when that field is omitted.
+Workflow providers back global runs, schedules, and event triggers. Configure
+one or more named entries under `providers.workflow`, then reference them from
+top-level `workflows.schedules.*.provider` or
+`workflows.eventTriggers.*.provider`. There is no
+`server.providers.workflow`: config-managed workflow objects choose a provider
+explicitly, or inherit the sole/default workflow provider when `provider` is
+omitted. User-owned schedules use the same provider pool through
+`/api/v1/workflow/schedules` and `gestalt workflows ...`.
 
 ```yaml
 providers:
@@ -368,22 +374,21 @@ providers:
       config:
         pollInterval: 1s
 
-plugins:
-  roadmap:
-    workflow:
+workflows:
+  schedules:
+    nightly_sync:
       provider: local
-      operations:
-        - sync_items
-      schedules:
-        nightly_sync:
-          cron: "0 3 * * *"
-          timezone: America/New_York
-          operation: sync_items
-      eventTriggers:
-        item_updated:
-          match:
-            type: roadmap.item.updated
-          operation: sync_items
+      plugin: roadmap
+      cron: "0 3 * * *"
+      timezone: America/New_York
+      operation: sync_items
+  eventTriggers:
+    item_updated:
+      provider: local
+      plugin: roadmap
+      match:
+        type: roadmap.item.updated
+      operation: sync_items
 ```
 
 `providers.workflow.<name>.indexeddb` is optional. When present, it binds a
@@ -393,13 +398,77 @@ allowlist logical stores exposed through that binding.
 
 | Field | Description |
 | --- | --- |
-| `default` | Marks this named workflow entry as the default selection when a plugin omits `plugins.<name>.workflow.provider`. |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
+| `default` | Marks this named workflow entry as the default selection when a config-managed workflow object or API request omits `provider`. |
+| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the workflow provider. |
 | `indexeddb` | Optional host IndexedDB binding for the workflow provider, including `provider`, optional `db`, and optional `objectStores`. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+
+## `workflows`
+
+Top-level `workflows` declares config-managed schedules and event triggers.
+These objects are reconciled into the selected workflow provider at startup and
+invoke explicit workflow targets: `plugin`, `operation`, and optional
+`connection`, `instance`, and `input`.
+
+```yaml
+workflows:
+  schedules:
+    nightly_sync:
+      provider: local
+      plugin: roadmap
+      cron: "0 3 * * *"
+      timezone: America/New_York
+      operation: sync_items
+      connection: default
+      instance: tenant-a
+      input:
+        mode: incremental
+      paused: false
+
+  eventTriggers:
+    item_updated:
+      provider: local
+      plugin: roadmap
+      match:
+        type: roadmap.item.updated
+        source: roadmap
+      operation: sync_items
+      input:
+        reason: sync
+      paused: false
+```
+
+### `workflows.schedules.*`
+
+| Field | Description |
+| --- | --- |
+| `provider` | Optional named `providers.workflow` entry. When omitted, Gestalt uses the sole/default workflow provider. |
+| `plugin` | **Required.** Target plugin key from `plugins`. |
+| `cron` | **Required.** Five-field cron expression. |
+| `timezone` | IANA timezone name. Defaults to `UTC`. |
+| `operation` | **Required.** Target operation ID. |
+| `connection` | Optional target connection name. |
+| `instance` | Optional target instance name. |
+| `input` | Optional static input merged into the invocation payload. |
+| `paused` | When `true`, Gestalt reconciles the schedule in a paused state. |
+
+### `workflows.eventTriggers.*`
+
+| Field | Description |
+| --- | --- |
+| `provider` | Optional named `providers.workflow` entry. When omitted, Gestalt uses the sole/default workflow provider. |
+| `plugin` | **Required.** Target plugin key from `plugins`. |
+| `match.type` | **Required.** Event type matcher. |
+| `match.source` | Optional event source matcher. |
+| `match.subject` | Optional event subject matcher. |
+| `operation` | **Required.** Target operation ID. |
+| `connection` | Optional target connection name. |
+| `instance` | Optional target instance name. |
+| `input` | Optional static input merged into the invocation payload. |
+| `paused` | When `true`, Gestalt reconciles the trigger in a paused state. |
 
 ## `providers.cache`
 
@@ -427,8 +496,8 @@ First-party cache providers are published at
 
 | Field | Description |
 | --- | --- |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Arbitrary provider-specific config passed through to the cache provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
@@ -739,14 +808,6 @@ plugins:
       objectStores:
         - tasks
         - snapshots
-    workflow:
-      operations:
-        - sync_items
-      schedules:
-        nightly_sync:
-          cron: "0 3 * * *"
-          timezone: America/New_York
-          operation: sync_items
     connections:
       default:
         mode: user
@@ -770,14 +831,11 @@ plugins:
 | `mountPath` | Optional public path prefix for a plugin-backed mounted UI. When set, Gestalt mounts either `plugins.<name>.ui` or the plugin manifest's `spec.ui`. |
 | `ui` | Optional UI key from `providers.ui` used with `mountPath`. Omit it to mount the plugin manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#pluginssource) below. |
-| `source.auth` | Optional metadata-fetch auth for release sources. Use this for `source.url`, `source.githubRelease`, or local `provider-release.yaml` metadata. |
-| `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.auth`. In this Phase 1 schema/validation change, the field is parsed and validated only; runtime enforcement lands in a later phase. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
 | `indexeddb` | Optional plugin IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the plugin's single IndexedDB SDK socket; when omitted, the plugin inherits the selected/default host IndexedDB. `indexeddb.db` overrides the plugin-visible database name and defaults to the plugin key. Schema-capable backends derive plugin scoping from that `db` name. `indexeddb.objectStores` optionally allowlists the logical object stores the plugin may use. Plugins then call `new IndexedDB()` (or the equivalent SDK helper) against `GESTALT_INDEXEDDB_SOCKET`; they do not choose arbitrary schemas or DSNs at runtime. |
-| `workflow` | Optional plugin workflow config. `workflow.provider` selects which named `providers.workflow` entry backs the plugin's workflow runtime; when omitted, the plugin inherits the sole/default workflow provider. `workflow.operations` is the allowlist of plugin operations the workflow provider may invoke for that plugin. `workflow.schedules` and `workflow.eventTriggers` declare config-owned schedules and event triggers that Gestalt reconciles into the provider at startup. |
 | `s3` | Optional list of named `providers.s3` bindings exposed to the executable plugin through the SDK transport. A single binding also populates the default S3 SDK env var for compatibility. |
 
 S3 bindings are exposed as `GESTALT_S3_SOCKET_<NAME>`. When exactly one S3
@@ -790,29 +848,6 @@ Every plugin uses a `source` block to declare its backing provider.
 ```yaml
 source: https://artifacts.example.com/plugin/github/v1.2.3/provider-release.yaml
 ```
-
-Canonical metadata-source auth lives under `source.auth`. For direct metadata URLs:
-
-```yaml
-source:
-  url: https://artifacts.example.com/plugin/github/v1.2.3/provider-release.yaml
-  auth:
-    token: ${PLUGIN_RELEASE_TOKEN}
-```
-
-Plugin route auth overrides are declared separately:
-
-```yaml
-apiVersion: gestaltd.config/v4
-plugins:
-  slack_bot:
-    source: ./dist/provider-release.yaml
-    auth:
-      provider: server
-```
-
-This field is schema/validation-only in this phase. It does not change runtime
-route authentication behavior yet.
 
 For published providers, `source` can point at a `provider-release.yaml`
 metadata URL directly, or it can describe a GitHub release logically:
@@ -879,9 +914,8 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
 
 | Field | Description |
 | --- | --- |
-| `source` | A local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs, `source.githubRelease`, and local `provider-release.yaml` metadata. |
-| `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either `server` or a named `providers.auth` entry. In this Phase 1 schema/validation change, it is not enforced at runtime yet. |
+| `source` | A local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
@@ -1095,8 +1129,8 @@ When `authorizationPolicy` is set on a mounted UI, the referenced web UI manifes
 | --- | --- |
 | `path` | Direct mount prefix for this UI when not bound through `plugins.<name>.mountPath`. |
 | `authorizationPolicy` | Direct policy binding for this UI when not bound through `plugins.<name>.mountPath`. |
-| `source` | A local UI manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
+| `source` | A local UI manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Optional UI-provider config validated against the bundle schema when present. |
 
 ## Validation rules

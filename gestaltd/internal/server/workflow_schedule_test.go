@@ -25,7 +25,6 @@ type stubWorkflowControl struct {
 	defaultProviderName string
 	provider            coreworkflow.Provider
 	providers           map[string]coreworkflow.Provider
-	providerList        []string
 	selectionErr        error
 	providerErr         error
 }
@@ -60,24 +59,6 @@ func (s *stubWorkflowControl) ResolveProvider(name string) (coreworkflow.Provide
 		return provider, nil
 	}
 	return s.provider, nil
-}
-
-func (s *stubWorkflowControl) ProviderNames() []string {
-	if len(s.providerList) > 0 {
-		return append([]string(nil), s.providerList...)
-	}
-	if len(s.providers) > 0 {
-		names := make([]string, 0, len(s.providers))
-		for name := range s.providers {
-			names = append(names, name)
-		}
-		slices.Sort(names)
-		return names
-	}
-	if s.defaultProviderName == "" {
-		return nil
-	}
-	return []string{s.defaultProviderName}
 }
 
 type memoryWorkflowProvider struct {
@@ -1209,7 +1190,6 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 				"basic":    basicProvider,
 				"advanced": advancedProvider,
 			},
-			providerList: []string{"advanced", "basic"},
 		}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1465,7 +1445,6 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 				"basic":    basicProvider,
 				"advanced": advancedProvider,
 			},
-			providerList: []string{"advanced", "basic"},
 		}
 	})
 	testutil.CloseOnCleanup(t, ts)

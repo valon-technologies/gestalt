@@ -6,9 +6,9 @@ This page covers building custom workflow providers. If you only need to
 configure workflow storage for a deployment, use
 [Providers > Workflow](/providers/workflow).
 
-Workflow providers back plugin-scoped workflow runs, schedules, and event
-triggers. Gestalt uses them to persist workflow state and to call back into
-allowed plugin operations through the workflow host socket.
+Workflow providers back global workflow runs, schedules, and event triggers.
+Gestalt uses them to persist workflow state and to call back into target plugin
+operations through the workflow host socket.
 
 ## Manifest
 
@@ -69,9 +69,6 @@ request/response shape.
     func (p *Provider) GetRun(_ context.Context, req *proto.GetWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
     	return &proto.BoundWorkflowRun{
     		Id: req.GetRunId(),
-    		Target: &proto.BoundWorkflowTarget{
-    			PluginName: req.GetPluginName(),
-    		},
     	}, nil
     }
 
@@ -210,8 +207,13 @@ request/response shape.
             request: Request<proto::StartWorkflowProviderRunRequest>,
         ) -> Result<Response<proto::BoundWorkflowRun>, Status> {
             let req = request.into_inner();
+            let plugin_name = req
+                .target
+                .as_ref()
+                .map(|target| target.plugin_name.clone())
+                .unwrap_or_else(|| "workflow".into());
             Ok(Response::new(proto::BoundWorkflowRun {
-                id: format!("{}:run-1", req.plugin_name),
+                id: format!("{plugin_name}:run-1"),
                 status: proto::WorkflowRunStatus::Pending as i32,
                 target: req.target,
                 ..Default::default()
@@ -271,7 +273,7 @@ request/response shape.
 
       async startRun(request) {
         return {
-          id: `${request.pluginName}:run-1`,
+          id: `${request.target?.pluginName ?? "workflow"}:run-1`,
           status: WorkflowRunStatus.PENDING,
           target: request.target,
         };
@@ -370,7 +372,7 @@ request/response shape.
 ## Workflow host
 
 Workflow providers call back into Gestalt through the workflow host socket to
-invoke allowed plugin operations.
+invoke target plugin operations.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -382,7 +384,6 @@ invoke allowed plugin operations.
     defer host.Close()
 
     resp, err := host.InvokeOperation(ctx, &proto.InvokeWorkflowOperationRequest{
-    	PluginName: "roadmap",
     	Target: &proto.BoundWorkflowTarget{
     		PluginName: "roadmap",
     		Operation:  "sync_items",
@@ -396,7 +397,6 @@ invoke allowed plugin operations.
     with gestalt.WorkflowHost() as host:
         resp = host.invoke_operation(
             gestalt.pb.InvokeWorkflowOperationRequest(
-                plugin_name="roadmap",
                 target=gestalt.pb.BoundWorkflowTarget(
                     plugin_name="roadmap",
                     operation="sync_items",
@@ -411,7 +411,6 @@ invoke allowed plugin operations.
     let mut host = gestalt::WorkflowHost::connect().await?;
     let resp = host
         .invoke_operation(proto::InvokeWorkflowOperationRequest {
-            plugin_name: "roadmap".into(),
             target: Some(proto::BoundWorkflowTarget {
                 plugin_name: "roadmap".into(),
                 operation: "sync_items".into(),
@@ -429,7 +428,6 @@ invoke allowed plugin operations.
 
     const host = new WorkflowHost();
     const resp = await host.invokeOperation({
-      pluginName: "roadmap",
       target: {
         pluginName: "roadmap",
         operation: "sync_items",
@@ -443,7 +441,8 @@ invoke allowed plugin operations.
 ## Config reference
 
 To use a workflow provider in a deployment, configure it under
-`providers.workflow`, then bind plugins to it under `plugins.<name>.workflow`:
+`providers.workflow`, then reference it from top-level `workflows:` or the
+global workflow API/CLI:
 
 ```yaml
 providers:
@@ -462,18 +461,14 @@ providers:
       config:
         pollInterval: 1s
 
-plugins:
-  roadmap:
-    source: ./roadmap/manifest.yaml
-    workflow:
+workflows:
+  schedules:
+    nightly_sync:
       provider: local
-      operations:
-        - sync_items
-      schedules:
-        nightly_sync:
-          cron: "0 3 * * *"
-          timezone: America/New_York
-          operation: sync_items
+      plugin: roadmap
+      cron: "0 3 * * *"
+      timezone: America/New_York
+      operation: sync_items
 ```
 
 `providers.workflow.<name>.indexeddb` is optional. When present, Gestalt

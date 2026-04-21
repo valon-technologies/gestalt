@@ -86,9 +86,9 @@ providers:
 
 ## Workflow Providers
 
-Workflow providers back plugin-scoped runs, schedules, and event triggers. They
-are configured under `providers.workflow.<name>`, then bound per plugin through
-`plugins.<name>.workflow`.
+Workflow providers back global runs, schedules, and event triggers. They are
+configured under `providers.workflow.<name>`, then referenced by top-level
+`workflows.*` config or the global workflow API/CLI.
 
 ```yaml
 providers:
@@ -107,12 +107,13 @@ providers:
       config:
         pollInterval: 1s
 
-plugins:
-  roadmap:
-    workflow:
+workflows:
+  schedules:
+    nightly_sync:
       provider: local
-      operations:
-        - sync_items
+      plugin: roadmap
+      cron: "0 3 * * *"
+      operation: sync_items
 ```
 
 | Name | Purpose |

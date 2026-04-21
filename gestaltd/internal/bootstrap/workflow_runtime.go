@@ -210,24 +210,6 @@ func (r *workflowRuntime) ResolveProviderSelection(name string) (string, corewor
 	return selectedName, provider, nil
 }
 
-func (r *workflowRuntime) ProviderNames() []string {
-	if r == nil {
-		return nil
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	names := make([]string, 0, len(r.providers))
-	for name := range r.providers {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	return names
-}
-
 func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOperationRequest) (*coreworkflow.InvokeOperationResponse, error) {
 	if r == nil {
 		return nil, fmt.Errorf("workflow runtime is not configured")
