@@ -371,9 +371,9 @@ func ValidateResolvedStructure(cfg *Config) error {
 			continue
 		}
 		if entry.ResolvedManifest == nil || entry.ManifestSpec() == nil {
-			return fmt.Errorf("config validation: ui %q authorizationPolicy requires a resolved webui manifest", name)
+			return fmt.Errorf("config validation: ui %q authorizationPolicy requires a resolved ui manifest", name)
 		}
-		if err := providerpkg.ValidatePolicyBoundWebUIRoutes(entry.ManifestSpec().Routes); err != nil {
+		if err := providerpkg.ValidatePolicyBoundUIRoutes(entry.ManifestSpec().Routes); err != nil {
 			return fmt.Errorf("config validation: ui %q authorizationPolicy: %w", name, err)
 		}
 	}

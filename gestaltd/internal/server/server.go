@@ -38,14 +38,14 @@ const (
 	RouteProfileManagement
 )
 
-type MountedWebUIRoute = providermanifestv1.WebUIRoute
+type MountedUIRoute = providermanifestv1.UIRoute
 
-type MountedWebUI struct {
+type MountedUI struct {
 	Name                string
 	Path                string
 	PluginName          string
 	AuthorizationPolicy string
-	Routes              []MountedWebUIRoute
+	Routes              []MountedUIRoute
 	Handler             http.Handler
 	builtInAdmin        bool
 }
@@ -73,52 +73,52 @@ type BuiltinAdminUIOptions struct {
 }
 
 type Server struct {
-	router                 chi.Router
-	handler                http.Handler
-	auth                   core.AuthenticationProvider
-	authProviders          map[string]core.AuthenticationProvider
-	serverAuthProvider     string
-	auditSink              core.AuditSink
-	users                  *coredata.UserService
-	tokens                 *coredata.TokenService
-	apiTokens              *coredata.APITokenService
-	managedIdentities      *coredata.ManagedIdentityService
-	identityMemberships    *coredata.ManagedIdentityMembershipService
-	identityGrants         *coredata.ManagedIdentityGrantService
-	workspaceRoles         *coredata.WorkspaceRoleService
-	identityPluginAccess   *coredata.IdentityPluginAccessService
-	workflowExecutionRefs  *coredata.WorkflowExecutionRefService
-	workflowSchedules      *workflowmanager.Manager
-	authorizationProvider  core.AuthorizationProvider
-	managedIdentityMu      sync.Mutex
-	providers              *registry.ProviderMap[core.Provider]
-	workflow               bootstrap.WorkflowControl
-	resolver               *principal.Resolver
-	authResolvers          map[string]*principal.Resolver
-	invoker                invocation.Invoker
-	defaultConnection      map[string]string
-	catalogConnection      map[string]string
-	connectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
-	pluginDefs             map[string]*config.ProviderEntry
-	authorizer             authorization.RuntimeAuthorizer
-	noAuth                 bool
-	anonymousPrincipal     *principal.Principal
-	publicBaseURL          string
-	managementBaseURL      string
-	secureCookies          bool
-	encryptor              *cryptoutil.AESGCMEncryptor
-	sessionIssuer          []byte
-	stateCodec             *integrationOAuthStateCodec
-	apiTokenTTL            time.Duration
-	now                    func() time.Time
-	readiness              ReadinessChecker
-	prometheusMetrics      http.Handler
-	mcpHandler             http.Handler
-	mountedHTTPBindings    []MountedHTTPBinding
-	mountedWebUIs          []MountedWebUI
-	adminRoute             AdminRouteConfig
-	adminUI                http.Handler
-	routeProfile           RouteProfile
+	router                chi.Router
+	handler               http.Handler
+	auth                  core.AuthenticationProvider
+	authProviders         map[string]core.AuthenticationProvider
+	serverAuthProvider    string
+	auditSink             core.AuditSink
+	users                 *coredata.UserService
+	tokens                *coredata.TokenService
+	apiTokens             *coredata.APITokenService
+	managedIdentities     *coredata.ManagedIdentityService
+	identityMemberships   *coredata.ManagedIdentityMembershipService
+	identityGrants        *coredata.ManagedIdentityGrantService
+	workspaceRoles        *coredata.WorkspaceRoleService
+	identityPluginAccess  *coredata.IdentityPluginAccessService
+	workflowExecutionRefs *coredata.WorkflowExecutionRefService
+	workflowSchedules     *workflowmanager.Manager
+	authorizationProvider core.AuthorizationProvider
+	managedIdentityMu     sync.Mutex
+	providers             *registry.ProviderMap[core.Provider]
+	workflow              bootstrap.WorkflowControl
+	resolver              *principal.Resolver
+	authResolvers         map[string]*principal.Resolver
+	invoker               invocation.Invoker
+	defaultConnection     map[string]string
+	catalogConnection     map[string]string
+	connectionAuth        func() map[string]map[string]bootstrap.OAuthHandler
+	pluginDefs            map[string]*config.ProviderEntry
+	authorizer            authorization.RuntimeAuthorizer
+	noAuth                bool
+	anonymousPrincipal    *principal.Principal
+	publicBaseURL         string
+	managementBaseURL     string
+	secureCookies         bool
+	encryptor             *cryptoutil.AESGCMEncryptor
+	sessionIssuer         []byte
+	stateCodec            *integrationOAuthStateCodec
+	apiTokenTTL           time.Duration
+	now                   func() time.Time
+	readiness             ReadinessChecker
+	prometheusMetrics     http.Handler
+	mcpHandler            http.Handler
+	mountedHTTPBindings   []MountedHTTPBinding
+	mountedUIs            []MountedUI
+	adminRoute            AdminRouteConfig
+	adminUI               http.Handler
+	routeProfile          RouteProfile
 	httpBindingReplayStore httpBindingReplayStore
 }
 
@@ -156,7 +156,7 @@ type Config struct {
 	Readiness             ReadinessChecker
 	PrometheusMetrics     http.Handler
 	MCPHandler            http.Handler
-	MountedWebUIs         []MountedWebUI
+	MountedUIs            []MountedUI
 	Admin                 AdminRouteConfig
 	AdminUI               http.Handler
 	BuiltinAdminUI        *BuiltinAdminUIOptions
@@ -204,18 +204,18 @@ func New(cfg Config) (*Server, error) {
 	if err := validateAdminRouteRuntime(adminRoute, noAuth, cfg.PublicBaseURL, cfg.ManagementBaseURL, cfg.RouteProfile); err != nil {
 		return nil, fmt.Errorf("validate admin route: %w", err)
 	}
-	mountedWebUIs := cfg.MountedWebUIs
-	if len(mountedWebUIs) == 0 && len(cfg.ProviderUIs) != 0 {
-		mountedWebUIs, err = mountedWebUIsFromEntries(cfg.ProviderUIs)
+	mountedUIs := cfg.MountedUIs
+	if len(mountedUIs) == 0 && len(cfg.ProviderUIs) != 0 {
+		mountedUIs, err = mountedUIsFromEntries(cfg.ProviderUIs)
 		if err != nil {
 			return nil, fmt.Errorf("resolve mounted ui handlers: %w", err)
 		}
 	}
-	mountedWebUIs, err = normalizeMountedWebUIs(mountedWebUIs)
+	mountedUIs, err = normalizeMountedUIs(mountedUIs)
 	if err != nil {
 		return nil, err
 	}
-	mountedHTTPBindings, err := mountedHTTPBindingsFromEntries(cfg.PluginDefs, cfg.Providers, mountedWebUIs)
+	mountedHTTPBindings, err := mountedHTTPBindingsFromEntries(cfg.PluginDefs, cfg.Providers, mountedUIs)
 	if err != nil {
 		return nil, err
 	}
@@ -260,49 +260,49 @@ func New(cfg Config) (*Server, error) {
 		otelOptions = append(otelOptions, otelhttp.WithMeterProvider(cfg.MeterProvider))
 	}
 	s := &Server{
-		router:                 router,
-		handler:                withRequestMeterProvider(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider),
-		auth:                   cfg.Auth,
-		authProviders:          authProviders,
-		serverAuthProvider:     serverAuthProvider,
-		auditSink:              cfg.AuditSink,
-		users:                  users,
-		tokens:                 tokens,
-		apiTokens:              apiTokens,
-		managedIdentities:      managedIdentities,
-		identityMemberships:    identityMemberships,
-		identityGrants:         identityGrants,
-		workspaceRoles:         workspaceRoles,
-		identityPluginAccess:   identityPluginAccess,
-		workflowExecutionRefs:  workflowExecutionRefs,
-		authorizationProvider:  cfg.AuthorizationProvider,
-		providers:              cfg.Providers,
-		workflow:               cfg.Workflow,
-		resolver:               resolver,
-		authResolvers:          authResolvers,
-		invoker:                cfg.Invoker,
-		defaultConnection:      cfg.DefaultConnection,
-		catalogConnection:      cfg.CatalogConnection,
-		connectionAuth:         cfg.ConnectionAuth,
-		pluginDefs:             cfg.PluginDefs,
-		authorizer:             cfg.Authorizer,
-		noAuth:                 noAuth,
-		publicBaseURL:          strings.TrimRight(cfg.PublicBaseURL, "/"),
-		managementBaseURL:      strings.TrimRight(cfg.ManagementBaseURL, "/"),
-		secureCookies:          cfg.SecureCookies,
-		encryptor:              encryptor,
-		sessionIssuer:          cfg.StateSecret,
-		stateCodec:             stateCodec,
-		apiTokenTTL:            cfg.APITokenTTL,
-		now:                    now,
-		readiness:              cfg.Readiness,
-		prometheusMetrics:      cfg.PrometheusMetrics,
-		mcpHandler:             cfg.MCPHandler,
-		mountedHTTPBindings:    mountedHTTPBindings,
-		mountedWebUIs:          mountedWebUIs,
-		adminRoute:             adminRoute,
-		adminUI:                adminUI,
-		routeProfile:           cfg.RouteProfile,
+		router:                router,
+		handler:               withRequestMeterProvider(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider),
+		auth:                  cfg.Auth,
+		authProviders:         authProviders,
+		serverAuthProvider:    serverAuthProvider,
+		auditSink:             cfg.AuditSink,
+		users:                 users,
+		tokens:                tokens,
+		apiTokens:             apiTokens,
+		managedIdentities:     managedIdentities,
+		identityMemberships:   identityMemberships,
+		identityGrants:        identityGrants,
+		workspaceRoles:        workspaceRoles,
+		identityPluginAccess:  identityPluginAccess,
+		workflowExecutionRefs: workflowExecutionRefs,
+		authorizationProvider: cfg.AuthorizationProvider,
+		providers:             cfg.Providers,
+		workflow:              cfg.Workflow,
+		resolver:              resolver,
+		authResolvers:         authResolvers,
+		invoker:               cfg.Invoker,
+		defaultConnection:     cfg.DefaultConnection,
+		catalogConnection:     cfg.CatalogConnection,
+		connectionAuth:        cfg.ConnectionAuth,
+		pluginDefs:            cfg.PluginDefs,
+		authorizer:            cfg.Authorizer,
+		noAuth:                noAuth,
+		publicBaseURL:         strings.TrimRight(cfg.PublicBaseURL, "/"),
+		managementBaseURL:     strings.TrimRight(cfg.ManagementBaseURL, "/"),
+		secureCookies:         cfg.SecureCookies,
+		encryptor:             encryptor,
+		sessionIssuer:         cfg.StateSecret,
+		stateCodec:            stateCodec,
+		apiTokenTTL:           cfg.APITokenTTL,
+		now:                   now,
+		readiness:             cfg.Readiness,
+		prometheusMetrics:     cfg.PrometheusMetrics,
+		mcpHandler:            cfg.MCPHandler,
+		mountedHTTPBindings:   mountedHTTPBindings,
+		mountedUIs:            mountedUIs,
+		adminRoute:            adminRoute,
+		adminUI:               adminUI,
+		routeProfile:          cfg.RouteProfile,
 		httpBindingReplayStore: newMemoryHTTPBindingReplayStore(),
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{

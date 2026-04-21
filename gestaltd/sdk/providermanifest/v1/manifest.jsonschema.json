@@ -19,7 +19,7 @@
         "cache",
         "s3",
         "secrets",
-        "webui"
+        "ui"
       ]
     },
     "source": {
@@ -165,7 +165,7 @@
         "routes": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/webuiRoute"
+            "$ref": "#/$defs/uiRoute"
           }
         }
       }
@@ -832,7 +832,7 @@
         }
       }
     },
-    "webuiRoute": {
+    "uiRoute": {
       "type": "object",
       "additionalProperties": false,
       "required": [

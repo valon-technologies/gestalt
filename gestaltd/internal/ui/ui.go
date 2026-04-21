@@ -1,5 +1,5 @@
-// Package webui serves the client UI static assets from a prepared directory.
-package webui
+// Package ui serves the client UI static assets from a prepared directory.
+package ui
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ func DirHandler(path string) (http.Handler, error) {
 		DynamicIndex: true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("webui: %s: %w", path, err)
+		return nil, fmt.Errorf("ui: %s: %w", path, err)
 	}
 	return handler, nil
 }

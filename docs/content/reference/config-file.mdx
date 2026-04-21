@@ -394,6 +394,12 @@ These objects are reconciled into the selected workflow provider at startup and
 invoke explicit workflow targets: `plugin`, `operation`, and optional
 `connection`, `instance`, and `input`.
 
+Config-managed workflows are deployment-owned. They are created from YAML at
+startup, updated when config changes, and removed when deleted from config.
+They are distinct from user-owned schedules created through the global workflow
+HTTP API and CLI. For an end-to-end usage guide, see
+[Workflow](/providers/workflow).
+
 ```yaml
 workflows:
   schedules:
@@ -450,6 +456,11 @@ workflows:
 | `instance` | Optional target instance name. |
 | `input` | Optional static input merged into the invocation payload. |
 | `paused` | When `true`, Gestalt reconciles the trigger in a paused state. |
+
+Event trigger matching is exact string matching. `match.type` is required;
+`match.source` and `match.subject` are optional exact-match filters. Event
+triggers are config-managed only today; there is not yet a public HTTP or CLI
+CRUD surface for them.
 
 ## `providers.cache`
 
@@ -1123,17 +1134,17 @@ sandboxed runtime rather than relying on host-specific OS wrappers alone.
 providers:
   ui:
     console:
-      source: https://artifacts.example.com/webui/console/v1.0.0/provider-release.yaml
+      source: https://artifacts.example.com/ui/console/v1.0.0/provider-release.yaml
       path: /console
       config:
         brandName: Acme
 ```
 
-`providers.ui` is a map of `webui` bundles. Entries may mount directly by setting `path`, or they may act as named UI bundles that `plugins.<name>.ui` binds to `plugins.<name>.mountPath`. When a plugin manifest declares `spec.ui`, `plugins.<name>.ui` may be omitted entirely and Gestalt synthesizes the mounted UI entry from the plugin-owned reference. The built-in admin UI remains available at `/admin`. Omit `providers.ui` entirely to run headless with no public UI bundles.
+`providers.ui` is a map of `ui` bundles. Entries may mount directly by setting `path`, or they may act as named UI bundles that `plugins.<name>.ui` binds to `plugins.<name>.mountPath`. When a plugin manifest declares `spec.ui`, `plugins.<name>.ui` may be omitted entirely and Gestalt synthesizes the mounted UI entry from the plugin-owned reference. The built-in admin UI remains available at `/admin`. Omit `providers.ui` entirely to run headless with no public UI bundles.
 
 Plugin-backed mounted UIs inherit the owning plugin's dynamic authorization grants when that plugin sets `authorizationPolicy`. Direct `providers.ui.<name>.authorizationPolicy` bindings remain static-only.
 
-When `authorizationPolicy` is set on a mounted UI, the referenced web UI manifest must declare `spec.routes` with non-empty `allowedRoles`, and at least one route must cover `/`.
+When `authorizationPolicy` is set on a mounted UI, the referenced UI manifest must declare `spec.routes` with non-empty `allowedRoles`, and at least one route must cover `/`.
 
 | Field | Description |
 | --- | --- |

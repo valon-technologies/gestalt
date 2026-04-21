@@ -809,15 +809,15 @@ type mountedUITestConfig struct {
 	ManifestPath string
 }
 
-func setupMountedWebUIDir(t *testing.T, baseDir string) *mountedUITestConfig {
+func setupMountedUIDir(t *testing.T, baseDir string) *mountedUITestConfig {
 	t.Helper()
-	return setupMountedWebUIDirWithRoutes(t, baseDir, nil)
+	return setupMountedUIDirWithRoutes(t, baseDir, nil)
 }
 
-func setupMountedWebUIDirWithRoutes(t *testing.T, baseDir string, routes []providermanifestv1.WebUIRoute) *mountedUITestConfig {
+func setupMountedUIDirWithRoutes(t *testing.T, baseDir string, routes []providermanifestv1.UIRoute) *mountedUITestConfig {
 	t.Helper()
 
-	uiDir := filepath.Join(baseDir, "mounted-webui")
+	uiDir := filepath.Join(baseDir, "mounted-ui")
 	distDir := filepath.Join(uiDir, "dist")
 	assetsDir := filepath.Join(distDir, "assets")
 	if err := os.MkdirAll(assetsDir, 0o755); err != nil {
@@ -839,8 +839,8 @@ func setupMountedWebUIDirWithRoutes(t *testing.T, baseDir string, routes []provi
 	writeTestFile(t, uiDir, filepath.Join("dist", "assets", "app.js"), []byte(`window.__ROADMAP_REVIEW_UI__ = "ready";
 `), 0o644)
 	writeManifestFile(t, uiDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
-		Source:      "github.com/test/webui/roadmap-review",
+		Kind:        providermanifestv1.KindUI,
+		Source:      "github.com/test/ui/roadmap-review",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Roadmap Review UI",
 		Spec: &providermanifestv1.Spec{
@@ -902,8 +902,8 @@ func setupDefaultLocalProvidersDir(t *testing.T, baseDir string) string {
 </html>
 `), 0o644)
 	writeManifestFile(t, rootUIDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
-		Source:      "github.com/test/webui/default",
+		Kind:        providermanifestv1.KindUI,
+		Source:      "github.com/test/ui/default",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Default Gestalt UI",
 		Spec:        &providermanifestv1.Spec{AssetRoot: "dist"},
@@ -1247,7 +1247,7 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	mountedUI := setupMountedWebUIDir(t, dir)
+	mountedUI := setupMountedUIDir(t, dir)
 	publicPort, publicHolder := reservePort(t)
 	managementPort, managementHolder := reservePort(t)
 	publicURL := fmt.Sprintf("http://127.0.0.1:%d", publicPort)
@@ -1345,7 +1345,7 @@ func TestE2EServePluginOwnedUIWiring(t *testing.T) {
 	dir := t.TempDir()
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
-	mountedUI := setupMountedWebUIDirWithRoutes(t, dir, []providermanifestv1.WebUIRoute{{
+	mountedUI := setupMountedUIDirWithRoutes(t, dir, []providermanifestv1.UIRoute{{
 		Path:         "/*",
 		AllowedRoles: []string{"viewer"},
 	}})

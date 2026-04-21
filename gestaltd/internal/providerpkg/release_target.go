@@ -26,7 +26,7 @@ func HasSourceReleaseTarget(root, kind string) (bool, error) {
 	switch kind {
 	case providermanifestv1.KindPlugin:
 		return HasSourceProviderPackage(root)
-	case providermanifestv1.KindWebUI:
+	case providermanifestv1.KindUI:
 		return false, nil
 	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindSecrets:
 		return HasSourceComponentPackage(root, kind)

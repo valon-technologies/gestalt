@@ -1279,7 +1279,7 @@ func archivePolicySubject(kind, name string) string {
 	switch archivePolicyKind(kind) {
 	case providermanifestv1.KindPlugin:
 		return fmt.Sprintf("provider %q", name)
-	case providermanifestv1.KindWebUI:
+	case providermanifestv1.KindUI:
 		return fmt.Sprintf("ui provider %q", name)
 	default:
 		return fmt.Sprintf("%s %q", kind, name)
@@ -1308,7 +1308,7 @@ func lockEntryDestDir(paths initPaths, kind, name string) string {
 		return telemetryDestDir(paths, name)
 	case providerLockKindAudit:
 		return auditDestDir(paths, name)
-	case providermanifestv1.KindWebUI:
+	case providermanifestv1.KindUI:
 		return uiDestDir(paths, name)
 	default:
 		return ""
@@ -1773,14 +1773,14 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths init
 		return LockUIEntry{}, fmt.Errorf("fingerprinting %s: %w", subject, err)
 	}
 	if plugin.HasLocalSource() {
-		install, err := prepareLocalSourceInstall(providermanifestv1.KindWebUI, name, plugin.SourcePath(), destDir)
+		install, err := prepareLocalSourceInstall(providermanifestv1.KindUI, name, plugin.SourcePath(), destDir)
 		if err != nil {
 			return LockUIEntry{}, err
 		}
-		if err := validateInstalledManifestKind(providermanifestv1.KindWebUI, subject, install.manifest); err != nil {
+		if err := validateInstalledManifestKind(providermanifestv1.KindUI, subject, install.manifest); err != nil {
 			return LockUIEntry{}, err
 		}
-		if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, providermanifestv1.KindWebUI, configMap); err != nil {
+		if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, providermanifestv1.KindUI, configMap); err != nil {
 			return LockUIEntry{}, fmt.Errorf("provider config validation for %s: %w", subject, err)
 		}
 		entry, err := localUILockEntryFromPreparedInstall(paths, name, plugin, install)
@@ -1800,11 +1800,11 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths init
 	if !plugin.HasReleaseMetadataSource() {
 		return LockUIEntry{}, fmt.Errorf("%s source %q: only provider-release metadata sources and local manifest paths are supported", subject, expectedPackage)
 	}
-	installed, entry, opErr = l.installMetadataSourcePackage(ctx, providermanifestv1.KindWebUI, name, subject, destDir, plugin, paths.configDir)
+	installed, entry, opErr = l.installMetadataSourcePackage(ctx, providermanifestv1.KindUI, name, subject, destDir, plugin, paths.configDir)
 	if opErr != nil {
 		return LockUIEntry{}, opErr
 	}
-	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, providermanifestv1.KindWebUI, configMap); err != nil {
+	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, providermanifestv1.KindUI, configMap); err != nil {
 		return LockUIEntry{}, fmt.Errorf("provider config validation for %s: %w", subject, err)
 	}
 	manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
@@ -2405,10 +2405,10 @@ func bindResolvedComponentManifest(kind, name string, plugin *config.ProviderEnt
 
 func bindResolvedUIManifest(plugin *config.ProviderEntry, manifestPath string, manifest *providermanifestv1.Manifest, configMap map[string]any) error {
 	manifest = providerpkg.ResolveManifestLocalReferences(manifest, manifestPath)
-	if err := validateInstalledManifestKind(providermanifestv1.KindWebUI, "provider", manifest); err != nil {
+	if err := validateInstalledManifestKind(providermanifestv1.KindUI, "provider", manifest); err != nil {
 		return err
 	}
-	if err := providerpkg.ValidateConfigForManifest(manifestPath, manifest, providermanifestv1.KindWebUI, configMap); err != nil {
+	if err := providerpkg.ValidateConfigForManifest(manifestPath, manifest, providermanifestv1.KindUI, configMap); err != nil {
 		return fmt.Errorf("provider config validation for ui provider: %w", err)
 	}
 	resolveProviderIcon(manifest, manifestPath, plugin)
@@ -2598,7 +2598,7 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initP
 	if err != nil {
 		return fmt.Errorf("install locked source for ui provider: %w", err)
 	}
-	if err := validateInstalledManifestKind(providermanifestv1.KindWebUI, "ui provider", installed.Manifest); err != nil {
+	if err := validateInstalledManifestKind(providermanifestv1.KindUI, "ui provider", installed.Manifest); err != nil {
 		return err
 	}
 	if installed.Manifest.Source != lockEntryPackage(entry) {

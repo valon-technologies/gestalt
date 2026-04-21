@@ -8,7 +8,7 @@ import (
 
 func allowsGenericArchive(kind string, manifest *providermanifestv1.Manifest) bool {
 	switch kind {
-	case providermanifestv1.KindWebUI:
+	case providermanifestv1.KindUI:
 		return true
 	case providermanifestv1.KindPlugin:
 		return manifest != nil && manifest.IsDeclarativeOnlyProvider()
@@ -34,7 +34,7 @@ func validateLockedArchivePolicy(subject, kind string, manifest *providermanifes
 
 func unsafeGenericArchiveError(subject, platform string) error {
 	return fmt.Errorf(
-		"generic release archives are not allowed for %s on %s; publish an explicit %s archive or keep the package platform-neutral (webui or declarative/spec-only plugin package)",
+		"generic release archives are not allowed for %s on %s; publish an explicit %s archive or keep the package platform-neutral (ui or declarative/spec-only plugin package)",
 		subject,
 		platform,
 		platform,

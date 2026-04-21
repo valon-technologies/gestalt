@@ -27,6 +27,8 @@ asIndexPage: true
 | `gestalt plugins disconnect NAME` | Disconnect a plugin, removing stored credentials. |
 | `gestalt plugins invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
 | `gestalt plugins describe NAME OPERATION` | Show one operation's parameter contract. |
+| `gestalt workflows schedules ...` | Create, list, inspect, update, pause, resume, or delete workflow schedules. |
+| `gestalt workflows runs ...` | List, inspect, and cancel workflow runs. |
 | `gestalt tokens create\|list\|revoke` | Manage Gestalt API tokens. |
 
 ## URL resolution
@@ -88,5 +90,56 @@ gestalt plugins invoke slack chat postMessage \
   --connection plugin \
   -p channel=C123 \
   -p text='hello'
+gestalt workflows schedules create \
+  --cron "0 */6 * * *" \
+  --plugin github \
+  --operation issues.list \
+  -p owner=valon-technologies \
+  -p repo=gestalt
+gestalt workflows runs list --plugin github --status failed
 gestalt tokens create --name automation
 ```
+
+## Workflow commands
+
+The workflow CLI currently covers global schedules and workflow runs.
+
+### Schedules
+
+```sh
+gestalt workflows schedules list
+gestalt workflows schedules list --plugin github
+gestalt workflows schedules get <schedule-id>
+gestalt workflows schedules create \
+  --cron "0 */6 * * *" \
+  --timezone America/New_York \
+  --plugin github \
+  --operation issues.list \
+  --connection default \
+  --instance acme-org \
+  -p owner=valon-technologies \
+  -p repo=gestalt \
+  -p state=open
+gestalt workflows schedules update <schedule-id> --cron "0 9 * * 1-5"
+gestalt workflows schedules pause <schedule-id>
+gestalt workflows schedules resume <schedule-id>
+gestalt workflows schedules delete <schedule-id>
+```
+
+Use `-p key=value` for strings and `-p key:=json` for structured values. Use
+`--input-file file.json` to load the target input from JSON instead of flags.
+
+### Runs
+
+```sh
+gestalt workflows runs list
+gestalt workflows runs list --plugin github --status failed
+gestalt workflows runs get <run-id>
+gestalt workflows runs cancel <run-id> --reason "operator requested"
+```
+
+### Event triggers
+
+Event triggers are not exposed as a CLI CRUD surface yet. Define them in the
+server config under top-level `workflows.eventTriggers`. See
+[Workflow](/providers/workflow) for examples.

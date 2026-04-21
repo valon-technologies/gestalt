@@ -21,7 +21,7 @@ Every manifest defines exactly one provider kind, set by the `kind` field:
 | `indexeddb` | Persistence backend.                                 |
 | `s3`        | S3-compatible object store backend.                  |
 | `secrets`   | Secret manager for resolving structured secret refs. |
-| `webui`     | Static UI package served by `gestaltd`.              |
+| `ui`     | Static UI package served by `gestaltd`.              |
 
 The `kind` field is required. Kind-specific configuration goes under the `spec` block.
 
@@ -31,7 +31,7 @@ These fields appear at the top level of every manifest regardless of kind.
 
 | Field         | Type       | Required | Purpose                                                                                                                                                                                              |
 | ------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`        | string     | yes      | The provider kind (`plugin`, `auth`, `cache`, `indexeddb`, `s3`, `secrets`, `webui`).                                                                                                                |
+| `kind`        | string     | yes      | The provider kind (`plugin`, `auth`, `cache`, `indexeddb`, `s3`, `secrets`, `ui`).                                                                                                                |
 | `source`      | string     | yes      | Canonical provider source identifier. Use `github.com/<org>/<repo>/<path>`. The final path segment is the provider package name; preceding segments are used for release tags and source resolution. |
 | `version`     | string     | yes      | Semver version. Pre-release suffixes like `-alpha.1` are allowed.                                                                                                                                    |
 | `displayName` | string     | no       | Human-readable label shown in the UI.                                                                                                                                                                |
@@ -72,7 +72,7 @@ The `spec` block for a `kind: plugin` manifest describes a plugin. It supports d
 | `connections` | map[string]ConnectionDef | Canonical upstream auth and connection definitions. Put upstream OAuth/manual/bearer auth here, typically under `connections.default`. |
 | `defaultConnection` | string | Name of the connection to use when none is specified. |
 | `requires` | string[] | Provider source identifiers that this provider depends on. Gestalt ensures the listed providers are available before starting this provider. |
-| `ui` | OwnedUIRef | Optional owned web UI reference for plugins that publish a mounted UI. |
+| `ui` | OwnedUIRef | Optional owned UI reference for plugins that publish a mounted UI. |
 
 ### Owned UI
 
@@ -82,7 +82,7 @@ Plugins that back mounted apps may declare their UI artifact in the plugin manif
 
 | Field        | Type   | Purpose                                                                                                                                                                            |
 | ------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `path`       | string | Relative path to a co-packaged `kind: webui` manifest. Source releases may point at sibling UI packages; `gestaltd provider release` rewrites them into the archive automatically. |
+| `path`       | string | Relative path to a co-packaged `kind: ui` manifest. Source releases may point at sibling UI packages; `gestaltd provider release` rewrites them into the archive automatically. |
 | `ref`        | string | Managed provider source ref for the owned UI bundle.                                                                                                                               |
 | `version`    | string | Optional version for `ref`. Defaults to the plugin manifest version when omitted.                                                                                                  |
 | `auth.token` | string | Optional source token used when resolving a private managed `ref`. Only valid with `ref`.                                                                                          |
@@ -359,14 +359,14 @@ artifacts:
     path: artifacts/linux/amd64/provider
 ```
 
-## Web UI Metadata
+## UI Metadata
 
-The `spec` block for a `kind: webui` manifest describes a static UI package.
+The `spec` block for a `kind: ui` manifest describes a static UI package.
 
 | Field       | Type         | Required | Purpose                                                                                                                     |
 | ----------- | ------------ | -------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `assetRoot` | string       | yes      | Directory containing the built static assets.                                                                               |
-| `routes`    | WebUIRoute[] | no       | Optional route-level authorization rules used when a deployment binds this UI to `providers.ui.<name>.authorizationPolicy`. |
+| `routes`    | UIRoute[] | no       | Optional route-level authorization rules used when a deployment binds this UI to `providers.ui.<name>.authorizationPolicy`. |
 
 Each `spec.routes` entry declares a mounted path and the allowed human roles for that path. Path matching is exact or longest-prefix with a terminal `/*`. When a deployment sets `authorizationPolicy`, route definitions must have non-empty `allowedRoles`, and the manifest must include a route that covers `/`.
 
@@ -376,7 +376,7 @@ Each `spec.routes` entry declares a mounted path and the allowed human roles for
 | `allowedRoles` | string[] | yes      | Roles permitted to load the route or its associated static assets. |
 
 ```yaml
-kind: webui
+kind: ui
 source: github.com/acme/plugins/gestalt-ui
 version: 1.0.0
 displayName: Custom UI
@@ -605,7 +605,7 @@ spec:
 
 ## Authoring Notes
 
-Manifest paths must stay inside the package. `kind`, `source`, and `version` are required. A manifest defines exactly one provider kind: `kind: plugin`, `kind: authentication`, `kind: indexeddb`, `kind: secrets`, or `kind: webui`.
+Manifest paths must stay inside the package. `kind`, `source`, and `version` are required. A manifest defines exactly one provider kind: `kind: plugin`, `kind: authentication`, `kind: indexeddb`, `kind: secrets`, or `kind: ui`.
 
 `configSchemaPath` validates per-plugin config and may be written in JSON or YAML. Any connection may define `params` and `discovery`. The OpenAPI/GraphQL surface types are mutually exclusive, but MCP may be added alongside either.
 
@@ -683,7 +683,7 @@ packages generate support files or UI bundles without checking built artifacts
 into source control.
 
 ```yaml
-kind: webui
+kind: ui
 source: github.com/acme/plugins/gestalt-ui
 version: 1.0.0
 release:

@@ -85,7 +85,7 @@ func DirectoryDigest(dirPath, manifestPath string, manifest *providermanifestv1.
 			digests = append(digests, rel+"="+sum)
 			return nil
 		}); err != nil {
-			return "", fmt.Errorf("digest webui assets: %w", err)
+			return "", fmt.Errorf("digest ui assets: %w", err)
 		}
 	}
 

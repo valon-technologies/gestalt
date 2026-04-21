@@ -214,7 +214,7 @@ func newManagedMetadataServer(t *testing.T, releases []managedMetadataRelease) *
 	}))
 }
 
-func writeLocalWebUIManifest(t *testing.T, dir, name, source, version string, spec *providermanifestv1.Spec, files map[string]string) string {
+func writeLocalUIManifest(t *testing.T, dir, name, source, version string, spec *providermanifestv1.Spec, files map[string]string) string {
 	t.Helper()
 
 	root := filepath.Join(dir, name)
@@ -232,7 +232,7 @@ func writeLocalWebUIManifest(t *testing.T, dir, name, source, version string, sp
 	}
 	manifestPath := filepath.Join(root, "manifest.yaml")
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
+		Kind:        providermanifestv1.KindUI,
 		Source:      source,
 		Version:     version,
 		DisplayName: testDisplayName(name),
@@ -1170,7 +1170,7 @@ server:
 	}
 }
 
-func TestLoadForExecutionAtPath_ResolvesLocalMountedWebUIWithoutLockfile(t *testing.T) {
+func TestLoadForExecutionAtPath_ResolvesLocalMountedUIWithoutLockfile(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -1189,7 +1189,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedWebUIWithoutLockfile(t *test
 			uiConfigYAML: `  ui:
     roadmap:
       source:
-        path: ./webui/manifest.yaml
+        path: ./ui/manifest.yaml
       path: /create-customer-roadmap-review
 `,
 			uiKey:    "roadmap",
@@ -1200,7 +1200,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedWebUIWithoutLockfile(t *test
 			uiConfigYAML: `  ui:
     roadmap:
       source:
-        path: ./webui/manifest.yaml
+        path: ./ui/manifest.yaml
 plugins:
     roadmap:
       source:
@@ -1226,10 +1226,10 @@ plugins:
 			uiConfigYAML: `  ui:
     roadmap:
       source:
-        path: ./webui/manifest.yaml
+        path: ./ui/manifest.yaml
     console:
       source:
-        path: ./webui/manifest.yaml
+        path: ./ui/manifest.yaml
       path: /console
 plugins:
     roadmap:
@@ -1248,7 +1248,7 @@ plugins:
 			uiConfigYAML: `  ui:
     roadmap:
       source:
-        path: ./webui/manifest.yaml
+        path: ./ui/manifest.yaml
 plugins:
     roadmap:
       disabled: true
@@ -1278,7 +1278,7 @@ plugins:
 			uiKey:       "roadmap",
 			wantPath:    "/create-customer-roadmap-review",
 			wantPolicy:  "roadmap_policy",
-			ownedUIPath: "../webui/manifest.yaml",
+			ownedUIPath: "../ui/manifest.yaml",
 		},
 		{
 			name: "plugin owned ui via plugin mount with noncanonical manifest filename",
@@ -1300,7 +1300,7 @@ plugins:
 			uiKey:       "roadmap",
 			wantPath:    "/create-customer-roadmap-review",
 			wantPolicy:  "roadmap_policy",
-			ownedUIPath: "../webui/ui-manifest.yaml",
+			ownedUIPath: "../ui/ui-manifest.yaml",
 			uiManifest:  "ui-manifest.yaml",
 		},
 		{
@@ -1308,7 +1308,7 @@ plugins:
 			uiConfigYAML: `  ui:
     roadmap:
       source:
-        path: ./webui/manifest.yaml
+        path: ./ui/manifest.yaml
 plugins:
     roadmap:
       source:
@@ -1327,7 +1327,7 @@ plugins:
 			uiKey:       "roadmap",
 			wantPath:    "/create-customer-roadmap-review",
 			wantPolicy:  "roadmap_policy",
-			ownedUIPath: "../webui/manifest.yaml",
+			ownedUIPath: "../ui/manifest.yaml",
 		},
 		{
 			name: "disabled same-name ui overlay is rejected at parse time",
@@ -1335,7 +1335,7 @@ plugins:
     roadmap:
       disabled: true
       source:
-        path: ./webui/manifest.yaml
+        path: ./ui/manifest.yaml
 plugins:
     roadmap:
       source:
@@ -1343,7 +1343,7 @@ plugins:
       mountPath: /create-customer-roadmap-review
 `,
 			wantErr:     "field disabled not found",
-			ownedUIPath: "../webui/manifest.yaml",
+			ownedUIPath: "../ui/manifest.yaml",
 		},
 	}
 
@@ -1353,23 +1353,23 @@ plugins:
 			t.Parallel()
 
 			dir := t.TempDir()
-			webUIDir := filepath.Join(dir, "webui")
-			if err := os.MkdirAll(filepath.Join(webUIDir, "dist"), 0o755); err != nil {
-				t.Fatalf("MkdirAll webui dist: %v", err)
+			uiDir := filepath.Join(dir, "ui")
+			if err := os.MkdirAll(filepath.Join(uiDir, "dist"), 0o755); err != nil {
+				t.Fatalf("MkdirAll ui dist: %v", err)
 			}
-			if err := os.WriteFile(filepath.Join(webUIDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(uiDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
 				t.Fatalf("WriteFile index.html: %v", err)
 			}
 			manifestName := cmp.Or(tc.uiManifest, "manifest.yaml")
-			manifestPath := filepath.Join(webUIDir, manifestName)
+			manifestPath := filepath.Join(uiDir, manifestName)
 			spec := &providermanifestv1.Spec{AssetRoot: "dist"}
 			if tc.wantPolicy != "" {
-				spec.Routes = []providermanifestv1.WebUIRoute{
+				spec.Routes = []providermanifestv1.UIRoute{
 					{Path: "/", AllowedRoles: []string{"viewer"}},
 				}
 			}
 			manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-				Kind:        providermanifestv1.KindWebUI,
+				Kind:        providermanifestv1.KindUI,
 				Source:      "github.com/testowner/web/roadmap",
 				Version:     "0.0.1-alpha.1",
 				DisplayName: "Roadmap UI",
@@ -1454,13 +1454,13 @@ plugins:
 			}
 			gotManifestPath := filepath.ToSlash(entry.ResolvedManifestPath)
 			wantUIManifest := filepath.ToSlash(filepath.Join(".gestaltd", "ui", tc.uiKey, "manifest.yaml"))
-			wantOwnedManifest := filepath.ToSlash(filepath.Join(".gestaltd", "providers", "roadmap", "_owned_ui", "webui", "manifest.yaml"))
+			wantOwnedManifest := filepath.ToSlash(filepath.Join(".gestaltd", "providers", "roadmap", "_owned_ui", "ui", "manifest.yaml"))
 			if !strings.HasSuffix(gotManifestPath, wantUIManifest) && !strings.HasSuffix(gotManifestPath, wantOwnedManifest) {
 				t.Fatalf("ResolvedManifestPath = %q", gotManifestPath)
 			}
 			gotAssetRoot := filepath.ToSlash(entry.ResolvedAssetRoot)
 			wantUIAssetRoot := filepath.ToSlash(filepath.Join(".gestaltd", "ui", tc.uiKey, "dist"))
-			wantOwnedAssetRoot := filepath.ToSlash(filepath.Join(".gestaltd", "providers", "roadmap", "_owned_ui", "webui", "dist"))
+			wantOwnedAssetRoot := filepath.ToSlash(filepath.Join(".gestaltd", "providers", "roadmap", "_owned_ui", "ui", "dist"))
 			if !strings.HasSuffix(gotAssetRoot, wantUIAssetRoot) && !strings.HasSuffix(gotAssetRoot, wantOwnedAssetRoot) {
 				t.Fatalf("ResolvedAssetRoot = %q", gotAssetRoot)
 			}
@@ -1495,15 +1495,15 @@ func TestLoadForExecutionAtPath_RejectsLockedExplicitLocalUIWithoutPreparedUILoc
 	t.Parallel()
 
 	dir := t.TempDir()
-	webUIDir := filepath.Join(dir, "webui")
-	if err := os.MkdirAll(filepath.Join(webUIDir, "dist"), 0o755); err != nil {
-		t.Fatalf("MkdirAll webui dist: %v", err)
+	uiDir := filepath.Join(dir, "ui")
+	if err := os.MkdirAll(filepath.Join(uiDir, "dist"), 0o755); err != nil {
+		t.Fatalf("MkdirAll ui dist: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(webUIDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(uiDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile index.html: %v", err)
 	}
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
+		Kind:        providermanifestv1.KindUI,
 		Source:      "github.com/testowner/web/roadmap",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Roadmap UI",
@@ -1512,7 +1512,7 @@ func TestLoadForExecutionAtPath_RejectsLockedExplicitLocalUIWithoutPreparedUILoc
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(webUIDir, "manifest.yaml"), manifest, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(uiDir, "manifest.yaml"), manifest, 0o644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
 
@@ -1520,7 +1520,7 @@ func TestLoadForExecutionAtPath_RejectsLockedExplicitLocalUIWithoutPreparedUILoc
 	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
     roadmap:
       source:
-        path: ./webui/manifest.yaml
+        path: ./ui/manifest.yaml
       path: /create-customer-roadmap-review
 server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -1572,7 +1572,7 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 
 	ownedUIManifestPath := filepath.ToSlash(filepath.Join("_owned_ui", "roadmap-ui", providerpkg.ManifestFile))
 	ownedUIManifestBytes, err := providerpkg.EncodeManifest(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
+		Kind:        providermanifestv1.KindUI,
 		Source:      "github.com/testowner/web/roadmap-review",
 		Version:     version,
 		DisplayName: "Roadmap Review UI",
@@ -1628,7 +1628,7 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 		t.Fatalf("MkdirAll owned ui dir: %v", err)
 	}
 	outsideOwnedUIManifest, err := providerpkg.EncodeManifest(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
+		Kind:        providermanifestv1.KindUI,
 		Source:      "github.com/testowner/web/outside-roadmap",
 		Version:     version,
 		DisplayName: "Outside Roadmap UI",
@@ -1957,7 +1957,7 @@ func TestLoadForExecutionAtPath_UsesDerivedPreparedPathsWhenLockPathsAreStale(t 
 	const version = "0.0.1-alpha.1"
 	pluginManifestPath := writeLocalExecutablePlugin(t, dir, "example", "ping")
 	indexedDBManifestPath := writeStubIndexedDBManifest(t, dir)
-	webUIManifestPath := writeLocalWebUIManifest(t, dir, "roadmap-ui", "github.com/testowner/web/roadmap", version, &providermanifestv1.Spec{
+	uiManifestPath := writeLocalUIManifest(t, dir, "roadmap-ui", "github.com/testowner/web/roadmap", version, &providermanifestv1.Spec{
 		AssetRoot: "dist",
 	}, map[string]string{
 		"dist/index.html": "<html>roadmap</html>",
@@ -1984,7 +1984,7 @@ server:
   providers:
     indexeddb: main
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`, indexedDBManifestPath, filepath.Join(dir, "gestalt.db"), webUIManifestPath, pluginManifestPath)
+`, indexedDBManifestPath, filepath.Join(dir, "gestalt.db"), uiManifestPath, pluginManifestPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -2111,7 +2111,7 @@ func TestInitAtPath_RejectsManagedPluginOwnedUIPathOutsidePackage(t *testing.T) 
 		t.Fatalf("MkdirAll outside owned UI dist: %v", err)
 	}
 	outsideOwnedUIManifest, err := providerpkg.EncodeManifest(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
+		Kind:        providermanifestv1.KindUI,
 		Source:      "github.com/testowner/web/outside-roadmap",
 		Version:     version,
 		DisplayName: "Outside Roadmap UI",
@@ -2161,7 +2161,7 @@ server:
 	}
 }
 
-func TestLoadForExecutionAtPath_RejectsDisabledLocalMountedWebUIWithoutLockfile(t *testing.T) {
+func TestLoadForExecutionAtPath_RejectsDisabledLocalMountedUIWithoutLockfile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -2170,7 +2170,7 @@ func TestLoadForExecutionAtPath_RejectsDisabledLocalMountedWebUIWithoutLockfile(
     roadmap:
       disabled: true
       source:
-        path: ./missing-webui/manifest.yaml
+        path: ./missing-ui/manifest.yaml
       path: /create-customer-roadmap-review
 ` + `server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -2189,7 +2189,7 @@ func TestLoadForExecutionAtPath_RejectsDisabledLocalMountedWebUIWithoutLockfile(
 	}
 }
 
-func TestInitAtPath_RejectsDisabledManagedMountedWebUI(t *testing.T) {
+func TestInitAtPath_RejectsDisabledManagedMountedUI(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -2375,7 +2375,7 @@ providers:
 	}
 }
 
-func TestInitAtPath_RejectsPolicyBoundManagedMountedWebUIWithoutExplicitRouteCoverage(t *testing.T) {
+func TestInitAtPath_RejectsPolicyBoundManagedMountedUIWithoutExplicitRouteCoverage(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -2392,7 +2392,7 @@ func TestInitAtPath_RejectsPolicyBoundManagedMountedWebUIWithoutExplicitRouteCov
 			name: "missing root coverage",
 			spec: &providermanifestv1.Spec{
 				AssetRoot: "dist",
-				Routes: []providermanifestv1.WebUIRoute{
+				Routes: []providermanifestv1.UIRoute{
 					{Path: "/reports", AllowedRoles: []string{"admin"}},
 				},
 			},
@@ -2406,7 +2406,7 @@ func TestInitAtPath_RejectsPolicyBoundManagedMountedWebUIWithoutExplicitRouteCov
 
 			dir := t.TempDir()
 			pkgPath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
-				Kind:        providermanifestv1.KindWebUI,
+				Kind:        providermanifestv1.KindUI,
 				Source:      "github.com/testowner/web/sample-portal",
 				Version:     "0.0.1-alpha.1",
 				DisplayName: "Sample Portal",
@@ -2420,8 +2420,8 @@ func TestInitAtPath_RejectsPolicyBoundManagedMountedWebUIWithoutExplicitRouteCov
 				archiveFilePath: pkgPath,
 				packageSource:   "github.com/testowner/web/sample-portal",
 				version:         "0.0.1-alpha.1",
-				kind:            providermanifestv1.KindWebUI,
-				runtime:         providerReleaseRuntimeWebUI,
+				kind:            providermanifestv1.KindUI,
+				runtime:         providerReleaseRuntimeUI,
 			}})
 			defer srv.Close()
 
@@ -2496,10 +2496,10 @@ func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testin
 	}
 }
 
-func TestHashPlatformInEntries_HashesMountedWebUIAndProviderArchives(t *testing.T) {
+func TestHashPlatformInEntries_HashesMountedUIAndProviderArchives(t *testing.T) {
 	t.Parallel()
 
-	archiveBytes := []byte("mounted-web-ui-archive")
+	archiveBytes := []byte("mounted-ui-archive")
 	sum := sha256.Sum256(archiveBytes)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(archiveBytes)
@@ -2540,7 +2540,7 @@ func TestHashPlatformInEntries_HashesMountedWebUIAndProviderArchives(t *testing.
 	got := lock.UIs["roadmap"].Archives[platformKeyGeneric].SHA256
 	want := hex.EncodeToString(sum[:])
 	if got != want {
-		t.Fatalf("webui SHA256 = %q, want %q", got, want)
+		t.Fatalf("ui SHA256 = %q, want %q", got, want)
 	}
 	if got := lock.Caches["session"].Archives[providerpkg.CurrentPlatformString()].SHA256; got != want {
 		t.Fatalf("cache SHA256 = %q, want %q", got, want)
@@ -3385,7 +3385,7 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 			t.Fatalf("MkdirAll(%q): %v", filepath.Dir(manifestPath), err)
 		}
 		manifest := fmt.Sprintf("source: github.com/test-org/fingerprint-test/component\nversion: 0.0.1\nkind: %s\n", kind)
-		if kind == providermanifestv1.KindWebUI {
+		if kind == providermanifestv1.KindUI {
 			assetRoot := filepath.Join(filepath.Dir(manifestPath), "assets")
 			if err := os.MkdirAll(assetRoot, 0o755); err != nil {
 				t.Fatalf("MkdirAll(%q): %v", assetRoot, err)
@@ -3455,8 +3455,8 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 		root := t.TempDir()
 		firstConfigDir := filepath.Join(root, "one", "deploy")
 		secondConfigDir := filepath.Join(root, "two", "deploy")
-		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "web/dashboard/manifest.yaml", providermanifestv1.KindWebUI)
-		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "web/dashboard/manifest.yaml", providermanifestv1.KindWebUI)
+		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "web/dashboard/manifest.yaml", providermanifestv1.KindUI)
+		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "web/dashboard/manifest.yaml", providermanifestv1.KindUI)
 
 		firstProvider := &config.ProviderEntry{
 			Source: config.ProviderSource{Path: firstManifestPath},
@@ -3889,9 +3889,9 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if auditEntry.Runtime != providerReleaseRuntimeDeclarative {
 		t.Fatalf("audit runtime = %q, want %q", auditEntry.Runtime, providerReleaseRuntimeDeclarative)
 	}
-	uiEntry, ok := diskLock.Providers.WebUI["roadmap"]
+	uiEntry, ok := diskLock.Providers.UI["roadmap"]
 	if !ok {
-		t.Fatal(`disk lock providers.webui["roadmap"] not found`)
+		t.Fatal(`disk lock providers.ui["roadmap"] not found`)
 	}
 	if uiEntry.InputDigest != want.UIs["roadmap"].Fingerprint {
 		t.Fatalf("ui inputDigest = %q, want %q", uiEntry.InputDigest, want.UIs["roadmap"].Fingerprint)
@@ -3899,8 +3899,8 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if uiEntry.Source != "" {
 		t.Fatalf("ui source = %q, want omitted portable source", uiEntry.Source)
 	}
-	if uiEntry.Kind != providermanifestv1.KindWebUI {
-		t.Fatalf("ui kind = %q, want %q", uiEntry.Kind, providermanifestv1.KindWebUI)
+	if uiEntry.Kind != providermanifestv1.KindUI {
+		t.Fatalf("ui kind = %q, want %q", uiEntry.Kind, providermanifestv1.KindUI)
 	}
 	if uiEntry.Runtime != providerLockRuntimeAssets {
 		t.Fatalf("ui runtime = %q, want %q", uiEntry.Runtime, providerLockRuntimeAssets)
@@ -4005,7 +4005,7 @@ func TestHashArchiveEntry_HashesFallbackArchive(t *testing.T) {
 		},
 	}
 
-	if err := NewLifecycle().hashArchiveEntry(context.Background(), providermanifestv1.KindWebUI, "roadmap", &entry, initPaths{}, "linux/amd64", nil); err != nil {
+	if err := NewLifecycle().hashArchiveEntry(context.Background(), providermanifestv1.KindUI, "roadmap", &entry, initPaths{}, "linux/amd64", nil); err != nil {
 		t.Fatalf("hashArchiveEntry: %v", err)
 	}
 

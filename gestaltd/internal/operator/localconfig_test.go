@@ -8,7 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
-func TestDefaultManagedConfigIncludesRootWebUI(t *testing.T) {
+func TestDefaultManagedConfigIncludesRootUI(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -28,7 +28,7 @@ func TestDefaultManagedConfigIncludesRootWebUI(t *testing.T) {
 	if rootUI == nil {
 		t.Fatal(`Providers.UI["root"] = nil`)
 	}
-	wantURL := defaultProviderMetadataURL(config.DefaultWebUIProvider, config.DefaultWebUIVersion)
+	wantURL := defaultProviderMetadataURL(config.DefaultUIProvider, config.DefaultUIVersion)
 	if got := rootUI.SourceMetadataURL(); got != wantURL {
 		t.Fatalf(`Providers.UI["root"].SourceMetadataURL() = %q, want %q`, got, wantURL)
 	}
@@ -37,7 +37,7 @@ func TestDefaultManagedConfigIncludesRootWebUI(t *testing.T) {
 	}
 }
 
-func TestDefaultLocalSourceConfigIncludesRootWebUI(t *testing.T) {
+func TestDefaultLocalSourceConfigIncludesRootUI(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()

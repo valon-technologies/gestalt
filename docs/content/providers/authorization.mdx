@@ -21,14 +21,48 @@ APIs require an authorization provider. If you omit `providers.authorization`,
 Gestalt still evaluates static policy members from config, but there is no
 provider-backed relationship storage or dynamic human-grant control plane.
 
+## Product authorization semantics
+
+At the product level, authorization is about subjects and runtime surfaces.
+Gestalt resolves each request to a canonical subject such as `user:<id>`,
+`workload:<id>`, or a system subject, then asks whether that subject may access
+the thing they are trying to use. Static memberships under
+`authorization.policies` are always available. When you configure an
+authorization provider, Gestalt adds dynamic relationship storage on top so
+those decisions can change without editing YAML.
+
+This is separate from authentication. Authentication answers who the caller is.
+Authorization answers what that caller may do once their subject is known.
+
+### Plugin invocation
+
+Plugin authorization happens at request time. Gestalt checks whether the
+calling subject may access the plugin or operation before it invokes the
+target. The subject's upstream connection is also scoped to that same subject,
+so access is both identity-aware and credential-aware.
+
+### Workflow execution
+
+Workflow authorization happens twice. Gestalt checks access when a user creates
+a schedule, then checks again when that schedule or trigger fires later. User
+owned workflows keep the creating subject plus a permission ceiling for delayed
+execution. Config-managed workflows use the system config subject instead.
+
+### UI routes
+
+Mounted UI bundles can bind an `authorizationPolicy`, and their manifests can
+declare route-level `allowedRoles`. Gestalt resolves the caller's subject,
+derives their role for the bound policy, and checks that role before serving
+the matched route. The built-in admin UI uses the same model.
+
 ## First-party authorization providers
 
 First-party authorization providers live under
 [`valon-technologies/gestalt-providers/authorization`](https://github.com/valon-technologies/gestalt-providers/tree/main/authorization).
 
-| Provider | Repository | Package path | Use case |
-| --- | --- | --- | --- |
-| IndexedDB Authorization | [`authorization/indexeddb`](https://github.com/valon-technologies/gestalt-providers/tree/main/authorization/indexeddb) | `github.com/valon-technologies/gestalt-providers/authorization/indexeddb` | Stores authorization models and relationships in a host IndexedDB provider |
+| Provider | Use case |
+| --- | --- |
+| [`github.com/valon-technologies/gestalt-providers/authorization/indexeddb`](https://github.com/valon-technologies/gestalt-providers/tree/main/authorization/indexeddb) | Stores authorization models and relationships in a host IndexedDB provider |
 
 ## Configuring `providers.authorization`
 
@@ -57,12 +91,11 @@ IndexedDB provider and stores authorization models plus relationships there.
 
 ## Operational notes
 
-- `server.providers.authorization` selects the host authorization provider.
-- If more than one entry exists under `providers.authorization`, set
-  `server.providers.authorization` explicitly or mark one entry `default: true`.
-- Built-in admin authorization membership and inspection APIs use the selected
-  provider.
-- Static policy members still take precedence over dynamic grants.
+`server.providers.authorization` selects the host authorization provider. If
+more than one entry exists under `providers.authorization`, set
+`server.providers.authorization` explicitly or mark one entry `default: true`.
+Built-in admin authorization membership and inspection APIs use the selected
+provider. Static policy members still take precedence over dynamic grants.
 
 ## Building your own authorization provider
 
@@ -72,7 +105,10 @@ model lifecycle now live under
 
 ## What to read next
 
-- [Configuration](/configuration): server and provider config structure
-- [Config File](/reference/config-file): full `providers.authorization` reference
-- [Built-in Providers](/reference/built-in-providers): first-party authorization provider reference
-- [Custom Authorization Providers](/custom-providers/authorization): advanced authoring docs
+For the full server and provider config structure, read
+[Configuration](/configuration). For the exact `providers.authorization`
+reference, continue to [Config File](/reference/config-file). If you want to
+see how these semantics apply to concrete surfaces, read
+[Plugin](/providers/plugins), [Workflow](/providers/workflow), and
+[UI](/providers/ui). For provider implementation details, see
+[Custom Authorization Providers](/custom-providers/authorization).

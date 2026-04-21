@@ -1,4 +1,4 @@
-# Plugins
+# Plugin
 
 Plugin providers are the packages that expose tools through Gestalt. Operators
 configure them under `plugins`, while the host takes care of catalog
@@ -20,17 +20,29 @@ From a deployment point of view, the important pieces are:
 If the manifest enables MCP, the same operations are also exposed through the
 server's `/mcp` endpoint.
 
+## How plugin invocation uses authorization
+
+Gestalt resolves every plugin request to a canonical subject before it invokes
+the target operation. Authorization then decides whether that subject may use
+the plugin or operation at all. A plugin can be configured and healthy, but a
+particular subject may still be denied at request time if their static policy
+memberships or dynamic grants do not allow that operation.
+
+Connections are still stored per subject. Authorization answers whether the
+subject may invoke the plugin, while authentication and connection management
+answer how that subject proves itself to the upstream system.
+
 ## First-party plugin packages
 
 First-party plugins live under
 [`valon-technologies/gestalt-providers/plugins`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins).
 Examples include:
 
-| Plugin | Repository | Package path |
-| --- | --- | --- |
-| GitHub | [`plugins/github`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins/github) | `github.com/valon-technologies/gestalt-providers/plugins/github` |
-| Jira | [`plugins/jira`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins/jira) | `github.com/valon-technologies/gestalt-providers/plugins/jira` |
-| HTTPBin | [`plugins/httpbin`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins/httpbin) | `github.com/valon-technologies/gestalt-providers/plugins/httpbin` |
+| Provider |
+| --- |
+| [`github.com/valon-technologies/gestalt-providers/plugins/github`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins/github) |
+| [`github.com/valon-technologies/gestalt-providers/plugins/jira`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins/jira) |
+| [`github.com/valon-technologies/gestalt-providers/plugins/httpbin`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins/httpbin) |
 
 See the repository directory for the broader catalog of first-party plugins and
 their package layouts.
@@ -107,11 +119,12 @@ provides that sandbox contract.
 ## Building your own plugin
 
 Plugin implementation details, declarative surfaces, local testing, and custom
-release packaging now live under [Custom Providers > Plugins](/custom-providers/plugins).
+release packaging now live under [Custom Providers > Plugin](/custom-providers/plugins).
 
 ## What to read next
 
 - [Configuration](/configuration): provider entries, connections, and `allowedHosts`
 - [HTTP API](/reference/http-api): invoking plugin operations
 - [Provider Manifests](/reference/plugin-manifests): manifest field reference
-- [Custom Plugins](/custom-providers/plugins): advanced authoring docs
+- [Authorization](/providers/authorization): runtime authorization semantics
+- [Custom Plugin](/custom-providers/plugins): advanced authoring docs

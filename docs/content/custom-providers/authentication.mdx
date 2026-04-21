@@ -5,7 +5,7 @@ import { Tabs } from "nextra/components";
 This page covers building custom authentication providers. If you only need to
 configure platform login for a deployment, use [Providers > Authentication](/providers/authentication).
 
-Authentication providers handle platform login. When a user visits the Gestalt web UI or hits the HTTP API without a valid session, the authentication provider drives the login flow, validates the callback, and returns an authenticated identity. Gestalt then issues a session cookie and manages session lifetime on its own.
+Authentication providers handle platform login. When a user visits the Gestalt UI or hits the HTTP API without a valid session, the authentication provider drives the login flow, validates the callback, and returns an authenticated identity. Gestalt then issues a session cookie and manages session lifetime on its own.
 
 Beyond the core login flow, an authentication provider can optionally validate externally issued tokens (so API clients can present a bearer token directly instead of going through the browser) and control session TTL.
 

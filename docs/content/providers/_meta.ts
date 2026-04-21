@@ -3,10 +3,10 @@ export default {
   authorization: "Authorization",
   cache: "Cache",
   indexeddb: "IndexedDB",
-  plugins: "Plugins",
+  plugins: "Plugin",
   s3: "S3",
-  secrets: "Secrets",
-  "web-uis": "Web UIs",
+  secrets: "Secret",
+  ui: "UI",
   workflow: "Workflow",
   releasing: {
     display: "hidden",

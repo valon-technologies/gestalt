@@ -24,9 +24,9 @@ type InstalledPlugin struct {
 	Artifact       *providermanifestv1.Artifact
 }
 
-func isWebUIOnly(manifest *providermanifestv1.Manifest) bool {
+func isUIOnly(manifest *providermanifestv1.Manifest) bool {
 	kind, err := providerpkg.ManifestKind(manifest)
-	return err == nil && kind == providermanifestv1.KindWebUI
+	return err == nil && kind == providermanifestv1.KindUI
 }
 
 func manifestNeedsExecutableArtifact(manifest *providermanifestv1.Manifest) bool {
@@ -43,7 +43,7 @@ func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 		return nil, err
 	}
 
-	if isWebUIOnly(manifest) {
+	if isUIOnly(manifest) {
 		if err := os.MkdirAll(destDir, 0755); err != nil {
 			return nil, fmt.Errorf("create plugin directory: %w", err)
 		}
@@ -102,7 +102,7 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 		return nil, err
 	}
 
-	if isWebUIOnly(manifest) {
+	if isUIOnly(manifest) {
 		if err := os.MkdirAll(destDir, 0755); err != nil {
 			return nil, fmt.Errorf("create plugin directory: %w", err)
 		}
@@ -199,7 +199,7 @@ func executablePathForManifest(root string, manifest *providermanifestv1.Manifes
 	if manifest == nil {
 		return "", fmt.Errorf("manifest is required")
 	}
-	if isWebUIOnly(manifest) {
+	if isUIOnly(manifest) {
 		return "", nil
 	}
 	kind, err := providerpkg.ManifestKind(manifest)

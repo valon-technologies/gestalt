@@ -12,7 +12,7 @@ the executable artifacts for packaged providers, and optional static assets.
 
 ## What can be released
 
-Gestalt uses the same release system for executable provider packages, authentication and datastore component packages, and packaged web UI bundles. Every package is described by a provider manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`.
+Gestalt uses the same release system for executable provider packages, authentication and datastore component packages, and packaged UI bundles. Every package is described by a provider manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`.
 
 ## Source manifests vs release manifests
 
@@ -128,12 +128,12 @@ packaging.
 ### Source release builds
 
 Source manifests may optionally define a `release.build` command. Gestalt runs
-it before source-manifest preparation, which lets web UI packages generate
+it before source-manifest preparation, which lets UI packages generate
 static assets and lets provider/authentication/datastore packages generate support files
 such as config schemas before packaging.
 
 ```yaml
-kind: webui
+kind: ui
 source: github.com/acme/plugins/gestalt-ui
 version: 1.2.0
 release:
@@ -172,7 +172,7 @@ artifacts:
 UI packages use the same manifest system:
 
 ```yaml
-kind: webui
+kind: ui
 source: github.com/acme/plugins/web/default
 version: 1.2.0
 spec:
@@ -248,7 +248,7 @@ UI bundles use the same pattern under `providers.ui.<name>`:
 providers:
   ui:
     dashboard:
-      source: https://artifacts.example.com/webui/default/v1.2.0/provider-release.yaml
+      source: https://artifacts.example.com/ui/default/v1.2.0/provider-release.yaml
       path: /dashboard
       config:
         brand_name: Acme

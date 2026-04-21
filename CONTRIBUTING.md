@@ -9,7 +9,7 @@ Thanks for contributing. Before opening a PR, run the checks that match the part
 | `gestaltd/cmd/gestaltd` | Server entrypoint, command handling, and built-in registration. |
 | `gestaltd/core` | Public Go interfaces for auth, datastore, secrets, cache, telemetry, and providers. |
 | `gestaltd/internal` | Bootstrap, config loading, invocation, HTTP and MCP serving, operator lifecycle, and other server internals. |
-| `gestaltd/internal/webui` | Embedded admin UI asset serving and related tests. |
+| `gestaltd/internal/ui` | Embedded admin UI asset serving and related tests. |
 | `gestaltd/deploy` | Docker and Helm deployment assets for the server. |
 | `gestalt` | Rust CLI client. |
 | `sdk/go` | Go SDK. |
@@ -25,7 +25,7 @@ When you update docs, keep them aligned with:
 - config structs in `gestaltd/internal/config`
 - bootstrap wiring in `gestaltd/cmd/gestaltd` and `gestaltd/internal/bootstrap`
 - HTTP and MCP behavior in `gestaltd/internal/server` and `gestaltd/internal/mcp`
-- admin and mounted UI behavior in `gestaltd/internal/webui` and `gestaltd/internal/server/mounted_ui.go`
+- admin and mounted UI behavior in `gestaltd/internal/ui` and `gestaltd/internal/server/mounted_ui.go`
 - deployment assets in `gestaltd/Dockerfile` and `gestaltd/deploy/helm`
 
 The easiest way to make docs drift is to copy previous prose instead of reading the code path that actually implements the feature.

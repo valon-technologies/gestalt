@@ -40,6 +40,24 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | `POST` | `/api/v1/auth/start-oauth` | Start a plugin OAuth flow. |
 | `POST` | `/api/v1/auth/connect-manual` | Submit manual plugin credentials. |
 
+### Workflows
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/workflow/schedules` | List user-owned workflow schedules. |
+| `POST` | `/api/v1/workflow/schedules` | Create a user-owned workflow schedule. |
+| `GET` | `/api/v1/workflow/schedules/{scheduleID}` | Inspect one workflow schedule. |
+| `PUT` | `/api/v1/workflow/schedules/{scheduleID}` | Update one workflow schedule. |
+| `DELETE` | `/api/v1/workflow/schedules/{scheduleID}` | Delete one workflow schedule. |
+| `POST` | `/api/v1/workflow/schedules/{scheduleID}/pause` | Pause one workflow schedule. |
+| `POST` | `/api/v1/workflow/schedules/{scheduleID}/resume` | Resume one workflow schedule. |
+| `GET` | `/api/v1/workflow/runs` | List workflow runs. Supports optional `plugin` and `status` query filters. |
+| `GET` | `/api/v1/workflow/runs/{runID}` | Inspect one workflow run. |
+| `POST` | `/api/v1/workflow/runs/{runID}/cancel` | Cancel one workflow run. The request body may include an optional `reason`. |
+
+Event triggers are not exposed as a public HTTP CRUD surface yet. Today they
+are config-managed under top-level `workflows.eventTriggers`.
+
 ### API Tokens
 
 | Method | Path | Purpose |
@@ -127,6 +145,27 @@ curl 'http://localhost:8080/api/v1/slack/chat.postMessage?_connection=mcp&_insta
 curl -X POST http://localhost:8080/api/v1/slack/chat.postMessage \
   -H 'Content-Type: application/json' \
   -d '{"_connection": "mcp", "channel": "C123", "text": "hello"}'
+
+# Create a workflow schedule
+curl -X POST http://localhost:8080/api/v1/workflow/schedules \
+  -H 'Authorization: Bearer gst_api_...' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "cron": "0 */6 * * *",
+    "timezone": "America/New_York",
+    "target": {
+      "plugin": "github",
+      "operation": "issues.list",
+      "input": {
+        "owner": "valon-technologies",
+        "repo": "gestalt"
+      }
+    }
+  }'
+
+# List failed workflow runs for one plugin
+curl 'http://localhost:8080/api/v1/workflow/runs?plugin=github&status=failed' \
+  -H 'Authorization: Bearer gst_api_...'
 
 # Add a dynamic plugin member from the management/admin surface by email alias
 curl -X PUT http://localhost:9090/admin/api/v1/authorization/plugins/sample_plugin/members \

@@ -16,7 +16,7 @@ Run `gestaltd` with no arguments:
 gestaltd
 ```
 
-When no config file exists, `gestaltd` generates one at `~/.gestaltd/config.yaml` and starts immediately with SQLite storage via the [RelationalDB](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/relationaldb) implementation of the [IndexedDB provider](/providers/indexeddb), the [default web UI](https://github.com/valon-technologies/gestalt-providers/tree/main/web/default) mounted at `/`, no authentication, and an [HTTPBin](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins/httpbin) implementation of the [plugin provider](/providers/plugins) on port 8080.
+When no config file exists, `gestaltd` generates one at `~/.gestaltd/config.yaml` and starts immediately with SQLite storage via the [RelationalDB](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/relationaldb) implementation of the [IndexedDB provider](/providers/indexeddb), the [default UI](https://github.com/valon-technologies/gestalt-providers/tree/main/web/default) mounted at `/`, no authentication, and an [HTTPBin](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins/httpbin) implementation of the [plugin provider](/providers/plugins) on port 8080.
 
 ```
 2026/04/10 10:00:00 INFO generated default config path=~/.gestaltd/config.yaml
@@ -156,7 +156,7 @@ Gestalt exposes all MCP-enabled plugins at a single endpoint: `http://localhost:
   </Tabs.Tab>
 </Tabs>
 
-Once connected, your agent can call any operation exposed by the server. The same auth model applies: when plugins require credentials, users connect through the Gestalt web UI or CLI before the agent can invoke those tools.
+Once connected, your agent can call any operation exposed by the server. The same auth model applies: when plugins require credentials, users connect through the Gestalt UI or CLI before the agent can invoke those tools.
 
 ## Next steps
 
