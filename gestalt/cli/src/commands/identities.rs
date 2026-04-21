@@ -256,13 +256,13 @@ fn print_member(value: &serde_json::Value, format: Format) {
         Format::Json => output::print_json(value),
         Format::Table => {
             let row = vec![vec![
-                value["userId"].as_str().unwrap_or("-").to_string(),
+                value["subjectId"].as_str().unwrap_or("-").to_string(),
                 value["email"].as_str().unwrap_or("-").to_string(),
                 value["role"].as_str().unwrap_or("-").to_string(),
                 value["createdAt"].as_str().unwrap_or("-").to_string(),
                 value["updatedAt"].as_str().unwrap_or("-").to_string(),
             ]];
-            output::print_table(&["User ID", "Email", "Role", "Created", "Updated"], &row);
+            output::print_table(&["Subject ID", "Email", "Role", "Created", "Updated"], &row);
         }
     }
 }
@@ -276,7 +276,7 @@ fn print_members(value: &serde_json::Value, format: Format) {
                 .iter()
                 .map(|item| {
                     vec![
-                        item["userId"].as_str().unwrap_or("-").to_string(),
+                        item["subjectId"].as_str().unwrap_or("-").to_string(),
                         item["email"].as_str().unwrap_or("-").to_string(),
                         item["role"].as_str().unwrap_or("-").to_string(),
                         item["createdAt"].as_str().unwrap_or("-").to_string(),
@@ -284,7 +284,10 @@ fn print_members(value: &serde_json::Value, format: Format) {
                     ]
                 })
                 .collect();
-            output::print_table(&["User ID", "Email", "Role", "Created", "Updated"], &rows);
+            output::print_table(
+                &["Subject ID", "Email", "Role", "Created", "Updated"],
+                &rows,
+            );
         }
     }
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,12 +27,16 @@ func NewManagedIdentityMembershipService(ds indexeddb.IndexedDB, canonicalGrants
 }
 
 func (s *ManagedIdentityMembershipService) UpsertMembership(ctx context.Context, membership *core.ManagedIdentityMembership) (*core.ManagedIdentityMembership, error) {
-	if membership == nil || membership.IdentityID == "" || membership.UserID == "" {
-		return nil, fmt.Errorf("upsert managed identity membership: identity_id and user_id are required")
+	if membership == nil || membership.IdentityID == "" || membership.SubjectID == "" {
+		return nil, fmt.Errorf("upsert managed identity membership: identity_id and subject_id are required")
+	}
+	membership.SubjectID = strings.TrimSpace(membership.SubjectID)
+	if managedIdentityMembershipUserIDFromSubjectID(membership.SubjectID) == "" {
+		return nil, fmt.Errorf("upsert managed identity membership: subject_id must be a canonical user subject")
 	}
 
 	now := time.Now()
-	rec, err := s.store.Index("by_identity_user").Get(ctx, membership.IdentityID, membership.UserID)
+	rec, err := s.store.Index("by_identity_subject").Get(ctx, membership.IdentityID, membership.SubjectID)
 	switch {
 	case err == nil:
 		existing := recordToManagedIdentityMembership(rec)
@@ -63,8 +68,8 @@ func (s *ManagedIdentityMembershipService) UpsertMembership(ctx context.Context,
 	return membership, nil
 }
 
-func (s *ManagedIdentityMembershipService) GetMembership(ctx context.Context, identityID, userID string) (*core.ManagedIdentityMembership, error) {
-	rec, err := s.store.Index("by_identity_user").Get(ctx, identityID, userID)
+func (s *ManagedIdentityMembershipService) GetMembership(ctx context.Context, identityID, subjectID string) (*core.ManagedIdentityMembership, error) {
+	rec, err := s.store.Index("by_identity_subject").Get(ctx, identityID, strings.TrimSpace(subjectID))
 	if err != nil {
 		if err == indexeddb.ErrNotFound {
 			return nil, core.ErrNotFound
@@ -86,10 +91,10 @@ func (s *ManagedIdentityMembershipService) ListMembershipsByIdentity(ctx context
 	return out, nil
 }
 
-func (s *ManagedIdentityMembershipService) ListMembershipsByUser(ctx context.Context, userID string) ([]*core.ManagedIdentityMembership, error) {
-	recs, err := s.store.Index("by_user").GetAll(ctx, nil, userID)
+func (s *ManagedIdentityMembershipService) ListMembershipsBySubject(ctx context.Context, subjectID string) ([]*core.ManagedIdentityMembership, error) {
+	recs, err := s.store.Index("by_subject").GetAll(ctx, nil, strings.TrimSpace(subjectID))
 	if err != nil {
-		return nil, fmt.Errorf("list managed identity memberships by user: %w", err)
+		return nil, fmt.Errorf("list managed identity memberships by subject: %w", err)
 	}
 	out := make([]*core.ManagedIdentityMembership, 0, len(recs))
 	for _, rec := range recs {
@@ -98,8 +103,9 @@ func (s *ManagedIdentityMembershipService) ListMembershipsByUser(ctx context.Con
 	return out, nil
 }
 
-func (s *ManagedIdentityMembershipService) DeleteMembership(ctx context.Context, identityID, userID string) error {
-	deleted, err := s.store.Index("by_identity_user").Delete(ctx, identityID, userID)
+func (s *ManagedIdentityMembershipService) DeleteMembership(ctx context.Context, identityID, subjectID string) error {
+	subjectID = strings.TrimSpace(subjectID)
+	deleted, err := s.store.Index("by_identity_subject").Delete(ctx, identityID, subjectID)
 	if err != nil {
 		return fmt.Errorf("delete managed identity membership: %w", err)
 	}
@@ -107,7 +113,7 @@ func (s *ManagedIdentityMembershipService) DeleteMembership(ctx context.Context,
 		return core.ErrNotFound
 	}
 	if s.canonicalGrants != nil {
-		managerIdentityID, resolveErr := s.resolveManagerIdentityID(ctx, userID)
+		managerIdentityID, resolveErr := s.resolveManagerIdentityID(ctx, subjectID)
 		if resolveErr == nil {
 			if err := s.canonicalGrants.DeleteGrant(ctx, managerIdentityID, identityID); err != nil && err != core.ErrNotFound {
 				return fmt.Errorf("delete canonical identity management grant: %w", err)
@@ -118,8 +124,12 @@ func (s *ManagedIdentityMembershipService) DeleteMembership(ctx context.Context,
 }
 
 func (s *ManagedIdentityMembershipService) RestoreMembership(ctx context.Context, membership *core.ManagedIdentityMembership) error {
-	if membership == nil || membership.ID == "" || membership.IdentityID == "" || membership.UserID == "" {
-		return fmt.Errorf("restore managed identity membership: id, identity_id, and user_id are required")
+	if membership == nil || membership.ID == "" || membership.IdentityID == "" || membership.SubjectID == "" {
+		return fmt.Errorf("restore managed identity membership: id, identity_id, and subject_id are required")
+	}
+	membership.SubjectID = strings.TrimSpace(membership.SubjectID)
+	if managedIdentityMembershipUserIDFromSubjectID(membership.SubjectID) == "" {
+		return fmt.Errorf("restore managed identity membership: subject_id must be a canonical user subject")
 	}
 	if err := s.store.Put(ctx, managedIdentityMembershipRecord(membership)); err != nil {
 		return fmt.Errorf("restore managed identity membership: %w", err)
@@ -150,7 +160,7 @@ func managedIdentityMembershipRecord(membership *core.ManagedIdentityMembership)
 	return indexeddb.Record{
 		"id":          membership.ID,
 		"identity_id": membership.IdentityID,
-		"user_id":     membership.UserID,
+		"subject_id":  membership.SubjectID,
 		"email":       membership.Email,
 		"role":        membership.Role,
 		"created_at":  membership.CreatedAt,
@@ -162,7 +172,7 @@ func recordToManagedIdentityMembership(rec indexeddb.Record) *core.ManagedIdenti
 	return &core.ManagedIdentityMembership{
 		ID:         recString(rec, "id"),
 		IdentityID: recString(rec, "identity_id"),
-		UserID:     recString(rec, "user_id"),
+		SubjectID:  recString(rec, "subject_id"),
 		Email:      recString(rec, "email"),
 		Role:       recString(rec, "role"),
 		CreatedAt:  recTime(rec, "created_at"),
@@ -170,7 +180,11 @@ func recordToManagedIdentityMembership(rec indexeddb.Record) *core.ManagedIdenti
 	}
 }
 
-func (s *ManagedIdentityMembershipService) resolveManagerIdentityID(ctx context.Context, userID string) (string, error) {
+func (s *ManagedIdentityMembershipService) resolveManagerIdentityID(ctx context.Context, subjectID string) (string, error) {
+	userID := managedIdentityMembershipUserIDFromSubjectID(subjectID)
+	if userID == "" {
+		return "", core.ErrNotFound
+	}
 	if s.users == nil {
 		return userID, nil
 	}
@@ -178,10 +192,10 @@ func (s *ManagedIdentityMembershipService) resolveManagerIdentityID(ctx context.
 }
 
 func (s *ManagedIdentityMembershipService) syncCanonicalGrant(ctx context.Context, membership *core.ManagedIdentityMembership) error {
-	if s.canonicalGrants == nil || membership == nil || membership.UserID == "" || membership.IdentityID == "" {
+	if s.canonicalGrants == nil || membership == nil || membership.SubjectID == "" || membership.IdentityID == "" {
 		return nil
 	}
-	managerIdentityID, resolveErr := s.resolveManagerIdentityID(ctx, membership.UserID)
+	managerIdentityID, resolveErr := s.resolveManagerIdentityID(ctx, membership.SubjectID)
 	if resolveErr != nil {
 		if errors.Is(resolveErr, core.ErrNotFound) {
 			return nil
@@ -198,4 +212,14 @@ func (s *ManagedIdentityMembershipService) syncCanonicalGrant(ctx context.Contex
 		return fmt.Errorf("sync canonical identity management grant %q/%q: %w", managerIdentityID, membership.IdentityID, err)
 	}
 	return nil
+}
+
+// Keep this local: importing internal/principal here creates a cycle via
+// principal/resolver.go -> coredata.
+func managedIdentityMembershipUserIDFromSubjectID(subjectID string) string {
+	subjectID = strings.TrimSpace(subjectID)
+	if !strings.HasPrefix(subjectID, "user:") {
+		return ""
+	}
+	return strings.TrimPrefix(subjectID, "user:")
 }

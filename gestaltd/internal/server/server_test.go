@@ -644,7 +644,7 @@ func newTestServicesWithManagedIdentityMembershipDeleteFailure(t *testing.T, fai
 	svc, err := coredata.New(&deleteFailingIndexedDB{
 		IndexedDB: &coretesting.StubIndexedDB{},
 		failIndexDeletes: map[string]*deleteFailureRule{
-			coredata.StoreManagedIdentityMemberships + "/by_identity_user": failDelete,
+			coredata.StoreManagedIdentityMemberships + "/by_identity_subject": failDelete,
 		},
 	}, key)
 	if err != nil {
@@ -15607,13 +15607,31 @@ func TestManagedIdentityCRUDAndMemberships(t *testing.T) {
 	}
 
 	memberResp := struct {
-		UserID string `json:"userId"`
-		Email  string `json:"email"`
-		Role   string `json:"role"`
+		SubjectID string `json:"subjectId"`
+		Email     string `json:"email"`
+		Role      string `json:"role"`
 	}{}
 	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"viewer@example.test","role":"viewer"}`, http.StatusOK, &memberResp)
 	if memberResp.Role != "viewer" || memberResp.Email != "viewer@example.test" {
 		t.Fatalf("member response = %+v, want viewer@example.test viewer", memberResp)
+	}
+	if memberResp.SubjectID != principal.UserSubjectID(viewer.ID) {
+		t.Fatalf("member subjectId = %q, want %q", memberResp.SubjectID, principal.UserSubjectID(viewer.ID))
+	}
+	var membersResp []struct {
+		SubjectID string `json:"subjectId"`
+		Email     string `json:"email"`
+		Role      string `json:"role"`
+	}
+	doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", "", http.StatusOK, &membersResp)
+	if len(membersResp) != 2 {
+		t.Fatalf("members response = %+v, want admin and viewer", membersResp)
+	}
+	if membersResp[0].SubjectID != principal.UserSubjectID(admin.ID) || membersResp[0].Role != "admin" {
+		t.Fatalf("first member = %+v, want admin row", membersResp[0])
+	}
+	if membersResp[1].SubjectID != principal.UserSubjectID(viewer.ID) || membersResp[1].Role != "viewer" {
+		t.Fatalf("second member = %+v, want viewer row", membersResp[1])
 	}
 	viewerGrant, err := svc.IdentityManagementGrants.GetGrant(ctx, viewer.ID, createResp.ID)
 	if err != nil {
@@ -16043,7 +16061,7 @@ func TestManagedIdentityGrantsRespectActorAuthorization(t *testing.T) {
 		}
 		if _, err := svc.IdentityMemberships.UpsertMembership(context.Background(), &core.ManagedIdentityMembership{
 			IdentityID: createResp.ID,
-			UserID:     viewer.ID,
+			SubjectID:  principal.UserSubjectID(viewer.ID),
 			Email:      viewer.Email,
 			Role:       "viewer",
 		}); err != nil {
@@ -16909,7 +16927,7 @@ func TestManagedIdentityDeleteFailuresPreserveRetryPath(t *testing.T) {
 		}
 		originalViewerMembership, err := svc.IdentityMemberships.UpsertMembership(context.Background(), &core.ManagedIdentityMembership{
 			IdentityID: createResp.ID,
-			UserID:     viewer.ID,
+			SubjectID:  principal.UserSubjectID(viewer.ID),
 			Email:      viewer.Email,
 			Role:       "viewer",
 		})
@@ -16954,10 +16972,10 @@ func TestManagedIdentityDeleteFailuresPreserveRetryPath(t *testing.T) {
 		if len(memberships) != 2 {
 			t.Fatalf("membership count = %d, want 2", len(memberships))
 		}
-		if _, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, admin.ID); err != nil {
+		if _, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, principal.UserSubjectID(admin.ID)); err != nil {
 			t.Fatalf("GetMembership admin: %v", err)
 		}
-		restoredViewerMembership, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, viewer.ID)
+		restoredViewerMembership, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, principal.UserSubjectID(viewer.ID))
 		if err != nil {
 			t.Fatalf("GetMembership viewer: %v", err)
 		}
@@ -16988,7 +17006,7 @@ func TestManagedIdentityDeleteFailuresPreserveRetryPath(t *testing.T) {
 		}
 		originalViewerMembership, err := svc.IdentityMemberships.UpsertMembership(context.Background(), &core.ManagedIdentityMembership{
 			IdentityID: createResp.ID,
-			UserID:     viewer.ID,
+			SubjectID:  principal.UserSubjectID(viewer.ID),
 			Email:      viewer.Email,
 			Role:       "viewer",
 		})
@@ -17033,10 +17051,10 @@ func TestManagedIdentityDeleteFailuresPreserveRetryPath(t *testing.T) {
 		if len(memberships) != 2 {
 			t.Fatalf("membership count after failed parent delete = %d, want 2", len(memberships))
 		}
-		if _, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, admin.ID); err != nil {
+		if _, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, principal.UserSubjectID(admin.ID)); err != nil {
 			t.Fatalf("GetMembership admin: %v", err)
 		}
-		restoredViewerMembership, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, viewer.ID)
+		restoredViewerMembership, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, principal.UserSubjectID(viewer.ID))
 		if err != nil {
 			t.Fatalf("GetMembership viewer: %v", err)
 		}
@@ -17069,7 +17087,7 @@ func TestManagedIdentityDeleteFailuresPreserveRetryPath(t *testing.T) {
 		}
 		if _, err := svc.IdentityMemberships.UpsertMembership(context.Background(), &core.ManagedIdentityMembership{
 			IdentityID: createResp.ID,
-			UserID:     viewer.ID,
+			SubjectID:  principal.UserSubjectID(viewer.ID),
 			Email:      viewer.Email,
 			Role:       "viewer",
 		}); err != nil {
@@ -17107,7 +17125,7 @@ func TestManagedIdentityDeleteFailuresPreserveRetryPath(t *testing.T) {
 		if len(memberships) != 2 {
 			t.Fatalf("membership count after restore retry = %d, want 2", len(memberships))
 		}
-		if _, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, viewer.ID); err != nil {
+		if _, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, principal.UserSubjectID(viewer.ID)); err != nil {
 			t.Fatalf("GetMembership viewer after restore retry: %v", err)
 		}
 	})
@@ -17861,7 +17879,7 @@ func TestDeleteManagedIdentityMemberDecodesEscapedEmailPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListMembershipsByIdentity: %v", err)
 	}
-	if len(members) != 1 || members[0].UserID == member.ID {
+	if len(members) != 1 || members[0].SubjectID == principal.UserSubjectID(member.ID) {
 		t.Fatalf("members after delete = %+v, expected only the admin membership to remain", members)
 	}
 }

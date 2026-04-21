@@ -72,7 +72,7 @@ type ManagedIdentity struct {
 type ManagedIdentityMembership struct {
 	ID         string
 	IdentityID string
-	UserID     string
+	SubjectID  string
 	Email      string
 	Role       string
 	CreatedAt  time.Time

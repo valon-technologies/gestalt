@@ -44,7 +44,7 @@ type managedIdentityInfo struct {
 }
 
 type managedIdentityMemberInfo struct {
-	UserID    string    `json:"userId"`
+	SubjectID string    `json:"subjectId"`
 	Email     string    `json:"email"`
 	Role      string    `json:"role"`
 	CreatedAt time.Time `json:"createdAt"`
@@ -77,17 +77,18 @@ type putManagedIdentityGrantRequest struct {
 
 type managedIdentityActor struct {
 	UserID     string
+	SubjectID  string
 	Identity   *core.ManagedIdentity
 	Membership *core.ManagedIdentityMembership
 }
 
 func (s *Server) listManagedIdentities(w http.ResponseWriter, r *http.Request) {
-	userID, _, ok := s.resolveManagedIdentityUser(w, r)
+	_, subjectID, _, ok := s.resolveManagedIdentityUser(w, r)
 	if !ok {
 		return
 	}
 
-	memberships, err := s.identityMemberships.ListMembershipsByUser(r.Context(), userID)
+	memberships, err := s.identityMemberships.ListMembershipsBySubject(r.Context(), subjectID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list identities")
 		return
@@ -134,7 +135,7 @@ func (s *Server) createManagedIdentity(w http.ResponseWriter, r *http.Request) {
 		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), "", "identity.create", auditAllowed, auditErr, auditTarget)
 	}()
 
-	userID, user, ok := s.resolveManagedIdentityUser(w, r)
+	userID, subjectID, user, ok := s.resolveManagedIdentityUser(w, r)
 	if !ok {
 		return
 	}
@@ -170,7 +171,7 @@ func (s *Server) createManagedIdentity(w http.ResponseWriter, r *http.Request) {
 	}
 	membership, err := s.identityMemberships.UpsertMembership(r.Context(), &core.ManagedIdentityMembership{
 		IdentityID: identity.ID,
-		UserID:     userID,
+		SubjectID:  subjectID,
 		Email:      user.Email,
 		Role:       managedIdentityRoleAdmin,
 	})
@@ -178,7 +179,7 @@ func (s *Server) createManagedIdentity(w http.ResponseWriter, r *http.Request) {
 		membership = &core.ManagedIdentityMembership{
 			ID:         uuid.NewString(),
 			IdentityID: identity.ID,
-			UserID:     userID,
+			SubjectID:  subjectID,
 			Email:      user.Email,
 			Role:       managedIdentityRoleAdmin,
 			CreatedAt:  now,
@@ -385,14 +386,14 @@ func (s *Server) deleteManagedIdentity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.deleteManagedIdentityChildren(r.Context(), snapshot, actor.UserID); err != nil {
+	if err := s.deleteManagedIdentityChildren(r.Context(), snapshot, actor.SubjectID); err != nil {
 		auditErr = fmt.Errorf("failed to delete identity children: %w", err)
 		writeError(w, http.StatusInternalServerError, "failed to delete identity")
 		return
 	}
 
 	if err := s.managedIdentities.DeleteIdentity(r.Context(), actor.Identity.ID); err != nil {
-		if restoreErr := s.restoreManagedIdentityChildren(r.Context(), snapshot, actor.UserID); restoreErr != nil {
+		if restoreErr := s.restoreManagedIdentityChildren(r.Context(), snapshot, actor.SubjectID); restoreErr != nil {
 			auditErr = fmt.Errorf("failed to delete identity and restore children: %w", restoreErr)
 			writeError(w, http.StatusInternalServerError, "failed to delete identity")
 			return
@@ -432,7 +433,7 @@ func (s *Server) listManagedIdentityMembers(w http.ResponseWriter, r *http.Reque
 	out := make([]managedIdentityMemberInfo, 0, len(memberships))
 	for _, membership := range memberships {
 		out = append(out, managedIdentityMemberInfo{
-			UserID:    membership.UserID,
+			SubjectID: membership.SubjectID,
 			Email:     membership.Email,
 			Role:      membership.Role,
 			CreatedAt: membership.CreatedAt,
@@ -446,7 +447,7 @@ func (s *Server) listManagedIdentityMembers(w http.ResponseWriter, r *http.Reque
 		if out[i].Email != out[j].Email {
 			return out[i].Email < out[j].Email
 		}
-		return out[i].UserID < out[j].UserID
+		return out[i].SubjectID < out[j].SubjectID
 	})
 
 	writeJSON(w, http.StatusOK, out)
@@ -493,22 +494,23 @@ func (s *Server) putManagedIdentityMember(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
 		return
 	}
+	subjectID := principal.UserSubjectID(user.ID)
 
-	existing, err := s.identityMemberships.GetMembership(r.Context(), actor.Identity.ID, user.ID)
+	existing, err := s.identityMemberships.GetMembership(r.Context(), actor.Identity.ID, subjectID)
 	if err != nil && !errors.Is(err, core.ErrNotFound) {
 		auditErr = errors.New("failed to resolve existing membership")
 		writeError(w, http.StatusInternalServerError, "failed to resolve existing membership")
 		return
 	}
 	if existing != nil && existing.Role == managedIdentityRoleAdmin && role != managedIdentityRoleAdmin {
-		if !s.ensureManagedIdentityHasAnotherAdmin(w, r, actor.Identity.ID, user.ID) {
+		if !s.ensureManagedIdentityHasAnotherAdmin(w, r, actor.Identity.ID, subjectID) {
 			return
 		}
 	}
 
 	membership, err := s.identityMemberships.UpsertMembership(r.Context(), &core.ManagedIdentityMembership{
 		IdentityID: actor.Identity.ID,
-		UserID:     user.ID,
+		SubjectID:  subjectID,
 		Email:      user.Email,
 		Role:       role,
 	})
@@ -522,7 +524,7 @@ func (s *Server) putManagedIdentityMember(w http.ResponseWriter, r *http.Request
 	auditTarget = managedIdentityMemberAuditTarget(actor.Identity.ID, membership.Email)
 
 	writeJSON(w, http.StatusOK, managedIdentityMemberInfo{
-		UserID:    membership.UserID,
+		SubjectID: membership.SubjectID,
 		Email:     membership.Email,
 		Role:      membership.Role,
 		CreatedAt: membership.CreatedAt,
@@ -571,8 +573,9 @@ func (s *Server) deleteManagedIdentityMember(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusInternalServerError, "failed to resolve identity member")
 		return
 	}
+	subjectID := principal.UserSubjectID(user.ID)
 
-	membership, err := s.identityMemberships.GetMembership(r.Context(), actor.Identity.ID, user.ID)
+	membership, err := s.identityMemberships.GetMembership(r.Context(), actor.Identity.ID, subjectID)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			auditErr = errors.New("identity member not found")
@@ -583,10 +586,10 @@ func (s *Server) deleteManagedIdentityMember(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusInternalServerError, "failed to resolve identity member")
 		return
 	}
-	if membership.Role == managedIdentityRoleAdmin && !s.ensureManagedIdentityHasAnotherAdmin(w, r, actor.Identity.ID, membership.UserID) {
+	if membership.Role == managedIdentityRoleAdmin && !s.ensureManagedIdentityHasAnotherAdmin(w, r, actor.Identity.ID, membership.SubjectID) {
 		return
 	}
-	if err := s.identityMemberships.DeleteMembership(r.Context(), actor.Identity.ID, membership.UserID); err != nil {
+	if err := s.identityMemberships.DeleteMembership(r.Context(), actor.Identity.ID, membership.SubjectID); err != nil {
 		auditErr = errors.New("failed to delete identity member")
 		writeError(w, http.StatusInternalServerError, "failed to delete identity member")
 		return
@@ -762,24 +765,24 @@ func (s *Server) deleteManagedIdentityGrant(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-func (s *Server) resolveManagedIdentityUser(w http.ResponseWriter, r *http.Request) (string, *core.User, bool) {
+func (s *Server) resolveManagedIdentityUser(w http.ResponseWriter, r *http.Request) (string, string, *core.User, bool) {
 	if !s.ensureManagedIdentityRoutesAvailable(w) {
-		return "", nil, false
+		return "", "", nil, false
 	}
 	userID, err := s.resolveUserID(w, r)
 	if err != nil {
-		return "", nil, false
+		return "", "", nil, false
 	}
 	user, err := s.users.GetUser(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
-		return "", nil, false
+		return "", "", nil, false
 	}
-	return userID, user, true
+	return userID, principal.UserSubjectID(userID), user, true
 }
 
 func (s *Server) resolveManagedIdentityActor(w http.ResponseWriter, r *http.Request, requiredRole string) (*managedIdentityActor, bool) {
-	userID, _, ok := s.resolveManagedIdentityUser(w, r)
+	userID, subjectID, _, ok := s.resolveManagedIdentityUser(w, r)
 	if !ok {
 		return nil, false
 	}
@@ -798,7 +801,7 @@ func (s *Server) resolveManagedIdentityActor(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusInternalServerError, "failed to resolve identity")
 		return nil, false
 	}
-	membership, err := s.identityMemberships.GetMembership(r.Context(), identityID, userID)
+	membership, err := s.identityMemberships.GetMembership(r.Context(), identityID, subjectID)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "identity not found")
@@ -813,6 +816,7 @@ func (s *Server) resolveManagedIdentityActor(w http.ResponseWriter, r *http.Requ
 	}
 	return &managedIdentityActor{
 		UserID:     userID,
+		SubjectID:  subjectID,
 		Identity:   identity,
 		Membership: membership,
 	}, true
@@ -830,14 +834,14 @@ func (s *Server) ensureManagedIdentityRoutesAvailable(w http.ResponseWriter) boo
 	return true
 }
 
-func (s *Server) ensureManagedIdentityHasAnotherAdmin(w http.ResponseWriter, r *http.Request, identityID, excludedUserID string) bool {
+func (s *Server) ensureManagedIdentityHasAnotherAdmin(w http.ResponseWriter, r *http.Request, identityID, excludedSubjectID string) bool {
 	memberships, err := s.identityMemberships.ListMembershipsByIdentity(r.Context(), identityID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to resolve identity admins")
 		return false
 	}
 	for _, membership := range memberships {
-		if membership.UserID == excludedUserID {
+		if membership.SubjectID == excludedSubjectID {
 			continue
 		}
 		if membership.Role == managedIdentityRoleAdmin {
@@ -868,12 +872,12 @@ func (s *Server) loadManagedIdentityDeleteSnapshot(ctx context.Context, identity
 	}, nil
 }
 
-func (s *Server) deleteManagedIdentityChildren(ctx context.Context, snapshot *managedIdentityDeleteSnapshot, actorUserID string) error {
+func (s *Server) deleteManagedIdentityChildren(ctx context.Context, snapshot *managedIdentityDeleteSnapshot, actorSubjectID string) error {
 	deleted := &managedIdentityDeleteSnapshot{}
 
 	for _, grant := range snapshot.Grants {
 		if err := s.identityGrants.DeleteGrant(ctx, grant.IdentityID, grant.Plugin); err != nil {
-			if restoreErr := s.restoreManagedIdentityChildren(ctx, deleted, actorUserID); restoreErr != nil {
+			if restoreErr := s.restoreManagedIdentityChildren(ctx, deleted, actorSubjectID); restoreErr != nil {
 				return fmt.Errorf("delete managed identity grant: %w (restore deleted children: %v)", err, restoreErr)
 			}
 			return err
@@ -881,9 +885,9 @@ func (s *Server) deleteManagedIdentityChildren(ctx context.Context, snapshot *ma
 		deleted.Grants = append(deleted.Grants, cloneManagedIdentityGrant(grant))
 	}
 
-	for _, membership := range managedIdentityDeleteMembershipOrder(snapshot.Memberships, actorUserID) {
-		if err := s.identityMemberships.DeleteMembership(ctx, membership.IdentityID, membership.UserID); err != nil {
-			if restoreErr := s.restoreManagedIdentityChildren(ctx, deleted, actorUserID); restoreErr != nil {
+	for _, membership := range managedIdentityDeleteMembershipOrder(snapshot.Memberships, actorSubjectID) {
+		if err := s.identityMemberships.DeleteMembership(ctx, membership.IdentityID, membership.SubjectID); err != nil {
+			if restoreErr := s.restoreManagedIdentityChildren(ctx, deleted, actorSubjectID); restoreErr != nil {
 				return fmt.Errorf("delete managed identity membership: %w (restore deleted children: %v)", err, restoreErr)
 			}
 			return err
@@ -894,11 +898,11 @@ func (s *Server) deleteManagedIdentityChildren(ctx context.Context, snapshot *ma
 	return nil
 }
 
-func (s *Server) restoreManagedIdentityChildren(ctx context.Context, snapshot *managedIdentityDeleteSnapshot, actorUserID string) error {
+func (s *Server) restoreManagedIdentityChildren(ctx context.Context, snapshot *managedIdentityDeleteSnapshot, actorSubjectID string) error {
 	if snapshot == nil {
 		return nil
 	}
-	failedMemberships := s.restoreManagedIdentityMemberships(ctx, managedIdentityRestoreMembershipOrder(snapshot.Memberships, actorUserID))
+	failedMemberships := s.restoreManagedIdentityMemberships(ctx, managedIdentityRestoreMembershipOrder(snapshot.Memberships, actorSubjectID))
 	if len(failedMemberships) > 0 {
 		failedMemberships = s.restoreManagedIdentityMemberships(ctx, failedMemberships)
 	}
@@ -909,7 +913,7 @@ func (s *Server) restoreManagedIdentityChildren(ctx context.Context, snapshot *m
 
 	var restoreErr error
 	for _, membership := range failedMemberships {
-		restoreErr = errors.Join(restoreErr, fmt.Errorf("restore managed identity membership %s: failed after retry", membership.UserID))
+		restoreErr = errors.Join(restoreErr, fmt.Errorf("restore managed identity membership %s: failed after retry", membership.SubjectID))
 	}
 	for _, grant := range failedGrants {
 		restoreErr = errors.Join(restoreErr, fmt.Errorf("restore managed identity grant %s: failed after retry", grant.Plugin))
@@ -917,36 +921,36 @@ func (s *Server) restoreManagedIdentityChildren(ctx context.Context, snapshot *m
 	return restoreErr
 }
 
-func managedIdentityDeleteMembershipOrder(memberships []*core.ManagedIdentityMembership, actorUserID string) []*core.ManagedIdentityMembership {
+func managedIdentityDeleteMembershipOrder(memberships []*core.ManagedIdentityMembership, actorSubjectID string) []*core.ManagedIdentityMembership {
 	if len(memberships) == 0 {
 		return nil
 	}
 	ordered := cloneManagedIdentityMemberships(memberships)
 	sort.SliceStable(ordered, func(i, j int) bool {
-		if ordered[i].UserID == actorUserID {
+		if ordered[i].SubjectID == actorSubjectID {
 			return false
 		}
-		if ordered[j].UserID == actorUserID {
+		if ordered[j].SubjectID == actorSubjectID {
 			return true
 		}
-		return ordered[i].UserID < ordered[j].UserID
+		return ordered[i].SubjectID < ordered[j].SubjectID
 	})
 	return ordered
 }
 
-func managedIdentityRestoreMembershipOrder(memberships []*core.ManagedIdentityMembership, actorUserID string) []*core.ManagedIdentityMembership {
+func managedIdentityRestoreMembershipOrder(memberships []*core.ManagedIdentityMembership, actorSubjectID string) []*core.ManagedIdentityMembership {
 	if len(memberships) == 0 {
 		return nil
 	}
 	ordered := cloneManagedIdentityMemberships(memberships)
 	sort.SliceStable(ordered, func(i, j int) bool {
-		if ordered[i].UserID == actorUserID {
+		if ordered[i].SubjectID == actorSubjectID {
 			return true
 		}
-		if ordered[j].UserID == actorUserID {
+		if ordered[j].SubjectID == actorSubjectID {
 			return false
 		}
-		return ordered[i].UserID < ordered[j].UserID
+		return ordered[i].SubjectID < ordered[j].SubjectID
 	})
 	return ordered
 }
