@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: v1/auth.proto
+// source: v1/authentication.proto
 
 package proto
 
@@ -22,7 +22,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// AuthenticatedUser is the normalized user identity returned by an auth
+// AuthenticatedUser is the normalized user identity returned by an authentication
 // provider after a login or token-validation flow.
 type AuthenticatedUser struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -38,7 +38,7 @@ type AuthenticatedUser struct {
 
 func (x *AuthenticatedUser) Reset() {
 	*x = AuthenticatedUser{}
-	mi := &file_v1_auth_proto_msgTypes[0]
+	mi := &file_v1_authentication_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -50,7 +50,7 @@ func (x *AuthenticatedUser) String() string {
 func (*AuthenticatedUser) ProtoMessage() {}
 
 func (x *AuthenticatedUser) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_auth_proto_msgTypes[0]
+	mi := &file_v1_authentication_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -63,7 +63,7 @@ func (x *AuthenticatedUser) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthenticatedUser.ProtoReflect.Descriptor instead.
 func (*AuthenticatedUser) Descriptor() ([]byte, []int) {
-	return file_v1_auth_proto_rawDescGZIP(), []int{0}
+	return file_v1_authentication_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *AuthenticatedUser) GetSubject() string {
@@ -126,7 +126,7 @@ type BeginLoginRequest struct {
 
 func (x *BeginLoginRequest) Reset() {
 	*x = BeginLoginRequest{}
-	mi := &file_v1_auth_proto_msgTypes[1]
+	mi := &file_v1_authentication_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -138,7 +138,7 @@ func (x *BeginLoginRequest) String() string {
 func (*BeginLoginRequest) ProtoMessage() {}
 
 func (x *BeginLoginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_auth_proto_msgTypes[1]
+	mi := &file_v1_authentication_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -151,7 +151,7 @@ func (x *BeginLoginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginLoginRequest.ProtoReflect.Descriptor instead.
 func (*BeginLoginRequest) Descriptor() ([]byte, []int) {
-	return file_v1_auth_proto_rawDescGZIP(), []int{1}
+	return file_v1_authentication_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *BeginLoginRequest) GetCallbackUrl() string {
@@ -194,7 +194,7 @@ type BeginLoginResponse struct {
 
 func (x *BeginLoginResponse) Reset() {
 	*x = BeginLoginResponse{}
-	mi := &file_v1_auth_proto_msgTypes[2]
+	mi := &file_v1_authentication_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -206,7 +206,7 @@ func (x *BeginLoginResponse) String() string {
 func (*BeginLoginResponse) ProtoMessage() {}
 
 func (x *BeginLoginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_auth_proto_msgTypes[2]
+	mi := &file_v1_authentication_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -219,7 +219,7 @@ func (x *BeginLoginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginLoginResponse.ProtoReflect.Descriptor instead.
 func (*BeginLoginResponse) Descriptor() ([]byte, []int) {
-	return file_v1_auth_proto_rawDescGZIP(), []int{2}
+	return file_v1_authentication_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *BeginLoginResponse) GetAuthorizationUrl() string {
@@ -252,7 +252,7 @@ type CompleteLoginRequest struct {
 
 func (x *CompleteLoginRequest) Reset() {
 	*x = CompleteLoginRequest{}
-	mi := &file_v1_auth_proto_msgTypes[3]
+	mi := &file_v1_authentication_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -264,7 +264,7 @@ func (x *CompleteLoginRequest) String() string {
 func (*CompleteLoginRequest) ProtoMessage() {}
 
 func (x *CompleteLoginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_auth_proto_msgTypes[3]
+	mi := &file_v1_authentication_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -277,7 +277,7 @@ func (x *CompleteLoginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteLoginRequest.ProtoReflect.Descriptor instead.
 func (*CompleteLoginRequest) Descriptor() ([]byte, []int) {
-	return file_v1_auth_proto_rawDescGZIP(), []int{3}
+	return file_v1_authentication_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CompleteLoginRequest) GetQuery() map[string]string {
@@ -312,7 +312,7 @@ type ValidateExternalTokenRequest struct {
 
 func (x *ValidateExternalTokenRequest) Reset() {
 	*x = ValidateExternalTokenRequest{}
-	mi := &file_v1_auth_proto_msgTypes[4]
+	mi := &file_v1_authentication_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -324,7 +324,7 @@ func (x *ValidateExternalTokenRequest) String() string {
 func (*ValidateExternalTokenRequest) ProtoMessage() {}
 
 func (x *ValidateExternalTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_auth_proto_msgTypes[4]
+	mi := &file_v1_authentication_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -337,7 +337,7 @@ func (x *ValidateExternalTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateExternalTokenRequest.ProtoReflect.Descriptor instead.
 func (*ValidateExternalTokenRequest) Descriptor() ([]byte, []int) {
-	return file_v1_auth_proto_rawDescGZIP(), []int{4}
+	return file_v1_authentication_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ValidateExternalTokenRequest) GetToken() string {
@@ -357,7 +357,7 @@ type AuthSessionSettings struct {
 
 func (x *AuthSessionSettings) Reset() {
 	*x = AuthSessionSettings{}
-	mi := &file_v1_auth_proto_msgTypes[5]
+	mi := &file_v1_authentication_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -369,7 +369,7 @@ func (x *AuthSessionSettings) String() string {
 func (*AuthSessionSettings) ProtoMessage() {}
 
 func (x *AuthSessionSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_auth_proto_msgTypes[5]
+	mi := &file_v1_authentication_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -382,7 +382,7 @@ func (x *AuthSessionSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthSessionSettings.ProtoReflect.Descriptor instead.
 func (*AuthSessionSettings) Descriptor() ([]byte, []int) {
-	return file_v1_auth_proto_rawDescGZIP(), []int{5}
+	return file_v1_authentication_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *AuthSessionSettings) GetSessionTtlSeconds() int64 {
@@ -392,11 +392,11 @@ func (x *AuthSessionSettings) GetSessionTtlSeconds() int64 {
 	return 0
 }
 
-var File_v1_auth_proto protoreflect.FileDescriptor
+var File_v1_authentication_proto protoreflect.FileDescriptor
 
-const file_v1_auth_proto_rawDesc = "" +
+const file_v1_authentication_proto_rawDesc = "" +
 	"\n" +
-	"\rv1/auth.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\"\xb3\x02\n" +
+	"\x17v1/authentication.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\"\xb3\x02\n" +
 	"\x11AuthenticatedUser\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12%\n" +
@@ -431,29 +431,29 @@ const file_v1_auth_proto_rawDesc = "" +
 	"\x1cValidateExternalTokenRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"E\n" +
 	"\x13AuthSessionSettings\x12.\n" +
-	"\x13session_ttl_seconds\x18\x01 \x01(\x03R\x11sessionTtlSeconds2\x9d\x03\n" +
-	"\fAuthProvider\x12]\n" +
+	"\x13session_ttl_seconds\x18\x01 \x01(\x03R\x11sessionTtlSeconds2\xa7\x03\n" +
+	"\x16AuthenticationProvider\x12]\n" +
 	"\n" +
 	"BeginLogin\x12&.gestalt.provider.v1.BeginLoginRequest\x1a'.gestalt.provider.v1.BeginLoginResponse\x12b\n" +
 	"\rCompleteLogin\x12).gestalt.provider.v1.CompleteLoginRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\x12r\n" +
 	"\x15ValidateExternalToken\x121.gestalt.provider.v1.ValidateExternalTokenRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\x12V\n" +
-	"\x12GetSessionSettings\x12\x16.google.protobuf.Empty\x1a(.gestalt.provider.v1.AuthSessionSettingsB\xcd\x01\n" +
-	"\x17com.gestalt.provider.v1B\tAuthProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
+	"\x12GetSessionSettings\x12\x16.google.protobuf.Empty\x1a(.gestalt.provider.v1.AuthSessionSettingsB\xd7\x01\n" +
+	"\x17com.gestalt.provider.v1B\x13AuthenticationProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
-	file_v1_auth_proto_rawDescOnce sync.Once
-	file_v1_auth_proto_rawDescData []byte
+	file_v1_authentication_proto_rawDescOnce sync.Once
+	file_v1_authentication_proto_rawDescData []byte
 )
 
-func file_v1_auth_proto_rawDescGZIP() []byte {
-	file_v1_auth_proto_rawDescOnce.Do(func() {
-		file_v1_auth_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_v1_auth_proto_rawDesc), len(file_v1_auth_proto_rawDesc)))
+func file_v1_authentication_proto_rawDescGZIP() []byte {
+	file_v1_authentication_proto_rawDescOnce.Do(func() {
+		file_v1_authentication_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_v1_authentication_proto_rawDesc), len(file_v1_authentication_proto_rawDesc)))
 	})
-	return file_v1_auth_proto_rawDescData
+	return file_v1_authentication_proto_rawDescData
 }
 
-var file_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
-var file_v1_auth_proto_goTypes = []any{
+var file_v1_authentication_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_v1_authentication_proto_goTypes = []any{
 	(*AuthenticatedUser)(nil),            // 0: gestalt.provider.v1.AuthenticatedUser
 	(*BeginLoginRequest)(nil),            // 1: gestalt.provider.v1.BeginLoginRequest
 	(*BeginLoginResponse)(nil),           // 2: gestalt.provider.v1.BeginLoginResponse
@@ -465,18 +465,18 @@ var file_v1_auth_proto_goTypes = []any{
 	nil,                                  // 8: gestalt.provider.v1.CompleteLoginRequest.QueryEntry
 	(*emptypb.Empty)(nil),                // 9: google.protobuf.Empty
 }
-var file_v1_auth_proto_depIdxs = []int32{
+var file_v1_authentication_proto_depIdxs = []int32{
 	6, // 0: gestalt.provider.v1.AuthenticatedUser.claims:type_name -> gestalt.provider.v1.AuthenticatedUser.ClaimsEntry
 	7, // 1: gestalt.provider.v1.BeginLoginRequest.options:type_name -> gestalt.provider.v1.BeginLoginRequest.OptionsEntry
 	8, // 2: gestalt.provider.v1.CompleteLoginRequest.query:type_name -> gestalt.provider.v1.CompleteLoginRequest.QueryEntry
-	1, // 3: gestalt.provider.v1.AuthProvider.BeginLogin:input_type -> gestalt.provider.v1.BeginLoginRequest
-	3, // 4: gestalt.provider.v1.AuthProvider.CompleteLogin:input_type -> gestalt.provider.v1.CompleteLoginRequest
-	4, // 5: gestalt.provider.v1.AuthProvider.ValidateExternalToken:input_type -> gestalt.provider.v1.ValidateExternalTokenRequest
-	9, // 6: gestalt.provider.v1.AuthProvider.GetSessionSettings:input_type -> google.protobuf.Empty
-	2, // 7: gestalt.provider.v1.AuthProvider.BeginLogin:output_type -> gestalt.provider.v1.BeginLoginResponse
-	0, // 8: gestalt.provider.v1.AuthProvider.CompleteLogin:output_type -> gestalt.provider.v1.AuthenticatedUser
-	0, // 9: gestalt.provider.v1.AuthProvider.ValidateExternalToken:output_type -> gestalt.provider.v1.AuthenticatedUser
-	5, // 10: gestalt.provider.v1.AuthProvider.GetSessionSettings:output_type -> gestalt.provider.v1.AuthSessionSettings
+	1, // 3: gestalt.provider.v1.AuthenticationProvider.BeginLogin:input_type -> gestalt.provider.v1.BeginLoginRequest
+	3, // 4: gestalt.provider.v1.AuthenticationProvider.CompleteLogin:input_type -> gestalt.provider.v1.CompleteLoginRequest
+	4, // 5: gestalt.provider.v1.AuthenticationProvider.ValidateExternalToken:input_type -> gestalt.provider.v1.ValidateExternalTokenRequest
+	9, // 6: gestalt.provider.v1.AuthenticationProvider.GetSessionSettings:input_type -> google.protobuf.Empty
+	2, // 7: gestalt.provider.v1.AuthenticationProvider.BeginLogin:output_type -> gestalt.provider.v1.BeginLoginResponse
+	0, // 8: gestalt.provider.v1.AuthenticationProvider.CompleteLogin:output_type -> gestalt.provider.v1.AuthenticatedUser
+	0, // 9: gestalt.provider.v1.AuthenticationProvider.ValidateExternalToken:output_type -> gestalt.provider.v1.AuthenticatedUser
+	5, // 10: gestalt.provider.v1.AuthenticationProvider.GetSessionSettings:output_type -> gestalt.provider.v1.AuthSessionSettings
 	7, // [7:11] is the sub-list for method output_type
 	3, // [3:7] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name
@@ -484,26 +484,26 @@ var file_v1_auth_proto_depIdxs = []int32{
 	0, // [0:3] is the sub-list for field type_name
 }
 
-func init() { file_v1_auth_proto_init() }
-func file_v1_auth_proto_init() {
-	if File_v1_auth_proto != nil {
+func init() { file_v1_authentication_proto_init() }
+func file_v1_authentication_proto_init() {
+	if File_v1_authentication_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_auth_proto_rawDesc), len(file_v1_auth_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_authentication_proto_rawDesc), len(file_v1_authentication_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_v1_auth_proto_goTypes,
-		DependencyIndexes: file_v1_auth_proto_depIdxs,
-		MessageInfos:      file_v1_auth_proto_msgTypes,
+		GoTypes:           file_v1_authentication_proto_goTypes,
+		DependencyIndexes: file_v1_authentication_proto_depIdxs,
+		MessageInfos:      file_v1_authentication_proto_msgTypes,
 	}.Build()
-	File_v1_auth_proto = out.File
-	file_v1_auth_proto_goTypes = nil
-	file_v1_auth_proto_depIdxs = nil
+	File_v1_authentication_proto = out.File
+	file_v1_authentication_proto_goTypes = nil
+	file_v1_authentication_proto_depIdxs = nil
 }

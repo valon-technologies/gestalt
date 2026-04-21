@@ -109,11 +109,11 @@ The `_connection` and `_instance` selectors in the [HTTP API](/reference/http-ap
 
 ### Connection modes
 
-- **`none`**: No credentials stored. Operations run without upstream auth.
+- **`none`**: No credentials stored. Operations run without upstream authentication.
 - **`user`**: Each calling subject connects individually. Tokens are keyed by `subject_id`.
 
 Renaming a `plugins` key in config is a breaking change. Stored tokens reference the old name.
 
 ## Sessions
 
-Platform sessions (Google, OIDC, local) are not stored in the IndexedDB provider. They are HTTP-only cookies (`session_token`) with `Secure` (when HTTPS), `SameSite=Lax`, and a default 24-hour TTL (configurable via `sessionTtl` for OIDC). Sessions cannot be revoked server-side; they expire on TTL. Logout clears the client cookie.
+Platform sessions (OIDC, local, and custom authentication providers) are not stored in the IndexedDB provider. They are HTTP-only cookies (`session_token`) with `Secure` (when HTTPS), `SameSite=Lax`, and a default 24-hour TTL (configurable via `sessionTtl` for OIDC). Sessions cannot be revoked server-side; they expire on TTL. Logout clears the client cookie.

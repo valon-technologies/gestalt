@@ -26,16 +26,16 @@ const (
 type ProviderKind int32
 
 const (
-	ProviderKind_PROVIDER_KIND_UNSPECIFIED   ProviderKind = 0
-	ProviderKind_PROVIDER_KIND_INTEGRATION   ProviderKind = 1
-	ProviderKind_PROVIDER_KIND_AUTH          ProviderKind = 2
-	ProviderKind_PROVIDER_KIND_INDEXEDDB     ProviderKind = 3
-	ProviderKind_PROVIDER_KIND_SECRETS       ProviderKind = 4
-	ProviderKind_PROVIDER_KIND_TELEMETRY     ProviderKind = 5
-	ProviderKind_PROVIDER_KIND_CACHE         ProviderKind = 6
-	ProviderKind_PROVIDER_KIND_S3            ProviderKind = 7
-	ProviderKind_PROVIDER_KIND_WORKFLOW      ProviderKind = 8
-	ProviderKind_PROVIDER_KIND_AUTHORIZATION ProviderKind = 9
+	ProviderKind_PROVIDER_KIND_UNSPECIFIED    ProviderKind = 0
+	ProviderKind_PROVIDER_KIND_INTEGRATION    ProviderKind = 1
+	ProviderKind_PROVIDER_KIND_AUTHENTICATION ProviderKind = 2
+	ProviderKind_PROVIDER_KIND_INDEXEDDB      ProviderKind = 3
+	ProviderKind_PROVIDER_KIND_SECRETS        ProviderKind = 4
+	ProviderKind_PROVIDER_KIND_TELEMETRY      ProviderKind = 5
+	ProviderKind_PROVIDER_KIND_CACHE          ProviderKind = 6
+	ProviderKind_PROVIDER_KIND_S3             ProviderKind = 7
+	ProviderKind_PROVIDER_KIND_WORKFLOW       ProviderKind = 8
+	ProviderKind_PROVIDER_KIND_AUTHORIZATION  ProviderKind = 9
 )
 
 // Enum value maps for ProviderKind.
@@ -43,7 +43,7 @@ var (
 	ProviderKind_name = map[int32]string{
 		0: "PROVIDER_KIND_UNSPECIFIED",
 		1: "PROVIDER_KIND_INTEGRATION",
-		2: "PROVIDER_KIND_AUTH",
+		2: "PROVIDER_KIND_AUTHENTICATION",
 		3: "PROVIDER_KIND_INDEXEDDB",
 		4: "PROVIDER_KIND_SECRETS",
 		5: "PROVIDER_KIND_TELEMETRY",
@@ -53,16 +53,16 @@ var (
 		9: "PROVIDER_KIND_AUTHORIZATION",
 	}
 	ProviderKind_value = map[string]int32{
-		"PROVIDER_KIND_UNSPECIFIED":   0,
-		"PROVIDER_KIND_INTEGRATION":   1,
-		"PROVIDER_KIND_AUTH":          2,
-		"PROVIDER_KIND_INDEXEDDB":     3,
-		"PROVIDER_KIND_SECRETS":       4,
-		"PROVIDER_KIND_TELEMETRY":     5,
-		"PROVIDER_KIND_CACHE":         6,
-		"PROVIDER_KIND_S3":            7,
-		"PROVIDER_KIND_WORKFLOW":      8,
-		"PROVIDER_KIND_AUTHORIZATION": 9,
+		"PROVIDER_KIND_UNSPECIFIED":    0,
+		"PROVIDER_KIND_INTEGRATION":    1,
+		"PROVIDER_KIND_AUTHENTICATION": 2,
+		"PROVIDER_KIND_INDEXEDDB":      3,
+		"PROVIDER_KIND_SECRETS":        4,
+		"PROVIDER_KIND_TELEMETRY":      5,
+		"PROVIDER_KIND_CACHE":          6,
+		"PROVIDER_KIND_S3":             7,
+		"PROVIDER_KIND_WORKFLOW":       8,
+		"PROVIDER_KIND_AUTHORIZATION":  9,
 	}
 )
 
@@ -379,11 +379,11 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion\"E\n" +
 	"\x13HealthCheckResponse\x12\x14\n" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage*\xa5\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage*\xaf\x02\n" +
 	"\fProviderKind\x12\x1d\n" +
 	"\x19PROVIDER_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
-	"\x19PROVIDER_KIND_INTEGRATION\x10\x01\x12\x16\n" +
-	"\x12PROVIDER_KIND_AUTH\x10\x02\x12\x1b\n" +
+	"\x19PROVIDER_KIND_INTEGRATION\x10\x01\x12 \n" +
+	"\x1cPROVIDER_KIND_AUTHENTICATION\x10\x02\x12\x1b\n" +
 	"\x17PROVIDER_KIND_INDEXEDDB\x10\x03\x12\x19\n" +
 	"\x15PROVIDER_KIND_SECRETS\x10\x04\x12\x1b\n" +
 	"\x17PROVIDER_KIND_TELEMETRY\x10\x05\x12\x17\n" +

@@ -63,14 +63,14 @@ func TestDetectPythonComponentTarget(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
 plugin = "provider"
-auth = "provider:auth_provider"
+authentication = "provider:auth_provider"
 cache = "provider:cache_provider"
 indexeddb = "provider:indexeddb_provider"
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile(pyproject.toml): %v", err)
 	}
 
-	authTarget, err := DetectPythonComponentTarget(root, providermanifestv1.KindAuth)
+	authTarget, err := DetectPythonComponentTarget(root, providermanifestv1.KindAuthentication)
 	if err != nil {
 		t.Fatalf("DetectPythonComponentTarget(auth): %v", err)
 	}
@@ -144,7 +144,7 @@ plugin = "provider"
 		t.Fatalf("WriteFile(pyproject.toml): %v", err)
 	}
 
-	_, err := DetectPythonComponentTarget(root, providermanifestv1.KindAuth)
+	_, err := DetectPythonComponentTarget(root, providermanifestv1.KindAuthentication)
 	if err == nil {
 		t.Fatal("expected missing auth target error")
 	}
@@ -179,7 +179,7 @@ func TestPythonComponentExecutionCommand_PassesRuntimeKind(t *testing.T) {
 	pythonPath := pythonTestInterpreterPath(root, runtime.GOOS, ".venv")
 	mustWritePythonInterpreter(t, pythonPath)
 
-	command, args, cleanup, err := pythonComponentExecutionCommand(root, "provider:auth_provider", pythonRuntimeKindAuth)
+	command, args, cleanup, err := pythonComponentExecutionCommand(root, "provider:auth_provider", pythonRuntimeKindAuthentication)
 	if err != nil {
 		t.Fatalf("pythonComponentExecutionCommand: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestPythonComponentExecutionCommand_PassesRuntimeKind(t *testing.T) {
 	if len(args) != 5 {
 		t.Fatalf("args = %q, want 5 args", args)
 	}
-	if got := strings.Join(args, " "); got != "-m gestalt._runtime "+root+" provider:auth_provider auth" {
+	if got := strings.Join(args, " "); got != "-m gestalt._runtime "+root+" provider:auth_provider authentication" {
 		t.Fatalf("args = %q", got)
 	}
 }

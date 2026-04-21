@@ -20,49 +20,49 @@ type configCall struct {
 	config map[string]any
 }
 
-type fullAuthProvider struct {
+type fullAuthenticationProvider struct {
 	closeTracker
 	configured []configCall
 }
 
-func (p *fullAuthProvider) Configure(_ context.Context, name string, config map[string]any) error {
+func (p *fullAuthenticationProvider) Configure(_ context.Context, name string, config map[string]any) error {
 	p.configured = append(p.configured, configCall{name: name, config: config})
 	return nil
 }
 
-func (p *fullAuthProvider) Metadata() gestalt.ProviderMetadata {
+func (p *fullAuthenticationProvider) Metadata() gestalt.ProviderMetadata {
 	return gestalt.ProviderMetadata{
-		Kind:        gestalt.ProviderKindAuth,
+		Kind:        gestalt.ProviderKindAuthentication,
 		Name:        "stub-auth",
 		DisplayName: "Stub Auth",
 		Version:     "1.0",
 	}
 }
 
-func (p *fullAuthProvider) Warnings() []string {
+func (p *fullAuthenticationProvider) Warnings() []string {
 	return []string{"battery low"}
 }
 
-func (p *fullAuthProvider) HealthCheck(context.Context) error {
+func (p *fullAuthenticationProvider) HealthCheck(context.Context) error {
 	return nil
 }
 
-func (p *fullAuthProvider) SessionTTL() time.Duration {
+func (p *fullAuthenticationProvider) SessionTTL() time.Duration {
 	return 30 * time.Minute
 }
 
-func (p *fullAuthProvider) BeginLogin(_ context.Context, _ *gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
+func (p *fullAuthenticationProvider) BeginLogin(_ context.Context, _ *gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
 	return &gestalt.BeginLoginResponse{
 		AuthorizationUrl: "https://auth.example.test/login",
 		ProviderState:    []byte("state-data"),
 	}, nil
 }
 
-func (p *fullAuthProvider) CompleteLogin(_ context.Context, _ *gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
+func (p *fullAuthenticationProvider) CompleteLogin(_ context.Context, _ *gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
 	return testAuthUser(), nil
 }
 
-func (p *fullAuthProvider) ValidateExternalToken(_ context.Context, token string) (*gestalt.AuthenticatedUser, error) {
+func (p *fullAuthenticationProvider) ValidateExternalToken(_ context.Context, token string) (*gestalt.AuthenticatedUser, error) {
 	if token == "valid-token" {
 		return testAuthUser(), nil
 	}
@@ -80,15 +80,15 @@ func testAuthUser() *gestalt.AuthenticatedUser {
 	}
 }
 
-func TestAuthProviderRoundTrip(t *testing.T) {
+func TestAuthenticationProviderRoundTrip(t *testing.T) {
 	socket := newSocketPath(t, "auth.sock")
 	t.Setenv(proto.EnvProviderSocket, socket)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	provider := &fullAuthProvider{}
+	provider := &fullAuthenticationProvider{}
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- gestalt.ServeAuthProvider(ctx, provider)
+		errCh <- gestalt.ServeAuthenticationProvider(ctx, provider)
 	}()
 	t.Cleanup(func() {
 		cancel()
@@ -100,7 +100,7 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 
 	conn := newUnixConn(t, socket)
 	runtimeClient := proto.NewProviderLifecycleClient(conn)
-	authClient := proto.NewAuthProviderClient(conn)
+	authClient := proto.NewAuthenticationProviderClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer rpcCancel()
@@ -109,8 +109,8 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProviderIdentity: %v", err)
 	}
-	if meta.GetKind() != proto.ProviderKind_PROVIDER_KIND_AUTH {
-		t.Fatalf("kind = %v, want AUTH", meta.GetKind())
+	if meta.GetKind() != proto.ProviderKind_PROVIDER_KIND_AUTHENTICATION {
+		t.Fatalf("kind = %v, want AUTHENTICATION", meta.GetKind())
 	}
 	if meta.GetName() != "stub-auth" {
 		t.Fatalf("name = %q, want %q", meta.GetName(), "stub-auth")

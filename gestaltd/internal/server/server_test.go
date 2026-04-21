@@ -4731,7 +4731,7 @@ func TestPluginRouteAuth_HTTPRoutesUseNamedProviderOverride(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = nil
-		cfg.AuthProviders = map[string]core.AuthProvider{
+		cfg.AuthProviders = map[string]core.AuthenticationProvider{
 			"alt": &coretesting.StubAuthProvider{
 				N: "alt",
 				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {

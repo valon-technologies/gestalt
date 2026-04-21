@@ -256,7 +256,7 @@ func browserLoginStateForNextPath(nextPath string) string {
 	return parsed.Path
 }
 
-func loginURLForRequest(ctx context.Context, provider core.AuthProvider, state string) (string, error) {
+func loginURLForRequest(ctx context.Context, provider core.AuthenticationProvider, state string) (string, error) {
 	if providerWithContext, ok := provider.(core.LoginURLContextProvider); ok {
 		return providerWithContext.LoginURLContext(ctx, state)
 	}
@@ -298,13 +298,13 @@ type AuthProviderDisplayName interface {
 	DisplayName() string
 }
 
-// SessionTokenIssuer is an optional interface that auth providers can implement
+// SessionTokenIssuer is an optional interface that authentication providers can implement
 // to issue session tokens after login.
 type SessionTokenIssuer interface {
 	IssueSessionToken(identity *core.UserIdentity) (string, error)
 }
 
-// SessionTokenTTLProvider is an optional interface that auth providers can
+// SessionTokenTTLProvider is an optional interface that authentication providers can
 // implement to expose their configured session TTL for cookie MaxAge.
 type SessionTokenTTLProvider interface {
 	SessionTokenTTL() time.Duration
@@ -338,15 +338,15 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 	})
 }
 
-// StatefulCallbackHandler is an optional interface for auth providers that need
+// StatefulCallbackHandler is an optional interface for authentication providers that need
 // the OAuth state parameter during callback (e.g., for PKCE where the
 // code_verifier is encrypted in the state).
 type StatefulCallbackHandler interface {
 	HandleCallbackWithState(ctx context.Context, code, state string) (*core.UserIdentity, string, error)
 }
 
-// RequestCallbackHandler is an optional interface for auth providers that need
-// the full callback query map. This is used by executable auth plugins so the
+// RequestCallbackHandler is an optional interface for authentication providers that need
+// the full callback query map. This is used by executable authentication plugins so the
 // host can preserve callback state and provider-specific query parameters.
 type RequestCallbackHandler interface {
 	HandleCallbackRequest(ctx context.Context, query url.Values) (*core.UserIdentity, string, error)

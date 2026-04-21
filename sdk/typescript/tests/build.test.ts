@@ -7,7 +7,10 @@ import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { expect, test } from "bun:test";
 
-import { AuthProvider as AuthProviderService, BeginLoginRequestSchema } from "../gen/v1/auth_pb.ts";
+import {
+  AuthenticationProvider as AuthenticationProviderService,
+  BeginLoginRequestSchema,
+} from "../gen/v1/authentication_pb.ts";
 import { Cache as CacheService } from "../gen/v1/cache_pb.ts";
 import {
   AccessContextSchema,
@@ -24,14 +27,25 @@ import {
   SecretsProvider as SecretsProviderService,
 } from "../gen/v1/secrets_pb.ts";
 import { S3 as S3Service } from "../gen/v1/s3_pb.ts";
-import { ConfigureProviderRequestSchema, ProviderKind as ProtoProviderKind, ProviderLifecycle } from "../gen/v1/runtime_pb.ts";
+import {
+  ConfigureProviderRequestSchema,
+  ProviderKind as ProtoProviderKind,
+  ProviderLifecycle,
+} from "../gen/v1/runtime_pb.ts";
 import {
   StartWorkflowProviderRunRequestSchema,
   WorkflowProvider as WorkflowProviderService,
 } from "../gen/v1/workflow_pb.ts";
-import { buildProviderBinary, bunTarget, parseBuildArgs } from "../src/build.ts";
+import {
+  buildProviderBinary,
+  bunTarget,
+  parseBuildArgs,
+} from "../src/build.ts";
 import { Cache, cacheSocketEnv } from "../src/cache.ts";
-import { CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET } from "../src/runtime.ts";
+import {
+  CURRENT_PROTOCOL_VERSION,
+  ENV_PROVIDER_SOCKET,
+} from "../src/runtime.ts";
 import {
   captureChildStderr,
   createUnixGrpcClient,
@@ -57,33 +71,47 @@ async function expectConnectCode(
   }
 }
 
-async function waitForSocket(path: string, stderrText: () => string): Promise<void> {
+async function waitForSocket(
+  path: string,
+  stderrText: () => string,
+): Promise<void> {
   try {
     await waitForPath(path, 15_000);
   } catch (error) {
-    throw new Error(`${String(error)}${stderrText() ? `\n${stderrText()}` : ""}`);
+    throw new Error(
+      `${String(error)}${stderrText() ? `\n${stderrText()}` : ""}`,
+    );
   }
 }
 
 test("build arg parsing validates required arguments", () => {
-  expect(parseBuildArgs(["root", "auth:./auth.ts#provider", "out", "name", "darwin", "arm64"])).toEqual(
-    {
+  expect(
+    parseBuildArgs([
+      "root",
+      "authentication:./auth.ts#provider",
+      "out",
+      "name",
+      "darwin",
+      "arm64",
+    ]),
+  ).toEqual({
     root: "root",
-      target: "auth:./auth.ts#provider",
+    target: "authentication:./auth.ts#provider",
     outputPath: "out",
     providerName: "name",
     goos: "darwin",
     goarch: "arm64",
-    },
-  );
+  });
   expect(parseBuildArgs(["root"])).toBeUndefined();
   expect(bunTarget("darwin", "arm64")).toBe("bun-darwin-arm64");
   expect(bunTarget("linux", "amd64")).toBe("bun-linux-x64-musl");
   expect(bunTarget("linux", "arm64")).toBe("bun-linux-arm64-musl");
-  expect(() => bunTarget("plan9", "amd64")).toThrow("unsupported Bun target for plan9/amd64");
+  expect(() => bunTarget("plan9", "amd64")).toThrow(
+    "unsupported Bun target for plan9/amd64",
+  );
 });
 
-test("buildProviderBinary compiles a runnable auth provider executable", async () => {
+test("buildProviderBinary compiles a runnable authentication provider executable", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
   const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gestalt-typescript-build-test-");
@@ -94,7 +122,7 @@ test("buildProviderBinary compiles a runnable auth provider executable", async (
   try {
     buildProviderBinary({
       root: fixturePath("auth-provider"),
-      target: "auth:./auth.ts#provider",
+      target: "authentication:./auth.ts#provider",
       outputPath,
       providerName: "fixture-built",
       goos,
@@ -116,10 +144,13 @@ test("buildProviderBinary compiles a runnable auth provider executable", async (
     await waitForSocket(socketPath, stderrText);
 
     const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
-    const auth = createUnixGrpcClient(AuthProviderService, socketPath);
+    const auth = createUnixGrpcClient(
+      AuthenticationProviderService,
+      socketPath,
+    );
 
     const metadata = await runtime.getProviderIdentity(create(EmptySchema, {}));
-    expect(metadata.kind).toBe(ProtoProviderKind.AUTH);
+    expect(metadata.kind).toBe(ProtoProviderKind.AUTHENTICATION);
     expect(metadata.name).toBe("fixture-built");
 
     await runtime.configureProvider(
@@ -139,7 +170,9 @@ test("buildProviderBinary compiles a runnable auth provider executable", async (
         scopes: ["openid"],
       }),
     );
-    expect(begin.authorizationUrl).toContain("https://binary.example.test/authorize");
+    expect(begin.authorizationUrl).toContain(
+      "https://binary.example.test/authorize",
+    );
 
     const settings = await auth.getSessionSettings(create(EmptySchema, {}));
     expect(settings.sessionTtlSeconds).toBe(5400n);
@@ -192,7 +225,9 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
         socketPath,
       );
 
-      const identity = await runtime.getProviderIdentity(create(EmptySchema, {}));
+      const identity = await runtime.getProviderIdentity(
+        create(EmptySchema, {}),
+      );
       expect(identity.kind).toBe(ProtoProviderKind.INTEGRATION);
       expect(identity.name).toBe(`fixture-${label}`);
       expect(identity.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
@@ -204,13 +239,19 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
       expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
       expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
       expect(
-        metadata.staticCatalog?.operations?.some((operation) => operation.id === "hello"),
+        metadata.staticCatalog?.operations?.some(
+          (operation) => operation.id === "hello",
+        ),
       ).toBe(true);
       expect(
-        metadata.staticCatalog?.operations?.some((operation) => operation.id === "count"),
+        metadata.staticCatalog?.operations?.some(
+          (operation) => operation.id === "count",
+        ),
       ).toBe(true);
       expect(
-        metadata.staticCatalog?.operations?.find((operation) => operation.id === "hello"),
+        metadata.staticCatalog?.operations?.find(
+          (operation) => operation.id === "hello",
+        ),
       ).toMatchObject({
         method: "POST",
         title: "Hello",
@@ -218,7 +259,9 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
         allowedRoles: ["viewer", "admin"],
       });
       expect(
-        metadata.staticCatalog?.operations?.find((operation) => operation.id === "count"),
+        metadata.staticCatalog?.operations?.find(
+          (operation) => operation.id === "count",
+        ),
       ).toMatchObject({
         method: "POST",
         title: "Count",
@@ -340,10 +383,7 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
       const sessionOperation = sessionCatalog.catalog?.operations?.[0];
       expect(sessionOperation).toBeDefined();
       expect(sessionOperation?.id).toBe("session-hello");
-      expect(sessionOperation?.allowedRoles).toEqual([
-        "viewer",
-        "admin",
-      ]);
+      expect(sessionOperation?.allowedRoles).toEqual(["viewer", "admin"]);
       expect(sessionOperation?.title).toBe(
         `Session Hello ${label} user:user-123 identity viewer`,
       );
@@ -563,9 +603,9 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
     expect(decoder.decode((await cache.get("alpha"))!)).toBe("one");
     expect(
       Object.fromEntries(
-        Object.entries(await namedCache.getMany(["alpha", "missing", "gamma"])).map(
-          ([key, value]) => [key, decoder.decode(value)],
-        ),
+        Object.entries(
+          await namedCache.getMany(["alpha", "missing", "gamma"]),
+        ).map(([key, value]) => [key, decoder.decode(value)]),
       ),
     ).toEqual({
       alpha: "one",
@@ -573,14 +613,24 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
     });
     await cafeCache.set("unicode", encoder.encode("accent"));
     expect(decoder.decode((await emojiCache.get("unicode"))!)).toBe("accent");
-    const reserved = await namedCache.getMany(["toString", "__proto__", "missing"]);
+    const reserved = await namedCache.getMany([
+      "toString",
+      "__proto__",
+      "missing",
+    ]);
     expect(Object.keys(reserved).sort()).toEqual(["__proto__", "toString"]);
     expect(decoder.decode(reserved["toString"]!)).toBe("reserved");
     expect(decoder.decode(reserved["__proto__"]!)).toBe("proto");
     expect(await cache.touch("gamma", 2_500)).toBe(true);
     expect(await cache.delete("beta")).toBe(true);
     expect(
-      await namedCache.deleteMany(["alpha", "missing", "gamma", "toString", "__proto__"]),
+      await namedCache.deleteMany([
+        "alpha",
+        "missing",
+        "gamma",
+        "toString",
+        "__proto__",
+      ]),
     ).toBe(4);
 
     const remaining = await rawCache.getMany({
@@ -757,26 +807,28 @@ test("buildProviderBinary compiles a runnable s3 provider executable", async () 
       }),
     );
 
-    const written = await s3.writeObject((async function* () {
-      yield {
-        msg: {
-          case: "open",
-          value: {
-            ref: {
-              bucket: "build-bucket",
-              key: "hello.txt",
+    const written = await s3.writeObject(
+      (async function* () {
+        yield {
+          msg: {
+            case: "open",
+            value: {
+              ref: {
+                bucket: "build-bucket",
+                key: "hello.txt",
+              },
+              contentType: "text/plain",
             },
-            contentType: "text/plain",
           },
-        },
-      };
-      yield {
-        msg: {
-          case: "data",
-          value: new TextEncoder().encode("hello"),
-        },
-      };
-    })());
+        };
+        yield {
+          msg: {
+            case: "data",
+            value: new TextEncoder().encode("hello"),
+          },
+        };
+      })(),
+    );
     expect(written.meta?.ref?.key).toBe("hello.txt");
 
     const headed = await s3.headObject({

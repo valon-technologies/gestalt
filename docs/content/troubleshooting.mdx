@@ -1,4 +1,4 @@
-import { Tabs } from 'nextra/components'
+import { Tabs } from "nextra/components";
 
 # Troubleshooting
 
@@ -8,7 +8,7 @@ When `gestaltd serve --locked` reports that prepared artifacts are missing or st
 
 The validation error `server.encryptionKey is required` means the config is missing its root deployment secret. Set `server.encryptionKey` to a structured secret ref or other secret-backed value. The encryption key is used for token encryption and derived session material, so the server refuses to start without it.
 
-Set `server.encryptionKey` for every real deployment. Gestalt derives token and session encryption from it regardless of which auth and datastore providers you use.
+Set `server.encryptionKey` for every real deployment. Gestalt derives token and session encryption from it regardless of which authentication and datastore providers you use.
 
 If the `/mcp` endpoint is not mounted, the server found no plugin that exposes tools. At least one plugin must surface MCP-visible operations before `/mcp` becomes available.
 
@@ -51,6 +51,7 @@ Common source-package checks:
     ```
 
     The source package should include `go.mod`, `manifest.yaml`, and provider code at the module root.
+
   </Tabs.Tab>
   <Tabs.Tab>
     Verify the virtualenv is intact and the configured module is importable:
@@ -60,6 +61,7 @@ Common source-package checks:
     ```
 
     Also confirm `[tool.gestalt].provider` or the legacy `[tool.gestalt].plugin` entry in `pyproject.toml` points at the module Gestalt should load.
+
   </Tabs.Tab>
   <Tabs.Tab>
     Verify the crate builds from the provider root:
@@ -68,7 +70,8 @@ Common source-package checks:
     cargo check
     ```
 
-    The plugin root needs a real `Cargo.toml` package with a `[package]` section, not just a workspace manifest, and `src/lib.rs` should export the provider with `gestalt::export_provider!(...)`, `gestalt::export_auth_provider!(...)`, or `gestalt::export_indexeddb_provider!(...)`.
+    The plugin root needs a real `Cargo.toml` package with a `[package]` section, not just a workspace manifest, and `src/lib.rs` should export the provider with `gestalt::export_provider!(...)`, `gestalt::export_authentication_provider!(...)`, or `gestalt::export_indexeddb_provider!(...)`.
+
   </Tabs.Tab>
   <Tabs.Tab>
     Verify the module resolves from the provider root:
@@ -78,6 +81,7 @@ Common source-package checks:
     ```
 
     Confirm `package.json` has a `gestalt.provider` entry pointing at the correct `./file.ts#export` target. The target path must start with `./` and the export name must match a named export in the module.
+
   </Tabs.Tab>
 </Tabs>
 

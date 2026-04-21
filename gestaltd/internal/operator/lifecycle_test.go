@@ -2461,7 +2461,7 @@ func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testin
 	const source = "github.com/testowner/gestalt-providers/plugins/auth-only"
 	const version = "0.0.1-alpha.1"
 	pkgPath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
-		Kind:       providermanifestv1.KindAuth,
+		Kind:       providermanifestv1.KindAuthentication,
 		Source:     source,
 		Version:    version,
 		Spec:       &providermanifestv1.Spec{},
@@ -2491,7 +2491,7 @@ func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testin
 	if err == nil {
 		t.Fatal("expected provider kind validation error")
 	}
-	if !strings.Contains(err.Error(), `manifest has kind "auth", want "plugin"`) {
+	if !strings.Contains(err.Error(), `manifest has kind "authentication", want "plugin"`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -2557,7 +2557,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	authArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth-plugin"))
 	authManifestPath := filepath.Join(dir, "auth-manifest.yaml")
 	authManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindAuth,
+		Kind:    providermanifestv1.KindAuthentication,
 		Source:  "github.com/testowner/plugins/local-auth",
 		Version: "0.0.1-alpha.1",
 		Spec:    &providermanifestv1.Spec{},
@@ -2584,7 +2584,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	idbManifestPath := writeStubIndexedDBManifest(t, dir)
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`providers:
-  auth:
+  authentication:
     auth:
       source:
         path: ./auth-manifest.yaml
@@ -2598,7 +2598,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
         dsn: %q
 server:
   providers:
-    auth: auth
+    authentication: auth
     indexeddb: sqlite
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `, idbManifestPath, "sqlite://"+dbPath)
@@ -2612,7 +2612,7 @@ server:
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	authEntry := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindAuth)
+	authEntry := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindAuthentication)
 	if authEntry == nil || authEntry.ResolvedManifest == nil {
 		t.Fatalf("auth resolved manifest = %+v", authEntry)
 	}
@@ -2657,7 +2657,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	authManifestPath := filepath.Join(dir, "auth-manifest.yaml")
 	writeTestSourceFile("auth.go", []byte(testutil.GeneratedAuthPackageSource()), 0o644)
 	authManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindAuth,
+		Kind:    providermanifestv1.KindAuthentication,
 		Source:  "github.com/testowner/plugins/local-source-auth",
 		Version: "0.0.1-alpha.1",
 		Spec:    &providermanifestv1.Spec{},
@@ -2673,7 +2673,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	idbManifestPath := writeStubIndexedDBManifest(t, dir)
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`providers:
-  auth:
+  authentication:
     auth:
       source:
         path: ./auth-manifest.yaml
@@ -2685,7 +2685,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
         dsn: %q
 server:
   providers:
-    auth: auth
+    authentication: auth
     indexeddb: sqlite
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `, idbManifestPath, "sqlite://"+dbPath)
@@ -2699,7 +2699,7 @@ server:
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	authEntry := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindAuth)
+	authEntry := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindAuthentication)
 	if authEntry == nil || authEntry.ResolvedManifest == nil {
 		t.Fatalf("auth resolved manifest = %+v", authEntry)
 	}
@@ -3721,7 +3721,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 				Executable: ".gestaltd/providers/example/artifacts/darwin/arm64/provider",
 			},
 		},
-		Auth: map[string]LockEntry{
+		Authentication: map[string]LockEntry{
 			"oauth": {
 				Fingerprint: "auth-fp",
 				Source:      "github.com/test-org/test-repo/auth-oauth",
@@ -3844,24 +3844,24 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if providerEntry.Runtime != providerLockRuntimeExecutable {
 		t.Fatalf("provider runtime = %q, want %q", providerEntry.Runtime, providerLockRuntimeExecutable)
 	}
-	authEntry, ok := diskLock.Providers.Auth["oauth"]
+	authEntry, ok := diskLock.Providers.Authentication["oauth"]
 	if !ok {
-		t.Fatal(`disk lock providers.auth["oauth"] not found`)
+		t.Fatal(`disk lock providers.authentication["oauth"] not found`)
 	}
-	if authEntry.InputDigest != want.Auth["oauth"].Fingerprint {
-		t.Fatalf("auth inputDigest = %q, want %q", authEntry.InputDigest, want.Auth["oauth"].Fingerprint)
+	if authEntry.InputDigest != want.Authentication["oauth"].Fingerprint {
+		t.Fatalf("authentication inputDigest = %q, want %q", authEntry.InputDigest, want.Authentication["oauth"].Fingerprint)
 	}
-	if authEntry.Package != want.Auth["oauth"].Source {
-		t.Fatalf("auth package = %q, want %q", authEntry.Package, want.Auth["oauth"].Source)
+	if authEntry.Package != want.Authentication["oauth"].Source {
+		t.Fatalf("authentication package = %q, want %q", authEntry.Package, want.Authentication["oauth"].Source)
 	}
 	if authEntry.Source != "" {
-		t.Fatalf("auth source = %q, want omitted portable source", authEntry.Source)
+		t.Fatalf("authentication source = %q, want omitted portable source", authEntry.Source)
 	}
-	if authEntry.Kind != providermanifestv1.KindAuth {
-		t.Fatalf("auth kind = %q, want %q", authEntry.Kind, providermanifestv1.KindAuth)
+	if authEntry.Kind != providermanifestv1.KindAuthentication {
+		t.Fatalf("authentication kind = %q, want %q", authEntry.Kind, providermanifestv1.KindAuthentication)
 	}
 	if authEntry.Runtime != providerLockRuntimeExecutable {
-		t.Fatalf("auth runtime = %q, want %q", authEntry.Runtime, providerLockRuntimeExecutable)
+		t.Fatalf("authentication runtime = %q, want %q", authEntry.Runtime, providerLockRuntimeExecutable)
 	}
 	telemetryEntry, ok := diskLock.Providers.Telemetry["default"]
 	if !ok {
@@ -3919,8 +3919,8 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if got.Providers["example"].Source != want.Providers["example"].Source || got.Providers["example"].Version != want.Providers["example"].Version {
 		t.Fatal("provider source mismatch")
 	}
-	if got.Auth["oauth"].Fingerprint != want.Auth["oauth"].Fingerprint {
-		t.Fatal("auth fingerprint mismatch")
+	if got.Authentication["oauth"].Fingerprint != want.Authentication["oauth"].Fingerprint {
+		t.Fatal("authentication fingerprint mismatch")
 	}
 	if got.IndexedDBs["main"].Fingerprint != want.IndexedDBs["main"].Fingerprint {
 		t.Fatal("indexeddb fingerprint mismatch")

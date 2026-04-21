@@ -40,6 +40,7 @@ func DetectPythonProviderTarget(root string) (string, error) {
 }
 
 func DetectPythonComponentTarget(root, kind string) (string, error) {
+	kind = providermanifestv1.NormalizeKind(kind)
 	if err := validateSourceComponentKind(kind); err != nil {
 		return "", err
 	}
@@ -255,21 +256,22 @@ func SplitPythonProviderTarget(target string) (module string, attr string, err e
 }
 
 const (
-	pythonRuntimeKindIntegration = "integration"
-	pythonRuntimeKindAuth        = "auth"
-	pythonRuntimeKindCache       = "cache"
-	pythonRuntimeKindIndexedDB   = "indexeddb"
-	pythonRuntimeKindS3          = "s3"
-	pythonRuntimeKindWorkflow    = "workflow"
-	pythonRuntimeKindSecrets     = "secrets"
+	pythonRuntimeKindIntegration    = "integration"
+	pythonRuntimeKindAuthentication = "authentication"
+	pythonRuntimeKindCache          = "cache"
+	pythonRuntimeKindIndexedDB      = "indexeddb"
+	pythonRuntimeKindS3             = "s3"
+	pythonRuntimeKindWorkflow       = "workflow"
+	pythonRuntimeKindSecrets        = "secrets"
 )
 
 func pythonRuntimeKind(kind string) (string, error) {
+	kind = providermanifestv1.NormalizeKind(kind)
 	switch kind {
 	case providermanifestv1.KindPlugin:
 		return pythonRuntimeKindIntegration, nil
-	case providermanifestv1.KindAuth:
-		return pythonRuntimeKindAuth, nil
+	case providermanifestv1.KindAuthentication:
+		return pythonRuntimeKindAuthentication, nil
 	case providermanifestv1.KindCache:
 		return pythonRuntimeKindCache, nil
 	case providermanifestv1.KindIndexedDB:

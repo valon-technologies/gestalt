@@ -7,7 +7,9 @@ from v1 import runtime_pb2 as v1_dot_runtime__pb2
 
 
 class ProviderLifecycleStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """ProviderLifecycle is the common lifecycle protocol shared by every provider
+    kind.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -33,7 +35,9 @@ class ProviderLifecycleStub(object):
 
 
 class ProviderLifecycleServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """ProviderLifecycle is the common lifecycle protocol shared by every provider
+    kind.
+    """
 
     def GetProviderIdentity(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -80,7 +84,9 @@ def add_ProviderLifecycleServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class ProviderLifecycle(object):
-    """Missing associated documentation comment in .proto file."""
+    """ProviderLifecycle is the common lifecycle protocol shared by every provider
+    kind.
+    """
 
     @staticmethod
     def GetProviderIdentity(request,

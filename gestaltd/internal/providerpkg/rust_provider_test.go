@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 func TestDetectRustProviderPackage(t *testing.T) {
@@ -109,7 +111,7 @@ func TestBuildRustComponentBinary_UsesKindSpecificWrapper(t *testing.T) {
 		kind                string
 		expectedServeExport string
 	}{
-		{name: "auth", kind: "auth", expectedServeExport: "__gestalt_serve_auth"},
+		{name: "authentication", kind: providermanifestv1.KindAuthentication, expectedServeExport: "__gestalt_serve_authentication"},
 		{name: "cache", kind: "cache", expectedServeExport: "__gestalt_serve_cache"},
 		{name: "indexeddb", kind: "indexeddb", expectedServeExport: "__gestalt_serve_indexeddb"},
 	}
@@ -167,12 +169,12 @@ func TestHasSourceComponentPackage_DetectsRustPackage(t *testing.T) {
 	root := t.TempDir()
 	writeRustProviderCargoToml(t, root)
 
-	ok, err := HasSourceComponentPackage(root, "auth")
+	ok, err := HasSourceComponentPackage(root, providermanifestv1.KindAuthentication)
 	if err != nil {
-		t.Fatalf("HasSourceComponentPackage(auth): %v", err)
+		t.Fatalf("HasSourceComponentPackage(authentication): %v", err)
 	}
 	if !ok {
-		t.Fatal("HasSourceComponentPackage(auth) = false, want true")
+		t.Fatal("HasSourceComponentPackage(authentication) = false, want true")
 	}
 
 	ok, err = HasSourceComponentPackage(root, "authorization")

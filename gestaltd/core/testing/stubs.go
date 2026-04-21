@@ -40,6 +40,8 @@ type StubAuthProvider struct {
 	ValidateTokenFn  func(context.Context, string) (*core.UserIdentity, error)
 }
 
+type StubAuthenticationProvider = StubAuthProvider
+
 func (s *StubAuthProvider) Name() string                    { return s.N }
 func (s *StubAuthProvider) LoginURL(string) (string, error) { return "", nil }
 func (s *StubAuthProvider) HandleCallback(ctx context.Context, code string) (*core.UserIdentity, error) {

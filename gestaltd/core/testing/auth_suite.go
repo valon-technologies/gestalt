@@ -9,18 +9,18 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 )
 
-// RunAuthProviderTests validates an AuthProvider implementation against the
-// interface contract. The factory must return a fresh provider configured to
-// talk to mockServer for any external HTTP calls.
+// RunAuthenticationProviderTests validates an AuthenticationProvider
+// implementation against the interface contract. The factory must return a
+// fresh provider configured to talk to mockServer for any external HTTP calls.
 //
 // The mock server must recognize these well-known values:
 //   - "valid-code" for HandleCallback (returns a valid identity)
 //   - "invalid-code" for HandleCallback (returns an error)
 //   - "valid-token" for ValidateToken (returns a valid identity)
 //   - "invalid-token" for ValidateToken (returns an error)
-func RunAuthProviderTests(t *testing.T, newProvider func(t *testing.T, mockURL string) core.AuthProvider, mockServer *httptest.Server) {
+func RunAuthenticationProviderTests(t *testing.T, newProvider func(t *testing.T, mockURL string) core.AuthenticationProvider, mockServer *httptest.Server) {
 	if mockServer == nil {
-		t.Fatal("RunAuthProviderTests requires a mock server")
+		t.Fatal("RunAuthenticationProviderTests requires a mock server")
 		return
 	}
 	provider := newProvider(t, mockServer.URL)

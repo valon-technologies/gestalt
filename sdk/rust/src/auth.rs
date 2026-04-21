@@ -9,8 +9,8 @@ pub use crate::generated::v1::{
 };
 
 #[async_trait]
-/// Lifecycle and login contract for Gestalt auth providers.
-pub trait AuthProvider: Send + Sync + 'static {
+/// Lifecycle and login contract for Gestalt authentication providers.
+pub trait AuthenticationProvider: Send + Sync + 'static {
     /// Configures the provider before it starts serving requests.
     async fn configure(
         &self,
@@ -49,7 +49,7 @@ pub trait AuthProvider: Send + Sync + 'static {
     /// Validates an externally minted token when supported.
     async fn validate_external_token(&self, _token: &str) -> Result<Option<AuthenticatedUser>> {
         Err(Error::unimplemented(
-            "auth provider does not support external token validation",
+            "authentication provider does not support external token validation",
         ))
     }
 

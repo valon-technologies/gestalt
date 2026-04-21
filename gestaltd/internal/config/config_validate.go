@@ -73,7 +73,7 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		kind    HostProviderKind
 		entries map[string]*ProviderEntry
 	}{
-		{HostProviderKindAuth, cfg.Providers.Auth},
+		{HostProviderKindAuthentication, cfg.Providers.Authentication},
 		{HostProviderKindAuthorization, cfg.Providers.Authorization},
 		{HostProviderKindSecrets, cfg.Providers.Secrets},
 		{HostProviderKindTelemetry, cfg.Providers.Telemetry},
@@ -161,11 +161,11 @@ func validateHostProviderEntries(kind HostProviderKind, entries map[string]*Prov
 			return err
 		}
 		switch kind {
-		case HostProviderKindAuth:
+		case HostProviderKindAuthentication:
 			if entry.Source.IsBuiltin() {
-				return fmt.Errorf("config validation: auth provider %q does not support builtin providers; use a provider source reference or omit auth", name)
+				return fmt.Errorf("config validation: authentication provider %q does not support builtin providers; use a provider source reference or omit authentication", name)
 			}
-			if err := validateProviderEntrySource("auth", name, entry, sourceSyntax); err != nil {
+			if err := validateProviderEntrySource("authentication", name, entry, sourceSyntax); err != nil {
 				return err
 			}
 		case HostProviderKindAuthorization:
@@ -458,17 +458,17 @@ func validatePluginRouteAuth(cfg *Config, name string, entry *ProviderEntry) err
 		return fmt.Errorf("config validation: plugins.%s.auth.provider is required", name)
 	}
 	if entry.RouteAuth.Provider == "server" {
-		_, authProvider, err := cfg.SelectedAuthProvider()
+		_, authProvider, err := cfg.SelectedAuthenticationProvider()
 		if err != nil {
 			return err
 		}
 		if authProvider == nil {
-			return fmt.Errorf("config validation: plugins.%s.auth.provider %q requires a configured platform auth provider", name, entry.RouteAuth.Provider)
+			return fmt.Errorf("config validation: plugins.%s.auth.provider %q requires a configured platform authentication provider", name, entry.RouteAuth.Provider)
 		}
 		return nil
 	}
-	if _, ok := cfg.Providers.Auth[entry.RouteAuth.Provider]; !ok {
-		return fmt.Errorf("config validation: plugins.%s.auth.provider references unknown auth provider %q", name, entry.RouteAuth.Provider)
+	if _, ok := cfg.Providers.Authentication[entry.RouteAuth.Provider]; !ok {
+		return fmt.Errorf("config validation: plugins.%s.auth.provider references unknown authentication provider %q", name, entry.RouteAuth.Provider)
 	}
 	return nil
 }
@@ -692,12 +692,12 @@ func validateAdminConfig(cfg *Config) error {
 			return fmt.Errorf("config validation: server.admin.allowedRoles requires server.admin.authorizationPolicy")
 		}
 	} else {
-		_, authProvider, err := cfg.SelectedAuthProvider()
+		_, authProvider, err := cfg.SelectedAuthenticationProvider()
 		if err != nil {
 			return err
 		}
 		if authProvider == nil {
-			return fmt.Errorf("config validation: server.admin.authorizationPolicy requires providers.auth to be configured")
+			return fmt.Errorf("config validation: server.admin.authorizationPolicy requires providers.authentication to be configured")
 		}
 		if err := validateAuthorizationPolicyReference(cfg, "server.admin", "/admin", policy); err != nil {
 			return err

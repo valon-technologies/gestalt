@@ -1,6 +1,6 @@
-kind: auth
+kind: authentication
 source: github.com/valon-technologies/gestalt/provider-rust-auth
 version: 0.0.1-alpha.1
-displayName: Example Rust Auth Provider
-description: A minimal Rust auth provider built with the public Rust SDK
+displayName: Example Rust Authentication Provider
+description: A minimal Rust authentication provider built with the public Rust SDK
 spec: {}

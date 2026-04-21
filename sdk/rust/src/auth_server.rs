@@ -2,36 +2,43 @@ use std::sync::Arc;
 
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::auth::AuthProvider;
-use crate::generated::v1::auth_provider_server::AuthProvider as AuthProviderGrpc;
+use crate::auth::AuthenticationProvider;
+use crate::generated::v1::authentication_provider_server::AuthenticationProvider as AuthenticationProviderGrpc;
 use crate::generated::v1::{
     AuthSessionSettings, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse,
     CompleteLoginRequest, ValidateExternalTokenRequest,
 };
 use crate::rpc_status::rpc_status;
 
-#[derive(Clone)]
-pub struct AuthServer<P> {
-    auth: Arc<P>,
+pub struct AuthenticationServer<P> {
+    provider: Arc<P>,
 }
 
-impl<P> AuthServer<P> {
-    pub fn new(auth: Arc<P>) -> Self {
-        Self { auth }
+impl<P> AuthenticationServer<P> {
+    pub fn new(provider: Arc<P>) -> Self {
+        Self { provider }
+    }
+}
+
+impl<P> Clone for AuthenticationServer<P> {
+    fn clone(&self) -> Self {
+        Self {
+            provider: Arc::clone(&self.provider),
+        }
     }
 }
 
 #[tonic::async_trait]
-impl<P> AuthProviderGrpc for AuthServer<P>
+impl<P> AuthenticationProviderGrpc for AuthenticationServer<P>
 where
-    P: AuthProvider,
+    P: AuthenticationProvider,
 {
     async fn begin_login(
         &self,
         request: GrpcRequest<BeginLoginRequest>,
     ) -> std::result::Result<GrpcResponse<BeginLoginResponse>, Status> {
         let response = self
-            .auth
+            .provider
             .begin_login(request.into_inner())
             .await
             .map_err(|error| rpc_status("begin login", error))?;
@@ -43,7 +50,7 @@ where
         request: GrpcRequest<CompleteLoginRequest>,
     ) -> std::result::Result<GrpcResponse<AuthenticatedUser>, Status> {
         let user = self
-            .auth
+            .provider
             .complete_login(request.into_inner())
             .await
             .map_err(|error| rpc_status("complete login", error))?;
@@ -55,7 +62,7 @@ where
         request: GrpcRequest<ValidateExternalTokenRequest>,
     ) -> std::result::Result<GrpcResponse<AuthenticatedUser>, Status> {
         let user = self
-            .auth
+            .provider
             .validate_external_token(&request.into_inner().token)
             .await
             .map_err(|error| rpc_status("validate external token", error))?;
@@ -69,9 +76,9 @@ where
         &self,
         _request: GrpcRequest<()>,
     ) -> std::result::Result<GrpcResponse<AuthSessionSettings>, Status> {
-        let Some(ttl) = self.auth.session_ttl() else {
+        let Some(ttl) = self.provider.session_ttl() else {
             return Err(Status::unimplemented(
-                "auth provider does not expose session settings",
+                "authentication provider does not expose session settings",
             ));
         };
         let ttl_seconds = i64::try_from(ttl.as_secs()).unwrap_or(i64::MAX);

@@ -10,7 +10,8 @@ import (
 
 const (
 	providerLockSchemaName         = "gestaltd-provider-lock"
-	providerLockSchemaVersion      = 2
+	providerLockSchemaVersion      = 3
+	providerLockSchemaVersionV2    = 2
 	providerLockRevision           = 0
 	providerLockKindWorkflow       = "workflow"
 	providerLockKindTelemetry      = "telemetry"
@@ -29,17 +30,18 @@ type providerLockfile struct {
 }
 
 type providerLockBuckets struct {
-	Plugin        map[string]portableLockEntry `json:"plugin,omitempty"`
-	Auth          map[string]portableLockEntry `json:"auth,omitempty"`
-	Authorization map[string]portableLockEntry `json:"authorization,omitempty"`
-	IndexedDB     map[string]portableLockEntry `json:"indexeddb,omitempty"`
-	Cache         map[string]portableLockEntry `json:"cache,omitempty"`
-	S3            map[string]portableLockEntry `json:"s3,omitempty"`
-	Workflow      map[string]portableLockEntry `json:"workflow,omitempty"`
-	Secrets       map[string]portableLockEntry `json:"secrets,omitempty"`
-	Telemetry     map[string]portableLockEntry `json:"telemetry,omitempty"`
-	Audit         map[string]portableLockEntry `json:"audit,omitempty"`
-	WebUI         map[string]portableLockEntry `json:"webui,omitempty"`
+	Plugin         map[string]portableLockEntry `json:"plugin,omitempty"`
+	Authentication map[string]portableLockEntry `json:"authentication,omitempty"`
+	LegacyAuth     map[string]portableLockEntry `json:"auth,omitempty"`
+	Authorization  map[string]portableLockEntry `json:"authorization,omitempty"`
+	IndexedDB      map[string]portableLockEntry `json:"indexeddb,omitempty"`
+	Cache          map[string]portableLockEntry `json:"cache,omitempty"`
+	S3             map[string]portableLockEntry `json:"s3,omitempty"`
+	Workflow       map[string]portableLockEntry `json:"workflow,omitempty"`
+	Secrets        map[string]portableLockEntry `json:"secrets,omitempty"`
+	Telemetry      map[string]portableLockEntry `json:"telemetry,omitempty"`
+	Audit          map[string]portableLockEntry `json:"audit,omitempty"`
+	WebUI          map[string]portableLockEntry `json:"webui,omitempty"`
 }
 
 type portableLockEntry struct {
@@ -54,18 +56,18 @@ type portableLockEntry struct {
 
 func newLockfile() *Lockfile {
 	return &Lockfile{
-		Version:       LockVersion,
-		Providers:     make(map[string]LockProviderEntry),
-		Auth:          make(map[string]LockEntry),
-		Authorization: make(map[string]LockEntry),
-		IndexedDBs:    make(map[string]LockEntry),
-		Caches:        make(map[string]LockEntry),
-		S3:            make(map[string]LockEntry),
-		Workflows:     make(map[string]LockEntry),
-		Secrets:       make(map[string]LockEntry),
-		Telemetry:     make(map[string]LockEntry),
-		Audit:         make(map[string]LockEntry),
-		UIs:           make(map[string]LockUIEntry),
+		Version:        LockVersion,
+		Providers:      make(map[string]LockProviderEntry),
+		Authentication: make(map[string]LockEntry),
+		Authorization:  make(map[string]LockEntry),
+		IndexedDBs:     make(map[string]LockEntry),
+		Caches:         make(map[string]LockEntry),
+		S3:             make(map[string]LockEntry),
+		Workflows:      make(map[string]LockEntry),
+		Secrets:        make(map[string]LockEntry),
+		Telemetry:      make(map[string]LockEntry),
+		Audit:          make(map[string]LockEntry),
+		UIs:            make(map[string]LockUIEntry),
 	}
 }
 
@@ -73,14 +75,16 @@ func normalizeLockfile(lock *Lockfile) *Lockfile {
 	if lock == nil {
 		return newLockfile()
 	}
+	lock.Authentication = mergeLockEntries(lock.Authentication, lock.LegacyAuth)
+	lock.LegacyAuth = nil
 	if lock.Version == 0 {
 		lock.Version = LockVersion
 	}
 	if lock.Providers == nil {
 		lock.Providers = make(map[string]LockProviderEntry)
 	}
-	if lock.Auth == nil {
-		lock.Auth = make(map[string]LockEntry)
+	if lock.Authentication == nil {
+		lock.Authentication = make(map[string]LockEntry)
 	}
 	if lock.Authorization == nil {
 		lock.Authorization = make(map[string]LockEntry)
@@ -112,10 +116,48 @@ func normalizeLockfile(lock *Lockfile) *Lockfile {
 	return lock
 }
 
+func mergeLockEntries(primary, legacy map[string]LockEntry) map[string]LockEntry {
+	switch {
+	case primary == nil && legacy == nil:
+		return nil
+	case primary == nil:
+		return maps.Clone(legacy)
+	case legacy == nil:
+		return primary
+	default:
+		for name := range legacy {
+			if _, exists := primary[name]; exists {
+				continue
+			}
+			primary[name] = legacy[name]
+		}
+		return primary
+	}
+}
+
+func mergePortableLockEntries(primary, legacy map[string]portableLockEntry) map[string]portableLockEntry {
+	switch {
+	case primary == nil && legacy == nil:
+		return nil
+	case primary == nil:
+		return maps.Clone(legacy)
+	case legacy == nil:
+		return primary
+	default:
+		for name, entry := range legacy {
+			if _, exists := primary[name]; exists {
+				continue
+			}
+			primary[name] = entry
+		}
+		return primary
+	}
+}
+
 func providerLockKinds() []string {
 	return []string{
 		providermanifestv1.KindPlugin,
-		providermanifestv1.KindAuth,
+		providermanifestv1.KindAuthentication,
 		providermanifestv1.KindAuthorization,
 		providermanifestv1.KindIndexedDB,
 		providermanifestv1.KindCache,
@@ -135,8 +177,8 @@ func lockEntriesForProviderKind(lock *Lockfile, kind string) map[string]LockEntr
 	switch kind {
 	case providermanifestv1.KindPlugin:
 		return lock.Providers
-	case providermanifestv1.KindAuth:
-		return lock.Auth
+	case providermanifestv1.KindAuthentication:
+		return lock.Authentication
 	case providermanifestv1.KindAuthorization:
 		return lock.Authorization
 	case providermanifestv1.KindIndexedDB:
@@ -167,17 +209,17 @@ func providerLockfileFromLockfile(lock *Lockfile) *providerLockfile {
 		SchemaVersion: providerLockSchemaVersion,
 		Revision:      providerLockRevision,
 		Providers: providerLockBuckets{
-			Plugin:        portableEntriesFromLockEntries(lock.Providers, providermanifestv1.KindPlugin),
-			Auth:          portableEntriesFromLockEntries(lock.Auth, providermanifestv1.KindAuth),
-			Authorization: portableEntriesFromLockEntries(lock.Authorization, providermanifestv1.KindAuthorization),
-			IndexedDB:     portableEntriesFromLockEntries(lock.IndexedDBs, providermanifestv1.KindIndexedDB),
-			Cache:         portableEntriesFromLockEntries(lock.Caches, providermanifestv1.KindCache),
-			S3:            portableEntriesFromLockEntries(lock.S3, providermanifestv1.KindS3),
-			Workflow:      portableEntriesFromLockEntries(lock.Workflows, providerLockKindWorkflow),
-			Secrets:       portableEntriesFromLockEntries(lock.Secrets, providermanifestv1.KindSecrets),
-			Telemetry:     portableEntriesFromLockEntries(lock.Telemetry, providerLockKindTelemetry),
-			Audit:         portableEntriesFromLockEntries(lock.Audit, providerLockKindAudit),
-			WebUI:         portableEntriesFromLockEntries(lock.UIs, providermanifestv1.KindWebUI),
+			Plugin:         portableEntriesFromLockEntries(lock.Providers, providermanifestv1.KindPlugin),
+			Authentication: portableEntriesFromLockEntries(lock.Authentication, providermanifestv1.KindAuthentication),
+			Authorization:  portableEntriesFromLockEntries(lock.Authorization, providermanifestv1.KindAuthorization),
+			IndexedDB:      portableEntriesFromLockEntries(lock.IndexedDBs, providermanifestv1.KindIndexedDB),
+			Cache:          portableEntriesFromLockEntries(lock.Caches, providermanifestv1.KindCache),
+			S3:             portableEntriesFromLockEntries(lock.S3, providermanifestv1.KindS3),
+			Workflow:       portableEntriesFromLockEntries(lock.Workflows, providerLockKindWorkflow),
+			Secrets:        portableEntriesFromLockEntries(lock.Secrets, providermanifestv1.KindSecrets),
+			Telemetry:      portableEntriesFromLockEntries(lock.Telemetry, providerLockKindTelemetry),
+			Audit:          portableEntriesFromLockEntries(lock.Audit, providerLockKindAudit),
+			WebUI:          portableEntriesFromLockEntries(lock.UIs, providermanifestv1.KindWebUI),
 		},
 	}
 }
@@ -188,7 +230,7 @@ func (lock *providerLockfile) toLockfile() *Lockfile {
 		return runtimeLock
 	}
 	runtimeLock.Providers = lockEntriesFromPortableEntries(lock.Providers.Plugin)
-	runtimeLock.Auth = lockEntriesFromPortableEntries(lock.Providers.Auth)
+	runtimeLock.Authentication = lockEntriesFromPortableEntries(mergePortableLockEntries(lock.Providers.Authentication, lock.Providers.LegacyAuth))
 	runtimeLock.Authorization = lockEntriesFromPortableEntries(lock.Providers.Authorization)
 	runtimeLock.IndexedDBs = lockEntriesFromPortableEntries(lock.Providers.IndexedDB)
 	runtimeLock.Caches = lockEntriesFromPortableEntries(lock.Providers.Cache)
@@ -208,7 +250,7 @@ func validateProviderLockfile(lock *providerLockfile) error {
 	if lock.Schema != providerLockSchemaName {
 		return fmt.Errorf("unsupported lockfile schema %q; run `gestaltd init` to upgrade", lock.Schema)
 	}
-	if lock.SchemaVersion != providerLockSchemaVersion {
+	if lock.SchemaVersion != providerLockSchemaVersion && lock.SchemaVersion != providerLockSchemaVersionV2 {
 		return fmt.Errorf("unsupported lockfile schema version %d; run `gestaltd init` to upgrade", lock.SchemaVersion)
 	}
 	return nil

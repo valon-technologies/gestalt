@@ -1983,7 +1983,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	binaryContent := "fake-auth-binary"
 	bootstrapManifestPath := writeBootstrapSecretsManifest(t, dir, "github.com/acme/tools/bootstrap-secrets", "0.1.0")
 
-	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, providermanifestv1.KindAuth, "auth-plugin", binaryContent)
+	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, providermanifestv1.KindAuthentication, "auth-plugin", binaryContent)
 	archiveData, err := os.ReadFile(archivePath)
 	if err != nil {
 		t.Fatalf("read archive: %v", err)
@@ -2007,7 +2007,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       source,
-				Kind:          providermanifestv1.KindAuth,
+				Kind:          providermanifestv1.KindAuthentication,
 				Version:       version,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -2046,7 +2046,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 		"    secrets:",
 		"      source:",
 		"        path: " + bootstrapManifestPath,
-		"  auth:",
+		"  authentication:",
 		"    auth:",
 		"      source:",
 		"        url: " + srv.URL + metadataPath,
@@ -2061,7 +2061,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 		"  providers:",
 		"    indexeddb: sqlite",
 		"    secrets: secrets",
-		"    auth: auth",
+		"    authentication: auth",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
@@ -2083,12 +2083,12 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitAtPath: %v", err)
 	}
-	authLockEntry := mustLockEntryByName(t, lock.Auth, "auth")
+	authLockEntry := mustLockEntryByName(t, lock.Authentication, "auth")
 	if authLockEntry.Source != srv.URL+metadataPath {
-		t.Fatalf("lock.Auth[auth].Source = %q, want %q", authLockEntry.Source, srv.URL+metadataPath)
+		t.Fatalf("lock.Authentication[auth].Source = %q, want %q", authLockEntry.Source, srv.URL+metadataPath)
 	}
 	if authLockEntry.Executable == "" {
-		t.Fatal("lock.Auth.Executable is empty")
+		t.Fatal("lock.Authentication.Executable is empty")
 	}
 	if got := metadataCount.Load(); got != 1 {
 		t.Fatalf("metadata request count = %d, want 1", got)
@@ -2120,7 +2120,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 		t.Fatalf("download count during locked rehydration = %d, want 1", got)
 	}
 
-	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuth)
+	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuthentication)
 	if authProvider == nil {
 		t.Fatal("auth provider is nil after load")
 	}
@@ -2155,7 +2155,7 @@ func TestSourceAuthPluginInitAllowsMissingEnvPlaceholderInNonStringField(t *test
 	portEnv := "GESTALT_TEST_PORT_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
 	bootstrapManifestPath := writeBootstrapSecretsManifest(t, dir, "github.com/acme/tools/bootstrap-secrets", "0.1.0")
 
-	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, providermanifestv1.KindAuth, "auth-plugin", "fake-auth-binary")
+	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, providermanifestv1.KindAuthentication, "auth-plugin", "fake-auth-binary")
 	archiveData, err := os.ReadFile(archivePath)
 	if err != nil {
 		t.Fatalf("read archive: %v", err)
@@ -2178,7 +2178,7 @@ func TestSourceAuthPluginInitAllowsMissingEnvPlaceholderInNonStringField(t *test
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       source,
-				Kind:          providermanifestv1.KindAuth,
+				Kind:          providermanifestv1.KindAuthentication,
 				Version:       version,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -2216,7 +2216,7 @@ func TestSourceAuthPluginInitAllowsMissingEnvPlaceholderInNonStringField(t *test
 		"    secrets:",
 		"      source:",
 		"        path: " + bootstrapManifestPath,
-		"  auth:",
+		"  authentication:",
 		"    auth:",
 		"      source:",
 		"        url: " + srv.URL + metadataPath,
@@ -2231,7 +2231,7 @@ func TestSourceAuthPluginInitAllowsMissingEnvPlaceholderInNonStringField(t *test
 		"  providers:",
 		"    indexeddb: sqlite",
 		"    secrets: secrets",
-		"    auth: auth",
+		"    authentication: auth",
 		"  public:",
 		"    port: ${" + portEnv + "}",
 		"  artifactsDir: " + artifactsDir,
@@ -2256,12 +2256,12 @@ func TestSourceAuthPluginInitAllowsMissingEnvPlaceholderInNonStringField(t *test
 		t.Fatalf("InitAtPath: %v", err)
 	}
 
-	authLockEntry := mustLockEntryByName(t, lock.Auth, "auth")
+	authLockEntry := mustLockEntryByName(t, lock.Authentication, "auth")
 	if authLockEntry.Source != srv.URL+metadataPath {
-		t.Fatalf("lock.Auth[auth].Source = %q, want %q", authLockEntry.Source, srv.URL+metadataPath)
+		t.Fatalf("lock.Authentication[auth].Source = %q, want %q", authLockEntry.Source, srv.URL+metadataPath)
 	}
 	if authLockEntry.Executable == "" {
-		t.Fatal("lock.Auth.Executable is empty")
+		t.Fatal("lock.Authentication.Executable is empty")
 	}
 	if got := metadataCount.Load(); got != 1 {
 		t.Fatalf("metadata request count = %d, want 1", got)
@@ -2727,7 +2727,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 		"auth-src",
 		authSource,
 		authVersion,
-		providermanifestv1.KindAuth,
+		providermanifestv1.KindAuthentication,
 		"auth-plugin",
 		"fake-auth-binary",
 	)
@@ -2798,7 +2798,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       authSource,
-				Kind:          providermanifestv1.KindAuth,
+				Kind:          providermanifestv1.KindAuthentication,
 				Version:       authVersion,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -2845,7 +2845,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 		"            secret:",
 		"              provider: bootstrap",
 		"              name: source-token",
-		"  auth:",
+		"  authentication:",
 		"    auth:",
 		"      source:",
 		"        url: " + srv.URL + authMetadataPath,
@@ -2860,7 +2860,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 		"  providers:",
 		"    indexeddb: sqlite",
 		"    secrets: secrets",
-		"    auth: auth",
+		"    authentication: auth",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
@@ -2883,7 +2883,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 		t.Fatalf("InitAtPath: %v", err)
 	}
 	secretsLockEntry := mustLockEntryByName(t, lock.Secrets, "secrets")
-	authLockEntry := mustLockEntryByName(t, lock.Auth, "auth")
+	authLockEntry := mustLockEntryByName(t, lock.Authentication, "auth")
 	if got := secretsMetadataCount.Load(); got != 1 {
 		t.Fatalf("secrets metadata request count = %d, want 1", got)
 	}
@@ -2920,7 +2920,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	if got := authDownloads.Load() - authDownloadsBefore; got != 1 {
 		t.Fatalf("auth download count during locked load = %d, want 1", got)
 	}
-	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuth)
+	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuthentication)
 	if authProvider == nil || authProvider.Source.Auth == nil {
 		t.Fatalf("auth provider source auth = %#v", authProvider)
 	}
@@ -2992,7 +2992,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataInitPreparesOnce(t *tes
 		"auth-metadata-src",
 		authSource,
 		authVersion,
-		providermanifestv1.KindAuth,
+		providermanifestv1.KindAuthentication,
 		"auth-plugin",
 		"fake-auth-binary",
 	)
@@ -3030,7 +3030,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataInitPreparesOnce(t *tes
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       authSource,
-				Kind:          providermanifestv1.KindAuth,
+				Kind:          providermanifestv1.KindAuthentication,
 				Version:       authVersion,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -3071,7 +3071,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataInitPreparesOnce(t *tes
 		"    bootstrap:",
 		"      source:",
 		"        path: ./bootstrap-secrets-manifest.yaml",
-		"  auth:",
+		"  authentication:",
 		"    auth:",
 		"      source:",
 		"        url: " + srv.URL + metadataPath + "?download=1",
@@ -3086,7 +3086,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataInitPreparesOnce(t *tes
 		"  providers:",
 		"    indexeddb: sqlite",
 		"    secrets: bootstrap",
-		"    auth: auth",
+		"    authentication: auth",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
@@ -3120,7 +3120,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataInitPreparesOnce(t *tes
 		t.Fatalf("archive request count = %d, want 1", got)
 	}
 
-	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuth)
+	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuthentication)
 	if authProvider == nil || authProvider.Source.Auth == nil {
 		t.Fatalf("auth provider source auth = %#v", authProvider)
 	}

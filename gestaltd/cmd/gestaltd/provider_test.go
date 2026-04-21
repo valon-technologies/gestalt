@@ -59,7 +59,7 @@ const (
 	typeScriptReleaseModule        = "./provider.ts#provider"
 	typeScriptReleaseTarget        = "plugin:./provider.ts#provider"
 	authReleaseTypeScriptModule    = "./auth.ts#auth"
-	authReleaseTypeScriptTarget    = "auth:./auth.ts#auth"
+	authReleaseTypeScriptTarget    = "authentication:./auth.ts#auth"
 )
 
 func TestRun_ProviderCLIUsageAndErrors(t *testing.T) {
@@ -776,7 +776,7 @@ func TestRun_ProviderReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 		sourceFile: "auth.go",
 		sourceCode: testutil.GeneratedAuthPackageSource(),
 		manifest: &providermanifestv1.Manifest{
-			Kind:   providermanifestv1.KindAuth,
+			Kind:   providermanifestv1.KindAuthentication,
 			Source: authReleaseSource, Version: "0.0.1", DisplayName: "Auth Release",
 			Spec: &providermanifestv1.Spec{ConfigSchemaPath: authReleaseSchemaPath},
 		},
@@ -809,8 +809,8 @@ func TestRun_ProviderReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 	if metadata.Package != authReleaseSource {
 		t.Fatalf("release metadata package = %q, want %q", metadata.Package, authReleaseSource)
 	}
-	if metadata.Kind != providermanifestv1.KindAuth {
-		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindAuth)
+	if metadata.Kind != providermanifestv1.KindAuthentication {
+		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindAuthentication)
 	}
 	if metadata.Runtime != providerReleaseRuntimeKindExecutable {
 		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindExecutable)
@@ -827,14 +827,14 @@ func TestRun_ProviderReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 		t.Fatalf("release metadata auth artifact = %+v, want path %q sha %q", authArtifact, archiveName, authDigest)
 	}
 
-	auth, err := providerhost.NewExecutableAuthProvider(context.Background(), providerhost.AuthExecConfig{
+	auth, err := providerhost.NewExecutableAuthenticationProvider(context.Background(), providerhost.AuthenticationExecConfig{
 		Command:     filepath.Join(extractDir, binaryName),
 		Name:        "auth-release",
 		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
 		SessionKey:  []byte("0123456789abcdef0123456789abcdef"),
 	})
 	if err != nil {
-		t.Fatalf("NewExecutableAuthProvider: %v", err)
+		t.Fatalf("NewExecutableAuthenticationProvider: %v", err)
 	}
 	defer func() {
 		if closer, ok := auth.(interface{ Close() error }); ok {
@@ -1129,7 +1129,7 @@ func TestRun_ProviderReleaseBuildsExecutableAuthProviders(t *testing.T) {
 			sourceFile: "auth.go",
 			sourceCode: testutil.GeneratedAuthPackageSource(),
 			manifest: &providermanifestv1.Manifest{
-				Kind:   providermanifestv1.KindAuth,
+				Kind:   providermanifestv1.KindAuthentication,
 				Source: authReleaseSource, Version: "0.0.1", DisplayName: "Auth Release",
 				Spec: &providermanifestv1.Spec{ConfigSchemaPath: authReleaseSchemaPath},
 			},
@@ -1180,7 +1180,7 @@ func TestRun_ProviderReleaseBuildsExecutableAuthProviders(t *testing.T) {
 				fakeCargoDir := t.TempDir()
 				writeFakeRustReleaseCargo(t, filepath.Join(fakeCargoDir, "cargo"), fakeRustCargoConfig{
 					ExpectedPluginName:   authReleasePluginName,
-					ExpectedServeExport:  "__gestalt_serve_auth",
+					ExpectedServeExport:  "__gestalt_serve_authentication",
 					ExpectedCatalogWrite: false,
 					DelegateBinary:       buildGoSourceAuthBinary(t),
 					AllowedTargets:       []string{hostTarget},
@@ -1206,7 +1206,7 @@ func TestRun_ProviderReleaseBuildsExecutableAuthProviders(t *testing.T) {
 				t.Helper()
 
 				goFixtureDir := newSourceComponentReleaseFixture(t, t.TempDir(), goAuthFixture(t))
-				t.Setenv("GESTALT_TEST_PYINSTALLER_BINARY", buildGoSourceComponentBinaryForTest(t, goFixtureDir, providermanifestv1.KindAuth))
+				t.Setenv("GESTALT_TEST_PYINSTALLER_BINARY", buildGoSourceComponentBinaryForTest(t, goFixtureDir, providermanifestv1.KindAuthentication))
 				t.Setenv("PATH", pathWithoutGo(t))
 				return newPythonSourceAuthReleaseFixture(t, t.TempDir())
 			},
@@ -1945,13 +1945,13 @@ func TestRun_ProviderReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypo
 		{
 			name: "auth",
 			manifest: &providermanifestv1.Manifest{
-				Kind:        providermanifestv1.KindAuth,
+				Kind:        providermanifestv1.KindAuthentication,
 				Source:      "github.com/testowner/plugins/missing-auth",
 				Version:     "0.0.1",
 				DisplayName: "Missing Auth",
 				Spec:        &providermanifestv1.Spec{},
 			},
-			wantError: "no Go, Rust, Python, or TypeScript auth source package found",
+			wantError: "no Go, Rust, Python, or TypeScript authentication source package found",
 		},
 		{
 			name: "authorization",
@@ -2221,7 +2221,7 @@ func newTypeScriptSourceAuthReleaseFixture(t *testing.T, dir string) string {
   "version": "0.0.1",
   "gestalt": {
     "provider": {
-      "kind": "auth",
+      "kind": "authentication",
       "target": "`+authReleaseTypeScriptModule+`"
     }
   }
@@ -2229,7 +2229,7 @@ func newTypeScriptSourceAuthReleaseFixture(t *testing.T, dir string) string {
 `), 0o644)
 	writeTestFile(t, pluginDir, "auth.ts", []byte("export const auth = {};\n"), 0o644)
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindAuth,
+		Kind:        providermanifestv1.KindAuthentication,
 		Source:      authReleaseSource,
 		Version:     "0.0.1",
 		DisplayName: "Auth Release",
@@ -2258,11 +2258,11 @@ version = "0.0.1-alpha.1"
 dependencies = ["gestalt"]
 
 [tool.gestalt]
-auth = "provider:auth_provider"
+authentication = "provider:auth_provider"
 `), 0o644)
 	writeTestFile(t, pluginDir, "provider.py", []byte("auth_provider = object()\n"), 0o644)
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindAuth,
+		Kind:        providermanifestv1.KindAuthentication,
 		Source:      pythonAuthReleaseSource,
 		Version:     "0.0.1",
 		DisplayName: "Python Auth Release",
@@ -2275,7 +2275,7 @@ auth = "provider:auth_provider"
 		t,
 		filepath.Join(pluginDir, ".venv", "bin", "python"),
 		"provider:auth_provider",
-		"auth",
+		"authentication",
 		pythonAuthReleasePluginName,
 		runtime.GOOS,
 		runtime.GOARCH,
@@ -2637,14 +2637,14 @@ func assertArtifactPlatform(t *testing.T, artifact providermanifestv1.Artifact, 
 func assertExecutableAuthProviderWorks(t *testing.T, command, providerName string, assertSessionTTL, assertExternalJWT bool) {
 	t.Helper()
 
-	auth, err := providerhost.NewExecutableAuthProvider(context.Background(), providerhost.AuthExecConfig{
+	auth, err := providerhost.NewExecutableAuthenticationProvider(context.Background(), providerhost.AuthenticationExecConfig{
 		Command:     command,
 		Name:        providerName,
 		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
 		SessionKey:  []byte("0123456789abcdef0123456789abcdef"),
 	})
 	if err != nil {
-		t.Fatalf("NewExecutableAuthProvider: %v", err)
+		t.Fatalf("NewExecutableAuthenticationProvider: %v", err)
 	}
 	defer func() {
 		if closer, ok := auth.(interface{ Close() error }); ok {
@@ -2845,7 +2845,7 @@ func newRustSourceAuthReleaseFixture(t *testing.T, dir string) string {
 	pluginDir := filepath.Join(dir, authReleasePluginName)
 	copyFixtureTree(t, rustAuthProviderFixturePath(t), pluginDir)
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindAuth,
+		Kind:        providermanifestv1.KindAuthentication,
 		Source:      authReleaseSource,
 		Version:     "0.0.1",
 		DisplayName: "Auth Release",
@@ -3069,7 +3069,7 @@ func buildGoSourceAuthBinary(t *testing.T) string {
 	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile(t, providerDir, "auth.go", []byte(testutil.GeneratedAuthPackageSource()), 0o644)
 	outputPath := filepath.Join(t.TempDir(), "auth-provider")
-	if err := providerpkg.BuildGoComponentBinary(providerDir, outputPath, providermanifestv1.KindAuth, runtime.GOOS, runtime.GOARCH); err != nil {
+	if err := providerpkg.BuildGoComponentBinary(providerDir, outputPath, providermanifestv1.KindAuthentication, runtime.GOOS, runtime.GOARCH); err != nil {
 		t.Fatalf("BuildGoComponentBinary(auth): %v", err)
 	}
 	return outputPath

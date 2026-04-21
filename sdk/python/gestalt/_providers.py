@@ -1,8 +1,9 @@
 """Provider base classes for non-integration Gestalt runtimes.
 
-The generated request and response protobuf messages for auth and catalog data
-remain available through the public :mod:`gestalt` package, but these helpers
-document the handwritten provider interfaces that wrap those messages.
+The generated request and response protobuf messages for authentication and
+catalog data remain available through the public :mod:`gestalt` package, but
+these helpers document the handwritten provider interfaces that wrap those
+messages.
 """
 
 import datetime as dt
@@ -10,21 +11,21 @@ from enum import Enum
 from typing import Any, Callable
 
 from ._cache import CacheEntry
-from .gen.v1 import auth_pb2 as _auth_pb2
+from .gen.v1 import authentication_pb2 as _authentication_pb2
 from .gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 from .gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
-AuthenticatedUser: Any = _auth_pb2.AuthenticatedUser  # ty: ignore[unresolved-attribute]
-BeginLoginRequest: Any = _auth_pb2.BeginLoginRequest  # ty: ignore[unresolved-attribute]
-BeginLoginResponse: Any = _auth_pb2.BeginLoginResponse  # ty: ignore[unresolved-attribute]
-CompleteLoginRequest: Any = _auth_pb2.CompleteLoginRequest  # ty: ignore[unresolved-attribute]
+AuthenticatedUser: Any = _authentication_pb2.AuthenticatedUser  # ty: ignore[unresolved-attribute]
+BeginLoginRequest: Any = _authentication_pb2.BeginLoginRequest  # ty: ignore[unresolved-attribute]
+BeginLoginResponse: Any = _authentication_pb2.BeginLoginResponse  # ty: ignore[unresolved-attribute]
+CompleteLoginRequest: Any = _authentication_pb2.CompleteLoginRequest  # ty: ignore[unresolved-attribute]
 
 
 class ProviderKind(str, Enum):
     """Runtime kinds supported by the Python SDK."""
 
     INTEGRATION = "integration"
-    AUTH = "auth"
+    AUTHENTICATION = "authentication"
     CACHE = "cache"
     S3 = "s3"
     WORKFLOW = "workflow"
@@ -123,7 +124,7 @@ class PluginProviderAdapter:
         _runtime.serve(self)
 
 
-class AuthProvider(PluginProvider):
+class AuthenticationProvider(PluginProvider):
     """Base class for authentication providers."""
 
     def begin_login(self, request: Any) -> Any:
@@ -137,12 +138,11 @@ class AuthProvider(PluginProvider):
         raise NotImplementedError
 
     def serve(self) -> None:
-        """Start the auth runtime."""
+        """Start the authentication runtime."""
 
         from . import _runtime
 
-        _runtime.serve(self, runtime_kind=ProviderKind.AUTH)
-
+        _runtime.serve(self, runtime_kind=ProviderKind.AUTHENTICATION)
 
 class ExternalTokenValidator:
     """Optional mixin for providers that validate external bearer tokens."""

@@ -145,7 +145,7 @@ type Deps struct {
 	PluginInvoker         invocation.Invoker
 }
 
-type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
+type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
 type AuthorizationFactory func(node yaml.Node, hostServices []providerhost.HostService, deps Deps) (core.AuthorizationProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
@@ -176,9 +176,9 @@ func NewFactoryRegistry() *FactoryRegistry {
 }
 
 type Result struct {
-	Auth                  core.AuthProvider
+	Auth                  core.AuthenticationProvider
 	SelectedAuthProvider  string
-	AuthProviders         map[string]core.AuthProvider
+	AuthProviders         map[string]core.AuthenticationProvider
 	AuthorizationProvider core.AuthorizationProvider
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
@@ -327,9 +327,9 @@ func (p *workflowProviderWithCleanup) Close() error {
 }
 
 type preparedCore struct {
-	Auth                  core.AuthProvider
+	Auth                  core.AuthenticationProvider
 	SelectedAuthProvider  string
-	AuthProviders         map[string]core.AuthProvider
+	AuthProviders         map[string]core.AuthenticationProvider
 	AuthorizationProvider core.AuthorizationProvider
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
@@ -889,7 +889,7 @@ func buildNamedSecretManager(name string, secrets *config.ProviderEntry, factori
 	return sm, nil
 }
 
-func closeAuth(provider core.AuthProvider) error {
+func closeAuth(provider core.AuthenticationProvider) error {
 	closer, ok := provider.(interface{ Close() error })
 	if !ok {
 		return nil
@@ -897,7 +897,7 @@ func closeAuth(provider core.AuthProvider) error {
 	return closer.Close()
 }
 
-func closeAuthProviders(providers map[string]core.AuthProvider) error {
+func closeAuthProviders(providers map[string]core.AuthenticationProvider) error {
 	if len(providers) == 0 {
 		return nil
 	}
@@ -934,19 +934,19 @@ func closeSecretManager(sm core.SecretManager) error {
 	return closer.Close()
 }
 
-func buildAuthProviders(cfg *config.Config, factories *FactoryRegistry, deps Deps) (string, map[string]core.AuthProvider, error) {
-	selectedName, _, err := cfg.SelectedAuthProvider()
+func buildAuthProviders(cfg *config.Config, factories *FactoryRegistry, deps Deps) (string, map[string]core.AuthenticationProvider, error) {
+	selectedName, _, err := cfg.SelectedAuthenticationProvider()
 	if err != nil {
 		return "", nil, err
 	}
-	if len(cfg.Providers.Auth) == 0 {
+	if len(cfg.Providers.Authentication) == 0 {
 		return selectedName, nil, nil
 	}
 	if factories.Auth == nil {
-		return "", nil, fmt.Errorf("bootstrap: auth factory is not registered")
+		return "", nil, fmt.Errorf("bootstrap: authentication factory is not registered")
 	}
-	providers := make(map[string]core.AuthProvider, len(cfg.Providers.Auth))
-	for name, authEntry := range cfg.Providers.Auth {
+	providers := make(map[string]core.AuthenticationProvider, len(cfg.Providers.Authentication))
+	for name, authEntry := range cfg.Providers.Authentication {
 		if authEntry == nil {
 			continue
 		}
@@ -960,21 +960,21 @@ func buildAuthProviders(cfg *config.Config, factories *FactoryRegistry, deps Dep
 	return selectedName, providers, nil
 }
 
-func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.AuthProvider, error) {
+func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.AuthenticationProvider, error) {
 	if authEntry == nil {
 		return nil, nil
 	}
 	node := authEntry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
 		var err error
-		node, err = config.BuildComponentRuntimeConfigNode(name, "auth", authEntry, authEntry.Config)
+		node, err = config.BuildComponentRuntimeConfigNode(name, "authentication", authEntry, authEntry.Config)
 		if err != nil {
-			return nil, fmt.Errorf("bootstrap: auth provider %q: %w", name, err)
+			return nil, fmt.Errorf("bootstrap: authentication provider %q: %w", name, err)
 		}
 	}
 	auth, err := factories.Auth(node, deps)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: auth provider %q: %w", name, err)
+		return nil, fmt.Errorf("bootstrap: authentication provider %q: %w", name, err)
 	}
 	return auth, nil
 }

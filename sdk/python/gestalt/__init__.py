@@ -60,7 +60,7 @@ from ._invoker import ENV_PLUGIN_INVOKER_SOCKET, PluginInvoker
 from ._plugin import Plugin, operation, session_catalog
 from ._providers import (
     AuthenticatedUser,
-    AuthProvider,
+    AuthenticationProvider,
     BeginLoginRequest,
     BeginLoginResponse,
     CacheProvider,
@@ -107,7 +107,7 @@ from ._workflow import (
 
 __all__ = [
     "AlreadyExistsError",
-    "AuthProvider",
+    "AuthenticationProvider",
     "AuthenticatedUser",
     "Cache",
     "CacheEntry",

@@ -6,10 +6,10 @@ Every `gestaltd` deployment reads one or more YAML config files. When you pass
 multiple `--config` flags, Gestalt merges them left-to-right before validation
 and bootstrap. The top-level keys are `server` (listener, encryption, egress,
 and host-provider selection), `authorization` (shared human/workload access
-policy), `providers` (named auth, secrets, telemetry, audit, UI, indexeddb,
-authorization, workflow, cache, and s3 entries), `workflows` (config-managed
-schedules and event triggers), and `plugins` (executable integrations and
-optional plugin-backed UI mounts):
+policy), `providers` (named authentication, secrets, telemetry, audit, UI,
+indexeddb, authorization, workflow, cache, and s3 entries), `workflows`
+(config-managed schedules and event triggers), and `plugins` (executable
+integrations and optional plugin-backed UI mounts):
 
 ```yaml
 server:
@@ -18,16 +18,16 @@ authorization:
   policies: {}
   workloads: {}
 providers:
-  auth: {}
+  audit: {}
+  authentication: {}
+  authorization: {}
+  cache: {}
+  indexeddb: {}
+  s3: {}
   secrets: {}
   telemetry: {}
-  audit: {}
   ui: {}
-  indexeddb: {}
-  authorization: {}
   workflow: {}
-  cache: {}
-  s3: {}
 workflows:
   schedules: {}
   eventTriggers: {}
@@ -113,9 +113,9 @@ server:
   apiTokenTtl: 30d
   artifactsDir: ./state
   providers:
-    auth: google
-    indexeddb: main
     authorization: indexeddb
+    authentication: oidc
+    indexeddb: main
 authorization:
   policies:
     support_staff:
@@ -175,7 +175,7 @@ Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `a
 | `encryptionKey` | | **Required.** Root encryption key. Typically a structured secret ref. |
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
 | `artifactsDir` | config directory | Directory for prepared `init` artifacts. |
-| `providers.auth` / `providers.secrets` / `providers.telemetry` / `providers.audit` / `providers.indexeddb` / `providers.authorization` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
+| `providers.audit` / `providers.authentication` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
 | `admin.authorizationPolicy` | | Shared human access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
 | `authorization.policies` | | Shared human access policies resolved by canonical `subjectID`. |
@@ -183,38 +183,19 @@ Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `a
 
 When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener. When `server.admin.authorizationPolicy` is set, Gestalt does apply browser session auth plus role-based policy checks to `/admin` and `/admin/api/v1/*`.
 
-## `providers.auth`
+## `providers.authentication`
 
-Platform auth is optional. Omit the `providers.auth` block entirely to disable platform authentication. When auth is enabled, configure one or more named entries under `providers.auth`. If more than one entry exists, set `server.providers.auth` to pick which one the host should use.
+Platform authentication is optional. Omit the `providers.authentication` block entirely to disable it. When platform authentication is enabled, configure one or more named entries under `providers.authentication`. If more than one entry exists, set `server.providers.authentication` to pick which one the host should use.
 
-### `google`
+### `local`
 
-```yaml
-providers:
-  auth:
-    google:
-      source: https://artifacts.example.com/auth/google/v0.0.1-alpha.1/provider-release.yaml
-      config:
-        clientId: ${GOOGLE_CLIENT_ID}
-        clientSecret:
-          secret:
-            provider: default
-            name: google-client-secret
-        redirectUrl: https://gestalt.example.com/api/v1/auth/login/callback
-        allowedDomains:
-          - example.com
-        sessionTtl: 24h
-```
-
-`clientId` and `clientSecret` are both required and identify your Google OAuth application. `redirectUrl` defaults to a path derived from `server.baseUrl` when omitted. `allowedDomains` restricts login to specific email domains. `sessionTtl` controls session token lifetime and defaults to `24h`.
-
-Google checks `email_verified` on every login. Unverified accounts are rejected.
+The `local` authentication provider is intended for single-user development on a trusted machine. It uses the same `ProviderEntry` shape as any other `providers.authentication.<name>` entry, but it does not require an external identity provider configuration.
 
 ### `oidc`
 
 ```yaml
 providers:
-  auth:
+  authentication:
     oidc:
       source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
       config:
@@ -251,16 +232,16 @@ Two fields are required: `issuerUrl` (the OIDC discovery base URL) and `clientId
 
 OIDC checks `email_verified` when the claim is present. Unverified accounts are rejected.
 
-### `providers.auth` shape
+### `providers.authentication` shape
 
-Both `google` and `oidc` use the same ProviderEntry shape under `providers.auth.<name>`. First-party auth providers are published at `github.com/valon-technologies/gestalt-providers/auth/<name>`.
+Authentication providers use the same `ProviderEntry` shape under `providers.authentication.<name>`. First-party authentication providers are published under `github.com/valon-technologies/gestalt-providers/auth/`.
 
 | Field | Description |
 | --- | --- |
-| `default` | Marks this named auth entry as the default selection when `server.providers.auth` is omitted. |
-| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
-| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
-| `config` | Provider-specific config passed into the auth provider. |
+| `default` | Marks this named authentication entry as the default selection when `server.providers.authentication` is omitted. |
+| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
+| `config` | Provider-specific config passed into the authentication provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
@@ -832,7 +813,7 @@ plugins:
 | `ui` | Optional UI key from `providers.ui` used with `mountPath`. Omit it to mount the plugin manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#pluginssource) below. |
 | `source.auth` | Optional metadata-fetch auth for release sources. Use this for `source.url`, `source.githubRelease`, or local `provider-release.yaml` metadata. |
-| `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.auth`. Gestalt enforces this on plugin HTTP operation routes (`/api/v1/integrations/{name}/operations` and `/api/v1/{integration}/{operation}`). Browser login, mounted UIs, and `/mcp` still use the server-wide auth provider in this phase. |
+| `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on plugin HTTP operation routes (`/api/v1/integrations/{name}/operations` and `/api/v1/{integration}/{operation}`). Browser login, mounted UIs, and `/mcp` still use the server-wide auth provider in this phase. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
@@ -941,7 +922,7 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
 | --- | --- |
 | `source` | A local provider manifest path, a published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
 | `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs, `source.githubRelease`, and local `provider-release.yaml` metadata. |
-| `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either `server` or a named `providers.auth` entry. Gestalt enforces this on plugin HTTP operation routes only; browser login, mounted UIs, and `/mcp` still use the server-wide auth provider in this phase. |
+| `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either `server` or a named `providers.authentication` entry. Gestalt enforces this on plugin HTTP operation routes only; browser login, mounted UIs, and `/mcp` still use the server-wide auth provider in this phase. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
@@ -971,13 +952,13 @@ connections:
 
 Connection `mode` determines how credentials are managed: `none` requires no credentials, and `user` stores credentials for the caller's effective subject. For humans that is typically `user:<id>`; for workloads it is `workload:<id>`; for managed identities it is the managed identity subject. All connections in a single plugin must share the same mode.
 
-#### Auth shapes
+#### Authentication Shapes
 
 Every connection `auth` block uses the same shape. `type` selects the auth strategy: `oauth2`, `manual`, `bearer`, `none`, or `mcp_oauth`.
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `type` | | Auth strategy: `oauth2`, `manual`, `bearer`, `none`, or `mcp_oauth`. |
+| `type` | | Authentication strategy: `oauth2`, `manual`, `bearer`, `none`, or `mcp_oauth`. |
 | `authorizationUrl` | | OAuth2 authorization endpoint. |
 | `tokenUrl` | | OAuth2 token endpoint. |
 | `clientId` | | OAuth2 client identifier. |
@@ -1045,9 +1026,9 @@ connections:
 | `credentials[].description` | Hint text below the label. Supports inline links via `[text](url)`. |
 | `authMapping.headers.<HEADER>.value` | Supplies a static deployer-managed value for a header. |
 | `authMapping.headers.<HEADER>.valueFrom.credentialFieldRef.name` | Reads a header value from the named manual credential field. |
-| `authMapping.basic.username` / `authMapping.basic.password` | Build the Basic auth username/password from either a static `value` or `valueFrom.credentialFieldRef.name`. |
+| `authMapping.basic.username` / `authMapping.basic.password` | Build the Basic authentication username/password from either a static `value` or `valueFrom.credentialFieldRef.name`. |
 
-For Basic auth providers that should collect only an API key while keeping the organization ID static, declare just the user-facing field and map the rest explicitly:
+For Basic authentication providers that should collect only an API key while keeping the organization ID static, declare just the user-facing field and map the rest explicitly:
 
 ```yaml
 connections:
@@ -1117,7 +1098,7 @@ plugins:
       - api.github.com
       - "*.github.com"
   my-plugin:
-    source: ./plugins/my-plugin
+    source: ./plugins/my-plugin/manifest.yaml
     allowedHosts:
       - external-api.com
 ```
@@ -1168,10 +1149,10 @@ Structural validation runs at config load time (`init`, `validate`, `serve`). Ru
 Each plugin must set `source` to exactly one loading mode: a local manifest path or a published `provider-release.yaml` metadata URL.
 
 Host-provider entries use the same ProviderEntry shape. When
-`providers.auth.<name>`, `providers.cache.<name>`,
+`providers.authentication.<name>`, `providers.cache.<name>`,
 `providers.indexeddb.<name>`, or `providers.s3.<name>` is set, `source`
 must be present.
-`providers.auth.<name>.config`, `providers.cache.<name>.config`,
+`providers.authentication.<name>.config`, `providers.cache.<name>.config`,
 `providers.indexeddb.<name>.config`, and `providers.s3.<name>.config` are only
 allowed when their corresponding source is set.
 
@@ -1194,4 +1175,4 @@ Server listener ports must be greater than zero. When `server.management` is con
 
 ### Runtime
 
-`server.providers.indexeddb`, `providers.indexeddb`, and `server.encryptionKey` are required at `serve` time. `providers.auth` is optional.
+`server.providers.indexeddb`, `providers.indexeddb`, and `server.encryptionKey` are required at `serve` time. `providers.authentication` is optional.

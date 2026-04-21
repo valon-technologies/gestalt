@@ -13,8 +13,9 @@ const (
 	// ProviderKindIntegration is the main executable provider surface used by
 	// integration plugins.
 	ProviderKindIntegration ProviderKind = "integration"
-	// ProviderKindAuth serves interactive login and token-validation flows.
-	ProviderKindAuth ProviderKind = "auth"
+	// ProviderKindAuthentication serves interactive login and token-validation
+	// flows.
+	ProviderKindAuthentication ProviderKind = "authentication"
 	// ProviderKindAuthorization serves authorization decision and control-plane flows.
 	ProviderKindAuthorization ProviderKind = "authorization"
 	// ProviderKindIndexedDB serves the IndexedDB-style datastore surface.

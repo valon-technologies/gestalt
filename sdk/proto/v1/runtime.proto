@@ -4,7 +4,7 @@ package gestalt.provider.v1;
 
 // SDK Naming Convention (all languages):
 //   Base provider interface:  Provider
-//   Auth provider:            AuthProvider
+//   Authentication provider:  AuthenticationProvider
 //   Authorization provider:   AuthorizationProvider
 //   IndexedDB provider:       IndexedDBProvider
 //   Lifecycle service:        ProviderLifecycle (internal, not user-facing)
@@ -17,7 +17,7 @@ option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 enum ProviderKind {
   PROVIDER_KIND_UNSPECIFIED = 0;
   PROVIDER_KIND_INTEGRATION = 1;
-  PROVIDER_KIND_AUTH = 2;
+  PROVIDER_KIND_AUTHENTICATION = 2;
   PROVIDER_KIND_INDEXEDDB = 3;
   PROVIDER_KIND_SECRETS = 4;
   PROVIDER_KIND_TELEMETRY = 5;

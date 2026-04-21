@@ -7,10 +7,12 @@ import (
 	"google.golang.org/grpc"
 )
 
-// ServeAuthProvider starts a gRPC server for an [AuthProvider].
-func ServeAuthProvider(ctx context.Context, auth AuthProvider) error {
+// ServeAuthenticationProvider starts a gRPC server for an
+// [AuthenticationProvider].
+func ServeAuthenticationProvider(ctx context.Context, auth AuthenticationProvider) error {
 	return serveProvider(withProviderCloser(ctx, auth), func(srv *grpc.Server) {
-		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindAuth, auth))
-		proto.RegisterAuthProviderServer(srv, newAuthProviderServer(auth))
+		server := newAuthenticationProviderServer(auth)
+		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindAuthentication, auth))
+		proto.RegisterAuthenticationProviderServer(srv, server)
 	})
 }

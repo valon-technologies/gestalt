@@ -1,0 +1,85 @@
+# Authentication
+
+Authentication providers handle platform login for the Gestalt server. They are separate
+from plugin connections: `providers.authentication.<name>` decides how users sign in to the
+deployment itself, while plugin connections decide how Gestalt authenticates to
+upstream APIs on behalf of callers.
+
+## How authentication providers work
+
+When a request arrives without a valid session, Gestalt asks the configured
+authentication provider to begin login, redirects the user to the identity provider, and
+then calls the provider again to complete the callback. After that, Gestalt
+issues and stores its own session.
+
+Some authentication providers also support:
+
+- validating externally issued bearer tokens for API clients
+- customizing session TTL
+- restricting login to allowed email domains or tenant settings
+
+## First-Party Authentication Providers
+
+First-party authentication providers live under
+[`valon-technologies/gestalt-providers/auth`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth).
+
+| Provider | Use case |
+| --- | --- |
+| `local` | Single-user development on a trusted machine |
+| [`valon-technologies/gestalt-providers/auth/oidc`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth/oidc) | Generic OpenID Connect providers such as Google, Okta, Auth0, Azure AD, or Keycloak |
+
+## Configuring `providers.authentication`
+
+```yaml
+providers:
+  authentication:
+    oidc:
+      source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        issuerUrl: https://login.example.com
+        clientId: ${OIDC_CLIENT_ID}
+        clientSecret:
+          secret:
+            provider: default
+            name: oidc-client-secret
+        allowedDomains:
+          - example.com
+```
+
+Structured secret refs such as `clientSecret.secret.provider: default` are
+resolved through `providers.secrets` before the authentication provider receives its
+config.
+
+To disable platform authentication entirely, omit `providers.authentication`.
+
+For local development, omission is the simple default: every request is treated
+as the same anonymous user.
+
+## Local source during development
+
+```yaml
+providers:
+  authentication:
+    oidc:
+      source: ./oidc-auth/manifest.yaml
+      config:
+        issuerUrl: https://login.example.com
+        clientId: ${OIDC_CLIENT_ID}
+        clientSecret:
+          secret:
+            provider: default
+            name: oidc-client-secret
+```
+
+## Building Your Own Authentication Provider
+
+Implementation details for `BeginLogin`, callback handling, optional bearer
+token validation, and release packaging now live under
+[Custom Providers > Authentication](/custom-providers/authentication).
+
+## What To Read Next
+
+- [Secrets](/providers/secrets): secret managers for authentication provider config
+- [Configuration](/configuration): full config examples including `providers.authentication`
+- [Built-in Providers](/reference/built-in-providers): first-party authentication reference
+- [Custom Authentication Providers](/custom-providers/authentication): advanced authoring docs

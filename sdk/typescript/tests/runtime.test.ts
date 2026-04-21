@@ -8,9 +8,10 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { expect, test } from "bun:test";
 
 import {
+  BeginLoginRequestSchema,
   CompleteLoginRequestSchema,
   ValidateExternalTokenRequestSchema,
-} from "../gen/v1/auth_pb.ts";
+} from "../gen/v1/authentication_pb.ts";
 import {
   CacheDeleteManyRequestSchema,
   CacheDeleteRequestSchema,
@@ -49,7 +50,7 @@ import {
   createCacheService,
   ENV_WRITE_CATALOG,
   ENV_PROVIDER_SOCKET,
-  createAuthService,
+  createAuthenticationService,
   createProviderService,
   createRuntimeService,
   createWorkflowProviderService,
@@ -170,7 +171,9 @@ export const plugin = definePlugin({
 });
 
 test("loadProviderFromTarget resolves a secrets provider from package metadata", async () => {
-  const provider = await loadProviderFromTarget(fixturePath("secrets-provider"));
+  const provider = await loadProviderFromTarget(
+    fixturePath("secrets-provider"),
+  );
   expect(provider.kind).toBe("secrets");
   expect(provider.name).toBe("secrets-provider");
   expect(provider.displayName).toBe("Fixture Secrets");
@@ -205,7 +208,7 @@ test("loadProviderFromTarget formats package target in errors when explicit targ
         name: "broken-provider",
         gestalt: {
           provider: {
-            kind: "auth",
+            kind: "authentication",
             target: "./provider.ts#missing",
           },
         },
@@ -231,7 +234,7 @@ export const plugin = definePlugin({
     );
 
     await expect(loadProviderFromTarget(root, "   ")).rejects.toThrow(
-      "auth:./provider.ts#missing did not resolve to a Gestalt auth provider",
+      "authentication:./provider.ts#missing did not resolve to a Gestalt authentication provider",
     );
   } finally {
     removeTempDir(root);
@@ -296,19 +299,25 @@ test("runtime serves a secrets provider over unix gRPC", async () => {
   let child: ChildProcess | undefined;
 
   try {
-    child = spawn(process.execPath, [runtimeEntry, root, "secrets:./secrets.ts"], {
-      env: {
-        ...process.env,
-        [ENV_PROVIDER_SOCKET]: socketPath,
+    child = spawn(
+      process.execPath,
+      [runtimeEntry, root, "secrets:./secrets.ts"],
+      {
+        env: {
+          ...process.env,
+          [ENV_PROVIDER_SOCKET]: socketPath,
+        },
+        stdio: ["ignore", "ignore", "pipe"],
       },
-      stdio: ["ignore", "ignore", "pipe"],
-    });
+    );
     const stderrText = captureChildStderr(child);
 
     try {
       await waitForPath(socketPath);
     } catch (error) {
-      throw new Error(`${String(error)}${stderrText() ? `\n${stderrText()}` : ""}`);
+      throw new Error(
+        `${String(error)}${stderrText() ? `\n${stderrText()}` : ""}`,
+      );
     }
 
     const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
@@ -629,10 +638,10 @@ export const plugin = definePlugin({
   }
 });
 
-test("auth provider supports runtime metadata, login flows, and token validation", async () => {
+test("authentication provider supports runtime metadata, login flows, and token validation", async () => {
   const provider = await loadProviderFromTarget(fixturePath("auth-provider"));
   const runtime = createRuntimeService(provider);
-  const auth = createAuthService(provider as any);
+  const auth = createAuthenticationService(provider as any);
 
   await expectConnectCode(
     (runtime.configureProvider as any)(
@@ -648,7 +657,7 @@ test("auth provider supports runtime metadata, login flows, and token validation
   );
 
   const defaultBegin = await (auth.beginLogin as any)(
-    create((await import("../gen/v1/auth_pb.ts")).BeginLoginRequestSchema, {
+    create(BeginLoginRequestSchema, {
       callbackUrl: "https://app.example.test/callback",
       hostState: "host-state",
       scopes: ["openid"],
@@ -672,13 +681,13 @@ test("auth provider supports runtime metadata, login flows, and token validation
   const metadata = await (runtime.getProviderIdentity as any)(
     create(EmptySchema, {}),
   );
-  expect(metadata.kind).toBe(2);
+  expect(metadata.kind).toBe(ProtoProviderKind.AUTHENTICATION);
   expect(metadata.displayName).toBe("Fixture Auth");
   expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
 
   const begin = await (auth.beginLogin as any)(
-    create((await import("../gen/v1/auth_pb.ts")).BeginLoginRequestSchema, {
+    create(BeginLoginRequestSchema, {
       callbackUrl: "https://app.example.test/callback",
       hostState: "host-state",
       scopes: ["openid"],
@@ -963,7 +972,9 @@ test("s3 provider target resolves and serves runtime metadata plus object operat
 });
 
 test("workflow provider target resolves and serves runtime metadata plus workflow operations", async () => {
-  const provider = await loadProviderFromTarget(fixturePath("workflow-provider"));
+  const provider = await loadProviderFromTarget(
+    fixturePath("workflow-provider"),
+  );
   const runtime = createRuntimeService(provider);
   const workflow = createWorkflowProviderService(provider as any);
 
@@ -1305,7 +1316,10 @@ test("s3 client writeObject cancels unread readable streams when upload ends ear
         meta: {
           ref: { bucket: "runtime-bucket", key: "runtime.txt" },
           etag: "etag",
-          size: BigInt((firstChunk.value as { msg: { value: Uint8Array } }).msg.value.byteLength),
+          size: BigInt(
+            (firstChunk.value as { msg: { value: Uint8Array } }).msg.value
+              .byteLength,
+          ),
           contentType: "text/plain",
           metadata: {},
           storageClass: "STANDARD",

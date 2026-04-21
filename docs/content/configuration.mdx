@@ -7,55 +7,90 @@ Gestalt is configured from one or more YAML files. This page covers the key conc
 A Gestalt config has five top-level keys: `server` for host settings and host-provider selection, `authorization` for shared human/workload access policy, `providers` for named host-scoped providers and web UIs, `workflows` for config-managed schedules and event triggers, and `plugins` for executable integrations and optional plugin-backed UI mounts.
 
 ```yaml
-server:
-  encryptionKey: ...        # required, root deployment secret
-  baseUrl: ...              # public URL for OAuth callbacks
-  providers:
-    auth: ...               # optional selected auth provider
-    secrets: ...            # optional selected secrets provider
-    telemetry: ...          # optional selected telemetry provider
-    audit: ...              # optional selected audit provider
-    indexeddb: ...          # selected storage provider
-    authorization: ...      # optional selected authorization provider
-  public:                   # public listener (default port 8080)
-    host: ...
-    port: ...
-  management:               # optional management listener
-    host: ...
-    port: ...
-  egress:                   # outbound request policy
-    defaultAction: ...      # "allow" or "deny"
-
 authorization:
-  policies: ...             # shared human access policies
-  workloads: ...            # workload bearer-token policy
+  # shared human access policies
+  policies: ...
+
+  # workload bearer-token policy
+  workloads: ...
+
+plugins:
+  <name>: ...               # each is a ProviderEntry
 
 providers:
-  auth:                     # named auth providers
+  # named audit pipelines
+  audit:
+    <name>: ...            # default: providers.audit.default = inherit
+
+  # named authentication providers
+  authentication:
     <name>: ...            # each is a ProviderEntry
-  secrets:                  # named secret managers
+
+  # named authorization providers
+  authorization:
+    <name>: ...             # each is a ProviderEntry
+
+  # named cache providers
+  cache:
+    <name>: ...             # each is a ProviderEntry
+
+  # named storage providers
+  indexeddb:
+    <name>: ...             # each is a ProviderEntry
+
+  # named S3 object-store providers
+  s3:
+    <name>: ...             # each is a ProviderEntry
+
+  # named secret managers
+  secrets:
     <name>: ...            # each is a ProviderEntry
-  telemetry:                # named telemetry pipelines (default: providers.telemetry.default = stdout)
-    <name>: ...            # each is a ProviderEntry
-  audit:                    # named audit pipelines (default: providers.audit.default = inherit)
-    <name>: ...            # each is a ProviderEntry
-  ui:                       # named web UI bundles
+
+  # named telemetry pipelines
+  telemetry:
+    <name>: ...            # default: providers.telemetry.default = stdout
+
+  # named web UI bundles
+  ui:
     <name>: ...             # each is a UIEntry
-  indexeddb:                # named storage providers
+
+  # named workflow providers
+  workflow:
     <name>: ...             # each is a ProviderEntry
-  authorization:            # named authorization providers
-    <name>: ...             # each is a ProviderEntry
-  workflow:                 # named workflow providers
-    <name>: ...             # each is a ProviderEntry
-  cache:                    # named cache providers
-    <name>: ...             # each is a ProviderEntry
-  s3:                       # named S3 object-store providers
-    <name>: ...             # each is a ProviderEntry
+
 workflows:
   schedules: {}             # config-managed schedules
   eventTriggers: {}         # config-managed event triggers
-plugins:
-  <name>: ...               # each is a ProviderEntry
+
+server:
+  # public URL for OAuth callbacks
+  baseUrl: ...
+
+  # outbound request policy
+  egress:
+    defaultAction: ...      # "allow" or "deny"
+
+  # required root deployment secret
+  encryptionKey: ...
+
+  # optional management listener
+  management:
+    host: ...
+    port: ...
+
+  # host-provider selection
+  providers:
+    audit: ...
+    authentication: ...
+    authorization: ...
+    indexeddb: ...
+    secrets: ...
+    telemetry: ...
+
+  # public listener (default port 8080)
+  public:
+    host: ...
+    port: ...
 ```
 
 ProviderEntry-backed entries accept `source` (where to load it from), `config` (provider-specific settings), `allowedHosts`, and optional metadata fields. Plugin entries additionally support plugin-only fields such as `connections`, `allowedOperations`, `mountPath`, and `ui`. See the [Config File](/reference/config-file) reference for every field.
@@ -69,7 +104,7 @@ Gestalt has nine core concepts you configure in YAML:
 - **[IndexedDB.](/providers/indexeddb)** The persistent storage layer. Stores users, sessions, tokens, and credentials through a provider that implements the IndexedDB interface.
 - **[Authorization.](/providers/authorization)** Optional host-scoped policy storage and decision engine for dynamic human authorization state. The first-party `authorization/indexeddb` provider persists models and relationships in the selected host IndexedDB provider.
 - **[S3.](/providers/s3)** Plugin-bound object storage. The provider config chooses the backend, credentials, and endpoint; plugin code chooses buckets, keys, and versions at runtime.
-- **[Auth.](/providers/auth)** Platform login for the Gestalt server. Separate from connection auth, which is per-plugin and per-upstream.
+- **[Authentication.](/providers/authentication)** Platform login for the Gestalt server. Separate from connection authentication, which is per-plugin and per-upstream.
 - **[Secrets.](/providers/secrets)** Resolves structured secret refs in the config at startup. Backed by environment variables, files, or cloud secret managers.
 - **[Workflow.](/providers/workflow)** Global workflow runs, schedules, and event triggers backed by a workflow provider and optional host IndexedDB storage.
 - **[UI.](/providers/web-uis)** Public static UI bundles served under configured path prefixes, either directly from `providers.ui` or through `plugins.<name>.mountPath`. Omit `providers.ui` to run headless.
@@ -203,12 +238,12 @@ plugins:
 | `none` | No upstream credential needed. |
 | `user` | Credentials are stored for the calling subject (for example `user:<id>`, `workload:<id>`, or a managed identity subject). |
 
-### Auth types
+### Authentication Types
 
 | Type | Use case |
 | --- | --- |
 | `oauth2` | Standard OAuth 2.0 with authorization URL, token URL, scopes, PKCE. |
-| `mcp_oauth` | Delegates auth to an upstream MCP server. |
+| `mcp_oauth` | Delegates authentication to an upstream MCP server. |
 | `bearer` | Static bearer token. Prompts the user for the value. |
 | `manual` | Custom credential fields (API key, org ID, etc.). |
 | `none` | No authentication. |
@@ -297,19 +332,19 @@ providers:
 
 The built-in admin UI at `/admin` is always available regardless of this setting. See [Web UIs](/providers/web-uis) for the bundle format.
 
-## Platform auth
+## Platform Authentication
 
-The `providers.auth` map protects the web UI, HTTP API, and `/mcp` endpoint. For local development, omit it:
+The `providers.authentication` map protects the web UI, HTTP API, and `/mcp` endpoint. For local development, omit it:
 
-For multi-user deployments, point at a published auth provider:
+For multi-user deployments, point at a published authentication provider:
 
 ```yaml
 server:
   providers:
-    auth: oidc
+    authentication: oidc
 
 providers:
-  auth:
+  authentication:
     oidc:
       source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
       config:
@@ -323,13 +358,13 @@ providers:
 
 For production OIDC providers, keep `issuerUrl` on `https://`. If you run a
 local plaintext issuer on loopback for development, add
-`allowInsecureHttp: true` under `providers.auth.<name>.config`.
+`allowInsecureHttp: true` under `providers.authentication.<name>.config`.
 
 | Scenario | Configuration |
 | --- | --- |
-| Local development | Omit `providers.auth` |
-| Multi-user deployment | `providers.auth.<name>` with a published OIDC or Google auth provider |
-| Subject-owned upstream access | `mode: user` on plugin connections |
+| Local development | Omit `providers.authentication` |
+| Multi-user deployment | `providers.authentication.<name>` with a published OIDC or other authentication provider |
+| Per-user upstream access | `mode: user` on plugin connections |
 
 ### API tokens
 
@@ -369,17 +404,13 @@ server:
 providers:
   indexeddb:
     main:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
       config:
         dsn: sqlite://./gestalt.db
 
   authorization:
     indexeddb:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/authorization/indexeddb
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/authorization/indexeddb/v0.0.1-alpha.1/provider-release.yaml
       config:
         indexeddb: main
 ```
@@ -510,7 +541,7 @@ server:
       provider: default
       name: gestalt-encryption-key
   providers:
-    auth: oidc
+    authentication: oidc
     secrets: default
     indexeddb: main
 
@@ -521,7 +552,7 @@ providers:
       config:
         dir: /etc/gestalt-secrets
 
-  auth:
+  authentication:
     oidc:
       source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
       config:

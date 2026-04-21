@@ -44,8 +44,8 @@ test("provider target parsing supports plugin defaults and kind prefixes", () =>
     modulePath: "./provider.ts",
     exportName: "plugin",
   });
-  expect(parseProviderTarget("auth:./auth.ts#provider")).toEqual({
-    kind: "auth",
+  expect(parseProviderTarget("authentication:./auth.ts#provider")).toEqual({
+    kind: "authentication",
     modulePath: "./auth.ts",
     exportName: "provider",
   });
@@ -56,6 +56,9 @@ test("provider target parsing supports plugin defaults and kind prefixes", () =>
   });
   expect(() => parseProviderTarget("integration:./provider.ts#plugin")).toThrow(
     'unsupported provider kind "integration"',
+  );
+  expect(() => parseProviderTarget("auth:./auth.ts#provider")).toThrow(
+    'unsupported provider kind "auth"',
   );
   expect(parseProviderTarget("workflow:./workflow.ts#provider")).toEqual({
     kind: "workflow",
@@ -86,13 +89,13 @@ test("package config reads provider targets", () => {
   expect(readPackageConfig(authRoot)).toEqual({
     name: "@fixtures/auth-provider",
     providerTarget: {
-      kind: "auth",
+      kind: "authentication",
       modulePath: "./auth.ts",
       exportName: "provider",
     },
   });
   expect(formatProviderTarget(readPackageProviderTarget(authRoot))).toBe(
-    "auth:./auth.ts#provider",
+    "authentication:./auth.ts#provider",
   );
 
   const cacheRoot = fixturePath("cache-provider");

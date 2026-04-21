@@ -70,7 +70,7 @@ func ParseTokenType(token string) (TokenType, bool) {
 }
 
 type Resolver struct {
-	auth              core.AuthProvider
+	auth              core.AuthenticationProvider
 	users             *coredata.UserService
 	apiTokens         *coredata.APITokenService
 	managedIdentities *coredata.ManagedIdentityService
@@ -78,7 +78,7 @@ type Resolver struct {
 	workloads         WorkloadTokenResolver
 }
 
-func NewResolver(auth core.AuthProvider, users *coredata.UserService, apiTokens *coredata.APITokenService, managedIdentities *coredata.ManagedIdentityService, identityGrants *coredata.ManagedIdentityGrantService, workloads WorkloadTokenResolver) *Resolver {
+func NewResolver(auth core.AuthenticationProvider, users *coredata.UserService, apiTokens *coredata.APITokenService, managedIdentities *coredata.ManagedIdentityService, identityGrants *coredata.ManagedIdentityGrantService, workloads WorkloadTokenResolver) *Resolver {
 	return &Resolver{
 		auth:              auth,
 		users:             users,

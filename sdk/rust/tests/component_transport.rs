@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use gestalt::proto::v1::auth_provider_client::AuthProviderClient;
+use gestalt::proto::v1::authentication_provider_client::AuthenticationProviderClient;
 use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use gestalt::proto::v1::s3_client::S3Client;
 use gestalt::proto::v1::s3_server::S3 as ProtoS3;
@@ -17,7 +17,7 @@ use gestalt::proto::v1::{
     ProviderKind, ReadObjectChunk, ReadObjectRequest, S3ObjectMeta, S3ObjectRef,
     ValidateExternalTokenRequest, WriteObjectRequest, WriteObjectResponse,
 };
-use gestalt::{AuthProvider, RuntimeMetadata};
+use gestalt::{AuthenticationProvider, RuntimeMetadata};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::UnixStream;
 use tokio_stream::iter as stream_iter;
@@ -40,7 +40,7 @@ impl Default for TestAuthProvider {
 }
 
 #[async_trait]
-impl AuthProvider for TestAuthProvider {
+impl AuthenticationProvider for TestAuthProvider {
     async fn configure(
         &self,
         name: &str,
@@ -54,7 +54,7 @@ impl AuthProvider for TestAuthProvider {
         Some(RuntimeMetadata {
             name: "auth-example".to_string(),
             display_name: "Auth Example".to_string(),
-            description: "Test auth provider".to_string(),
+            description: "Test authentication provider".to_string(),
             version: "0.1.0".to_string(),
         })
     }
@@ -340,16 +340,16 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
     let provider = Arc::new(TestAuthProvider::default());
     let serve_provider = Arc::clone(&provider);
     let serve_task = tokio::spawn(async move {
-        gestalt::runtime::serve_auth_provider(serve_provider)
+        gestalt::runtime::serve_authentication_provider(serve_provider)
             .await
-            .expect("serve auth provider");
+            .expect("serve authentication provider");
     });
 
     helpers::wait_for_socket(&socket).await;
 
     let channel = connect_unix(&socket).await;
     let mut runtime = ProviderLifecycleClient::new(channel.clone());
-    let mut auth = AuthProviderClient::new(channel);
+    let mut auth = AuthenticationProviderClient::new(channel);
 
     let metadata = runtime
         .get_provider_identity(())
@@ -360,7 +360,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
         ProviderKind::try_from(metadata.kind)
             .expect("valid provider kind")
             .as_str_name(),
-        "PROVIDER_KIND_AUTH"
+        "PROVIDER_KIND_AUTHENTICATION"
     );
     assert_eq!(metadata.name, "auth-example");
     assert_eq!(metadata.warnings, vec!["set OIDC_BASE_URL"]);

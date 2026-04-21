@@ -72,7 +72,7 @@ jobs:
 | Command | Description |
 |---|---|
 | `plugins list` | List available plugins |
-| `plugins connect NAME` | Connect a plugin via OAuth or manual auth |
+| `plugins connect NAME` | Connect a plugin via OAuth or manual authentication |
 | `plugins disconnect NAME` | Disconnect a plugin |
 | `plugins invoke NAME OP` | Execute a plugin operation |
 | `tokens create/list/revoke` | Manage API tokens |

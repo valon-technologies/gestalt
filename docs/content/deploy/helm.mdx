@@ -18,7 +18,7 @@ matching `extraEnv` entries.
 
 The default chart profile is intentionally minimal:
 
-- platform auth omitted
+- platform authentication omitted
 - SQLite on a PVC mounted at `/data`
 - a static dev-only `server.encryptionKey`
 - one replica
@@ -30,7 +30,7 @@ before any shared, persistent, or production deployment.
 
 ## Production Install Pattern
 
-For production, override the default auth and datastore settings and provide
+For production, override the default authentication and datastore settings and provide
 the required environment variables through `extraEnv`. Prefer enabling the
 separate management listener and internal management Service so `/admin` and
 `/metrics` do not share the public listener.
@@ -176,7 +176,7 @@ Service rather than exposing it on the public ingress.
 
 ## When to enable `pluginInit`
 
-Enable the init container when your config uses published provider metadata URLs under `plugins.*.source`, `providers.auth.*.source`, `providers.indexeddb.*.source`, or `providers.ui.*.source` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
+Enable the init container when your config uses published provider metadata URLs under `plugins.*.source`, `providers.authentication.*.source`, `providers.indexeddb.*.source`, or `providers.ui.*.source` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
 
 `/gestaltd init --config /etc/gestalt/config.yaml`
 

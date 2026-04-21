@@ -22,7 +22,7 @@ use crate::env::{
 };
 use crate::error::{Error, Result};
 #[cfg(unix)]
-use crate::generated::v1::auth_provider_server::AuthProviderServer;
+use crate::generated::v1::authentication_provider_server::AuthenticationProviderServer;
 #[cfg(unix)]
 use crate::generated::v1::cache_server::CacheServer;
 #[cfg(unix)]
@@ -37,11 +37,12 @@ use crate::generated::v1::secrets_provider_server::SecretsProviderServer;
 use crate::generated::v1::workflow_provider_server::WorkflowProviderServer as WorkflowRpcServer;
 use crate::provider_server::ProviderServer;
 use crate::{
-    AuthProvider, CacheProvider, Provider, Router, S3Provider, SecretsProvider, WorkflowProvider,
+    AuthenticationProvider, CacheProvider, Provider, Router, S3Provider, SecretsProvider,
+    WorkflowProvider,
 };
 #[cfg(unix)]
 use crate::{
-    auth_server::AuthServer, cache_server::CacheRpcServer, runtime_server::RuntimeServer,
+    auth_server::AuthenticationServer, cache_server::CacheRpcServer, runtime_server::RuntimeServer,
     secrets_server::SecretsServer, workflow::WorkflowServer,
 };
 
@@ -62,9 +63,9 @@ pub fn run_provider<P: Provider>(provider: Arc<P>, router: Router<P>) -> Result<
     build_runtime_and_block_on(|| serve_provider(provider, router))
 }
 
-/// Runs an auth provider on the Unix socket exposed by `gestaltd`.
-pub fn run_auth_provider<P: AuthProvider>(provider: Arc<P>) -> Result<()> {
-    build_runtime_and_block_on(|| serve_auth_provider(provider))
+/// Runs an authentication provider on the Unix socket exposed by `gestaltd`.
+pub fn run_authentication_provider<P: AuthenticationProvider>(provider: Arc<P>) -> Result<()> {
+    build_runtime_and_block_on(|| serve_authentication_provider(provider))
 }
 
 /// Runs a cache provider on the Unix socket exposed by `gestaltd`.
@@ -135,26 +136,35 @@ where
 }
 
 #[cfg(unix)]
-/// Serves an auth provider over the configured Unix socket.
-pub async fn serve_auth_provider<P>(provider: Arc<P>) -> Result<()>
+/// Serves an authentication provider over the configured Unix socket.
+pub async fn serve_authentication_provider<P>(provider: Arc<P>) -> Result<()>
 where
-    P: AuthProvider,
+    P: AuthenticationProvider,
 {
     serve_unix_provider(
         provider,
         move |incoming, provider| {
+            let auth_server = AuthenticationServer::new(Arc::clone(&provider));
             Server::builder()
-                .add_service(ProviderLifecycleServer::new(RuntimeServer::for_auth(
-                    Arc::clone(&provider),
-                )))
-                .add_service(AuthProviderServer::new(AuthServer::new(Arc::clone(
-                    &provider,
-                ))))
+                .add_service(ProviderLifecycleServer::new(
+                    RuntimeServer::for_authentication(Arc::clone(&provider)),
+                ))
+                .add_service(AuthenticationProviderServer::new(auth_server))
                 .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
         },
         |provider| async move { provider.close().await },
     )
     .await
+}
+
+#[cfg(not(unix))]
+pub async fn serve_authentication_provider<P>(_provider: Arc<P>) -> Result<()>
+where
+    P: AuthenticationProvider,
+{
+    Err(Error::internal(
+        "unix sockets are unsupported on this platform",
+    ))
 }
 
 #[cfg(unix)]
@@ -252,16 +262,6 @@ where
     if maybe_write_catalog(&router)? {
         return Ok(());
     }
-    Err(Error::internal(
-        "unix sockets are unsupported on this platform",
-    ))
-}
-
-#[cfg(not(unix))]
-pub async fn serve_auth_provider<P>(_provider: Arc<P>) -> Result<()>
-where
-    P: AuthProvider,
-{
     Err(Error::internal(
         "unix sockets are unsupported on this platform",
     ))

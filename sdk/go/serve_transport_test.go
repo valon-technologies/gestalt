@@ -56,26 +56,26 @@ func TestServeProviderRoundTrip(t *testing.T) {
 	}
 }
 
-func TestServeAuthProviderClosesProviderOnShutdown(t *testing.T) {
+func TestServeAuthenticationProviderClosesProviderOnShutdown(t *testing.T) {
 	socket := newSocketPath(t, "a.sock")
 	t.Setenv(proto.EnvProviderSocket, socket)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	auth := &closeableStubAuthProvider{}
+	auth := &closeableStubAuthenticationProvider{}
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- gestalt.ServeAuthProvider(ctx, auth)
+		errCh <- gestalt.ServeAuthenticationProvider(ctx, auth)
 	}()
 	t.Cleanup(func() {
 		cancel()
 		waitServeResult(t, errCh)
 		if !auth.closed.Load() {
-			t.Fatal("auth provider Close was not called")
+			t.Fatal("authentication provider Close was not called")
 		}
 	})
 
 	conn := newUnixConn(t, socket)
-	client := proto.NewAuthProviderClient(conn)
+	client := proto.NewAuthenticationProviderClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
 	defer rpcCancel()
@@ -103,19 +103,19 @@ type closeableStubProvider struct {
 	closeTracker
 }
 
-type closeableStubAuthProvider struct {
+type closeableStubAuthenticationProvider struct {
 	closeTracker
 }
 
-func (p *closeableStubAuthProvider) Configure(context.Context, string, map[string]any) error {
+func (p *closeableStubAuthenticationProvider) Configure(context.Context, string, map[string]any) error {
 	return nil
 }
 
-func (p *closeableStubAuthProvider) BeginLogin(_ context.Context, _ *gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
+func (p *closeableStubAuthenticationProvider) BeginLogin(_ context.Context, _ *gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
 	return &gestalt.BeginLoginResponse{AuthorizationUrl: "https://auth.example.test/login"}, nil
 }
 
-func (p *closeableStubAuthProvider) CompleteLogin(_ context.Context, _ *gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
+func (p *closeableStubAuthenticationProvider) CompleteLogin(_ context.Context, _ *gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
 	return &gestalt.AuthenticatedUser{Email: "user@example.com"}, nil
 }
 

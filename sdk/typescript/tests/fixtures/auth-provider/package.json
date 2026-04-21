@@ -3,7 +3,7 @@
   "type": "module",
   "gestalt": {
     "provider": {
-      "kind": "auth",
+      "kind": "authentication",
       "target": "./auth.ts#provider"
     }
   }

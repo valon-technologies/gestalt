@@ -11,11 +11,11 @@ import (
 )
 
 type authServer struct {
-	proto.UnimplementedAuthProviderServer
-	auth AuthProvider
+	proto.UnimplementedAuthenticationProviderServer
+	auth AuthenticationProvider
 }
 
-func newAuthProviderServer(auth AuthProvider) *authServer {
+func newAuthenticationProviderServer(auth AuthenticationProvider) *authServer {
 	return &authServer{auth: auth}
 }
 
@@ -28,7 +28,7 @@ func (s *authServer) BeginLogin(ctx context.Context, req *proto.BeginLoginReques
 		return nil, providerRPCError("begin login", err)
 	}
 	if resp == nil {
-		return nil, status.Error(codes.Internal, "auth provider returned nil response")
+		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
 	}
 	return resp, nil
 }
@@ -42,7 +42,7 @@ func (s *authServer) CompleteLogin(ctx context.Context, req *proto.CompleteLogin
 		return nil, providerRPCError("complete login", err)
 	}
 	if user == nil {
-		return nil, status.Error(codes.Internal, "auth provider returned nil user")
+		return nil, status.Error(codes.Internal, "authentication provider returned nil user")
 	}
 	return user, nil
 }
@@ -68,7 +68,7 @@ func (s *authServer) ValidateExternalToken(ctx context.Context, req *proto.Valid
 func (s *authServer) GetSessionSettings(context.Context, *emptypb.Empty) (*proto.AuthSessionSettings, error) {
 	provider, ok := s.auth.(SessionTTLProvider)
 	if !ok {
-		return nil, status.Error(codes.Unimplemented, "auth provider does not expose session settings")
+		return nil, status.Error(codes.Unimplemented, "authentication provider does not expose session settings")
 	}
 	ttl := provider.SessionTTL()
 	if ttl < 0 {

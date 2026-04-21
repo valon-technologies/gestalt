@@ -42,7 +42,7 @@ import (
 )
 
 func stubAuthFactory(name string) bootstrap.AuthFactory {
-	return func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
+	return func(yaml.Node, bootstrap.Deps) (core.AuthenticationProvider, error) {
 		return &coretesting.StubAuthProvider{N: name}, nil
 	}
 }
@@ -675,7 +675,7 @@ func validConfig() *config.Config {
 	return &config.Config{
 		Plugins: map[string]*config.ProviderEntry{},
 		Providers: config.ProvidersConfig{
-			Auth: map[string]*config.ProviderEntry{
+			Authentication: map[string]*config.ProviderEntry{
 				"default": {
 					Source: config.NewMetadataSource("https://example.invalid/github-com-valon-technologies-gestalt-providers-auth-oidc/v0.0.1-alpha.1/provider-release.yaml"),
 					Config: yaml.Node{Kind: yaml.MappingNode},
@@ -708,11 +708,11 @@ func mustYAMLNode(t *testing.T, value any) yaml.Node {
 	return node
 }
 
-func selectedAuthEntry(t *testing.T, cfg *config.Config) *config.ProviderEntry {
+func selectedAuthenticationEntry(t *testing.T, cfg *config.Config) *config.ProviderEntry {
 	t.Helper()
-	_, entry, err := cfg.SelectedAuthProvider()
+	_, entry, err := cfg.SelectedAuthenticationProvider()
 	if err != nil {
-		t.Fatalf("SelectedAuthProvider: %v", err)
+		t.Fatalf("SelectedAuthenticationProvider: %v", err)
 	}
 	return entry
 }
@@ -3465,7 +3465,7 @@ func TestResultCloseClosesAuthProvider(t *testing.T) {
 
 	closed := &atomic.Bool{}
 	factories := validFactories()
-	factories.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
+	factories.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthenticationProvider, error) {
 		return &closableAuthProvider{
 			StubAuthProvider: &coretesting.StubAuthProvider{N: "test-auth"},
 			closed:           closed,
@@ -3480,7 +3480,7 @@ func TestResultCloseClosesAuthProvider(t *testing.T) {
 		t.Fatalf("Result.Close: %v", err)
 	}
 	if !closed.Load() {
-		t.Fatal("auth provider was not closed")
+		t.Fatal("authentication provider was not closed")
 	}
 }
 
@@ -3673,7 +3673,7 @@ func TestBootstrap_ReusesPreparedComponentRuntimeConfig(t *testing.T) {
 
 	cfg := validConfig()
 
-	authRuntime, err := config.BuildComponentRuntimeConfigNode("auth", "auth", selectedAuthEntry(t, cfg), yaml.Node{
+	authRuntime, err := config.BuildComponentRuntimeConfigNode("authentication", "authentication", selectedAuthenticationEntry(t, cfg), yaml.Node{
 		Kind: yaml.MappingNode,
 		Content: []*yaml.Node{
 			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "clientId"},
@@ -3681,13 +3681,13 @@ func TestBootstrap_ReusesPreparedComponentRuntimeConfig(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("BuildComponentRuntimeConfigNode(auth): %v", err)
+		t.Fatalf("BuildComponentRuntimeConfigNode(authentication): %v", err)
 	}
-	selectedAuthEntry(t, cfg).Config = authRuntime
+	selectedAuthenticationEntry(t, cfg).Config = authRuntime
 
 	var gotAuthNode yaml.Node
 	factories := validFactories()
-	factories.Auth = func(node yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+	factories.Auth = func(node yaml.Node, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
 		gotAuthNode = node
 		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 	}
@@ -3726,7 +3726,7 @@ func TestBootstrapFactoryError(t *testing.T) {
 		{
 			name: "auth factory error",
 			mutate: func(f *bootstrap.FactoryRegistry) {
-				f.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
+				f.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthenticationProvider, error) {
 					return nil, fmt.Errorf("auth broke")
 				}
 			},
@@ -3755,7 +3755,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 
 		var receivedKey []byte
 		factories := validFactories()
-		factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
 			receivedKey = deps.EncryptionKey
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -3784,7 +3784,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 
 		var receivedKey []byte
 		factories := validFactories()
-		factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
 			receivedKey = deps.EncryptionKey
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -3808,7 +3808,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 		var keys [][]byte
 		for i := 0; i < 2; i++ {
 			factories := validFactories()
-			factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+			factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
 				keys = append(keys, deps.EncryptionKey)
 				return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 			}
@@ -3840,7 +3840,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				Secrets: map[string]string{"enc-key": "resolved-passphrase"},
 			}, nil
 		}
-		factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthenticationProvider, error) {
 			receivedKey = deps.EncryptionKey
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -3922,13 +3922,13 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		var receivedNode yaml.Node
-		factories.Auth = func(node yaml.Node, _ bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth = func(node yaml.Node, _ bootstrap.Deps) (core.AuthenticationProvider, error) {
 			receivedNode = node
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
 
 		cfg := validConfig()
-		selectedAuthEntry(t, cfg).Config = yaml.Node{
+		selectedAuthenticationEntry(t, cfg).Config = yaml.Node{
 			Kind: yaml.MappingNode,
 			Content: []*yaml.Node{
 				{Kind: yaml.ScalarNode, Value: "clientSecret", Tag: "!!str"},
@@ -4807,11 +4807,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
-		cfg.Providers.Auth = map[string]*config.ProviderEntry{
+		cfg.Providers.Authentication = map[string]*config.ProviderEntry{
 			"secondary": {Source: config.NewMetadataSource("https://example.invalid/github-com-valon-technologies-gestalt-providers-auth-oidc/v0.0.1-alpha.1/provider-release.yaml")},
 		}
-		cfg.Server.Providers.Auth = "secondary"
-		cfg.Providers.Auth["secondary"].Config = yaml.Node{
+		cfg.Server.Providers.Authentication = "secondary"
+		cfg.Providers.Authentication["secondary"].Config = yaml.Node{
 			Kind: yaml.MappingNode,
 			Content: []*yaml.Node{
 				{Kind: yaml.ScalarNode, Value: "issuerUrl", Tag: "!!str"},
@@ -4821,7 +4821,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		var authNode yaml.Node
 		factories := validFactories()
-		factories.Auth = func(node yaml.Node, _ bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth = func(node yaml.Node, _ bootstrap.Deps) (core.AuthenticationProvider, error) {
 			authNode = node
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -4847,16 +4847,16 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("omits auth when auth provider is unset", func(t *testing.T) {
+	t.Run("omits authentication when the authentication provider is unset", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
-		cfg.Providers.Auth = nil
-		cfg.Server.Providers.Auth = ""
+		cfg.Providers.Authentication = nil
+		cfg.Server.Providers.Authentication = ""
 
 		var authFactoryCalled atomic.Bool
 		factories := validFactories()
-		factories.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthenticationProvider, error) {
 			authFactoryCalled.Store(true)
 			return &coretesting.StubAuthProvider{N: "unexpected"}, nil
 		}
@@ -4982,7 +4982,9 @@ func TestBootstrapWorkflowAuthorizationAllowsNormalizedCredentialedProvider(t *t
 		return &stubWorkflowProvider{}, nil
 	}
 
-	if _, err := bootstrap.Bootstrap(context.Background(), cfg, factories); err != nil {
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
+	t.Cleanup(func() { _ = result.Close(context.Background()) })
 }

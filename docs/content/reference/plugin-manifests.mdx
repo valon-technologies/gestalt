@@ -1,10 +1,10 @@
-import { Tabs } from 'nextra/components'
+import { Tabs } from "nextra/components";
 
 # Provider Manifests
 
 Gestalt provider packages and release archives are described by a manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`. YAML is the easiest format to author by hand.
 
-Providers are the umbrella concept in Gestalt. Auth providers, cache
+Providers are the umbrella concept in Gestalt. Authentication providers, cache
 providers, indexeddb providers, S3 providers, and plugins all use this
 manifest format. The `plugin` manifest kind is reserved for providers that
 expose callable operations.
@@ -13,15 +13,15 @@ expose callable operations.
 
 Every manifest defines exactly one provider kind, set by the `kind` field:
 
-| Kind | Purpose |
-| --- | --- |
-| `plugin` | Plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
-| `auth` | Platform auth provider. |
-| `cache` | Cache backend for plugin-bound cache bindings. |
-| `indexeddb` | Persistence backend. |
-| `s3` | S3-compatible object store backend. |
-| `secrets` | Secret manager for resolving structured secret refs. |
-| `webui` | Static UI package served by `gestaltd`. |
+| Kind        | Purpose                                              |
+| ----------- | ---------------------------------------------------- |
+| `plugin`    | Plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
+| `auth`      | Platform authentication provider.                    |
+| `cache`     | Cache backend for plugin-bound cache bindings.       |
+| `indexeddb` | Persistence backend.                                 |
+| `s3`        | S3-compatible object store backend.                  |
+| `secrets`   | Secret manager for resolving structured secret refs. |
+| `webui`     | Static UI package served by `gestaltd`.              |
 
 The `kind` field is required. Kind-specific configuration goes under the `spec` block.
 
@@ -29,26 +29,26 @@ The `kind` field is required. Kind-specific configuration goes under the `spec` 
 
 These fields appear at the top level of every manifest regardless of kind.
 
-| Field | Type | Required | Purpose |
-| --- | --- | --- | --- |
-| `kind` | string | yes | The provider kind (`plugin`, `auth`, `cache`, `indexeddb`, `s3`, `secrets`, `webui`). |
-| `source` | string | yes | Canonical provider source identifier. Use `github.com/<org>/<repo>/<path>`. The final path segment is the provider package name; preceding segments are used for release tags and source resolution. |
-| `version` | string | yes | Semver version. Pre-release suffixes like `-alpha.1` are allowed. |
-| `displayName` | string | no | Human-readable label shown in the UI. |
-| `description` | string | no | Human-readable description. |
-| `iconFile` | string | no | Relative path to an SVG icon bundled with the package. |
-| `artifacts` | Artifact[] | no | Packaged executable artifacts keyed by platform. Omit for declarative-only plugin packages or source manifests used during local development. |
-| `entrypoint` | Entrypoint | no | Executable entrypoint metadata for the provider. |
-| `spec` | object | no | Kind-specific configuration block. |
+| Field         | Type       | Required | Purpose                                                                                                                                                                                              |
+| ------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`        | string     | yes      | The provider kind (`plugin`, `auth`, `cache`, `indexeddb`, `s3`, `secrets`, `webui`).                                                                                                                |
+| `source`      | string     | yes      | Canonical provider source identifier. Use `github.com/<org>/<repo>/<path>`. The final path segment is the provider package name; preceding segments are used for release tags and source resolution. |
+| `version`     | string     | yes      | Semver version. Pre-release suffixes like `-alpha.1` are allowed.                                                                                                                                    |
+| `displayName` | string     | no       | Human-readable label shown in the UI.                                                                                                                                                                |
+| `description` | string     | no       | Human-readable description.                                                                                                                                                                          |
+| `iconFile`    | string     | no       | Relative path to an SVG icon bundled with the package.                                                                                                                                               |
+| `artifacts`   | Artifact[] | no       | Packaged executable artifacts keyed by platform. Omit for declarative-only plugin packages or source manifests used during local development.                                                        |
+| `entrypoint`  | Entrypoint | no       | Executable entrypoint metadata for the provider.                                                                                                                                                     |
+| `spec`        | object     | no       | Kind-specific configuration block.                                                                                                                                                                   |
 
 ## Entrypoint
 
 The `entrypoint` block declares the executable binary for the provider.
 
-| Field | Type | Required | Purpose |
-| --- | --- | --- | --- |
-| `artifactPath` | string | yes | Path to the binary inside the package. |
-| `args` | string[] | no | Additional arguments passed to the binary at startup. |
+| Field          | Type     | Required | Purpose                                               |
+| -------------- | -------- | -------- | ----------------------------------------------------- |
+| `artifactPath` | string   | yes      | Path to the binary inside the package.                |
+| `args`         | string[] | no       | Additional arguments passed to the binary at startup. |
 
 ```yaml
 entrypoint:
@@ -65,7 +65,7 @@ The `spec` block for a `kind: plugin` manifest describes a plugin. It supports d
 | Field | Type | Purpose |
 | --- | --- | --- |
 | `configSchemaPath` | string | Path to a JSON/YAML schema that validates `plugins.<name>.config` in the server config. |
-| `auth` | RouteAuthRef | Optional plugin route-auth reference. Use `auth.provider` to bind the plugin’s mounted routes to a named request-auth provider. |
+| `auth` | RouteAuthRef | Optional plugin route-auth reference. Use `auth.provider` to bind the plugin’s mounted routes to a named request-auth provider. Legacy manifests may also use `spec.auth` for upstream connection auth when no `connections` map is defined. |
 | `mcp` | bool | When true, the plugin exposes its operations as MCP tools. |
 | `headers` | map[string]string | Static headers injected into every outbound request. |
 | `surfaces` | Surfaces | Spec-loaded and declarative REST surfaces. See [Surfaces](#surfaces). |
@@ -80,12 +80,12 @@ Plugins that back mounted apps may declare their UI artifact in the plugin manif
 
 `spec.ui` supports two mutually exclusive forms:
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `path` | string | Relative path to a co-packaged `kind: webui` manifest. Source releases may point at sibling UI packages; `gestaltd provider release` rewrites them into the archive automatically. |
-| `ref` | string | Managed provider source ref for the owned UI bundle. |
-| `version` | string | Optional version for `ref`. Defaults to the plugin manifest version when omitted. |
-| `auth.token` | string | Optional source token used when resolving a private managed `ref`. Only valid with `ref`. |
+| Field        | Type   | Purpose                                                                                                                                                                            |
+| ------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`       | string | Relative path to a co-packaged `kind: webui` manifest. Source releases may point at sibling UI packages; `gestaltd provider release` rewrites them into the archive automatically. |
+| `ref`        | string | Managed provider source ref for the owned UI bundle.                                                                                                                               |
+| `version`    | string | Optional version for `ref`. Defaults to the plugin manifest version when omitted.                                                                                                  |
+| `auth.token` | string | Optional source token used when resolving a private managed `ref`. Only valid with `ref`.                                                                                          |
 
 When a deployment sets `plugins.<name>.mountPath` and omits `plugins.<name>.ui`, Gestalt synthesizes the mounted UI binding from this block.
 
@@ -146,48 +146,48 @@ Surfaces load operation catalogs from external specifications. They are configur
 
 #### `spec.surfaces.openapi`
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `document` | string | Path to a bundled OpenAPI document. |
+| Field        | Type   | Purpose                                 |
+| ------------ | ------ | --------------------------------------- |
+| `document`   | string | Path to a bundled OpenAPI document.     |
 | `connection` | string | Connection name used for OpenAPI calls. |
 
 #### `spec.surfaces.graphql`
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `url` | string | URL of the upstream GraphQL endpoint. |
+| Field        | Type   | Purpose                                 |
+| ------------ | ------ | --------------------------------------- |
+| `url`        | string | URL of the upstream GraphQL endpoint.   |
 | `connection` | string | Connection name used for GraphQL calls. |
 
 #### `spec.surfaces.mcp`
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `url` | string | URL of the upstream MCP server. |
+| Field        | Type   | Purpose                             |
+| ------------ | ------ | ----------------------------------- |
+| `url`        | string | URL of the upstream MCP server.     |
 | `connection` | string | Connection name used for MCP calls. |
 
 #### `spec.surfaces.rest`
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `connection` | string | Connection name used for REST calls. Optional. |
-| `baseUrl` | string | Base URL for declarative REST operations. |
+| Field        | Type                | Purpose                                                                           |
+| ------------ | ------------------- | --------------------------------------------------------------------------------- |
+| `connection` | string              | Connection name used for REST calls. Optional.                                    |
+| `baseUrl`    | string              | Base URL for declarative REST operations.                                         |
 | `operations` | ProviderOperation[] | Declarative REST operations. Presence of this field makes the plugin declarative. |
 
 The `rest`/`openapi`/`graphql` surface types are mutually exclusive (use `surfaces.openapi` or `surfaces.graphql`, not both), but `surfaces.mcp` may be combined with any of them.
 
-### Auth Types
+### Authentication Types
 
 `spec.auth.provider` selects a route-auth provider for plugin HTTP operation routes. Gestalt currently enforces it on `/api/v1/integrations/{name}/operations` and `/api/v1/{integration}/{operation}` only; browser login, mounted UIs, integration OAuth helper routes, and `/mcp` still use the server-wide auth provider. Upstream auth still lives on `spec.connections.<name>.auth`, and the `auth.type` field on a connection accepts these values:
 
-| Type | Purpose |
-| --- | --- |
-| `oauth2` | Standard OAuth 2.0. Requires `authorizationUrl` and `tokenUrl`. |
+| Type        | Purpose                                                                                                                                                            |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `oauth2`    | Standard OAuth 2.0. Requires `authorizationUrl` and `tokenUrl`.                                                                                                    |
 | `mcp_oauth` | MCP-native OAuth. The plugin must also declare an MCP surface (via `spec.surfaces.mcp`). A manifest that uses `mcp_oauth` without an MCP surface fails validation. |
-| `bearer` | Static bearer token. Define `credentials` to prompt the user for the token value. |
-| `manual` | Custom credential fields. Define `credentials` to describe each field. |
-| `none` | No authentication. |
+| `bearer`    | Static bearer token. Define `credentials` to prompt the user for the token value.                                                                                  |
+| `manual`    | Custom credential fields. Define `credentials` to describe each field.                                                                                             |
+| `none`      | No authentication.                                                                                                                                                 |
 
-Manual auth in provider manifests also supports `authMapping`, using the same `value` / `valueFrom.credentialFieldRef.name` shape as deploy config.
+Manual authentication in provider manifests also supports `authMapping`, using the same `value` / `valueFrom.credentialFieldRef.name` shape as deploy config.
 
 ```yaml
 spec:
@@ -216,16 +216,16 @@ spec:
 
 Plugin-level pagination configuration applies to all operations by default. Individual operations can override this through `allowedOperations`.
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `style` | string | Required. One of `cursor`, `offset`, `page`. |
-| `cursorParam` | string | Query parameter name for the cursor value. |
-| `cursor.source` | string | Value source for the next cursor. One of `body`, `header`. |
-| `cursor.path` | string | Lookup path for the cursor value in the selected source. |
-| `limitParam` | string | Query parameter name for page size. |
-| `defaultLimit` | int | Default page size when the caller does not specify one. |
-| `resultsPath` | string | JSON path to the array of results in the response. |
-| `maxPages` | int | Maximum number of pages to fetch in a single paginated request. |
+| Field           | Type   | Purpose                                                         |
+| --------------- | ------ | --------------------------------------------------------------- |
+| `style`         | string | Required. One of `cursor`, `offset`, `page`.                    |
+| `cursorParam`   | string | Query parameter name for the cursor value.                      |
+| `cursor.source` | string | Value source for the next cursor. One of `body`, `header`.      |
+| `cursor.path`   | string | Lookup path for the cursor value in the selected source.        |
+| `limitParam`    | string | Query parameter name for page size.                             |
+| `defaultLimit`  | int    | Default page size when the caller does not specify one.         |
+| `resultsPath`   | string | JSON path to the array of results in the response.              |
+| `maxPages`      | int    | Maximum number of pages to fetch in a single paginated request. |
 
 ```yaml
 spec:
@@ -244,13 +244,13 @@ spec:
 
 The `allowedOperations` map selectively exposes and customizes operations from a spec-loaded surface. Keys are the original operation IDs from the OpenAPI/GraphQL/MCP spec.
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `alias` | string | Rename the operation for Gestalt consumers. |
-| `description` | string | Override the operation description. |
-| `allowedRoles` | string[] | Restrict the operation to callers whose resolved human role matches one of these values. This only takes effect when the deployment binds the plugin to `authorizationPolicy`. |
-| `paginate` | bool | Enable automatic pagination for this operation. Uses the plugin-level pagination config. |
-| `pagination` | ManifestPaginationConfig | Per-operation pagination config that overrides the plugin-level default. |
+| Field          | Type                     | Purpose                                                                                                                                                                        |
+| -------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `alias`        | string                   | Rename the operation for Gestalt consumers.                                                                                                                                    |
+| `description`  | string                   | Override the operation description.                                                                                                                                            |
+| `allowedRoles` | string[]                 | Restrict the operation to callers whose resolved human role matches one of these values. This only takes effect when the deployment binds the plugin to `authorizationPolicy`. |
+| `paginate`     | bool                     | Enable automatic pagination for this operation. Uses the plugin-level pagination config.                                                                                       |
+| `pagination`   | ManifestPaginationConfig | Per-operation pagination config that overrides the plugin-level default.                                                                                                       |
 
 ```yaml
 spec:
@@ -268,33 +268,33 @@ spec:
 
 The `responseMapping` block extracts a data array and pagination metadata from API responses that wrap results in an envelope.
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `dataPath` | string | Required. JSON path to the results array. |
-| `pagination.hasMore.source` | string | Value source for the has-more flag. One of `body`, `header`. |
-| `pagination.hasMore.path` | string | Lookup path for the has-more flag in the selected source. |
-| `pagination.cursor.source` | string | Value source for the next-page cursor. One of `body`, `header`. |
-| `pagination.cursor.path` | string | Lookup path for the next-page cursor in the selected source. |
+| Field                       | Type   | Purpose                                                         |
+| --------------------------- | ------ | --------------------------------------------------------------- |
+| `dataPath`                  | string | Required. JSON path to the results array.                       |
+| `pagination.hasMore.source` | string | Value source for the has-more flag. One of `body`, `header`.    |
+| `pagination.hasMore.path`   | string | Lookup path for the has-more flag in the selected source.       |
+| `pagination.cursor.source`  | string | Value source for the next-page cursor. One of `body`, `header`. |
+| `pagination.cursor.path`    | string | Lookup path for the next-page cursor in the selected source.    |
 
 ### Managed Parameters
 
 Managed parameters inject fixed values into every request, removing them from the caller-facing operation signature.
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `in` | string | Required. One of `header`, `path`. |
-| `name` | string | Required. Parameter name. |
-| `value` | string | Required. Fixed value. |
+| Field   | Type   | Purpose                            |
+| ------- | ------ | ---------------------------------- |
+| `in`    | string | Required. One of `header`, `path`. |
+| `name`  | string | Required. Parameter name.          |
+| `value` | string | Required. Fixed value.             |
 
 ### Discovery
 
 The `discovery` block on a connection performs an authenticated lookup immediately after a connection is established. Gestalt calls the configured URL with the new access token, parses the response, and turns each item into a candidate connection.
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `url` | string | Required. Endpoint to call after connect. |
-| `idPath` | string | JSON path to the item identifier. |
-| `namePath` | string | JSON path to the item display name. |
+| Field      | Type              | Purpose                                                                |
+| ---------- | ----------------- | ---------------------------------------------------------------------- |
+| `url`      | string            | Required. Endpoint to call after connect.                              |
+| `idPath`   | string            | JSON path to the item identifier.                                      |
+| `namePath` | string            | JSON path to the item display name.                                    |
 | `metadata` | map[string]string | Maps connection parameter names to JSON paths in each discovered item. |
 
 If discovery returns exactly one item, Gestalt merges its metadata into the stored connection automatically. Multiple items prompt the user to choose. Zero items fails the connection.
@@ -303,27 +303,27 @@ If discovery returns exactly one item, Gestalt merges its metadata into the stor
 
 The `params` map on a connection defines parameters that are populated during or after connect rather than from user input.
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `required` | bool | Whether the parameter must be present for a valid connection. |
-| `description` | string | Describes the parameter to the user. |
-| `from` | string | Set to `discovery` to populate the value from post-connect discovery metadata. |
+| Field         | Type   | Purpose                                                                        |
+| ------------- | ------ | ------------------------------------------------------------------------------ |
+| `required`    | bool   | Whether the parameter must be present for a valid connection.                  |
+| `description` | string | Describes the parameter to the user.                                           |
+| `from`        | string | Set to `discovery` to populate the value from post-connect discovery metadata. |
 
-## Auth Provider Metadata
+## Authentication Provider Metadata
 
-The `spec` block for a `kind: auth` manifest describes a platform auth provider package.
+The `spec` block for a `kind: authentication` manifest describes a platform authentication provider package.
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `providers.auth.<name>.config` block in the server config. |
+| Field              | Type   | Purpose                                                                                                            |
+| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------ |
+| `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `providers.authentication.<name>.config` block in the server config. |
 
-Auth providers require an executable entrypoint. Declare it under `entrypoint`.
+Authentication providers require an executable entrypoint. Declare it under `entrypoint`.
 
 ```yaml
-kind: auth
-source: github.com/valon-technologies/gestalt-providers/auth/google
+kind: authentication
+source: github.com/valon-technologies/gestalt-providers/auth/oidc
 version: 1.0.0
-displayName: Google Auth
+displayName: OIDC Authentication
 spec:
   configSchemaPath: schemas/config.schema.json
 entrypoint:
@@ -338,8 +338,8 @@ artifacts:
 
 The `spec` block for a `kind: indexeddb` manifest describes a persistence backend package.
 
-| Field | Type | Purpose |
-| --- | --- | --- |
+| Field              | Type   | Purpose                                                                                                       |
+| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------- |
 | `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `providers.indexeddb.<name>.config` block in the server config. |
 
 IndexedDB providers require an executable entrypoint. Declare it under `entrypoint`.
@@ -363,17 +363,17 @@ artifacts:
 
 The `spec` block for a `kind: webui` manifest describes a static UI package.
 
-| Field | Type | Required | Purpose |
-| --- | --- | --- | --- |
-| `assetRoot` | string | yes | Directory containing the built static assets. |
-| `routes` | WebUIRoute[] | no | Optional route-level authorization rules used when a deployment binds this UI to `providers.ui.<name>.authorizationPolicy`. |
+| Field       | Type         | Required | Purpose                                                                                                                     |
+| ----------- | ------------ | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `assetRoot` | string       | yes      | Directory containing the built static assets.                                                                               |
+| `routes`    | WebUIRoute[] | no       | Optional route-level authorization rules used when a deployment binds this UI to `providers.ui.<name>.authorizationPolicy`. |
 
 Each `spec.routes` entry declares a mounted path and the allowed human roles for that path. Path matching is exact or longest-prefix with a terminal `/*`. When a deployment sets `authorizationPolicy`, route definitions must have non-empty `allowedRoles`, and the manifest must include a route that covers `/`.
 
-| Route field | Type | Required | Purpose |
-| --- | --- | --- | --- |
-| `path` | string | yes | Route path such as `/`, `/reports`, or `/admin/*`. |
-| `allowedRoles` | string[] | yes | Roles permitted to load the route or its associated static assets. |
+| Route field    | Type     | Required | Purpose                                                            |
+| -------------- | -------- | -------- | ------------------------------------------------------------------ |
+| `path`         | string   | yes      | Route path such as `/`, `/reports`, or `/admin/*`.                 |
+| `allowedRoles` | string[] | yes      | Roles permitted to load the route or its associated static assets. |
 
 ```yaml
 kind: webui
@@ -393,13 +393,13 @@ spec:
 
 The `artifacts` array lists platform-specific binaries included in the package.
 
-| Field | Type | Required | Purpose |
-| --- | --- | --- | --- |
-| `os` | string | yes | Target operating system (e.g. `linux`, `darwin`). |
-| `arch` | string | yes | Target architecture (e.g. `amd64`, `arm64`). |
-| `libc` | string | no | C library variant. `musl`. Only relevant for Linux. |
-| `path` | string | yes | Path to the binary inside the package. |
-| `sha256` | string | no | SHA-256 hex digest for integrity verification. |
+| Field    | Type   | Required | Purpose                                             |
+| -------- | ------ | -------- | --------------------------------------------------- |
+| `os`     | string | yes      | Target operating system (e.g. `linux`, `darwin`).   |
+| `arch`   | string | yes      | Target architecture (e.g. `amd64`, `arm64`).        |
+| `libc`   | string | no       | C library variant. `musl`. Only relevant for Linux. |
+| `path`   | string | yes      | Path to the binary inside the package.              |
+| `sha256` | string | no       | SHA-256 hex digest for integrity verification.      |
 
 Declarative-only plugin packages do not require `artifacts`. Pure executable source manifests used with `plugins.*.provider.source.path` or `gestaltd provider release` may omit them.
 
@@ -605,7 +605,7 @@ spec:
 
 ## Authoring Notes
 
-Manifest paths must stay inside the package. `kind`, `source`, and `version` are required. A manifest defines exactly one provider kind: `kind: plugin`, `kind: auth`, `kind: indexeddb`, `kind: secrets`, or `kind: webui`.
+Manifest paths must stay inside the package. `kind`, `source`, and `version` are required. A manifest defines exactly one provider kind: `kind: plugin`, `kind: authentication`, `kind: indexeddb`, `kind: secrets`, or `kind: webui`.
 
 `configSchemaPath` validates per-plugin config and may be written in JSON or YAML. Any connection may define `params` and `discovery`. The OpenAPI/GraphQL surface types are mutually exclusive, but MCP may be added alongside either.
 
@@ -613,7 +613,7 @@ A connection using `mcp_oauth` auth requires the plugin to declare an MCP surfac
 
 When an executable plugin defines helper operations in Go, Rust, Python, or
 TypeScript, Gestalt materializes the executable catalog automatically during
-local source-plugin execution and `provider release`. Auth and indexeddb
+local source-plugin execution and `provider release`. Authentication and indexeddb
 source packages use the same release flow for Go, Rust, and TypeScript, but
 they do not generate catalogs. See [Plugins](/providers/plugins)
 for the end-to-end authoring flow.
@@ -639,6 +639,7 @@ for the end-to-end authoring flow.
     [tool.gestalt]
     provider = "provider"
     ```
+
   </Tabs.Tab>
   <Tabs.Tab>
     ```text
@@ -652,6 +653,7 @@ for the end-to-end authoring flow.
     ```rust
     gestalt::export_provider!(constructor = new, router = router);
     ```
+
   </Tabs.Tab>
   <Tabs.Tab>
     ```text
@@ -671,6 +673,7 @@ for the end-to-end authoring flow.
       }
     }
     ```
+
   </Tabs.Tab>
 </Tabs>
 
@@ -710,7 +713,7 @@ declared in `[tool.gestalt].provider` and materialize the executable catalog
 automatically. TypeScript source providers load the target declared in
 `package.json` under `gestalt.provider`. A string target such as
 `./provider.ts#plugin` defaults to a plugin provider; auth and indexeddb
-providers use an object with `kind` and `target`. Auth and indexeddb source
+providers use an object with `kind` and `target`. Authentication and indexeddb source
 packages support the same release flow for Go, Rust, and TypeScript, but they
 do not generate catalogs. Source packages build the host-platform artifact by
 default. Pass `--platform` for an explicit `os/arch[/libc]` target list, or

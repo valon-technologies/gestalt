@@ -5,7 +5,7 @@ asIndexPage: true
 # Providers
 
 Gestalt loads most integration and platform surfaces as providers instead of
-compiling them into `gestaltd`. Plugins, auth backends, IndexedDB backends,
+compiling them into `gestaltd`. Plugins, authentication backends, IndexedDB backends,
 authorization backends, workflow backends, cache backends, S3 object stores,
 external secret managers, and public web UIs all use the same provider model:
 you reference a package in config, the host resolves it, validates it, and
@@ -16,7 +16,7 @@ starts it with the permissions and request context it needs.
 | Kind | Purpose | Config location |
 | --- | --- | --- |
 | `plugin` | Tool providers that expose operations over CLI, HTTP API, and MCP | `plugins.<name>` |
-| `auth` | Platform login backends | `providers.auth.<name>` |
+| `auth` | Platform authentication backends | `providers.authentication.<name>` |
 | `authorization` | Dynamic human authorization backends | `providers.authorization.<name>` |
 | `cache` | Plugin-bound cache backends | `providers.cache.<name>` |
 | `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddb.<name>` |
@@ -51,7 +51,7 @@ The repository is organized by provider type:
 | Type | Repository path | Typical config key |
 | --- | --- | --- |
 | Plugins | [`plugins/`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins) | `plugins.<name>` |
-| Auth | [`auth/`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth) | `providers.auth.<name>` |
+| Authentication | [`auth/`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth) | `providers.authentication.<name>` |
 | Authorization | [`authorization/`](https://github.com/valon-technologies/gestalt-providers/tree/main/authorization) | `providers.authorization.<name>` |
 | Cache | [`cache/`](https://github.com/valon-technologies/gestalt-providers/tree/main/cache) | `providers.cache.<name>` |
 | IndexedDB | [`indexeddb/`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb) | `providers.indexeddb.<name>` |
@@ -70,7 +70,7 @@ server:
     indexeddb: main
 
 providers:
-  auth:
+  authentication:
     oidc:
       source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
       config:
@@ -127,13 +127,13 @@ release workflow now lives under [Custom Providers](/custom-providers).
 
 ## What to read next
 
-- [Plugins](/providers/plugins): choosing and configuring plugin providers
-- [Auth](/providers/auth): platform login providers
+- [Authentication](/providers/authentication): platform login providers
 - [Authorization](/providers/authorization): human authorization providers
 - [Cache](/providers/cache): plugin-bound cache backends
 - [IndexedDB](/providers/indexeddb): storage backends
+- [Plugins](/providers/plugins): choosing and configuring plugin providers
 - [S3](/providers/s3): S3-compatible object store providers
 - [Secrets](/providers/secrets): built-in and external secret managers
-- [Workflow](/providers/workflow): workflow run, schedule, and event-trigger backends
 - [Web UIs](/providers/web-uis): public UI bundles
+- [Workflow](/providers/workflow): workflow run, schedule, and event-trigger backends
 - [Custom Providers](/custom-providers): advanced implementation and release docs
