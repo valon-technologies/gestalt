@@ -12,6 +12,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -59,8 +60,14 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 	if record["source"] != "binding:test-hook" {
 		t.Errorf("expected source=binding:test-hook, got %v", record["source"])
 	}
-	if record["user_id"] != "user-42" {
-		t.Errorf("expected user_id=user-42, got %v", record["user_id"])
+	if record["subject_id"] != principal.UserSubjectID("user-42") {
+		t.Errorf("expected subject_id=%q, got %v", principal.UserSubjectID("user-42"), record["subject_id"])
+	}
+	if record["subject_kind"] != string(principal.KindUser) {
+		t.Errorf("expected subject_kind=%q, got %v", principal.KindUser, record["subject_kind"])
+	}
+	if _, has := record["user_id"]; has {
+		t.Errorf("expected emitted audit record to omit user_id, got %v", record["user_id"])
 	}
 	if record["provider"] != "alpha" {
 		t.Errorf("expected provider=alpha, got %v", record["provider"])
@@ -137,7 +144,7 @@ func TestSlogAuditSink_WithSpanContext(t *testing.T) {
 		Timestamp: time.Now(),
 		RequestID: "req-trace-789",
 		Source:    "binding:traced",
-		UserID:    "user-1",
+		SubjectID: principal.UserSubjectID("user-1"),
 		Provider:  "gamma",
 		Operation: "read",
 		Depth:     0,
@@ -175,7 +182,7 @@ func TestSlogAuditSink_NoTraceContext(t *testing.T) {
 		Timestamp: time.Now(),
 		RequestID: "req-no-trace",
 		Source:    "binding:test-hook",
-		UserID:    "user-1",
+		SubjectID: principal.UserSubjectID("user-1"),
 		Provider:  "delta",
 		Operation: "read",
 		Depth:     0,
@@ -217,7 +224,7 @@ func TestSlogAuditSink_GuaranteedDelivery(t *testing.T) {
 			Timestamp: time.Now(),
 			RequestID: "req-allowed",
 			Source:    "binding:test-hook",
-			UserID:    "user-1",
+			SubjectID: principal.UserSubjectID("user-1"),
 			Provider:  "epsilon",
 			Operation: "read",
 			Allowed:   true,
@@ -226,7 +233,7 @@ func TestSlogAuditSink_GuaranteedDelivery(t *testing.T) {
 			Timestamp: time.Now(),
 			RequestID: "req-denied",
 			Source:    "binding:test-hook",
-			UserID:    "user-2",
+			SubjectID: principal.UserSubjectID("user-2"),
 			Provider:  "zeta",
 			Operation: "write",
 			Allowed:   false,
@@ -280,7 +287,7 @@ func TestSlogAuditSink_NilWriterFallsBackToStderr(t *testing.T) { //nolint:paral
 		Timestamp: time.Now(),
 		RequestID: "req-stderr",
 		Source:    "binding:test-hook",
-		UserID:    "user-stderr",
+		SubjectID: principal.UserSubjectID("user-stderr"),
 		Provider:  "theta",
 		Operation: "read",
 		Allowed:   true,

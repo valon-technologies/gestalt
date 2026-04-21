@@ -132,15 +132,15 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	startedAt := time.Now()
 	auditAllowed := false
 	auditErr := errors.New("oauth callback failed")
-	auditUserID := ""
+	auditSubjectID := ""
 	auditTarget := auditTarget{Kind: auditTargetKindConnection}
 	stateAuthSource := ""
 	providerName := ""
 	connectionMode := metricutil.UnknownAttrValue
 	defer func() {
 		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, providerName, "oauth", "complete", connectionMode, auditErr != nil)
-		if auditUserID != "" {
-			s.auditHTTPEventWithUserIDAndTarget(r.Context(), auditUserID, stateAuthSource, providerName, "connection.oauth.complete", auditAllowed, auditErr, auditTarget)
+		if auditSubjectID != "" {
+			s.auditHTTPEventWithSubjectIDAndTarget(r.Context(), auditSubjectID, stateAuthSource, providerName, "connection.oauth.complete", auditAllowed, auditErr, auditTarget)
 			return
 		}
 		s.auditHTTPEventWithTarget(r.Context(), nil, providerName, "connection.oauth.complete", auditAllowed, auditErr, auditTarget)
@@ -195,7 +195,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		return
 	}
 	providerName = state.Integration
-	auditUserID = principal.UserIDFromSubjectID(state.SubjectID)
+	auditSubjectID = state.SubjectID
 	stateAuthSource = state.AuthSource
 	auditTarget = connectionAuditTarget(state.Integration, state.Connection, state.Instance)
 	handler, ok := s.requireOAuthHandler(w, providerName, state.Connection)

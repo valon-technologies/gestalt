@@ -366,12 +366,12 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
 	auditAllowed := false
 	auditErr := errors.New("login callback failed")
-	auditUserID := ""
+	auditSubjectID := ""
 	auth := s.serverAuthRuntime()
 	defer func() {
 		metricutil.RecordAuthMetrics(r.Context(), startedAt, auth.providerName, "complete_login", auditErr != nil)
-		if auditUserID != "" {
-			s.auditHTTPEventWithUserID(r.Context(), auditUserID, principal.SourceSession.String(), auth.providerName, "auth.login.complete", auditAllowed, auditErr)
+		if auditSubjectID != "" {
+			s.auditHTTPEventWithSubjectID(r.Context(), auditSubjectID, principal.SourceSession.String(), auth.providerName, "auth.login.complete", auditAllowed, auditErr)
 			return
 		}
 		s.auditHTTPEvent(r.Context(), nil, auth.providerName, "auth.login.complete", auditAllowed, auditErr)
@@ -440,14 +440,14 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to resolve user")
 			return
 		}
-		auditUserID = dbUser.ID
+		auditSubjectID = principal.UserSubjectID(dbUser.ID)
 		apiToken, plaintext, issueErr := s.issueAPIToken(r.Context(), dbUser.ID, cliLoginTokenName, "", true)
 		if issueErr != nil {
 			auditErr = errors.New("failed to issue CLI API token")
 			writeError(w, http.StatusInternalServerError, "failed to issue CLI API token")
 			return
 		}
-		s.auditHTTPEventWithUserID(r.Context(), dbUser.ID, principal.SourceSession.String(), "", "api_token.create", true, nil)
+		s.auditHTTPEventWithSubjectID(r.Context(), principal.UserSubjectID(dbUser.ID), principal.SourceSession.String(), "", "api_token.create", true, nil)
 		auditAllowed = true
 		auditErr = nil
 		writeJSON(w, http.StatusOK, createTokenResponse{
@@ -465,7 +465,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		case auditPrincipalErr != nil:
 			slog.WarnContext(r.Context(), "login audit user resolution failed", "error", auditPrincipalErr)
 		case dbUser != nil && dbUser.ID != "":
-			auditUserID = dbUser.ID
+			auditSubjectID = principal.UserSubjectID(dbUser.ID)
 		default:
 			slog.WarnContext(r.Context(), "login audit user resolution failed", "error", "authenticated principal missing user ID")
 		}

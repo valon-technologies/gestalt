@@ -92,12 +92,12 @@ func (s *Server) auditEventWithAuthSource(ctx context.Context, authSource, sourc
 	s.auditSink.Log(ctx, entry)
 }
 
-func (s *Server) auditEventWithUserIDAndTarget(ctx context.Context, userID, authSource, source, provider, operation string, allowed bool, err error, target auditTarget) {
+func (s *Server) auditEventWithSubjectIDAndTarget(ctx context.Context, subjectID, authSource, source, provider, operation string, allowed bool, err error, target auditTarget) {
 	if s.auditSink == nil {
 		return
 	}
 
-	ctx, entry := invocation.BuildAuditEntry(ctx, &principal.Principal{UserID: userID}, source, provider, operation)
+	ctx, entry := invocation.BuildAuditEntry(ctx, &principal.Principal{SubjectID: strings.TrimSpace(subjectID)}, source, provider, operation)
 	entry.AuthSource = authSource
 	populateAuditEntry(&entry, allowed, err, target, auditAuthorization{})
 	s.auditSink.Log(ctx, entry)
@@ -213,10 +213,10 @@ func (s *Server) auditRequestEventWithAuthSource(r *http.Request, authSource, pr
 	s.auditEventWithAuthSource(r.Context(), authSource, auditSourceForRequest(r), provider, operation, allowed, err)
 }
 
-func (s *Server) auditHTTPEventWithUserID(ctx context.Context, userID, authSource, provider, operation string, allowed bool, err error) {
-	s.auditHTTPEventWithUserIDAndTarget(ctx, userID, authSource, provider, operation, allowed, err, auditTarget{})
+func (s *Server) auditHTTPEventWithSubjectID(ctx context.Context, subjectID, authSource, provider, operation string, allowed bool, err error) {
+	s.auditHTTPEventWithSubjectIDAndTarget(ctx, subjectID, authSource, provider, operation, allowed, err, auditTarget{})
 }
 
-func (s *Server) auditHTTPEventWithUserIDAndTarget(ctx context.Context, userID, authSource, provider, operation string, allowed bool, err error, target auditTarget) {
-	s.auditEventWithUserIDAndTarget(ctx, userID, authSource, "http", provider, operation, allowed, err, target)
+func (s *Server) auditHTTPEventWithSubjectIDAndTarget(ctx context.Context, subjectID, authSource, provider, operation string, allowed bool, err error, target auditTarget) {
+	s.auditEventWithSubjectIDAndTarget(ctx, subjectID, authSource, "http", provider, operation, allowed, err, target)
 }
