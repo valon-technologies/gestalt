@@ -792,38 +792,6 @@ func validateWorkflowScheduleCron(scheduleKey, spec string) error {
 }
 
 func validateWorkflowsConfig(cfg *Config) error {
-	for pluginName, binding := range cfg.Workflows.Bindings {
-		pluginName = strings.TrimSpace(pluginName)
-		if pluginName == "" {
-			return fmt.Errorf("config validation: workflows.bindings keys must not be empty")
-		}
-		if _, ok := cfg.Plugins[pluginName]; !ok {
-			return fmt.Errorf("config validation: workflows.bindings.%s references unknown plugin %q", pluginName, pluginName)
-		}
-		if binding == nil {
-			return fmt.Errorf("config validation: workflows.bindings.%s is required", pluginName)
-		}
-		binding.Provider = strings.TrimSpace(binding.Provider)
-		seenOps := make(map[string]struct{}, len(binding.Operations))
-		for i, op := range binding.Operations {
-			op = strings.TrimSpace(op)
-			if op == "" {
-				return fmt.Errorf("config validation: workflows.bindings.%s.operations[%d] is required", pluginName, i)
-			}
-			if _, exists := seenOps[op]; exists {
-				return fmt.Errorf("config validation: workflows.bindings.%s.operations[%d] duplicates %q", pluginName, i, op)
-			}
-			seenOps[op] = struct{}{}
-			binding.Operations[i] = op
-		}
-		if len(binding.Operations) == 0 {
-			return fmt.Errorf("config validation: workflows.bindings.%s.operations must not be empty", pluginName)
-		}
-		if _, err := cfg.EffectiveWorkflowBinding(pluginName); err != nil {
-			return err
-		}
-	}
-
 	if len(cfg.Workflows.Schedules) > 0 {
 		normalized := make(map[string]WorkflowScheduleConfig, len(cfg.Workflows.Schedules))
 		for key := range cfg.Workflows.Schedules {
@@ -842,12 +810,13 @@ func validateWorkflowsConfig(cfg *Config) error {
 			if _, ok := cfg.Plugins[schedule.Plugin]; !ok {
 				return fmt.Errorf("config validation: workflows.schedules.%s.plugin references unknown plugin %q", key, schedule.Plugin)
 			}
-			binding, err := cfg.EffectiveWorkflowBinding(schedule.Plugin)
+			schedule.Provider = strings.TrimSpace(schedule.Provider)
+			providerName, _, err := cfg.EffectiveWorkflowProvider(schedule.Provider)
 			if err != nil {
-				return err
+				return fmt.Errorf("config validation: workflows.schedules.%s.provider: %w", key, err)
 			}
-			if !binding.Enabled {
-				return fmt.Errorf("config validation: workflows.schedules.%s.plugin %q does not have a workflow binding", key, schedule.Plugin)
+			if providerName == "" {
+				return fmt.Errorf("config validation: workflows.schedules.%s.provider is required", key)
 			}
 			schedule.Cron = strings.TrimSpace(schedule.Cron)
 			if schedule.Cron == "" {
@@ -859,9 +828,6 @@ func validateWorkflowsConfig(cfg *Config) error {
 			schedule.Operation = strings.TrimSpace(schedule.Operation)
 			if schedule.Operation == "" {
 				return fmt.Errorf("config validation: workflows.schedules.%s.operation is required", key)
-			}
-			if !slices.Contains(binding.Operations, schedule.Operation) {
-				return fmt.Errorf("config validation: workflows.schedules.%s.operation %q must be listed in workflows.bindings.%s.operations", key, schedule.Operation, schedule.Plugin)
 			}
 			schedule.Connection = strings.TrimSpace(schedule.Connection)
 			schedule.Instance = strings.TrimSpace(schedule.Instance)
@@ -895,12 +861,13 @@ func validateWorkflowsConfig(cfg *Config) error {
 			if _, ok := cfg.Plugins[trigger.Plugin]; !ok {
 				return fmt.Errorf("config validation: workflows.eventTriggers.%s.plugin references unknown plugin %q", key, trigger.Plugin)
 			}
-			binding, err := cfg.EffectiveWorkflowBinding(trigger.Plugin)
+			trigger.Provider = strings.TrimSpace(trigger.Provider)
+			providerName, _, err := cfg.EffectiveWorkflowProvider(trigger.Provider)
 			if err != nil {
-				return err
+				return fmt.Errorf("config validation: workflows.eventTriggers.%s.provider: %w", key, err)
 			}
-			if !binding.Enabled {
-				return fmt.Errorf("config validation: workflows.eventTriggers.%s.plugin %q does not have a workflow binding", key, trigger.Plugin)
+			if providerName == "" {
+				return fmt.Errorf("config validation: workflows.eventTriggers.%s.provider is required", key)
 			}
 			trigger.Match.Type = strings.TrimSpace(trigger.Match.Type)
 			if trigger.Match.Type == "" {
@@ -911,9 +878,6 @@ func validateWorkflowsConfig(cfg *Config) error {
 			trigger.Operation = strings.TrimSpace(trigger.Operation)
 			if trigger.Operation == "" {
 				return fmt.Errorf("config validation: workflows.eventTriggers.%s.operation is required", key)
-			}
-			if !slices.Contains(binding.Operations, trigger.Operation) {
-				return fmt.Errorf("config validation: workflows.eventTriggers.%s.operation %q must be listed in workflows.bindings.%s.operations", key, trigger.Operation, trigger.Plugin)
 			}
 			trigger.Connection = strings.TrimSpace(trigger.Connection)
 			trigger.Instance = strings.TrimSpace(trigger.Instance)

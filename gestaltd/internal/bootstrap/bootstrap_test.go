@@ -852,16 +852,12 @@ func setWorkflowFixture(cfg *config.Config, plugin string, workflow *workflowFix
 	if cfg == nil {
 		return
 	}
-	if cfg.Workflows.Bindings == nil {
-		cfg.Workflows.Bindings = map[string]*config.WorkflowBindingConfig{}
-	}
 	if cfg.Workflows.Schedules == nil {
 		cfg.Workflows.Schedules = map[string]config.WorkflowScheduleConfig{}
 	}
 	if cfg.Workflows.EventTriggers == nil {
 		cfg.Workflows.EventTriggers = map[string]config.WorkflowEventTriggerConfig{}
 	}
-	delete(cfg.Workflows.Bindings, plugin)
 	for key, schedule := range cfg.Workflows.Schedules {
 		if schedule.Plugin == plugin {
 			delete(cfg.Workflows.Schedules, key)
@@ -875,12 +871,9 @@ func setWorkflowFixture(cfg *config.Config, plugin string, workflow *workflowFix
 	if workflow == nil {
 		return
 	}
-	cfg.Workflows.Bindings[plugin] = &config.WorkflowBindingConfig{
-		Provider:   workflow.Provider,
-		Operations: slices.Clone(workflow.Operations),
-	}
 	for key, schedule := range workflow.Schedules {
 		cfg.Workflows.Schedules[key] = config.WorkflowScheduleConfig{
+			Provider:  workflow.Provider,
 			Plugin:    plugin,
 			Cron:      schedule.Cron,
 			Timezone:  schedule.Timezone,
@@ -891,7 +884,8 @@ func setWorkflowFixture(cfg *config.Config, plugin string, workflow *workflowFix
 	}
 	for key, trigger := range workflow.EventTriggers {
 		cfg.Workflows.EventTriggers[key] = config.WorkflowEventTriggerConfig{
-			Plugin: plugin,
+			Provider: workflow.Provider,
+			Plugin:   plugin,
 			Match: config.WorkflowEventMatch{
 				Type:    trigger.Match.Type,
 				Source:  trigger.Match.Source,
@@ -1613,7 +1607,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	if got.Target.Input["source"] != "yaml" {
 		t.Fatalf("target input = %#v", got.Target.Input)
 	}
-	if got.RequestedBy.SubjectID != "config:workflow:roadmap" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
+	if got.RequestedBy.SubjectID != "config:workflow" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", got.RequestedBy)
 	}
 	if strings.TrimSpace(got.ExecutionRef) == "" {
@@ -1623,8 +1617,8 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get execution ref: %v", err)
 	}
-	if ref.SubjectID != principal.WorkloadSubjectID("workflow.roadmap") {
-		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, principal.WorkloadSubjectID("workflow.roadmap"))
+	if ref.SubjectID != principal.WorkloadSubjectID("workflow.config") {
+		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, principal.WorkloadSubjectID("workflow.config"))
 	}
 	if len(ref.Permissions) != 1 || ref.Permissions[0].Plugin != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
 		t.Fatalf("permissions = %#v", ref.Permissions)
@@ -2429,7 +2423,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	if got.Target.Input["source"] != "yaml" {
 		t.Fatalf("target input = %#v", got.Target.Input)
 	}
-	if got.RequestedBy.SubjectID != "config:workflow:roadmap" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
+	if got.RequestedBy.SubjectID != "config:workflow" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", got.RequestedBy)
 	}
 }

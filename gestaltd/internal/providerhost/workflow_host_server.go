@@ -13,20 +13,17 @@ import (
 )
 
 type workflowInvokeFunc func(context.Context, coreworkflow.InvokeOperationRequest) (*coreworkflow.InvokeOperationResponse, error)
-type workflowAllowFunc func(providerName, pluginName, operation string) bool
 
 type WorkflowHostServer struct {
 	proto.UnimplementedWorkflowHostServer
 	providerName string
 	invoke       workflowInvokeFunc
-	allow        workflowAllowFunc
 }
 
-func NewWorkflowHostServer(providerName string, invoke workflowInvokeFunc, allow workflowAllowFunc) *WorkflowHostServer {
+func NewWorkflowHostServer(providerName string, invoke workflowInvokeFunc) *WorkflowHostServer {
 	return &WorkflowHostServer{
 		providerName: providerName,
 		invoke:       invoke,
-		allow:        allow,
 	}
 }
 
@@ -47,9 +44,6 @@ func (s *WorkflowHostServer) InvokeOperation(ctx context.Context, req *proto.Inv
 		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.operation is required")
 	}
 	value.ProviderName = s.providerName
-	if s.allow != nil && !s.allow(s.providerName, value.Target.PluginName, value.Target.Operation) {
-		return nil, status.Errorf(codes.PermissionDenied, "workflow invoke operation %q on plugin %q is not allowed", value.Target.Operation, value.Target.PluginName)
-	}
 	resp, err := s.invoke(ctx, value)
 	if err != nil {
 		return nil, status.Errorf(workflowInvokeErrorCode(err), "workflow invoke operation: %v", err)

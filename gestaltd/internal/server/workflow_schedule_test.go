@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,34 +21,31 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
-type stubWorkflowBinding struct {
-	providerName string
-	allowed      map[string]struct{}
-}
-
 type stubWorkflowControl struct {
-	providerName string
-	allowed      map[string]struct{}
-	provider     coreworkflow.Provider
-	bindings     map[string]stubWorkflowBinding
-	providers    map[string]coreworkflow.Provider
-	providerList []string
-	bindingErr   error
-	providerErr  error
+	defaultProviderName string
+	provider            coreworkflow.Provider
+	providers           map[string]coreworkflow.Provider
+	providerList        []string
+	selectionErr        error
+	providerErr         error
 }
 
-func (s *stubWorkflowControl) ResolveBinding(pluginName string) (string, map[string]struct{}, error) {
-	if s.bindingErr != nil {
-		return "", nil, s.bindingErr
+func (s *stubWorkflowControl) ResolveProviderSelection(name string) (string, coreworkflow.Provider, error) {
+	if s.selectionErr != nil {
+		return "", nil, s.selectionErr
 	}
-	if s.bindings != nil {
-		binding, ok := s.bindings[pluginName]
-		if !ok {
-			return "", nil, errors.New("binding not found")
-		}
-		return binding.providerName, cloneWorkflowAllowed(binding.allowed), nil
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = s.defaultProviderName
 	}
-	return s.providerName, cloneWorkflowAllowed(s.allowed), nil
+	if name == "" {
+		return "", nil, errors.New("provider not found")
+	}
+	provider, err := s.ResolveProvider(name)
+	if err != nil {
+		return "", nil, err
+	}
+	return name, provider, nil
 }
 
 func (s *stubWorkflowControl) ResolveProvider(name string) (coreworkflow.Provider, error) {
@@ -76,34 +74,10 @@ func (s *stubWorkflowControl) ProviderNames() []string {
 		slices.Sort(names)
 		return names
 	}
-	if len(s.bindings) > 0 {
-		seen := make(map[string]struct{}, len(s.bindings))
-		names := make([]string, 0, len(s.bindings))
-		for _, binding := range s.bindings {
-			if _, ok := seen[binding.providerName]; ok || binding.providerName == "" {
-				continue
-			}
-			seen[binding.providerName] = struct{}{}
-			names = append(names, binding.providerName)
-		}
-		slices.Sort(names)
-		return names
-	}
-	if s.providerName == "" {
+	if s.defaultProviderName == "" {
 		return nil
 	}
-	return []string{s.providerName}
-}
-
-func cloneWorkflowAllowed(src map[string]struct{}) map[string]struct{} {
-	if src == nil {
-		return nil
-	}
-	dst := make(map[string]struct{}, len(src))
-	for key := range src {
-		dst[key] = struct{}{}
-	}
-	return dst
+	return []string{s.defaultProviderName}
 }
 
 type memoryWorkflowProvider struct {
@@ -329,9 +303,8 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 			},
 		})
 		cfg.Workflow = &stubWorkflowControl{
-			providerName: "basic",
-			allowed:      map[string]struct{}{"sync": {}},
-			provider:     provider,
+			defaultProviderName: "basic",
+			provider:            provider,
 		}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -563,9 +536,8 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 			},
 		})
 		cfg.Workflow = &stubWorkflowControl{
-			providerName: "basic",
-			allowed:      map[string]struct{}{"sync": {}},
-			provider:     provider,
+			defaultProviderName: "basic",
+			provider:            provider,
 		}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -633,7 +605,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	}
 }
 
-func TestCreateWorkflowScheduleRejectsOperationOutsideWorkflowBinding(t *testing.T) {
+func TestCreateWorkflowScheduleAllowsAuthorizedCatalogOperation(t *testing.T) {
 	t.Parallel()
 
 	services := coretesting.NewStubServices(t)
@@ -652,7 +624,7 @@ func TestCreateWorkflowScheduleRejectsOperationOutsideWorkflowBinding(t *testing
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
-			ConnMode: core.ConnectionModeUser,
+			ConnMode: core.ConnectionModeNone,
 			CatalogVal: &catalog.Catalog{
 				Name: "roadmap",
 				Operations: []catalog.CatalogOperation{
@@ -662,9 +634,8 @@ func TestCreateWorkflowScheduleRejectsOperationOutsideWorkflowBinding(t *testing
 			},
 		})
 		cfg.Workflow = &stubWorkflowControl{
-			providerName: "basic",
-			allowed:      map[string]struct{}{"sync": {}},
-			provider:     provider,
+			defaultProviderName: "basic",
+			provider:            provider,
 		}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -678,8 +649,12 @@ func TestCreateWorkflowScheduleRejectsOperationOutsideWorkflowBinding(t *testing
 		t.Fatalf("request: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, body)
+	}
+	if len(provider.upsertReqs) != 1 || provider.upsertReqs[0].Target.Operation != "export" {
+		t.Fatalf("upsert requests = %#v", provider.upsertReqs)
 	}
 }
 
@@ -761,9 +736,8 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 			},
 		})
 		cfg.Workflow = &stubWorkflowControl{
-			providerName: "basic",
-			allowed:      map[string]struct{}{"sync": {}, "export": {}},
-			provider:     provider,
+			defaultProviderName: "basic",
+			provider:            provider,
 		}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -879,9 +853,8 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 			},
 		})
 		cfg.Workflow = &stubWorkflowControl{
-			providerName: "basic",
-			allowed:      map[string]struct{}{"sync": {}},
-			provider:     provider,
+			defaultProviderName: "basic",
+			provider:            provider,
 		}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -964,9 +937,8 @@ func TestWorkflowScheduleCreatePinsResolvedInstance(t *testing.T) {
 			},
 		})
 		cfg.Workflow = &stubWorkflowControl{
-			providerName: "basic",
-			allowed:      map[string]struct{}{"sync": {}},
-			provider:     provider,
+			defaultProviderName: "basic",
+			provider:            provider,
 		}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1065,10 +1037,7 @@ func TestGlobalWorkflowScheduleLookupIgnoresUnrelatedProviderFailures(t *testing
 			},
 		)
 		cfg.Workflow = &stubWorkflowControl{
-			bindings: map[string]stubWorkflowBinding{
-				"roadmap":   {providerName: "basic", allowed: map[string]struct{}{"sync": {}}},
-				"analytics": {providerName: "advanced", allowed: map[string]struct{}{"sync": {}}},
-			},
+			defaultProviderName: "basic",
 			providers: map[string]coreworkflow.Provider{
 				"basic":    basicProvider,
 				"advanced": advancedProvider,
@@ -1158,9 +1127,8 @@ func TestGlobalWorkflowScheduleRejectsDuplicateActiveExecutionRefs(t *testing.T)
 			},
 		})
 		cfg.Workflow = &stubWorkflowControl{
-			providerName: "basic",
-			allowed:      map[string]struct{}{"sync": {}},
-			provider:     provider,
+			defaultProviderName: "basic",
+			provider:            provider,
 		}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1234,10 +1202,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 			},
 		)
 		cfg.Workflow = &stubWorkflowControl{
-			bindings: map[string]stubWorkflowBinding{
-				"roadmap":   {providerName: "basic", allowed: map[string]struct{}{"sync": {}}},
-				"analytics": {providerName: "advanced", allowed: map[string]struct{}{"sync": {}}},
-			},
+			defaultProviderName: "basic",
 			providers: map[string]coreworkflow.Provider{
 				"basic":    basicProvider,
 				"advanced": advancedProvider,
@@ -1250,7 +1215,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	createReq, _ := http.NewRequest(
 		http.MethodPost,
 		ts.URL+"/api/v1/workflow/schedules/",
-		bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`),
+		bytes.NewBufferString(`{"provider":"basic","cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`),
 	)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -1301,7 +1266,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	updateReq, _ := http.NewRequest(
 		http.MethodPut,
 		ts.URL+"/api/v1/workflow/schedules/"+created.ID,
-		bytes.NewBufferString(`{"cron":"0 * * * *","timezone":"UTC","target":{"plugin":"analytics","operation":"sync","connection":"warehouse","instance":"tenant-b","input":{"mode":"full"}},"paused":true}`),
+		bytes.NewBufferString(`{"provider":"advanced","cron":"0 * * * *","timezone":"UTC","target":{"plugin":"analytics","operation":"sync","connection":"warehouse","instance":"tenant-b","input":{"mode":"full"}},"paused":true}`),
 	)
 	updateReq.Header.Set("Content-Type", "application/json")
 	updateReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -1493,10 +1458,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 			},
 		)
 		cfg.Workflow = &stubWorkflowControl{
-			bindings: map[string]stubWorkflowBinding{
-				"roadmap":   {providerName: "basic", allowed: map[string]struct{}{"sync": {}}},
-				"analytics": {providerName: "advanced", allowed: map[string]struct{}{"sync": {}}},
-			},
+			defaultProviderName: "basic",
 			providers: map[string]coreworkflow.Provider{
 				"basic":    basicProvider,
 				"advanced": advancedProvider,

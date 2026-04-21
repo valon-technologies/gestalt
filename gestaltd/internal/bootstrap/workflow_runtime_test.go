@@ -195,16 +195,7 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 			_ = closer.Close()
 		}
 	})
-	runtime := &workflowRuntime{
-		bindings: map[string]workflowBinding{
-			"roadmap": {
-				providerName: "temporal",
-				operations: map[string]struct{}{
-					"sync": {},
-				},
-			},
-		},
-	}
+	runtime := &workflowRuntime{}
 
 	var gotPrincipal *principal.Principal
 	var gotProvider string
@@ -264,7 +255,7 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	if resp.Status != http.StatusAccepted || resp.Body != `{"ok":true}` {
 		t.Fatalf("response = %#v", resp)
 	}
-	if gotPrincipal == nil || gotPrincipal.SubjectID != principal.WorkloadSubjectID("workflow.roadmap") {
+	if gotPrincipal == nil || gotPrincipal.SubjectID != principal.WorkloadSubjectID("workflow.config") {
 		t.Fatalf("principal = %#v", gotPrincipal)
 	}
 	if gotProvider != "roadmap" {
@@ -346,17 +337,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 		t.Fatalf("Put execution ref: %v", err)
 	}
 
-	runtime := &workflowRuntime{
-		bindings: map[string]workflowBinding{
-			"roadmap": {
-				providerName: "temporal",
-				operations: map[string]struct{}{
-					"sync": {},
-				},
-			},
-		},
-		executionRefs: services.WorkflowExecutionRefs,
-	}
+	runtime := &workflowRuntime{executionRefs: services.WorkflowExecutionRefs}
 
 	var gotPrincipal *principal.Principal
 	var gotProvider string
@@ -430,17 +411,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredWorkloadPrincipal(t *testing
 		t.Fatalf("Put execution ref: %v", err)
 	}
 
-	runtime := &workflowRuntime{
-		bindings: map[string]workflowBinding{
-			"roadmap": {
-				providerName: "temporal",
-				operations: map[string]struct{}{
-					"sync": {},
-				},
-			},
-		},
-		executionRefs: services.WorkflowExecutionRefs,
-	}
+	runtime := &workflowRuntime{executionRefs: services.WorkflowExecutionRefs}
 
 	var gotPrincipal *principal.Principal
 	runtime.SetInvoker(funcInvoker{
@@ -538,17 +509,7 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 		t.Fatalf("authorization.New: %v", err)
 	}
 
-	runtime := &workflowRuntime{
-		bindings: map[string]workflowBinding{
-			"roadmap": {
-				providerName: "temporal",
-				operations: map[string]struct{}{
-					"sync": {},
-				},
-			},
-		},
-		executionRefs: services.WorkflowExecutionRefs,
-	}
+	runtime := &workflowRuntime{executionRefs: services.WorkflowExecutionRefs}
 	runtime.SetInvoker(invocation.NewBroker(&providers.Providers, services.Users, services.Tokens, invocation.WithAuthorizer(authz)))
 
 	_, err = runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
@@ -616,14 +577,6 @@ func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *tes
 
 	broker := invocation.NewBroker(&providers.Providers, services.Users, services.Tokens)
 	runtime := &workflowRuntime{
-		bindings: map[string]workflowBinding{
-			"roadmap": {
-				providerName: "basic",
-				operations: map[string]struct{}{
-					"export": {},
-				},
-			},
-		},
 		invoker:       broker,
 		executionRefs: services.WorkflowExecutionRefs,
 	}
@@ -652,14 +605,6 @@ func TestWorkflowRuntimeInvokeExecutionRefLookupInfrastructureErrorIsInternal(t 
 
 	lookupErr := errors.New("boom")
 	runtime := &workflowRuntime{
-		bindings: map[string]workflowBinding{
-			"roadmap": {
-				providerName: "basic",
-				operations: map[string]struct{}{
-					"sync": {},
-				},
-			},
-		},
 		executionRefs: coredata.NewWorkflowExecutionRefService(&erroringIndexedDB{err: lookupErr}),
 	}
 	runtime.SetInvoker(funcInvoker{

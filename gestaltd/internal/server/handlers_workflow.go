@@ -29,6 +29,7 @@ type workflowScheduleTargetRequest struct {
 }
 
 type workflowScheduleUpsertRequest struct {
+	Provider string                        `json:"provider,omitempty"`
 	Cron     string                        `json:"cron"`
 	Timezone string                        `json:"timezone,omitempty"`
 	Target   workflowScheduleTargetRequest `json:"target"`
@@ -115,12 +116,12 @@ func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "workflow target plugin is required")
 		return
 	}
-	providerName, provider, allowed, ok := s.resolveWorkflowScheduleProvider(w, pluginName)
+	providerName, provider, ok := s.resolveWorkflowScheduleProvider(w, strings.TrimSpace(req.Provider))
 	if !ok {
 		return
 	}
 
-	target, err := s.resolveWorkflowScheduleTarget(r.Context(), pluginName, allowed, p, req.Target)
+	target, err := s.resolveWorkflowScheduleTarget(r.Context(), pluginName, p, req.Target)
 	if err != nil {
 		s.writeWorkflowScheduleTargetError(w, r, pluginName, strings.TrimSpace(req.Target.Operation), err)
 		return
@@ -184,11 +185,11 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, "workflow target plugin is required")
 		return
 	}
-	nextProviderName, nextProvider, allowed, ok := s.resolveWorkflowScheduleProvider(w, pluginName)
+	nextProviderName, nextProvider, ok := s.resolveWorkflowScheduleProvider(w, strings.TrimSpace(req.Provider))
 	if !ok {
 		return
 	}
-	target, err := s.resolveWorkflowScheduleTarget(r.Context(), pluginName, allowed, p, req.Target)
+	target, err := s.resolveWorkflowScheduleTarget(r.Context(), pluginName, p, req.Target)
 	if err != nil {
 		s.writeWorkflowScheduleTargetError(w, r, pluginName, strings.TrimSpace(req.Target.Operation), err)
 		return
@@ -304,25 +305,17 @@ func (s *Server) resolveWorkflowScheduleActor(w http.ResponseWriter, r *http.Req
 	return p, true
 }
 
-func (s *Server) resolveWorkflowScheduleProvider(w http.ResponseWriter, pluginName string) (string, coreworkflow.Provider, map[string]struct{}, bool) {
-	if _, ok := s.getProvider(w, pluginName); !ok {
-		return "", nil, nil, false
-	}
+func (s *Server) resolveWorkflowScheduleProvider(w http.ResponseWriter, providerName string) (string, coreworkflow.Provider, bool) {
 	if s.workflow == nil {
-		writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("workflow is not configured for integration %q", pluginName))
-		return "", nil, nil, false
+		writeError(w, http.StatusPreconditionFailed, "workflow is not configured")
+		return "", nil, false
 	}
-	providerName, allowed, err := s.workflow.ResolveBinding(pluginName)
+	providerName, provider, err := s.workflow.ResolveProviderSelection(providerName)
 	if err != nil {
 		writeError(w, http.StatusPreconditionFailed, err.Error())
-		return "", nil, nil, false
+		return "", nil, false
 	}
-	provider, err := s.workflow.ResolveProvider(providerName)
-	if err != nil {
-		writeError(w, http.StatusPreconditionFailed, err.Error())
-		return "", nil, nil, false
-	}
-	return providerName, provider, allowed, true
+	return providerName, provider, true
 }
 
 func (s *Server) resolveWorkflowScheduleProviderByName(w http.ResponseWriter, providerName string) (coreworkflow.Provider, bool) {
@@ -341,7 +334,6 @@ func (s *Server) resolveWorkflowScheduleProviderByName(w http.ResponseWriter, pr
 func (s *Server) resolveWorkflowScheduleTarget(
 	ctx context.Context,
 	pluginName string,
-	allowed map[string]struct{},
 	p *principal.Principal,
 	target workflowScheduleTargetRequest,
 ) (coreworkflow.Target, error) {
@@ -381,9 +373,6 @@ func (s *Server) resolveWorkflowScheduleTarget(
 	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, pluginName, resolver, p, operation, boundConnections, sessionInstance)
 	if err != nil {
 		return coreworkflow.Target{}, err
-	}
-	if _, ok := allowed[opMeta.ID]; !ok {
-		return coreworkflow.Target{}, fmt.Errorf("%w: workflow target operation %q is not enabled", invocation.ErrAuthorizationDenied, opMeta.ID)
 	}
 	if !principal.AllowsOperationPermission(p, pluginName, opMeta.ID) {
 		return coreworkflow.Target{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, pluginName, opMeta.ID)

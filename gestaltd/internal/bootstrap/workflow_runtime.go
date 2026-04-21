@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -20,76 +21,73 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
-type workflowBinding struct {
-	providerName string
-	operations   map[string]struct{}
-}
-
 type workflowRuntime struct {
-	mu                     sync.RWMutex
-	bindings               map[string]workflowBinding
-	managedScheduleIDs     map[string]map[string]struct{}
-	managedEventTriggerIDs map[string]map[string]struct{}
-	workloadTokens         map[string]string
-	providers              map[string]coreworkflow.Provider
-	startupWaits           *startupWaitTracker
-	invoker                invocation.Invoker
-	executionRefs          *coredata.WorkflowExecutionRefService
+	mu                  sync.RWMutex
+	defaultProviderName string
+	configPermissions   map[string]map[string]struct{}
+	configProviderModes map[string]core.ConnectionMode
+	configWorkloadToken string
+	providers           map[string]coreworkflow.Provider
+	startupWaits        *startupWaitTracker
+	invoker             invocation.Invoker
+	executionRefs       *coredata.WorkflowExecutionRefService
 }
 
 func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 	runtime := &workflowRuntime{
-		bindings:               make(map[string]workflowBinding, len(cfg.Workflows.Bindings)),
-		managedScheduleIDs:     make(map[string]map[string]struct{}, len(cfg.Plugins)),
-		managedEventTriggerIDs: make(map[string]map[string]struct{}, len(cfg.Plugins)),
-		workloadTokens:         make(map[string]string, len(cfg.Workflows.Bindings)),
-		providers:              map[string]coreworkflow.Provider{},
-		startupWaits:           newStartupWaitTracker(),
+		configPermissions:   map[string]map[string]struct{}{},
+		configProviderModes: map[string]core.ConnectionMode{},
+		providers:           map[string]coreworkflow.Provider{},
+		startupWaits:        newStartupWaitTracker(),
 	}
-	for pluginName := range cfg.Workflows.Bindings {
-		effective, err := cfg.EffectiveWorkflowBinding(pluginName)
-		if err != nil {
-			return nil, err
+	if cfg != nil {
+		selectedProviderName, _, err := cfg.SelectedWorkflowProvider()
+		if err == nil {
+			runtime.defaultProviderName = strings.TrimSpace(selectedProviderName)
 		}
-		if !effective.Enabled {
-			continue
+		for _, pluginName := range slices.Sorted(maps.Keys(cfg.Plugins)) {
+			entry := cfg.Plugins[pluginName]
+			spec, _, err := buildStartupProviderSpec(pluginName, entry)
+			if err != nil || spec.Catalog == nil {
+				continue
+			}
+			runtime.configProviderModes[pluginName] = spec.ConnectionMode
+			for i := range spec.Catalog.Operations {
+				runtime.addConfigPermission(pluginName, spec.Catalog.Operations[i].ID)
+			}
 		}
-		allowed := make(map[string]struct{}, len(effective.Operations))
-		for _, operation := range effective.Operations {
-			allowed[operation] = struct{}{}
+		for _, scheduleKey := range slices.Sorted(maps.Keys(cfg.Workflows.Schedules)) {
+			schedule := cfg.Workflows.Schedules[scheduleKey]
+			runtime.addConfigPermission(schedule.Plugin, schedule.Operation)
 		}
-		runtime.bindings[pluginName] = workflowBinding{
-			providerName: effective.ProviderName,
-			operations:   allowed,
+		for _, triggerKey := range slices.Sorted(maps.Keys(cfg.Workflows.EventTriggers)) {
+			trigger := cfg.Workflows.EventTriggers[triggerKey]
+			runtime.addConfigPermission(trigger.Plugin, trigger.Operation)
 		}
-		runtime.workloadTokens[pluginName], err = workflowWorkloadToken()
-		if err != nil {
-			return nil, err
+		if len(runtime.configPermissions) > 0 {
+			token, err := workflowWorkloadToken()
+			if err != nil {
+				return nil, err
+			}
+			runtime.configWorkloadToken = token
 		}
-	}
-	for scheduleKey := range cfg.Workflows.Schedules {
-		schedule := cfg.Workflows.Schedules[scheduleKey]
-		pluginName := strings.TrimSpace(schedule.Plugin)
-		if pluginName == "" {
-			continue
-		}
-		if runtime.managedScheduleIDs[pluginName] == nil {
-			runtime.managedScheduleIDs[pluginName] = map[string]struct{}{}
-		}
-		runtime.managedScheduleIDs[pluginName][workflowConfigScheduleID(scheduleKey)] = struct{}{}
-	}
-	for triggerKey := range cfg.Workflows.EventTriggers {
-		trigger := cfg.Workflows.EventTriggers[triggerKey]
-		pluginName := strings.TrimSpace(trigger.Plugin)
-		if pluginName == "" {
-			continue
-		}
-		if runtime.managedEventTriggerIDs[pluginName] == nil {
-			runtime.managedEventTriggerIDs[pluginName] = map[string]struct{}{}
-		}
-		runtime.managedEventTriggerIDs[pluginName][workflowConfigEventTriggerID(triggerKey)] = struct{}{}
 	}
 	return runtime, nil
+}
+
+func (r *workflowRuntime) addConfigPermission(pluginName, operation string) {
+	if r == nil {
+		return
+	}
+	pluginName = strings.TrimSpace(pluginName)
+	operation = strings.TrimSpace(operation)
+	if pluginName == "" || operation == "" {
+		return
+	}
+	if r.configPermissions[pluginName] == nil {
+		r.configPermissions[pluginName] = map[string]struct{}{}
+	}
+	r.configPermissions[pluginName][operation] = struct{}{}
 }
 
 func (r *workflowRuntime) InitProviderPlaceholders(defs map[string]*config.ProviderEntry) {
@@ -152,16 +150,6 @@ func (r *workflowRuntime) FailPendingProviders(err error) {
 	}
 }
 
-func (r *workflowRuntime) HasBinding(pluginName string) bool {
-	if r == nil {
-		return false
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	_, ok := r.bindings[pluginName]
-	return ok
-}
-
 func (r *workflowRuntime) StartupWaitTracker() *startupWaitTracker {
 	if r == nil {
 		return nil
@@ -189,36 +177,6 @@ func (r *workflowRuntime) SetExecutionRefs(service *coredata.WorkflowExecutionRe
 	r.executionRefs = service
 }
 
-func (r *workflowRuntime) ResolvePlugin(pluginName string) (coreworkflow.Provider, map[string]struct{}, error) {
-	if r == nil {
-		return nil, nil, fmt.Errorf("workflow runtime is not configured")
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	binding, ok := r.bindings[pluginName]
-	if !ok {
-		return nil, nil, fmt.Errorf("plugin %q does not have a workflow binding", pluginName)
-	}
-	provider, ok := r.providers[binding.providerName]
-	if !ok || provider == nil {
-		return nil, nil, fmt.Errorf("workflow provider %q is not available", binding.providerName)
-	}
-	return provider, maps.Clone(binding.operations), nil
-}
-
-func (r *workflowRuntime) ResolveBinding(pluginName string) (string, map[string]struct{}, error) {
-	if r == nil {
-		return "", nil, fmt.Errorf("workflow runtime is not configured")
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	binding, ok := r.bindings[pluginName]
-	if !ok {
-		return "", nil, fmt.Errorf("plugin %q does not have a workflow binding", pluginName)
-	}
-	return binding.providerName, maps.Clone(binding.operations), nil
-}
-
 func (r *workflowRuntime) ResolveProvider(name string) (coreworkflow.Provider, error) {
 	if r == nil {
 		return nil, fmt.Errorf("workflow runtime is not configured")
@@ -232,62 +190,42 @@ func (r *workflowRuntime) ResolveProvider(name string) (coreworkflow.Provider, e
 	return provider, nil
 }
 
+func (r *workflowRuntime) ResolveProviderSelection(name string) (string, coreworkflow.Provider, error) {
+	if r == nil {
+		return "", nil, fmt.Errorf("workflow runtime is not configured")
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	selectedName := strings.TrimSpace(name)
+	if selectedName == "" {
+		selectedName = strings.TrimSpace(r.defaultProviderName)
+	}
+	if selectedName == "" {
+		return "", nil, fmt.Errorf("workflow provider is required")
+	}
+	provider, ok := r.providers[selectedName]
+	if !ok || provider == nil {
+		return "", nil, fmt.Errorf("workflow provider %q is not available", selectedName)
+	}
+	return selectedName, provider, nil
+}
+
 func (r *workflowRuntime) ProviderNames() []string {
 	if r == nil {
 		return nil
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	seen := make(map[string]struct{}, len(r.bindings))
-	names := make([]string, 0, len(r.bindings))
-	for _, binding := range r.bindings {
-		name := strings.TrimSpace(binding.providerName)
+	names := make([]string, 0, len(r.providers))
+	for name := range r.providers {
+		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
-		if _, ok := seen[name]; ok {
-			continue
-		}
-		seen[name] = struct{}{}
 		names = append(names, name)
 	}
 	slices.Sort(names)
 	return names
-}
-
-func (r *workflowRuntime) ManagedScheduleIDs(pluginName string) map[string]struct{} {
-	if r == nil {
-		return nil
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return maps.Clone(r.managedScheduleIDs[pluginName])
-}
-
-func (r *workflowRuntime) ManagedEventTriggerIDs(pluginName string) map[string]struct{} {
-	if r == nil {
-		return nil
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return maps.Clone(r.managedEventTriggerIDs[pluginName])
-}
-
-func (r *workflowRuntime) Allow(providerName, pluginName, operation string) bool {
-	if r == nil {
-		return false
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	binding, ok := r.bindings[pluginName]
-	if !ok {
-		return false
-	}
-	if binding.providerName != strings.TrimSpace(providerName) {
-		return false
-	}
-	_, ok = binding.operations[operation]
-	return ok
 }
 
 func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOperationRequest) (*coreworkflow.InvokeOperationResponse, error) {
@@ -305,10 +243,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 	if targetPluginName == "" {
 		return nil, fmt.Errorf("workflow target plugin is required")
 	}
-	if !r.Allow(req.ProviderName, targetPluginName, req.Target.Operation) {
-		return nil, fmt.Errorf("workflow target %q for plugin %q is not enabled", req.Target.Operation, targetPluginName)
-	}
-	principalValue := workflowWorkloadPrincipal(targetPluginName)
+	principalValue := workflowWorkloadPrincipal()
 	target := req.Target
 	invokeConnection := ""
 	invokeInstance := ""
@@ -526,7 +461,7 @@ func workflowActorContext(actor coreworkflow.Actor) map[string]any {
 }
 
 func (r *workflowRuntime) AugmentAuthorization(cfg config.AuthorizationConfig) (config.AuthorizationConfig, error) {
-	if r == nil || len(r.bindings) == 0 {
+	if r == nil || len(r.configPermissions) == 0 {
 		return cfg, nil
 	}
 	cfg.Policies = maps.Clone(cfg.Policies)
@@ -534,51 +469,50 @@ func (r *workflowRuntime) AugmentAuthorization(cfg config.AuthorizationConfig) (
 	if cfg.Workloads == nil {
 		cfg.Workloads = map[string]config.WorkloadDef{}
 	}
-	for pluginName, binding := range r.bindings {
-		workloadID := workflowWorkloadID(pluginName)
-		if _, exists := cfg.Workloads[workloadID]; exists {
-			return config.AuthorizationConfig{}, fmt.Errorf("authorization validation: managed workflow workload %q conflicts with configured workload", workloadID)
+	workloadID := workflowWorkloadID()
+	if _, exists := cfg.Workloads[workloadID]; exists {
+		return config.AuthorizationConfig{}, fmt.Errorf("authorization validation: managed workflow workload %q conflicts with configured workload", workloadID)
+	}
+	providers := make(map[string]config.WorkloadProviderDef, len(r.configPermissions))
+	for pluginName, operations := range r.configPermissions {
+		if r.configProviderModes[pluginName] == core.ConnectionModeUser {
+			continue
 		}
-		allow := make([]string, 0, len(binding.operations))
-		for operation := range binding.operations {
+		allow := make([]string, 0, len(operations))
+		for operation := range operations {
 			allow = append(allow, operation)
 		}
 		slices.Sort(allow)
-		token, ok := r.workloadTokens[pluginName]
-		if !ok {
-			return config.AuthorizationConfig{}, fmt.Errorf("authorization validation: managed workflow workload %q is missing a token", workloadID)
-		}
-		cfg.Workloads[workloadID] = config.WorkloadDef{
-			DisplayName: workflowWorkloadDisplayName(pluginName),
-			Token:       token,
-			Providers: map[string]config.WorkloadProviderDef{
-				pluginName: {
-					Allow: allow,
-				},
-			},
-		}
+		providers[pluginName] = config.WorkloadProviderDef{Allow: allow}
+	}
+	if len(providers) == 0 {
+		return cfg, nil
+	}
+	if strings.TrimSpace(r.configWorkloadToken) == "" {
+		return config.AuthorizationConfig{}, fmt.Errorf("authorization validation: managed workflow workload %q is missing a token", workloadID)
+	}
+	cfg.Workloads[workloadID] = config.WorkloadDef{
+		DisplayName: workflowWorkloadDisplayName(),
+		Token:       r.configWorkloadToken,
+		Providers:   providers,
 	}
 	return cfg, nil
 }
 
-func workflowWorkloadPrincipal(pluginName string) *principal.Principal {
+func workflowWorkloadPrincipal() *principal.Principal {
 	return &principal.Principal{
 		Kind:      principal.KindWorkload,
-		SubjectID: principal.WorkloadSubjectID(workflowWorkloadID(pluginName)),
+		SubjectID: principal.WorkloadSubjectID(workflowWorkloadID()),
 		Source:    principal.SourceWorkloadToken,
 	}
 }
 
-func workflowWorkloadID(pluginName string) string {
-	return "workflow." + strings.TrimSpace(pluginName)
+func workflowWorkloadID() string {
+	return "workflow.config"
 }
 
-func workflowWorkloadDisplayName(pluginName string) string {
-	pluginName = strings.TrimSpace(pluginName)
-	if pluginName == "" {
-		return "workflow"
-	}
-	return pluginName + " workflow"
+func workflowWorkloadDisplayName() string {
+	return "workflow config"
 }
 
 func workflowWorkloadToken() (string, error) {

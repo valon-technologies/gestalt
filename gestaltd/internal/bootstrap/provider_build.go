@@ -20,7 +20,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
-	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/graphql"
@@ -91,7 +90,7 @@ func buildProvidersAsync(
 	for name := range cfg.Plugins {
 		intgDef := cfg.Plugins[name]
 		var proxy *startupProviderProxy
-		if deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasBinding(name) {
+		if deps.WorkflowRuntime != nil {
 			spec, operationConnections, err := buildStartupProviderSpec(name, intgDef)
 			if err != nil {
 				slog.Warn("building startup provider proxy metadata failed", "provider", name, "error", err)
@@ -713,13 +712,6 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		execCfg.HostServices = append(execCfg.HostServices, hostServices...)
 		cleanup = chainCleanup(cleanup, cacheCleanup)
 	}
-	if deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasBinding(name) {
-		hostServices, err := buildPluginWorkflowHostServices(name, deps)
-		if err != nil {
-			return nil, err
-		}
-		execCfg.HostServices = append(execCfg.HostServices, hostServices...)
-	}
 	if len(entry.S3) > 0 {
 		hostServices, err := buildPluginS3HostServices(name, entry, deps)
 		if err != nil {
@@ -836,27 +828,6 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 		})
 	}
 	return hostServices, nil
-}
-
-func buildPluginWorkflowHostServices(pluginName string, deps Deps) ([]providerhost.HostService, error) {
-	if deps.WorkflowRuntime == nil {
-		return nil, fmt.Errorf("workflow host services are not available")
-	}
-	return []providerhost.HostService{{
-		EnvVar: providerhost.DefaultWorkflowSocketEnv,
-		Register: func(srv *grpc.Server) {
-			proto.RegisterWorkflowServer(srv, providerhost.NewWorkflowServer(pluginName, func() (coreworkflow.Provider, map[string]struct{}, providerhost.WorkflowManagedIDs, error) {
-				provider, allowed, err := deps.WorkflowRuntime.ResolvePlugin(pluginName)
-				if err != nil {
-					return nil, nil, providerhost.WorkflowManagedIDs{}, err
-				}
-				return provider, allowed, providerhost.WorkflowManagedIDs{
-					Schedules:     deps.WorkflowRuntime.ManagedScheduleIDs(pluginName),
-					EventTriggers: deps.WorkflowRuntime.ManagedEventTriggerIDs(pluginName),
-				}, nil
-			}))
-		},
-	}}, nil
 }
 
 func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveWorkflowIndexedDB, deps Deps) ([]providerhost.HostService, func(), error) {

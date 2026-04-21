@@ -104,13 +104,6 @@ type EffectiveWorkflowIndexedDB struct {
 	ObjectStores []string
 }
 
-type EffectiveWorkflowBinding struct {
-	Enabled      bool
-	ProviderName string
-	Provider     *ProviderEntry
-	Operations   []string
-}
-
 func (c *Config) EffectivePluginIndexedDB(pluginName string, entry *ProviderEntry) (EffectivePluginIndexedDB, error) {
 	selectedName, _, err := c.SelectedIndexedDBProvider()
 	if err != nil {
@@ -119,20 +112,19 @@ func (c *Config) EffectivePluginIndexedDB(pluginName string, entry *ProviderEntr
 	return ResolveEffectivePluginIndexedDB(pluginName, entry, selectedName, c.Providers.IndexedDB)
 }
 
-func (c *Config) EffectiveWorkflowBinding(pluginName string) (EffectiveWorkflowBinding, error) {
-	binding := (*WorkflowBindingConfig)(nil)
-	if c != nil {
-		binding = c.Workflows.Bindings[pluginName]
+func (c *Config) EffectiveWorkflowProvider(providerName string) (string, *ProviderEntry, error) {
+	if c == nil {
+		return "", nil, nil
 	}
-	selectedName := ""
-	if binding != nil && strings.TrimSpace(binding.Provider) == "" {
-		var err error
-		selectedName, _, err = c.SelectedWorkflowProvider()
-		if err != nil {
-			return EffectiveWorkflowBinding{}, err
+	providerName = strings.TrimSpace(providerName)
+	if providerName != "" {
+		entry, ok := c.Providers.Workflow[providerName]
+		if !ok || entry == nil {
+			return "", nil, fmt.Errorf("config validation: providers.workflow references unknown workflow %q", providerName)
 		}
+		return providerName, entry, nil
 	}
-	return ResolveEffectiveWorkflowBinding(pluginName, binding, selectedName, c.Providers.Workflow)
+	return c.SelectedWorkflowProvider()
 }
 
 func (c *Config) EffectiveWorkflowIndexedDB(name string, entry *ProviderEntry) (EffectiveWorkflowIndexedDB, error) {
@@ -208,32 +200,6 @@ func ResolveEffectiveWorkflowIndexedDB(name string, entry *ProviderEntry, entrie
 		Provider:     provider,
 		DB:           dbName,
 		ObjectStores: slices.Clone(entry.IndexedDB.ObjectStores),
-	}, nil
-}
-
-func ResolveEffectiveWorkflowBinding(pluginName string, binding *WorkflowBindingConfig, selectedName string, entries map[string]*ProviderEntry) (EffectiveWorkflowBinding, error) {
-	if binding == nil {
-		return EffectiveWorkflowBinding{}, nil
-	}
-
-	providerName := strings.TrimSpace(binding.Provider)
-	if providerName == "" {
-		providerName = strings.TrimSpace(selectedName)
-	}
-	if providerName == "" {
-		return EffectiveWorkflowBinding{}, fmt.Errorf("config validation: workflows.bindings.%s requires provider or a selected/default providers.workflow entry", pluginName)
-	}
-
-	provider, ok := entries[providerName]
-	if !ok || provider == nil {
-		return EffectiveWorkflowBinding{}, fmt.Errorf("config validation: workflows.bindings.%s.provider references unknown workflow %q", pluginName, providerName)
-	}
-
-	return EffectiveWorkflowBinding{
-		Enabled:      true,
-		ProviderName: providerName,
-		Provider:     provider,
-		Operations:   slices.Clone(binding.Operations),
 	}, nil
 }
 

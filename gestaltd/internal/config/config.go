@@ -319,17 +319,12 @@ type PluginIndexedDBConfig struct {
 }
 
 type WorkflowsConfig struct {
-	Bindings      map[string]*WorkflowBindingConfig     `yaml:"bindings,omitempty"`
 	Schedules     map[string]WorkflowScheduleConfig     `yaml:"schedules,omitempty"`
 	EventTriggers map[string]WorkflowEventTriggerConfig `yaml:"eventTriggers,omitempty"`
 }
 
-type WorkflowBindingConfig struct {
-	Provider   string   `yaml:"provider,omitempty"`
-	Operations []string `yaml:"operations,omitempty"`
-}
-
 type WorkflowScheduleConfig struct {
+	Provider   string         `yaml:"provider,omitempty"`
 	Plugin     string         `yaml:"plugin,omitempty"`
 	Cron       string         `yaml:"cron,omitempty"`
 	Timezone   string         `yaml:"timezone,omitempty"`
@@ -341,6 +336,7 @@ type WorkflowScheduleConfig struct {
 }
 
 type WorkflowEventTriggerConfig struct {
+	Provider   string             `yaml:"provider,omitempty"`
 	Plugin     string             `yaml:"plugin,omitempty"`
 	Match      WorkflowEventMatch `yaml:"match,omitempty"`
 	Operation  string             `yaml:"operation,omitempty"`
@@ -1645,7 +1641,6 @@ func applyDefaults(cfg *Config) {
 		cfg.Server.Public.Port = 8080
 	}
 	cfg.Plugins = nonNilProviderEntryMap(cfg.Plugins)
-	cfg.Workflows.Bindings = nonNilWorkflowBindingMap(cfg.Workflows.Bindings)
 	cfg.Workflows.Schedules = nonNilWorkflowScheduleMap(cfg.Workflows.Schedules)
 	cfg.Workflows.EventTriggers = nonNilWorkflowEventTriggerMap(cfg.Workflows.EventTriggers)
 	cfg.Providers.UI = nonNilUIEntryMap(cfg.Providers.UI)
@@ -1658,13 +1653,6 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.Cache = nonNilProviderEntryMap(cfg.Providers.Cache)
 	cfg.Providers.S3 = nonNilProviderEntryMap(cfg.Providers.S3)
 	cfg.Providers.Workflow = nonNilProviderEntryMap(cfg.Providers.Workflow)
-}
-
-func nonNilWorkflowBindingMap(in map[string]*WorkflowBindingConfig) map[string]*WorkflowBindingConfig {
-	if in == nil {
-		return map[string]*WorkflowBindingConfig{}
-	}
-	return in
 }
 
 func nonNilWorkflowScheduleMap(in map[string]WorkflowScheduleConfig) map[string]WorkflowScheduleConfig {

@@ -11,23 +11,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func workflowRunStatusToProto(status coreworkflow.RunStatus) proto.WorkflowRunStatus {
-	switch status {
-	case coreworkflow.RunStatusPending:
-		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING
-	case coreworkflow.RunStatusRunning:
-		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_RUNNING
-	case coreworkflow.RunStatusSucceeded:
-		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_SUCCEEDED
-	case coreworkflow.RunStatusFailed:
-		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_FAILED
-	case coreworkflow.RunStatusCanceled:
-		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_CANCELED
-	default:
-		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_UNSPECIFIED
-	}
-}
-
 func workflowRunStatusFromProto(status proto.WorkflowRunStatus) (coreworkflow.RunStatus, error) {
 	switch status {
 	case proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_UNSPECIFIED:
@@ -95,32 +78,6 @@ func workflowActorFromProto(actor *proto.WorkflowActor) coreworkflow.Actor {
 		SubjectKind: actor.GetSubjectKind(),
 		DisplayName: actor.GetDisplayName(),
 		AuthSource:  actor.GetAuthSource(),
-	}
-}
-
-func pluginWorkflowTargetToProto(target coreworkflow.Target) (*proto.WorkflowTarget, error) {
-	input, err := structFromMap(target.Input)
-	if err != nil {
-		return nil, fmt.Errorf("workflow target input: %w", err)
-	}
-	return &proto.WorkflowTarget{
-		Operation:  target.Operation,
-		Input:      input,
-		Connection: target.Connection,
-		Instance:   target.Instance,
-	}, nil
-}
-
-func pluginWorkflowTargetFromProto(pluginName string, target *proto.WorkflowTarget) coreworkflow.Target {
-	if target == nil {
-		return coreworkflow.Target{PluginName: strings.TrimSpace(pluginName)}
-	}
-	return coreworkflow.Target{
-		PluginName: strings.TrimSpace(pluginName),
-		Operation:  strings.TrimSpace(target.GetOperation()),
-		Connection: strings.TrimSpace(target.GetConnection()),
-		Instance:   strings.TrimSpace(target.GetInstance()),
-		Input:      mapFromStruct(target.GetInput()),
 	}
 }
 
@@ -284,32 +241,6 @@ func workflowRunFromProto(run *proto.BoundWorkflowRun) (*coreworkflow.Run, error
 	}, nil
 }
 
-func workflowRunToPluginProto(run *coreworkflow.Run) (*proto.WorkflowRun, error) {
-	if run == nil {
-		return nil, nil
-	}
-	target, err := pluginWorkflowTargetToProto(run.Target)
-	if err != nil {
-		return nil, err
-	}
-	trigger, err := workflowRunTriggerToProto(run.Trigger)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowRun{
-		Id:            run.ID,
-		Status:        workflowRunStatusToProto(run.Status),
-		Target:        target,
-		Trigger:       trigger,
-		CreatedBy:     workflowActorToProto(run.CreatedBy),
-		CreatedAt:     timeToProto(run.CreatedAt),
-		StartedAt:     timeToProto(run.StartedAt),
-		CompletedAt:   timeToProto(run.CompletedAt),
-		StatusMessage: run.StatusMessage,
-		ResultBody:    run.ResultBody,
-	}, nil
-}
-
 func workflowScheduleFromProto(schedule *proto.BoundWorkflowSchedule) (*coreworkflow.Schedule, error) {
 	if schedule == nil {
 		return nil, nil
@@ -328,27 +259,6 @@ func workflowScheduleFromProto(schedule *proto.BoundWorkflowSchedule) (*corework
 	}, nil
 }
 
-func workflowScheduleToPluginProto(schedule *coreworkflow.Schedule) (*proto.WorkflowSchedule, error) {
-	if schedule == nil {
-		return nil, nil
-	}
-	target, err := pluginWorkflowTargetToProto(schedule.Target)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowSchedule{
-		Id:        schedule.ID,
-		Cron:      schedule.Cron,
-		Timezone:  schedule.Timezone,
-		Target:    target,
-		Paused:    schedule.Paused,
-		CreatedBy: workflowActorToProto(schedule.CreatedBy),
-		CreatedAt: timeToProto(schedule.CreatedAt),
-		UpdatedAt: timeToProto(schedule.UpdatedAt),
-		NextRunAt: timeToProto(schedule.NextRunAt),
-	}, nil
-}
-
 func workflowEventTriggerFromProto(trigger *proto.BoundWorkflowEventTrigger) (*coreworkflow.EventTrigger, error) {
 	if trigger == nil {
 		return nil, nil
@@ -361,25 +271,6 @@ func workflowEventTriggerFromProto(trigger *proto.BoundWorkflowEventTrigger) (*c
 		CreatedBy: workflowActorFromProto(trigger.GetCreatedBy()),
 		CreatedAt: timeFromProto(trigger.GetCreatedAt()),
 		UpdatedAt: timeFromProto(trigger.GetUpdatedAt()),
-	}, nil
-}
-
-func workflowEventTriggerToPluginProto(trigger *coreworkflow.EventTrigger) (*proto.WorkflowEventTrigger, error) {
-	if trigger == nil {
-		return nil, nil
-	}
-	target, err := pluginWorkflowTargetToProto(trigger.Target)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowEventTrigger{
-		Id:        trigger.ID,
-		Match:     workflowEventMatchToProto(trigger.Match),
-		Target:    target,
-		Paused:    trigger.Paused,
-		CreatedBy: workflowActorToProto(trigger.CreatedBy),
-		CreatedAt: timeToProto(trigger.CreatedAt),
-		UpdatedAt: timeToProto(trigger.UpdatedAt),
 	}, nil
 }
 
