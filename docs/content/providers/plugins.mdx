@@ -62,13 +62,12 @@ plugins:
 ## Connections and credentials
 
 Plugin packages declare connection models in their manifests, and the server
-stores credentials per user or per shared identity.
+stores credentials per subject.
 
 | Mode | Behavior |
 | --- | --- |
 | `none` | No upstream credential is required |
-| `user` | Each user stores their own credential |
-| `identity` | One shared service credential is used for every caller |
+| `user` | The calling subject stores its own credential (`user:<id>`, `workload:<id>`, or a managed identity subject) |
 
 Common auth types are `oauth2`, `mcp_oauth`, `bearer`, `manual`, and `none`.
 Operator-supplied app credentials such as `clientId` and `clientSecret` go in

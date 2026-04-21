@@ -162,7 +162,7 @@ authorization:
 
 Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `authorizationPolicy`, operators can manage additional dynamic members for that plugin from the built-in admin UI at `/admin/?tab=members` or through `/admin/api/v1/authorization/...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for users who already have static authorization on that plugin.
 
-`authorization.workloads` configures non-human workload callers. Each workload uses a dedicated bearer token with the `gst_wld_` prefix and a per-provider allowlist. In v1, workloads may bind only to `identity` or `none` providers. For `identity` providers, `connection` and `instance` resolve the exact stored identity credential the workload may use; `instance` defaults to `default` and `connection` falls back to the provider's default connection when omitted. For `none` providers, omit `connection` and `instance`.
+`authorization.workloads` configures non-human workload callers. Each workload uses a dedicated bearer token with the `gst_wld_` prefix and a per-provider allowlist. In the current runtime, workloads may bind only to `user` or `none` providers. For `user` providers, `connection` and `instance` resolve the exact stored workload credential the workload may use under its own subject (`workload:<id>`); `instance` defaults to `default` and `connection` falls back to the provider's default connection when omitted. For `none` providers, omit `connection` and `instance`.
 
 | Field | Default | Description |
 | --- | --- | --- |
@@ -179,7 +179,7 @@ Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `a
 | `admin.authorizationPolicy` | | Shared human access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
 | `authorization.policies` | | Shared human access policies resolved by canonical `subjectID`. |
-| `authorization.workloads` | | Workload bearer tokens, per-provider allowlists, and identity credential bindings. |
+| `authorization.workloads` | | Workload bearer tokens, per-provider allowlists, and workload-owned credential bindings. |
 
 When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener. When `server.admin.authorizationPolicy` is set, Gestalt does apply browser session auth plus role-based policy checks to `/admin` and `/admin/api/v1/*`.
 
@@ -969,7 +969,7 @@ connections:
       type: mcp_oauth
 ```
 
-Connection `mode` determines how credentials are managed: `none` requires no credentials, `user` requires each user to connect individually, and `identity` uses a shared operator credential. All connections in a single plugin must share the same mode.
+Connection `mode` determines how credentials are managed: `none` requires no credentials, and `user` stores credentials for the caller's effective subject. For humans that is typically `user:<id>`; for workloads it is `workload:<id>`; for managed identities it is the managed identity subject. All connections in a single plugin must share the same mode.
 
 #### Auth shapes
 
