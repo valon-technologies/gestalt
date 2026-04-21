@@ -66,7 +66,16 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 	for _, opt := range opts {
 		opt(&options)
 	}
-	auth := manifest.Spec.Auth
+	var (
+		auth      *providermanifestv1.ProviderAuth
+		params    map[string]providermanifestv1.ProviderConnectionParam
+		discovery *providermanifestv1.ProviderDiscovery
+	)
+	if def := manifest.Spec.DefaultConnectionDef(); def != nil {
+		auth = def.Auth
+		params = def.Params
+		discovery = def.Discovery
+	}
 	cat := declarativeCatalog(manifest, options)
 	authType := providermanifestv1.AuthType("")
 	authorizationURL := ""
@@ -80,8 +89,8 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 		HTTPClient:                  httpClient,
 		MethodDefaultParamLocations: true,
 		RequestContentType:          declarativeJSONContentType,
-		ConnectionDefs:              ConnectionParamDefsFromManifest(manifest.Spec.ConnectionParams),
-		DiscoveryDef:                DiscoveryConfigFromManifest(manifest.Spec.Discovery),
+		ConnectionDefs:              ConnectionParamDefsFromManifest(params),
+		DiscoveryDef:                DiscoveryConfigFromManifest(discovery),
 		CredentialFieldDefs:         declarativeCredentialFields(auth),
 		NoRetry:                     true,
 	}

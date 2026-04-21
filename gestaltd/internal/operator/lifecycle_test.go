@@ -69,6 +69,22 @@ func decodeNodeMap(t *testing.T, node any) map[string]any {
 	return out
 }
 
+func withNoAuthDefaultConnection(spec *providermanifestv1.Spec) *providermanifestv1.Spec {
+	if spec == nil {
+		spec = &providermanifestv1.Spec{}
+	}
+	if spec.Connections == nil {
+		spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{}
+	}
+	def := spec.Connections["default"]
+	if def == nil {
+		def = &providermanifestv1.ManifestConnectionDef{}
+	}
+	def.Auth = &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone}
+	spec.Connections["default"] = def
+	return spec
+}
+
 func writeStubIndexedDBManifest(t *testing.T, dir string) string {
 	t.Helper()
 	providerDir := filepath.Join(dir, "indexeddb-stub")
@@ -261,9 +277,7 @@ func writeLocalExecutablePlugin(t *testing.T, dir, name string, operations ...st
 			Path:   artifactPath,
 			SHA256: hex.EncodeToString(artifactSum[:]),
 		}},
-		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-		},
+		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat(%s): %v", name, err)
@@ -411,12 +425,11 @@ paths:
 			Path:   artifactPath,
 			SHA256: hex.EncodeToString(artifactSum[:]),
 		}},
-		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{
 			Surfaces: &providermanifestv1.ProviderSurfaces{
 				OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
 			},
-		},
+		}),
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat(%s): %v", name, err)
@@ -477,9 +490,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Local Provider",
 		Description: "Local executable provider",
-		Kind:        providermanifestv1.KindPlugin, Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-		},
+		Kind:        providermanifestv1.KindPlugin, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 		Artifacts: []providermanifestv1.Artifact{{
 			OS:   runtime.GOOS,
 			Arch: runtime.GOARCH,
@@ -656,8 +667,10 @@ source: github.com/testowner/plugins/example
 version: 0.0.1-alpha.1
 displayName: Example
 spec:
-  auth:
-    type: none
+  connections:
+    default:
+      auth:
+        type: none
   surfaces:
 %s`, tc.surfaceYAML)
 			if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
@@ -879,9 +892,7 @@ func TestInitAtPath_AllowsManagedPluginInvokesOnFirstInit(t *testing.T) {
 		Entrypoint: &providermanifestv1.Entrypoint{
 			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")),
 		},
-		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-		},
+		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 	}, map[string]string{
 		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")): "caller-binary",
 	}, true)
@@ -894,9 +905,7 @@ func TestInitAtPath_AllowsManagedPluginInvokesOnFirstInit(t *testing.T) {
 		Entrypoint: &providermanifestv1.Entrypoint{
 			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")),
 		},
-		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-		},
+		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 	}, map[string]string{
 		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")): "target-binary",
 	}, true)
@@ -1385,9 +1394,7 @@ plugins:
 				if err := os.WriteFile(pluginArtifactPath, []byte("roadmap-plugin"), 0o755); err != nil {
 					t.Fatalf("WriteFile plugin artifact: %v", err)
 				}
-				pluginSpec := &providermanifestv1.Spec{
-					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-				}
+				pluginSpec := withNoAuthDefaultConnection(&providermanifestv1.Spec{})
 				if tc.ownedUIPath != "" {
 					pluginSpec.UI = &providermanifestv1.OwnedUI{Path: tc.ownedUIPath}
 				}
@@ -1601,12 +1608,11 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 			Path:   artifactPath,
 			SHA256: hex.EncodeToString(sum[:]),
 		}},
-		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{
 			UI: &providermanifestv1.OwnedUI{
 				Path: ownedUIManifestPath,
 			},
-		},
+		}),
 	})
 	if err != nil {
 		t.Fatalf("Encode plugin manifest: %v", err)
@@ -1726,9 +1732,7 @@ func TestLoadForExecutionAtPath_ReinitializesManagedPluginWhenGenericArchiveLock
 		Entrypoint: &providermanifestv1.Entrypoint{
 			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")),
 		},
-		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-		},
+		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 	}, map[string]string{
 		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")): "plugin-binary-" + version,
 	}, true)
@@ -1822,9 +1826,7 @@ func TestLoadForExecutionAtPath_LockedManagedDeclarativePluginMaterializesBefore
 			Entrypoint: &providermanifestv1.Entrypoint{
 				ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")),
 			},
-			Spec: &providermanifestv1.Spec{
-				Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-			},
+			Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 		}, map[string]string{
 			filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")): "plugin-binary-" + version,
 		}, true)
@@ -1835,8 +1837,7 @@ func TestLoadForExecutionAtPath_LockedManagedDeclarativePluginMaterializesBefore
 			Source:      pluginRef,
 			Version:     version,
 			DisplayName: "Roadmap Review",
-			Spec: &providermanifestv1.Spec{
-				Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{
 				Surfaces: &providermanifestv1.ProviderSurfaces{
 					REST: &providermanifestv1.RESTSurface{
 						BaseURL: "https://api.example.com",
@@ -1849,7 +1850,7 @@ func TestLoadForExecutionAtPath_LockedManagedDeclarativePluginMaterializesBefore
 						},
 					},
 				},
-			},
+			}),
 		}, nil, false)
 	}
 
@@ -2090,12 +2091,11 @@ func TestInitAtPath_RejectsManagedPluginOwnedUIPathOutsidePackage(t *testing.T) 
 			Path:   artifactPath,
 			SHA256: hex.EncodeToString(sum[:]),
 		}},
-		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{
 			UI: &providermanifestv1.OwnedUI{
 				Path: "../owned-ui/manifest.json",
 			},
-		},
+		}),
 	})
 	if err != nil {
 		t.Fatalf("Marshal manifest: %v", err)
@@ -2741,9 +2741,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 		Source:      "github.com/testowner/plugins/local-generated-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Provider",
-		Kind:        providermanifestv1.KindPlugin, Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-		},
+		Kind:        providermanifestv1.KindPlugin, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifestFormat: %v", err)
@@ -2923,9 +2921,7 @@ def session_catalog(request: gestalt.Request) -> gestalt.Catalog:
 		Source:      "github.com/testowner/plugins/local-python-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Python Provider",
-		Kind:        providermanifestv1.KindPlugin, Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-		},
+		Kind:        providermanifestv1.KindPlugin, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 		Artifacts: []providermanifestv1.Artifact{{
 			OS:   runtime.GOOS,
 			Arch: runtime.GOARCH,
@@ -3261,9 +3257,7 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 		Source:      "github.com/testowner/plugins/local-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Local Provider",
-		Kind:        providermanifestv1.KindPlugin, Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-		},
+		Kind:        providermanifestv1.KindPlugin, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 		Artifacts: []providermanifestv1.Artifact{{
 			OS:   runtime.GOOS,
 			Arch: runtime.GOARCH,

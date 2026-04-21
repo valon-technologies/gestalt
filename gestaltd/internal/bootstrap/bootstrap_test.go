@@ -1080,12 +1080,45 @@ func TestBootstrap(t *testing.T) {
 				}))
 				defer srv.Close()
 
+				connections := make(map[string]*providermanifestv1.ManifestConnectionDef, len(tc.connections))
+				for name, def := range tc.connections {
+					if def == nil {
+						connections[name] = nil
+						continue
+					}
+					copyDef := *def
+					connections[name] = &copyDef
+				}
+				if tc.specAuth != nil {
+					target := tc.restConnection
+					if target == "" {
+						if _, ok := connections["default"]; ok {
+							target = "default"
+						} else if len(connections) == 1 {
+							for name := range connections {
+								target = name
+							}
+						}
+					}
+					if target == "" {
+						target = "default"
+					}
+					def := connections[target]
+					if def == nil {
+						def = &providermanifestv1.ManifestConnectionDef{}
+					} else {
+						copyDef := *def
+						def = &copyDef
+					}
+					def.Auth = tc.specAuth
+					connections[target] = def
+				}
+
 				cfg := validConfig()
 				cfg.Plugins = map[string]*config.ProviderEntry{
 					"slack": {
 						ResolvedManifest: &providermanifestv1.Manifest{
 							Spec: &providermanifestv1.Spec{
-								Auth: tc.specAuth,
 								Surfaces: &providermanifestv1.ProviderSurfaces{
 									REST: &providermanifestv1.RESTSurface{
 										BaseURL:    srv.URL,
@@ -1095,7 +1128,7 @@ func TestBootstrap(t *testing.T) {
 										},
 									},
 								},
-								Connections: tc.connections,
+								Connections: connections,
 							},
 						},
 					},

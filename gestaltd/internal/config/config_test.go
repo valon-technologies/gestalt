@@ -1019,7 +1019,7 @@ plugins:
 		}
 	})
 
-	t.Run("apiVersion canonicalizes deprecated sibling source auth on metadata URL sources", func(t *testing.T) {
+	t.Run("apiVersion preserves nested source auth on metadata URL sources", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1027,9 +1027,10 @@ apiVersion: gestaltd.config/v3
 providers:
 plugins:
     custom_tool:
-      source: https://example.com/providers/custom_tool/provider-release.yaml?download=1
-      auth:
-        token: test-token
+      source:
+        url: https://example.com/providers/custom_tool/provider-release.yaml?download=1
+        auth:
+          token: test-token
 `)
 
 		cfg, err := Load(path)
@@ -1042,9 +1043,6 @@ plugins:
 		}
 		if entry.Source.Auth == nil || entry.Source.Auth.Token != "test-token" {
 			t.Fatalf("Source.Auth = %#v", entry.Source.Auth)
-		}
-		if entry.InlineSourceAuth != nil {
-			t.Fatalf("InlineSourceAuth = %#v, want nil", entry.InlineSourceAuth)
 		}
 		if entry.RouteAuth != nil {
 			t.Fatalf("RouteAuth = %#v, want nil", entry.RouteAuth)
@@ -1183,7 +1181,7 @@ plugins:
 		}
 	})
 
-	t.Run("apiVersion reserves sibling auth for plugin route auth overrides", func(t *testing.T) {
+	t.Run("apiVersion preserves nested source auth with plugin route auth overrides", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1219,9 +1217,6 @@ plugins:
 		if entry.RouteAuth == nil || entry.RouteAuth.Provider != "server" {
 			t.Fatalf("RouteAuth = %#v", entry.RouteAuth)
 		}
-		if entry.InlineSourceAuth != nil {
-			t.Fatalf("InlineSourceAuth = %#v, want nil", entry.InlineSourceAuth)
-		}
 		marshaled, err := yaml.Marshal(entry)
 		if err != nil {
 			t.Fatalf("yaml.Marshal: %v", err)
@@ -1247,7 +1242,7 @@ plugins:
 		}
 	})
 
-	t.Run("apiVersion preserves github release metadata sources", func(t *testing.T) {
+	t.Run("apiVersion preserves github release metadata sources with nested auth", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1260,8 +1255,8 @@ plugins:
           repo: valon-technologies/toolshed
           tag: plugins/custom-tool/v0.0.1-alpha.1
           asset: provider-release.yaml
-      auth:
-        token: test-token
+        auth:
+          token: test-token
 `)
 
 		cfg, err := Load(path)
@@ -1305,7 +1300,7 @@ plugins:
 		}
 	})
 
-	t.Run("apiVersion moves sibling auth onto local release metadata sources", func(t *testing.T) {
+	t.Run("apiVersion preserves nested source auth on local release metadata sources", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1313,9 +1308,10 @@ apiVersion: gestaltd.config/v4
 providers:
 plugins:
     custom_tool:
-      source: ./plugins/custom_tool/dist/provider-release.yaml
-      auth:
-        token: test-token
+      source:
+        path: ./plugins/custom_tool/dist/provider-release.yaml
+        auth:
+          token: test-token
 `)
 
 		cfg, err := Load(path)
@@ -1329,9 +1325,6 @@ plugins:
 		}
 		if entry.Source.Auth == nil || entry.Source.Auth.Token != "test-token" {
 			t.Fatalf("Source.Auth = %#v", entry.Source.Auth)
-		}
-		if entry.InlineSourceAuth != nil {
-			t.Fatalf("InlineSourceAuth = %#v, want nil", entry.InlineSourceAuth)
 		}
 		marshaled, err := yaml.Marshal(entry)
 		if err != nil {
@@ -3188,15 +3181,21 @@ plugins:
 `,
 		},
 		{
-			name: "apiVersion metadata url with sibling auth",
+			name: "apiVersion metadata url with plugin route auth",
 			yaml: `
 apiVersion: gestaltd.config/v3
+server:
+  providers:
+    auth: corporate
 providers:
+  auth:
+    corporate:
+      source: https://example.com/providers/auth/corporate/provider-release.yaml
 plugins:
     external:
       source: https://example.com/providers/external/provider-release.yaml
       auth:
-        token: test-token
+        provider: server
 `,
 		},
 		{
@@ -3528,19 +3527,25 @@ plugins:
 			wantErr: "source.ref/source.version are no longer supported",
 		},
 		{
-			name: "apiVersion metadata url with sibling auth is valid",
+			name: "apiVersion route auth override is valid",
 			yaml: `
 apiVersion: gestaltd.config/v3
+server:
+  providers:
+    auth: corporate
 providers:
+  auth:
+    corporate:
+      source: https://example.com/providers/auth/corporate/provider-release.yaml
 plugins:
     external:
       source: https://example.com/providers/external/provider-release.yaml
       auth:
-        token: test-token
+        provider: server
 `,
 		},
 		{
-			name: "apiVersion github release source with sibling auth is valid",
+			name: "apiVersion github release source with nested source auth is valid",
 			yaml: `
 apiVersion: gestaltd.config/v3
 providers:
@@ -3551,8 +3556,8 @@ plugins:
           repo: valon-technologies/toolshed
           tag: plugins/external/v1.2.3
           asset: provider-release.yaml
-      auth:
-        token: test-token
+        auth:
+          token: test-token
 `,
 		},
 		{
@@ -3630,7 +3635,7 @@ plugins:
         token: test-token
         provider: server
 `,
-			wantErr: "auth.token source auth must be nested under source.auth",
+			wantErr: "field token not found",
 		},
 		{
 			name: "plugin auth override rejects unknown auth provider",
@@ -3669,7 +3674,7 @@ plugins:
       auth:
         token: test-token
 `,
-			wantErr: "auth is only valid with provider-release metadata sources",
+			wantErr: "field token not found",
 		},
 		{
 			name: "apiVersion v4 local provider-release metadata is valid",
@@ -3692,15 +3697,16 @@ plugins:
 `,
 		},
 		{
-			name: "apiVersion v4 local provider-release metadata accepts sibling auth",
+			name: "apiVersion v4 local provider-release metadata accepts nested source auth",
 			yaml: `
 apiVersion: gestaltd.config/v4
 providers:
 plugins:
     external:
-      source: ./plugins/dummy/dist/provider-release.yaml
-      auth:
-        token: test-token
+      source:
+        path: ./plugins/dummy/dist/provider-release.yaml
+        auth:
+          token: test-token
 `,
 		},
 		{

@@ -5579,9 +5579,13 @@ func TestListIntegrations_HidesIdentityConnectionsFromUserFacingMetadata(t *test
 						Connection: config.PluginConnectionName,
 					},
 				},
-				ConnectionMode: providermanifestv1.ConnectionModeIdentity,
-				Auth: &providermanifestv1.ProviderAuth{
-					Type: providermanifestv1.AuthTypeManual,
+				Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+					"default": {
+						Mode: providermanifestv1.ConnectionModeIdentity,
+						Auth: &providermanifestv1.ProviderAuth{
+							Type: providermanifestv1.AuthTypeManual,
+						},
+					},
 				},
 			},
 		},
@@ -5729,14 +5733,16 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			},
 			ResolvedManifest: &providermanifestv1.Manifest{
 				Spec: &providermanifestv1.Spec{
-					Auth: &providermanifestv1.ProviderAuth{
-						Type: providermanifestv1.AuthTypeManual,
-						Credentials: []providermanifestv1.CredentialField{
-							{Name: "plugin_token", Label: "Plugin Manifest Token", Description: "Plugin Manifest Description"},
-							{Name: "plugin_manifest_only", Label: "Plugin Manifest Only", Description: "Plugin Manifest Only Description"},
-						},
-					},
 					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"default": {
+							Auth: &providermanifestv1.ProviderAuth{
+								Type: providermanifestv1.AuthTypeManual,
+								Credentials: []providermanifestv1.CredentialField{
+									{Name: "plugin_token", Label: "Plugin Manifest Token", Description: "Plugin Manifest Description"},
+									{Name: "plugin_manifest_only", Label: "Plugin Manifest Only", Description: "Plugin Manifest Only Description"},
+								},
+							},
+						},
 						"workspace": {
 							DisplayName: "Workspace Access",
 							Auth: &providermanifestv1.ProviderAuth{

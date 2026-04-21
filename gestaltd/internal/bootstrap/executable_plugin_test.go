@@ -163,7 +163,11 @@ func TestPythonSourcePluginFallsBackWithoutGoOnPath(t *testing.T) {
 		DisplayName: "Python Source",
 		Description: "Python source provider fixture",
 		Spec: &providermanifestv1.Spec{
-			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+				},
+			},
 		},
 	}
 	manifestData, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
@@ -489,8 +493,8 @@ paths:
 	if err != nil {
 		t.Fatalf("providers.Get(hybrid): %v", err)
 	}
-	if got := prov.ConnectionForOperation("echo"); got != "default" {
-		t.Fatalf("echo connection = %q, want %q", got, "default")
+	if got := prov.ConnectionForOperation("echo"); got != config.PluginConnectionName {
+		t.Fatalf("echo connection = %q, want %q", got, config.PluginConnectionName)
 	}
 	if got := prov.ConnectionForOperation("status"); got != "default" {
 		t.Fatalf("status connection = %q, want %q", got, "default")
@@ -500,8 +504,8 @@ paths:
 	if err != nil {
 		t.Fatalf("buildStartupProviderSpec: %v", err)
 	}
-	if got := operationConnections["echo"]; got != "default" {
-		t.Fatalf("startup echo connection = %q, want %q", got, "default")
+	if got := operationConnections["echo"]; got != config.PluginConnectionName {
+		t.Fatalf("startup echo connection = %q, want %q", got, config.PluginConnectionName)
 	}
 	if _, ok := operationConnections["status"]; ok {
 		t.Fatalf("startup catalog unexpectedly exposed spec-loaded status operation")
@@ -762,9 +766,17 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 	exampleBin := buildExampleProviderBinary(t)
 	exampleRoot := exampleProviderRoot(t)
 	callerManifest := newExecutableManifest("Caller", "Invokes another plugin")
-	callerManifest.Spec.Auth = &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer}
+	callerManifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
+		"default": {
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+		},
+	}
 	exampleManifest := newExecutableManifest("Example Provider", "Reports request context")
-	exampleManifest.Spec.Auth = &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer}
+	exampleManifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
+		"default": {
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+		},
+	}
 
 	bridge := newLazyInvoker()
 	cfg := &config.Config{
@@ -905,11 +917,15 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	manifest.Spec.Auth = &providermanifestv1.ProviderAuth{
-		Type:             providermanifestv1.AuthTypeOAuth2,
-		AuthorizationURL: "https://example.com/authorize",
-		TokenURL:         "https://example.com/token",
-		Scopes:           []string{"read", "write"},
+	manifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
+		"default": {
+			Auth: &providermanifestv1.ProviderAuth{
+				Type:             providermanifestv1.AuthTypeOAuth2,
+				AuthorizationURL: "https://example.com/authorize",
+				TokenURL:         "https://example.com/token",
+				Scopes:           []string{"read", "write"},
+			},
+		},
 	}
 	cfg := &config.Config{
 		Plugins: map[string]*config.ProviderEntry{
@@ -1062,8 +1078,11 @@ func TestPreparedProviderStub_RejectsMixedConnectionModes(t *testing.T) {
 				ResolvedManifest: &providermanifestv1.Manifest{
 					DisplayName: "Echo Auth",
 					Spec: &providermanifestv1.Spec{
-						ConnectionMode: providermanifestv1.ConnectionModeIdentity,
 						Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+							"default": {
+								Mode: providermanifestv1.ConnectionModeIdentity,
+								Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+							},
 							"workspace": {
 								Mode: providermanifestv1.ConnectionModeUser,
 								Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
