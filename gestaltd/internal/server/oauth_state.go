@@ -17,7 +17,7 @@ const pendingConnectionTTL = 30 * time.Minute
 var errPendingConnectionExpired = errors.New("pending connection expired")
 
 type integrationOAuthState struct {
-	UserID           string            `json:"uid"`
+	SubjectID        string            `json:"sid"`
 	AuthSource       string            `json:"src,omitempty"`
 	Integration      string            `json:"int"`
 	Connection       string            `json:"con,omitempty"`
@@ -65,8 +65,8 @@ func decodeEncryptedState[T any](enc *cryptoutil.AESGCMEncryptor, label, encoded
 }
 
 func validateIntegrationOAuthState(state *integrationOAuthState, now time.Time) error {
-	if state.UserID == "" {
-		return fmt.Errorf("oauth state missing user ID")
+	if state.SubjectID == "" {
+		return fmt.Errorf("oauth state missing subject ID")
 	}
 	if state.Integration == "" {
 		return fmt.Errorf("oauth state missing integration")
@@ -149,8 +149,8 @@ func encodePendingConnectionState(enc *cryptoutil.AESGCMEncryptor, state pending
 }
 
 func validatePendingConnectionState(state *pendingConnectionState, now time.Time) error {
-	if state.Token.UserID == "" {
-		return fmt.Errorf("pending connection missing user ID")
+	if state.Token.SubjectID == "" {
+		return fmt.Errorf("pending connection missing subject ID")
 	}
 	if state.Token.Integration == "" {
 		return fmt.Errorf("pending connection missing integration")

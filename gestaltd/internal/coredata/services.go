@@ -113,6 +113,9 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := apiTokens.BackfillTokenAccess(ctx); err != nil {
 		return nil, fmt.Errorf("backfill canonical api token access: %w", err)
 	}
+	if err := tokens.BackfillSubjectIDs(ctx); err != nil {
+		return nil, fmt.Errorf("backfill integration token subjects: %w", err)
+	}
 	if err := tokens.BackfillCanonicalCredentials(ctx); err != nil {
 		return nil, fmt.Errorf("backfill canonical external credentials: %w", err)
 	}

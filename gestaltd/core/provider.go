@@ -12,7 +12,21 @@ const (
 	ConnectionModeNone     ConnectionMode = "none"
 	ConnectionModeUser     ConnectionMode = "user"
 	ConnectionModeIdentity ConnectionMode = "identity"
+	ConnectionModeEither   ConnectionMode = "either"
 )
+
+func NormalizeConnectionMode(mode ConnectionMode) ConnectionMode {
+	switch mode {
+	case "", ConnectionModeUser, ConnectionModeEither:
+		return ConnectionModeUser
+	case ConnectionModeIdentity:
+		return ConnectionModeIdentity
+	case ConnectionModeNone:
+		return ConnectionModeNone
+	default:
+		return mode
+	}
+}
 
 type Provider interface {
 	Name() string

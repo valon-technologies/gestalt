@@ -682,11 +682,6 @@ func (s *Server) putManagedIdentityGrant(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusNotFound, "plugin not found")
 		return
 	}
-	if !s.managedIdentityInvocationSupported(plugin) {
-		auditErr = fmt.Errorf("plugin %q does not yet support managed-identity invocation in this phase", plugin)
-		writeError(w, http.StatusBadRequest, auditErr.Error())
-		return
-	}
 	auditTarget = managedIdentityGrantAuditTarget(actor.Identity.ID, plugin)
 
 	grant, err := s.identityGrants.UpsertGrant(r.Context(), &core.ManagedIdentityGrant{
@@ -1053,85 +1048,6 @@ func (s *Server) managedIdentityGrantVisibleToActor(ctx context.Context, plugin 
 	}
 	return s.allowProviderContext(ctx, p, plugin)
 }
-
-func (s *Server) managedIdentityInvocationSupported(plugin string) bool {
-	if entry, ok := s.pluginDefs[plugin]; ok && entry != nil {
-		return managedIdentityPluginConnectionMode(entry) == core.ConnectionModeNone
-	}
-	prov, err := s.providers.Get(plugin)
-	if err != nil || prov == nil {
-		return false
-	}
-	return prov.ConnectionMode() == core.ConnectionModeNone
-}
-
-func managedIdentityPluginConnectionMode(entry *config.ProviderEntry) core.ConnectionMode {
-	needUser := false
-	needIdentity := false
-
-	addMode := func(mode core.ConnectionMode) {
-		switch mode {
-		case core.ConnectionModeUser:
-			needUser = true
-		case core.ConnectionModeIdentity:
-			needIdentity = true
-		}
-	}
-
-	addMode(managedIdentityConnectionModeForDef(config.EffectivePluginConnectionDef(entry, entry.ManifestSpec())))
-
-	for name := range managedIdentityGrantNamedConnectionNames(entry) {
-		conn, ok := config.EffectiveNamedConnectionDef(entry, entry.ManifestSpec(), name)
-		if !ok {
-			continue
-		}
-		addMode(managedIdentityConnectionModeForDef(conn))
-	}
-
-	switch {
-	case needUser:
-		return core.ConnectionModeUser
-	case needIdentity:
-		return core.ConnectionModeIdentity
-	default:
-		return core.ConnectionModeNone
-	}
-}
-
-func managedIdentityGrantNamedConnectionNames(entry *config.ProviderEntry) map[string]struct{} {
-	names := make(map[string]struct{})
-	if entry == nil {
-		return names
-	}
-	if spec := entry.ManifestSpec(); spec != nil {
-		for name := range spec.Connections {
-			resolved := config.ResolveConnectionAlias(name)
-			if resolved != "" && resolved != config.PluginConnectionName {
-				names[resolved] = struct{}{}
-			}
-		}
-	}
-	for name := range entry.Connections {
-		resolved := config.ResolveConnectionAlias(name)
-		if resolved != "" && resolved != config.PluginConnectionName {
-			names[resolved] = struct{}{}
-		}
-	}
-	return names
-}
-
-func managedIdentityConnectionModeForDef(conn config.ConnectionDef) core.ConnectionMode {
-	if conn.Mode != "" {
-		return core.ConnectionMode(conn.Mode)
-	}
-	switch conn.Auth.Type {
-	case "", "none":
-		return core.ConnectionModeNone
-	default:
-		return core.ConnectionModeUser
-	}
-}
-
 func (s *Server) managedIdentityGrantCatalog(ctx context.Context, plugin string, p *principal.Principal) (*catalog.Catalog, error) {
 	prov, err := s.providers.Get(plugin)
 	if err != nil {
@@ -1185,14 +1101,21 @@ func (s *Server) managedIdentityGrantCatalogTargets(ctx context.Context, plugin 
 		connection, instance := s.workloadBindingSelectors(p, plugin, connection, "")
 		addTarget(connection, instance)
 	}
-	if p == nil || p.Kind == principal.KindWorkload || strings.TrimSpace(p.UserID) == "" {
+	subjectID := ""
+	if p != nil {
+		subjectID = strings.TrimSpace(p.SubjectID)
+		if subjectID == "" && strings.TrimSpace(p.UserID) != "" {
+			subjectID = principal.UserSubjectID(p.UserID)
+		}
+	}
+	if p == nil || p.Kind == principal.KindWorkload || subjectID == "" {
 		if len(targets) == 0 {
 			addTarget("", "")
 		}
 		return targets, nil
 	}
 
-	tokens, err := s.tokens.ListTokensForIntegration(ctx, p.UserID, plugin)
+	tokens, err := s.tokens.ListTokensForIntegration(ctx, subjectID, plugin)
 	if err != nil {
 		return nil, fmt.Errorf("list integration tokens for grant validation: %w", err)
 	}
@@ -1309,15 +1232,22 @@ func managedIdentityGrantValidationPrincipal(p *principal.Principal, userID stri
 }
 
 type managedIdentitySessionTokenResolver interface {
-	ResolveUserToken(ctx context.Context, prov core.Provider, userID, providerName, connection, instance string) (context.Context, string, error)
+	ResolveSubjectToken(ctx context.Context, prov core.Provider, subjectID, providerName, connection, instance string) (context.Context, string, error)
 }
 
 func (s *Server) managedIdentityGrantUserSessionContext(ctx context.Context, prov core.Provider, plugin string, resolver invocation.TokenResolver, p *principal.Principal, connection string, instance string) (context.Context, string, bool, error) {
-	if p == nil || strings.TrimSpace(p.UserID) == "" {
+	if p == nil {
+		return ctx, "", false, nil
+	}
+	subjectID := strings.TrimSpace(p.SubjectID)
+	if subjectID == "" && strings.TrimSpace(p.UserID) != "" {
+		subjectID = principal.UserSubjectID(p.UserID)
+	}
+	if subjectID == "" {
 		return ctx, "", false, nil
 	}
 	if userResolver, ok := resolver.(managedIdentitySessionTokenResolver); ok {
-		enrichedCtx, token, err := userResolver.ResolveUserToken(ctx, prov, p.UserID, plugin, connection, instance)
+		enrichedCtx, token, err := userResolver.ResolveSubjectToken(ctx, prov, subjectID, plugin, connection, instance)
 		if err != nil {
 			if errors.Is(err, invocation.ErrNoToken) {
 				return ctx, "", false, nil
@@ -1335,7 +1265,7 @@ func (s *Server) managedIdentityGrantUserSessionContext(ctx context.Context, pro
 		err         error
 	)
 	if strings.TrimSpace(instance) != "" {
-		storedToken, err = s.tokens.Token(ctx, p.UserID, plugin, connection, instance)
+		storedToken, err = s.tokens.Token(ctx, subjectID, plugin, connection, instance)
 		if err != nil {
 			if errors.Is(err, core.ErrNotFound) {
 				return ctx, "", false, nil
@@ -1343,7 +1273,7 @@ func (s *Server) managedIdentityGrantUserSessionContext(ctx context.Context, pro
 			return ctx, "", true, err
 		}
 	} else {
-		tokens, listErr := s.tokens.ListTokensForConnection(ctx, p.UserID, plugin, connection)
+		tokens, listErr := s.tokens.ListTokensForConnection(ctx, subjectID, plugin, connection)
 		if listErr != nil {
 			return ctx, "", true, listErr
 		}
@@ -1362,7 +1292,7 @@ func (s *Server) managedIdentityGrantUserSessionContext(ctx context.Context, pro
 
 	ctx = invocation.WithCredentialContext(ctx, invocation.CredentialContext{
 		Mode:       core.ConnectionModeUser,
-		SubjectID:  principal.UserSubjectID(p.UserID),
+		SubjectID:  subjectID,
 		Connection: storedToken.Connection,
 		Instance:   storedToken.Instance,
 	})

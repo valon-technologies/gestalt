@@ -29,14 +29,15 @@ const (
 )
 
 type Principal struct {
-	Identity         *core.UserIdentity
-	UserID           string
-	SubjectID        string
-	DisplayName      string
-	Kind             Kind
-	Source           Source
-	Scopes           []string
-	TokenPermissions PermissionSet
+	Identity            *core.UserIdentity
+	UserID              string
+	SubjectID           string
+	CredentialSubjectID string
+	DisplayName         string
+	Kind                Kind
+	Source              Source
+	Scopes              []string
+	TokenPermissions    PermissionSet
 }
 
 type PermissionSet map[string]map[string]struct{}
@@ -104,6 +105,22 @@ func WorkloadSubjectID(workloadID string) string {
 
 func IdentitySubjectID() string {
 	return "identity:" + IdentityPrincipal
+}
+
+func EffectiveCredentialSubjectID(p *Principal) string {
+	if p == nil {
+		return ""
+	}
+	if subjectID := strings.TrimSpace(p.CredentialSubjectID); subjectID != "" {
+		return subjectID
+	}
+	if subjectID := strings.TrimSpace(p.SubjectID); subjectID != "" {
+		return subjectID
+	}
+	if userID := strings.TrimSpace(p.UserID); userID != "" {
+		return UserSubjectID(userID)
+	}
+	return ""
 }
 
 func ManagedIdentitySubjectID(identityID string) string {

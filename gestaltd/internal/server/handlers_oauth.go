@@ -70,7 +70,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbUserID, instance, err := s.resolveUserConnectionSetup(w, r, req.Instance)
+	subjectID, instance, err := s.resolveUserConnectionSetup(w, r, req.Instance)
 	if err != nil {
 		auditErr = err
 		return
@@ -101,7 +101,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		authSource = p.AuthSource()
 	}
 	state, err := s.stateCodec.Encode(integrationOAuthState{
-		UserID:           dbUserID,
+		SubjectID:        subjectID,
 		AuthSource:       authSource,
 		Integration:      req.Integration,
 		Connection:       connection,
@@ -195,7 +195,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		return
 	}
 	providerName = state.Integration
-	auditUserID = state.UserID
+	auditUserID = principal.UserIDFromSubjectID(state.SubjectID)
 	stateAuthSource = state.AuthSource
 	auditTarget = connectionAuditTarget(state.Integration, state.Connection, state.Instance)
 	handler, ok := s.requireOAuthHandler(w, providerName, state.Connection)
@@ -258,7 +258,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	tm := tokenMaterial{
-		UserID:         state.UserID,
+		SubjectID:      state.SubjectID,
 		AuthSource:     state.AuthSource,
 		Integration:    providerName,
 		Connection:     state.Connection,

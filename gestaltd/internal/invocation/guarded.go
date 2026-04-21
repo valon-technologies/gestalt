@@ -173,14 +173,14 @@ func (g *GuardedInvoker) ResolveToken(ctx context.Context, p *principal.Principa
 	return ctx, "", fmt.Errorf("token resolution not supported")
 }
 
-func (g *GuardedInvoker) ResolveUserToken(ctx context.Context, prov core.Provider, userID, providerName, connection, instance string) (context.Context, string, error) {
+func (g *GuardedInvoker) ResolveSubjectToken(ctx context.Context, prov core.Provider, subjectID, providerName, connection, instance string) (context.Context, string, error) {
 	type resolver interface {
-		ResolveUserToken(ctx context.Context, prov core.Provider, userID, providerName, connection, instance string) (context.Context, string, error)
+		ResolveSubjectToken(ctx context.Context, prov core.Provider, subjectID, providerName, connection, instance string) (context.Context, string, error)
 	}
 	if r, ok := g.inner.(resolver); ok {
-		return r.ResolveUserToken(ctx, prov, userID, providerName, connection, instance)
+		return r.ResolveSubjectToken(ctx, prov, subjectID, providerName, connection, instance)
 	}
-	return ctx, "", fmt.Errorf("user token resolution not supported")
+	return ctx, "", fmt.Errorf("subject token resolution not supported")
 }
 
 func (g *GuardedInvoker) logAudit(ctx context.Context, entry core.AuditEntry) {

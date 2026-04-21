@@ -183,7 +183,7 @@ func buildProvidersAsync(
 }
 
 func validateProviderConnectionMode(provider string, mode core.ConnectionMode) error {
-	switch mode {
+	switch core.NormalizeConnectionMode(mode) {
 	case core.ConnectionModeNone, core.ConnectionModeUser, core.ConnectionModeIdentity:
 		return nil
 	default:

@@ -37,14 +37,14 @@ var UsersSchema = indexeddb.ObjectStoreSchema{
 
 var IntegrationTokensSchema = indexeddb.ObjectStoreSchema{
 	Indexes: []indexeddb.IndexSchema{
-		{Name: "by_user", KeyPath: []string{"user_id"}},
-		{Name: "by_user_integration", KeyPath: []string{"user_id", "integration"}},
-		{Name: "by_user_connection", KeyPath: []string{"user_id", "integration", "connection"}},
-		{Name: "by_lookup", KeyPath: []string{"user_id", "integration", "connection", "instance"}, Unique: true},
+		{Name: "by_subject", KeyPath: []string{"subject_id"}},
+		{Name: "by_subject_integration", KeyPath: []string{"subject_id", "integration"}},
+		{Name: "by_subject_connection", KeyPath: []string{"subject_id", "integration", "connection"}},
+		{Name: "by_lookup", KeyPath: []string{"subject_id", "integration", "connection", "instance"}, Unique: true},
 	},
 	Columns: []indexeddb.ColumnDef{
 		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-		{Name: "user_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "subject_id", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "integration", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "connection", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "instance", Type: indexeddb.TypeString},
@@ -78,6 +78,7 @@ var APITokensSchema = indexeddb.ObjectStoreSchema{
 		{Name: "owner_kind", Type: indexeddb.TypeString},
 		{Name: "owner_id", Type: indexeddb.TypeString},
 		{Name: "token_kind", Type: indexeddb.TypeString},
+		{Name: "credential_subject_id", Type: indexeddb.TypeString},
 		{Name: "name", Type: indexeddb.TypeString},
 		{Name: "hashed_token", Type: indexeddb.TypeString, NotNull: true, Unique: true},
 		{Name: "scopes", Type: indexeddb.TypeString},

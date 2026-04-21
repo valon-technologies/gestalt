@@ -73,7 +73,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbUserID, manualInstance, err := s.resolveUserConnectionSetup(w, r, req.Instance)
+	subjectID, manualInstance, err := s.resolveUserConnectionSetup(w, r, req.Instance)
 	if err != nil {
 		auditErr = err
 		return
@@ -110,7 +110,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		authSource = p.AuthSource()
 	}
 	tm := tokenMaterial{
-		UserID:       dbUserID,
+		SubjectID:    subjectID,
 		AuthSource:   authSource,
 		Integration:  req.Integration,
 		Connection:   manualConnection,
@@ -153,7 +153,7 @@ func (s *Server) resolveUserConnectionSetup(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return "", "", errors.New("invalid instance")
 	}
-	return userID, instance, nil
+	return principal.UserSubjectID(userID), instance, nil
 }
 
 func validateConnectionParams(defs map[string]core.ConnectionParamDef, provided map[string]string) (map[string]string, error) {
@@ -237,7 +237,7 @@ func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 type tokenMaterial struct {
-	UserID         string
+	SubjectID      string
 	AuthSource     string
 	Integration    string
 	Connection     string
@@ -265,7 +265,7 @@ func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (
 	now := s.now().UTC().Truncate(time.Second)
 	tok := &core.IntegrationToken{
 		ID:              uuid.NewString(),
-		UserID:          tm.UserID,
+		SubjectID:       tm.SubjectID,
 		Integration:     tm.Integration,
 		Connection:      tm.Connection,
 		Instance:        tm.Instance,

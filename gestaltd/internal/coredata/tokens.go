@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,6 +33,9 @@ func NewTokenService(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor, ex
 }
 
 func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationToken) error {
+	token.SubjectID = canonicalTokenSubjectID(token.SubjectID, token.UserID)
+	token.UserID = tokenUserIDFromSubjectID(token.SubjectID)
+
 	accessEnc, refreshEnc, err := s.enc.EncryptTokenPair(token.AccessToken, token.RefreshToken)
 	if err != nil {
 		return fmt.Errorf("encrypt token pair: %w", err)
@@ -41,7 +45,7 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 	}
 	now := time.Now()
 	fields := indexeddb.Record{
-		"user_id":                 token.UserID,
+		"subject_id":              token.SubjectID,
 		"integration":             token.Integration,
 		"connection":              token.Connection,
 		"instance":                token.Instance,
@@ -55,7 +59,7 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 		"updated_at":              now,
 	}
 
-	existing, err := s.tokenRecord(ctx, token.UserID, token.Integration, token.Connection, token.Instance)
+	existing, err := s.tokenRecord(ctx, token.SubjectID, token.Integration, token.Connection, token.Instance)
 	switch err {
 	case nil:
 		token.ID = recString(existing, "id")
@@ -78,7 +82,7 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 		return fmt.Errorf("check existing token: %w", err)
 	}
 
-	if err := s.deleteDuplicateLookupRecords(ctx, token.ID, token.UserID, token.Integration, token.Connection, token.Instance); err != nil {
+	if err := s.deleteDuplicateLookupRecords(ctx, token.ID, token.SubjectID, token.Integration, token.Connection, token.Instance); err != nil {
 		return err
 	}
 	if err := s.syncExternalCredential(ctx, token, accessEnc, refreshEnc); err != nil {
@@ -87,32 +91,32 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 	return nil
 }
 
-func (s *TokenService) Token(ctx context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
-	rec, err := s.tokenRecord(ctx, userID, integration, connection, instance)
+func (s *TokenService) Token(ctx context.Context, subjectID, integration, connection, instance string) (*core.IntegrationToken, error) {
+	rec, err := s.tokenRecord(ctx, subjectID, integration, connection, instance)
 	if err != nil {
 		return nil, err
 	}
 	return s.recordToToken(rec)
 }
 
-func (s *TokenService) ListTokens(ctx context.Context, userID string) ([]*core.IntegrationToken, error) {
-	recs, err := s.store.Index("by_user").GetAll(ctx, nil, userID)
+func (s *TokenService) ListTokens(ctx context.Context, subjectID string) ([]*core.IntegrationToken, error) {
+	recs, err := s.store.Index("by_subject").GetAll(ctx, nil, subjectID)
 	if err != nil {
 		return nil, fmt.Errorf("list tokens: %w", err)
 	}
 	return s.recordsToTokens(recs)
 }
 
-func (s *TokenService) ListTokensForIntegration(ctx context.Context, userID, integration string) ([]*core.IntegrationToken, error) {
-	recs, err := s.store.Index("by_user_integration").GetAll(ctx, nil, userID, integration)
+func (s *TokenService) ListTokensForIntegration(ctx context.Context, subjectID, integration string) ([]*core.IntegrationToken, error) {
+	recs, err := s.store.Index("by_subject_integration").GetAll(ctx, nil, subjectID, integration)
 	if err != nil {
 		return nil, fmt.Errorf("list tokens for integration: %w", err)
 	}
 	return s.recordsToTokens(recs)
 }
 
-func (s *TokenService) ListTokensForConnection(ctx context.Context, userID, integration, connection string) ([]*core.IntegrationToken, error) {
-	recs, err := s.store.Index("by_user_connection").GetAll(ctx, nil, userID, integration, connection)
+func (s *TokenService) ListTokensForConnection(ctx context.Context, subjectID, integration, connection string) ([]*core.IntegrationToken, error) {
+	recs, err := s.store.Index("by_subject_connection").GetAll(ctx, nil, subjectID, integration, connection)
 	if err != nil {
 		return nil, fmt.Errorf("list tokens for connection: %w", err)
 	}
@@ -134,7 +138,8 @@ func (s *TokenService) DeleteToken(ctx context.Context, id string) error {
 		return err
 	}
 	if s.externalCredentials != nil {
-		remaining, err := s.store.Index("by_lookup").GetAll(ctx, nil, recString(rec, "user_id"), recString(rec, "integration"), recString(rec, "connection"), recString(rec, "instance"))
+		subjectID := tokenRecordSubjectID(rec)
+		remaining, err := s.store.Index("by_lookup").GetAll(ctx, nil, subjectID, recString(rec, "integration"), recString(rec, "connection"), recString(rec, "instance"))
 		if err != nil {
 			return fmt.Errorf("list remaining duplicate tokens: %w", err)
 		}
@@ -144,7 +149,7 @@ func (s *TokenService) DeleteToken(ctx context.Context, id string) error {
 				return err
 			}
 		} else {
-			identityID, resolveErr := s.resolveIdentityID(ctx, recString(rec, "user_id"))
+			identityID, resolveErr := s.resolveIdentityID(ctx, tokenUserIDFromSubjectID(subjectID))
 			if resolveErr == nil {
 				if err := s.externalCredentials.DeleteCredential(ctx, identityID, recString(rec, "integration"), recString(rec, "connection"), recString(rec, "instance")); err != nil && err != core.ErrNotFound {
 					return fmt.Errorf("delete canonical external credential: %w", err)
@@ -165,7 +170,8 @@ func (s *TokenService) recordToToken(rec indexeddb.Record) (*core.IntegrationTok
 	}
 	return &core.IntegrationToken{
 		ID:                recString(rec, "id"),
-		UserID:            recString(rec, "user_id"),
+		UserID:            tokenUserIDFromSubjectID(tokenRecordSubjectID(rec)),
+		SubjectID:         tokenRecordSubjectID(rec),
 		Integration:       recString(rec, "integration"),
 		Connection:        recString(rec, "connection"),
 		Instance:          recString(rec, "instance"),
@@ -194,8 +200,8 @@ func (s *TokenService) recordsToTokens(recs []indexeddb.Record) ([]*core.Integra
 	return out, nil
 }
 
-func (s *TokenService) tokenRecord(ctx context.Context, userID, integration, connection, instance string) (indexeddb.Record, error) {
-	recs, err := s.store.Index("by_lookup").GetAll(ctx, nil, userID, integration, connection, instance)
+func (s *TokenService) tokenRecord(ctx context.Context, subjectID, integration, connection, instance string) (indexeddb.Record, error) {
+	recs, err := s.store.Index("by_lookup").GetAll(ctx, nil, subjectID, integration, connection, instance)
 	if err != nil {
 		return nil, fmt.Errorf("get token: %w", err)
 	}
@@ -206,8 +212,8 @@ func (s *TokenService) tokenRecord(ctx context.Context, userID, integration, con
 	return recs[0], nil
 }
 
-func (s *TokenService) deleteDuplicateLookupRecords(ctx context.Context, keepID, userID, integration, connection, instance string) error {
-	recs, err := s.store.Index("by_lookup").GetAll(ctx, nil, userID, integration, connection, instance)
+func (s *TokenService) deleteDuplicateLookupRecords(ctx context.Context, keepID, subjectID, integration, connection, instance string) error {
+	recs, err := s.store.Index("by_lookup").GetAll(ctx, nil, subjectID, integration, connection, instance)
 	if err != nil {
 		return fmt.Errorf("list duplicate tokens: %w", err)
 	}
@@ -242,6 +248,24 @@ func (s *TokenService) BackfillCanonicalCredentials(ctx context.Context) error {
 	return nil
 }
 
+func (s *TokenService) BackfillSubjectIDs(ctx context.Context) error {
+	recs, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("list integration tokens for subject_id backfill: %w", err)
+	}
+	for _, rec := range recs {
+		subjectID := tokenRecordSubjectID(rec)
+		if subjectID == "" || recString(rec, "subject_id") == subjectID {
+			continue
+		}
+		rec["subject_id"] = subjectID
+		if err := s.store.Put(ctx, rec); err != nil {
+			return fmt.Errorf("backfill integration token subject_id %q: %w", recString(rec, "id"), err)
+		}
+	}
+	return nil
+}
+
 func dedupeTokenRecords(recs []indexeddb.Record) []indexeddb.Record {
 	if len(recs) <= 1 {
 		return recs
@@ -267,10 +291,40 @@ func dedupeTokenRecords(recs []indexeddb.Record) []indexeddb.Record {
 }
 
 func tokenLookupKey(rec indexeddb.Record) string {
-	return recString(rec, "user_id") + "\x00" +
+	return tokenRecordSubjectID(rec) + "\x00" +
 		recString(rec, "integration") + "\x00" +
 		recString(rec, "connection") + "\x00" +
 		recString(rec, "instance")
+}
+
+func tokenRecordSubjectID(rec indexeddb.Record) string {
+	return canonicalTokenSubjectID(recString(rec, "subject_id"), recString(rec, "user_id"))
+}
+
+func canonicalTokenSubjectID(subjectID, userID string) string {
+	subjectID = strings.TrimSpace(subjectID)
+	if subjectID != "" {
+		return subjectID
+	}
+	userID = strings.TrimSpace(userID)
+	switch userID {
+	case "":
+		return ""
+	case "__identity__":
+		return "identity:__identity__"
+	}
+	return "user:" + userID
+}
+
+func tokenUserIDFromSubjectID(subjectID string) string {
+	switch {
+	case strings.HasPrefix(subjectID, "user:"):
+		return strings.TrimPrefix(subjectID, "user:")
+	case subjectID == "identity:__identity__":
+		return "__identity__"
+	default:
+		return ""
+	}
 }
 
 func tokenRecordLess(a, b indexeddb.Record) bool {
@@ -349,7 +403,7 @@ func (s *TokenService) syncExternalCredentialRecord(ctx context.Context, rec ind
 	if s.externalCredentials == nil {
 		return nil
 	}
-	identityID, resolveErr := s.resolveIdentityID(ctx, recString(rec, "user_id"))
+	identityID, resolveErr := s.resolveIdentityID(ctx, tokenUserIDFromSubjectID(tokenRecordSubjectID(rec)))
 	if resolveErr != nil {
 		if errors.Is(resolveErr, core.ErrNotFound) {
 			return nil

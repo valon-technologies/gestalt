@@ -212,7 +212,7 @@ func (s *Server) userConnectedIntegrations(r *http.Request) (map[string][]instan
 		}
 		userID = dbUser.ID
 	}
-	tokens, err := s.tokens.ListTokens(r.Context(), userID)
+	tokens, err := s.tokens.ListTokens(r.Context(), principal.UserSubjectID(userID))
 	if err != nil {
 		return nil, fmt.Errorf("listing tokens: %w", err)
 	}
@@ -240,6 +240,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		auditErr = err
 		return
 	}
+	subjectID := principal.UserSubjectID(userID)
 
 	if _, ok := s.getProvider(w, name); !ok {
 		auditErr = errors.New("integration not found")
@@ -268,7 +269,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		auditTarget = connectionAuditTarget(name, requestedConnection, requestedInstance)
 	}
 
-	tokens, err := s.tokens.ListTokensForIntegration(r.Context(), userID, name)
+	tokens, err := s.tokens.ListTokensForIntegration(r.Context(), subjectID, name)
 	if err != nil {
 		auditErr = errors.New("failed to list tokens")
 		writeError(w, http.StatusInternalServerError, "failed to list tokens")

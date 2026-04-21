@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -259,10 +260,14 @@ func (s *Server) resolvePendingConnectionUserID(r *http.Request) (string, bool, 
 	if p.Kind == principal.KindWorkload {
 		return "", true, errWorkloadForbidden
 	}
-	if p.UserID == "" {
-		return "", true, fmt.Errorf("authenticated principal missing user ID")
+	subjectID := strings.TrimSpace(p.SubjectID)
+	if subjectID == "" && strings.TrimSpace(p.UserID) != "" {
+		subjectID = principal.UserSubjectID(p.UserID)
 	}
-	return p.UserID, true, nil
+	if subjectID == "" {
+		return "", true, fmt.Errorf("authenticated principal missing subject ID")
+	}
+	return subjectID, true, nil
 }
 
 func (s *Server) authorizePendingConnectionByCookie(r *http.Request, state *pendingConnectionState) error {
@@ -287,7 +292,7 @@ func (s *Server) authorizePendingConnectionByCookie(r *http.Request, state *pend
 }
 
 func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Request, state *pendingConnectionState) bool {
-	userID, authenticated, err := s.resolvePendingConnectionUserID(r)
+	subjectID, authenticated, err := s.resolvePendingConnectionUserID(r)
 	if err != nil {
 		if errors.Is(err, errWorkloadForbidden) {
 			writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
@@ -300,7 +305,7 @@ func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, "failed to validate pending connection")
 		return false
 	}
-	if authenticated && userID != state.Token.UserID {
+	if authenticated && subjectID != state.Token.SubjectID {
 		writeError(w, http.StatusNotFound, "pending connection not found")
 		return false
 	}
@@ -359,7 +364,7 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 		auditErr = errors.New("pending connection authorization required")
 		return
 	}
-	auditUserID = state.Token.UserID
+	auditUserID = principal.UserIDFromSubjectID(state.Token.SubjectID)
 	auditAuthSource = state.Token.AuthSource
 	if candidateIndex == "" && candidateID == "" {
 		auditAllowed = true

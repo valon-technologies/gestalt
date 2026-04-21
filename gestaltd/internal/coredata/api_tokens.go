@@ -52,19 +52,20 @@ func (s *APITokenService) StoreAPIToken(ctx context.Context, token *core.APIToke
 	}
 	now := time.Now()
 	rec := indexeddb.Record{
-		"id":               token.ID,
-		"identity_id":      identityID,
-		"user_id":          token.UserID,
-		"owner_kind":       ownerKind,
-		"owner_id":         ownerID,
-		"token_kind":       token.TokenKind,
-		"name":             token.Name,
-		"hashed_token":     token.HashedToken,
-		"scopes":           token.Scopes,
-		"permissions_json": string(permissionsJSON),
-		"expires_at":       token.ExpiresAt,
-		"created_at":       now,
-		"updated_at":       now,
+		"id":                    token.ID,
+		"identity_id":           identityID,
+		"user_id":               token.UserID,
+		"owner_kind":            ownerKind,
+		"owner_id":              ownerID,
+		"credential_subject_id": token.CredentialSubjectID,
+		"token_kind":            token.TokenKind,
+		"name":                  token.Name,
+		"hashed_token":          token.HashedToken,
+		"scopes":                token.Scopes,
+		"permissions_json":      string(permissionsJSON),
+		"expires_at":            token.ExpiresAt,
+		"created_at":            now,
+		"updated_at":            now,
 	}
 	if err := s.store.Add(ctx, rec); err != nil {
 		return fmt.Errorf("store api token: %w", err)
@@ -317,18 +318,19 @@ func (s *APITokenService) BackfillTokenAccess(ctx context.Context) error {
 
 func recordToAPIToken(rec indexeddb.Record) *core.APIToken {
 	token := &core.APIToken{
-		ID:          recString(rec, "id"),
-		IdentityID:  recString(rec, "identity_id"),
-		UserID:      recString(rec, "user_id"),
-		OwnerKind:   recString(rec, "owner_kind"),
-		OwnerID:     recString(rec, "owner_id"),
-		TokenKind:   recString(rec, "token_kind"),
-		Name:        recString(rec, "name"),
-		HashedToken: recString(rec, "hashed_token"),
-		Scopes:      recString(rec, "scopes"),
-		ExpiresAt:   recTimePtr(rec, "expires_at"),
-		CreatedAt:   recTime(rec, "created_at"),
-		UpdatedAt:   recTime(rec, "updated_at"),
+		ID:                  recString(rec, "id"),
+		IdentityID:          recString(rec, "identity_id"),
+		UserID:              recString(rec, "user_id"),
+		OwnerKind:           recString(rec, "owner_kind"),
+		OwnerID:             recString(rec, "owner_id"),
+		CredentialSubjectID: recString(rec, "credential_subject_id"),
+		TokenKind:           recString(rec, "token_kind"),
+		Name:                recString(rec, "name"),
+		HashedToken:         recString(rec, "hashed_token"),
+		Scopes:              recString(rec, "scopes"),
+		ExpiresAt:           recTimePtr(rec, "expires_at"),
+		CreatedAt:           recTime(rec, "created_at"),
+		UpdatedAt:           recTime(rec, "updated_at"),
 	}
 	if token.OwnerKind == "" && token.UserID != "" {
 		token.OwnerKind = core.APITokenOwnerKindUser
@@ -346,6 +348,9 @@ func recordToAPIToken(rec indexeddb.Record) *core.APIToken {
 	}
 	if token.TokenKind == "" {
 		token.TokenKind = core.APITokenKindAPI
+	}
+	if token.CredentialSubjectID == "" && token.OwnerKind == core.APITokenOwnerKindUser && token.OwnerID != "" {
+		token.CredentialSubjectID = "user:" + token.OwnerID
 	}
 	if raw := recString(rec, "permissions_json"); raw != "" {
 		var permissions []core.AccessPermission

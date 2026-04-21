@@ -26,7 +26,6 @@ var (
 type CredentialBinding struct {
 	Mode                core.ConnectionMode
 	CredentialSubjectID string
-	CredentialOwnerID   string
 	Connection          string
 	Instance            string
 }
@@ -228,7 +227,26 @@ func (a *Authorizer) Binding(p *principal.Principal, provider string) (Credentia
 		if !a.allowManagedIdentityProvider(p, provider) {
 			return CredentialBinding{}, false
 		}
-		return CredentialBinding{Mode: core.ConnectionModeNone}, true
+		switch core.NormalizeConnectionMode(a.providerModes[provider]) {
+		case core.ConnectionModeNone:
+			return CredentialBinding{Mode: core.ConnectionModeNone}, true
+		case core.ConnectionModeIdentity:
+			return CredentialBinding{
+				Mode:                core.ConnectionModeIdentity,
+				CredentialSubjectID: principal.IdentitySubjectID(),
+			}, true
+		case core.ConnectionModeUser:
+			subjectID := principal.EffectiveCredentialSubjectID(p)
+			if subjectID == "" {
+				return CredentialBinding{}, false
+			}
+			return CredentialBinding{
+				Mode:                core.ConnectionModeUser,
+				CredentialSubjectID: subjectID,
+			}, true
+		default:
+			return CredentialBinding{}, false
+		}
 	}
 	if !a.IsWorkload(p) {
 		return CredentialBinding{}, false
@@ -458,7 +476,7 @@ func (p *HumanPolicy) staticRoleForIdentity(subjectID string) (string, bool) {
 }
 
 func buildBinding(mode core.ConnectionMode, workloadID, provider string, def config.WorkloadProviderDef, defaultConnections map[string]string) (WorkloadProviderBinding, error) {
-	switch mode {
+	switch core.NormalizeConnectionMode(mode) {
 	case core.ConnectionModeNone:
 		if strings.TrimSpace(def.Connection) != "" || strings.TrimSpace(def.Instance) != "" {
 			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q does not accept connection or instance bindings", workloadID, provider)
@@ -493,12 +511,11 @@ func buildBinding(mode core.ConnectionMode, workloadID, provider string, def con
 			CredentialBinding: CredentialBinding{
 				Mode:                core.ConnectionModeIdentity,
 				CredentialSubjectID: principal.IdentitySubjectID(),
-				CredentialOwnerID:   principal.IdentityPrincipal,
 				Connection:          connection,
 				Instance:            instance,
 			},
 		}, nil
-	case core.ConnectionModeUser, core.ConnectionMode("either"), "":
+	case core.ConnectionModeUser:
 		return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q uses unsupported connection mode %q in v1", workloadID, provider, mode)
 	default:
 		return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q uses unknown connection mode %q", workloadID, provider, mode)
@@ -532,7 +549,14 @@ func (a *Authorizer) allowManagedIdentityProvider(p *principal.Principal, provid
 	if !ok {
 		return false
 	}
-	return mode == core.ConnectionModeNone
+	switch core.NormalizeConnectionMode(mode) {
+	case core.ConnectionModeNone, core.ConnectionModeIdentity:
+		return true
+	case core.ConnectionModeUser:
+		return principal.EffectiveCredentialSubjectID(p) != ""
+	default:
+		return false
+	}
 }
 
 func providerMode(provider string, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider]) (core.ConnectionMode, bool, error) {

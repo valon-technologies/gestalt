@@ -3299,7 +3299,7 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("workflow managed workloads reject either providers", func(t *testing.T) {
+	t.Run("workflow managed workloads reject normalized credentialed providers", func(t *testing.T) {
 		t.Parallel()
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -3340,11 +3340,8 @@ func TestValidate(t *testing.T) {
 		}
 
 		_, err := bootstrap.Validate(context.Background(), cfg, factories)
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
-			t.Fatalf("unexpected error: %v", err)
+		if err == nil || !strings.Contains(err.Error(), `unsupported connection mode "user"`) {
+			t.Fatalf("Validate error = %v, want unsupported connection mode user", err)
 		}
 	})
 
@@ -4589,7 +4586,7 @@ func TestBootstrapWorkloadAuthorizationRejectsEitherProvider(t *testing.T) {
 			"triage-bot": {
 				Token: "gst_wld_triage-bot-token",
 				Providers: map[string]config.WorkloadProviderDef{
-					"svc": {Allow: []string{"run"}},
+					"svc": {Allow: []string{"run"}, Connection: "default"},
 				},
 			},
 		},
@@ -4601,11 +4598,8 @@ func TestBootstrapWorkloadAuthorizationRejectsEitherProvider(t *testing.T) {
 	}
 
 	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil || !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
+		t.Fatalf("Bootstrap error = %v, want unsupported connection mode either", err)
 	}
 }
 
@@ -4618,16 +4612,12 @@ func TestBootstrapRejectsBuiltinEitherProviderWithoutAuthorizationConfig(t *test
 		&coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionMode("either")},
 	}
 
-	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
+	if _, err := bootstrap.Bootstrap(context.Background(), cfg, factories); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestBootstrapWorkflowAuthorizationRejectsEitherProvider(t *testing.T) {
+func TestBootstrapWorkflowAuthorizationRejectsNormalizedCredentialedProvider(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -4669,10 +4659,7 @@ func TestBootstrapWorkflowAuthorizationRejectsEitherProvider(t *testing.T) {
 	}
 
 	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil || !strings.Contains(err.Error(), `unsupported connection mode "user"`) {
+		t.Fatalf("Bootstrap error = %v, want unsupported connection mode user", err)
 	}
 }

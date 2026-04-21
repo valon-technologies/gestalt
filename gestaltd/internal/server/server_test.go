@@ -6803,7 +6803,7 @@ func TestDisconnectIntegration(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 		}
-		tokens, err := svc.Tokens.ListTokensForIntegration(context.Background(), u.ID, "slack")
+		tokens, err := svc.Tokens.ListTokensForIntegration(context.Background(), principal.UserSubjectID(u.ID), "slack")
 		if err != nil {
 			t.Fatalf("ListTokensForIntegration: %v", err)
 		}
@@ -6907,7 +6907,7 @@ func TestDisconnectIntegration(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 		}
-		tokens, err := svc.Tokens.ListTokensForIntegration(context.Background(), u.ID, "notion")
+		tokens, err := svc.Tokens.ListTokensForIntegration(context.Background(), principal.UserSubjectID(u.ID), "notion")
 		if err != nil {
 			t.Fatalf("ListTokensForIntegration: %v", err)
 		}
@@ -10313,7 +10313,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("expected redirect to /integrations?connected=slack, got %q", loc)
 		}
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "user@example.com")
-		tokens, _ := svc.Tokens.ListTokens(context.Background(), u.ID)
+		tokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
 		if len(tokens) == 0 {
 			t.Fatal("expected token to be stored")
 		}
@@ -10487,7 +10487,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("expected 200, got %d", selectResp.StatusCode)
 		}
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "cli@test.local")
-		tokens, _ := svc.Tokens.ListTokens(context.Background(), u.ID)
+		tokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
 		if len(tokens) == 0 {
 			t.Fatal("expected token to be stored after selection")
 		}
@@ -11649,7 +11649,7 @@ func TestExecuteOperation_RefreshPassesThroughStoredTokenWhenRefreshDoesNotApply
 			svc := coretesting.NewStubServices(t)
 			u := seedUser(t, svc, "anonymous@gestalt")
 			token := tc.token
-			token.UserID = u.ID
+			token.SubjectID = principal.UserSubjectID(u.ID)
 			seedToken(t, svc, &token)
 
 			refreshCalled := false
@@ -11786,7 +11786,7 @@ func TestExecuteOperation_RefreshPersistsReturnedTokenFields(t *testing.T) {
 				t.Fatalf("expected 200, got %d", resp.StatusCode)
 			}
 
-			stored, err := svc.Tokens.Token(context.Background(), u.ID, "fake", "default", "default")
+			stored, err := svc.Tokens.Token(context.Background(), principal.UserSubjectID(u.ID), "fake", "default", "default")
 			if err != nil {
 				t.Fatalf("Token: %v", err)
 			}
@@ -12276,7 +12276,7 @@ func TestConnectManual(t *testing.T) {
 		}
 
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
-		tokens, _ := svc.Tokens.ListTokens(context.Background(), u.ID)
+		tokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
 		if len(tokens) == 0 {
 			t.Fatal("expected StoreToken to be called")
 		}
@@ -12522,7 +12522,7 @@ func TestConnectManual(t *testing.T) {
 			t.Fatalf("expected redirect to /integrations?connected=manual-svc, got %q", loc)
 		}
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "same@test.local")
-		tokens, _ := svc.Tokens.ListTokens(context.Background(), u.ID)
+		tokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
 		if len(tokens) == 0 {
 			t.Fatal("expected token to be stored")
 		}
@@ -12692,7 +12692,7 @@ func TestConnectManual(t *testing.T) {
 		}
 
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
-		tokens, _ := svc.Tokens.ListTokens(context.Background(), u.ID)
+		tokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
 		if len(tokens) != 1 {
 			t.Fatalf("expected 1 stored token, got %d", len(tokens))
 		}
@@ -12769,7 +12769,7 @@ func TestConnectManual(t *testing.T) {
 		}
 
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
-		tokens, _ := svc.Tokens.ListTokens(context.Background(), u.ID)
+		tokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
 		if len(tokens) != 1 {
 			t.Fatalf("expected 1 stored token, got %d", len(tokens))
 		}
@@ -14646,17 +14646,6 @@ func TestExecuteOperation_ConnectionModeIdentity(t *testing.T) {
 func TestExecuteOperation_ConnectionModeUserDoesNotFallbackToIdentity(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
-	apiToken, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-	seedAPIToken(t, svc, apiToken, hashed, "api-user")
-	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok-identity", UserID: principal.IdentityPrincipal, Integration: "svc",
-		Connection: "", Instance: "default", AccessToken: "identity-tok",
-	})
-
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "svc",
@@ -14668,43 +14657,97 @@ func TestExecuteOperation_ConnectionModeUserDoesNotFallbackToIdentity(t *testing
 		ops: []core.Operation{{Name: "do", Method: http.MethodGet}},
 	}
 
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Services = svc
+	t.Run("prefers user token", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		apiToken, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+		if err != nil {
+			t.Fatalf("GenerateToken: %v", err)
+		}
+		seedAPIToken(t, svc, apiToken, hashed, "api-user")
+		u, _ := svc.Users.FindOrCreateUser(context.Background(), "api-user@test.local")
+		seedToken(t, svc, &core.IntegrationToken{
+			ID: "tok-user", UserID: u.ID, Integration: "svc",
+			Connection: "", Instance: "default", AccessToken: "user-tok",
+		})
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
+		req.Header.Set("Authorization", "Bearer "+apiToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		var result map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if result["token"] != "user-tok" {
+			t.Fatalf("expected user-tok (preferred), got %v", result["token"])
+		}
 	})
-	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
-	req.Header.Set("Authorization", "Bearer "+apiToken)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+	t.Run("no longer falls back to shared identity", func(t *testing.T) {
+		t.Parallel()
 
-	if resp.StatusCode != http.StatusPreconditionFailed {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 412, got %d: %s", resp.StatusCode, body)
-	}
+		svc := coretesting.NewStubServices(t)
+		apiToken, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+		if err != nil {
+			t.Fatalf("GenerateToken: %v", err)
+		}
+		seedAPIToken(t, svc, apiToken, hashed, "api-user")
+		seedToken(t, svc, &core.IntegrationToken{
+			ID: "tok-identity", UserID: principal.IdentityPrincipal, Integration: "svc",
+			Connection: "", Instance: "default", AccessToken: "identity-tok",
+		})
 
-	var errResp struct {
-		Error       string `json:"error"`
-		Code        string `json:"code"`
-		Integration string `json:"integration"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
-		t.Fatalf("decoding error response: %v", err)
-	}
-	if errResp.Code != "not_connected" {
-		t.Fatalf("expected not_connected code, got %q", errResp.Code)
-	}
-	if errResp.Error != `no token stored for integration "svc"; connect via OAuth first` {
-		t.Fatalf("unexpected error message: %q", errResp.Error)
-	}
-	if errResp.Integration != "svc" {
-		t.Fatalf("expected integration svc, got %q", errResp.Integration)
-	}
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
+		req.Header.Set("Authorization", "Bearer "+apiToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusPreconditionFailed {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 412, got %d: %s", resp.StatusCode, body)
+		}
+
+		var errResp struct {
+			Error       string `json:"error"`
+			Code        string `json:"code"`
+			Integration string `json:"integration"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+			t.Fatalf("decoding error response: %v", err)
+		}
+		if errResp.Code != "not_connected" {
+			t.Fatalf("expected not_connected code, got %q", errResp.Code)
+		}
+		if errResp.Error != `no token stored for integration "svc"; connect via OAuth first` {
+			t.Fatalf("unexpected error message: %q", errResp.Error)
+		}
+		if errResp.Integration != "svc" {
+			t.Fatalf("expected integration svc, got %q", errResp.Integration)
+		}
+	})
 }
 
 func TestConnectManual_MultiCredential(t *testing.T) {
@@ -14817,7 +14860,7 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 			}
 
 			u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
-			tokens, _ := svc.Tokens.ListTokens(context.Background(), u.ID)
+			tokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
 			if len(tokens) == 0 {
 				t.Fatal("expected StoreToken to be called")
 			}
@@ -15892,9 +15935,9 @@ func TestManagedIdentityGrantValidationUsesSessionCatalog(t *testing.T) {
 			t.Fatalf("session-fallback grant request: %v", err)
 		}
 		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusBadRequest {
+		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
-			t.Fatalf("session-fallback grant status = %d, want %d: %s", resp.StatusCode, http.StatusBadRequest, body)
+			t.Fatalf("session-fallback grant status = %d, want %d: %s", resp.StatusCode, http.StatusOK, body)
 		}
 	})
 
@@ -16732,7 +16775,7 @@ func TestManagedIdentityTokens_RoleMatrix(t *testing.T) {
 			{
 				name:         "unsupported plugin rejected",
 				body:         `{"name":"invalid","permissions":[{"plugin":"gamma","operations":["query"]}]}`,
-				wantContains: "does not yet support managed-identity invocation",
+				wantContains: "is not granted to this identity",
 			},
 			{
 				name: "broader than grant rejected",
@@ -16923,11 +16966,11 @@ func TestManagedIdentityTokenPermissionsUsePluginLevelViewerCeiling(t *testing.T
 	}
 }
 
-func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
+func TestManagedIdentityAPITokenInvocation_UsesCreatorCredentialSubject(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
-	seedUser(t, svc, "admin@example.test")
+	admin := seedUser(t, svc, "admin@example.test")
 
 	alphaStub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
@@ -16963,6 +17006,10 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 		ops: []core.Operation{{Name: "query", Method: http.MethodGet}},
 	}
 	providers := testutil.NewProviderRegistry(t, alphaStub, betaStub, gammaStub)
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "gamma-admin-token", UserID: admin.ID, Integration: "gamma",
+		Connection: "", Instance: "default", AccessToken: "gamma-user-token",
+	})
 	authz, err := authorization.New(config.AuthorizationConfig{}, nil, providers, nil)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
@@ -16990,38 +17037,7 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 	doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Invoke Bot"}`, http.StatusCreated, &createResp)
 	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/alpha", "admin-session", `{"operations":["read"]}`, http.StatusOK, nil)
 	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/beta", "admin-session", `{"operations":["query"]}`, http.StatusOK, nil)
-
-	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/gamma", bytes.NewBufferString(`{"operations":["query"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("gamma grant request: %v", err)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("gamma grant status = %d, want %d: %s", resp.StatusCode, http.StatusBadRequest, body)
-	}
-	if !strings.Contains(string(body), "does not yet support managed-identity invocation") {
-		t.Fatalf("gamma grant body = %q, want managed-identity invocation rejection", string(body))
-	}
-
-	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens", bytes.NewBufferString(`{"name":"invalid-token","permissions":[{"plugin":"gamma","operations":["query"]}]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("gamma token request: %v", err)
-	}
-	body, _ = io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("gamma token status = %d, want %d: %s", resp.StatusCode, http.StatusBadRequest, body)
-	}
-	if !strings.Contains(string(body), "does not yet support managed-identity invocation") {
-		t.Fatalf("gamma token body = %q, want managed-identity invocation rejection", string(body))
-	}
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/gamma", "admin-session", `{"operations":["query"]}`, http.StatusOK, nil)
 
 	createTokenResp := struct {
 		Token string `json:"token"`
@@ -17031,7 +17047,7 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 		http.MethodPost,
 		ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens",
 		"admin-session",
-		`{"name":"invoke-token","permissions":[{"plugin":"alpha","operations":["read"]},{"plugin":"beta","operations":["query"]}]}`,
+		`{"name":"invoke-token","permissions":[{"plugin":"alpha","operations":["read"]},{"plugin":"beta","operations":["query"]},{"plugin":"gamma","operations":["query"]}]}`,
 		http.StatusCreated,
 		&createTokenResp,
 	)
@@ -17059,8 +17075,8 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 	if status := call("/api/v1/beta/query"); status != http.StatusOK {
 		t.Fatalf("beta/query status = %d, want 200", status)
 	}
-	if status := call("/api/v1/gamma/query"); status != http.StatusForbidden {
-		t.Fatalf("gamma/query status = %d, want 403", status)
+	if status := call("/api/v1/gamma/query"); status != http.StatusOK {
+		t.Fatalf("gamma/query status = %d, want 200", status)
 	}
 
 	doJSONRequestAndDecode(t, http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", "", http.StatusOK, nil)
