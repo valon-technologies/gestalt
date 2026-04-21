@@ -25,10 +25,12 @@ var (
 	ErrExecutionRefsNotConfigured = errors.New("workflow execution refs are not configured")
 	ErrWorkflowSubjectRequired    = errors.New("workflow subject is required")
 	ErrWorkflowScheduleSubject    = ErrWorkflowSubjectRequired
-	ErrDuplicateExecutionRefs     = errors.New("workflow schedule matched multiple execution references")
+	ErrDuplicateExecutionRefs     = errors.New("workflow object matched multiple execution references")
+	ErrWorkflowEventMatchRequired = errors.New("workflow event trigger match.type is required")
 )
 
 const workflowScheduleExecutionRefBasePrefix = "workflow_schedule:"
+const workflowEventTriggerExecutionRefBasePrefix = "workflow_event_trigger:"
 
 type WorkflowControl interface {
 	ResolveProvider(name string) (coreworkflow.Provider, error)
@@ -43,6 +45,13 @@ type Service interface {
 	DeleteSchedule(ctx context.Context, p *principal.Principal, scheduleID string) error
 	PauseSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*ManagedSchedule, error)
 	ResumeSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*ManagedSchedule, error)
+	ListEventTriggers(ctx context.Context, p *principal.Principal) ([]*ManagedEventTrigger, error)
+	CreateEventTrigger(ctx context.Context, p *principal.Principal, req EventTriggerUpsert) (*ManagedEventTrigger, error)
+	GetEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error)
+	UpdateEventTrigger(ctx context.Context, p *principal.Principal, triggerID string, req EventTriggerUpsert) (*ManagedEventTrigger, error)
+	DeleteEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) error
+	PauseEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error)
+	ResumeEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error)
 	ListRuns(ctx context.Context, p *principal.Principal) ([]*ManagedRun, error)
 	GetRun(ctx context.Context, p *principal.Principal, runID string) (*ManagedRun, error)
 	CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*ManagedRun, error)
@@ -78,9 +87,23 @@ type ScheduleUpsert struct {
 	Paused       bool
 }
 
+type EventTriggerUpsert struct {
+	ProviderName string
+	Match        coreworkflow.EventMatch
+	Target       coreworkflow.Target
+	Paused       bool
+}
+
 type ManagedSchedule struct {
 	ProviderName string
 	Schedule     *coreworkflow.Schedule
+	ExecutionRef *coreworkflow.ExecutionReference
+	provider     coreworkflow.Provider
+}
+
+type ManagedEventTrigger struct {
+	ProviderName string
+	Trigger      *coreworkflow.EventTrigger
 	ExecutionRef *coreworkflow.ExecutionReference
 	provider     coreworkflow.Provider
 }
@@ -424,6 +447,213 @@ func (m *Manager) ResumeSchedule(ctx context.Context, p *principal.Principal, sc
 	return value, nil
 }
 
+func (m *Manager) ListEventTriggers(ctx context.Context, p *principal.Principal) ([]*ManagedEventTrigger, error) {
+	refs, err := m.listOwnedExecutionRefs(ctx, p, true)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*ManagedEventTrigger, 0, len(refs))
+	for _, ref := range refs {
+		if !m.allowTarget(ctx, p, ref.Target) {
+			continue
+		}
+		triggerID := eventTriggerIDFromExecutionRefID(ref.ID)
+		if triggerID == "" {
+			continue
+		}
+		provider, err := m.resolveProviderByName(strings.TrimSpace(ref.ProviderName))
+		if err != nil {
+			return nil, err
+		}
+		trigger, err := provider.GetEventTrigger(ctx, coreworkflow.GetEventTriggerRequest{TriggerID: triggerID})
+		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		if !eventTriggerMatchesExecutionRef(ref.ProviderName, trigger, ref) {
+			continue
+		}
+		out = append(out, &ManagedEventTrigger{
+			ProviderName: strings.TrimSpace(ref.ProviderName),
+			Trigger:      trigger,
+			ExecutionRef: ref,
+			provider:     provider,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		left := out[i]
+		right := out[j]
+		if left.Trigger != nil && right.Trigger != nil && left.Trigger.CreatedAt != nil && right.Trigger.CreatedAt != nil && !left.Trigger.CreatedAt.Equal(*right.Trigger.CreatedAt) {
+			return left.Trigger.CreatedAt.Before(*right.Trigger.CreatedAt)
+		}
+		leftID := ""
+		rightID := ""
+		if left.Trigger != nil {
+			leftID = left.Trigger.ID
+		}
+		if right.Trigger != nil {
+			rightID = right.Trigger.ID
+		}
+		return leftID < rightID
+	})
+	return out, nil
+}
+
+func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal, req EventTriggerUpsert) (*ManagedEventTrigger, error) {
+	p = principal.Canonicalized(p)
+	if strings.TrimSpace(principalSubjectID(p)) == "" {
+		return nil, ErrWorkflowSubjectRequired
+	}
+	providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
+	if err != nil {
+		return nil, err
+	}
+	target, err := m.resolveTarget(ctx, p, req.Target)
+	if err != nil {
+		return nil, err
+	}
+	match := normalizeEventMatch(req.Match)
+	if strings.TrimSpace(match.Type) == "" {
+		return nil, ErrWorkflowEventMatchRequired
+	}
+
+	triggerID := uuid.NewString()
+	executionRefID := eventTriggerExecutionRefID(triggerID)
+	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, target, p)
+	if err != nil {
+		return nil, err
+	}
+	trigger, err := provider.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{
+		TriggerID:    triggerID,
+		Match:        match,
+		Target:       target,
+		Paused:       req.Paused,
+		RequestedBy:  workflowActorFromPrincipal(p),
+		ExecutionRef: executionRefID,
+	})
+	if err != nil {
+		m.revokeExecutionRef(ctx, ref)
+		return nil, err
+	}
+	return &ManagedEventTrigger{
+		ProviderName: providerName,
+		Trigger:      trigger,
+		ExecutionRef: ref,
+		provider:     provider,
+	}, nil
+}
+
+func (m *Manager) GetEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error) {
+	return m.requireOwnedEventTrigger(ctx, triggerID, p)
+}
+
+func (m *Manager) UpdateEventTrigger(ctx context.Context, p *principal.Principal, triggerID string, req EventTriggerUpsert) (*ManagedEventTrigger, error) {
+	p = principal.Canonicalized(p)
+	if strings.TrimSpace(principalSubjectID(p)) == "" {
+		return nil, ErrWorkflowSubjectRequired
+	}
+	existing, err := m.requireOwnedEventTrigger(ctx, triggerID, p)
+	if err != nil {
+		return nil, err
+	}
+	nextProviderName, nextProvider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
+	if err != nil {
+		return nil, err
+	}
+	target, err := m.resolveTarget(ctx, p, req.Target)
+	if err != nil {
+		return nil, err
+	}
+	match := normalizeEventMatch(req.Match)
+	if strings.TrimSpace(match.Type) == "" {
+		return nil, ErrWorkflowEventMatchRequired
+	}
+
+	executionRefID := eventTriggerExecutionRefID(strings.TrimSpace(existing.Trigger.ID))
+	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, target, p)
+	if err != nil {
+		return nil, err
+	}
+	trigger, err := nextProvider.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{
+		TriggerID:    strings.TrimSpace(existing.Trigger.ID),
+		Match:        match,
+		Target:       target,
+		Paused:       req.Paused,
+		RequestedBy:  workflowActorFromPrincipal(p),
+		ExecutionRef: executionRefID,
+	})
+	if err != nil {
+		m.revokeExecutionRef(ctx, nextRef)
+		return nil, err
+	}
+	if strings.TrimSpace(existing.ProviderName) != nextProviderName {
+		if err := existingEventTriggerProvider(existing).DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{
+			TriggerID: strings.TrimSpace(existing.Trigger.ID),
+		}); err != nil {
+			_ = nextProvider.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{
+				TriggerID: strings.TrimSpace(existing.Trigger.ID),
+			})
+			m.revokeExecutionRef(ctx, nextRef)
+			return nil, err
+		}
+	}
+	if existing.ExecutionRef != nil && existing.ExecutionRef.ID != "" && existing.ExecutionRef.ID != executionRefID {
+		m.revokeExecutionRef(ctx, existing.ExecutionRef)
+	}
+	return &ManagedEventTrigger{
+		ProviderName: nextProviderName,
+		Trigger:      trigger,
+		ExecutionRef: nextRef,
+		provider:     nextProvider,
+	}, nil
+}
+
+func (m *Manager) DeleteEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) error {
+	value, err := m.requireOwnedEventTrigger(ctx, triggerID, p)
+	if err != nil {
+		return err
+	}
+	if err := existingEventTriggerProvider(value).DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{
+		TriggerID: strings.TrimSpace(value.Trigger.ID),
+	}); err != nil {
+		return err
+	}
+	m.revokeExecutionRef(ctx, value.ExecutionRef)
+	return nil
+}
+
+func (m *Manager) PauseEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error) {
+	value, err := m.requireOwnedEventTrigger(ctx, triggerID, p)
+	if err != nil {
+		return nil, err
+	}
+	trigger, err := existingEventTriggerProvider(value).PauseEventTrigger(ctx, coreworkflow.PauseEventTriggerRequest{
+		TriggerID: strings.TrimSpace(value.Trigger.ID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	value.Trigger = trigger
+	return value, nil
+}
+
+func (m *Manager) ResumeEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error) {
+	value, err := m.requireOwnedEventTrigger(ctx, triggerID, p)
+	if err != nil {
+		return nil, err
+	}
+	trigger, err := existingEventTriggerProvider(value).ResumeEventTrigger(ctx, coreworkflow.ResumeEventTriggerRequest{
+		TriggerID: strings.TrimSpace(value.Trigger.ID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	value.Trigger = trigger
+	return value, nil
+}
+
 func (m *Manager) resolveProviderSelection(providerName string) (string, coreworkflow.Provider, error) {
 	if m == nil || m.workflow == nil {
 		return "", nil, ErrWorkflowNotConfigured
@@ -550,6 +780,37 @@ func (m *Manager) requireOwnedSchedule(ctx context.Context, scheduleID string, p
 	}, nil
 }
 
+func (m *Manager) requireOwnedEventTrigger(ctx context.Context, triggerID string, p *principal.Principal) (*ManagedEventTrigger, error) {
+	triggerID = strings.TrimSpace(triggerID)
+	if triggerID == "" {
+		return nil, core.ErrNotFound
+	}
+	ref, err := m.findOwnedEventTriggerExecutionRef(ctx, triggerID, p)
+	if err != nil {
+		return nil, err
+	}
+	if !m.allowTarget(ctx, p, ref.Target) {
+		return nil, core.ErrNotFound
+	}
+	provider, err := m.resolveProviderByName(strings.TrimSpace(ref.ProviderName))
+	if err != nil {
+		return nil, err
+	}
+	trigger, err := provider.GetEventTrigger(ctx, coreworkflow.GetEventTriggerRequest{TriggerID: triggerID})
+	if err != nil {
+		return nil, err
+	}
+	if !eventTriggerMatchesExecutionRef(ref.ProviderName, trigger, ref) {
+		return nil, core.ErrNotFound
+	}
+	return &ManagedEventTrigger{
+		ProviderName: strings.TrimSpace(ref.ProviderName),
+		Trigger:      trigger,
+		ExecutionRef: ref,
+		provider:     provider,
+	}, nil
+}
+
 func (m *Manager) listOwnedExecutionRefs(ctx context.Context, p *principal.Principal, activeOnly bool) ([]*coreworkflow.ExecutionReference, error) {
 	if m == nil || m.workflowExecutionRefs == nil {
 		return nil, ErrExecutionRefsNotConfigured
@@ -585,6 +846,28 @@ func (m *Manager) findOwnedExecutionRef(ctx context.Context, scheduleID string, 
 		}
 		if match != nil {
 			return nil, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, scheduleID)
+		}
+		match = ref
+	}
+	if match == nil {
+		return nil, core.ErrNotFound
+	}
+	return match, nil
+}
+
+func (m *Manager) findOwnedEventTriggerExecutionRef(ctx context.Context, triggerID string, p *principal.Principal) (*coreworkflow.ExecutionReference, error) {
+	refs, err := m.listOwnedExecutionRefs(ctx, p, true)
+	if err != nil {
+		return nil, err
+	}
+	prefix := eventTriggerExecutionRefPrefix(triggerID)
+	var match *coreworkflow.ExecutionReference
+	for _, ref := range refs {
+		if !strings.HasPrefix(strings.TrimSpace(ref.ID), prefix) {
+			continue
+		}
+		if match != nil {
+			return nil, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, triggerID)
 		}
 		match = ref
 	}
@@ -722,6 +1005,19 @@ func scheduleMatchesExecutionRef(providerName string, schedule *coreworkflow.Sch
 		strings.TrimSpace(schedule.Target.Instance) == strings.TrimSpace(ref.Target.Instance)
 }
 
+func eventTriggerMatchesExecutionRef(providerName string, trigger *coreworkflow.EventTrigger, ref *coreworkflow.ExecutionReference) bool {
+	if trigger == nil || ref == nil {
+		return false
+	}
+	if providerName = strings.TrimSpace(providerName); providerName != "" && strings.TrimSpace(ref.ProviderName) != providerName {
+		return false
+	}
+	return strings.TrimSpace(trigger.Target.PluginName) == strings.TrimSpace(ref.Target.PluginName) &&
+		strings.TrimSpace(trigger.Target.Operation) == strings.TrimSpace(ref.Target.Operation) &&
+		strings.TrimSpace(trigger.Target.Connection) == strings.TrimSpace(ref.Target.Connection) &&
+		strings.TrimSpace(trigger.Target.Instance) == strings.TrimSpace(ref.Target.Instance)
+}
+
 func runMatchesExecutionRef(providerName string, run *coreworkflow.Run, ref *coreworkflow.ExecutionReference) bool {
 	if run == nil || ref == nil {
 		return false
@@ -733,6 +1029,14 @@ func runMatchesExecutionRef(providerName string, run *coreworkflow.Run, ref *cor
 		strings.TrimSpace(run.Target.Operation) == strings.TrimSpace(ref.Target.Operation) &&
 		strings.TrimSpace(run.Target.Connection) == strings.TrimSpace(ref.Target.Connection) &&
 		strings.TrimSpace(run.Target.Instance) == strings.TrimSpace(ref.Target.Instance)
+}
+
+func normalizeEventMatch(match coreworkflow.EventMatch) coreworkflow.EventMatch {
+	return coreworkflow.EventMatch{
+		Type:    strings.TrimSpace(match.Type),
+		Source:  strings.TrimSpace(match.Source),
+		Subject: strings.TrimSpace(match.Subject),
+	}
 }
 
 func workflowActorFromPrincipal(p *principal.Principal) coreworkflow.Actor {
@@ -789,6 +1093,27 @@ func scheduleIDFromExecutionRefID(executionRefID string) string {
 	return rest[:lastColon]
 }
 
+func eventTriggerExecutionRefID(triggerID string) string {
+	return eventTriggerExecutionRefPrefix(triggerID) + uuid.NewString()
+}
+
+func eventTriggerExecutionRefPrefix(triggerID string) string {
+	return workflowEventTriggerExecutionRefBasePrefix + strings.TrimSpace(triggerID) + ":"
+}
+
+func eventTriggerIDFromExecutionRefID(executionRefID string) string {
+	trimmed := strings.TrimSpace(executionRefID)
+	if !strings.HasPrefix(trimmed, workflowEventTriggerExecutionRefBasePrefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(trimmed, workflowEventTriggerExecutionRefBasePrefix)
+	lastColon := strings.LastIndex(rest, ":")
+	if lastColon <= 0 {
+		return ""
+	}
+	return rest[:lastColon]
+}
+
 func existingProvider(value *ManagedSchedule) coreworkflow.Provider {
 	if value == nil {
 		return nil
@@ -797,6 +1122,13 @@ func existingProvider(value *ManagedSchedule) coreworkflow.Provider {
 }
 
 func existingRunProvider(value *ManagedRun) coreworkflow.Provider {
+	if value == nil {
+		return nil
+	}
+	return value.provider
+}
+
+func existingEventTriggerProvider(value *ManagedEventTrigger) coreworkflow.Provider {
 	if value == nil {
 		return nil
 	}

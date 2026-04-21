@@ -80,6 +80,62 @@ func (l *lazyWorkflowManager) ResumeSchedule(ctx context.Context, p *principal.P
 	return target.ResumeSchedule(ctx, p, scheduleID)
 }
 
+func (l *lazyWorkflowManager) ListEventTriggers(ctx context.Context, p *principal.Principal) ([]*workflowmanager.ManagedEventTrigger, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ListEventTriggers(ctx, p)
+}
+
+func (l *lazyWorkflowManager) CreateEventTrigger(ctx context.Context, p *principal.Principal, req workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.CreateEventTrigger(ctx, p, req)
+}
+
+func (l *lazyWorkflowManager) GetEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*workflowmanager.ManagedEventTrigger, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.GetEventTrigger(ctx, p, triggerID)
+}
+
+func (l *lazyWorkflowManager) UpdateEventTrigger(ctx context.Context, p *principal.Principal, triggerID string, req workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.UpdateEventTrigger(ctx, p, triggerID, req)
+}
+
+func (l *lazyWorkflowManager) DeleteEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) error {
+	target, err := l.current()
+	if err != nil {
+		return err
+	}
+	return target.DeleteEventTrigger(ctx, p, triggerID)
+}
+
+func (l *lazyWorkflowManager) PauseEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*workflowmanager.ManagedEventTrigger, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.PauseEventTrigger(ctx, p, triggerID)
+}
+
+func (l *lazyWorkflowManager) ResumeEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*workflowmanager.ManagedEventTrigger, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ResumeEventTrigger(ctx, p, triggerID)
+}
+
 func (l *lazyWorkflowManager) ListRuns(ctx context.Context, p *principal.Principal) ([]*workflowmanager.ManagedRun, error) {
 	target, err := l.current()
 	if err != nil {

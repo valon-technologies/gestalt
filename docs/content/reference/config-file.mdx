@@ -331,8 +331,9 @@ top-level `workflows.schedules.*.provider` or
 `workflows.eventTriggers.*.provider`. There is no
 `server.providers.workflow`: config-managed workflow objects choose a provider
 explicitly, or inherit the sole/default workflow provider when `provider` is
-omitted. User-owned schedules use the same provider pool through
-`/api/v1/workflow/schedules` and `gestalt workflows ...`.
+omitted. User-owned schedules and event triggers use the same provider pool
+through `/api/v1/workflow/schedules`,
+`/api/v1/workflow/event-triggers`, and `gestalt workflows ...`.
 
 ```yaml
 providers:

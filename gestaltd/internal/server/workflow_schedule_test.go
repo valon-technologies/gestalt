@@ -62,24 +62,33 @@ func (s *stubWorkflowControl) ResolveProvider(name string) (coreworkflow.Provide
 }
 
 type memoryWorkflowProvider struct {
-	schedules     map[string]*coreworkflow.Schedule
-	runs          map[string]*coreworkflow.Run
-	upsertReqs    []coreworkflow.UpsertScheduleRequest
-	deleteReqs    []coreworkflow.DeleteScheduleRequest
-	pauseReqs     []coreworkflow.PauseScheduleRequest
-	resumeReqs    []coreworkflow.ResumeScheduleRequest
-	cancelReqs    []coreworkflow.CancelRunRequest
-	nextUpsertErr error
-	getErr        error
-	listErr       error
-	getRunErr     error
-	listRunsErr   error
-	cancelRunErr  error
+	schedules            map[string]*coreworkflow.Schedule
+	triggers             map[string]*coreworkflow.EventTrigger
+	runs                 map[string]*coreworkflow.Run
+	upsertReqs           []coreworkflow.UpsertScheduleRequest
+	upsertTriggerReqs    []coreworkflow.UpsertEventTriggerRequest
+	deleteReqs           []coreworkflow.DeleteScheduleRequest
+	deleteTriggerReqs    []coreworkflow.DeleteEventTriggerRequest
+	pauseReqs            []coreworkflow.PauseScheduleRequest
+	pauseTriggerReqs     []coreworkflow.PauseEventTriggerRequest
+	resumeReqs           []coreworkflow.ResumeScheduleRequest
+	resumeTriggerReqs    []coreworkflow.ResumeEventTriggerRequest
+	cancelReqs           []coreworkflow.CancelRunRequest
+	nextUpsertErr        error
+	nextUpsertTriggerErr error
+	getErr               error
+	getTriggerErr        error
+	listErr              error
+	listTriggersErr      error
+	getRunErr            error
+	listRunsErr          error
+	cancelRunErr         error
 }
 
 func newMemoryWorkflowProvider() *memoryWorkflowProvider {
 	return &memoryWorkflowProvider{
 		schedules: map[string]*coreworkflow.Schedule{},
+		triggers:  map[string]*coreworkflow.EventTrigger{},
 		runs:      map[string]*coreworkflow.Run{},
 	}
 }
@@ -216,28 +225,89 @@ func (p *memoryWorkflowProvider) ResumeSchedule(_ context.Context, req coreworkf
 	return cloneWorkflowSchedule(schedule), nil
 }
 
-func (p *memoryWorkflowProvider) UpsertEventTrigger(context.Context, coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	return nil, errors.New("not implemented")
+func (p *memoryWorkflowProvider) UpsertEventTrigger(_ context.Context, req coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	p.upsertTriggerReqs = append(p.upsertTriggerReqs, req)
+	if p.nextUpsertTriggerErr != nil {
+		err := p.nextUpsertTriggerErr
+		p.nextUpsertTriggerErr = nil
+		return nil, err
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	existing := p.triggers[req.TriggerID]
+	createdAt := &now
+	if existing != nil && existing.CreatedAt != nil {
+		createdAt = existing.CreatedAt
+	}
+	trigger := &coreworkflow.EventTrigger{
+		ID:           req.TriggerID,
+		Match:        req.Match,
+		Target:       req.Target,
+		Paused:       req.Paused,
+		ExecutionRef: req.ExecutionRef,
+		CreatedBy:    req.RequestedBy,
+		CreatedAt:    createdAt,
+		UpdatedAt:    &now,
+	}
+	p.triggers[req.TriggerID] = cloneWorkflowEventTrigger(trigger)
+	return cloneWorkflowEventTrigger(trigger), nil
 }
 
-func (p *memoryWorkflowProvider) GetEventTrigger(context.Context, coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	return nil, errors.New("not implemented")
+func (p *memoryWorkflowProvider) GetEventTrigger(_ context.Context, req coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	if p.getTriggerErr != nil {
+		return nil, p.getTriggerErr
+	}
+	trigger, ok := p.triggers[req.TriggerID]
+	if !ok || trigger == nil {
+		return nil, core.ErrNotFound
+	}
+	return cloneWorkflowEventTrigger(trigger), nil
 }
 
-func (p *memoryWorkflowProvider) ListEventTriggers(context.Context, coreworkflow.ListEventTriggersRequest) ([]*coreworkflow.EventTrigger, error) {
-	return nil, nil
+func (p *memoryWorkflowProvider) ListEventTriggers(_ context.Context, _ coreworkflow.ListEventTriggersRequest) ([]*coreworkflow.EventTrigger, error) {
+	if p.listTriggersErr != nil {
+		return nil, p.listTriggersErr
+	}
+	out := make([]*coreworkflow.EventTrigger, 0, len(p.triggers))
+	for _, trigger := range p.triggers {
+		if trigger != nil {
+			out = append(out, cloneWorkflowEventTrigger(trigger))
+		}
+	}
+	return out, nil
 }
 
-func (p *memoryWorkflowProvider) DeleteEventTrigger(context.Context, coreworkflow.DeleteEventTriggerRequest) error {
-	return errors.New("not implemented")
+func (p *memoryWorkflowProvider) DeleteEventTrigger(_ context.Context, req coreworkflow.DeleteEventTriggerRequest) error {
+	trigger, ok := p.triggers[req.TriggerID]
+	if !ok || trigger == nil {
+		return core.ErrNotFound
+	}
+	delete(p.triggers, req.TriggerID)
+	p.deleteTriggerReqs = append(p.deleteTriggerReqs, req)
+	return nil
 }
 
-func (p *memoryWorkflowProvider) PauseEventTrigger(context.Context, coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	return nil, errors.New("not implemented")
+func (p *memoryWorkflowProvider) PauseEventTrigger(_ context.Context, req coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	trigger, ok := p.triggers[req.TriggerID]
+	if !ok || trigger == nil {
+		return nil, core.ErrNotFound
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	trigger.Paused = true
+	trigger.UpdatedAt = &now
+	p.pauseTriggerReqs = append(p.pauseTriggerReqs, req)
+	return cloneWorkflowEventTrigger(trigger), nil
 }
 
-func (p *memoryWorkflowProvider) ResumeEventTrigger(context.Context, coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	return nil, errors.New("not implemented")
+func (p *memoryWorkflowProvider) ResumeEventTrigger(_ context.Context, req coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	trigger, ok := p.triggers[req.TriggerID]
+	if !ok || trigger == nil {
+		return nil, core.ErrNotFound
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	trigger.Paused = false
+	trigger.UpdatedAt = &now
+	p.resumeTriggerReqs = append(p.resumeTriggerReqs, req)
+	return cloneWorkflowEventTrigger(trigger), nil
 }
 
 func (p *memoryWorkflowProvider) PublishEvent(context.Context, coreworkflow.PublishEventRequest) error {
@@ -307,6 +377,23 @@ func cloneWorkflowRun(run *coreworkflow.Run) *coreworkflow.Run {
 	return &cloned
 }
 
+func cloneWorkflowEventTrigger(trigger *coreworkflow.EventTrigger) *coreworkflow.EventTrigger {
+	if trigger == nil {
+		return nil
+	}
+	cloned := *trigger
+	cloned.Target.Input = cloneMap(trigger.Target.Input)
+	if trigger.CreatedAt != nil {
+		value := *trigger.CreatedAt
+		cloned.CreatedAt = &value
+	}
+	if trigger.UpdatedAt != nil {
+		value := *trigger.UpdatedAt
+		cloned.UpdatedAt = &value
+	}
+	return &cloned
+}
+
 func cloneMap(src map[string]any) map[string]any {
 	if src == nil {
 		return nil
@@ -324,6 +411,24 @@ type workflowScheduleResponse struct {
 	Cron     string `json:"cron"`
 	Timezone string `json:"timezone"`
 	Target   struct {
+		Plugin     string         `json:"plugin"`
+		Operation  string         `json:"operation"`
+		Connection string         `json:"connection"`
+		Instance   string         `json:"instance"`
+		Input      map[string]any `json:"input"`
+	} `json:"target"`
+	Paused bool `json:"paused"`
+}
+
+type workflowEventTriggerResponse struct {
+	ID       string `json:"id"`
+	Provider string `json:"provider"`
+	Match    struct {
+		Type    string `json:"type"`
+		Source  string `json:"source"`
+		Subject string `json:"subject"`
+	} `json:"match"`
+	Target struct {
 		Plugin     string         `json:"plugin"`
 		Operation  string         `json:"operation"`
 		Connection string         `json:"connection"`
@@ -1638,5 +1743,415 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 	}
 	if _, ok := advancedProvider.schedules["sched-grace-advanced"]; !ok {
 		t.Fatal("expected grace schedule to remain after unauthorized global delete")
+	}
+}
+
+func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	ada := seedUser(t, services, "ada@example.test")
+	basicProvider := newMemoryWorkflowProvider()
+	advancedProvider := newMemoryWorkflowProvider()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: ada.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t,
+			&coretesting.StubIntegration{
+				N:        "roadmap",
+				ConnMode: core.ConnectionModeUser,
+				CatalogVal: &catalog.Catalog{
+					Name: "roadmap",
+					Operations: []catalog.CatalogOperation{
+						{ID: "sync", Method: http.MethodPost},
+					},
+				},
+			},
+			&coretesting.StubIntegration{
+				N:        "analytics",
+				ConnMode: core.ConnectionModeUser,
+				CatalogVal: &catalog.Catalog{
+					Name: "analytics",
+					Operations: []catalog.CatalogOperation{
+						{ID: "sync", Method: http.MethodPost},
+					},
+				},
+			},
+		)
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			providers: map[string]coreworkflow.Provider{
+				"basic":    basicProvider,
+				"advanced": advancedProvider,
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createReq, _ := http.NewRequest(
+		http.MethodPost,
+		ts.URL+"/api/v1/workflow/event-triggers/",
+		bytes.NewBufferString(`{"provider":"basic","match":{"type":"roadmap.item.updated","source":"roadmap","subject":"item"},"target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`),
+	)
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	if createResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(createResp.Body)
+		t.Fatalf("expected 201, got %d: %s", createResp.StatusCode, body)
+	}
+
+	var created workflowEventTriggerResponse
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.Provider != "basic" || created.Match.Type != "roadmap.item.updated" || created.Target.Plugin != "roadmap" || created.Target.Operation != "sync" {
+		t.Fatalf("created trigger = %#v", created)
+	}
+	if len(basicProvider.upsertTriggerReqs) != 1 {
+		t.Fatalf("basic trigger upsert requests = %d, want 1", len(basicProvider.upsertTriggerReqs))
+	}
+	if basicProvider.upsertTriggerReqs[0].Target.PluginName != "roadmap" {
+		t.Fatalf("basic create target = %#v", basicProvider.upsertTriggerReqs[0].Target)
+	}
+	initialExecutionRef := basicProvider.upsertTriggerReqs[0].ExecutionRef
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/event-triggers/", nil)
+	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(listResp.Body)
+		t.Fatalf("expected 200, got %d: %s", listResp.StatusCode, body)
+	}
+	var listed []workflowEventTriggerResponse
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed) != 1 || listed[0].ID != created.ID || listed[0].Provider != "basic" || listed[0].Match.Type != "roadmap.item.updated" {
+		t.Fatalf("listed triggers = %#v", listed)
+	}
+
+	updateReq, _ := http.NewRequest(
+		http.MethodPut,
+		ts.URL+"/api/v1/workflow/event-triggers/"+created.ID,
+		bytes.NewBufferString(`{"provider":"advanced","match":{"type":"analytics.item.synced","source":"analytics","subject":"sync"},"target":{"plugin":"analytics","operation":"sync","connection":"warehouse","instance":"tenant-b","input":{"mode":"full"}},"paused":true}`),
+	)
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	updateResp, err := http.DefaultClient.Do(updateReq)
+	if err != nil {
+		t.Fatalf("update request: %v", err)
+	}
+	defer func() { _ = updateResp.Body.Close() }()
+	if updateResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(updateResp.Body)
+		t.Fatalf("expected 200, got %d: %s", updateResp.StatusCode, body)
+	}
+
+	var updated workflowEventTriggerResponse
+	if err := json.NewDecoder(updateResp.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode update response: %v", err)
+	}
+	if updated.Provider != "advanced" || updated.Match.Type != "analytics.item.synced" || updated.Target.Plugin != "analytics" || !updated.Paused {
+		t.Fatalf("updated trigger = %#v", updated)
+	}
+	if len(advancedProvider.upsertTriggerReqs) != 1 {
+		t.Fatalf("advanced trigger upsert requests = %d, want 1", len(advancedProvider.upsertTriggerReqs))
+	}
+	if len(basicProvider.deleteTriggerReqs) != 1 || basicProvider.deleteTriggerReqs[0].TriggerID != created.ID {
+		t.Fatalf("basic delete trigger requests = %#v", basicProvider.deleteTriggerReqs)
+	}
+	if _, ok := basicProvider.triggers[created.ID]; ok {
+		t.Fatal("expected global update to remove event trigger from old provider")
+	}
+	if _, ok := advancedProvider.triggers[created.ID]; !ok {
+		t.Fatal("expected global update to store event trigger in new provider")
+	}
+	updatedExecutionRef := advancedProvider.upsertTriggerReqs[0].ExecutionRef
+	if updatedExecutionRef == "" || updatedExecutionRef == initialExecutionRef {
+		t.Fatalf("updated execution ref = %q, want rotated from %q", updatedExecutionRef, initialExecutionRef)
+	}
+	oldRef, err := services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
+	if err != nil {
+		t.Fatalf("Get initial execution ref: %v", err)
+	}
+	if oldRef.RevokedAt == nil || oldRef.RevokedAt.IsZero() {
+		t.Fatalf("expected initial execution ref to be revoked, got %#v", oldRef)
+	}
+
+	pauseReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/event-triggers/"+created.ID+"/pause", nil)
+	pauseReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	pauseResp, err := http.DefaultClient.Do(pauseReq)
+	if err != nil {
+		t.Fatalf("pause request: %v", err)
+	}
+	defer func() { _ = pauseResp.Body.Close() }()
+	if pauseResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", pauseResp.StatusCode)
+	}
+	if len(advancedProvider.pauseTriggerReqs) != 1 {
+		t.Fatalf("advanced pause trigger requests = %d, want 1", len(advancedProvider.pauseTriggerReqs))
+	}
+
+	resumeReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/event-triggers/"+created.ID+"/resume", nil)
+	resumeReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	resumeResp, err := http.DefaultClient.Do(resumeReq)
+	if err != nil {
+		t.Fatalf("resume request: %v", err)
+	}
+	defer func() { _ = resumeResp.Body.Close() }()
+	if resumeResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resumeResp.StatusCode)
+	}
+	if len(advancedProvider.resumeTriggerReqs) != 1 {
+		t.Fatalf("advanced resume trigger requests = %d, want 1", len(advancedProvider.resumeTriggerReqs))
+	}
+
+	deleteReq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/workflow/event-triggers/"+created.ID, nil)
+	deleteReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	deleteResp, err := http.DefaultClient.Do(deleteReq)
+	if err != nil {
+		t.Fatalf("delete request: %v", err)
+	}
+	defer func() { _ = deleteResp.Body.Close() }()
+	if deleteResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", deleteResp.StatusCode)
+	}
+	if _, ok := advancedProvider.triggers[created.ID]; ok {
+		t.Fatal("expected event trigger to be deleted from current global provider")
+	}
+	finalRef, err := services.WorkflowExecutionRefs.Get(context.Background(), updatedExecutionRef)
+	if err != nil {
+		t.Fatalf("Get final execution ref: %v", err)
+	}
+	if finalRef.RevokedAt == nil || finalRef.RevokedAt.IsZero() {
+		t.Fatalf("expected final execution ref to be revoked, got %#v", finalRef)
+	}
+}
+
+func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	ada := seedUser(t, services, "ada@example.test")
+	grace := seedUser(t, services, "grace@example.test")
+	basicProvider := newMemoryWorkflowProvider()
+	advancedProvider := newMemoryWorkflowProvider()
+	now := time.Now().UTC().Truncate(time.Second)
+
+	basicProvider.triggers["trg-ada-basic"] = &coreworkflow.EventTrigger{
+		ID:           "trg-ada-basic",
+		Match:        coreworkflow.EventMatch{Type: "roadmap.item.updated"},
+		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		ExecutionRef: "workflow_event_trigger:trg-ada-basic:ref-basic",
+		CreatedAt:    &now,
+		UpdatedAt:    &now,
+	}
+	advancedProvider.triggers["trg-ada-advanced"] = &coreworkflow.EventTrigger{
+		ID:           "trg-ada-advanced",
+		Match:        coreworkflow.EventMatch{Type: "analytics.item.synced"},
+		Target:       coreworkflow.Target{PluginName: "analytics", Operation: "sync"},
+		ExecutionRef: "workflow_event_trigger:trg-ada-advanced:ref-advanced",
+		CreatedAt:    &now,
+		UpdatedAt:    &now,
+	}
+	advancedProvider.triggers["trg-grace-advanced"] = &coreworkflow.EventTrigger{
+		ID:           "trg-grace-advanced",
+		Match:        coreworkflow.EventMatch{Type: "analytics.item.failed"},
+		Target:       coreworkflow.Target{PluginName: "analytics", Operation: "sync"},
+		ExecutionRef: "workflow_event_trigger:trg-grace-advanced:ref-grace-advanced",
+		CreatedAt:    &now,
+		UpdatedAt:    &now,
+	}
+	for _, ref := range []*coreworkflow.ExecutionReference{
+		{
+			ID:           "workflow_event_trigger:trg-ada-basic:ref-basic",
+			ProviderName: "basic",
+			Target:       basicProvider.triggers["trg-ada-basic"].Target,
+			SubjectID:    principal.UserSubjectID(ada.ID),
+		},
+		{
+			ID:           "workflow_event_trigger:trg-ada-advanced:ref-advanced",
+			ProviderName: "advanced",
+			Target:       advancedProvider.triggers["trg-ada-advanced"].Target,
+			SubjectID:    principal.UserSubjectID(ada.ID),
+		},
+		{
+			ID:           "workflow_event_trigger:trg-grace-advanced:ref-grace-advanced",
+			ProviderName: "advanced",
+			Target:       advancedProvider.triggers["trg-grace-advanced"].Target,
+			SubjectID:    principal.UserSubjectID(grace.ID),
+		},
+	} {
+		if _, err := services.WorkflowExecutionRefs.Put(context.Background(), ref); err != nil {
+			t.Fatalf("Put execution ref %q: %v", ref.ID, err)
+		}
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "ada-session":
+					return &core.UserIdentity{Email: ada.Email, DisplayName: "Ada"}, nil
+				case "grace-session":
+					return &core.UserIdentity{Email: grace.Email, DisplayName: "Grace"}, nil
+				default:
+					return nil, core.ErrNotFound
+				}
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t,
+			&coretesting.StubIntegration{
+				N:        "roadmap",
+				ConnMode: core.ConnectionModeUser,
+				CatalogVal: &catalog.Catalog{
+					Name: "roadmap",
+					Operations: []catalog.CatalogOperation{
+						{ID: "sync", Method: http.MethodPost},
+					},
+				},
+			},
+			&coretesting.StubIntegration{
+				N:        "analytics",
+				ConnMode: core.ConnectionModeUser,
+				CatalogVal: &catalog.Catalog{
+					Name: "analytics",
+					Operations: []catalog.CatalogOperation{
+						{ID: "sync", Method: http.MethodPost},
+					},
+				},
+			},
+		)
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			providers: map[string]coreworkflow.Provider{
+				"basic":    basicProvider,
+				"advanced": advancedProvider,
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/event-triggers/", nil)
+	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", listResp.StatusCode)
+	}
+	var listed []workflowEventTriggerResponse
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed) != 2 {
+		t.Fatalf("listed triggers = %#v", listed)
+	}
+	listedIDs := []string{listed[0].ID, listed[1].ID}
+	slices.Sort(listedIDs)
+	if !slices.Equal(listedIDs, []string{"trg-ada-advanced", "trg-ada-basic"}) {
+		t.Fatalf("listed triggers = %#v", listed)
+	}
+
+	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/event-triggers/trg-grace-advanced", nil)
+	getReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	getResp, err := http.DefaultClient.Do(getReq)
+	if err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	defer func() { _ = getResp.Body.Close() }()
+	if getResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", getResp.StatusCode)
+	}
+
+	deleteReq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/workflow/event-triggers/trg-grace-advanced", nil)
+	deleteReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	deleteResp, err := http.DefaultClient.Do(deleteReq)
+	if err != nil {
+		t.Fatalf("delete request: %v", err)
+	}
+	defer func() { _ = deleteResp.Body.Close() }()
+	if deleteResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", deleteResp.StatusCode)
+	}
+	if _, ok := advancedProvider.triggers["trg-grace-advanced"]; !ok {
+		t.Fatal("expected grace trigger to remain after unauthorized global delete")
+	}
+}
+
+func TestWorkflowEventTriggerCreateRequiresMatchType(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryWorkflowProvider()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{
+				Name: "roadmap",
+				Operations: []catalog.CatalogOperation{
+					{ID: "sync", Method: http.MethodPost},
+				},
+			},
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			provider:            provider,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(
+		http.MethodPost,
+		ts.URL+"/api/v1/workflow/event-triggers/",
+		bytes.NewBufferString(`{"match":{"source":"roadmap"},"target":{"plugin":"roadmap","operation":"sync"}}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
+	}
+	if len(provider.upsertTriggerReqs) != 0 {
+		t.Fatalf("upsert trigger requests = %d, want 0", len(provider.upsertTriggerReqs))
 	}
 }

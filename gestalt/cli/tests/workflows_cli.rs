@@ -18,6 +18,20 @@ const SCHEDULE_JSON: &str = r#"{
     "nextRunAt":"2026-04-21T00:00:00Z"
 }"#;
 
+const TRIGGER_JSON: &str = r#"{
+    "id":"trg-1",
+    "provider":"test-provider",
+    "match":{"type":"dummy.event","source":"dummy","subject":"item"},
+    "target":{
+        "plugin":"dummy",
+        "operation":"doit",
+        "input":{"k":"v"}
+    },
+    "paused":false,
+    "createdAt":"2026-04-20T00:00:00Z",
+    "updatedAt":"2026-04-20T00:00:00Z"
+}"#;
+
 const RUN_JSON: &str = r#"{
     "id":"run-1",
     "provider":"test-provider",
@@ -276,6 +290,237 @@ fn test_cli_list_schedules_json_format() {
         .success()
         .stdout(predicate::str::contains(r#""id": "sched-1""#))
         .stdout(predicate::str::contains(r#""plugin": "dummy""#));
+}
+
+#[test]
+fn test_cli_lists_event_triggers() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/workflow/event-triggers",
+        StatusCode::OK
+    )
+    .with_body(format!("[{TRIGGER_JSON}]"))
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["workflows", "triggers", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("trg-1"))
+        .stdout(predicate::str::contains("dummy"))
+        .stdout(predicate::str::contains("doit"));
+}
+
+#[test]
+fn test_cli_list_event_triggers_filters() {
+    let body = r#"[
+        {"id":"trg-a","match":{"type":"alpha.created"},"target":{"plugin":"alpha","operation":"x"},"paused":false},
+        {"id":"trg-b","match":{"type":"beta.failed"},"target":{"plugin":"beta","operation":"y"},"paused":false}
+    ]"#;
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/workflow/event-triggers",
+        StatusCode::OK
+    )
+    .with_body(body)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "workflows",
+            "triggers",
+            "list",
+            "--plugin",
+            "beta",
+            "--type",
+            "beta.failed",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("trg-b"))
+        .stdout(predicate::str::contains("trg-a").not());
+}
+
+#[test]
+fn test_cli_gets_event_trigger() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/workflow/event-triggers/trg-1",
+        StatusCode::OK
+    )
+    .with_body(TRIGGER_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["workflows", "triggers", "get", "trg-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("trg-1"))
+        .stdout(predicate::str::contains("dummy"));
+}
+
+#[test]
+fn test_cli_creates_event_trigger() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/workflow/event-triggers",
+        StatusCode::CREATED
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{
+            "match":{"type":"dummy.event","source":"dummy","subject":"item"},
+            "target":{"plugin":"dummy","operation":"doit","input":{"channel":"C1","text":"hi"}},
+            "paused":false
+        }"#
+        .to_string(),
+    ))
+    .with_body(TRIGGER_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "workflows",
+            "triggers",
+            "create",
+            "--type",
+            "dummy.event",
+            "--source",
+            "dummy",
+            "--subject",
+            "item",
+            "--plugin",
+            "dummy",
+            "--operation",
+            "doit",
+            "-p",
+            "channel=C1",
+            "-p",
+            "text=hi",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("trg-1"));
+}
+
+#[test]
+fn test_cli_updates_event_trigger_merges_existing_fields() {
+    let mut server = Server::new();
+    let _get = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/workflow/event-triggers/trg-1",
+        StatusCode::OK
+    )
+    .with_body(TRIGGER_JSON)
+    .create();
+
+    let _put = authed_json_mock!(
+        server,
+        Method::PUT,
+        "/api/v1/workflow/event-triggers/trg-1",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{
+            "provider":"test-provider",
+            "match":{"type":"dummy.event.updated","source":"dummy","subject":"item"},
+            "target":{"plugin":"dummy","operation":"doit","input":{"k":"v"}},
+            "paused":true
+        }"#
+        .to_string(),
+    ))
+    .with_body(TRIGGER_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "workflows",
+            "triggers",
+            "update",
+            "trg-1",
+            "--type",
+            "dummy.event.updated",
+            "--paused",
+        ])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_cli_deletes_event_trigger() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::DELETE,
+        "/api/v1/workflow/event-triggers/trg-1",
+        StatusCode::OK
+    )
+    .with_body(r#"{"status":"deleted"}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["workflows", "triggers", "delete", "trg-1"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Workflow event trigger trg-1 deleted.",
+        ));
+}
+
+#[test]
+fn test_cli_pauses_event_trigger() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/workflow/event-triggers/trg-1/pause",
+        StatusCode::OK
+    )
+    .with_body(TRIGGER_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["workflows", "triggers", "pause", "trg-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("trg-1"));
+}
+
+#[test]
+fn test_cli_resumes_event_trigger() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/workflow/event-triggers/trg-1/resume",
+        StatusCode::OK
+    )
+    .with_body(TRIGGER_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["workflows", "triggers", "resume", "trg-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("trg-1"));
 }
 
 #[test]
