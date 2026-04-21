@@ -8,6 +8,15 @@ import {
   writeCatalogYaml,
 } from "./catalog.ts";
 import {
+  type HTTPAck,
+  type HTTPBinding,
+  type HTTPRequestBody,
+  type HTTPSecurityScheme,
+  type PluginManifestMetadata,
+  hasPluginManifestMetadata,
+  writeManifestMetadataYaml,
+} from "./manifest-metadata.ts";
+import {
   errorMessage,
   type MaybePromise,
   type OperationResult,
@@ -82,6 +91,8 @@ export interface PluginDefinitionOptions extends RuntimeProviderOptions {
   connectionMode?: ConnectionMode;
   authTypes?: string[];
   connectionParams?: Record<string, ConnectionParamDefinition>;
+  securitySchemes?: Record<string, HTTPSecurityScheme>;
+  http?: Record<string, HTTPBinding>;
   iconSvg?: string;
   operations: Array<OperationDefinition<any, any>>;
   sessionCatalog?: SessionCatalogHandler;
@@ -134,6 +145,8 @@ export class PluginProvider extends RuntimeProvider {
   readonly connectionMode: ConnectionMode;
   readonly authTypes: string[];
   readonly connectionParams: Record<string, ConnectionParamDefinition>;
+  readonly securitySchemes: Record<string, HTTPSecurityScheme>;
+  readonly http: Record<string, HTTPBinding>;
 
   private readonly sessionCatalogHandler: SessionCatalogHandler | undefined;
   private readonly operations = new Map<string, OperationDefinition<any, any>>();
@@ -144,6 +157,8 @@ export class PluginProvider extends RuntimeProvider {
     this.connectionMode = options.connectionMode ?? "unspecified";
     this.authTypes = [...(options.authTypes ?? [])];
     this.connectionParams = normalizeConnectionParams(options.connectionParams);
+    this.securitySchemes = normalizeHTTPSecuritySchemes(options.securitySchemes);
+    this.http = normalizeHTTPBindings(options.http);
     this.sessionCatalogHandler = options.sessionCatalog;
 
     for (const rawEntry of options.operations) {
@@ -256,6 +271,38 @@ export class PluginProvider extends RuntimeProvider {
   }
 
   /**
+   * Returns generated manifest-backed HTTP/security metadata for the provider.
+   */
+  staticManifestMetadata(): PluginManifestMetadata {
+    const metadata: PluginManifestMetadata = {};
+    if (Object.keys(this.securitySchemes).length > 0) {
+      metadata.securitySchemes = cloneHTTPSecuritySchemes(this.securitySchemes);
+    }
+    if (Object.keys(this.http).length > 0) {
+      metadata.http = cloneHTTPBindings(this.http);
+    }
+    return metadata;
+  }
+
+  /**
+   * Reports whether the provider emits manifest metadata in addition to catalog metadata.
+   */
+  supportsManifestMetadata(): boolean {
+    return hasPluginManifestMetadata(this.staticManifestMetadata());
+  }
+
+  /**
+   * Writes generated manifest metadata to disk as YAML.
+   */
+  writeManifestMetadata(path: string): void {
+    const metadata = this.staticManifestMetadata();
+    if (!hasPluginManifestMetadata(metadata)) {
+      return;
+    }
+    writeManifestMetadataYaml(path, metadata);
+  }
+
+  /**
    * Executes an operation against validated input and request metadata.
    */
   async execute(
@@ -347,6 +394,121 @@ function normalizeConnectionParams(
     output[key] = entry;
   }
   return output;
+}
+
+function normalizeHTTPSecuritySchemes(
+  input: Record<string, HTTPSecurityScheme> | undefined,
+): Record<string, HTTPSecurityScheme> {
+  const output: Record<string, HTTPSecurityScheme> = {};
+  for (const [key, value] of Object.entries(input ?? {})) {
+    output[key] = cloneHTTPSecurityScheme(value);
+  }
+  return output;
+}
+
+function cloneHTTPSecuritySchemes(
+  input: Record<string, HTTPSecurityScheme>,
+): Record<string, HTTPSecurityScheme> {
+  const output: Record<string, HTTPSecurityScheme> = {};
+  for (const [key, value] of Object.entries(input)) {
+    output[key] = cloneHTTPSecurityScheme(value);
+  }
+  return output;
+}
+
+function cloneHTTPSecurityScheme(value: HTTPSecurityScheme): HTTPSecurityScheme {
+  const output: HTTPSecurityScheme = {};
+  if (value.type !== undefined) {
+    output.type = value.type;
+  }
+  if (value.description !== undefined) {
+    output.description = value.description;
+  }
+  if (value.name !== undefined) {
+    output.name = value.name;
+  }
+  if (value.in !== undefined) {
+    output.in = value.in;
+  }
+  if (value.scheme !== undefined) {
+    output.scheme = value.scheme;
+  }
+  if (value.secret) {
+    output.secret = {
+      ...value.secret,
+    };
+  }
+  return output;
+}
+
+function normalizeHTTPBindings(
+  input: Record<string, HTTPBinding> | undefined,
+): Record<string, HTTPBinding> {
+  const output: Record<string, HTTPBinding> = {};
+  for (const [key, value] of Object.entries(input ?? {})) {
+    output[key] = cloneHTTPBinding(value);
+  }
+  return output;
+}
+
+function cloneHTTPBindings(
+  input: Record<string, HTTPBinding>,
+): Record<string, HTTPBinding> {
+  const output: Record<string, HTTPBinding> = {};
+  for (const [key, value] of Object.entries(input)) {
+    output[key] = cloneHTTPBinding(value);
+  }
+  return output;
+}
+
+function cloneHTTPBinding(value: HTTPBinding): HTTPBinding {
+  const output: HTTPBinding = {
+    path: value.path,
+    method: value.method,
+    security: value.security,
+    target: value.target,
+  };
+  if (value.requestBody) {
+    output.requestBody = cloneHTTPRequestBody(value.requestBody);
+  }
+  if (value.ack) {
+    output.ack = cloneHTTPAck(value.ack);
+  }
+  return output;
+}
+
+function cloneHTTPRequestBody(value: HTTPRequestBody): HTTPRequestBody {
+  const output: HTTPRequestBody = {};
+  if (value.required !== undefined) {
+    output.required = value.required;
+  }
+  if (value.content) {
+    output.content = {};
+    for (const key of Object.keys(value.content)) {
+      output.content[key] = {};
+    }
+  }
+  return output;
+}
+
+function cloneHTTPAck(value: HTTPAck): HTTPAck {
+  const output: HTTPAck = {};
+  if (value.status !== undefined) {
+    output.status = value.status;
+  }
+  if (value.headers) {
+    output.headers = {
+      ...value.headers,
+    };
+  }
+  if (value.body !== undefined) {
+    output.body = cloneHTTPBodyValue(value.body);
+  }
+  return output;
+}
+
+function cloneHTTPBodyValue<T>(value: T): T {
+  return structuredClone(value);
 }
 
 function isResponse(value: unknown): value is Response<unknown> {
