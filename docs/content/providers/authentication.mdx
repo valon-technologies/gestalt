@@ -8,7 +8,7 @@ upstream APIs on behalf of callers.
 ## How authentication providers work
 
 When a request arrives without a valid session, Gestalt asks the configured
-authentication provider to begin login, redirects the user to the identity provider, and
+authentication provider to begin authentication, redirects the user to the identity provider, and
 then calls the provider again to complete the callback. After that, Gestalt
 issues and stores its own session.
 
@@ -73,7 +73,7 @@ providers:
 
 ## Building Your Own Authentication Provider
 
-Implementation details for `BeginLogin`, callback handling, optional bearer
+Implementation details for `BeginAuthentication`, callback handling, optional bearer
 token validation, and release packaging now live under
 [Custom Providers > Authentication](/custom-providers/authentication).
 

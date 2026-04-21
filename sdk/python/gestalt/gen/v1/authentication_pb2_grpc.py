@@ -37,6 +37,21 @@ class AuthenticationProviderStub(object):
         Args:
             channel: A grpc.Channel.
         """
+        self.BeginAuthentication = channel.unary_unary(
+                '/gestalt.provider.v1.AuthenticationProvider/BeginAuthentication',
+                request_serializer=v1_dot_authentication__pb2.BeginAuthenticationRequest.SerializeToString,
+                response_deserializer=v1_dot_authentication__pb2.BeginAuthenticationResponse.FromString,
+                _registered_method=True)
+        self.CompleteAuthentication = channel.unary_unary(
+                '/gestalt.provider.v1.AuthenticationProvider/CompleteAuthentication',
+                request_serializer=v1_dot_authentication__pb2.CompleteAuthenticationRequest.SerializeToString,
+                response_deserializer=v1_dot_authentication__pb2.AuthenticatedUser.FromString,
+                _registered_method=True)
+        self.Authenticate = channel.unary_unary(
+                '/gestalt.provider.v1.AuthenticationProvider/Authenticate',
+                request_serializer=v1_dot_authentication__pb2.AuthenticateRequest.SerializeToString,
+                response_deserializer=v1_dot_authentication__pb2.AuthenticatedUser.FromString,
+                _registered_method=True)
         self.BeginLogin = channel.unary_unary(
                 '/gestalt.provider.v1.AuthenticationProvider/BeginLogin',
                 request_serializer=v1_dot_authentication__pb2.BeginLoginRequest.SerializeToString,
@@ -64,20 +79,41 @@ class AuthenticationProviderServicer(object):
     protocol.
     """
 
-    def BeginLogin(self, request, context):
+    def BeginAuthentication(self, request, context):
         """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CompleteAuthentication(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Authenticate(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def BeginLogin(self, request, context):
+        """Deprecated: use BeginAuthentication.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def CompleteLogin(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Deprecated: use CompleteAuthentication.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def ValidateExternalToken(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Deprecated: use Authenticate.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -91,6 +127,21 @@ class AuthenticationProviderServicer(object):
 
 def add_AuthenticationProviderServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'BeginAuthentication': grpc.unary_unary_rpc_method_handler(
+                    servicer.BeginAuthentication,
+                    request_deserializer=v1_dot_authentication__pb2.BeginAuthenticationRequest.FromString,
+                    response_serializer=v1_dot_authentication__pb2.BeginAuthenticationResponse.SerializeToString,
+            ),
+            'CompleteAuthentication': grpc.unary_unary_rpc_method_handler(
+                    servicer.CompleteAuthentication,
+                    request_deserializer=v1_dot_authentication__pb2.CompleteAuthenticationRequest.FromString,
+                    response_serializer=v1_dot_authentication__pb2.AuthenticatedUser.SerializeToString,
+            ),
+            'Authenticate': grpc.unary_unary_rpc_method_handler(
+                    servicer.Authenticate,
+                    request_deserializer=v1_dot_authentication__pb2.AuthenticateRequest.FromString,
+                    response_serializer=v1_dot_authentication__pb2.AuthenticatedUser.SerializeToString,
+            ),
             'BeginLogin': grpc.unary_unary_rpc_method_handler(
                     servicer.BeginLogin,
                     request_deserializer=v1_dot_authentication__pb2.BeginLoginRequest.FromString,
@@ -123,6 +174,87 @@ class AuthenticationProvider(object):
     """AuthenticationProvider models the shared Gestalt authentication-provider
     protocol.
     """
+
+    @staticmethod
+    def BeginAuthentication(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.AuthenticationProvider/BeginAuthentication',
+            v1_dot_authentication__pb2.BeginAuthenticationRequest.SerializeToString,
+            v1_dot_authentication__pb2.BeginAuthenticationResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CompleteAuthentication(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.AuthenticationProvider/CompleteAuthentication',
+            v1_dot_authentication__pb2.CompleteAuthenticationRequest.SerializeToString,
+            v1_dot_authentication__pb2.AuthenticatedUser.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Authenticate(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.AuthenticationProvider/Authenticate',
+            v1_dot_authentication__pb2.AuthenticateRequest.SerializeToString,
+            v1_dot_authentication__pb2.AuthenticatedUser.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def BeginLogin(request,

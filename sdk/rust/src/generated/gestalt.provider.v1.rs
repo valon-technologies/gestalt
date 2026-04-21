@@ -19,9 +19,9 @@ pub struct AuthenticatedUser {
         ::prost::alloc::string::String,
     >,
 }
-/// BeginLoginRequest starts an interactive login flow.
+/// BeginAuthenticationRequest starts an interactive authentication flow.
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BeginLoginRequest {
+pub struct BeginAuthenticationRequest {
     /// callback_url is the host-managed URL the provider should redirect back to.
     #[prost(string, tag = "1")]
     pub callback_url: ::prost::alloc::string::String,
@@ -39,18 +39,18 @@ pub struct BeginLoginRequest {
         ::prost::alloc::string::String,
     >,
 }
-/// BeginLoginResponse returns the provider-managed authorization URL and opaque
-/// provider state that must be preserved until completion.
+/// BeginAuthenticationResponse returns the provider-managed authorization URL and
+/// opaque provider state that must be preserved until completion.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct BeginLoginResponse {
+pub struct BeginAuthenticationResponse {
     #[prost(string, tag = "1")]
     pub authorization_url: ::prost::alloc::string::String,
     #[prost(bytes = "vec", tag = "2")]
     pub provider_state: ::prost::alloc::vec::Vec<u8>,
 }
-/// CompleteLoginRequest finishes an interactive login flow.
+/// CompleteAuthenticationRequest finishes an interactive authentication flow.
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CompleteLoginRequest {
+pub struct CompleteAuthenticationRequest {
     /// query contains the callback URL query parameters returned by the identity
     /// provider.
     #[prost(btree_map = "string, string", tag = "1")]
@@ -58,15 +58,94 @@ pub struct CompleteLoginRequest {
         ::prost::alloc::string::String,
         ::prost::alloc::string::String,
     >,
-    /// provider_state is the opaque state returned from BeginLoginResponse.
+    /// provider_state is the opaque state returned from BeginAuthenticationResponse.
     #[prost(bytes = "vec", tag = "2")]
     pub provider_state: ::prost::alloc::vec::Vec<u8>,
     /// callback_url is the fully qualified callback URL used by the host.
     #[prost(string, tag = "3")]
     pub callback_url: ::prost::alloc::string::String,
 }
-/// ValidateExternalTokenRequest asks the provider to validate a token minted
-/// outside the interactive login flow.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct TokenAuthInput {
+    #[prost(string, tag = "1")]
+    pub token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HttpRequestAuthInput {
+    #[prost(string, tag = "1")]
+    pub method: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub url: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, string", tag = "3")]
+    pub headers: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(btree_map = "string, string", tag = "4")]
+    pub query: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+}
+/// AuthenticateRequest asks the provider to validate an external authentication
+/// input, such as a bearer token or signed HTTP request.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AuthenticateRequest {
+    #[prost(btree_map = "string, string", tag = "10")]
+    pub options: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(oneof = "authenticate_request::Input", tags = "1, 2")]
+    pub input: ::core::option::Option<authenticate_request::Input>,
+}
+/// Nested message and enum types in `AuthenticateRequest`.
+pub mod authenticate_request {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Input {
+        #[prost(message, tag = "1")]
+        Token(super::TokenAuthInput),
+        #[prost(message, tag = "2")]
+        Http(super::HttpRequestAuthInput),
+    }
+}
+/// Deprecated: use BeginAuthenticationRequest.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BeginLoginRequest {
+    #[prost(string, tag = "1")]
+    pub callback_url: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub host_state: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "3")]
+    pub scopes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(btree_map = "string, string", tag = "4")]
+    pub options: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+}
+/// Deprecated: use BeginAuthenticationResponse.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct BeginLoginResponse {
+    #[prost(string, tag = "1")]
+    pub authorization_url: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "2")]
+    pub provider_state: ::prost::alloc::vec::Vec<u8>,
+}
+/// Deprecated: use CompleteAuthenticationRequest.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CompleteLoginRequest {
+    #[prost(btree_map = "string, string", tag = "1")]
+    pub query: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(bytes = "vec", tag = "2")]
+    pub provider_state: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag = "3")]
+    pub callback_url: ::prost::alloc::string::String,
+}
+/// Deprecated: use AuthenticateRequest with token input.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ValidateExternalTokenRequest {
     #[prost(string, tag = "1")]
@@ -170,6 +249,62 @@ pub mod authentication_provider_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        pub async fn begin_authentication(
+            &mut self,
+            request: impl tonic::IntoRequest<super::BeginAuthenticationRequest>,
+        ) -> std::result::Result<tonic::Response<super::BeginAuthenticationResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AuthenticationProvider/BeginAuthentication",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthenticationProvider",
+                "BeginAuthentication",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn complete_authentication(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CompleteAuthenticationRequest>,
+        ) -> std::result::Result<tonic::Response<super::AuthenticatedUser>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AuthenticationProvider/CompleteAuthentication",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthenticationProvider",
+                "CompleteAuthentication",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn authenticate(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AuthenticateRequest>,
+        ) -> std::result::Result<tonic::Response<super::AuthenticatedUser>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AuthenticationProvider/Authenticate",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthenticationProvider",
+                "Authenticate",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Deprecated: use BeginAuthentication.
         pub async fn begin_login(
             &mut self,
             request: impl tonic::IntoRequest<super::BeginLoginRequest>,
@@ -189,6 +324,7 @@ pub mod authentication_provider_client {
             ));
             self.inner.unary(req, path, codec).await
         }
+        /// Deprecated: use CompleteAuthentication.
         pub async fn complete_login(
             &mut self,
             request: impl tonic::IntoRequest<super::CompleteLoginRequest>,
@@ -207,6 +343,7 @@ pub mod authentication_provider_client {
             ));
             self.inner.unary(req, path, codec).await
         }
+        /// Deprecated: use Authenticate.
         pub async fn validate_external_token(
             &mut self,
             request: impl tonic::IntoRequest<super::ValidateExternalTokenRequest>,
@@ -259,14 +396,29 @@ pub mod authentication_provider_server {
     /// Generated trait containing gRPC methods that should be implemented for use with AuthenticationProviderServer.
     #[async_trait]
     pub trait AuthenticationProvider: std::marker::Send + std::marker::Sync + 'static {
+        async fn begin_authentication(
+            &self,
+            request: tonic::Request<super::BeginAuthenticationRequest>,
+        ) -> std::result::Result<tonic::Response<super::BeginAuthenticationResponse>, tonic::Status>;
+        async fn complete_authentication(
+            &self,
+            request: tonic::Request<super::CompleteAuthenticationRequest>,
+        ) -> std::result::Result<tonic::Response<super::AuthenticatedUser>, tonic::Status>;
+        async fn authenticate(
+            &self,
+            request: tonic::Request<super::AuthenticateRequest>,
+        ) -> std::result::Result<tonic::Response<super::AuthenticatedUser>, tonic::Status>;
+        /// Deprecated: use BeginAuthentication.
         async fn begin_login(
             &self,
             request: tonic::Request<super::BeginLoginRequest>,
         ) -> std::result::Result<tonic::Response<super::BeginLoginResponse>, tonic::Status>;
+        /// Deprecated: use CompleteAuthentication.
         async fn complete_login(
             &self,
             request: tonic::Request<super::CompleteLoginRequest>,
         ) -> std::result::Result<tonic::Response<super::AuthenticatedUser>, tonic::Status>;
+        /// Deprecated: use Authenticate.
         async fn validate_external_token(
             &self,
             request: tonic::Request<super::ValidateExternalTokenRequest>,
@@ -351,6 +503,136 @@ pub mod authentication_provider_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
+                "/gestalt.provider.v1.AuthenticationProvider/BeginAuthentication" => {
+                    #[allow(non_camel_case_types)]
+                    struct BeginAuthenticationSvc<T: AuthenticationProvider>(pub Arc<T>);
+                    impl<T: AuthenticationProvider>
+                        tonic::server::UnaryService<super::BeginAuthenticationRequest>
+                        for BeginAuthenticationSvc<T>
+                    {
+                        type Response = super::BeginAuthenticationResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::BeginAuthenticationRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AuthenticationProvider>::begin_authentication(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = BeginAuthenticationSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AuthenticationProvider/CompleteAuthentication" => {
+                    #[allow(non_camel_case_types)]
+                    struct CompleteAuthenticationSvc<T: AuthenticationProvider>(pub Arc<T>);
+                    impl<T: AuthenticationProvider>
+                        tonic::server::UnaryService<super::CompleteAuthenticationRequest>
+                        for CompleteAuthenticationSvc<T>
+                    {
+                        type Response = super::AuthenticatedUser;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::CompleteAuthenticationRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AuthenticationProvider>::complete_authentication(
+                                    &inner, request,
+                                )
+                                .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = CompleteAuthenticationSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AuthenticationProvider/Authenticate" => {
+                    #[allow(non_camel_case_types)]
+                    struct AuthenticateSvc<T: AuthenticationProvider>(pub Arc<T>);
+                    impl<T: AuthenticationProvider>
+                        tonic::server::UnaryService<super::AuthenticateRequest>
+                        for AuthenticateSvc<T>
+                    {
+                        type Response = super::AuthenticatedUser;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::AuthenticateRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AuthenticationProvider>::authenticate(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = AuthenticateSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 "/gestalt.provider.v1.AuthenticationProvider/BeginLogin" => {
                     #[allow(non_camel_case_types)]
                     struct BeginLoginSvc<T: AuthenticationProvider>(pub Arc<T>);

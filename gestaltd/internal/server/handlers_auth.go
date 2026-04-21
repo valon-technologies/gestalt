@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/authcallback"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
@@ -141,7 +143,14 @@ func (s *Server) startBrowserLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) beginLogin(w http.ResponseWriter, r *http.Request, auth authRuntime, state, nextPath string) (string, error) {
-	loginURLRaw, err := loginURLForRequest(r.Context(), auth.provider, state)
+	callbackURL, err := s.authCallbackURLForRequest(r)
+	if err != nil {
+		return "", errors.New("failed to resolve callback URL")
+	}
+	loginURLRaw, err := loginURLForRequest(r.Context(), auth.provider, &core.BeginAuthenticationRequest{
+		CallbackURL: callbackURL,
+		HostState:   state,
+	})
 	if err != nil {
 		return "", errors.New("failed to generate login URL")
 	}
@@ -266,11 +275,34 @@ func browserLoginStateForNextPath(nextPath string) string {
 	return parsed.Path
 }
 
-func loginURLForRequest(ctx context.Context, provider core.AuthenticationProvider, state string) (string, error) {
-	if providerWithContext, ok := provider.(core.LoginURLContextProvider); ok {
-		return providerWithContext.LoginURLContext(ctx, state)
+func loginURLForRequest(ctx context.Context, provider core.AuthenticationProvider, req *core.BeginAuthenticationRequest) (string, error) {
+	resp, err := provider.BeginAuthentication(ctx, req)
+	if err != nil {
+		return "", err
 	}
-	return provider.LoginURL(state)
+	if resp == nil {
+		return "", errors.New("authentication provider returned nil response")
+	}
+	upstreamState, err := authcallback.StateFromURL(resp.AuthorizationURL)
+	if err != nil {
+		return "", err
+	}
+	if len(resp.ProviderState) == 0 && upstreamState == req.HostState {
+		return resp.AuthorizationURL, nil
+	}
+	encodedState, err := authcallback.EncodeState(req.HostState, resp.ProviderState, upstreamState)
+	if err != nil {
+		return "", err
+	}
+	wrappedURL, _, err := authcallback.WithWrappedStateParam(resp.AuthorizationURL, encodedState)
+	if err != nil {
+		return "", err
+	}
+	return wrappedURL, nil
+}
+
+func (s *Server) authCallbackURLForRequest(r *http.Request) (string, error) {
+	return s.resolvePublicURL(r, config.AuthCallbackPath)
 }
 
 func (s *Server) resolvePublicURL(r *http.Request, raw string) (string, error) {
@@ -348,20 +380,6 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 	})
 }
 
-// StatefulCallbackHandler is an optional interface for authentication providers that need
-// the OAuth state parameter during callback (e.g., for PKCE where the
-// code_verifier is encrypted in the state).
-type StatefulCallbackHandler interface {
-	HandleCallbackWithState(ctx context.Context, code, state string) (*core.UserIdentity, string, error)
-}
-
-// RequestCallbackHandler is an optional interface for authentication providers that need
-// the full callback query map. This is used by executable authentication plugins so the
-// host can preserve callback state and provider-specific query parameters.
-type RequestCallbackHandler interface {
-	HandleCallbackRequest(ctx context.Context, query url.Values) (*core.UserIdentity, string, error)
-}
-
 func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
 	auditAllowed := false
@@ -377,12 +395,12 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		s.auditHTTPEvent(r.Context(), nil, auth.providerName, "auth.login.complete", auditAllowed, auditErr)
 	}()
 
-	code := r.URL.Query().Get("code")
-	if code == "" {
+	if r.URL.Query().Get("code") == "" && r.URL.Query().Get("error") == "" {
 		auditErr = errors.New("missing code parameter")
 		writeError(w, http.StatusBadRequest, "missing code parameter")
 		return
 	}
+
 	loginState, err := s.loginStateForCallback(r)
 	if err != nil {
 		auditErr = errors.New("login state validation failed")
@@ -404,18 +422,37 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var identity *core.UserIdentity
-	var originalState string
-
-	if handler, ok := auth.provider.(RequestCallbackHandler); ok {
-		identity, originalState, err = handler.HandleCallbackRequest(r.Context(), r.URL.Query())
-	} else if stateful, ok := auth.provider.(StatefulCallbackHandler); ok {
-		state := r.URL.Query().Get("state")
-		identity, originalState, err = stateful.HandleCallbackWithState(r.Context(), code, state)
-	} else {
-		originalState = r.URL.Query().Get("state")
-		identity, err = auth.provider.HandleCallback(r.Context(), code)
+	callbackURL, err := s.authCallbackURLForRequest(r)
+	if err != nil {
+		auditErr = errors.New("failed to resolve callback URL")
+		writeError(w, http.StatusInternalServerError, "failed to resolve callback URL")
+		return
 	}
+	hostState, providerState, upstreamState, err := authcallback.DecodeState(r.URL.Query().Get("state"))
+	if err != nil {
+		auditErr = errors.New("login state validation failed")
+		slog.ErrorContext(r.Context(), "login state validation failed", "error", err)
+		writeError(w, http.StatusForbidden, "login state validation failed")
+		return
+	}
+	normalizedQuery := authcallback.FirstQueryValues(r.URL.Query())
+	if normalizedQuery == nil {
+		normalizedQuery = map[string]string{}
+	}
+	if upstreamState != "" {
+		normalizedQuery["state"] = upstreamState
+	} else {
+		delete(normalizedQuery, "state")
+	}
+	originalState := hostState
+	if originalState == "" {
+		originalState = r.URL.Query().Get("state")
+	}
+	identity, err := auth.provider.CompleteAuthentication(r.Context(), &core.CompleteAuthenticationRequest{
+		CallbackURL:   callbackURL,
+		Query:         normalizedQuery,
+		ProviderState: providerState,
+	})
 	if err != nil {
 		auditErr = errors.New("login failed")
 		slog.ErrorContext(r.Context(), "login callback failed", "error", err)

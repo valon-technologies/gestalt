@@ -10662,9 +10662,18 @@ func TestLoginCallbackWithStatefulHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start login: %v", err)
 	}
+	var loginResult map[string]string
+	if err := json.NewDecoder(loginResp.Body).Decode(&loginResult); err != nil {
+		t.Fatalf("decoding login response: %v", err)
+	}
 	_ = loginResp.Body.Close()
 
-	resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=encrypted-state")
+	loginURL, err := url.Parse(loginResult["url"])
+	if err != nil {
+		t.Fatalf("url.Parse(loginResult[url]): %v", err)
+	}
+
+	resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=" + url.QueryEscape(loginURL.Query().Get("state")))
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
@@ -11793,16 +11802,20 @@ type stubAuthWithLoginURL struct {
 	loginURLCtxFn func(context.Context, string) (string, error)
 }
 
-func (s *stubAuthWithLoginURL) LoginURL(state string) (string, error) {
-	s.capturedState = state
-	return s.loginURL, nil
-}
-
-func (s *stubAuthWithLoginURL) LoginURLContext(ctx context.Context, state string) (string, error) {
-	if s.loginURLCtxFn != nil {
-		return s.loginURLCtxFn(ctx, state)
+func (s *stubAuthWithLoginURL) BeginAuthentication(ctx context.Context, req *core.BeginAuthenticationRequest) (*core.BeginAuthenticationResponse, error) {
+	state := ""
+	if req != nil {
+		state = req.HostState
 	}
-	return s.LoginURL(state)
+	s.capturedState = state
+	if s.loginURLCtxFn != nil {
+		url, err := s.loginURLCtxFn(ctx, state)
+		if err != nil {
+			return nil, err
+		}
+		return &core.BeginAuthenticationResponse{AuthorizationURL: url}, nil
+	}
+	return &core.BeginAuthenticationResponse{AuthorizationURL: s.loginURL}, nil
 }
 
 type stubIntegrationWithAuthURL struct {
@@ -12539,8 +12552,21 @@ type stubStatefulAuth struct {
 	handleWithState func(context.Context, string, string) (*core.UserIdentity, string, error)
 }
 
-func (s *stubStatefulAuth) HandleCallbackWithState(ctx context.Context, code, state string) (*core.UserIdentity, string, error) {
-	return s.handleWithState(ctx, code, state)
+func (s *stubStatefulAuth) BeginAuthentication(_ context.Context, req *core.BeginAuthenticationRequest) (*core.BeginAuthenticationResponse, error) {
+	return &core.BeginAuthenticationResponse{
+		AuthorizationURL: "https://auth.example.test/login?state=encrypted-state",
+	}, nil
+}
+
+func (s *stubStatefulAuth) CompleteAuthentication(ctx context.Context, req *core.CompleteAuthenticationRequest) (*core.UserIdentity, error) {
+	code := ""
+	state := ""
+	if req != nil {
+		code = req.Query["code"]
+		state = req.Query["state"]
+	}
+	identity, _, err := s.handleWithState(ctx, code, state)
+	return identity, err
 }
 
 func (s *stubStatefulAuth) IssueSessionToken(identity *core.UserIdentity) (string, error) {
@@ -14746,21 +14772,25 @@ func (s *stubHostIssuedSessionAuth) Name() string {
 	return "host-issued"
 }
 
-func (s *stubHostIssuedSessionAuth) LoginURL(state string) (string, error) {
+func (s *stubHostIssuedSessionAuth) BeginAuthentication(_ context.Context, req *core.BeginAuthenticationRequest) (*core.BeginAuthenticationResponse, error) {
 	host := s.loginHost
 	if host == "" {
 		host = "idp.example.test"
 	}
-	return "https://" + host + "/login?state=" + url.QueryEscape(state), nil
+	return &core.BeginAuthenticationResponse{
+		AuthorizationURL: "https://" + host + "/login?state=" + url.QueryEscape(req.HostState),
+	}, nil
 }
 
-func (s *stubHostIssuedSessionAuth) HandleCallback(_ context.Context, _ string) (*core.UserIdentity, error) {
-	return nil, fmt.Errorf("use HandleCallbackWithState")
-}
-
-func (s *stubHostIssuedSessionAuth) HandleCallbackWithState(_ context.Context, code, state string) (*core.UserIdentity, string, error) {
+func (s *stubHostIssuedSessionAuth) CompleteAuthentication(_ context.Context, req *core.CompleteAuthenticationRequest) (*core.UserIdentity, error) {
+	code := ""
+	state := ""
+	if req != nil {
+		code = req.Query["code"]
+		state = req.Query["state"]
+	}
 	if code != "good-code" {
-		return nil, "", fmt.Errorf("unexpected code %q", code)
+		return nil, fmt.Errorf("unexpected code %q", code)
 	}
 	email := s.email
 	if email == "" {
@@ -14770,11 +14800,17 @@ func (s *stubHostIssuedSessionAuth) HandleCallbackWithState(_ context.Context, c
 	if displayName == "" {
 		displayName = "Host Issued"
 	}
-	return &core.UserIdentity{Email: email, DisplayName: displayName}, state, nil
+	if state == "" {
+		return nil, fmt.Errorf("missing state")
+	}
+	return &core.UserIdentity{Email: email, DisplayName: displayName}, nil
 }
 
-func (s *stubHostIssuedSessionAuth) ValidateToken(_ context.Context, token string) (*core.UserIdentity, error) {
-	return session.ValidateToken(token, s.secret)
+func (s *stubHostIssuedSessionAuth) Authenticate(_ context.Context, req *core.AuthenticateRequest) (*core.UserIdentity, error) {
+	if req == nil || req.Token == nil {
+		return nil, fmt.Errorf("token input is required")
+	}
+	return session.ValidateToken(req.Token.Token, s.secret)
 }
 
 func (s *stubHostIssuedSessionAuth) SessionTokenTTL() time.Duration {

@@ -14,10 +14,10 @@ import (
 // fresh provider configured to talk to mockServer for any external HTTP calls.
 //
 // The mock server must recognize these well-known values:
-//   - "valid-code" for HandleCallback (returns a valid identity)
-//   - "invalid-code" for HandleCallback (returns an error)
-//   - "valid-token" for ValidateToken (returns a valid identity)
-//   - "invalid-token" for ValidateToken (returns an error)
+//   - "valid-code" in CompleteAuthenticationRequest.Query["code"] (returns a valid identity)
+//   - "invalid-code" in CompleteAuthenticationRequest.Query["code"] (returns an error)
+//   - "valid-token" for Authenticate (returns a valid identity)
+//   - "invalid-token" for Authenticate (returns an error)
 func RunAuthenticationProviderTests(t *testing.T, newProvider func(t *testing.T, mockURL string) core.AuthenticationProvider, mockServer *httptest.Server) {
 	if mockServer == nil {
 		t.Fatal("RunAuthenticationProviderTests requires a mock server")
@@ -31,58 +31,75 @@ func RunAuthenticationProviderTests(t *testing.T, newProvider func(t *testing.T,
 		}
 	})
 
-	t.Run("LoginURL", func(t *testing.T) {
-		url, err := provider.LoginURL("test-state-123")
+	t.Run("BeginAuthentication", func(t *testing.T) {
+		resp, err := provider.BeginAuthentication(context.Background(), &core.BeginAuthenticationRequest{
+			HostState: "test-state-123",
+		})
 		if err != nil {
-			t.Fatalf("LoginURL: %v", err)
+			t.Fatalf("BeginAuthentication: %v", err)
 		}
-		if url == "" {
-			t.Fatal("LoginURL returned empty string")
+		if resp == nil {
+			t.Fatal("BeginAuthentication returned nil response")
 		}
-		if !strings.Contains(url, "test-state-123") {
-			t.Errorf("LoginURL should contain state parameter; got %q", url)
+		if resp.AuthorizationURL == "" {
+			t.Fatal("BeginAuthentication returned empty authorization URL")
+		}
+		if !strings.Contains(resp.AuthorizationURL, "test-state-123") {
+			t.Errorf("BeginAuthentication should contain state parameter; got %q", resp.AuthorizationURL)
 		}
 	})
 
-	t.Run("HandleCallback", func(t *testing.T) {
+	t.Run("CompleteAuthentication", func(t *testing.T) {
 		ctx := context.Background()
 
-		identity, err := provider.HandleCallback(ctx, "valid-code")
+		identity, err := provider.CompleteAuthentication(ctx, &core.CompleteAuthenticationRequest{
+			Query: map[string]string{"code": "valid-code"},
+		})
 		if err != nil {
-			t.Fatalf("HandleCallback(valid-code): %v", err)
+			t.Fatalf("CompleteAuthentication(valid-code): %v", err)
 		}
 		if identity == nil {
-			t.Fatal("HandleCallback returned nil identity")
+			t.Fatal("CompleteAuthentication returned nil identity")
 			return
 		}
 		if identity.Email == "" {
 			t.Error("identity.Email is empty")
 		}
 
-		_, err = provider.HandleCallback(ctx, "invalid-code")
+		_, err = provider.CompleteAuthentication(ctx, &core.CompleteAuthenticationRequest{
+			Query: map[string]string{"code": "invalid-code"},
+		})
 		if err == nil {
-			t.Error("HandleCallback(invalid-code): expected error, got nil")
+			t.Error("CompleteAuthentication(invalid-code): expected error, got nil")
 		}
 	})
 
-	t.Run("ValidateToken", func(t *testing.T) {
+	t.Run("Authenticate", func(t *testing.T) {
 		ctx := context.Background()
+		authenticator, ok := provider.(core.Authenticator)
+		if !ok {
+			t.Fatal("provider does not implement core.Authenticator")
+		}
 
-		identity, err := provider.ValidateToken(ctx, "valid-token")
+		identity, err := authenticator.Authenticate(ctx, &core.AuthenticateRequest{
+			Token: &core.TokenAuthInput{Token: "valid-token"},
+		})
 		if err != nil {
-			t.Fatalf("ValidateToken(valid-token): %v", err)
+			t.Fatalf("Authenticate(valid-token): %v", err)
 		}
 		if identity == nil {
-			t.Fatal("ValidateToken returned nil identity")
+			t.Fatal("Authenticate returned nil identity")
 			return
 		}
 		if identity.Email == "" {
 			t.Error("identity.Email is empty")
 		}
 
-		_, err = provider.ValidateToken(ctx, "invalid-token")
+		_, err = authenticator.Authenticate(ctx, &core.AuthenticateRequest{
+			Token: &core.TokenAuthInput{Token: "invalid-token"},
+		})
 		if err == nil {
-			t.Error("ValidateToken(invalid-token): expected error, got nil")
+			t.Error("Authenticate(invalid-token): expected error, got nil")
 		}
 	})
 }

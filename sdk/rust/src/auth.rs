@@ -5,7 +5,10 @@ use tonic::codegen::async_trait;
 use crate::api::RuntimeMetadata;
 use crate::error::{Error, Result};
 pub use crate::generated::v1::{
-    AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest,
+    AuthenticateRequest, AuthenticatedUser, BeginAuthenticationRequest,
+    BeginAuthenticationResponse, BeginLoginRequest, BeginLoginResponse,
+    CompleteAuthenticationRequest, CompleteLoginRequest, HttpRequestAuthInput, TokenAuthInput,
+    authenticate_request,
 };
 
 #[async_trait]
@@ -40,13 +43,58 @@ pub trait AuthenticationProvider: Send + Sync + 'static {
         Ok(())
     }
 
-    /// Starts an interactive login flow.
-    async fn begin_login(&self, req: BeginLoginRequest) -> Result<BeginLoginResponse>;
+    /// Starts an interactive authentication flow.
+    async fn begin_authentication(
+        &self,
+        _req: BeginAuthenticationRequest,
+    ) -> Result<BeginAuthenticationResponse> {
+        Err(Error::unimplemented(
+            "authentication provider does not implement begin_authentication",
+        ))
+    }
 
-    /// Finishes an interactive login flow.
-    async fn complete_login(&self, req: CompleteLoginRequest) -> Result<AuthenticatedUser>;
+    /// Finishes an interactive authentication flow.
+    async fn complete_authentication(
+        &self,
+        _req: CompleteAuthenticationRequest,
+    ) -> Result<AuthenticatedUser> {
+        Err(Error::unimplemented(
+            "authentication provider does not implement complete_authentication",
+        ))
+    }
 
-    /// Validates an externally minted token when supported.
+    /// Validates an externally minted token or HTTP request when supported.
+    async fn authenticate(&self, req: AuthenticateRequest) -> Result<Option<AuthenticatedUser>> {
+        let Some(input) = req.input else {
+            return Err(Error::unimplemented(
+                "authentication provider does not support external authentication",
+            ));
+        };
+        match input {
+            authenticate_request::Input::Token(token) => {
+                self.validate_external_token(&token.token).await
+            }
+            authenticate_request::Input::Http(_) => Err(Error::unimplemented(
+                "authentication provider does not support external authentication",
+            )),
+        }
+    }
+
+    /// Deprecated: use begin_authentication.
+    async fn begin_login(&self, _req: BeginLoginRequest) -> Result<BeginLoginResponse> {
+        Err(Error::unimplemented(
+            "authentication provider does not implement begin_login",
+        ))
+    }
+
+    /// Deprecated: use complete_authentication.
+    async fn complete_login(&self, _req: CompleteLoginRequest) -> Result<AuthenticatedUser> {
+        Err(Error::unimplemented(
+            "authentication provider does not implement complete_login",
+        ))
+    }
+
+    /// Deprecated: use authenticate with TokenAuthInput.
     async fn validate_external_token(&self, _token: &str) -> Result<Option<AuthenticatedUser>> {
         Err(Error::unimplemented(
             "authentication provider does not support external token validation",

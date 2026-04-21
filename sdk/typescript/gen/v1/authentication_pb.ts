@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/authentication.proto.
  */
 export const file_v1_authentication: GenFile = /*@__PURE__*/
-  fileDesc("Chd2MS9hdXRoZW50aWNhdGlvbi5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSLoAQoRQXV0aGVudGljYXRlZFVzZXISDwoHc3ViamVjdBgBIAEoCRINCgVlbWFpbBgCIAEoCRIWCg5lbWFpbF92ZXJpZmllZBgDIAEoCBIUCgxkaXNwbGF5X25hbWUYBCABKAkSEgoKYXZhdGFyX3VybBgFIAEoCRJCCgZjbGFpbXMYBiADKAsyMi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhlbnRpY2F0ZWRVc2VyLkNsYWltc0VudHJ5Gi0KC0NsYWltc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiwwEKEUJlZ2luTG9naW5SZXF1ZXN0EhQKDGNhbGxiYWNrX3VybBgBIAEoCRISCgpob3N0X3N0YXRlGAIgASgJEg4KBnNjb3BlcxgDIAMoCRJECgdvcHRpb25zGAQgAygLMjMuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpbkxvZ2luUmVxdWVzdC5PcHRpb25zRW50cnkaLgoMT3B0aW9uc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiRwoSQmVnaW5Mb2dpblJlc3BvbnNlEhkKEWF1dGhvcml6YXRpb25fdXJsGAEgASgJEhYKDnByb3ZpZGVyX3N0YXRlGAIgASgMIrcBChRDb21wbGV0ZUxvZ2luUmVxdWVzdBJDCgVxdWVyeRgBIAMoCzI0Lmdlc3RhbHQucHJvdmlkZXIudjEuQ29tcGxldGVMb2dpblJlcXVlc3QuUXVlcnlFbnRyeRIWCg5wcm92aWRlcl9zdGF0ZRgCIAEoDBIUCgxjYWxsYmFja191cmwYAyABKAkaLAoKUXVlcnlFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIi0KHFZhbGlkYXRlRXh0ZXJuYWxUb2tlblJlcXVlc3QSDQoFdG9rZW4YASABKAkiMgoTQXV0aFNlc3Npb25TZXR0aW5ncxIbChNzZXNzaW9uX3R0bF9zZWNvbmRzGAEgASgDMqcDChZBdXRoZW50aWNhdGlvblByb3ZpZGVyEl0KCkJlZ2luTG9naW4SJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkJlZ2luTG9naW5SZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpbkxvZ2luUmVzcG9uc2USYgoNQ29tcGxldGVMb2dpbhIpLmdlc3RhbHQucHJvdmlkZXIudjEuQ29tcGxldGVMb2dpblJlcXVlc3QaJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhlbnRpY2F0ZWRVc2VyEnIKFVZhbGlkYXRlRXh0ZXJuYWxUb2tlbhIxLmdlc3RhbHQucHJvdmlkZXIudjEuVmFsaWRhdGVFeHRlcm5hbFRva2VuUmVxdWVzdBomLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aGVudGljYXRlZFVzZXISVgoSR2V0U2Vzc2lvblNldHRpbmdzEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GiguZ2VzdGFsdC5wcm92aWRlci52MS5BdXRoU2Vzc2lvblNldHRpbmdzQjtaOWdpdGh1Yi5jb20vdmFsb24tdGVjaG5vbG9naWVzL2dlc3RhbHQvc2RrL2dvL2dlbi92MTtwcm90b2IGcHJvdG8z", [file_google_protobuf_empty]);
+  fileDesc("Chd2MS9hdXRoZW50aWNhdGlvbi5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSLoAQoRQXV0aGVudGljYXRlZFVzZXISDwoHc3ViamVjdBgBIAEoCRINCgVlbWFpbBgCIAEoCRIWCg5lbWFpbF92ZXJpZmllZBgDIAEoCBIUCgxkaXNwbGF5X25hbWUYBCABKAkSEgoKYXZhdGFyX3VybBgFIAEoCRJCCgZjbGFpbXMYBiADKAsyMi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhlbnRpY2F0ZWRVc2VyLkNsYWltc0VudHJ5Gi0KC0NsYWltc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEi1QEKGkJlZ2luQXV0aGVudGljYXRpb25SZXF1ZXN0EhQKDGNhbGxiYWNrX3VybBgBIAEoCRISCgpob3N0X3N0YXRlGAIgASgJEg4KBnNjb3BlcxgDIAMoCRJNCgdvcHRpb25zGAQgAygLMjwuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpbkF1dGhlbnRpY2F0aW9uUmVxdWVzdC5PcHRpb25zRW50cnkaLgoMT3B0aW9uc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiUAobQmVnaW5BdXRoZW50aWNhdGlvblJlc3BvbnNlEhkKEWF1dGhvcml6YXRpb25fdXJsGAEgASgJEhYKDnByb3ZpZGVyX3N0YXRlGAIgASgMIskBCh1Db21wbGV0ZUF1dGhlbnRpY2F0aW9uUmVxdWVzdBJMCgVxdWVyeRgBIAMoCzI9Lmdlc3RhbHQucHJvdmlkZXIudjEuQ29tcGxldGVBdXRoZW50aWNhdGlvblJlcXVlc3QuUXVlcnlFbnRyeRIWCg5wcm92aWRlcl9zdGF0ZRgCIAEoDBIUCgxjYWxsYmFja191cmwYAyABKAkaLAoKUXVlcnlFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIh8KDlRva2VuQXV0aElucHV0Eg0KBXRva2VuGAEgASgJIp8CChRIVFRQUmVxdWVzdEF1dGhJbnB1dBIOCgZtZXRob2QYASABKAkSCwoDdXJsGAIgASgJEkcKB2hlYWRlcnMYAyADKAsyNi5nZXN0YWx0LnByb3ZpZGVyLnYxLkhUVFBSZXF1ZXN0QXV0aElucHV0LkhlYWRlcnNFbnRyeRJDCgVxdWVyeRgEIAMoCzI0Lmdlc3RhbHQucHJvdmlkZXIudjEuSFRUUFJlcXVlc3RBdXRoSW5wdXQuUXVlcnlFbnRyeRouCgxIZWFkZXJzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARosCgpRdWVyeUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEihwIKE0F1dGhlbnRpY2F0ZVJlcXVlc3QSNAoFdG9rZW4YASABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlRva2VuQXV0aElucHV0SAASOQoEaHR0cBgCIAEoCzIpLmdlc3RhbHQucHJvdmlkZXIudjEuSFRUUFJlcXVlc3RBdXRoSW5wdXRIABJGCgdvcHRpb25zGAogAygLMjUuZ2VzdGFsdC5wcm92aWRlci52MS5BdXRoZW50aWNhdGVSZXF1ZXN0Lk9wdGlvbnNFbnRyeRouCgxPcHRpb25zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUIHCgVpbnB1dCLDAQoRQmVnaW5Mb2dpblJlcXVlc3QSFAoMY2FsbGJhY2tfdXJsGAEgASgJEhIKCmhvc3Rfc3RhdGUYAiABKAkSDgoGc2NvcGVzGAMgAygJEkQKB29wdGlvbnMYBCADKAsyMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkJlZ2luTG9naW5SZXF1ZXN0Lk9wdGlvbnNFbnRyeRouCgxPcHRpb25zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJHChJCZWdpbkxvZ2luUmVzcG9uc2USGQoRYXV0aG9yaXphdGlvbl91cmwYASABKAkSFgoOcHJvdmlkZXJfc3RhdGUYAiABKAwitwEKFENvbXBsZXRlTG9naW5SZXF1ZXN0EkMKBXF1ZXJ5GAEgAygLMjQuZ2VzdGFsdC5wcm92aWRlci52MS5Db21wbGV0ZUxvZ2luUmVxdWVzdC5RdWVyeUVudHJ5EhYKDnByb3ZpZGVyX3N0YXRlGAIgASgMEhQKDGNhbGxiYWNrX3VybBgDIAEoCRosCgpRdWVyeUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiLQocVmFsaWRhdGVFeHRlcm5hbFRva2VuUmVxdWVzdBINCgV0b2tlbhgBIAEoCSIyChNBdXRoU2Vzc2lvblNldHRpbmdzEhsKE3Nlc3Npb25fdHRsX3NlY29uZHMYASABKAMy+QUKFkF1dGhlbnRpY2F0aW9uUHJvdmlkZXISeAoTQmVnaW5BdXRoZW50aWNhdGlvbhIvLmdlc3RhbHQucHJvdmlkZXIudjEuQmVnaW5BdXRoZW50aWNhdGlvblJlcXVlc3QaMC5nZXN0YWx0LnByb3ZpZGVyLnYxLkJlZ2luQXV0aGVudGljYXRpb25SZXNwb25zZRJ0ChZDb21wbGV0ZUF1dGhlbnRpY2F0aW9uEjIuZ2VzdGFsdC5wcm92aWRlci52MS5Db21wbGV0ZUF1dGhlbnRpY2F0aW9uUmVxdWVzdBomLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aGVudGljYXRlZFVzZXISYAoMQXV0aGVudGljYXRlEiguZ2VzdGFsdC5wcm92aWRlci52MS5BdXRoZW50aWNhdGVSZXF1ZXN0GiYuZ2VzdGFsdC5wcm92aWRlci52MS5BdXRoZW50aWNhdGVkVXNlchJdCgpCZWdpbkxvZ2luEiYuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpbkxvZ2luUmVxdWVzdBonLmdlc3RhbHQucHJvdmlkZXIudjEuQmVnaW5Mb2dpblJlc3BvbnNlEmIKDUNvbXBsZXRlTG9naW4SKS5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvbXBsZXRlTG9naW5SZXF1ZXN0GiYuZ2VzdGFsdC5wcm92aWRlci52MS5BdXRoZW50aWNhdGVkVXNlchJyChVWYWxpZGF0ZUV4dGVybmFsVG9rZW4SMS5nZXN0YWx0LnByb3ZpZGVyLnYxLlZhbGlkYXRlRXh0ZXJuYWxUb2tlblJlcXVlc3QaJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhlbnRpY2F0ZWRVc2VyElYKEkdldFNlc3Npb25TZXR0aW5ncxIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRooLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aFNlc3Npb25TZXR0aW5nc0I7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty]);
 
 /**
  * AuthenticatedUser is the normalized user identity returned by an authentication
@@ -60,11 +60,11 @@ export const AuthenticatedUserSchema: GenMessage<AuthenticatedUser> = /*@__PURE_
   messageDesc(file_v1_authentication, 0);
 
 /**
- * BeginLoginRequest starts an interactive login flow.
+ * BeginAuthenticationRequest starts an interactive authentication flow.
  *
- * @generated from message gestalt.provider.v1.BeginLoginRequest
+ * @generated from message gestalt.provider.v1.BeginAuthenticationRequest
  */
-export type BeginLoginRequest = Message<"gestalt.provider.v1.BeginLoginRequest"> & {
+export type BeginAuthenticationRequest = Message<"gestalt.provider.v1.BeginAuthenticationRequest"> & {
   /**
    * callback_url is the host-managed URL the provider should redirect back to.
    *
@@ -96,15 +96,195 @@ export type BeginLoginRequest = Message<"gestalt.provider.v1.BeginLoginRequest">
 };
 
 /**
+ * Describes the message gestalt.provider.v1.BeginAuthenticationRequest.
+ * Use `create(BeginAuthenticationRequestSchema)` to create a new message.
+ */
+export const BeginAuthenticationRequestSchema: GenMessage<BeginAuthenticationRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 1);
+
+/**
+ * BeginAuthenticationResponse returns the provider-managed authorization URL and
+ * opaque provider state that must be preserved until completion.
+ *
+ * @generated from message gestalt.provider.v1.BeginAuthenticationResponse
+ */
+export type BeginAuthenticationResponse = Message<"gestalt.provider.v1.BeginAuthenticationResponse"> & {
+  /**
+   * @generated from field: string authorization_url = 1;
+   */
+  authorizationUrl: string;
+
+  /**
+   * @generated from field: bytes provider_state = 2;
+   */
+  providerState: Uint8Array;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.BeginAuthenticationResponse.
+ * Use `create(BeginAuthenticationResponseSchema)` to create a new message.
+ */
+export const BeginAuthenticationResponseSchema: GenMessage<BeginAuthenticationResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 2);
+
+/**
+ * CompleteAuthenticationRequest finishes an interactive authentication flow.
+ *
+ * @generated from message gestalt.provider.v1.CompleteAuthenticationRequest
+ */
+export type CompleteAuthenticationRequest = Message<"gestalt.provider.v1.CompleteAuthenticationRequest"> & {
+  /**
+   * query contains the callback URL query parameters returned by the identity
+   * provider.
+   *
+   * @generated from field: map<string, string> query = 1;
+   */
+  query: { [key: string]: string };
+
+  /**
+   * provider_state is the opaque state returned from BeginAuthenticationResponse.
+   *
+   * @generated from field: bytes provider_state = 2;
+   */
+  providerState: Uint8Array;
+
+  /**
+   * callback_url is the fully qualified callback URL used by the host.
+   *
+   * @generated from field: string callback_url = 3;
+   */
+  callbackUrl: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.CompleteAuthenticationRequest.
+ * Use `create(CompleteAuthenticationRequestSchema)` to create a new message.
+ */
+export const CompleteAuthenticationRequestSchema: GenMessage<CompleteAuthenticationRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 3);
+
+/**
+ * @generated from message gestalt.provider.v1.TokenAuthInput
+ */
+export type TokenAuthInput = Message<"gestalt.provider.v1.TokenAuthInput"> & {
+  /**
+   * @generated from field: string token = 1;
+   */
+  token: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.TokenAuthInput.
+ * Use `create(TokenAuthInputSchema)` to create a new message.
+ */
+export const TokenAuthInputSchema: GenMessage<TokenAuthInput> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 4);
+
+/**
+ * @generated from message gestalt.provider.v1.HTTPRequestAuthInput
+ */
+export type HTTPRequestAuthInput = Message<"gestalt.provider.v1.HTTPRequestAuthInput"> & {
+  /**
+   * @generated from field: string method = 1;
+   */
+  method: string;
+
+  /**
+   * @generated from field: string url = 2;
+   */
+  url: string;
+
+  /**
+   * @generated from field: map<string, string> headers = 3;
+   */
+  headers: { [key: string]: string };
+
+  /**
+   * @generated from field: map<string, string> query = 4;
+   */
+  query: { [key: string]: string };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.HTTPRequestAuthInput.
+ * Use `create(HTTPRequestAuthInputSchema)` to create a new message.
+ */
+export const HTTPRequestAuthInputSchema: GenMessage<HTTPRequestAuthInput> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 5);
+
+/**
+ * AuthenticateRequest asks the provider to validate an external authentication
+ * input, such as a bearer token or signed HTTP request.
+ *
+ * @generated from message gestalt.provider.v1.AuthenticateRequest
+ */
+export type AuthenticateRequest = Message<"gestalt.provider.v1.AuthenticateRequest"> & {
+  /**
+   * @generated from oneof gestalt.provider.v1.AuthenticateRequest.input
+   */
+  input: {
+    /**
+     * @generated from field: gestalt.provider.v1.TokenAuthInput token = 1;
+     */
+    value: TokenAuthInput;
+    case: "token";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.HTTPRequestAuthInput http = 2;
+     */
+    value: HTTPRequestAuthInput;
+    case: "http";
+  } | { case: undefined; value?: undefined };
+
+  /**
+   * @generated from field: map<string, string> options = 10;
+   */
+  options: { [key: string]: string };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AuthenticateRequest.
+ * Use `create(AuthenticateRequestSchema)` to create a new message.
+ */
+export const AuthenticateRequestSchema: GenMessage<AuthenticateRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 6);
+
+/**
+ * Deprecated: use BeginAuthenticationRequest.
+ *
+ * @generated from message gestalt.provider.v1.BeginLoginRequest
+ */
+export type BeginLoginRequest = Message<"gestalt.provider.v1.BeginLoginRequest"> & {
+  /**
+   * @generated from field: string callback_url = 1;
+   */
+  callbackUrl: string;
+
+  /**
+   * @generated from field: string host_state = 2;
+   */
+  hostState: string;
+
+  /**
+   * @generated from field: repeated string scopes = 3;
+   */
+  scopes: string[];
+
+  /**
+   * @generated from field: map<string, string> options = 4;
+   */
+  options: { [key: string]: string };
+};
+
+/**
  * Describes the message gestalt.provider.v1.BeginLoginRequest.
  * Use `create(BeginLoginRequestSchema)` to create a new message.
  */
 export const BeginLoginRequestSchema: GenMessage<BeginLoginRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authentication, 1);
+  messageDesc(file_v1_authentication, 7);
 
 /**
- * BeginLoginResponse returns the provider-managed authorization URL and opaque
- * provider state that must be preserved until completion.
+ * Deprecated: use BeginAuthenticationResponse.
  *
  * @generated from message gestalt.provider.v1.BeginLoginResponse
  */
@@ -125,32 +305,25 @@ export type BeginLoginResponse = Message<"gestalt.provider.v1.BeginLoginResponse
  * Use `create(BeginLoginResponseSchema)` to create a new message.
  */
 export const BeginLoginResponseSchema: GenMessage<BeginLoginResponse> = /*@__PURE__*/
-  messageDesc(file_v1_authentication, 2);
+  messageDesc(file_v1_authentication, 8);
 
 /**
- * CompleteLoginRequest finishes an interactive login flow.
+ * Deprecated: use CompleteAuthenticationRequest.
  *
  * @generated from message gestalt.provider.v1.CompleteLoginRequest
  */
 export type CompleteLoginRequest = Message<"gestalt.provider.v1.CompleteLoginRequest"> & {
   /**
-   * query contains the callback URL query parameters returned by the identity
-   * provider.
-   *
    * @generated from field: map<string, string> query = 1;
    */
   query: { [key: string]: string };
 
   /**
-   * provider_state is the opaque state returned from BeginLoginResponse.
-   *
    * @generated from field: bytes provider_state = 2;
    */
   providerState: Uint8Array;
 
   /**
-   * callback_url is the fully qualified callback URL used by the host.
-   *
    * @generated from field: string callback_url = 3;
    */
   callbackUrl: string;
@@ -161,11 +334,10 @@ export type CompleteLoginRequest = Message<"gestalt.provider.v1.CompleteLoginReq
  * Use `create(CompleteLoginRequestSchema)` to create a new message.
  */
 export const CompleteLoginRequestSchema: GenMessage<CompleteLoginRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authentication, 3);
+  messageDesc(file_v1_authentication, 9);
 
 /**
- * ValidateExternalTokenRequest asks the provider to validate a token minted
- * outside the interactive login flow.
+ * Deprecated: use AuthenticateRequest with token input.
  *
  * @generated from message gestalt.provider.v1.ValidateExternalTokenRequest
  */
@@ -181,7 +353,7 @@ export type ValidateExternalTokenRequest = Message<"gestalt.provider.v1.Validate
  * Use `create(ValidateExternalTokenRequestSchema)` to create a new message.
  */
 export const ValidateExternalTokenRequestSchema: GenMessage<ValidateExternalTokenRequest> = /*@__PURE__*/
-  messageDesc(file_v1_authentication, 4);
+  messageDesc(file_v1_authentication, 10);
 
 /**
  * AuthSessionSettings configures how the host persists authenticated sessions.
@@ -200,7 +372,7 @@ export type AuthSessionSettings = Message<"gestalt.provider.v1.AuthSessionSettin
  * Use `create(AuthSessionSettingsSchema)` to create a new message.
  */
 export const AuthSessionSettingsSchema: GenMessage<AuthSessionSettings> = /*@__PURE__*/
-  messageDesc(file_v1_authentication, 5);
+  messageDesc(file_v1_authentication, 11);
 
 /**
  * AuthenticationProvider models the shared Gestalt authentication-provider
@@ -210,6 +382,32 @@ export const AuthSessionSettingsSchema: GenMessage<AuthSessionSettings> = /*@__P
  */
 export const AuthenticationProvider: GenService<{
   /**
+   * @generated from rpc gestalt.provider.v1.AuthenticationProvider.BeginAuthentication
+   */
+  beginAuthentication: {
+    methodKind: "unary";
+    input: typeof BeginAuthenticationRequestSchema;
+    output: typeof BeginAuthenticationResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AuthenticationProvider.CompleteAuthentication
+   */
+  completeAuthentication: {
+    methodKind: "unary";
+    input: typeof CompleteAuthenticationRequestSchema;
+    output: typeof AuthenticatedUserSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AuthenticationProvider.Authenticate
+   */
+  authenticate: {
+    methodKind: "unary";
+    input: typeof AuthenticateRequestSchema;
+    output: typeof AuthenticatedUserSchema;
+  },
+  /**
+   * Deprecated: use BeginAuthentication.
+   *
    * @generated from rpc gestalt.provider.v1.AuthenticationProvider.BeginLogin
    */
   beginLogin: {
@@ -218,6 +416,8 @@ export const AuthenticationProvider: GenService<{
     output: typeof BeginLoginResponseSchema;
   },
   /**
+   * Deprecated: use CompleteAuthentication.
+   *
    * @generated from rpc gestalt.provider.v1.AuthenticationProvider.CompleteLogin
    */
   completeLogin: {
@@ -226,6 +426,8 @@ export const AuthenticationProvider: GenService<{
     output: typeof AuthenticatedUserSchema;
   },
   /**
+   * Deprecated: use Authenticate.
+   *
    * @generated from rpc gestalt.provider.v1.AuthenticationProvider.ValidateExternalToken
    */
   validateExternalToken: {
