@@ -1797,8 +1797,8 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 		},
 		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			sessionCatalogCalls++
-			if token != "identity-token" {
-				t.Fatalf("session catalog token = %q, want %q", token, "identity-token")
+			if token != "workload-token" {
+				t.Fatalf("session catalog token = %q, want %q", token, "workload-token")
 			}
 			return &catalog.Catalog{
 				Name: "clickhouse",
@@ -1816,8 +1816,8 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 			if name != "run_query" {
 				t.Fatalf("name = %q, want %q", name, "run_query")
 			}
-			if token := mcpupstream.UpstreamTokenFromContext(ctx); token != "identity-token" {
-				t.Fatalf("upstream token = %q, want %q", token, "identity-token")
+			if token := mcpupstream.UpstreamTokenFromContext(ctx); token != "workload-token" {
+				t.Fatalf("upstream token = %q, want %q", token, "workload-token")
 			}
 			if sql, _ := args["sql"].(string); sql != "select 1" {
 				t.Fatalf("sql = %q, want %q", sql, "select 1")
@@ -1830,12 +1830,12 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 	ds := coretesting.NewStubServices(t)
 	ctx := context.Background()
 	if err := ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
-		ID:          "tok-identity",
-		SubjectID:   principal.IdentitySubjectID(),
+		ID:          "tok-workload",
+		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 		Integration: "clickhouse",
 		Connection:  "workspace",
 		Instance:    "team-a",
-		AccessToken: "identity-token",
+		AccessToken: "workload-token",
 	}); err != nil {
 		t.Fatalf("StoreToken: %v", err)
 	}
@@ -1923,12 +1923,12 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 	ds := coretesting.NewStubServices(t)
 	ctx := context.Background()
 	if err := ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
-		ID:          "tok-identity",
-		SubjectID:   principal.IdentitySubjectID(),
+		ID:          "tok-workload",
+		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 		Integration: "sampledb",
 		Connection:  "workspace",
 		Instance:    "team-a",
-		AccessToken: "identity-token",
+		AccessToken: "workload-token",
 	}); err != nil {
 		t.Fatalf("StoreToken: %v", err)
 	}
