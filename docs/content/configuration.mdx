@@ -201,8 +201,7 @@ plugins:
 | Mode | Behavior |
 | --- | --- |
 | `none` | No upstream credential needed. |
-| `user` | Each user stores their own credential. |
-| `identity` | One shared service credential for all callers. |
+| `user` | Credentials are stored for the calling subject (for example `user:<id>`, `workload:<id>`, or a managed identity subject). |
 
 ### Auth types
 
@@ -330,8 +329,7 @@ local plaintext issuer on loopback for development, add
 | --- | --- |
 | Local development | Omit `providers.auth` |
 | Multi-user deployment | `providers.auth.<name>` with a published OIDC or Google auth provider |
-| Per-user upstream access | `mode: user` on plugin connections |
-| Shared service credential | `mode: identity` on plugin connections |
+| Subject-owned upstream access | `mode: user` on plugin connections |
 
 ### API tokens
 
