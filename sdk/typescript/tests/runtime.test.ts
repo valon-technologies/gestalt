@@ -49,6 +49,7 @@ import {
   CURRENT_PROTOCOL_VERSION,
   createCacheService,
   ENV_WRITE_CATALOG,
+  ENV_WRITE_MANIFEST_METADATA,
   ENV_PROVIDER_SOCKET,
   createAuthenticationService,
   createProviderService,
@@ -165,6 +166,95 @@ export const plugin = definePlugin({
       delete process.env[ENV_WRITE_CATALOG];
     } else {
       process.env[ENV_WRITE_CATALOG] = previousCatalog;
+    }
+    removeTempDir(root);
+  }
+});
+
+test("runtime main writes generated manifest metadata when requested", async () => {
+  const root = makeTempDir("gestalt-typescript-runtime-manifest-metadata-");
+  const metadataPath = join(root, "manifest-metadata.yaml");
+  const previousManifestMetadata = process.env[ENV_WRITE_MANIFEST_METADATA];
+
+  try {
+    const indexPath = join(import.meta.dir, "..", "src", "index.ts");
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "@scope/http provider",
+        gestalt: {
+          provider: {
+            kind: "plugin",
+            target: "./provider.ts#plugin",
+          },
+        },
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(root, "provider.ts"),
+      `import { definePlugin } from ${JSON.stringify(indexPath)};
+
+export const plugin = definePlugin({
+  securitySchemes: {
+    slack: {
+      type: "slack_signature",
+      secret: {
+        env: "SLACK_SIGNING_SECRET",
+      },
+    },
+  },
+  http: {
+    command: {
+      path: "/command",
+      method: "POST",
+      security: "slack",
+      target: "handle_command",
+      requestBody: {
+        required: true,
+        content: {
+          "application/x-www-form-urlencoded": {},
+        },
+      },
+      ack: {
+        status: 200,
+        body: {
+          response_type: "ephemeral",
+          text: "Working on it...",
+        },
+      },
+    },
+  },
+  operations: [
+    {
+      id: "handle_command",
+      handler() {
+        return { ok: true };
+      },
+    },
+  ],
+});
+`,
+      "utf8",
+    );
+
+    process.env[ENV_WRITE_MANIFEST_METADATA] = metadataPath;
+    const code = await main([root, "plugin:./provider.ts#plugin"]);
+    expect(code).toBe(0);
+    const metadata = readFileSync(metadataPath, "utf8");
+    expect(metadata).toContain("securitySchemes:");
+    expect(metadata).toContain("type: slack_signature");
+    expect(metadata).toContain("env: SLACK_SIGNING_SECRET");
+    expect(metadata).toContain("http:");
+    expect(metadata).toContain("path: /command");
+    expect(metadata).toContain("target: handle_command");
+    expect(metadata).toContain("application/x-www-form-urlencoded");
+    expect(metadata).toContain("response_type: ephemeral");
+  } finally {
+    if (previousManifestMetadata === undefined) {
+      delete process.env[ENV_WRITE_MANIFEST_METADATA];
+    } else {
+      process.env[ENV_WRITE_MANIFEST_METADATA] = previousManifestMetadata;
     }
     removeTempDir(root);
   }

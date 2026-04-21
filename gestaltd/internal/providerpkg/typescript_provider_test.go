@@ -435,6 +435,87 @@ func TestPrepareSourceManifest_GeneratesTypeScriptStaticCatalog(t *testing.T) {
 	}
 }
 
+func TestPrepareSourceManifest_MergesGeneratedTypeScriptManifestMetadata(t *testing.T) {
+	root := t.TempDir()
+	manifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindPlugin,
+		Source:  "github.com/testowner/plugins/ts-release",
+		Version: "0.0.1",
+		Spec: &providermanifestv1.Spec{
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+				},
+			},
+			SecuritySchemes: map[string]*providermanifestv1.HTTPSecurityScheme{
+				"slack": {
+					Type: providermanifestv1.HTTPSecuritySchemeTypeSlackSignature,
+					Secret: &providermanifestv1.HTTPSecretRef{
+						Env: "SLACK_SIGNING_SECRET",
+					},
+				},
+			},
+		},
+	}
+	data, err := EncodeSourceManifestFormat(manifest, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	manifestPath := filepath.Join(root, "manifest.yaml")
+	mustWriteFile(t, manifestPath, data, 0o644)
+	mustWriteTypeScriptProviderPackage(t, root, typeScriptTestPluginTarget)
+	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH)
+	t.Setenv(typeScriptBunEnvVar, bunPath)
+
+	preparedData, preparedManifest, err := PrepareSourceManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("PrepareSourceManifest: %v", err)
+	}
+	if preparedManifest == nil || preparedManifest.Spec == nil {
+		t.Fatalf("prepared manifest = %+v, want provider metadata", preparedManifest)
+	}
+	if !containsString(string(preparedData), "securitySchemes:") {
+		t.Fatalf("prepared manifest data = %q, want merged security scheme metadata", string(preparedData))
+	}
+	if !containsString(string(preparedData), "path: /command") {
+		t.Fatalf("prepared manifest data = %q, want merged HTTP binding metadata", string(preparedData))
+	}
+
+	scheme := preparedManifest.Spec.SecuritySchemes["slack"]
+	if scheme == nil {
+		t.Fatal(`manifest.Spec.SecuritySchemes["slack"] = nil, want generated scheme`)
+	}
+	if scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeSlackSignature {
+		t.Fatalf("scheme.Type = %q, want %q", scheme.Type, providermanifestv1.HTTPSecuritySchemeTypeSlackSignature)
+	}
+	if scheme.Secret == nil || scheme.Secret.Env != "SLACK_SIGNING_SECRET" {
+		t.Fatalf("scheme.Secret = %+v, want env-backed secret", scheme.Secret)
+	}
+
+	binding := preparedManifest.Spec.HTTP["command"]
+	if binding == nil {
+		t.Fatal(`manifest.Spec.HTTP["command"] = nil, want generated binding`)
+	}
+	if binding.Path != "/command" {
+		t.Fatalf("binding.Path = %q, want %q", binding.Path, "/command")
+	}
+	if binding.Method != "POST" {
+		t.Fatalf("binding.Method = %q, want %q", binding.Method, "POST")
+	}
+	if binding.Security != "slack" {
+		t.Fatalf("binding.Security = %q, want %q", binding.Security, "slack")
+	}
+	if binding.Target != "handle_command" {
+		t.Fatalf("binding.Target = %q, want %q", binding.Target, "handle_command")
+	}
+	if binding.RequestBody == nil {
+		t.Fatal("binding.RequestBody = nil, want request body metadata")
+	}
+	if _, ok := binding.RequestBody.Content["application/x-www-form-urlencoded"]; !ok {
+		t.Fatalf("binding.RequestBody.Content = %#v, want form content type", binding.RequestBody.Content)
+	}
+}
+
 func TestValidateSourceProviderRelease_TypeScript(t *testing.T) {
 	root := t.TempDir()
 	mustWriteTypeScriptProviderPackage(t, root, typeScriptTestPluginTarget)
@@ -733,6 +814,25 @@ operations:
   - id: greet
     method: GET
 EOF
+    if [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
+      cat > "$GESTALT_PLUGIN_WRITE_MANIFEST_METADATA" <<'EOF'
+securitySchemes:
+  slack:
+    type: slack_signature
+    secret:
+      env: SLACK_SIGNING_SECRET
+http:
+  command:
+    path: /command
+    method: POST
+    security: slack
+    target: handle_command
+    requestBody:
+      required: true
+      content:
+        application/x-www-form-urlencoded: {}
+EOF
+    fi
     exit 0
     ;;
   gestalt-ts-build|build.ts)
