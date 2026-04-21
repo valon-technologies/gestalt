@@ -212,11 +212,10 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			principal: &principal.Principal{
 				SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 				DisplayName: "Triage Bot",
-				Kind:        principal.KindWorkload,
 				Source:      principal.SourceWorkloadToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|workload:triage-bot|workload|Triage Bot|false|workload_token|user|workload:triage-bot|roadmap|admin",
-			wantSessionCatalog: "token-123|workload:triage-bot|workload|Triage Bot|false|workload_token|user|roadmap|admin",
+			wantExecuteBody:    "echo|secret-token|hi|acme|workload:triage-bot||Triage Bot|false|workload_token|user|workload:triage-bot|roadmap|admin",
+			wantSessionCatalog: "token-123|workload:triage-bot||Triage Bot|false|workload_token|user|roadmap|admin",
 		},
 	}
 
@@ -291,7 +290,6 @@ func TestRequestContextProto_PreservesWorkloadDisplayName(t *testing.T) {
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 		DisplayName: "Triage Bot",
-		Kind:        principal.KindWorkload,
 		Source:      principal.SourceWorkloadToken,
 	})
 	ctx = invocation.WithAccessContext(ctx, invocation.AccessContext{
@@ -309,8 +307,77 @@ func TestRequestContextProto_PreservesWorkloadDisplayName(t *testing.T) {
 	if got := reqCtx.GetSubject().GetDisplayName(); got != "Triage Bot" {
 		t.Fatalf("subject display name = %q, want %q", got, "Triage Bot")
 	}
+	if got := reqCtx.GetSubject().GetKind(); got != "workload" {
+		t.Fatalf("subject kind = %q, want %q", got, "workload")
+	}
 	if reqCtx.GetAccess() == nil || reqCtx.GetAccess().GetPolicy() != "roadmap" || reqCtx.GetAccess().GetRole() != "viewer" {
 		t.Fatalf("unexpected access context: %#v", reqCtx.GetAccess())
+	}
+}
+
+func TestRequestContextProto_PreservesManagedIdentityLegacyKind(t *testing.T) {
+	t.Parallel()
+
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID:   principal.ManagedIdentitySubjectID("managed-1"),
+		DisplayName: "Deploy Bot",
+		Source:      principal.SourceAPIToken,
+	})
+
+	reqCtx, err := requestContextProto(ctx)
+	if err != nil {
+		t.Fatalf("requestContextProto: %v", err)
+	}
+	if reqCtx == nil || reqCtx.GetSubject() == nil {
+		t.Fatal("expected request subject context")
+	}
+	if got := reqCtx.GetSubject().GetKind(); got != "workload" {
+		t.Fatalf("subject kind = %q, want %q", got, "workload")
+	}
+}
+
+func TestRestoreRequestSnapshotContext_InheritsSelectorsForHeadlessNonWorkloadPrincipals(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		principal *principal.Principal
+		wantConn  string
+	}{
+		{
+			name:      "managed identity",
+			principal: &principal.Principal{SubjectID: principal.ManagedIdentitySubjectID("managed-1"), Source: principal.SourceAPIToken},
+			wantConn:  "workspace",
+		},
+		{
+			name:      "system principal",
+			principal: &principal.Principal{SubjectID: "system:workflow-startup"},
+			wantConn:  "workspace",
+		},
+		{
+			name:      "static workload token",
+			principal: &principal.Principal{SubjectID: principal.WorkloadSubjectID("triage-bot"), Source: principal.SourceWorkloadToken},
+			wantConn:  "",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := restoreRequestSnapshotContext(context.Background(), requestSnapshot{
+				principal: tc.principal,
+				credential: invocation.CredentialContext{
+					Connection: "workspace",
+					Instance:   "team-a",
+				},
+			}, "")
+
+			if got := invocation.ConnectionFromContext(ctx); got != tc.wantConn {
+				t.Fatalf("connection = %q, want %q", got, tc.wantConn)
+			}
+		})
 	}
 }
 
@@ -346,7 +413,7 @@ func TestPrincipalFromProto_WorkloadDisplayNameDoesNotCreateIdentity(t *testing.
 
 	p := principalFromProto(&proto.SubjectContext{
 		Id:          principal.WorkloadSubjectID("triage-bot"),
-		Kind:        string(principal.KindWorkload),
+		Kind:        "workload",
 		DisplayName: "Triage Bot",
 		AuthSource:  principal.SourceWorkloadToken.String(),
 	})

@@ -441,8 +441,11 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredWorkloadPrincipal(t *testing
 	if gotPrincipal == nil {
 		t.Fatal("principal = nil")
 	}
-	if gotPrincipal.Kind != principal.KindWorkload {
-		t.Fatalf("principal kind = %q, want %q", gotPrincipal.Kind, principal.KindWorkload)
+	if gotPrincipal.Kind != "" {
+		t.Fatalf("principal kind = %q, want empty", gotPrincipal.Kind)
+	}
+	if gotPrincipal.Source != principal.SourceWorkloadToken {
+		t.Fatalf("principal source = %q, want %q", gotPrincipal.Source.String(), principal.SourceWorkloadToken.String())
 	}
 	if gotPrincipal.SubjectID != principal.WorkloadSubjectID("scheduler") {
 		t.Fatalf("subjectID = %q, want %q", gotPrincipal.SubjectID, principal.WorkloadSubjectID("scheduler"))

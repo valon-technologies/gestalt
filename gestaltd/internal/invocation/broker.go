@@ -448,7 +448,7 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 }
 
 func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principal) error {
-	if p == nil || p.UserID != "" || p.Kind == principal.KindWorkload || p.Identity == nil || p.Identity.Email == "" {
+	if p == nil || p.UserID != "" || !p.HasUserContext() {
 		return nil
 	}
 	if b.users == nil {
@@ -484,7 +484,7 @@ func (b *Broker) resolveWorkloadToken(ctx context.Context, prov core.Provider, p
 	switch binding.Mode {
 	case core.ConnectionModeNone:
 		if requestedConnection != "" || requestedInstance != "" {
-			return ctx, "", fmt.Errorf("%w: workloads may not override connection or instance bindings", ErrAuthorizationDenied)
+			return ctx, "", fmt.Errorf("%w: static identity-token callers may not override connection or instance bindings", ErrAuthorizationDenied)
 		}
 		SetCredentialAudit(ctx, binding.Mode, binding.CredentialSubjectID, binding.Connection, binding.Instance)
 		ctx = WithCredentialContext(ctx, CredentialContext{
@@ -498,7 +498,7 @@ func (b *Broker) resolveWorkloadToken(ctx context.Context, prov core.Provider, p
 		connection := binding.Connection
 		instance := binding.Instance
 		if (requestedConnection != "" && requestedConnection != binding.Connection) || (requestedInstance != "" && requestedInstance != binding.Instance) {
-			return ctx, "", fmt.Errorf("%w: workloads may not override connection or instance bindings", ErrAuthorizationDenied)
+			return ctx, "", fmt.Errorf("%w: static identity-token callers may not override connection or instance bindings", ErrAuthorizationDenied)
 		}
 		subjectID := strings.TrimSpace(binding.CredentialSubjectID)
 		if subjectID == "" {
@@ -510,7 +510,7 @@ func (b *Broker) resolveWorkloadToken(ctx context.Context, prov core.Provider, p
 		SetCredentialAudit(ctx, binding.Mode, subjectID, connection, instance)
 		return b.resolveSubjectToken(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
 	default:
-		return ctx, "", fmt.Errorf("%w: workloads may only use credentialed or none providers", ErrAuthorizationDenied)
+		return ctx, "", fmt.Errorf("%w: static identity-token callers may only use credentialed or none providers", ErrAuthorizationDenied)
 	}
 }
 

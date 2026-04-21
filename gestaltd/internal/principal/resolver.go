@@ -205,7 +205,6 @@ func (r *Resolver) resolveManagedIdentityAPIToken(ctx context.Context, apiToken 
 		SubjectID:           ManagedIdentitySubjectID(identity.ID),
 		CredentialSubjectID: apiToken.CredentialSubjectID,
 		DisplayName:         identity.DisplayName,
-		Kind:                KindWorkload,
 		Source:              SourceAPIToken,
 		Scopes:              PermissionPlugins(effectivePerms),
 		TokenPermissions:    effectivePerms,
@@ -221,7 +220,6 @@ func (r *Resolver) resolveWorkloadToken(token string) (*Principal, error) {
 		return nil, ErrInvalidToken
 	}
 	return &Principal{
-		Kind:        KindWorkload,
 		SubjectID:   WorkloadSubjectID(workload.ID),
 		DisplayName: workload.DisplayName,
 		Source:      SourceWorkloadToken,

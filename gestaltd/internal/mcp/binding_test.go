@@ -140,7 +140,6 @@ func ctxWithIdentityPrincipal(email, userID string) context.Context {
 
 func ctxWithWorkloadPrincipal(workloadID string) context.Context {
 	p := &principal.Principal{
-		Kind:      principal.KindWorkload,
 		SubjectID: principal.WorkloadSubjectID(workloadID),
 		Source:    principal.SourceWorkloadToken,
 	}
@@ -999,7 +998,7 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 		},
 		TokenResolver: &stubTokenResolver{
 			resolveFn: func(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
-				if p == nil || p.Kind != principal.KindWorkload {
+				if p == nil || !p.IsStaticWorkloadToken() {
 					t.Fatalf("expected workload principal, got %+v", p)
 				}
 				if providerName != "clickhouse" {
@@ -1965,7 +1964,7 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 		t.Fatalf("expected MCP error result, got %+v", result)
 	}
 	text, ok := result.Content[0].(mcpgo.TextContent)
-	if !ok || text.Text != "workload callers may not override connection or instance bindings" {
+	if !ok || text.Text != "static identity-token callers may not override connection or instance bindings" {
 		t.Fatalf("unexpected MCP error content: %+v", result.Content)
 	}
 	if called {

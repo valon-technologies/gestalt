@@ -24,7 +24,7 @@ func makeHandler(cfg Config, provName, opName, connection string) mcpserver.Tool
 		rawArgs := req.GetArguments()
 		instance := normalizedSessionCatalogInstance(rawArgs["_instance"])
 		if workloadInstanceOverrideRequested(cfg.Authorizer, p, instance) {
-			return mcpgo.NewToolResultError("workload callers may not override connection or instance bindings"), nil
+			return mcpgo.NewToolResultError("static identity-token callers may not override connection or instance bindings"), nil
 		}
 		args := make(map[string]any, len(rawArgs))
 		for key, value := range rawArgs {

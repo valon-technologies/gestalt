@@ -78,8 +78,8 @@ func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "missing authorization")
 			return
 		}
-		if p.Kind == principal.KindWorkload {
-			writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
+		if !p.HasUserContext() {
+			writeError(w, http.StatusForbidden, errWorkloadForbidden.Error())
 			return
 		}
 

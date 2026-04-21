@@ -40,13 +40,10 @@ func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Princi
 	if p == nil {
 		return nil, nil
 	}
-	if p.Kind == principal.KindWorkload {
+	if !p.HasUserContext() {
 		return p, nil
 	}
 	if p.UserID != "" {
-		return p, nil
-	}
-	if p.Identity == nil || p.Identity.Email == "" {
 		return p, nil
 	}
 

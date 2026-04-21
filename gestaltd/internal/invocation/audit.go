@@ -65,8 +65,8 @@ func buildAuditEntry(ctx context.Context, p *principal.Principal, source, provid
 		entry.UserID = p.UserID
 		entry.AuthSource = p.AuthSource()
 		entry.SubjectID = p.SubjectID
-		if p.Kind != "" {
-			entry.SubjectKind = string(p.Kind)
+		if subjectKind := p.LegacySubjectKind(); subjectKind != "" {
+			entry.SubjectKind = subjectKind
 		}
 	}
 	access := AccessContextFromContext(ctx)

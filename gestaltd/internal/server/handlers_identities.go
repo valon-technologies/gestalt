@@ -1112,7 +1112,7 @@ func (s *Server) managedIdentityGrantCatalogTargets(ctx context.Context, plugin 
 			subjectID = principal.UserSubjectID(p.UserID)
 		}
 	}
-	if p == nil || p.Kind == principal.KindWorkload || subjectID == "" {
+	if p == nil || !p.HasUserContext() || subjectID == "" {
 		if len(targets) == 0 {
 			addTarget("", "")
 		}
