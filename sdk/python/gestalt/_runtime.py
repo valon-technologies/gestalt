@@ -582,7 +582,7 @@ def _authentication_servicer(*, provider: PluginProvider) -> Any:
                 )
             return user
 
-        def GetSessionSettings(self, _request: Any, context: Any) -> Any:
+        def GetSessionSettings(self, request: Any, context: Any) -> Any:
             if not isinstance(auth_provider, SessionTTLProvider):
                 return context.abort(
                     grpc.StatusCode.UNIMPLEMENTED,
