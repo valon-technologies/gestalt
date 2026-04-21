@@ -125,11 +125,11 @@ func mergeLockEntries(primary, legacy map[string]LockEntry) map[string]LockEntry
 	case legacy == nil:
 		return primary
 	default:
-		for name, entry := range legacy {
+		for name := range legacy {
 			if _, exists := primary[name]; exists {
 				continue
 			}
-			primary[name] = entry
+			primary[name] = legacy[name]
 		}
 		return primary
 	}

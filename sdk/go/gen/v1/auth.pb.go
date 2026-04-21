@@ -22,7 +22,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// AuthenticatedUser is the normalized user identity returned by an auth
+// AuthenticatedUser is the normalized user identity returned by an authentication
 // provider after a login or token-validation flow.
 type AuthenticatedUser struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`

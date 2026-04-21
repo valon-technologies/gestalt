@@ -59,8 +59,8 @@ from ._indexeddb import (
 from ._invoker import ENV_PLUGIN_INVOKER_SOCKET, PluginInvoker
 from ._plugin import Plugin, operation, session_catalog
 from ._providers import (
-    AuthenticationProvider,
     AuthenticatedUser,
+    AuthenticationProvider,
     AuthProvider,
     BeginLoginRequest,
     BeginLoginResponse,
