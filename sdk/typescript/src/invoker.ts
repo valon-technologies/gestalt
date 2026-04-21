@@ -14,14 +14,19 @@ export interface PluginInvokeOptions {
   instance?: string;
 }
 
+export interface PluginInvocationGrant {
+  plugin: string;
+  operations: string[];
+}
+
 export class PluginInvoker {
   private readonly client: Client<typeof PluginInvokerService>;
-  private readonly requestHandle: string;
+  private readonly invocationToken: string;
 
   constructor(request: Request);
-  constructor(requestHandle: string);
-  constructor(requestOrHandle: Request | string) {
-    this.requestHandle = normalizeRequestHandle(requestOrHandle);
+  constructor(invocationToken: string);
+  constructor(requestOrToken: Request | string) {
+    this.invocationToken = normalizeInvocationToken(requestOrToken);
 
     const socketPath = process.env[ENV_PLUGIN_INVOKER_SOCKET];
     if (!socketPath) {
@@ -44,7 +49,7 @@ export class PluginInvoker {
     options?: PluginInvokeOptions,
   ): Promise<OperationResult> {
     const response = await this.client.invoke({
-      requestHandle: this.requestHandle,
+      invocationToken: this.invocationToken,
       plugin,
       operation,
       params: toJsonObject(params),
@@ -56,16 +61,35 @@ export class PluginInvoker {
       body: response.body,
     };
   }
+
+  async exchangeInvocationToken(options?: {
+    grants?: PluginInvocationGrant[];
+    ttlSeconds?: number;
+  }): Promise<string> {
+    const response = await this.client.exchangeInvocationToken({
+      parentInvocationToken: this.invocationToken,
+      grants: (options?.grants ?? [])
+        .map((grant) => ({
+          plugin: grant.plugin.trim(),
+          operations: grant.operations
+            .map((operation) => operation.trim())
+            .filter(Boolean),
+        }))
+        .filter((grant) => grant.plugin.length > 0),
+      ttlSeconds: BigInt(Math.max(0, options?.ttlSeconds ?? 0)),
+    });
+    return response.invocationToken;
+  }
 }
 
-function normalizeRequestHandle(requestOrHandle: Request | string): string {
-  const requestHandle =
-    typeof requestOrHandle === "string"
-      ? requestOrHandle
-      : requestOrHandle.requestHandle;
-  const trimmed = requestHandle.trim();
+function normalizeInvocationToken(requestOrToken: Request | string): string {
+  const invocationToken =
+    typeof requestOrToken === "string"
+      ? requestOrToken
+      : requestOrToken.invocationToken;
+  const trimmed = invocationToken.trim();
   if (!trimmed) {
-    throw new Error("plugin invoker: request handle is not available");
+    throw new Error("plugin invoker: invocation token is not available");
   }
   return trimmed;
 }

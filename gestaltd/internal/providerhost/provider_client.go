@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -32,19 +31,21 @@ type StaticProviderSpec struct {
 }
 
 type remoteProviderBase struct {
-	client      proto.IntegrationProviderClient
-	name        string
-	displayName string
-	description string
-	connection  core.ConnectionMode
-	catalog     *catalog.Catalog
-	iconSVG     string
-	authTypes   []string
-	connParams  map[string]core.ConnectionParamDef
-	credFields  []core.CredentialFieldDef
-	discovery   *core.DiscoveryConfig
-	closer      io.Closer
-	snapshots   *RequestSnapshotStore
+	client       proto.IntegrationProviderClient
+	name         string
+	displayName  string
+	description  string
+	connection   core.ConnectionMode
+	catalog      *catalog.Catalog
+	iconSVG      string
+	authTypes    []string
+	connParams   map[string]core.ConnectionParamDef
+	credFields   []core.CredentialFieldDef
+	discovery    *core.DiscoveryConfig
+	closer       io.Closer
+	invTokens    *InvocationTokenManager
+	callerPlugin string
+	invokeGrants map[string]map[string]struct{}
 }
 
 // RemoteProviderOption configures a remote provider returned by NewRemoteProvider.
@@ -56,8 +57,15 @@ func WithCloser(c io.Closer) RemoteProviderOption {
 	return func(b *remoteProviderBase) { b.closer = c }
 }
 
-func WithRequestSnapshots(s *RequestSnapshotStore) RemoteProviderOption {
-	return func(b *remoteProviderBase) { b.snapshots = s }
+func WithInvocationTokens(tokens *InvocationTokenManager) RemoteProviderOption {
+	return func(b *remoteProviderBase) { b.invTokens = tokens }
+}
+
+func WithInvocationTokenSubject(pluginName string, grants map[string]map[string]struct{}) RemoteProviderOption {
+	return func(b *remoteProviderBase) {
+		b.callerPlugin = strings.TrimSpace(pluginName)
+		b.invokeGrants = cloneOperationMap(grants)
+	}
 }
 
 func NewRemoteProvider(ctx context.Context, client proto.IntegrationProviderClient, spec StaticProviderSpec, config map[string]any, opts ...RemoteProviderOption) (core.Provider, error) {
@@ -139,10 +147,12 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 	if err != nil {
 		return nil, err
 	}
-	requestHandle := p.newRequestHandle()
-	if requestHandle != "" {
-		releaseSnapshot := p.snapshots.Register(ctx, requestHandle)
-		defer releaseSnapshot()
+	requestToken := ""
+	if p != nil && p.invTokens != nil && p.callerPlugin != "" {
+		requestToken, err = p.invTokens.MintRootToken(ctx, p.callerPlugin, p.invokeGrants)
+		if err != nil {
+			return nil, err
+		}
 	}
 	reqCtx, err := requestContextProto(ctx)
 	if err != nil {
@@ -154,7 +164,7 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 		Token:            token,
 		ConnectionParams: core.ConnectionParams(ctx),
 		InvocationId:     invocationIDFromContext(ctx),
-		RequestHandle:    requestHandle,
+		InvocationToken:  requestToken,
 		Context:          reqCtx,
 	})
 	if err != nil {
@@ -269,13 +279,6 @@ func invocationIDFromContext(ctx context.Context) string {
 		return ""
 	}
 	return meta.RequestID
-}
-
-func (p *remoteProviderBase) newRequestHandle() string {
-	if p == nil || p.snapshots == nil {
-		return ""
-	}
-	return uuid.NewString()
 }
 
 func requestContextProto(ctx context.Context) (*proto.RequestContext, error) {

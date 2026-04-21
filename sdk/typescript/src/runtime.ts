@@ -109,7 +109,7 @@ export const ENV_WRITE_CATALOG = "GESTALT_PLUGIN_WRITE_CATALOG";
 /**
  * Protocol version currently implemented by the TypeScript runtime.
  */
-export const CURRENT_PROTOCOL_VERSION = 2;
+export const CURRENT_PROTOCOL_VERSION = 3;
 /**
  * Command-line usage for the runtime entrypoint.
  */
@@ -503,7 +503,7 @@ export function createProviderService(
             request.token,
             request.connectionParams,
             request.context,
-            request.requestHandle,
+            request.invocationToken,
           ),
         ),
       );
@@ -708,7 +708,7 @@ function providerRequest(
   token: string,
   connectionParams: Record<string, string>,
   requestContext?: ProtoRequestContext,
-  requestHandle = "",
+  invocationToken = "",
 ): Request {
   const subject = requestContext?.subject;
   const credential = requestContext?.credential;
@@ -737,7 +737,7 @@ function providerRequest(
     workflow: {
       ...(requestContext?.workflow ?? {}),
     },
-    requestHandle,
+    invocationToken,
   };
 }
 

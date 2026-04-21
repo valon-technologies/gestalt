@@ -21,7 +21,7 @@ type Request struct {
 	Subject          Subject
 	Credential       Credential
 	Access           Access
-	requestHandle    string
+	invocationToken  string
 }
 
 // ConnectionParam returns one resolved connection parameter by name and whether
@@ -34,16 +34,16 @@ func (r Request) ConnectionParam(name string) (string, bool) {
 	return value, ok
 }
 
-func (r Request) RequestHandle() string {
-	return r.requestHandle
+func (r Request) InvocationToken() string {
+	return r.invocationToken
 }
 
 func (r Request) Invoker() (*InvokerClient, error) {
-	return Invoker(r.requestHandle)
+	return Invoker(r.invocationToken)
 }
 
 func (r Request) WorkflowManager() (*WorkflowManagerClient, error) {
-	return WorkflowManager(r.requestHandle)
+	return WorkflowManager(r.invocationToken)
 }
 
 // Response is the typed handler result marshaled into the provider response body.
@@ -214,7 +214,7 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 			Subject:          SubjectFromContext(ctx),
 			Credential:       CredentialFromContext(ctx),
 			Access:           AccessFromContext(ctx),
-			requestHandle:    requestHandleFromContext(ctx),
+			invocationToken:  invocationTokenFromContext(ctx),
 		})
 	})
 	if result == nil {

@@ -17,14 +17,16 @@ import (
 type WorkflowManagerServer struct {
 	proto.UnimplementedWorkflowManagerHostServer
 
-	manager   workflowmanager.Service
-	snapshots *RequestSnapshotStore
+	pluginName string
+	manager    workflowmanager.Service
+	tokens     *InvocationTokenManager
 }
 
-func NewWorkflowManagerServer(manager workflowmanager.Service, snapshots *RequestSnapshotStore) *WorkflowManagerServer {
+func NewWorkflowManagerServer(pluginName string, manager workflowmanager.Service, tokens *InvocationTokenManager) *WorkflowManagerServer {
 	return &WorkflowManagerServer{
-		manager:   manager,
-		snapshots: snapshots,
+		pluginName: pluginName,
+		manager:    manager,
+		tokens:     tokens,
 	}
 }
 
@@ -32,7 +34,7 @@ func (s *WorkflowManagerServer) CreateSchedule(ctx context.Context, req *proto.W
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	snapshot, err := s.snapshot(req.GetRequestHandle())
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +48,7 @@ func (s *WorkflowManagerServer) CreateSchedule(ctx context.Context, req *proto.W
 	if err != nil {
 		return nil, err
 	}
-	managed, err := s.manager.CreateSchedule(restoreRequestSnapshotContext(ctx, snapshot, ""), snapshot.principal, upsert)
+	managed, err := s.manager.CreateSchedule(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, upsert)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -61,7 +63,7 @@ func (s *WorkflowManagerServer) GetSchedule(ctx context.Context, req *proto.Work
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	snapshot, err := s.snapshot(req.GetRequestHandle())
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +71,7 @@ func (s *WorkflowManagerServer) GetSchedule(ctx context.Context, req *proto.Work
 	if scheduleID == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
 	}
-	managed, err := s.manager.GetSchedule(restoreRequestSnapshotContext(ctx, snapshot, ""), snapshot.principal, scheduleID)
+	managed, err := s.manager.GetSchedule(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, scheduleID)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -84,7 +86,7 @@ func (s *WorkflowManagerServer) UpdateSchedule(ctx context.Context, req *proto.W
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	snapshot, err := s.snapshot(req.GetRequestHandle())
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +104,7 @@ func (s *WorkflowManagerServer) UpdateSchedule(ctx context.Context, req *proto.W
 	if err != nil {
 		return nil, err
 	}
-	managed, err := s.manager.UpdateSchedule(restoreRequestSnapshotContext(ctx, snapshot, ""), snapshot.principal, scheduleID, upsert)
+	managed, err := s.manager.UpdateSchedule(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, scheduleID, upsert)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -117,7 +119,7 @@ func (s *WorkflowManagerServer) DeleteSchedule(ctx context.Context, req *proto.W
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	snapshot, err := s.snapshot(req.GetRequestHandle())
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +127,7 @@ func (s *WorkflowManagerServer) DeleteSchedule(ctx context.Context, req *proto.W
 	if scheduleID == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
 	}
-	if err := s.manager.DeleteSchedule(restoreRequestSnapshotContext(ctx, snapshot, ""), snapshot.principal, scheduleID); err != nil {
+	if err := s.manager.DeleteSchedule(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, scheduleID); err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
 	return &emptypb.Empty{}, nil
@@ -135,7 +137,7 @@ func (s *WorkflowManagerServer) PauseSchedule(ctx context.Context, req *proto.Wo
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	snapshot, err := s.snapshot(req.GetRequestHandle())
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +145,7 @@ func (s *WorkflowManagerServer) PauseSchedule(ctx context.Context, req *proto.Wo
 	if scheduleID == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
 	}
-	managed, err := s.manager.PauseSchedule(restoreRequestSnapshotContext(ctx, snapshot, ""), snapshot.principal, scheduleID)
+	managed, err := s.manager.PauseSchedule(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, scheduleID)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -158,7 +160,7 @@ func (s *WorkflowManagerServer) ResumeSchedule(ctx context.Context, req *proto.W
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	snapshot, err := s.snapshot(req.GetRequestHandle())
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +168,7 @@ func (s *WorkflowManagerServer) ResumeSchedule(ctx context.Context, req *proto.W
 	if scheduleID == "" {
 		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
 	}
-	managed, err := s.manager.ResumeSchedule(restoreRequestSnapshotContext(ctx, snapshot, ""), snapshot.principal, scheduleID)
+	managed, err := s.manager.ResumeSchedule(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, scheduleID)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -177,12 +179,12 @@ func (s *WorkflowManagerServer) ResumeSchedule(ctx context.Context, req *proto.W
 	return resp, nil
 }
 
-func (s *WorkflowManagerServer) snapshot(handle string) (requestSnapshot, error) {
-	snapshot, err := s.snapshots.snapshot(handle)
+func (s *WorkflowManagerServer) tokenContext(token string) (invocationTokenContext, error) {
+	tokenCtx, err := s.tokens.resolveToken(token, s.pluginName)
 	if err != nil {
-		return requestSnapshot{}, status.Error(codes.FailedPrecondition, err.Error())
+		return invocationTokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
 	}
-	return snapshot, nil
+	return tokenCtx, nil
 }
 
 func workflowManagerScheduleUpsert(

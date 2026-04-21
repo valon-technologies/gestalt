@@ -675,12 +675,36 @@ pub struct OperationResult {
     #[prost(string, tag = "2")]
     pub body: ::prost::alloc::string::String,
 }
+/// PluginInvocationGrant describes one plugin operation grant minted into an
+/// exchanged invocation token.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PluginInvocationGrant {
+    #[prost(string, tag = "1")]
+    pub plugin: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "2")]
+    pub operations: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// ExchangeInvocationTokenRequest narrows an existing invocation token to a
+/// child token that carries only the requested plugin grants.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ExchangeInvocationTokenRequest {
+    #[prost(string, tag = "1")]
+    pub parent_invocation_token: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "2")]
+    pub grants: ::prost::alloc::vec::Vec<PluginInvocationGrant>,
+    #[prost(int64, tag = "3")]
+    pub ttl_seconds: i64,
+}
+/// ExchangeInvocationTokenResponse returns the child invocation token.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ExchangeInvocationTokenResponse {
+    #[prost(string, tag = "1")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
 /// PluginInvokeRequest invokes a declared operation on another plugin through
 /// the host-side invoker service.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PluginInvokeRequest {
-    #[prost(string, tag = "1")]
-    pub request_handle: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub plugin: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
@@ -691,6 +715,8 @@ pub struct PluginInvokeRequest {
     pub connection: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub instance: ::prost::alloc::string::String,
+    #[prost(string, tag = "7")]
+    pub invocation_token: ::prost::alloc::string::String,
 }
 /// IntegrationToken is the host-managed token payload passed into post-connect
 /// hooks.
@@ -786,8 +812,8 @@ pub struct ExecuteRequest {
     pub invocation_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub context: ::core::option::Option<RequestContext>,
-    #[prost(string, tag = "7")]
-    pub request_handle: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub invocation_token: ::prost::alloc::string::String,
 }
 /// GetSessionCatalogRequest asks a provider for request-scoped catalog
 /// extensions.
@@ -1497,6 +1523,27 @@ pub mod plugin_invoker_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        pub async fn exchange_invocation_token(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ExchangeInvocationTokenRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ExchangeInvocationTokenResponse>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.PluginInvoker/ExchangeInvocationToken",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.PluginInvoker",
+                "ExchangeInvocationToken",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
         pub async fn invoke(
             &mut self,
             request: impl tonic::IntoRequest<super::PluginInvokeRequest>,
@@ -1529,6 +1576,13 @@ pub mod plugin_invoker_server {
     /// Generated trait containing gRPC methods that should be implemented for use with PluginInvokerServer.
     #[async_trait]
     pub trait PluginInvoker: std::marker::Send + std::marker::Sync + 'static {
+        async fn exchange_invocation_token(
+            &self,
+            request: tonic::Request<super::ExchangeInvocationTokenRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ExchangeInvocationTokenResponse>,
+            tonic::Status,
+        >;
         async fn invoke(
             &self,
             request: tonic::Request<super::PluginInvokeRequest>,
@@ -1607,6 +1661,49 @@ pub mod plugin_invoker_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
+                "/gestalt.provider.v1.PluginInvoker/ExchangeInvocationToken" => {
+                    #[allow(non_camel_case_types)]
+                    struct ExchangeInvocationTokenSvc<T: PluginInvoker>(pub Arc<T>);
+                    impl<T: PluginInvoker>
+                        tonic::server::UnaryService<super::ExchangeInvocationTokenRequest>
+                        for ExchangeInvocationTokenSvc<T>
+                    {
+                        type Response = super::ExchangeInvocationTokenResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ExchangeInvocationTokenRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PluginInvoker>::exchange_invocation_token(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ExchangeInvocationTokenSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 "/gestalt.provider.v1.PluginInvoker/Invoke" => {
                     #[allow(non_camel_case_types)]
                     struct InvokeSvc<T: PluginInvoker>(pub Arc<T>);
@@ -6030,8 +6127,6 @@ pub struct ManagedWorkflowSchedule {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowManagerCreateScheduleRequest {
-    #[prost(string, tag = "1")]
-    pub request_handle: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub provider_name: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
@@ -6042,18 +6137,18 @@ pub struct WorkflowManagerCreateScheduleRequest {
     pub target: ::core::option::Option<BoundWorkflowTarget>,
     #[prost(bool, tag = "6")]
     pub paused: bool,
+    #[prost(string, tag = "7")]
+    pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowManagerGetScheduleRequest {
-    #[prost(string, tag = "1")]
-    pub request_handle: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub schedule_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowManagerUpdateScheduleRequest {
-    #[prost(string, tag = "1")]
-    pub request_handle: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub schedule_id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
@@ -6066,27 +6161,29 @@ pub struct WorkflowManagerUpdateScheduleRequest {
     pub target: ::core::option::Option<BoundWorkflowTarget>,
     #[prost(bool, tag = "7")]
     pub paused: bool,
+    #[prost(string, tag = "8")]
+    pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowManagerDeleteScheduleRequest {
-    #[prost(string, tag = "1")]
-    pub request_handle: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub schedule_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowManagerPauseScheduleRequest {
-    #[prost(string, tag = "1")]
-    pub request_handle: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub schedule_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowManagerResumeScheduleRequest {
-    #[prost(string, tag = "1")]
-    pub request_handle: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub schedule_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

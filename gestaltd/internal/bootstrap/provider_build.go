@@ -731,7 +731,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		return nil, fmt.Errorf("wait for plugin runtime session %q ready: %w", sessionID, err)
 	}
 
-	hostServices, snapshots, runtimeCleanup, err := buildPluginRuntimeHostServices(name, entry, deps)
+	hostServices, invTokens, runtimeCleanup, err := buildPluginRuntimeHostServices(name, entry, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -775,8 +775,11 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		sessionID:    sessionID,
 		closeRuntime: runtimeOwned,
 	})}
-	if snapshots != nil {
-		opts = append(opts, providerhost.WithRequestSnapshots(snapshots))
+	if invTokens != nil {
+		opts = append(opts,
+			providerhost.WithInvocationTokens(invTokens),
+			providerhost.WithInvocationTokenSubject(name, providerhost.InvocationDependencyGrants(entry.Invokes)),
+		)
 	}
 	prov, err := providerhost.NewRemoteProvider(ctx, conn.Integration(), spec, pluginConfig, opts...)
 	if err != nil {
@@ -942,13 +945,13 @@ func waitForPluginRuntimeSessionReady(ctx context.Context, runtimeProvider plugi
 	}
 }
 
-func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]providerhost.HostService, *providerhost.RequestSnapshotStore, func(), error) {
+func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]providerhost.HostService, *providerhost.InvocationTokenManager, func(), error) {
 	var (
 		hostServices []providerhost.HostService
 		cleanup      func()
-		snapshots    *providerhost.RequestSnapshotStore
+		invTokens    *providerhost.InvocationTokenManager
 	)
-	fail := func(err error) ([]providerhost.HostService, *providerhost.RequestSnapshotStore, func(), error) {
+	fail := func(err error) ([]providerhost.HostService, *providerhost.InvocationTokenManager, func(), error) {
 		if cleanup != nil {
 			cleanup()
 			cleanup = nil
@@ -983,12 +986,15 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		}
 		hostServices = append(hostServices, services...)
 	}
-	snapshots = providerhost.NewRequestSnapshotStore()
-	hostServices = append(hostServices, buildPluginWorkflowManagerHostService(deps, snapshots))
-	if len(entry.Invokes) > 0 {
-		hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, snapshots))
+	invTokens, err = providerhost.NewInvocationTokenManager(deps.EncryptionKey)
+	if err != nil {
+		return fail(err)
 	}
-	return hostServices, snapshots, cleanup, nil
+	hostServices = append(hostServices, buildPluginWorkflowManagerHostService(name, deps, invTokens))
+	if len(entry.Invokes) > 0 {
+		hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
+	}
+	return hostServices, invTokens, cleanup, nil
 }
 
 func buildPluginIndexedDBHostServices(pluginName string, effective config.EffectivePluginIndexedDB, deps Deps) ([]providerhost.HostService, func(), error) {
@@ -1111,7 +1117,7 @@ func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveW
 	}, nil
 }
 
-func buildPluginWorkflowManagerHostService(deps Deps, snapshots *providerhost.RequestSnapshotStore) providerhost.HostService {
+func buildPluginWorkflowManagerHostService(pluginName string, deps Deps, tokens *providerhost.InvocationTokenManager) providerhost.HostService {
 	manager := deps.WorkflowManager
 	if manager == nil {
 		manager = unavailableWorkflowManager{}
@@ -1119,12 +1125,12 @@ func buildPluginWorkflowManagerHostService(deps Deps, snapshots *providerhost.Re
 	return providerhost.HostService{
 		EnvVar: providerhost.DefaultWorkflowManagerSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterWorkflowManagerHostServer(srv, providerhost.NewWorkflowManagerServer(manager, snapshots))
+			proto.RegisterWorkflowManagerHostServer(srv, providerhost.NewWorkflowManagerServer(pluginName, manager, tokens))
 		},
 	}
 }
 
-func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps, snapshots *providerhost.RequestSnapshotStore) providerhost.HostService {
+func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps, tokens *providerhost.InvocationTokenManager) providerhost.HostService {
 	invoker := deps.PluginInvoker
 	if invoker == nil {
 		invoker = unavailablePluginInvoker{}
@@ -1132,7 +1138,7 @@ func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntr
 	return providerhost.HostService{
 		EnvVar: providerhost.DefaultPluginInvokerSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterPluginInvokerServer(srv, providerhost.NewPluginInvokerServer(pluginName, entry.Invokes, invoker, snapshots))
+			proto.RegisterPluginInvokerServer(srv, providerhost.NewPluginInvokerServer(pluginName, entry.Invokes, invoker, tokens))
 		},
 	}
 }

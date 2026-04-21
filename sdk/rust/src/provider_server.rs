@@ -115,7 +115,7 @@ where
                     credential: request_credential(request.context.as_ref()),
                     access: request_access(request.context.as_ref()),
                     workflow: request_workflow(request.context.as_ref()),
-                    request_handle: request.request_handle,
+                    invocation_token: request.invocation_token,
                 },
             )
             .await;
@@ -144,7 +144,7 @@ where
             credential: request_credential(request.context.as_ref()),
             access: request_access(request.context.as_ref()),
             workflow: request_workflow(request.context.as_ref()),
-            request_handle: String::new(),
+            invocation_token: String::new(),
         };
         let catalog = self
             .provider

@@ -218,9 +218,8 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(request.subject.id, "")
         self.assertEqual(request.credential.mode, "")
         self.assertEqual(request.access.role, "")
-        self.assertEqual(request.request_handle, "")
         self.assertEqual(request.workflow, {})
-        self.assertEqual(request.request_handle, "")
+        self.assertEqual(request.invocation_token, "")
 
 
 class MainEntrypointTests(unittest.TestCase):
@@ -268,7 +267,7 @@ class MainEntrypointTests(unittest.TestCase):
                 "credential_subject_id": request.credential.subject_id,
                 "access_policy": request.access.policy,
                 "access_role": request.access.role,
-                "request_handle": request.request_handle,
+                "invocation_token": request.invocation_token,
                 "workflow_run_id": str(request.workflow.get("runId", "")),
                 "workflow_trigger_kind": str(
                     request.workflow.get("trigger", {}).get("kind", "")
@@ -351,7 +350,7 @@ class MainEntrypointTests(unittest.TestCase):
             plugin_pb2.ExecuteRequest(
                 operation="whoami",
                 token="secret-token",
-                request_handle="opaque-request-handle",
+                invocation_token="opaque-invocation-token",
                 context=plugin_pb2.RequestContext(
                     subject=plugin_pb2.SubjectContext(
                         id="user:user-123",
@@ -437,7 +436,7 @@ class MainEntrypointTests(unittest.TestCase):
                         },
                     },
                 },
-                "request_handle": "opaque-request-handle",
+                "invocation_token": "opaque-invocation-token",
             },
         )
         catalog = response.catalog

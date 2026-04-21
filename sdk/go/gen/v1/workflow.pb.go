@@ -2153,15 +2153,15 @@ func (x *ManagedWorkflowSchedule) GetSchedule() *BoundWorkflowSchedule {
 }
 
 type WorkflowManagerCreateScheduleRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestHandle string                 `protobuf:"bytes,1,opt,name=request_handle,json=requestHandle,proto3" json:"request_handle,omitempty"`
-	ProviderName  string                 `protobuf:"bytes,2,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
-	Cron          string                 `protobuf:"bytes,3,opt,name=cron,proto3" json:"cron,omitempty"`
-	Timezone      string                 `protobuf:"bytes,4,opt,name=timezone,proto3" json:"timezone,omitempty"`
-	Target        *BoundWorkflowTarget   `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
-	Paused        bool                   `protobuf:"varint,6,opt,name=paused,proto3" json:"paused,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ProviderName    string                 `protobuf:"bytes,2,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
+	Cron            string                 `protobuf:"bytes,3,opt,name=cron,proto3" json:"cron,omitempty"`
+	Timezone        string                 `protobuf:"bytes,4,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	Target          *BoundWorkflowTarget   `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
+	Paused          bool                   `protobuf:"varint,6,opt,name=paused,proto3" json:"paused,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,7,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *WorkflowManagerCreateScheduleRequest) Reset() {
@@ -2192,13 +2192,6 @@ func (x *WorkflowManagerCreateScheduleRequest) ProtoReflect() protoreflect.Messa
 // Deprecated: Use WorkflowManagerCreateScheduleRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerCreateScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{34}
-}
-
-func (x *WorkflowManagerCreateScheduleRequest) GetRequestHandle() string {
-	if x != nil {
-		return x.RequestHandle
-	}
-	return ""
 }
 
 func (x *WorkflowManagerCreateScheduleRequest) GetProviderName() string {
@@ -2236,12 +2229,19 @@ func (x *WorkflowManagerCreateScheduleRequest) GetPaused() bool {
 	return false
 }
 
+func (x *WorkflowManagerCreateScheduleRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
+}
+
 type WorkflowManagerGetScheduleRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestHandle string                 `protobuf:"bytes,1,opt,name=request_handle,json=requestHandle,proto3" json:"request_handle,omitempty"`
-	ScheduleId    string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ScheduleId      string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *WorkflowManagerGetScheduleRequest) Reset() {
@@ -2274,13 +2274,6 @@ func (*WorkflowManagerGetScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{35}
 }
 
-func (x *WorkflowManagerGetScheduleRequest) GetRequestHandle() string {
-	if x != nil {
-		return x.RequestHandle
-	}
-	return ""
-}
-
 func (x *WorkflowManagerGetScheduleRequest) GetScheduleId() string {
 	if x != nil {
 		return x.ScheduleId
@@ -2288,17 +2281,24 @@ func (x *WorkflowManagerGetScheduleRequest) GetScheduleId() string {
 	return ""
 }
 
+func (x *WorkflowManagerGetScheduleRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
+}
+
 type WorkflowManagerUpdateScheduleRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestHandle string                 `protobuf:"bytes,1,opt,name=request_handle,json=requestHandle,proto3" json:"request_handle,omitempty"`
-	ScheduleId    string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
-	ProviderName  string                 `protobuf:"bytes,3,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
-	Cron          string                 `protobuf:"bytes,4,opt,name=cron,proto3" json:"cron,omitempty"`
-	Timezone      string                 `protobuf:"bytes,5,opt,name=timezone,proto3" json:"timezone,omitempty"`
-	Target        *BoundWorkflowTarget   `protobuf:"bytes,6,opt,name=target,proto3" json:"target,omitempty"`
-	Paused        bool                   `protobuf:"varint,7,opt,name=paused,proto3" json:"paused,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ScheduleId      string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	ProviderName    string                 `protobuf:"bytes,3,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
+	Cron            string                 `protobuf:"bytes,4,opt,name=cron,proto3" json:"cron,omitempty"`
+	Timezone        string                 `protobuf:"bytes,5,opt,name=timezone,proto3" json:"timezone,omitempty"`
+	Target          *BoundWorkflowTarget   `protobuf:"bytes,6,opt,name=target,proto3" json:"target,omitempty"`
+	Paused          bool                   `protobuf:"varint,7,opt,name=paused,proto3" json:"paused,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,8,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *WorkflowManagerUpdateScheduleRequest) Reset() {
@@ -2329,13 +2329,6 @@ func (x *WorkflowManagerUpdateScheduleRequest) ProtoReflect() protoreflect.Messa
 // Deprecated: Use WorkflowManagerUpdateScheduleRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerUpdateScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{36}
-}
-
-func (x *WorkflowManagerUpdateScheduleRequest) GetRequestHandle() string {
-	if x != nil {
-		return x.RequestHandle
-	}
-	return ""
 }
 
 func (x *WorkflowManagerUpdateScheduleRequest) GetScheduleId() string {
@@ -2380,12 +2373,19 @@ func (x *WorkflowManagerUpdateScheduleRequest) GetPaused() bool {
 	return false
 }
 
+func (x *WorkflowManagerUpdateScheduleRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
+}
+
 type WorkflowManagerDeleteScheduleRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestHandle string                 `protobuf:"bytes,1,opt,name=request_handle,json=requestHandle,proto3" json:"request_handle,omitempty"`
-	ScheduleId    string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ScheduleId      string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *WorkflowManagerDeleteScheduleRequest) Reset() {
@@ -2418,13 +2418,6 @@ func (*WorkflowManagerDeleteScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{37}
 }
 
-func (x *WorkflowManagerDeleteScheduleRequest) GetRequestHandle() string {
-	if x != nil {
-		return x.RequestHandle
-	}
-	return ""
-}
-
 func (x *WorkflowManagerDeleteScheduleRequest) GetScheduleId() string {
 	if x != nil {
 		return x.ScheduleId
@@ -2432,12 +2425,19 @@ func (x *WorkflowManagerDeleteScheduleRequest) GetScheduleId() string {
 	return ""
 }
 
+func (x *WorkflowManagerDeleteScheduleRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
+}
+
 type WorkflowManagerPauseScheduleRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestHandle string                 `protobuf:"bytes,1,opt,name=request_handle,json=requestHandle,proto3" json:"request_handle,omitempty"`
-	ScheduleId    string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ScheduleId      string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *WorkflowManagerPauseScheduleRequest) Reset() {
@@ -2470,13 +2470,6 @@ func (*WorkflowManagerPauseScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{38}
 }
 
-func (x *WorkflowManagerPauseScheduleRequest) GetRequestHandle() string {
-	if x != nil {
-		return x.RequestHandle
-	}
-	return ""
-}
-
 func (x *WorkflowManagerPauseScheduleRequest) GetScheduleId() string {
 	if x != nil {
 		return x.ScheduleId
@@ -2484,12 +2477,19 @@ func (x *WorkflowManagerPauseScheduleRequest) GetScheduleId() string {
 	return ""
 }
 
+func (x *WorkflowManagerPauseScheduleRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
+}
+
 type WorkflowManagerResumeScheduleRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestHandle string                 `protobuf:"bytes,1,opt,name=request_handle,json=requestHandle,proto3" json:"request_handle,omitempty"`
-	ScheduleId    string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ScheduleId      string                 `protobuf:"bytes,2,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *WorkflowManagerResumeScheduleRequest) Reset() {
@@ -2522,16 +2522,16 @@ func (*WorkflowManagerResumeScheduleRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{39}
 }
 
-func (x *WorkflowManagerResumeScheduleRequest) GetRequestHandle() string {
+func (x *WorkflowManagerResumeScheduleRequest) GetScheduleId() string {
 	if x != nil {
-		return x.RequestHandle
+		return x.ScheduleId
 	}
 	return ""
 }
 
-func (x *WorkflowManagerResumeScheduleRequest) GetScheduleId() string {
+func (x *WorkflowManagerResumeScheduleRequest) GetInvocationToken() string {
 	if x != nil {
-		return x.ScheduleId
+		return x.InvocationToken
 	}
 	return ""
 }
@@ -2713,39 +2713,39 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x04body\x18\x02 \x01(\tR\x04body\"\x86\x01\n" +
 	"\x17ManagedWorkflowSchedule\x12#\n" +
 	"\rprovider_name\x18\x01 \x01(\tR\fproviderName\x12F\n" +
-	"\bschedule\x18\x02 \x01(\v2*.gestalt.provider.v1.BoundWorkflowScheduleR\bschedule\"\xfc\x01\n" +
-	"$WorkflowManagerCreateScheduleRequest\x12%\n" +
-	"\x0erequest_handle\x18\x01 \x01(\tR\rrequestHandle\x12#\n" +
+	"\bschedule\x18\x02 \x01(\v2*.gestalt.provider.v1.BoundWorkflowScheduleR\bschedule\"\x96\x02\n" +
+	"$WorkflowManagerCreateScheduleRequest\x12#\n" +
 	"\rprovider_name\x18\x02 \x01(\tR\fproviderName\x12\x12\n" +
 	"\x04cron\x18\x03 \x01(\tR\x04cron\x12\x1a\n" +
 	"\btimezone\x18\x04 \x01(\tR\btimezone\x12@\n" +
 	"\x06target\x18\x05 \x01(\v2(.gestalt.provider.v1.BoundWorkflowTargetR\x06target\x12\x16\n" +
-	"\x06paused\x18\x06 \x01(\bR\x06paused\"k\n" +
-	"!WorkflowManagerGetScheduleRequest\x12%\n" +
-	"\x0erequest_handle\x18\x01 \x01(\tR\rrequestHandle\x12\x1f\n" +
+	"\x06paused\x18\x06 \x01(\bR\x06paused\x12)\n" +
+	"\x10invocation_token\x18\a \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\x85\x01\n" +
+	"!WorkflowManagerGetScheduleRequest\x12\x1f\n" +
 	"\vschedule_id\x18\x02 \x01(\tR\n" +
-	"scheduleId\"\x9d\x02\n" +
-	"$WorkflowManagerUpdateScheduleRequest\x12%\n" +
-	"\x0erequest_handle\x18\x01 \x01(\tR\rrequestHandle\x12\x1f\n" +
+	"scheduleId\x12)\n" +
+	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\xb7\x02\n" +
+	"$WorkflowManagerUpdateScheduleRequest\x12\x1f\n" +
 	"\vschedule_id\x18\x02 \x01(\tR\n" +
 	"scheduleId\x12#\n" +
 	"\rprovider_name\x18\x03 \x01(\tR\fproviderName\x12\x12\n" +
 	"\x04cron\x18\x04 \x01(\tR\x04cron\x12\x1a\n" +
 	"\btimezone\x18\x05 \x01(\tR\btimezone\x12@\n" +
 	"\x06target\x18\x06 \x01(\v2(.gestalt.provider.v1.BoundWorkflowTargetR\x06target\x12\x16\n" +
-	"\x06paused\x18\a \x01(\bR\x06paused\"n\n" +
-	"$WorkflowManagerDeleteScheduleRequest\x12%\n" +
-	"\x0erequest_handle\x18\x01 \x01(\tR\rrequestHandle\x12\x1f\n" +
+	"\x06paused\x18\a \x01(\bR\x06paused\x12)\n" +
+	"\x10invocation_token\x18\b \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\x88\x01\n" +
+	"$WorkflowManagerDeleteScheduleRequest\x12\x1f\n" +
 	"\vschedule_id\x18\x02 \x01(\tR\n" +
-	"scheduleId\"m\n" +
-	"#WorkflowManagerPauseScheduleRequest\x12%\n" +
-	"\x0erequest_handle\x18\x01 \x01(\tR\rrequestHandle\x12\x1f\n" +
+	"scheduleId\x12)\n" +
+	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\x87\x01\n" +
+	"#WorkflowManagerPauseScheduleRequest\x12\x1f\n" +
 	"\vschedule_id\x18\x02 \x01(\tR\n" +
-	"scheduleId\"n\n" +
-	"$WorkflowManagerResumeScheduleRequest\x12%\n" +
-	"\x0erequest_handle\x18\x01 \x01(\tR\rrequestHandle\x12\x1f\n" +
+	"scheduleId\x12)\n" +
+	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\x88\x01\n" +
+	"$WorkflowManagerResumeScheduleRequest\x12\x1f\n" +
 	"\vschedule_id\x18\x02 \x01(\tR\n" +
-	"scheduleId*\xdf\x01\n" +
+	"scheduleId\x12)\n" +
+	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle*\xdf\x01\n" +
 	"\x11WorkflowRunStatus\x12#\n" +
 	"\x1fWORKFLOW_RUN_STATUS_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bWORKFLOW_RUN_STATUS_PENDING\x10\x01\x12\x1f\n" +

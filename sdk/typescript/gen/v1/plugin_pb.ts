@@ -12,7 +12,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file v1/plugin.proto.
  */
 export const file_v1_plugin: GenFile = /*@__PURE__*/
-  fileDesc("Cg92MS9wbHVnaW4ucHJvdG8SE2dlc3RhbHQucHJvdmlkZXIudjEifgoQQ2F0YWxvZ1BhcmFtZXRlchIMCgRuYW1lGAEgASgJEgwKBHR5cGUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSEAoIcmVxdWlyZWQYBCABKAgSJwoHZGVmYXVsdBgFIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZSLeAQoUT3BlcmF0aW9uQW5ub3RhdGlvbnMSGwoOcmVhZF9vbmx5X2hpbnQYASABKAhIAIgBARIcCg9pZGVtcG90ZW50X2hpbnQYAiABKAhIAYgBARIdChBkZXN0cnVjdGl2ZV9oaW50GAMgASgISAKIAQESHAoPb3Blbl93b3JsZF9oaW50GAQgASgISAOIAQFCEQoPX3JlYWRfb25seV9oaW50QhIKEF9pZGVtcG90ZW50X2hpbnRCEwoRX2Rlc3RydWN0aXZlX2hpbnRCEgoQX29wZW5fd29ybGRfaGludCKAAwoQQ2F0YWxvZ09wZXJhdGlvbhIKCgJpZBgBIAEoCRIOCgZtZXRob2QYAiABKAkSDQoFdGl0bGUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSFAoMaW5wdXRfc2NoZW1hGAUgASgJEhUKDW91dHB1dF9zY2hlbWEYBiABKAkSPgoLYW5ub3RhdGlvbnMYByABKAsyKS5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZXJhdGlvbkFubm90YXRpb25zEjkKCnBhcmFtZXRlcnMYCCADKAsyJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkNhdGFsb2dQYXJhbWV0ZXISFwoPcmVxdWlyZWRfc2NvcGVzGAkgAygJEgwKBHRhZ3MYCiADKAkSEQoJcmVhZF9vbmx5GAsgASgIEhQKB3Zpc2libGUYDCABKAhIAIgBARIRCgl0cmFuc3BvcnQYDSABKAkSFQoNYWxsb3dlZF9yb2xlcxgOIAMoCUIKCghfdmlzaWJsZSKPAQoHQ2F0YWxvZxIMCgRuYW1lGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIQCghpY29uX3N2ZxgEIAEoCRI5CgpvcGVyYXRpb25zGAUgAygLMiUuZ2VzdGFsdC5wcm92aWRlci52MS5DYXRhbG9nT3BlcmF0aW9uIm8KEkNvbm5lY3Rpb25QYXJhbURlZhIQCghyZXF1aXJlZBgBIAEoCBITCgtkZXNjcmlwdGlvbhgCIAEoCRIVCg1kZWZhdWx0X3ZhbHVlGAMgASgJEgwKBGZyb20YBCABKAkSDQoFZmllbGQYBSABKAkiigQKEFByb3ZpZGVyTWV0YWRhdGESDAoEbmFtZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSPAoPY29ubmVjdGlvbl9tb2RlGAQgASgOMiMuZ2VzdGFsdC5wcm92aWRlci52MS5Db25uZWN0aW9uTW9kZRISCgphdXRoX3R5cGVzGAUgAygJElYKEWNvbm5lY3Rpb25fcGFyYW1zGAYgAygLMjsuZ2VzdGFsdC5wcm92aWRlci52MS5Qcm92aWRlck1ldGFkYXRhLkNvbm5lY3Rpb25QYXJhbXNFbnRyeRI0Cg5zdGF0aWNfY2F0YWxvZxgHIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuQ2F0YWxvZxIgChhzdXBwb3J0c19zZXNzaW9uX2NhdGFsb2cYCCABKAgSHQoVc3VwcG9ydHNfcG9zdF9jb25uZWN0GAkgASgIEhwKFG1pbl9wcm90b2NvbF92ZXJzaW9uGAsgASgFEhwKFG1heF9wcm90b2NvbF92ZXJzaW9uGAwgASgFGmAKFUNvbm5lY3Rpb25QYXJhbXNFbnRyeRILCgNrZXkYASABKAkSNgoFdmFsdWUYAiABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvbm5lY3Rpb25QYXJhbURlZjoCOAEiLwoPT3BlcmF0aW9uUmVzdWx0Eg4KBnN0YXR1cxgBIAEoBRIMCgRib2R5GAIgASgJIp8BChNQbHVnaW5JbnZva2VSZXF1ZXN0EhYKDnJlcXVlc3RfaGFuZGxlGAEgASgJEg4KBnBsdWdpbhgCIAEoCRIRCglvcGVyYXRpb24YAyABKAkSJwoGcGFyYW1zGAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBISCgpjb25uZWN0aW9uGAUgASgJEhAKCGluc3RhbmNlGAYgASgJIo4DChBJbnRlZ3JhdGlvblRva2VuEgoKAmlkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkSEwoLaW50ZWdyYXRpb24YAyABKAkSEAoIaW5zdGFuY2UYBCABKAkSFAoMYWNjZXNzX3Rva2VuGAUgASgJEhUKDXJlZnJlc2hfdG9rZW4YBiABKAkSDgoGc2NvcGVzGAcgASgJEi4KCmV4cGlyZXNfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjUKEWxhc3RfcmVmcmVzaGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIbChNyZWZyZXNoX2Vycm9yX2NvdW50GAogASgFEhUKDW1ldGFkYXRhX2pzb24YCyABKAkSLgoKY3JlYXRlZF9hdBgMIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgNIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiVQoOU3ViamVjdENvbnRleHQSCgoCaWQYASABKAkSDAoEa2luZBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSEwoLYXV0aF9zb3VyY2UYBCABKAkiWwoRQ3JlZGVudGlhbENvbnRleHQSDAoEbW9kZRgBIAEoCRISCgpzdWJqZWN0X2lkGAIgASgJEhIKCmNvbm5lY3Rpb24YAyABKAkSEAoIaW5zdGFuY2UYBCABKAkiLQoNQWNjZXNzQ29udGV4dBIOCgZwb2xpY3kYASABKAkSDAoEcm9sZRgCIAEoCSLhAQoOUmVxdWVzdENvbnRleHQSNAoHc3ViamVjdBgBIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuU3ViamVjdENvbnRleHQSOgoKY3JlZGVudGlhbBgCIAEoCzImLmdlc3RhbHQucHJvdmlkZXIudjEuQ3JlZGVudGlhbENvbnRleHQSMgoGYWNjZXNzGAMgASgLMiIuZ2VzdGFsdC5wcm92aWRlci52MS5BY2Nlc3NDb250ZXh0EikKCHdvcmtmbG93GAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCLPAgoORXhlY3V0ZVJlcXVlc3QSEQoJb3BlcmF0aW9uGAEgASgJEicKBnBhcmFtcxgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSDQoFdG9rZW4YAyABKAkSVAoRY29ubmVjdGlvbl9wYXJhbXMYBCADKAsyOS5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4ZWN1dGVSZXF1ZXN0LkNvbm5lY3Rpb25QYXJhbXNFbnRyeRIVCg1pbnZvY2F0aW9uX2lkGAUgASgJEjQKB2NvbnRleHQYBiABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlcXVlc3RDb250ZXh0EhYKDnJlcXVlc3RfaGFuZGxlGAcgASgJGjcKFUNvbm5lY3Rpb25QYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIo8CChhHZXRTZXNzaW9uQ2F0YWxvZ1JlcXVlc3QSDQoFdG9rZW4YASABKAkSXgoRY29ubmVjdGlvbl9wYXJhbXMYAiADKAsyQy5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldFNlc3Npb25DYXRhbG9nUmVxdWVzdC5Db25uZWN0aW9uUGFyYW1zRW50cnkSFQoNaW52b2NhdGlvbl9pZBgDIAEoCRI0Cgdjb250ZXh0GAQgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5SZXF1ZXN0Q29udGV4dBo3ChVDb25uZWN0aW9uUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJKChlHZXRTZXNzaW9uQ2F0YWxvZ1Jlc3BvbnNlEi0KB2NhdGFsb2cYASABKAsyHC5nZXN0YWx0LnByb3ZpZGVyLnYxLkNhdGFsb2ciSgoSUG9zdENvbm5lY3RSZXF1ZXN0EjQKBXRva2VuGAEgASgLMiUuZ2VzdGFsdC5wcm92aWRlci52MS5JbnRlZ3JhdGlvblRva2VuIpABChNQb3N0Q29ubmVjdFJlc3BvbnNlEkgKCG1ldGFkYXRhGAEgAygLMjYuZ2VzdGFsdC5wcm92aWRlci52MS5Qb3N0Q29ubmVjdFJlc3BvbnNlLk1ldGFkYXRhRW50cnkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBImcKFFN0YXJ0UHJvdmlkZXJSZXF1ZXN0EgwKBG5hbWUYASABKAkSJwoGY29uZmlnGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIYChBwcm90b2NvbF92ZXJzaW9uGAQgASgFIjEKFVN0YXJ0UHJvdmlkZXJSZXNwb25zZRIYChBwcm90b2NvbF92ZXJzaW9uGAEgASgFKqEBCg5Db25uZWN0aW9uTW9kZRIfChtDT05ORUNUSU9OX01PREVfVU5TUEVDSUZJRUQQABIYChRDT05ORUNUSU9OX01PREVfTk9ORRABEhgKFENPTk5FQ1RJT05fTU9ERV9VU0VSEAISHAoYQ09OTkVDVElPTl9NT0RFX0lERU5USVRZEAMiBAgEEAQqFkNPTk5FQ1RJT05fTU9ERV9FSVRIRVIy9wMKE0ludGVncmF0aW9uUHJvdmlkZXISTAoLR2V0TWV0YWRhdGESFi5nb29nbGUucHJvdG9idWYuRW1wdHkaJS5nZXN0YWx0LnByb3ZpZGVyLnYxLlByb3ZpZGVyTWV0YWRhdGESZgoNU3RhcnRQcm92aWRlchIpLmdlc3RhbHQucHJvdmlkZXIudjEuU3RhcnRQcm92aWRlclJlcXVlc3QaKi5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0YXJ0UHJvdmlkZXJSZXNwb25zZRJUCgdFeGVjdXRlEiMuZ2VzdGFsdC5wcm92aWRlci52MS5FeGVjdXRlUmVxdWVzdBokLmdlc3RhbHQucHJvdmlkZXIudjEuT3BlcmF0aW9uUmVzdWx0EnIKEUdldFNlc3Npb25DYXRhbG9nEi0uZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZXNzaW9uQ2F0YWxvZ1JlcXVlc3QaLi5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldFNlc3Npb25DYXRhbG9nUmVzcG9uc2USYAoLUG9zdENvbm5lY3QSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLlBvc3RDb25uZWN0UmVxdWVzdBooLmdlc3RhbHQucHJvdmlkZXIudjEuUG9zdENvbm5lY3RSZXNwb25zZTJpCg1QbHVnaW5JbnZva2VyElgKBkludm9rZRIoLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luSW52b2tlUmVxdWVzdBokLmdlc3RhbHQucHJvdmlkZXIudjEuT3BlcmF0aW9uUmVzdWx0QjtaOWdpdGh1Yi5jb20vdmFsb24tdGVjaG5vbG9naWVzL2dlc3RhbHQvc2RrL2dvL2dlbi92MTtwcm90b2IGcHJvdG8z", [file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("Cg92MS9wbHVnaW4ucHJvdG8SE2dlc3RhbHQucHJvdmlkZXIudjEifgoQQ2F0YWxvZ1BhcmFtZXRlchIMCgRuYW1lGAEgASgJEgwKBHR5cGUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSEAoIcmVxdWlyZWQYBCABKAgSJwoHZGVmYXVsdBgFIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZSLeAQoUT3BlcmF0aW9uQW5ub3RhdGlvbnMSGwoOcmVhZF9vbmx5X2hpbnQYASABKAhIAIgBARIcCg9pZGVtcG90ZW50X2hpbnQYAiABKAhIAYgBARIdChBkZXN0cnVjdGl2ZV9oaW50GAMgASgISAKIAQESHAoPb3Blbl93b3JsZF9oaW50GAQgASgISAOIAQFCEQoPX3JlYWRfb25seV9oaW50QhIKEF9pZGVtcG90ZW50X2hpbnRCEwoRX2Rlc3RydWN0aXZlX2hpbnRCEgoQX29wZW5fd29ybGRfaGludCKAAwoQQ2F0YWxvZ09wZXJhdGlvbhIKCgJpZBgBIAEoCRIOCgZtZXRob2QYAiABKAkSDQoFdGl0bGUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSFAoMaW5wdXRfc2NoZW1hGAUgASgJEhUKDW91dHB1dF9zY2hlbWEYBiABKAkSPgoLYW5ub3RhdGlvbnMYByABKAsyKS5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZXJhdGlvbkFubm90YXRpb25zEjkKCnBhcmFtZXRlcnMYCCADKAsyJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkNhdGFsb2dQYXJhbWV0ZXISFwoPcmVxdWlyZWRfc2NvcGVzGAkgAygJEgwKBHRhZ3MYCiADKAkSEQoJcmVhZF9vbmx5GAsgASgIEhQKB3Zpc2libGUYDCABKAhIAIgBARIRCgl0cmFuc3BvcnQYDSABKAkSFQoNYWxsb3dlZF9yb2xlcxgOIAMoCUIKCghfdmlzaWJsZSKPAQoHQ2F0YWxvZxIMCgRuYW1lGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIQCghpY29uX3N2ZxgEIAEoCRI5CgpvcGVyYXRpb25zGAUgAygLMiUuZ2VzdGFsdC5wcm92aWRlci52MS5DYXRhbG9nT3BlcmF0aW9uIm8KEkNvbm5lY3Rpb25QYXJhbURlZhIQCghyZXF1aXJlZBgBIAEoCBITCgtkZXNjcmlwdGlvbhgCIAEoCRIVCg1kZWZhdWx0X3ZhbHVlGAMgASgJEgwKBGZyb20YBCABKAkSDQoFZmllbGQYBSABKAkiigQKEFByb3ZpZGVyTWV0YWRhdGESDAoEbmFtZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSPAoPY29ubmVjdGlvbl9tb2RlGAQgASgOMiMuZ2VzdGFsdC5wcm92aWRlci52MS5Db25uZWN0aW9uTW9kZRISCgphdXRoX3R5cGVzGAUgAygJElYKEWNvbm5lY3Rpb25fcGFyYW1zGAYgAygLMjsuZ2VzdGFsdC5wcm92aWRlci52MS5Qcm92aWRlck1ldGFkYXRhLkNvbm5lY3Rpb25QYXJhbXNFbnRyeRI0Cg5zdGF0aWNfY2F0YWxvZxgHIAEoCzIcLmdlc3RhbHQucHJvdmlkZXIudjEuQ2F0YWxvZxIgChhzdXBwb3J0c19zZXNzaW9uX2NhdGFsb2cYCCABKAgSHQoVc3VwcG9ydHNfcG9zdF9jb25uZWN0GAkgASgIEhwKFG1pbl9wcm90b2NvbF92ZXJzaW9uGAsgASgFEhwKFG1heF9wcm90b2NvbF92ZXJzaW9uGAwgASgFGmAKFUNvbm5lY3Rpb25QYXJhbXNFbnRyeRILCgNrZXkYASABKAkSNgoFdmFsdWUYAiABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvbm5lY3Rpb25QYXJhbURlZjoCOAEiLwoPT3BlcmF0aW9uUmVzdWx0Eg4KBnN0YXR1cxgBIAEoBRIMCgRib2R5GAIgASgJIjsKFVBsdWdpbkludm9jYXRpb25HcmFudBIOCgZwbHVnaW4YASABKAkSEgoKb3BlcmF0aW9ucxgCIAMoCSKSAQoeRXhjaGFuZ2VJbnZvY2F0aW9uVG9rZW5SZXF1ZXN0Eh8KF3BhcmVudF9pbnZvY2F0aW9uX3Rva2VuGAEgASgJEjoKBmdyYW50cxgCIAMoCzIqLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luSW52b2NhdGlvbkdyYW50EhMKC3R0bF9zZWNvbmRzGAMgASgDIjsKH0V4Y2hhbmdlSW52b2NhdGlvblRva2VuUmVzcG9uc2USGAoQaW52b2NhdGlvbl90b2tlbhgBIAEoCSK3AQoTUGx1Z2luSW52b2tlUmVxdWVzdBIOCgZwbHVnaW4YAiABKAkSEQoJb3BlcmF0aW9uGAMgASgJEicKBnBhcmFtcxgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSEgoKY29ubmVjdGlvbhgFIAEoCRIQCghpbnN0YW5jZRgGIAEoCRIYChBpbnZvY2F0aW9uX3Rva2VuGAcgASgJSgQIARACUg5yZXF1ZXN0X2hhbmRsZSKOAwoQSW50ZWdyYXRpb25Ub2tlbhIKCgJpZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJEhMKC2ludGVncmF0aW9uGAMgASgJEhAKCGluc3RhbmNlGAQgASgJEhQKDGFjY2Vzc190b2tlbhgFIAEoCRIVCg1yZWZyZXNoX3Rva2VuGAYgASgJEg4KBnNjb3BlcxgHIAEoCRIuCgpleHBpcmVzX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI1ChFsYXN0X3JlZnJlc2hlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASGwoTcmVmcmVzaF9lcnJvcl9jb3VudBgKIAEoBRIVCg1tZXRhZGF0YV9qc29uGAsgASgJEi4KCmNyZWF0ZWRfYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYDSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlUKDlN1YmplY3RDb250ZXh0EgoKAmlkGAEgASgJEgwKBGtpbmQYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEhMKC2F1dGhfc291cmNlGAQgASgJIlsKEUNyZWRlbnRpYWxDb250ZXh0EgwKBG1vZGUYASABKAkSEgoKc3ViamVjdF9pZBgCIAEoCRISCgpjb25uZWN0aW9uGAMgASgJEhAKCGluc3RhbmNlGAQgASgJIi0KDUFjY2Vzc0NvbnRleHQSDgoGcG9saWN5GAEgASgJEgwKBHJvbGUYAiABKAki4QEKDlJlcXVlc3RDb250ZXh0EjQKB3N1YmplY3QYASABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlN1YmplY3RDb250ZXh0EjoKCmNyZWRlbnRpYWwYAiABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkNyZWRlbnRpYWxDb250ZXh0EjIKBmFjY2VzcxgDIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuQWNjZXNzQ29udGV4dBIpCgh3b3JrZmxvdxgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3Qi5wIKDkV4ZWN1dGVSZXF1ZXN0EhEKCW9wZXJhdGlvbhgBIAEoCRInCgZwYXJhbXMYAiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Eg0KBXRva2VuGAMgASgJElQKEWNvbm5lY3Rpb25fcGFyYW1zGAQgAygLMjkuZ2VzdGFsdC5wcm92aWRlci52MS5FeGVjdXRlUmVxdWVzdC5Db25uZWN0aW9uUGFyYW1zRW50cnkSFQoNaW52b2NhdGlvbl9pZBgFIAEoCRI0Cgdjb250ZXh0GAYgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5SZXF1ZXN0Q29udGV4dBIYChBpbnZvY2F0aW9uX3Rva2VuGAggASgJGjcKFUNvbm5lY3Rpb25QYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBSgQIBxAIUg5yZXF1ZXN0X2hhbmRsZSKPAgoYR2V0U2Vzc2lvbkNhdGFsb2dSZXF1ZXN0Eg0KBXRva2VuGAEgASgJEl4KEWNvbm5lY3Rpb25fcGFyYW1zGAIgAygLMkMuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZXNzaW9uQ2F0YWxvZ1JlcXVlc3QuQ29ubmVjdGlvblBhcmFtc0VudHJ5EhUKDWludm9jYXRpb25faWQYAyABKAkSNAoHY29udGV4dBgEIAEoCzIjLmdlc3RhbHQucHJvdmlkZXIudjEuUmVxdWVzdENvbnRleHQaNwoVQ29ubmVjdGlvblBhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiSgoZR2V0U2Vzc2lvbkNhdGFsb2dSZXNwb25zZRItCgdjYXRhbG9nGAEgASgLMhwuZ2VzdGFsdC5wcm92aWRlci52MS5DYXRhbG9nIkoKElBvc3RDb25uZWN0UmVxdWVzdBI0CgV0b2tlbhgBIAEoCzIlLmdlc3RhbHQucHJvdmlkZXIudjEuSW50ZWdyYXRpb25Ub2tlbiKQAQoTUG9zdENvbm5lY3RSZXNwb25zZRJICghtZXRhZGF0YRgBIAMoCzI2Lmdlc3RhbHQucHJvdmlkZXIudjEuUG9zdENvbm5lY3RSZXNwb25zZS5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJnChRTdGFydFByb3ZpZGVyUmVxdWVzdBIMCgRuYW1lGAEgASgJEicKBmNvbmZpZxgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSGAoQcHJvdG9jb2xfdmVyc2lvbhgEIAEoBSIxChVTdGFydFByb3ZpZGVyUmVzcG9uc2USGAoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoBSqhAQoOQ29ubmVjdGlvbk1vZGUSHwobQ09OTkVDVElPTl9NT0RFX1VOU1BFQ0lGSUVEEAASGAoUQ09OTkVDVElPTl9NT0RFX05PTkUQARIYChRDT05ORUNUSU9OX01PREVfVVNFUhACEhwKGENPTk5FQ1RJT05fTU9ERV9JREVOVElUWRADIgQIBBAEKhZDT05ORUNUSU9OX01PREVfRUlUSEVSMvcDChNJbnRlZ3JhdGlvblByb3ZpZGVyEkwKC0dldE1ldGFkYXRhEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GiUuZ2VzdGFsdC5wcm92aWRlci52MS5Qcm92aWRlck1ldGFkYXRhEmYKDVN0YXJ0UHJvdmlkZXISKS5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0YXJ0UHJvdmlkZXJSZXF1ZXN0GiouZ2VzdGFsdC5wcm92aWRlci52MS5TdGFydFByb3ZpZGVyUmVzcG9uc2USVAoHRXhlY3V0ZRIjLmdlc3RhbHQucHJvdmlkZXIudjEuRXhlY3V0ZVJlcXVlc3QaJC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZXJhdGlvblJlc3VsdBJyChFHZXRTZXNzaW9uQ2F0YWxvZxItLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0U2Vzc2lvbkNhdGFsb2dSZXF1ZXN0Gi4uZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZXNzaW9uQ2F0YWxvZ1Jlc3BvbnNlEmAKC1Bvc3RDb25uZWN0EicuZ2VzdGFsdC5wcm92aWRlci52MS5Qb3N0Q29ubmVjdFJlcXVlc3QaKC5nZXN0YWx0LnByb3ZpZGVyLnYxLlBvc3RDb25uZWN0UmVzcG9uc2Uy8AEKDVBsdWdpbkludm9rZXIShAEKF0V4Y2hhbmdlSW52b2NhdGlvblRva2VuEjMuZ2VzdGFsdC5wcm92aWRlci52MS5FeGNoYW5nZUludm9jYXRpb25Ub2tlblJlcXVlc3QaNC5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4Y2hhbmdlSW52b2NhdGlvblRva2VuUmVzcG9uc2USWAoGSW52b2tlEiguZ2VzdGFsdC5wcm92aWRlci52MS5QbHVnaW5JbnZva2VSZXF1ZXN0GiQuZ2VzdGFsdC5wcm92aWRlci52MS5PcGVyYXRpb25SZXN1bHRCO1o5Z2l0aHViLmNvbS92YWxvbi10ZWNobm9sb2dpZXMvZ2VzdGFsdC9zZGsvZ28vZ2VuL3YxO3Byb3RvYgZwcm90bzM", [file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * CatalogParameter describes one input parameter surfaced in the generated
@@ -347,17 +347,86 @@ export const OperationResultSchema: GenMessage<OperationResult> = /*@__PURE__*/
   messageDesc(file_v1_plugin, 6);
 
 /**
+ * PluginInvocationGrant describes one plugin operation grant minted into an
+ * exchanged invocation token.
+ *
+ * @generated from message gestalt.provider.v1.PluginInvocationGrant
+ */
+export type PluginInvocationGrant = Message<"gestalt.provider.v1.PluginInvocationGrant"> & {
+  /**
+   * @generated from field: string plugin = 1;
+   */
+  plugin: string;
+
+  /**
+   * @generated from field: repeated string operations = 2;
+   */
+  operations: string[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.PluginInvocationGrant.
+ * Use `create(PluginInvocationGrantSchema)` to create a new message.
+ */
+export const PluginInvocationGrantSchema: GenMessage<PluginInvocationGrant> = /*@__PURE__*/
+  messageDesc(file_v1_plugin, 7);
+
+/**
+ * ExchangeInvocationTokenRequest narrows an existing invocation token to a
+ * child token that carries only the requested plugin grants.
+ *
+ * @generated from message gestalt.provider.v1.ExchangeInvocationTokenRequest
+ */
+export type ExchangeInvocationTokenRequest = Message<"gestalt.provider.v1.ExchangeInvocationTokenRequest"> & {
+  /**
+   * @generated from field: string parent_invocation_token = 1;
+   */
+  parentInvocationToken: string;
+
+  /**
+   * @generated from field: repeated gestalt.provider.v1.PluginInvocationGrant grants = 2;
+   */
+  grants: PluginInvocationGrant[];
+
+  /**
+   * @generated from field: int64 ttl_seconds = 3;
+   */
+  ttlSeconds: bigint;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ExchangeInvocationTokenRequest.
+ * Use `create(ExchangeInvocationTokenRequestSchema)` to create a new message.
+ */
+export const ExchangeInvocationTokenRequestSchema: GenMessage<ExchangeInvocationTokenRequest> = /*@__PURE__*/
+  messageDesc(file_v1_plugin, 8);
+
+/**
+ * ExchangeInvocationTokenResponse returns the child invocation token.
+ *
+ * @generated from message gestalt.provider.v1.ExchangeInvocationTokenResponse
+ */
+export type ExchangeInvocationTokenResponse = Message<"gestalt.provider.v1.ExchangeInvocationTokenResponse"> & {
+  /**
+   * @generated from field: string invocation_token = 1;
+   */
+  invocationToken: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ExchangeInvocationTokenResponse.
+ * Use `create(ExchangeInvocationTokenResponseSchema)` to create a new message.
+ */
+export const ExchangeInvocationTokenResponseSchema: GenMessage<ExchangeInvocationTokenResponse> = /*@__PURE__*/
+  messageDesc(file_v1_plugin, 9);
+
+/**
  * PluginInvokeRequest invokes a declared operation on another plugin through
  * the host-side invoker service.
  *
  * @generated from message gestalt.provider.v1.PluginInvokeRequest
  */
 export type PluginInvokeRequest = Message<"gestalt.provider.v1.PluginInvokeRequest"> & {
-  /**
-   * @generated from field: string request_handle = 1;
-   */
-  requestHandle: string;
-
   /**
    * @generated from field: string plugin = 2;
    */
@@ -382,6 +451,11 @@ export type PluginInvokeRequest = Message<"gestalt.provider.v1.PluginInvokeReque
    * @generated from field: string instance = 6;
    */
   instance: string;
+
+  /**
+   * @generated from field: string invocation_token = 7;
+   */
+  invocationToken: string;
 };
 
 /**
@@ -389,7 +463,7 @@ export type PluginInvokeRequest = Message<"gestalt.provider.v1.PluginInvokeReque
  * Use `create(PluginInvokeRequestSchema)` to create a new message.
  */
 export const PluginInvokeRequestSchema: GenMessage<PluginInvokeRequest> = /*@__PURE__*/
-  messageDesc(file_v1_plugin, 7);
+  messageDesc(file_v1_plugin, 10);
 
 /**
  * IntegrationToken is the host-managed token payload passed into post-connect
@@ -469,7 +543,7 @@ export type IntegrationToken = Message<"gestalt.provider.v1.IntegrationToken"> &
  * Use `create(IntegrationTokenSchema)` to create a new message.
  */
 export const IntegrationTokenSchema: GenMessage<IntegrationToken> = /*@__PURE__*/
-  messageDesc(file_v1_plugin, 8);
+  messageDesc(file_v1_plugin, 11);
 
 /**
  * SubjectContext identifies the caller that initiated an operation.
@@ -503,7 +577,7 @@ export type SubjectContext = Message<"gestalt.provider.v1.SubjectContext"> & {
  * Use `create(SubjectContextSchema)` to create a new message.
  */
 export const SubjectContextSchema: GenMessage<SubjectContext> = /*@__PURE__*/
-  messageDesc(file_v1_plugin, 9);
+  messageDesc(file_v1_plugin, 12);
 
 /**
  * CredentialContext describes the resolved credential used for an operation.
@@ -537,7 +611,7 @@ export type CredentialContext = Message<"gestalt.provider.v1.CredentialContext">
  * Use `create(CredentialContextSchema)` to create a new message.
  */
 export const CredentialContextSchema: GenMessage<CredentialContext> = /*@__PURE__*/
-  messageDesc(file_v1_plugin, 10);
+  messageDesc(file_v1_plugin, 13);
 
 /**
  * AccessContext describes the host-side access decision for an operation.
@@ -561,7 +635,7 @@ export type AccessContext = Message<"gestalt.provider.v1.AccessContext"> & {
  * Use `create(AccessContextSchema)` to create a new message.
  */
 export const AccessContextSchema: GenMessage<AccessContext> = /*@__PURE__*/
-  messageDesc(file_v1_plugin, 11);
+  messageDesc(file_v1_plugin, 14);
 
 /**
  * RequestContext bundles the caller, credential, and access metadata for one
@@ -596,7 +670,7 @@ export type RequestContext = Message<"gestalt.provider.v1.RequestContext"> & {
  * Use `create(RequestContextSchema)` to create a new message.
  */
 export const RequestContextSchema: GenMessage<RequestContext> = /*@__PURE__*/
-  messageDesc(file_v1_plugin, 12);
+  messageDesc(file_v1_plugin, 15);
 
 /**
  * ExecuteRequest invokes one executable operation.
@@ -635,9 +709,9 @@ export type ExecuteRequest = Message<"gestalt.provider.v1.ExecuteRequest"> & {
   context?: RequestContext;
 
   /**
-   * @generated from field: string request_handle = 7;
+   * @generated from field: string invocation_token = 8;
    */
-  requestHandle: string;
+  invocationToken: string;
 };
 
 /**
@@ -645,7 +719,7 @@ export type ExecuteRequest = Message<"gestalt.provider.v1.ExecuteRequest"> & {
  * Use `create(ExecuteRequestSchema)` to create a new message.
  */
 export const ExecuteRequestSchema: GenMessage<ExecuteRequest> = /*@__PURE__*/
-  messageDesc(file_v1_plugin, 13);
+  messageDesc(file_v1_plugin, 16);
 
 /**
  * GetSessionCatalogRequest asks a provider for request-scoped catalog
@@ -680,7 +754,7 @@ export type GetSessionCatalogRequest = Message<"gestalt.provider.v1.GetSessionCa
  * Use `create(GetSessionCatalogRequestSchema)` to create a new message.
  */
 export const GetSessionCatalogRequestSchema: GenMessage<GetSessionCatalogRequest> = /*@__PURE__*/
-  messageDesc(file_v1_plugin, 14);
+  messageDesc(file_v1_plugin, 17);
 
 /**
  * GetSessionCatalogResponse returns request-scoped catalog extensions.
@@ -699,7 +773,7 @@ export type GetSessionCatalogResponse = Message<"gestalt.provider.v1.GetSessionC
  * Use `create(GetSessionCatalogResponseSchema)` to create a new message.
  */
 export const GetSessionCatalogResponseSchema: GenMessage<GetSessionCatalogResponse> = /*@__PURE__*/
-  messageDesc(file_v1_plugin, 15);
+  messageDesc(file_v1_plugin, 18);
 
 /**
  * PostConnectRequest notifies a provider that a connection has completed.
@@ -718,7 +792,7 @@ export type PostConnectRequest = Message<"gestalt.provider.v1.PostConnectRequest
  * Use `create(PostConnectRequestSchema)` to create a new message.
  */
 export const PostConnectRequestSchema: GenMessage<PostConnectRequest> = /*@__PURE__*/
-  messageDesc(file_v1_plugin, 16);
+  messageDesc(file_v1_plugin, 19);
 
 /**
  * PostConnectResponse returns provider-defined metadata captured after
@@ -738,7 +812,7 @@ export type PostConnectResponse = Message<"gestalt.provider.v1.PostConnectRespon
  * Use `create(PostConnectResponseSchema)` to create a new message.
  */
 export const PostConnectResponseSchema: GenMessage<PostConnectResponse> = /*@__PURE__*/
-  messageDesc(file_v1_plugin, 17);
+  messageDesc(file_v1_plugin, 20);
 
 /**
  * StartProviderRequest configures an integration provider for one runtime
@@ -768,7 +842,7 @@ export type StartProviderRequest = Message<"gestalt.provider.v1.StartProviderReq
  * Use `create(StartProviderRequestSchema)` to create a new message.
  */
 export const StartProviderRequestSchema: GenMessage<StartProviderRequest> = /*@__PURE__*/
-  messageDesc(file_v1_plugin, 18);
+  messageDesc(file_v1_plugin, 21);
 
 /**
  * StartProviderResponse confirms the protocol version the provider is serving.
@@ -787,7 +861,7 @@ export type StartProviderResponse = Message<"gestalt.provider.v1.StartProviderRe
  * Use `create(StartProviderResponseSchema)` to create a new message.
  */
 export const StartProviderResponseSchema: GenMessage<StartProviderResponse> = /*@__PURE__*/
-  messageDesc(file_v1_plugin, 19);
+  messageDesc(file_v1_plugin, 22);
 
 /**
  * ConnectionMode describes which credential sources a provider accepts.
@@ -875,6 +949,14 @@ export const IntegrationProvider: GenService<{
  * @generated from service gestalt.provider.v1.PluginInvoker
  */
 export const PluginInvoker: GenService<{
+  /**
+   * @generated from rpc gestalt.provider.v1.PluginInvoker.ExchangeInvocationToken
+   */
+  exchangeInvocationToken: {
+    methodKind: "unary";
+    input: typeof ExchangeInvocationTokenRequestSchema;
+    output: typeof ExchangeInvocationTokenResponseSchema;
+  },
   /**
    * @generated from rpc gestalt.provider.v1.PluginInvoker.Invoke
    */

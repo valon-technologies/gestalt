@@ -43,7 +43,7 @@ pub struct Request {
     /// such as `runId`, `target.pluginName`, `trigger.scheduleId`, and
     /// `trigger.event.specVersion`.
     pub workflow: serde_json::Map<String, serde_json::Value>,
-    pub request_handle: String,
+    pub invocation_token: String,
 }
 
 impl Request {
@@ -52,20 +52,20 @@ impl Request {
         self.connection_params.get(name).map(String::as_str)
     }
 
-    pub fn request_handle(&self) -> &str {
-        &self.request_handle
+    pub fn invocation_token(&self) -> &str {
+        &self.invocation_token
     }
 
     pub async fn invoker(
         &self,
     ) -> std::result::Result<crate::PluginInvoker, crate::PluginInvokerError> {
-        crate::PluginInvoker::connect(self.request_handle()).await
+        crate::PluginInvoker::connect(self.invocation_token()).await
     }
 
     pub async fn workflow_manager(
         &self,
     ) -> std::result::Result<crate::WorkflowManager, crate::WorkflowManagerError> {
-        crate::WorkflowManager::connect(self.request_handle()).await
+        crate::WorkflowManager::connect(self.invocation_token()).await
     }
 }
 

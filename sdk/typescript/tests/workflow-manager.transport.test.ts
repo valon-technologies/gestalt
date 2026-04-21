@@ -21,11 +21,11 @@ import {
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
 
-test("WorkflowManager forwards request handles from strings and Request objects", async () => {
+test("WorkflowManager forwards invocation tokens from strings and Request objects", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-workflow-manager-"));
   const socketPath = join(tempDir, "workflow-manager.sock");
   const previousSocket = process.env[ENV_WORKFLOW_MANAGER_SOCKET];
-  const calls: Array<{ method: string; requestHandle: string; scheduleId?: string }> = [];
+  const calls: Array<{ method: string; invocationToken: string; scheduleId?: string }> = [];
 
   const handler = connectNodeAdapter({
     grpc: true,
@@ -38,7 +38,7 @@ test("WorkflowManager forwards request handles from strings and Request objects"
           async createSchedule(input) {
             calls.push({
               method: "create",
-              requestHandle: input.requestHandle,
+              invocationToken: input.invocationToken,
             });
             return create(ManagedWorkflowScheduleSchema, {
               providerName: input.providerName || "basic",
@@ -54,7 +54,7 @@ test("WorkflowManager forwards request handles from strings and Request objects"
           async getSchedule(input) {
             calls.push({
               method: "get",
-              requestHandle: input.requestHandle,
+              invocationToken: input.invocationToken,
               scheduleId: input.scheduleId,
             });
             return create(ManagedWorkflowScheduleSchema, {
@@ -67,7 +67,7 @@ test("WorkflowManager forwards request handles from strings and Request objects"
           async updateSchedule(input) {
             calls.push({
               method: "update",
-              requestHandle: input.requestHandle,
+              invocationToken: input.invocationToken,
               scheduleId: input.scheduleId,
             });
             return create(ManagedWorkflowScheduleSchema, {
@@ -84,7 +84,7 @@ test("WorkflowManager forwards request handles from strings and Request objects"
           async deleteSchedule(input) {
             calls.push({
               method: "delete",
-              requestHandle: input.requestHandle,
+              invocationToken: input.invocationToken,
               scheduleId: input.scheduleId,
             });
             return create(EmptySchema, {});
@@ -92,7 +92,7 @@ test("WorkflowManager forwards request handles from strings and Request objects"
           async pauseSchedule(input) {
             calls.push({
               method: "pause",
-              requestHandle: input.requestHandle,
+              invocationToken: input.invocationToken,
               scheduleId: input.scheduleId,
             });
             return create(ManagedWorkflowScheduleSchema, {
@@ -106,7 +106,7 @@ test("WorkflowManager forwards request handles from strings and Request objects"
           async resumeSchedule(input) {
             calls.push({
               method: "resume",
-              requestHandle: input.requestHandle,
+              invocationToken: input.invocationToken,
               scheduleId: input.scheduleId,
             });
             return create(ManagedWorkflowScheduleSchema, {
@@ -134,7 +134,7 @@ test("WorkflowManager forwards request handles from strings and Request objects"
 
     process.env[ENV_WORKFLOW_MANAGER_SOCKET] = socketPath;
 
-    const fromHandle = new WorkflowManager("request-handle-123");
+    const fromHandle = new WorkflowManager("invocation-token-123");
     const created = await fromHandle.createSchedule({
       providerName: "basic",
       cron: "*/5 * * * *",
@@ -150,7 +150,7 @@ test("WorkflowManager forwards request handles from strings and Request objects"
     expect(created.schedule?.id).toBe("sched-1");
 
     const fromRequest = new WorkflowManager(
-      request("tok", {}, {}, {}, {}, "request-handle-456"),
+      request("tok", {}, {}, {}, {}, {}, "invocation-token-456"),
     );
     const fetched = await fromRequest.getSchedule({ scheduleId: "sched-1" });
     const updated = await fromRequest.updateSchedule({
@@ -174,12 +174,12 @@ test("WorkflowManager forwards request handles from strings and Request objects"
     expect(paused.schedule?.paused).toBe(true);
     expect(resumed.schedule?.paused).toBe(false);
     expect(calls).toEqual([
-      { method: "create", requestHandle: "request-handle-123" },
-      { method: "get", requestHandle: "request-handle-456", scheduleId: "sched-1" },
-      { method: "update", requestHandle: "request-handle-456", scheduleId: "sched-1" },
-      { method: "pause", requestHandle: "request-handle-456", scheduleId: "sched-1" },
-      { method: "resume", requestHandle: "request-handle-456", scheduleId: "sched-1" },
-      { method: "delete", requestHandle: "request-handle-456", scheduleId: "sched-1" },
+      { method: "create", invocationToken: "invocation-token-123" },
+      { method: "get", invocationToken: "invocation-token-456", scheduleId: "sched-1" },
+      { method: "update", invocationToken: "invocation-token-456", scheduleId: "sched-1" },
+      { method: "pause", invocationToken: "invocation-token-456", scheduleId: "sched-1" },
+      { method: "resume", invocationToken: "invocation-token-456", scheduleId: "sched-1" },
+      { method: "delete", invocationToken: "invocation-token-456", scheduleId: "sched-1" },
     ]);
   } finally {
     if (previousSocket === undefined) {
@@ -196,13 +196,13 @@ test("WorkflowManager forwards request handles from strings and Request objects"
   }
 });
 
-test("WorkflowManager prioritizes request-handle validation over socket configuration", () => {
+test("WorkflowManager prioritizes invocation-token validation over socket configuration", () => {
   const previousSocket = process.env[ENV_WORKFLOW_MANAGER_SOCKET];
 
   try {
     delete process.env[ENV_WORKFLOW_MANAGER_SOCKET];
     expect(() => new WorkflowManager("   ")).toThrow(
-      "workflow manager: request handle is not available",
+      "workflow manager: invocation token is not available",
     );
   } finally {
     if (previousSocket === undefined) {

@@ -9,6 +9,7 @@ import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { expect, test } from "bun:test";
 
 import {
+  ExchangeInvocationTokenResponseSchema,
   OperationResultSchema,
   PluginInvoker as PluginInvokerService,
 } from "../gen/v1/plugin_pb.ts";
@@ -19,17 +20,22 @@ import {
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
 
-test("PluginInvoker forwards request handles from strings and Request objects", async () => {
+test("PluginInvoker forwards invocation tokens from strings and Request objects", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-plugin-invoker-"));
   const socketPath = join(tempDir, "plugin-invoker.sock");
   const previousSocket = process.env[ENV_PLUGIN_INVOKER_SOCKET];
   const calls: Array<{
-    requestHandle: string;
+    invocationToken: string;
     plugin: string;
     operation: string;
     params: Record<string, unknown>;
     connection: string;
     instance: string;
+  }> = [];
+  const exchanges: Array<{
+    parentInvocationToken: string;
+    grants: Array<{ plugin: string; operations: string[] }>;
+    ttlSeconds: bigint;
   }> = [];
 
   const handler = connectNodeAdapter({
@@ -40,10 +46,23 @@ test("PluginInvoker forwards request handles from strings and Request objects", 
       router.service(
         PluginInvokerService,
         {
+          async exchangeInvocationToken(input) {
+            exchanges.push({
+              parentInvocationToken: input.parentInvocationToken,
+              grants: input.grants.map((grant) => ({
+                plugin: grant.plugin,
+                operations: [...grant.operations],
+              })),
+              ttlSeconds: input.ttlSeconds,
+            });
+            return create(ExchangeInvocationTokenResponseSchema, {
+              invocationToken: `${input.parentInvocationToken}:child`,
+            });
+          },
           async invoke(input) {
             const params = Object.fromEntries(Object.entries(input.params ?? {}));
             calls.push({
-              requestHandle: input.requestHandle,
+              invocationToken: input.invocationToken,
               plugin: input.plugin,
               operation: input.operation,
               params,
@@ -53,7 +72,7 @@ test("PluginInvoker forwards request handles from strings and Request objects", 
             return create(OperationResultSchema, {
               status: 207,
               body: JSON.stringify({
-                requestHandle: input.requestHandle,
+                invocationToken: input.invocationToken,
                 plugin: input.plugin,
                 operation: input.operation,
                 params,
@@ -79,7 +98,18 @@ test("PluginInvoker forwards request handles from strings and Request objects", 
 
     process.env[ENV_PLUGIN_INVOKER_SOCKET] = socketPath;
 
-    const fromHandle = new PluginInvoker("request-handle-123");
+    const fromHandle = new PluginInvoker("invocation-token-123");
+    const childToken = await fromHandle.exchangeInvocationToken({
+      grants: [
+        {
+          plugin: "github",
+          operations: ["get_issue"],
+        },
+      ],
+      ttlSeconds: 45,
+    });
+    expect(childToken).toBe("invocation-token-123:child");
+
     const first = await fromHandle.invoke(
       "github",
       "get_issue",
@@ -94,7 +124,7 @@ test("PluginInvoker forwards request handles from strings and Request objects", 
 
     expect(first.status).toBe(207);
     expect(JSON.parse(first.body)).toEqual({
-      requestHandle: "request-handle-123",
+      invocationToken: "invocation-token-123",
       plugin: "github",
       operation: "get_issue",
       params: {
@@ -105,7 +135,7 @@ test("PluginInvoker forwards request handles from strings and Request objects", 
     });
 
     const fromRequest = new PluginInvoker(
-      request("tok", {}, {}, {}, {}, "request-handle-456"),
+      request("tok", {}, {}, {}, {}, {}, "invocation-token-456"),
     );
     const second = await fromRequest.invoke("slack", "post_message", {
       channel: "eng",
@@ -114,7 +144,7 @@ test("PluginInvoker forwards request handles from strings and Request objects", 
 
     expect(second.status).toBe(207);
     expect(JSON.parse(second.body)).toEqual({
-      requestHandle: "request-handle-456",
+      invocationToken: "invocation-token-456",
       plugin: "slack",
       operation: "post_message",
       params: {
@@ -125,9 +155,22 @@ test("PluginInvoker forwards request handles from strings and Request objects", 
       instance: "",
     });
 
+    expect(exchanges).toEqual([
+      {
+        parentInvocationToken: "invocation-token-123",
+        grants: [
+          {
+            plugin: "github",
+            operations: ["get_issue"],
+          },
+        ],
+        ttlSeconds: 45n,
+      },
+    ]);
+
     expect(calls).toEqual([
       {
-        requestHandle: "request-handle-123",
+        invocationToken: "invocation-token-123",
         plugin: "github",
         operation: "get_issue",
         params: {
@@ -137,7 +180,7 @@ test("PluginInvoker forwards request handles from strings and Request objects", 
         instance: "secondary",
       },
       {
-        requestHandle: "request-handle-456",
+        invocationToken: "invocation-token-456",
         plugin: "slack",
         operation: "post_message",
         params: {
@@ -163,13 +206,13 @@ test("PluginInvoker forwards request handles from strings and Request objects", 
   }
 });
 
-test("PluginInvoker prioritizes request-handle validation over socket configuration", () => {
+test("PluginInvoker prioritizes invocation-token validation over socket configuration", () => {
   const previousSocket = process.env[ENV_PLUGIN_INVOKER_SOCKET];
 
   try {
     delete process.env[ENV_PLUGIN_INVOKER_SOCKET];
     expect(() => new PluginInvoker("   ")).toThrow(
-      "plugin invoker: request handle is not available",
+      "plugin invoker: invocation token is not available",
     );
   } finally {
     if (previousSocket === undefined) {

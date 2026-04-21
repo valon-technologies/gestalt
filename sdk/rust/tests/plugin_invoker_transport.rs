@@ -3,12 +3,16 @@ mod helpers;
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use gestalt::proto::v1::plugin_invoker_server::{
     PluginInvoker as ProtoPluginInvoker, PluginInvokerServer,
 };
-use gestalt::proto::v1::{OperationResult, PluginInvokeRequest};
-use gestalt::{ENV_PLUGIN_INVOKER_SOCKET, InvokeOptions, PluginInvoker, Request};
+use gestalt::proto::v1::{
+    ExchangeInvocationTokenRequest, ExchangeInvocationTokenResponse, OperationResult,
+    PluginInvocationGrant, PluginInvokeRequest,
+};
+use gestalt::{ENV_PLUGIN_INVOKER_SOCKET, InvocationGrant, InvokeOptions, PluginInvoker, Request};
 use prost_types::Struct;
 use tokio::net::UnixListener;
 use tokio_stream::wrappers::UnixListenerStream;
@@ -18,7 +22,7 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 #[derive(Clone, Debug, Default, PartialEq)]
 struct SeenRequest {
-    request_handle: String,
+    invocation_token: String,
     plugin: String,
     operation: String,
     params: Option<Struct>,
@@ -26,31 +30,61 @@ struct SeenRequest {
     instance: String,
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+struct SeenExchangeRequest {
+    parent_invocation_token: String,
+    grants: Vec<PluginInvocationGrant>,
+    ttl_seconds: i64,
+}
+
 #[derive(Clone, Default)]
 struct TestPluginInvokerServer {
-    seen: Arc<Mutex<Vec<SeenRequest>>>,
+    seen_invokes: Arc<Mutex<Vec<SeenRequest>>>,
+    seen_exchanges: Arc<Mutex<Vec<SeenExchangeRequest>>>,
 }
 
 #[async_trait]
 impl ProtoPluginInvoker for TestPluginInvokerServer {
+    async fn exchange_invocation_token(
+        &self,
+        request: GrpcRequest<ExchangeInvocationTokenRequest>,
+    ) -> std::result::Result<GrpcResponse<ExchangeInvocationTokenResponse>, Status> {
+        let request = request.into_inner();
+        self.seen_exchanges
+            .lock()
+            .expect("lock seen exchanges")
+            .push(SeenExchangeRequest {
+                parent_invocation_token: request.parent_invocation_token,
+                grants: request.grants,
+                ttl_seconds: request.ttl_seconds,
+            });
+
+        Ok(GrpcResponse::new(ExchangeInvocationTokenResponse {
+            invocation_token: "child-token-123".to_string(),
+        }))
+    }
+
     async fn invoke(
         &self,
         request: GrpcRequest<PluginInvokeRequest>,
     ) -> std::result::Result<GrpcResponse<OperationResult>, Status> {
         let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            request_handle: request.request_handle.clone(),
-            plugin: request.plugin.clone(),
-            operation: request.operation.clone(),
-            params: request.params.clone(),
-            connection: request.connection.clone(),
-            instance: request.instance.clone(),
-        });
+        self.seen_invokes
+            .lock()
+            .expect("lock seen invokes")
+            .push(SeenRequest {
+                invocation_token: request.invocation_token.clone(),
+                plugin: request.plugin.clone(),
+                operation: request.operation.clone(),
+                params: request.params.clone(),
+                connection: request.connection.clone(),
+                instance: request.instance.clone(),
+            });
 
         Ok(GrpcResponse::new(OperationResult {
             status: 207,
             body: serde_json::json!({
-                "request_handle": request.request_handle,
+                "invocation_token": request.invocation_token,
                 "plugin": request.plugin,
                 "operation": request.operation,
                 "params": request.params.map(struct_to_json).unwrap_or_else(|| serde_json::json!({})),
@@ -63,7 +97,7 @@ impl ProtoPluginInvoker for TestPluginInvokerServer {
 }
 
 #[tokio::test]
-async fn plugin_invoker_connects_over_unix_socket_and_sends_request_handle() {
+async fn plugin_invoker_connects_over_unix_socket_and_sends_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-plugin-invoker.sock");
     let _socket_guard = helpers::EnvGuard::set(ENV_PLUGIN_INVOKER_SOCKET, socket.as_os_str());
@@ -79,7 +113,7 @@ async fn plugin_invoker_connects_over_unix_socket_and_sends_request_handle() {
 
     helpers::wait_for_socket(&socket).await;
 
-    let mut invoker = PluginInvoker::connect("handle-123")
+    let mut invoker = PluginInvoker::connect("token-123")
         .await
         .expect("connect invoker");
     let response = invoker
@@ -99,7 +133,7 @@ async fn plugin_invoker_connects_over_unix_socket_and_sends_request_handle() {
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&response.body).expect("parse response"),
         serde_json::json!({
-            "request_handle": "handle-123",
+            "invocation_token": "token-123",
             "plugin": "github",
             "operation": "get_issue",
             "params": { "issue": 42.0, "labels": ["bug"] },
@@ -108,12 +142,16 @@ async fn plugin_invoker_connects_over_unix_socket_and_sends_request_handle() {
         })
     );
 
-    let seen = server.seen.lock().expect("lock seen").clone();
+    let seen = server
+        .seen_invokes
+        .lock()
+        .expect("lock seen invokes")
+        .clone();
     assert_eq!(seen.len(), 1);
     assert_eq!(
         seen[0],
         SeenRequest {
-            request_handle: "handle-123".to_string(),
+            invocation_token: "token-123".to_string(),
             plugin: "github".to_string(),
             operation: "get_issue".to_string(),
             params: Some(helpers::struct_from_json(
@@ -129,7 +167,7 @@ async fn plugin_invoker_connects_over_unix_socket_and_sends_request_handle() {
 }
 
 #[tokio::test]
-async fn request_invoker_uses_embedded_request_handle() {
+async fn request_invoker_uses_embedded_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-request-invoker.sock");
     let _socket_guard = helpers::EnvGuard::set(ENV_PLUGIN_INVOKER_SOCKET, socket.as_os_str());
@@ -146,7 +184,7 @@ async fn request_invoker_uses_embedded_request_handle() {
     helpers::wait_for_socket(&socket).await;
 
     let request = Request {
-        request_handle: "handle-embedded".to_string(),
+        invocation_token: "token-embedded".to_string(),
         ..Request::default()
     };
     let mut invoker = request.invoker().await.expect("request invoker");
@@ -157,13 +195,82 @@ async fn request_invoker_uses_embedded_request_handle() {
 
     assert_eq!(response.status, 207);
 
-    let seen = server.seen.lock().expect("lock seen").clone();
+    let seen = server
+        .seen_invokes
+        .lock()
+        .expect("lock seen invokes")
+        .clone();
     assert_eq!(seen.len(), 1);
-    assert_eq!(seen[0].request_handle, "handle-embedded");
+    assert_eq!(seen[0].invocation_token, "token-embedded");
     assert_eq!(seen[0].plugin, "linear");
     assert_eq!(seen[0].operation, "search_issues");
     assert_eq!(seen[0].connection, "");
     assert_eq!(seen[0].instance, "");
+
+    serve_task.abort();
+    let _ = serve_task.await;
+}
+
+#[tokio::test]
+async fn plugin_invoker_exchanges_invocation_tokens_with_grants_and_ttl() {
+    let _env_lock = helpers::env_lock().lock().await;
+    let socket = helpers::temp_socket("gestalt-rust-exchange-invoker.sock");
+    let _socket_guard = helpers::EnvGuard::set(ENV_PLUGIN_INVOKER_SOCKET, socket.as_os_str());
+
+    let server = TestPluginInvokerServer::default();
+    let serve_server = server.clone();
+    let serve_socket = socket.clone();
+    let serve_task = tokio::spawn(async move {
+        serve_plugin_invoker(serve_server, &serve_socket)
+            .await
+            .expect("serve plugin invoker");
+    });
+
+    helpers::wait_for_socket(&socket).await;
+
+    let mut invoker = PluginInvoker::connect("parent-token-123")
+        .await
+        .expect("connect invoker");
+    let child_token = invoker
+        .exchange_invocation_token(
+            &[
+                InvocationGrant {
+                    plugin: " github ".to_string(),
+                    operations: vec![
+                        " get_issue ".to_string(),
+                        String::new(),
+                        "list_labels".to_string(),
+                    ],
+                },
+                InvocationGrant {
+                    plugin: "   ".to_string(),
+                    operations: vec!["ignored".to_string()],
+                },
+            ],
+            Some(Duration::from_millis(500)),
+        )
+        .await
+        .expect("exchange invocation token");
+
+    assert_eq!(child_token, "child-token-123");
+
+    let seen = server
+        .seen_exchanges
+        .lock()
+        .expect("lock seen exchanges")
+        .clone();
+    assert_eq!(seen.len(), 1);
+    assert_eq!(
+        seen[0],
+        SeenExchangeRequest {
+            parent_invocation_token: "parent-token-123".to_string(),
+            grants: vec![PluginInvocationGrant {
+                plugin: "github".to_string(),
+                operations: vec!["get_issue".to_string(), "list_labels".to_string()],
+            }],
+            ttl_seconds: 1,
+        }
+    );
 
     serve_task.abort();
     let _ = serve_task.await;
