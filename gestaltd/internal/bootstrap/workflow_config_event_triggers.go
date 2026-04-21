@@ -92,7 +92,6 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 	for _, triggerKey := range slices.Sorted(maps.Keys(cfg.Workflows.EventTriggers)) {
 		trigger := cfg.Workflows.EventTriggers[triggerKey]
 		pluginName := trigger.Plugin
-		managedKey := workflowConfigEventTriggerManagedKey(triggerKey, trigger)
 		provider, allowed, err := runtime.ResolvePlugin(pluginName)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event triggers for plugin %q: %w", pluginName, err)
@@ -100,7 +99,7 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		if _, ok := allowed[trigger.Operation]; !ok {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q targets disabled operation %q", triggerKey, pluginName, trigger.Operation)
 		}
-		rowID := workflowConfigEventTriggerStateID(pluginName, managedKey)
+		rowID := workflowConfigEventTriggerStateID(triggerKey)
 		desiredEntry := desired[rowID]
 		prev, owned := previous[rowID]
 		providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
@@ -155,7 +154,6 @@ func desiredWorkflowConfigEventTriggers(cfg *config.Config) (map[string]desiredW
 	now := time.Now()
 	for _, triggerKey := range slices.Sorted(maps.Keys(cfg.Workflows.EventTriggers)) {
 		trigger := cfg.Workflows.EventTriggers[triggerKey]
-		managedKey := workflowConfigEventTriggerManagedKey(triggerKey, trigger)
 		binding, err := cfg.EffectiveWorkflowBinding(trigger.Plugin)
 		if err != nil {
 			return nil, err
@@ -163,14 +161,14 @@ func desiredWorkflowConfigEventTriggers(cfg *config.Config) (map[string]desiredW
 		if !binding.Enabled {
 			continue
 		}
-		rowID := workflowConfigEventTriggerStateID(trigger.Plugin, managedKey)
+		rowID := workflowConfigEventTriggerStateID(triggerKey)
 		desired[rowID] = desiredWorkflowConfigEventTrigger{
 			state: workflowConfigEventTriggerState{
 				ID:           rowID,
 				PluginName:   trigger.Plugin,
-				TriggerKey:   managedKey,
+				TriggerKey:   triggerKey,
 				ProviderName: binding.ProviderName,
-				TriggerID:    workflowConfigEventTriggerID(trigger.Plugin, managedKey),
+				TriggerID:    workflowConfigEventTriggerID(triggerKey),
 				UpdatedAt:    now,
 			},
 			trigger: trigger,
@@ -258,18 +256,11 @@ func workflowConfigEventTriggerTarget(trigger config.WorkflowEventTriggerConfig)
 	}
 }
 
-func workflowConfigEventTriggerManagedKey(triggerKey string, trigger config.WorkflowEventTriggerConfig) string {
-	if managedKey := strings.TrimSpace(trigger.ManagedKey); managedKey != "" {
-		return managedKey
-	}
+func workflowConfigEventTriggerStateID(triggerKey string) string {
 	return strings.TrimSpace(triggerKey)
 }
 
-func workflowConfigEventTriggerStateID(pluginName, triggerKey string) string {
-	return pluginName + "\x00event_trigger\x00" + triggerKey
-}
-
-func workflowConfigEventTriggerID(pluginName, triggerKey string) string {
-	sum := sha256.Sum256([]byte(pluginName + "\x00event_trigger\x00" + triggerKey))
+func workflowConfigEventTriggerID(triggerKey string) string {
+	sum := sha256.Sum256([]byte("event_trigger\x00" + strings.TrimSpace(triggerKey)))
 	return coreworkflow.ConfigManagedSchedulePrefix + hex.EncodeToString(sum[:])
 }

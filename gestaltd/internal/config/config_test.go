@@ -2447,11 +2447,10 @@ server:
 			t.Fatalf("Workflows.Bindings[roadmap] = %#v, want %#v", got, wantBinding)
 		}
 		wantSchedule := WorkflowScheduleConfig{
-			ManagedKey: "nightly",
-			Plugin:     "roadmap",
-			Cron:       "0 2 * * *",
-			Timezone:   "UTC",
-			Operation:  "nightly_sync",
+			Plugin:    "roadmap",
+			Cron:      "0 2 * * *",
+			Timezone:  "UTC",
+			Operation: "nightly_sync",
 			Input: map[string]any{
 				"source": "yaml",
 			},
@@ -2460,8 +2459,7 @@ server:
 			t.Fatalf("Workflows.Schedules[nightly] = %#v, want %#v", got, wantSchedule)
 		}
 		wantTrigger := WorkflowEventTriggerConfig{
-			ManagedKey: "task_updated",
-			Plugin:     "roadmap",
+			Plugin: "roadmap",
 			Match: WorkflowEventMatch{
 				Type:   "roadmap.task.updated",
 				Source: "roadmap",
@@ -2477,7 +2475,7 @@ server:
 		}
 	})
 
-	t.Run("legacy plugin workflow config is canonicalized into top-level workflows", func(t *testing.T) {
+	t.Run("legacy plugin workflow config is rejected", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2489,10 +2487,6 @@ plugins:
       provider: temporal
       operations:
         - nightly_sync
-      schedules:
-        nightly:
-          cron: "0 2 * * *"
-          operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -2508,81 +2502,12 @@ server:
   encryptionKey: server-key
 `)
 
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load succeeded, want error")
 		}
-		if cfg.Plugins["roadmap"].Workflow != nil {
-			t.Fatalf("Plugins[roadmap].Workflow = %#v, want nil after canonicalization", cfg.Plugins["roadmap"].Workflow)
-		}
-		if got := cfg.Workflows.Bindings["roadmap"]; got == nil || got.Provider != "temporal" || !reflect.DeepEqual(got.Operations, []string{"nightly_sync"}) {
-			t.Fatalf("Workflows.Bindings[roadmap] = %#v", got)
-		}
-		schedule, ok := cfg.Workflows.Schedules["nightly"]
-		if !ok {
-			t.Fatalf("Workflows.Schedules = %#v, want nightly", cfg.Workflows.Schedules)
-		}
-		if schedule.Plugin != "roadmap" || schedule.ManagedKey != "nightly" || schedule.Operation != "nightly_sync" {
-			t.Fatalf("Workflows.Schedules[nightly] = %#v", schedule)
-		}
-	})
-
-	t.Run("legacy duplicate workflow keys are lifted deterministically", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-plugins:
-  alpha:
-    source:
-      path: ./plugin/manifest.yaml
-    workflow:
-      provider: temporal
-      operations:
-        - sync
-      schedules:
-        nightly:
-          cron: "0 2 * * *"
-          operation: sync
-  beta:
-    source:
-      path: ./plugin/manifest.yaml
-    workflow:
-      provider: temporal
-      operations:
-        - sync
-      schedules:
-        nightly:
-          cron: "0 3 * * *"
-          operation: sync
-providers:
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-  indexeddb:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  providers:
-    indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		alpha := cfg.Workflows.Schedules["nightly"]
-		if alpha.Plugin != "alpha" || alpha.ManagedKey != "nightly" {
-			t.Fatalf("Workflows.Schedules[nightly] = %#v", alpha)
-		}
-		beta, ok := cfg.Workflows.Schedules["beta.nightly"]
-		if !ok {
-			t.Fatalf("Workflows.Schedules = %#v, want beta.nightly", cfg.Workflows.Schedules)
-		}
-		if beta.Plugin != "beta" || beta.ManagedKey != "nightly" {
-			t.Fatalf("Workflows.Schedules[beta.nightly] = %#v", beta)
+		if !strings.Contains(err.Error(), `field workflow not found`) {
+			t.Fatalf("Load error = %v, want unknown workflow field", err)
 		}
 	})
 
@@ -2663,7 +2588,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `ui.root.workflow has moved to top-level workflows.bindings, workflows.schedules, and workflows.eventTriggers`) {
+		if !strings.Contains(err.Error(), `field workflow not found in type config.UIEntry`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
