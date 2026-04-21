@@ -1714,7 +1714,7 @@ providers:
   ui:
     roadmap:
       source:
-        path: ./web/default/provider.yaml
+        path: ./ui/default/provider.yaml
       path: /create-customer-roadmap-review
   indexeddb:
     sqlite:
@@ -1734,7 +1734,7 @@ server:
 		if entry == nil {
 			t.Fatal(`Providers.UI["roadmap"] = nil`)
 		}
-		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "provider.yaml")
+		wantPath := filepath.Join(filepath.Dir(path), "ui", "default", "provider.yaml")
 		if got := entry.Source.Path; got != wantPath {
 			t.Fatalf(`Providers.UI["roadmap"].Source.Path = %q, want %q`, got, wantPath)
 		}

@@ -44,8 +44,6 @@ func NormalizeKind(kind string) string {
 		return KindWorkflow
 	case KindSecrets:
 		return KindSecrets
-	case "webui":
-		return KindUI
 	case KindUI:
 		return KindUI
 	default:

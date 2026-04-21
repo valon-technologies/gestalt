@@ -3611,54 +3611,6 @@ func TestReadLockfile_RejectsSchemaV1PortableEntries(t *testing.T) {
 	}
 }
 
-func TestReadLockfile_PreservesLegacyPortableWebUILockEntries(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	lockPath := filepath.Join(dir, InitLockfileName)
-	legacy := `{
-  "schema": "gestaltd-provider-lock",
-  "schemaVersion": 3,
-  "revision": 0,
-  "providers": {
-    "webui": {
-      "admin": {
-        "inputDigest": "ui-fp",
-        "package": "github.com/test-org/test-repo/test-ui",
-        "kind": "webui",
-        "runtime": "ui",
-        "version": "2.0.0"
-      }
-    }
-  }
-}
-`
-	if err := os.WriteFile(lockPath, []byte(legacy), 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	lock, err := ReadLockfile(lockPath)
-	if err != nil {
-		t.Fatalf("ReadLockfile: %v", err)
-	}
-	entry, ok := lock.UIs["admin"]
-	if !ok {
-		t.Fatal("expected legacy webui portable entry to be preserved in ui lock entries")
-	}
-	if got, want := entry.Fingerprint, "ui-fp"; got != want {
-		t.Fatalf("Fingerprint = %q, want %q", got, want)
-	}
-	if got, want := entry.Source, "github.com/test-org/test-repo/test-ui"; got != want {
-		t.Fatalf("Source = %q, want %q", got, want)
-	}
-	if got, want := entry.Runtime, "ui"; got != want {
-		t.Fatalf("Runtime = %q, want %q", got, want)
-	}
-	if got, want := entry.Kind, providermanifestv1.KindUI; got != want {
-		t.Fatalf("Kind = %q, want %q", got, want)
-	}
-}
-
 func mustBuildManagedProviderPackage(t *testing.T, dir string, manifest *providermanifestv1.Manifest, artifacts map[string]string, includeCatalog bool) string {
 	t.Helper()
 
