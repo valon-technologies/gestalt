@@ -122,14 +122,11 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 	for _, scheduleKey := range slices.Sorted(maps.Keys(cfg.Workflows.Schedules)) {
 		schedule := cfg.Workflows.Schedules[scheduleKey]
 		pluginName := schedule.Plugin
-		provider, allowed, err := runtime.ResolvePlugin(pluginName)
+		providerName, provider, err := runtime.ResolveProviderSelection(schedule.Provider)
 		if err != nil {
-			return fmt.Errorf("bootstrap: workflow schedules for plugin %q: %w", pluginName, err)
+			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", scheduleKey, pluginName, err)
 		}
 		target := workflowConfigScheduleTarget(schedule)
-		if _, ok := allowed[schedule.Operation]; !ok {
-			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q targets disabled operation %q", scheduleKey, pluginName, schedule.Operation)
-		}
 		rowID := workflowConfigScheduleStateID(scheduleKey)
 		desiredEntry := desired[rowID]
 		prev, owned := previous[rowID]
@@ -156,9 +153,9 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			existingExecutionRef = workflowScheduleExecutionRef(existing, prev.ExecutionRef)
 		}
 		desiredExecutionRef := &coreworkflow.ExecutionReference{
-			ProviderName: desiredEntry.state.ProviderName,
+			ProviderName: providerName,
 			Target:       target,
-			SubjectID:    principal.WorkloadSubjectID(workflowWorkloadID(pluginName)),
+			SubjectID:    principal.WorkloadSubjectID(workflowWorkloadID()),
 			Permissions:  workflowExecutionRefPermissionsForTarget(target),
 		}
 		executionRefID, createdExecutionRef, err := workflowEnsureConfigScheduleExecutionRef(ctx, executionRefs, desiredEntry.state.ScheduleID, desiredExecutionRef, existingExecutionRef)
@@ -171,7 +168,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			Timezone:     schedule.Timezone,
 			Target:       target,
 			Paused:       schedule.Paused,
-			RequestedBy:  workflowConfigActor(pluginName),
+			RequestedBy:  workflowConfigActor(),
 			ExecutionRef: executionRefID,
 		}); err != nil {
 			if createdExecutionRef {
@@ -212,6 +209,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			}
 		}
 		desiredEntry.state.ExecutionRef = executionRefID
+		desiredEntry.state.ProviderName = providerName
 		if err := store.Put(ctx, desiredEntry.state.record()); err != nil {
 			return fmt.Errorf("bootstrap: store workflow schedule state %q: %w", rowID, err)
 		}
@@ -227,12 +225,9 @@ func desiredWorkflowConfigSchedules(cfg *config.Config) (map[string]desiredWorkf
 	now := time.Now()
 	for _, scheduleKey := range slices.Sorted(maps.Keys(cfg.Workflows.Schedules)) {
 		schedule := cfg.Workflows.Schedules[scheduleKey]
-		binding, err := cfg.EffectiveWorkflowBinding(schedule.Plugin)
+		providerName, _, err := cfg.EffectiveWorkflowProvider(schedule.Provider)
 		if err != nil {
 			return nil, err
-		}
-		if !binding.Enabled {
-			continue
 		}
 		rowID := workflowConfigScheduleStateID(scheduleKey)
 		desired[rowID] = desiredWorkflowConfigSchedule{
@@ -240,7 +235,7 @@ func desiredWorkflowConfigSchedules(cfg *config.Config) (map[string]desiredWorkf
 				ID:           rowID,
 				PluginName:   schedule.Plugin,
 				ScheduleKey:  scheduleKey,
-				ProviderName: binding.ProviderName,
+				ProviderName: providerName,
 				ScheduleID:   workflowConfigScheduleID(scheduleKey),
 				UpdatedAt:    now,
 			},
@@ -326,7 +321,7 @@ func isWorkflowConfigOwnedSchedule(existing *coreworkflow.Schedule, pluginName, 
 	if existing == nil {
 		return false
 	}
-	actor := workflowConfigActor(pluginName)
+	actor := workflowConfigActor()
 	return existing.ID == scheduleID &&
 		existing.Target.PluginName == pluginName &&
 		existing.CreatedBy.SubjectID == actor.SubjectID &&
@@ -350,11 +345,11 @@ func workflowConfigScheduleTarget(schedule config.WorkflowScheduleConfig) corewo
 	}
 }
 
-func workflowConfigActor(pluginName string) coreworkflow.Actor {
+func workflowConfigActor() coreworkflow.Actor {
 	return coreworkflow.Actor{
-		SubjectID:   "config:workflow:" + pluginName,
+		SubjectID:   "config:workflow",
 		SubjectKind: "system",
-		DisplayName: "Workflow Config (" + pluginName + ")",
+		DisplayName: "Workflow Config",
 		AuthSource:  "config",
 	}
 }

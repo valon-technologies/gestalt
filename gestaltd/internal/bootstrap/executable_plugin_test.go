@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -1838,79 +1837,6 @@ func TestPluginCacheBindingsExposeHostSocketEnv(t *testing.T) {
 	}
 	if got := checkEnv(t, []string{"session", "rate_limit"}, providerhost.CacheSocketEnv("rate_limit")); !got {
 		t.Fatal(`named cache env for "rate_limit" should be set with multiple plugin cache bindings`)
-	}
-}
-
-func TestPluginWorkflowBindingsExposeHostSocketEnv(t *testing.T) {
-	t.Parallel()
-
-	bin := buildEchoPluginBinary(t)
-	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "echoext",
-		Operations: []catalog.CatalogOperation{
-			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
-		},
-	})
-	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	cfg := &config.Config{
-		Plugins: map[string]*config.ProviderEntry{
-			"echoext": {
-				Command:              bin,
-				Args:                 []string{"provider"},
-				ResolvedManifest:     manifest,
-				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-			},
-		},
-		Workflows: config.WorkflowsConfig{
-			Bindings: map[string]*config.WorkflowBindingConfig{
-				"echoext": {
-					Provider:   "temporal",
-					Operations: []string{"read_env"},
-				},
-			},
-		},
-	}
-
-	workflowRuntime := &workflowRuntime{
-		bindings: map[string]workflowBinding{
-			"echoext": {
-				providerName: "temporal",
-				operations: map[string]struct{}{
-					"read_env": {},
-				},
-			},
-		},
-	}
-
-	providers, ready, _, errResolver, err := buildProvidersAsync(context.Background(), cfg, NewFactoryRegistry(), Deps{
-		WorkflowRuntime: workflowRuntime,
-	}, buildProvider)
-	if err != nil {
-		t.Fatalf("buildProvidersAsync: %v", err)
-	}
-	<-ready
-	if errs := errResolver(); len(errs) > 0 {
-		t.Fatalf("buildProvidersAsync provider errors: %v", errors.Join(errs...))
-	}
-	defer func() { _ = CloseProviders(providers) }()
-
-	prov, err := providers.Get("echoext")
-	if err != nil {
-		t.Fatalf("providers.Get: %v", err)
-	}
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": providerhost.DefaultWorkflowSocketEnv}, "")
-	if err != nil {
-		t.Fatalf("Execute read_env: %v", err)
-	}
-	var env struct {
-		Value string `json:"value"`
-		Found bool   `json:"found"`
-	}
-	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if !env.Found || env.Value == "" {
-		t.Fatal("default workflow env should be set when plugin workflow binding exists")
 	}
 }
 
