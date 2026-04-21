@@ -7,6 +7,7 @@ use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
 
 const SCHEDULES_PATH: &str = "/api/v1/workflow/schedules";
+const RUNS_PATH: &str = "/api/v1/workflow/runs";
 
 pub fn list(client: &ApiClient, plugin: Option<&str>, format: Format) -> Result<()> {
     let resp = client
@@ -85,6 +86,28 @@ pub fn resume(client: &ApiClient, id: &str, format: Format) -> Result<()> {
     Ok(())
 }
 
+pub fn list_runs(
+    client: &ApiClient,
+    plugin: Option<&str>,
+    status: Option<&str>,
+    format: Format,
+) -> Result<()> {
+    let resp = client
+        .get(RUNS_PATH)
+        .context("failed to list workflow runs")?;
+    let filtered = filter_runs(resp, plugin, status);
+    print_runs(&filtered, format);
+    Ok(())
+}
+
+pub fn get_run(client: &ApiClient, id: &str, format: Format) -> Result<()> {
+    let resp = client
+        .get(&format!("{RUNS_PATH}/{id}"))
+        .with_context(|| format!("failed to get workflow run {id}"))?;
+    print_run(&resp, format);
+    Ok(())
+}
+
 fn filter_by_plugin(value: Value, plugin: Option<&str>) -> Value {
     let Some(plugin) = plugin else {
         return value;
@@ -96,6 +119,25 @@ fn filter_by_plugin(value: Value, plugin: Option<&str>) -> Value {
         items
             .into_iter()
             .filter(|item| item["target"]["plugin"].as_str() == Some(plugin))
+            .collect(),
+    )
+}
+
+fn filter_runs(value: Value, plugin: Option<&str>, status: Option<&str>) -> Value {
+    let Value::Array(items) = value else {
+        return value;
+    };
+    Value::Array(
+        items
+            .into_iter()
+            .filter(|item| {
+                plugin
+                    .map(|plugin| item["target"]["plugin"].as_str() == Some(plugin))
+                    .unwrap_or(true)
+                    && status
+                        .map(|status| item["status"].as_str() == Some(status))
+                        .unwrap_or(true)
+            })
             .collect(),
     )
 }
@@ -257,6 +299,27 @@ fn print_schedules(value: &Value, format: Format) {
     }
 }
 
+fn print_run(value: &Value, format: Format) {
+    match format {
+        Format::Json => output::print_json(value),
+        Format::Table => {
+            let rows = vec![run_row(value)];
+            output::print_table(&run_headers(), &rows);
+        }
+    }
+}
+
+fn print_runs(value: &Value, format: Format) {
+    match format {
+        Format::Json => output::print_json(value),
+        Format::Table => {
+            let items = value.as_array().cloned().unwrap_or_default();
+            let rows: Vec<Vec<String>> = items.iter().map(run_row).collect();
+            output::print_table(&run_headers(), &rows);
+        }
+    }
+}
+
 fn schedule_headers() -> [&'static str; 8] {
     [
         "ID",
@@ -287,6 +350,57 @@ fn schedule_row(value: &Value) -> Vec<String> {
         value["nextRunAt"].as_str().unwrap_or("-").to_string(),
         value["createdAt"].as_str().unwrap_or("-").to_string(),
     ]
+}
+
+fn run_headers() -> [&'static str; 7] {
+    [
+        "ID",
+        "Plugin",
+        "Operation",
+        "Status",
+        "Trigger",
+        "Started",
+        "Created",
+    ]
+}
+
+fn run_row(value: &Value) -> Vec<String> {
+    vec![
+        value["id"].as_str().unwrap_or("-").to_string(),
+        value["target"]["plugin"]
+            .as_str()
+            .unwrap_or("-")
+            .to_string(),
+        value["target"]["operation"]
+            .as_str()
+            .unwrap_or("-")
+            .to_string(),
+        value["status"].as_str().unwrap_or("-").to_string(),
+        run_trigger_label(value),
+        value["startedAt"]
+            .as_str()
+            .or_else(|| value["completedAt"].as_str())
+            .unwrap_or("-")
+            .to_string(),
+        value["createdAt"].as_str().unwrap_or("-").to_string(),
+    ]
+}
+
+fn run_trigger_label(value: &Value) -> String {
+    let trigger = &value["trigger"];
+    match trigger["kind"].as_str() {
+        Some("schedule") => trigger["scheduleId"]
+            .as_str()
+            .map(|id| format!("schedule:{id}"))
+            .unwrap_or_else(|| "schedule".to_string()),
+        Some("event") => trigger["triggerId"]
+            .as_str()
+            .map(|id| format!("event:{id}"))
+            .unwrap_or_else(|| "event".to_string()),
+        Some("manual") => "manual".to_string(),
+        Some(other) if !other.is_empty() => other.to_string(),
+        _ => "-".to_string(),
+    }
 }
 
 fn format_bool(value: Option<bool>) -> String {

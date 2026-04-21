@@ -374,6 +374,11 @@ pub enum WorkflowCommands {
         #[command(subcommand)]
         command: WorkflowScheduleCommands,
     },
+    /// Inspect workflow runs
+    Runs {
+        #[command(subcommand)]
+        command: WorkflowRunCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -406,6 +411,24 @@ pub enum WorkflowScheduleCommands {
     /// Resume a paused workflow schedule
     Resume {
         /// Schedule ID
+        id: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum WorkflowRunCommands {
+    /// List workflow runs
+    List {
+        /// Filter runs by target plugin
+        #[arg(long)]
+        plugin: Option<String>,
+        /// Filter runs by status
+        #[arg(long)]
+        status: Option<String>,
+    },
+    /// Show a single workflow run
+    Get {
+        /// Run ID
         id: String,
     },
 }

@@ -160,6 +160,16 @@ func (r *workflowRuntime) ResolveProviderSelection(name string) (string, corewor
 	return selectedName, provider, nil
 }
 
+func (r *workflowRuntime) StartupPendingProvider(name string) bool {
+	if r == nil {
+		return false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.providers[strings.TrimSpace(name)].(*startupWorkflowProviderProxy)
+	return ok
+}
+
 func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOperationRequest) (*coreworkflow.InvokeOperationResponse, error) {
 	if r == nil {
 		return nil, fmt.Errorf("workflow runtime is not configured")
@@ -175,7 +185,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 	if targetPluginName == "" {
 		return nil, fmt.Errorf("workflow target plugin is required")
 	}
-	principalValue := workflowStartupPrincipal(req)
+	principalValue := principal.Canonicalized(principal.FromContext(ctx))
 	target := req.Target
 	invokeConnection := ""
 	invokeInstance := ""
@@ -191,6 +201,8 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		target.Instance = resolvedRef.Target.Instance
 		invokeConnection = strings.TrimSpace(target.Connection)
 		invokeInstance = strings.TrimSpace(target.Instance)
+	} else if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
+		return nil, fmt.Errorf("%w: workflow execution principal is required when execution_ref is omitted", invocation.ErrInternal)
 	}
 	if contextValue := workflowInvocationContext(req); len(contextValue) > 0 {
 		ctx = invocation.WithWorkflowContext(ctx, contextValue)
