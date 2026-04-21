@@ -42,10 +42,7 @@ func (p *roundTripProvider) Execute(ctx context.Context, operation string, param
 	displayName := ""
 	identityPresent := "false"
 	if p := principal.FromContext(ctx); p != nil {
-		subjectID = p.SubjectID
-		if subjectID == "" && p.UserID != "" {
-			subjectID = principal.UserSubjectID(p.UserID)
-		}
+		subjectID = principal.Canonicalized(p).SubjectID
 		subjectKind = string(p.Kind)
 		authSource = p.AuthSource()
 		displayName = p.DisplayName
@@ -79,10 +76,7 @@ func (p *roundTripProvider) CatalogForRequest(ctx context.Context, token string)
 	displayName := ""
 	identityPresent := "false"
 	if p := principal.FromContext(ctx); p != nil {
-		subjectID = p.SubjectID
-		if subjectID == "" && p.UserID != "" {
-			subjectID = principal.UserSubjectID(p.UserID)
-		}
+		subjectID = principal.Canonicalized(p).SubjectID
 		subjectKind = string(p.Kind)
 		authSource = p.AuthSource()
 		displayName = p.DisplayName

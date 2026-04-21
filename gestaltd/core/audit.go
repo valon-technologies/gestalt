@@ -10,7 +10,6 @@ type AuditEntry struct {
 	RequestID                    string
 	Source                       string
 	AuthSource                   string
-	UserID                       string
 	SubjectID                    string
 	SubjectKind                  string
 	AccessPolicy                 string
