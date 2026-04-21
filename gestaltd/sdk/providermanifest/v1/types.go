@@ -22,6 +22,7 @@ const (
 	KindWorkflow       = "workflow"
 	KindSecrets        = "secrets"
 	KindUI             = "ui"
+	KindRuntime        = "runtime"
 )
 
 func NormalizeKind(kind string) string {
@@ -46,6 +47,8 @@ func NormalizeKind(kind string) string {
 		return KindSecrets
 	case KindUI:
 		return KindUI
+	case KindRuntime:
+		return KindRuntime
 	default:
 		return strings.TrimSpace(kind)
 	}

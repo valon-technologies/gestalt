@@ -46,7 +46,7 @@ func NewExecutableCache(ctx context.Context, cfg CacheExecConfig) (corecache.Cac
 
 	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
 	cacheClient := proto.NewCacheClient(proc.conn)
-	_, err = configureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_CACHE, cfg.Name, cfg.Config)
+	_, err = ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_CACHE, cfg.Name, cfg.Config)
 	if err != nil {
 		_ = proc.Close()
 		return nil, err

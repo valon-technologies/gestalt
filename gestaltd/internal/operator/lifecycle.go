@@ -36,8 +36,9 @@ const (
 	PreparedAuditDir         = ".gestaltd/audit"
 	PreparedCacheDir         = ".gestaltd/cache"
 	PreparedWorkflowDir      = ".gestaltd/workflow"
+	PreparedRuntimeDir       = ".gestaltd/runtime"
 	PreparedUIDir            = ".gestaltd/ui"
-	LockVersion              = 8
+	LockVersion              = 9
 
 	platformKeyGeneric = "generic"
 )
@@ -52,6 +53,7 @@ type Lockfile struct {
 	Caches         map[string]LockEntry         `json:"cache,omitempty"`
 	S3             map[string]LockEntry         `json:"s3,omitempty"`
 	Workflows      map[string]LockEntry         `json:"workflow,omitempty"`
+	Runtimes       map[string]LockEntry         `json:"runtime,omitempty"`
 	Secrets        map[string]LockEntry         `json:"secrets,omitempty"`
 	Telemetry      map[string]LockEntry         `json:"telemetry,omitempty"`
 	Audit          map[string]LockEntry         `json:"audit,omitempty"`
@@ -180,7 +182,7 @@ func (l *Lifecycle) initAtPaths(configPaths []string, state StatePaths) (*Lockfi
 		return nil, nil, initPaths{}, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "authentication", len(lock.Authentication), "authorization", len(lock.Authorization), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "s3", len(lock.S3), "workflow", len(lock.Workflows), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "authentication", len(lock.Authentication), "authorization", len(lock.Authorization), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "s3", len(lock.S3), "workflow", len(lock.Workflows), "runtime", len(lock.Runtimes), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, paths, nil
 }
@@ -222,6 +224,17 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, path
 			}
 			lockEntriesForKind(lock, collection.kind)[name] = lockEntry
 		}
+	}
+	for name, entry := range cfg.Runtime.Providers {
+		if entry == nil || !runtimeSourceBacked(entry) {
+			continue
+		}
+		destDir := componentDestDir(paths, config.HostProviderKindRuntime, name)
+		lockEntry, err := l.writeComponentArtifact(ctx, paths, providerManifestKind(config.HostProviderKindRuntime), name, destDir, &entry.ProviderEntry, entry.Config)
+		if err != nil {
+			return nil, err
+		}
+		lock.Runtimes[name] = lockEntry
 	}
 	if err := l.resolveConfiguredPlugins(paths, lock, cfg, true); err != nil {
 		return nil, err
@@ -606,6 +619,7 @@ type initPaths struct {
 	auditDir         string
 	cacheDir         string
 	workflowDir      string
+	runtimeDir       string
 	uiDir            string
 }
 
@@ -655,6 +669,10 @@ func sourceBacked(entry *config.ProviderEntry) bool {
 	return entry != nil && (entry.HasRemoteSource() || entry.HasLocalSource() || entry.HasLocalReleaseSource())
 }
 
+func runtimeSourceBacked(entry *config.RuntimeProviderEntry) bool {
+	return entry != nil && sourceBacked(&entry.ProviderEntry)
+}
+
 func hostProviderCollections(cfg *config.Config) []struct {
 	kind    config.HostProviderKind
 	entries map[string]*config.ProviderEntry
@@ -694,6 +712,8 @@ func lockEntriesForKind(lock *Lockfile, kind config.HostProviderKind) map[string
 		return lock.IndexedDBs
 	case config.HostProviderKindWorkflow:
 		return lock.Workflows
+	case config.HostProviderKindRuntime:
+		return lock.Runtimes
 	default:
 		return nil
 	}
@@ -710,6 +730,11 @@ func configHasProviderLoading(cfg *config.Config) bool {
 			if sourceBacked(entry) {
 				return true
 			}
+		}
+	}
+	for _, entry := range cfg.Runtime.Providers {
+		if runtimeSourceBacked(entry) {
+			return true
 		}
 	}
 	for _, entry := range cfg.Providers.UI {
@@ -743,6 +768,11 @@ func configHasLocalProviderSources(cfg *config.Config) bool {
 			}
 		}
 	}
+	for _, entry := range cfg.Runtime.Providers {
+		if entry != nil && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
+			return true
+		}
+	}
 	for _, entry := range cfg.Providers.UI {
 		if entry != nil && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
 			return true
@@ -772,6 +802,11 @@ func configHasMetadataProviderSources(cfg *config.Config) bool {
 			if entry != nil && entry.HasMetadataSource() {
 				return true
 			}
+		}
+	}
+	for _, entry := range cfg.Runtime.Providers {
+		if entry != nil && entry.HasMetadataSource() {
+			return true
 		}
 	}
 	for _, entry := range cfg.Providers.UI {
@@ -846,6 +881,7 @@ func resolveInitPaths(configPaths []string, cfg *config.Config, state StatePaths
 		auditDir:         filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuditDir)),
 		cacheDir:         filepath.Join(artifactsDir, filepath.FromSlash(PreparedCacheDir)),
 		workflowDir:      filepath.Join(artifactsDir, filepath.FromSlash(PreparedWorkflowDir)),
+		runtimeDir:       filepath.Join(artifactsDir, filepath.FromSlash(PreparedRuntimeDir)),
 		uiDir:            filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
 	}
 }
@@ -890,6 +926,10 @@ func workflowDestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.workflowDir, name)
 }
 
+func runtimeDestDir(paths initPaths, name string) string {
+	return filepath.Join(paths.runtimeDir, name)
+}
+
 func indexeddbDestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.artifactsDir, "indexeddb", name)
 }
@@ -916,6 +956,8 @@ func componentDestDir(paths initPaths, kind config.HostProviderKind, name string
 		return indexeddbDestDir(paths, name)
 	case config.HostProviderKindWorkflow:
 		return workflowDestDir(paths, name)
+	case config.HostProviderKindRuntime:
+		return runtimeDestDir(paths, name)
 	default:
 		return ""
 	}
@@ -970,6 +1012,8 @@ func providerManifestKind(kind config.HostProviderKind) string {
 		return providermanifestv1.KindIndexedDB
 	case config.HostProviderKindWorkflow:
 		return providermanifestv1.KindWorkflow
+	case config.HostProviderKindRuntime:
+		return providermanifestv1.KindRuntime
 	default:
 		return ""
 	}
@@ -1053,6 +1097,15 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			if !lockEntryMatches(paths, providerManifestKind(collection.kind), name, entry, lockEntry, found, componentDestDir(paths, collection.kind, name)) {
 				return false
 			}
+		}
+	}
+	for name, entry := range cfg.Runtime.Providers {
+		if !runtimeSourceBacked(entry) {
+			continue
+		}
+		lockEntry, found := lock.Runtimes[name]
+		if !lockEntryMatches(paths, providermanifestv1.KindRuntime, name, &entry.ProviderEntry, lockEntry, found, runtimeDestDir(paths, name)) {
+			return false
 		}
 	}
 	for name, entry := range cfg.Providers.IndexedDB {
@@ -1849,6 +1902,19 @@ func (l *Lifecycle) applyPreparedProviders(paths initPaths, lock *Lockfile, cfg 
 				clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedPluginUIs)
 				return err
 			}
+		}
+	}
+	runtimeLocks := map[string]LockEntry(nil)
+	if lock != nil {
+		runtimeLocks = lock.Runtimes
+	}
+	for name, entry := range cfg.Runtime.Providers {
+		if entry == nil {
+			continue
+		}
+		if err := l.applyComponentProvider(paths, runtimeLocks, providermanifestv1.KindRuntime, name, &entry.ProviderEntry, entry.Config, &entry.Config, runtimeDestDir(paths, name), locked); err != nil {
+			clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedPluginUIs)
+			return err
 		}
 	}
 	indexedDBLocks := map[string]LockEntry(nil)

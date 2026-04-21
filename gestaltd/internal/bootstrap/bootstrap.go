@@ -157,31 +157,28 @@ type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
 type CacheFactory func(node yaml.Node) (corecache.Cache, error)
 type S3Factory func(node yaml.Node) (s3store.Client, error)
 type WorkflowFactory func(ctx context.Context, name string, node yaml.Node, hostServices []providerhost.HostService, deps Deps) (coreworkflow.Provider, error)
+type RuntimeFactory func(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (pluginruntime.Provider, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
 type FactoryRegistry struct {
-	Auth           AuthFactory
-	Authorization  AuthorizationFactory
-	Secrets        map[string]SecretManagerFactory
-	IndexedDB      IndexedDBFactory
-	Cache          CacheFactory
-	PluginRuntimes map[config.RuntimeProviderDriver]pluginRuntimeFactory
-	S3             S3Factory
-	Workflow       WorkflowFactory
-	Telemetry      map[string]TelemetryFactory
-	Audit          AuditFactory
-	Builtins       []core.Provider
+	Auth          AuthFactory
+	Authorization AuthorizationFactory
+	Secrets       map[string]SecretManagerFactory
+	IndexedDB     IndexedDBFactory
+	Cache         CacheFactory
+	Runtime       RuntimeFactory
+	S3            S3Factory
+	Workflow      WorkflowFactory
+	Telemetry     map[string]TelemetryFactory
+	Audit         AuditFactory
+	Builtins      []core.Provider
 }
 
 func NewFactoryRegistry() *FactoryRegistry {
 	return &FactoryRegistry{
-		Secrets: make(map[string]SecretManagerFactory),
-		PluginRuntimes: map[config.RuntimeProviderDriver]pluginRuntimeFactory{
-			config.RuntimeProviderDriverLocal: func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
-				return pluginruntime.NewLocalProvider(), nil
-			},
-		},
+		Secrets:   make(map[string]SecretManagerFactory),
+		Runtime:   buildExecutablePluginRuntime,
 		Telemetry: make(map[string]TelemetryFactory),
 	}
 }
@@ -603,7 +600,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
-	runtimeRegistry := newPluginRuntimeRegistry(cfg, factories.PluginRuntimes, deps)
+	runtimeRegistry := newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 	deps.PluginRuntimeRegistry = runtimeRegistry
 
 	closeSM = false

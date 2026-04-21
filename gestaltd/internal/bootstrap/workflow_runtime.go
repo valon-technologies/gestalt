@@ -128,6 +128,15 @@ func (r *workflowRuntime) SetExecutionRefs(service *coredata.WorkflowExecutionRe
 	r.executionRefs = service
 }
 
+func (r *workflowRuntime) HasConfiguredProviders() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.providers) > 0
+}
+
 func (r *workflowRuntime) ResolveProvider(name string) (coreworkflow.Provider, error) {
 	if r == nil {
 		return nil, fmt.Errorf("workflow runtime is not configured")

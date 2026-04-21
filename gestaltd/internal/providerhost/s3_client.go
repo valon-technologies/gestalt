@@ -48,7 +48,7 @@ func NewExecutableS3(ctx context.Context, cfg S3ExecConfig) (s3store.Client, err
 
 	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
 	s3Client := proto.NewS3Client(proc.conn)
-	if _, err := configureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_S3, cfg.Name, cfg.Config); err != nil {
+	if _, err := ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_S3, cfg.Name, cfg.Config); err != nil {
 		_ = proc.Close()
 		return nil, err
 	}

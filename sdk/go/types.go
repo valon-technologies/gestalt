@@ -10,6 +10,10 @@ import (
 type ProviderKind string
 
 const (
+	// HostedPluginBundleRoot is the guest-visible directory where the host stages
+	// bundle-based plugin payloads before a hosted runtime launches them.
+	HostedPluginBundleRoot = "/workspace/plugin"
+
 	// ProviderKindIntegration is the main executable provider surface used by
 	// integration plugins.
 	ProviderKindIntegration ProviderKind = "integration"
@@ -28,6 +32,8 @@ const (
 	ProviderKindS3 ProviderKind = "s3"
 	// ProviderKindWorkflow serves the workflow orchestration surface.
 	ProviderKindWorkflow ProviderKind = "workflow"
+	// ProviderKindRuntime serves hosted executable-plugin runtime management.
+	ProviderKindRuntime ProviderKind = "runtime"
 )
 
 // ProviderMetadata describes a provider instance independent of its concrete

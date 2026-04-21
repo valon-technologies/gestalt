@@ -3,19 +3,29 @@ package pluginruntime
 import (
 	"context"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-	"github.com/valon-technologies/gestalt/server/internal/egress"
-	"google.golang.org/grpc"
 )
 
 type SessionState string
 
 const (
-	SessionStatePending SessionState = "pending"
-	SessionStateReady   SessionState = "ready"
-	SessionStateRunning SessionState = "running"
-	SessionStateStopped SessionState = "stopped"
-	SessionStateFailed  SessionState = "failed"
+	HostedPluginBundleRoot              = gestalt.HostedPluginBundleRoot
+	SessionStatePending    SessionState = "pending"
+	SessionStateReady      SessionState = "ready"
+	SessionStateRunning    SessionState = "running"
+	SessionStateStopped    SessionState = "stopped"
+	SessionStateFailed     SessionState = "failed"
+)
+
+// PolicyAction mirrors the host egress default for runtime-launched plugins.
+// Runtime backends live outside gestaltd internals, so this contract cannot
+// depend on the server's internal egress package directly.
+type PolicyAction string
+
+const (
+	PolicyAllow PolicyAction = "allow"
+	PolicyDeny  PolicyAction = "deny"
 )
 
 type Capabilities struct {
@@ -24,6 +34,9 @@ type Capabilities struct {
 	ProviderGRPCTunnel  bool
 	HostnameProxyEgress bool
 	CIDREgress          bool
+	HostPathExecution   bool
+	ExecutionGOOS       string
+	ExecutionGOARCH     string
 }
 
 type Session struct {
@@ -48,9 +61,9 @@ type StopSessionRequest struct {
 }
 
 type BindHostServiceRequest struct {
-	SessionID string
-	EnvVar    string
-	Register  func(*grpc.Server)
+	SessionID      string
+	EnvVar         string
+	HostSocketPath string
 }
 
 type HostServiceBinding struct {
@@ -62,29 +75,25 @@ type HostServiceBinding struct {
 
 // StartPluginRequest describes the plugin process to launch inside a runtime
 // session. Implementations own allocation and injection of the plugin's
-// provider listener endpoint (for example, GESTALT_PLUGIN_SOCKET); the host
-// does not pass an explicit listener path through this contract.
+// provider listener endpoint and must return a host-reachable dial target in
+// HostedPlugin.DialTarget.
 type StartPluginRequest struct {
 	SessionID     string
 	PluginName    string
 	Command       string
 	Args          []string
 	Env           map[string]string
+	BundleDir     string
 	AllowedHosts  []string
-	DefaultAction egress.PolicyAction
+	DefaultAction PolicyAction
 	HostBinary    string
-	Cleanup       func()
 }
 
 type HostedPlugin struct {
 	ID         string
 	SessionID  string
 	PluginName string
-}
-
-type DialPluginRequest struct {
-	SessionID string
-	PluginID  string
+	DialTarget string
 }
 
 type HostedPluginConn interface {
@@ -99,12 +108,6 @@ type Provider interface {
 	GetSession(ctx context.Context, req GetSessionRequest) (*Session, error)
 	StopSession(ctx context.Context, req StopSessionRequest) error
 	BindHostService(ctx context.Context, req BindHostServiceRequest) (*HostServiceBinding, error)
-	// StartPlugin launches a plugin inside the session. Implementations must
-	// allocate and inject the plugin listener endpoint before startup and only
-	// return success once DialPlugin can connect to the running plugin.
 	StartPlugin(ctx context.Context, req StartPluginRequest) (*HostedPlugin, error)
-	// DialPlugin connects to the listener established by StartPlugin using the
-	// backend-specific transport or tunnel.
-	DialPlugin(ctx context.Context, req DialPluginRequest) (HostedPluginConn, error)
 	Close() error
 }

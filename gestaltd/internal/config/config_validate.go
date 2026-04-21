@@ -400,23 +400,51 @@ func validateRuntimeConfig(cfg *Config) error {
 	if cfg == nil {
 		return nil
 	}
+	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	cfg.Server.Runtime.Provider = strings.TrimSpace(cfg.Server.Runtime.Provider)
 	for name, entry := range cfg.Runtime.Providers {
 		if entry == nil {
 			return fmt.Errorf("config validation: runtime.providers.%s is required", name)
 		}
-		entry.Driver = RuntimeProviderDriver(strings.TrimSpace(string(entry.Driver)))
-		if entry.Driver == "" {
-			return fmt.Errorf("config validation: runtime.providers.%s.driver is required", name)
+		if err := validatePluginOnlyProviderFields("runtime.providers."+name, &entry.ProviderEntry); err != nil {
+			return err
 		}
-		if entry.Driver == RuntimeProviderDriverLocal && entry.Config.Kind != 0 {
-			return fmt.Errorf("config validation: runtime.providers.%s.config is not supported when driver is %q", name, RuntimeProviderDriverLocal)
+		entry.Driver = RuntimeProviderDriver(strings.TrimSpace(string(entry.Driver)))
+		switch entry.Driver {
+		case "":
+			if entry.Source.IsBuiltin() {
+				return fmt.Errorf("config validation: runtime provider %q does not support builtin providers; use a provider source reference or driver: %q", name, RuntimeProviderDriverLocal)
+			}
+			if err := validateProviderEntrySource("runtime", name, &entry.ProviderEntry, sourceSyntax); err != nil {
+				return err
+			}
+		case RuntimeProviderDriverLocal:
+			if runtimeProviderUsesSource(entry) {
+				return fmt.Errorf("config validation: runtime.providers.%s.source is not supported when driver is %q", name, RuntimeProviderDriverLocal)
+			}
+			if entry.Config.Kind != 0 {
+				return fmt.Errorf("config validation: runtime.providers.%s.config is not supported when driver is %q", name, RuntimeProviderDriverLocal)
+			}
+		default:
+			return fmt.Errorf("config validation: runtime.providers.%s.driver %q is not supported; use driver %q or a provider source reference", name, entry.Driver, RuntimeProviderDriverLocal)
 		}
 	}
 	if _, _, err := cfg.SelectedRuntimeProvider(); err != nil {
 		return err
 	}
 	return nil
+}
+
+func runtimeProviderUsesSource(entry *RuntimeProviderEntry) bool {
+	if entry == nil {
+		return false
+	}
+	return entry.Source.IsBuiltin() ||
+		entry.Source.IsMetadataURL() ||
+		entry.Source.IsGitHubRelease() ||
+		entry.Source.IsLocalMetadataPath() ||
+		entry.Source.IsLocal() ||
+		entry.Source.UnsupportedURL() != ""
 }
 
 func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax providerSourceSyntaxMode) error {

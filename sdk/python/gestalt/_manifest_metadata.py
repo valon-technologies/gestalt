@@ -3,10 +3,9 @@
 import copy
 import pathlib
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, TypedDict
 
 import yaml
-from typing_extensions import NotRequired, TypedDict
 
 
 class HTTPSecretRef(TypedDict, total=False):
@@ -43,13 +42,16 @@ class HTTPAck(TypedDict, total=False):
     body: Any
 
 
-class HTTPBinding(TypedDict):
+class HTTPBindingRequired(TypedDict):
     path: str
     method: str
     security: str
     target: str
-    requestBody: NotRequired[HTTPRequestBody]
-    ack: NotRequired[HTTPAck]
+
+
+class HTTPBinding(HTTPBindingRequired, total=False):
+    requestBody: HTTPRequestBody
+    ack: HTTPAck
 
 
 class PluginManifestMetadata(TypedDict, total=False):

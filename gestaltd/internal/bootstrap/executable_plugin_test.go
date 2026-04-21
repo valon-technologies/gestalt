@@ -31,6 +31,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 	graphqlschema "github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
@@ -123,10 +124,6 @@ func (r *capturingPluginRuntime) StartPlugin(ctx context.Context, req pluginrunt
 	return r.provider.StartPlugin(ctx, req)
 }
 
-func (r *capturingPluginRuntime) DialPlugin(ctx context.Context, req pluginruntime.DialPluginRequest) (pluginruntime.HostedPluginConn, error) {
-	return r.provider.DialPlugin(ctx, req)
-}
-
 func (r *capturingPluginRuntime) Close() error {
 	return r.provider.Close()
 }
@@ -141,6 +138,101 @@ func (r *capturingPluginRuntime) startSessionRequests() []pluginruntime.StartSes
 			Template:   req.Template,
 			Image:      req.Image,
 			Metadata:   cloneRuntimeMetadata(req.Metadata),
+		}
+	}
+	return out
+}
+
+type capturingBundlePluginRuntime struct {
+	provider      *pluginruntime.LocalProvider
+	capabilities  pluginruntime.Capabilities
+	bindHostCalls atomic.Int32
+
+	mu                  sync.Mutex
+	startPluginRequests []pluginruntime.StartPluginRequest
+}
+
+func newCapturingBundlePluginRuntime() *capturingBundlePluginRuntime {
+	return &capturingBundlePluginRuntime{
+		provider: pluginruntime.NewLocalProvider(),
+		capabilities: pluginruntime.Capabilities{
+			HostedPluginRuntime: true,
+			ProviderGRPCTunnel:  true,
+			ExecutionGOOS:       runtime.GOOS,
+			ExecutionGOARCH:     runtime.GOARCH,
+		},
+	}
+}
+
+func (r *capturingBundlePluginRuntime) Capabilities(context.Context) (pluginruntime.Capabilities, error) {
+	return r.capabilities, nil
+}
+
+func (r *capturingBundlePluginRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
+	return r.provider.StartSession(ctx, req)
+}
+
+func (r *capturingBundlePluginRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
+	return r.provider.GetSession(ctx, req)
+}
+
+func (r *capturingBundlePluginRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
+	return r.provider.StopSession(ctx, req)
+}
+
+func (r *capturingBundlePluginRuntime) BindHostService(ctx context.Context, req pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
+	r.bindHostCalls.Add(1)
+	return r.provider.BindHostService(ctx, req)
+}
+
+func (r *capturingBundlePluginRuntime) StartPlugin(ctx context.Context, req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
+	r.mu.Lock()
+	r.startPluginRequests = append(r.startPluginRequests, pluginruntime.StartPluginRequest{
+		SessionID:  req.SessionID,
+		PluginName: req.PluginName,
+		Command:    req.Command,
+		Args:       slices.Clone(req.Args),
+		BundleDir:  req.BundleDir,
+	})
+	r.mu.Unlock()
+
+	translated := req
+	if req.BundleDir != "" && strings.HasPrefix(req.Command, pluginruntime.HostedPluginBundleRoot+"/") {
+		rel := strings.TrimPrefix(req.Command, pluginruntime.HostedPluginBundleRoot+"/")
+		translated.Command = filepath.Join(req.BundleDir, filepath.FromSlash(rel))
+	}
+	if req.BundleDir != "" {
+		translated.Args = make([]string, len(req.Args))
+		for i, arg := range req.Args {
+			switch {
+			case arg == pluginruntime.HostedPluginBundleRoot:
+				translated.Args[i] = req.BundleDir
+			case strings.HasPrefix(arg, pluginruntime.HostedPluginBundleRoot+"/"):
+				rel := strings.TrimPrefix(arg, pluginruntime.HostedPluginBundleRoot+"/")
+				translated.Args[i] = filepath.Join(req.BundleDir, filepath.FromSlash(rel))
+			default:
+				translated.Args[i] = arg
+			}
+		}
+	}
+	return r.provider.StartPlugin(ctx, translated)
+}
+
+func (r *capturingBundlePluginRuntime) Close() error {
+	return r.provider.Close()
+}
+
+func (r *capturingBundlePluginRuntime) startPluginRequestsCopy() []pluginruntime.StartPluginRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]pluginruntime.StartPluginRequest, len(r.startPluginRequests))
+	for i, req := range r.startPluginRequests {
+		out[i] = pluginruntime.StartPluginRequest{
+			SessionID:  req.SessionID,
+			PluginName: req.PluginName,
+			Command:    req.Command,
+			Args:       slices.Clone(req.Args),
+			BundleDir:  req.BundleDir,
 		}
 	}
 	return out
@@ -188,10 +280,6 @@ func (r *slowStopPluginRuntime) StartPlugin(ctx context.Context, req pluginrunti
 	return r.inner.StartPlugin(ctx, req)
 }
 
-func (r *slowStopPluginRuntime) DialPlugin(ctx context.Context, req pluginruntime.DialPluginRequest) (pluginruntime.HostedPluginConn, error) {
-	return r.inner.DialPlugin(ctx, req)
-}
-
 func (r *slowStopPluginRuntime) Close() error {
 	return r.inner.Close()
 }
@@ -232,10 +320,6 @@ func (r *staticCapabilityPluginRuntime) BindHostService(ctx context.Context, req
 
 func (r *staticCapabilityPluginRuntime) StartPlugin(ctx context.Context, req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
 	return r.inner.StartPlugin(ctx, req)
-}
-
-func (r *staticCapabilityPluginRuntime) DialPlugin(ctx context.Context, req pluginruntime.DialPluginRequest) (pluginruntime.HostedPluginConn, error) {
-	return r.inner.DialPlugin(ctx, req)
 }
 
 func (r *staticCapabilityPluginRuntime) Close() error {
@@ -3116,6 +3200,7 @@ func TestInjectedPluginRuntimeStopsSessionOnProviderClose(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingPluginRuntime()
+	t.Cleanup(func() { _ = runtimeProvider.Close() })
 	cfg := &config.Config{
 		Plugins: map[string]*config.ProviderEntry{
 			"echoext": {
@@ -3161,6 +3246,7 @@ func TestInjectedPluginRuntimeStopSessionTimeoutDoesNotHangProviderClose(t *test
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := &slowStopPluginRuntime{inner: pluginruntime.NewLocalProvider()}
+	t.Cleanup(func() { _ = runtimeProvider.Close() })
 	cfg := &config.Config{
 		Plugins: map[string]*config.ProviderEntry{
 			"echoext": {
@@ -3221,6 +3307,7 @@ func TestInjectedPluginRuntimeStopSessionTimeoutDoesNotHangBootstrapFailure(t *t
 		slowStopPluginRuntime: slowStopPluginRuntime{inner: pluginruntime.NewLocalProvider()},
 		err:                   fmt.Errorf("bind failed"),
 	}
+	t.Cleanup(func() { _ = runtimeProvider.Close() })
 	cfg := &config.Config{
 		Plugins: map[string]*config.ProviderEntry{
 			"echoext": {
@@ -3274,7 +3361,7 @@ func TestPluginRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *te
 	ctxSentinel := &struct{}{}
 	var factoryContextValue any
 	factories := NewFactoryRegistry()
-	factories.PluginRuntimes[config.RuntimeProviderDriver("capture")] = func(ctx context.Context, _ string, _ *config.RuntimeProviderEntry, _ Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(ctx context.Context, _ string, _ *config.RuntimeProviderEntry, _ Deps) (pluginruntime.Provider, error) {
 		factoryContextValue = ctx.Value(runtimeFactoryContextKey{})
 		return runtimeProvider, nil
 	}
@@ -3305,7 +3392,7 @@ func TestPluginRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *te
 	}
 
 	deps := Deps{
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.PluginRuntimes, Deps{}),
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	}
 	buildCtx := context.WithValue(context.Background(), runtimeFactoryContextKey{}, ctxSentinel)
 	providers, _, err := buildProvidersStrict(buildCtx, cfg, factories, deps)
@@ -3349,6 +3436,308 @@ func TestPluginRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *te
 	}
 }
 
+func TestPluginRuntimeStagesBundleForNonHostPathExecution(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, filepath.Base(bin)))
+	artifactBytes, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatalf("ReadFile(binary): %v", err)
+	}
+	artifactFile := filepath.Join(manifestRoot, filepath.FromSlash(artifactPath))
+	if err := os.MkdirAll(filepath.Dir(artifactFile), 0o755); err != nil {
+		t.Fatalf("MkdirAll(artifact dir): %v", err)
+	}
+	if err := os.WriteFile(artifactFile, artifactBytes, 0o755); err != nil {
+		t.Fatalf("WriteFile(artifact): %v", err)
+	}
+	digest, err := providerpkg.FileSHA256(artifactFile)
+	if err != nil {
+		t.Fatalf("FileSHA256(artifact): %v", err)
+	}
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	manifest.Artifacts = []providermanifestv1.Artifact{{
+		OS:     runtime.GOOS,
+		Arch:   runtime.GOARCH,
+		Path:   artifactPath,
+		SHA256: digest,
+	}}
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: artifactPath}
+	manifestData, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifestFormat(manifest): %v", err)
+	}
+	manifestPath := filepath.Join(manifestRoot, "manifest.yaml")
+	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
+		t.Fatalf("WriteFile(manifest.yaml): %v", err)
+	}
+
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: manifestPath,
+				Runtime:              &config.PluginRuntimeConfig{},
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get(echoext): %v", err)
+	}
+	if _, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": "PATH"}, ""); err != nil {
+		t.Fatalf("Execute(read_env): %v", err)
+	}
+
+	requests := runtimeProvider.startPluginRequestsCopy()
+	if len(requests) != 1 {
+		t.Fatalf("start plugin requests = %d, want 1", len(requests))
+	}
+	req := requests[0]
+	if req.BundleDir == "" {
+		t.Fatal("StartPlugin BundleDir = empty, want staged bundle")
+	}
+	if !strings.HasPrefix(req.Command, pluginruntime.HostedPluginBundleRoot+"/") {
+		t.Fatalf("StartPlugin Command = %q, want command under %s", req.Command, pluginruntime.HostedPluginBundleRoot)
+	}
+	if got := runtimeProvider.bindHostCalls.Load(); got != 0 {
+		t.Fatalf("BindHostService calls = %d, want 0", got)
+	}
+
+	if err := CloseProviders(providers); err != nil {
+		t.Fatalf("CloseProviders: %v", err)
+	}
+	if _, err := os.Stat(req.BundleDir); !os.IsNotExist(err) {
+		t.Fatalf("bundle dir stat after close = %v, want not-exist", err)
+	}
+}
+
+func TestPluginRuntimeDropsSourceStyleArgsForNonHostPathExecution(t *testing.T) {
+	t.Parallel()
+
+	bin := buildExampleProviderBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "example",
+		Operations: []catalog.CatalogOperation{
+			{ID: "status", Method: http.MethodGet},
+		},
+	})
+	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, filepath.Base(bin)))
+	artifactBytes, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatalf("ReadFile(binary): %v", err)
+	}
+	artifactFile := filepath.Join(manifestRoot, filepath.FromSlash(artifactPath))
+	if err := os.MkdirAll(filepath.Dir(artifactFile), 0o755); err != nil {
+		t.Fatalf("MkdirAll(artifact dir): %v", err)
+	}
+	if err := os.WriteFile(artifactFile, artifactBytes, 0o755); err != nil {
+		t.Fatalf("WriteFile(artifact): %v", err)
+	}
+	digest, err := providerpkg.FileSHA256(artifactFile)
+	if err != nil {
+		t.Fatalf("FileSHA256(artifact): %v", err)
+	}
+	manifest := newExecutableManifest("Example Provider", "Prepared install artifact")
+	manifest.Artifacts = []providermanifestv1.Artifact{{
+		OS:     runtime.GOOS,
+		Arch:   runtime.GOARCH,
+		Path:   artifactPath,
+		SHA256: digest,
+	}}
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: artifactPath}
+	manifestData, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifestFormat(manifest): %v", err)
+	}
+	manifestPath := filepath.Join(manifestRoot, "manifest.yaml")
+	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
+		t.Fatalf("WriteFile(manifest.yaml): %v", err)
+	}
+
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"example": {
+				Args:                 []string{"-m", "gestalt._runtime", "/host/source", "pkg.provider", "integration"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: manifestPath,
+				Runtime:              &config.PluginRuntimeConfig{},
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() {
+		if err := CloseProviders(providers); err != nil {
+			t.Fatalf("CloseProviders: %v", err)
+		}
+	}()
+
+	requests := runtimeProvider.startPluginRequestsCopy()
+	if len(requests) != 1 {
+		t.Fatalf("start plugin requests = %d, want 1", len(requests))
+	}
+	if len(requests[0].Args) != 0 {
+		t.Fatalf("StartPlugin Args = %#v, want source-style host args dropped", requests[0].Args)
+	}
+	if !strings.HasPrefix(requests[0].Command, pluginruntime.HostedPluginBundleRoot+"/") {
+		t.Fatalf("StartPlugin Command = %q, want command under %s", requests[0].Command, pluginruntime.HostedPluginBundleRoot)
+	}
+}
+
+func TestPluginRuntimeRewritesHostPathArgsForNonHostPathExecution(t *testing.T) {
+	t.Parallel()
+
+	bin := buildExampleProviderBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "example",
+		Operations: []catalog.CatalogOperation{
+			{ID: "status", Method: http.MethodGet},
+		},
+	})
+	configPath := filepath.Join(manifestRoot, "fixtures", "config.json")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(fixtures): %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{"ok":true}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(config.json): %v", err)
+	}
+	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, filepath.Base(bin)))
+	artifactBytes, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatalf("ReadFile(binary): %v", err)
+	}
+	artifactFile := filepath.Join(manifestRoot, filepath.FromSlash(artifactPath))
+	if err := os.MkdirAll(filepath.Dir(artifactFile), 0o755); err != nil {
+		t.Fatalf("MkdirAll(artifact dir): %v", err)
+	}
+	if err := os.WriteFile(artifactFile, artifactBytes, 0o755); err != nil {
+		t.Fatalf("WriteFile(artifact): %v", err)
+	}
+	digest, err := providerpkg.FileSHA256(artifactFile)
+	if err != nil {
+		t.Fatalf("FileSHA256(artifact): %v", err)
+	}
+	manifest := newExecutableManifest("Example Provider", "Prepared install artifact")
+	manifest.Artifacts = []providermanifestv1.Artifact{{
+		OS:     runtime.GOOS,
+		Arch:   runtime.GOARCH,
+		Path:   artifactPath,
+		SHA256: digest,
+	}}
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: artifactPath}
+	manifestData, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifestFormat(manifest): %v", err)
+	}
+	manifestPath := filepath.Join(manifestRoot, "manifest.yaml")
+	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
+		t.Fatalf("WriteFile(manifest.yaml): %v", err)
+	}
+
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"example": {
+				Command:              bin,
+				Args:                 []string{"--config", configPath, "--name", "example"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: manifestPath,
+				Runtime:              &config.PluginRuntimeConfig{},
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() {
+		if err := CloseProviders(providers); err != nil {
+			t.Fatalf("CloseProviders: %v", err)
+		}
+	}()
+
+	requests := runtimeProvider.startPluginRequestsCopy()
+	if len(requests) != 1 {
+		t.Fatalf("start plugin requests = %d, want 1", len(requests))
+	}
+	if requests[0].Args[1] != pluginruntime.HostedPluginBundleRoot+"/fixtures/config.json" {
+		t.Fatalf("StartPlugin Args = %#v, want staged bundle config path", requests[0].Args)
+	}
+	if requests[0].Args[3] != "example" {
+		t.Fatalf("StartPlugin Args = %#v, want non-path args preserved", requests[0].Args)
+	}
+}
+
 func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapability(t *testing.T) {
 	t.Parallel()
 
@@ -3369,7 +3758,7 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapability(t *testing
 		},
 	}
 	factories := NewFactoryRegistry()
-	factories.PluginRuntimes[config.RuntimeProviderDriver("capture")] = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -3398,7 +3787,7 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapability(t *testing
 	}
 
 	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.PluginRuntimes, Deps{}),
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	})
 	if err == nil || !strings.Contains(err.Error(), "host service tunnels") {
 		t.Fatalf("buildProvidersStrict error = %v, want missing host service tunnels", err)
@@ -3425,7 +3814,7 @@ func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T)
 		},
 	}
 	factories := NewFactoryRegistry()
-	factories.PluginRuntimes[config.RuntimeProviderDriver("capture")] = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
 		return runtimeProvider, nil
 	}
 	cfg := &config.Config{
@@ -3452,7 +3841,122 @@ func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T)
 	}
 
 	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.PluginRuntimes, Deps{}),
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+	})
+	if err == nil || !strings.Contains(err.Error(), "hostname-based egress controls") {
+		t.Fatalf("buildProvidersStrict error = %v, want missing hostname-based egress controls", err)
+	}
+}
+
+func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapabilityWithWorkflowProvider(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := &staticCapabilityPluginRuntime{
+		inner: pluginruntime.NewLocalProvider(),
+		capabilities: pluginruntime.Capabilities{
+			HostedPluginRuntime: true,
+			ProviderGRPCTunnel:  true,
+		},
+	}
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+			},
+		},
+	}
+
+	workflowRuntime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{
+			"managed": nil,
+		},
+	}
+	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
+		WorkflowRuntime:       workflowRuntime,
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{WorkflowRuntime: workflowRuntime}),
+	})
+	if err == nil || !strings.Contains(err.Error(), "host service tunnels") {
+		t.Fatalf("buildProvidersStrict error = %v, want missing host service tunnels", err)
+	}
+}
+
+func TestPluginRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := &staticCapabilityPluginRuntime{
+		inner: pluginruntime.NewLocalProvider(),
+		capabilities: pluginruntime.Capabilities{
+			HostedPluginRuntime: true,
+			ProviderGRPCTunnel:  true,
+			HostServiceTunnels:  true,
+		},
+	}
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+			},
+		},
+	}
+
+	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{
+			Egress: EgressDeps{DefaultAction: egress.PolicyDeny},
+		}),
+		Egress: EgressDeps{DefaultAction: egress.PolicyDeny},
 	})
 	if err == nil || !strings.Contains(err.Error(), "hostname-based egress controls") {
 		t.Fatalf("buildProvidersStrict error = %v, want missing hostname-based egress controls", err)

@@ -728,7 +728,7 @@ func TestInitAtPath_RejectsInvalidPluginInvokesShape(t *testing.T) {
       invokes:
         - plugin: target
 `,
-			want: `plugins.caller.invokes[0].operation`,
+			want: `plugins.caller.invokes[0].operation or .surface is required`,
 		},
 		{
 			name: "duplicate dependency",

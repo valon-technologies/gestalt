@@ -176,6 +176,7 @@ Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `a
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
 | `artifactsDir` | config directory | Directory for prepared `init` artifacts. |
 | `providers.audit` / `providers.authentication` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
+| `runtime.provider` | | Default runtime-provider selector for plugins that opt into `plugins.<name>.runtime`. This does not move plugins into hosted runtimes by itself. |
 | `admin.authorizationPolicy` | | Shared human access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
 | `authorization.policies` | | Shared human access policies resolved by canonical `subjectID`. |
@@ -183,6 +184,81 @@ Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `a
 
 When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener. When `server.admin.authorizationPolicy` is set, Gestalt does apply browser session auth plus role-based policy checks to `/admin` and `/admin/api/v1/*`.
 
+## `runtime`
+
+`runtime.providers` defines named execution backends for executable plugins.
+These backends are only used when a plugin opts into `plugins.<name>.runtime`.
+If a plugin omits `runtime`, it still runs on the same machine as `gestaltd`.
+
+See [Providers > Runtime](/providers/runtime) for the lifecycle and capability
+model behind these fields.
+
+```yaml
+runtime:
+  providers:
+    local:
+      driver: local
+    modal:
+      source:
+        path: ./vendor/gestalt-providers/runtime/modal/manifest.yaml
+      default: true
+      config:
+        app: gestalt-runtime
+        environment: main
+```
+
+`server.runtime.provider` supplies the default runtime name for plugins that set
+`plugins.<name>.runtime` without an explicit `provider`.
+
+| Field | Description |
+| --- | --- |
+| `providers.<name>.driver` | Optional built-in runtime selector. The only built-in runtime is `local`. |
+| `providers.<name>.source` | Source or provider-release reference for an installable `kind: runtime` provider such as Modal. |
+| `providers.<name>.default` | Marks the runtime as the default selection when `server.runtime.provider` is omitted. Only one runtime may be default. |
+| `providers.<name>.config` | Runtime-provider-specific config blob. Built-ins such as `local` reject custom config entirely. |
+
+### `runtime.providers.*.config` for the Modal runtime provider
+
+The Modal runtime provider creates hosted Linux sandboxes in a Modal app and
+connects to the plugin over a gRPC tunnel.
+
+```yaml
+runtime:
+  providers:
+    modal:
+      source:
+        path: ./vendor/gestalt-providers/runtime/modal/manifest.yaml
+      config:
+        app: gestalt-runtime
+        environment: main
+        cpu: 2
+        memoryMiB: 4096
+        memoryLimitMiB: 6144
+        timeout: 30m
+        idleTimeout: 10m
+        cloud: aws
+        regions:
+          - us-east-1
+```
+
+| Field | Description |
+| --- | --- |
+| `app` | **Required.** Modal app name used to create or reuse sandboxes. |
+| `environment` | Optional Modal environment name. |
+| `cpu` | Optional CPU allocation for each sandbox. Must be non-negative. |
+| `memoryMiB` | Optional memory request in MiB. Must be non-negative. |
+| `memoryLimitMiB` | Optional memory limit in MiB. Must be non-negative. |
+| `timeout` | Optional absolute sandbox timeout. |
+| `idleTimeout` | Optional idle timeout before Modal reclaims the sandbox. |
+| `cloud` | Optional cloud selector passed through to Modal. |
+| `regions` | Optional region allowlist passed through to Modal. |
+
+When a plugin uses the Modal runtime provider, `plugins.<name>.runtime.image` is
+required. The current backend does not support host-service tunnels or
+Gestalt's hostname-based egress model, so Gestalt rejects Modal for plugins
+that need `indexeddb`, `cache`, `s3`, workflow-manager access when workflows
+are configured, nested `invokes`, `allowedHosts`, or a server-wide default-deny
+egress policy.
 ## `providers.authentication`
 
 Platform authentication is optional. Omit the `providers.authentication` block entirely to disable it. When platform authentication is enabled, configure one or more named entries under `providers.authentication`. If more than one entry exists, set `server.providers.authentication` to pick which one the host should use.

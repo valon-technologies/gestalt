@@ -142,6 +142,13 @@ func (p *PluginProcess) Integration() proto.IntegrationProviderClient {
 	return proto.NewIntegrationProviderClient(p.proc.conn)
 }
 
+func (p *PluginProcess) Conn() *grpc.ClientConn {
+	if p == nil || p.proc == nil {
+		return nil
+	}
+	return p.proc.conn
+}
+
 func (p *PluginProcess) Close() error {
 	if p == nil || p.proc == nil {
 		return nil

@@ -1,4 +1,4 @@
-# Plugin
+# Plugins
 
 Plugin providers are the packages that expose tools through Gestalt. Operators
 configure them under `plugins`, while the host takes care of catalog
@@ -16,6 +16,7 @@ From a deployment point of view, the important pieces are:
 - `config` for provider-specific settings such as OAuth app credentials
 - `allowedOperations` to publish only part of a large catalog
 - `allowedHosts` to declare outbound egress policy
+- `runtime` to opt an executable plugin into hosted execution
 
 If the manifest enables MCP, the same operations are also exposed through the
 server's `/mcp` endpoint.
@@ -71,6 +72,57 @@ plugins:
     source: ./plugins/support/manifest.yaml
 ```
 
+By default, executable plugins run on the same machine as `gestaltd`. A plugin
+only uses a hosted runtime when it sets `plugins.<name>.runtime`.
+
+## Choosing a runtime
+
+Runtime selection is explicit and per-plugin:
+
+```yaml
+runtime:
+  providers:
+    modal:
+      source:
+        path: ./vendor/gestalt-providers/runtime/modal/manifest.yaml
+      default: true
+      config:
+        app: gestalt-runtime
+        environment: main
+
+server:
+  runtime:
+    provider: modal
+
+plugins:
+  support:
+    source: ./plugins/support/manifest.yaml
+    runtime:
+      template: python-dev
+      image: ghcr.io/example/support-plugin:2026-04-21
+      metadata:
+        environment: production
+```
+
+`plugins.<name>.runtime.provider` selects a named backend from
+`runtime.providers`. When `provider` is omitted, Gestalt uses
+`server.runtime.provider` or the one runtime entry marked `default: true`.
+
+`template`, `image`, and `metadata` are forwarded to the runtime backend. Their
+meaning is backend-specific: one runtime may ignore them, while another may use
+them to choose a sandbox template, container image, or lifecycle labels.
+
+A built-in `local` runtime is always available for same-machine execution. The
+first installable hosted runtime provider is `modal`. It requires
+`runtime.providers.<name>.config.app` and `plugins.<name>.runtime.image`.
+Gestalt only uses it for plain executable plugins today: Modal does not yet
+support host-service tunnels or Gestalt's hostname-based egress model, so
+plugins that use `indexeddb`, `cache`, `s3`, workflow-manager access when
+workflows are configured, nested `invokes`, `allowedHosts`, or
+`server.egress.defaultAction: deny` stay on `local`.
+
+For the runtime-provider model itself, see [Providers > Runtime](/providers/runtime).
+
 ## Connections and credentials
 
 Plugin packages declare connection models in their manifests, and the server
@@ -111,10 +163,11 @@ plugins:
 ```
 
 For executable plugins, `allowedHosts` is only a complete security boundary when
-the plugin is running inside a supported sandboxed provider runtime. The current
-host-local wrappers are OS-dependent, so operators should treat `allowedHosts`
-as declarative policy plus best-effort enforcement unless the deployment target
-provides that sandbox contract.
+the plugin is running inside a runtime backend that preserves Gestalt's
+hostname-based policy model. The current host-local wrappers are OS-dependent,
+so operators should treat `allowedHosts` as declarative policy plus best-effort
+enforcement unless the selected runtime explicitly supports hostname-based
+egress controls.
 
 ## Building your own plugin
 

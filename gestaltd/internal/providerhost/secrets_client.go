@@ -43,7 +43,7 @@ func NewExecutableSecretManager(ctx context.Context, cfg SecretsExecConfig) (cor
 	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
 	secretsClient := proto.NewSecretsProviderClient(proc.conn)
 
-	_, err = configureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_SECRETS, cfg.Name, cfg.Config)
+	_, err = ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_SECRETS, cfg.Name, cfg.Config)
 	if err != nil {
 		_ = proc.Close()
 		return nil, err
