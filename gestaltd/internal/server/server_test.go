@@ -6172,6 +6172,68 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			t.Fatalf("expected MCP connection authTypes=[], got %+v", integrations[0].Connections[0].AuthTypes)
 		}
 	})
+
+	t.Run("manifest-backed passive default no-auth connection stays hidden", func(t *testing.T) {
+		t.Parallel()
+
+		stub := &stubNonOAuthProvider{
+			name: "httpbin",
+			ops:  []core.Operation{{Name: "get", Method: http.MethodGet}},
+		}
+		plugin := &config.ProviderEntry{
+			Source: config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-httpbin/v1.0.0/provider-release.yaml"),
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL: "https://httpbin.org",
+						},
+					},
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"default": {
+							Mode: providermanifestv1.ConnectionModeNone,
+						},
+					},
+				},
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"httpbin": plugin,
+			}
+			cfg.Services = coretesting.NewStubServices(t)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		var integrations []struct {
+			Name        string   `json:"name"`
+			AuthTypes   []string `json:"authTypes"`
+			Connections []struct {
+				Name string `json:"name"`
+			} `json:"connections"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if len(integrations) != 1 {
+			t.Fatalf("expected 1 integration, got %d", len(integrations))
+		}
+		if len(integrations[0].AuthTypes) != 0 {
+			t.Fatalf("expected no top-level auth types, got %+v", integrations[0].AuthTypes)
+		}
+		if len(integrations[0].Connections) != 0 {
+			t.Fatalf("expected passive default connection to stay hidden, got %+v", integrations[0].Connections)
+		}
+	})
 }
 
 func TestListIntegrations_ConnectionInfosHideOAuthConnectionsWithoutHandler(t *testing.T) {

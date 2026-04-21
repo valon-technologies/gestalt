@@ -189,7 +189,7 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 	infos := make([]connectionDefInfo, 0, len(names))
 	for _, name := range names {
 		conn, ok := plan.LookupConnection(name)
-		if !ok || !userFacingConnection(conn) {
+		if !ok || !userFacingConnection(conn) || shouldHidePassiveNamedConnection(plan, name, conn, integrationAuthTypes) {
 			continue
 		}
 		if info, ok := s.connectionInfoFromAuth(integration, userFacingConnectionName(name), conn, integrationAuthTypes, defaultCredentialFields, name != config.PluginConnectionName); ok {
@@ -296,6 +296,33 @@ func (s *Server) connectionInfoFromAuth(integration, name string, conn config.Co
 
 func userFacingConnection(conn config.ConnectionDef) bool {
 	return conn.Mode != providermanifestv1.ConnectionModeIdentity
+}
+
+func shouldHidePassiveNamedConnection(plan config.StaticConnectionPlan, name string, conn config.ConnectionDef, integrationAuthTypes []string) bool {
+	if len(plan.NamedConnectionNames()) != 1 {
+		return false
+	}
+	if config.ResolveConnectionAlias(name) != plan.AuthDefaultConnection() {
+		return false
+	}
+	if conn.Mode != providermanifestv1.ConnectionModeNone {
+		return false
+	}
+	if strings.TrimSpace(conn.DisplayName) != "" {
+		return false
+	}
+	if len(connectionAuthTypes(conn.Auth, integrationAuthTypes)) != 0 {
+		return false
+	}
+	if len(conn.Auth.Credentials) != 0 {
+		return false
+	}
+	for _, def := range conn.ConnectionParams {
+		if strings.TrimSpace(def.From) == "" {
+			return false
+		}
+	}
+	return true
 }
 
 func defaultManualCredentialFieldInfos() []credentialFieldInfo {
