@@ -883,11 +883,11 @@ func seedLegacyUserRecord(t *testing.T, svc *coredata.Services, id, email string
 	}
 }
 
-func seedIdentityToken(t *testing.T, svc *coredata.Services, integration, connection, instance, accessToken string) {
+func seedSubjectToken(t *testing.T, svc *coredata.Services, subjectID, integration, connection, instance, accessToken string) {
 	t.Helper()
 	seedToken(t, svc, &core.IntegrationToken{
 		ID:          integration + "-" + connection + "-" + instance,
-		SubjectID:   principal.IdentitySubjectID(),
+		SubjectID:   subjectID,
 		Integration: integration,
 		Connection:  connection,
 		Instance:    instance,
@@ -5254,10 +5254,10 @@ func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordan
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, "svc", "workspace", "default", "identity-svc-token")
+	seedSubjectToken(t, svc, principal.WorkloadSubjectID("triage-bot"), "svc", "workspace", "default", "identity-svc-token")
 
 	svcProvider := &stubIntegrationWithOps{
-		StubIntegration: coretesting.StubIntegration{N: "svc", DN: "Service", ConnMode: core.ConnectionModeIdentity},
+		StubIntegration: coretesting.StubIntegration{N: "svc", DN: "Service", ConnMode: core.ConnectionModeUser},
 		ops:             []core.Operation{{Name: "run", Method: http.MethodGet}},
 	}
 	weatherProvider := &stubIntegrationWithOps{
@@ -5398,7 +5398,7 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 	}
 
 	provider := &stubIntegrationWithOps{
-		StubIntegration: coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionModeIdentity},
+		StubIntegration: coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionModeUser},
 		ops: []core.Operation{
 			{Name: "run", Method: http.MethodGet},
 			{Name: "admin", Method: http.MethodGet},
@@ -5493,12 +5493,12 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, "svc-session", "workspace", "team-a", "session-bound-token")
+	seedSubjectToken(t, svc, principal.WorkloadSubjectID("triage-bot"), "svc-session", "workspace", "team-a", "session-bound-token")
 
 	var sessionCatalogToken string
 	sessionProvider := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "svc-session", ConnMode: core.ConnectionModeIdentity},
+			StubIntegration: coretesting.StubIntegration{N: "svc-session", ConnMode: core.ConnectionModeUser},
 		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			sessionCatalogToken = token
@@ -5720,7 +5720,7 @@ func TestListIntegrations_DerivesAuthTypesFromConnectionsWhenProviderOmitsThem(t
 	}
 }
 
-func TestListIntegrations_HidesIdentityConnectionsFromUserFacingMetadata(t *testing.T) {
+func TestListIntegrations_ShowsCredentialedConnectionsInUserFacingMetadata(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubManualProvider{
@@ -5738,7 +5738,7 @@ func TestListIntegrations_HidesIdentityConnectionsFromUserFacingMetadata(t *test
 				},
 				Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 					"default": {
-						Mode: providermanifestv1.ConnectionModeIdentity,
+						Mode: providermanifestv1.ConnectionModeUser,
 						Auth: &providermanifestv1.ProviderAuth{
 							Type: providermanifestv1.AuthTypeManual,
 						},
@@ -5785,8 +5785,19 @@ func TestListIntegrations_HidesIdentityConnectionsFromUserFacingMetadata(t *test
 	if !reflect.DeepEqual(integrations[0].AuthTypes, []string{"manual"}) {
 		t.Fatalf("auth types = %v, want [manual]", integrations[0].AuthTypes)
 	}
-	if len(integrations[0].Connections) != 0 {
-		t.Fatalf("connections = %+v, want no user-facing connections", integrations[0].Connections)
+	if len(integrations[0].Connections) != 2 {
+		t.Fatalf("connections = %+v, want plugin and default user-facing connections", integrations[0].Connections)
+	}
+	if integrations[0].Connections[0].Name != "plugin" {
+		t.Fatalf("first connection name = %q, want %q", integrations[0].Connections[0].Name, "plugin")
+	}
+	if integrations[0].Connections[1].Name != "default" {
+		t.Fatalf("second connection name = %q, want %q", integrations[0].Connections[1].Name, "default")
+	}
+	for _, conn := range integrations[0].Connections {
+		if !reflect.DeepEqual(conn.AuthTypes, []string{"manual"}) {
+			t.Fatalf("connection auth types = %v, want [manual]", conn.AuthTypes)
+		}
 	}
 }
 
@@ -8560,12 +8571,12 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, "svc", "workspace", "team-a", "identity-bound-token")
+	seedSubjectToken(t, svc, principal.WorkloadSubjectID("triage-bot"), "svc", "workspace", "team-a", "identity-bound-token")
 
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "svc",
-			ConnMode: core.ConnectionModeIdentity,
+			ConnMode: core.ConnectionModeUser,
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
 			},
@@ -9111,7 +9122,7 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "svc",
-			ConnMode: core.ConnectionModeIdentity,
+			ConnMode: core.ConnectionModeUser,
 		},
 		ops: []core.Operation{{Name: "run", Method: http.MethodGet}},
 	}
@@ -9164,8 +9175,8 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns
 	if record["subject_id"] != "workload:triage-bot" {
 		t.Fatalf("expected workload subject_id, got %v", record["subject_id"])
 	}
-	if record["credential_subject_id"] != "identity:__identity__" {
-		t.Fatalf("expected credential_subject_id identity principal, got %v", record["credential_subject_id"])
+	if record["credential_subject_id"] != "workload:triage-bot" {
+		t.Fatalf("expected credential_subject_id workload principal, got %v", record["credential_subject_id"])
 	}
 	if record["credential_connection"] != "workspace" {
 		t.Fatalf("expected credential_connection=workspace, got %v", record["credential_connection"])
@@ -13841,7 +13852,7 @@ func TestMCPEndpoint_WorkloadAuthorizationAndAudit(t *testing.T) {
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	prov := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeIdentity},
+			StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeUser},
 			ops: []core.Operation{
 				{Name: "run_query", Description: "Execute a SQL query"},
 				{Name: "delete_table", Description: "Delete a table"},
@@ -13855,7 +13866,7 @@ func TestMCPEndpoint_WorkloadAuthorizationAndAudit(t *testing.T) {
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedIdentityToken(t, svc, "clickhouse", "default", "default", "identity-token")
+	seedSubjectToken(t, svc, principal.WorkloadSubjectID("triage-bot"), "clickhouse", "default", "default", "identity-token")
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
@@ -13985,11 +13996,11 @@ func TestMCPEndpoint_WorkloadAuthorizationAndAudit(t *testing.T) {
 	if auditRecord["subject_kind"] != "workload" {
 		t.Fatalf("expected subject_kind workload, got %v", auditRecord["subject_kind"])
 	}
-	if auditRecord["credential_mode"] != "identity" {
-		t.Fatalf("expected credential_mode identity, got %v", auditRecord["credential_mode"])
+	if auditRecord["credential_mode"] != "user" {
+		t.Fatalf("expected credential_mode user, got %v", auditRecord["credential_mode"])
 	}
-	if auditRecord["credential_subject_id"] != "identity:__identity__" {
-		t.Fatalf("expected credential_subject_id identity:__identity__, got %v", auditRecord["credential_subject_id"])
+	if auditRecord["credential_subject_id"] != "workload:triage-bot" {
+		t.Fatalf("expected credential_subject_id workload:triage-bot, got %v", auditRecord["credential_subject_id"])
 	}
 	if auditRecord["credential_connection"] != "default" {
 		t.Fatalf("expected credential_connection default, got %v", auditRecord["credential_connection"])
@@ -14797,53 +14808,6 @@ func TestLogout_NoAuthNilProvider(t *testing.T) {
 	}
 	if auditRecord["allowed"] != true {
 		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])
-	}
-}
-
-func TestExecuteOperation_ConnectionModeIdentity(t *testing.T) {
-	t.Parallel()
-
-	svc := coretesting.NewStubServices(t)
-	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", SubjectID: principal.IdentitySubjectID(), Integration: "svc",
-		Connection: "", Instance: "default", AccessToken: "identity-tok",
-	})
-
-	stub := &stubIntegrationWithOps{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "svc",
-			ConnMode: core.ConnectionModeIdentity,
-			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"token":%q}`, token)}, nil
-			},
-		},
-		ops: []core.Operation{{Name: "do", Method: http.MethodGet}},
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Services = svc
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/do", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
-	}
-
-	var result map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if result["token"] != "identity-tok" {
-		t.Fatalf("expected identity-tok, got %v", result["token"])
 	}
 }
 

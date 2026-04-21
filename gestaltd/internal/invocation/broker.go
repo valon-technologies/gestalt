@@ -435,9 +435,6 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 		}
 		return b.resolveSubjectToken(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
 
-	case core.ConnectionModeIdentity:
-		return b.resolveSubjectToken(ctx, prov, principal.IdentitySubjectID(), providerName, connection, instance, core.ConnectionModeIdentity, principal.IdentitySubjectID())
-
 	default:
 		return ctx, "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, mode)
 	}
@@ -490,14 +487,6 @@ func (b *Broker) resolveWorkloadToken(ctx context.Context, prov core.Provider, p
 			Instance:   binding.Instance,
 		})
 		return ctx, "", nil
-	case core.ConnectionModeIdentity:
-		connection := binding.Connection
-		instance := binding.Instance
-		if (requestedConnection != "" && requestedConnection != binding.Connection) || (requestedInstance != "" && requestedInstance != binding.Instance) {
-			return ctx, "", fmt.Errorf("%w: workloads may not override connection or instance bindings", ErrAuthorizationDenied)
-		}
-		SetCredentialAudit(ctx, binding.Mode, binding.CredentialSubjectID, connection, instance)
-		return b.resolveSubjectToken(ctx, prov, principal.IdentitySubjectID(), providerName, connection, instance, core.ConnectionModeIdentity, binding.CredentialSubjectID)
 	case core.ConnectionModeUser:
 		connection := binding.Connection
 		instance := binding.Instance
@@ -514,7 +503,7 @@ func (b *Broker) resolveWorkloadToken(ctx context.Context, prov core.Provider, p
 		SetCredentialAudit(ctx, binding.Mode, subjectID, connection, instance)
 		return b.resolveSubjectToken(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
 	default:
-		return ctx, "", fmt.Errorf("%w: workloads may only use identity or none providers", ErrAuthorizationDenied)
+		return ctx, "", fmt.Errorf("%w: workloads may only use credentialed or none providers", ErrAuthorizationDenied)
 	}
 }
 

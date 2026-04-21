@@ -870,11 +870,11 @@ func TestBuildStartupProviderSpecPreservesStaticCatalogConnectionRouting(t *test
 	manifest.Spec.DefaultConnection = config.PluginConnectionAlias
 	manifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
 		"api": {
-			Mode: providermanifestv1.ConnectionModeIdentity,
+			Mode: providermanifestv1.ConnectionModeUser,
 			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
 		},
 		"mcp": {
-			Mode: providermanifestv1.ConnectionModeIdentity,
+			Mode: providermanifestv1.ConnectionModeUser,
 			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
 		},
 	}
@@ -1079,7 +1079,7 @@ func TestPreparedProviderStub_RejectsMixedConnectionModes(t *testing.T) {
 					Spec: &providermanifestv1.Spec{
 						Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 							"default": {
-								Mode: providermanifestv1.ConnectionModeIdentity,
+								Mode: providermanifestv1.ConnectionModeUser,
 								Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 							},
 							"workspace": {
@@ -1094,13 +1094,10 @@ func TestPreparedProviderStub_RejectsMixedConnectionModes(t *testing.T) {
 	}
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{})
-	if err == nil {
-		defer func() { _ = CloseProviders(providers) }()
-		t.Fatal("expected mixed connection mode error, got nil")
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
 	}
-	if !strings.Contains(err.Error(), `plugins may not mix "user" and "identity" connection modes across connections`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	defer func() { _ = CloseProviders(providers) }()
 }
 
 func TestPluginProcessEnvIsolation(t *testing.T) {

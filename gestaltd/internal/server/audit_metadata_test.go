@@ -351,7 +351,7 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "audit-workload-prov",
-			ConnMode: core.ConnectionModeIdentity,
+			ConnMode: core.ConnectionModeUser,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				if token != "identity-token" {
 					t.Fatalf("unexpected token %q", token)
@@ -384,7 +384,7 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	if err := svc.Tokens.StoreToken(t.Context(), &core.IntegrationToken{
 		ID:          "identity-audit-token",
-		SubjectID:   principal.IdentitySubjectID(),
+		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 		Integration: "audit-workload-prov",
 		Connection:  "workspace",
 		Instance:    "team-a",
@@ -436,11 +436,11 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	if record["subject_kind"] != "workload" {
 		t.Fatalf("expected subject_kind=workload, got %v", record["subject_kind"])
 	}
-	if record["credential_mode"] != "identity" {
-		t.Fatalf("expected credential_mode=identity, got %v", record["credential_mode"])
+	if record["credential_mode"] != "user" {
+		t.Fatalf("expected credential_mode=user, got %v", record["credential_mode"])
 	}
-	if record["credential_subject_id"] != "identity:__identity__" {
-		t.Fatalf("expected credential_subject_id identity principal, got %v", record["credential_subject_id"])
+	if record["credential_subject_id"] != "workload:triage-bot" {
+		t.Fatalf("expected credential_subject_id workload principal, got %v", record["credential_subject_id"])
 	}
 	if record["credential_connection"] != "workspace" {
 		t.Fatalf("expected credential_connection=workspace, got %v", record["credential_connection"])

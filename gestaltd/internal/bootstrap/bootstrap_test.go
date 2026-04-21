@@ -795,7 +795,7 @@ func workflowStartupCallbackConfig(baseURL string) *config.Config {
 	cfg := validConfig()
 	cfg.Plugins = map[string]*config.ProviderEntry{
 		"roadmap": {
-			ConnectionMode: providermanifestv1.ConnectionModeIdentity,
+			ConnectionMode: providermanifestv1.ConnectionModeUser,
 			ResolvedManifest: &providermanifestv1.Manifest{
 				Spec: &providermanifestv1.Spec{
 					Surfaces: &providermanifestv1.ProviderSurfaces{
@@ -2958,7 +2958,7 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.IdentitySubjectID(),
+			SubjectID:   principal.WorkloadSubjectID("workflow.config"),
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
@@ -3012,7 +3012,7 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.IdentitySubjectID(),
+			SubjectID:   principal.WorkloadSubjectID("workflow.config"),
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
@@ -3067,7 +3067,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 			cfg.Plugins = map[string]*config.ProviderEntry{
 				"roadmap": {
 					Source:         tc.source,
-					ConnectionMode: providermanifestv1.ConnectionModeIdentity,
+					ConnectionMode: providermanifestv1.ConnectionModeUser,
 					ResolvedManifest: &providermanifestv1.Manifest{
 						DisplayName: "Roadmap",
 						Description: "Managed roadmap plugin",
@@ -3098,7 +3098,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 					return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 				}
 				if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-					SubjectID:   principal.IdentitySubjectID(),
+					SubjectID:   principal.WorkloadSubjectID("workflow.config"),
 					Integration: "roadmap",
 					Connection:  config.PluginConnectionName,
 					Instance:    "default",
@@ -3154,7 +3154,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 	cfg.Plugins = map[string]*config.ProviderEntry{
 		"roadmap": {
 			Source:               config.NewMetadataSource("https://example.invalid/github-com-example-roadmap/v0.0.1/provider-release.yaml"),
-			ConnectionMode:       providermanifestv1.ConnectionModeIdentity,
+			ConnectionMode:       providermanifestv1.ConnectionModeUser,
 			ResolvedManifestPath: filepath.Join(root, "manifest.yaml"),
 			ResolvedManifest: &providermanifestv1.Manifest{
 				DisplayName: "Roadmap",
@@ -3192,7 +3192,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 			connection = config.PluginConnectionName
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.IdentitySubjectID(),
+			SubjectID:   principal.WorkloadSubjectID("workflow.config"),
 			Integration: "roadmap",
 			Connection:  connection,
 			Instance:    "default",
@@ -3376,6 +3376,91 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
+	t.Run("workflow managed workloads allow normalized credentialed providers", func(t *testing.T) {
+		t.Parallel()
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}))
+		defer srv.Close()
+
+		cfg := validConfig()
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"svc": {
+				ConnectionMode: providermanifestv1.ConnectionModeUser,
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{
+						Surfaces: &providermanifestv1.ProviderSurfaces{
+							REST: &providermanifestv1.RESTSurface{
+								BaseURL: srv.URL,
+								Operations: []providermanifestv1.ProviderOperation{
+									{Name: "run", Method: http.MethodPost, Path: "/run"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+			"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		}
+
+		factories := validFactories()
+		factories.Workflow = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
+			return &stubWorkflowProvider{}, nil
+		}
+
+		if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+	})
+
+	t.Run("workflow managed workload tokens stay unique across similar plugin names", func(t *testing.T) {
+		t.Parallel()
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}))
+		defer srv.Close()
+
+		manifest := &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				Surfaces: &providermanifestv1.ProviderSurfaces{
+					REST: &providermanifestv1.RESTSurface{
+						BaseURL: srv.URL,
+						Operations: []providermanifestv1.ProviderOperation{
+							{Name: "run", Method: http.MethodPost, Path: "/run"},
+						},
+					},
+				},
+			},
+		}
+
+		cfg := validConfig()
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"foo-bar": {
+				ResolvedManifest: manifest,
+			},
+			"foo_bar": {
+				ResolvedManifest: manifest,
+			},
+		}
+		cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+			"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		}
+
+		factories := validFactories()
+		factories.Workflow = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
+			return &stubWorkflowProvider{}, nil
+		}
+
+		if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+	})
 }
 
 func TestBootstrapNoIntegrations(t *testing.T) {
@@ -4591,7 +4676,49 @@ func TestBootstrapRejectsBuiltinEitherProviderWithoutAuthorizationConfig(t *test
 		&coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionMode("either")},
 	}
 
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil || !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
+		t.Fatalf("Bootstrap error = %v, want unsupported connection mode either", err)
+	}
+}
+func TestBootstrapWorkflowAuthorizationAllowsNormalizedCredentialedProvider(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	cfg := validConfig()
+	cfg.Plugins = map[string]*config.ProviderEntry{
+		"svc": {
+			ConnectionMode: providermanifestv1.ConnectionModeUser,
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL: srv.URL,
+							Operations: []providermanifestv1.ProviderOperation{
+								{Name: "run", Method: http.MethodPost, Path: "/run"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Authorization = config.AuthorizationConfig{}
+
+	factories := validFactories()
+	factories.Workflow = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
+		return &stubWorkflowProvider{}, nil
+	}
+
 	if _, err := bootstrap.Bootstrap(context.Background(), cfg, factories); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("Bootstrap: %v", err)
 	}
 }

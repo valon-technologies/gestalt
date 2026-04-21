@@ -311,9 +311,8 @@ const (
 type ConnectionMode string
 
 const (
-	ConnectionModeNone     ConnectionMode = "none"
-	ConnectionModeUser     ConnectionMode = "user"
-	ConnectionModeIdentity ConnectionMode = "identity"
+	ConnectionModeNone ConnectionMode = "none"
+	ConnectionModeUser ConnectionMode = "user"
 )
 
 type PaginationStyle string

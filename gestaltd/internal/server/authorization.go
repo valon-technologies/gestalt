@@ -75,7 +75,7 @@ func (s *Server) workloadBindingConnected(ctx context.Context, binding authoriza
 	switch binding.Mode {
 	case core.ConnectionModeNone:
 		return true, nil
-	case core.ConnectionModeIdentity, core.ConnectionModeUser:
+	case core.ConnectionModeUser:
 		_, err := s.tokens.Token(ctx, binding.CredentialSubjectID, provider, binding.Connection, binding.Instance)
 		switch {
 		case err == nil:

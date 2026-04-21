@@ -432,7 +432,7 @@ func validateExecutableProviderMetadata(provider *providermanifestv1.Spec) error
 			continue
 		}
 		switch conn.Mode {
-		case "none", "user", "identity":
+		case "none", "user":
 		default:
 			return fmt.Errorf("unsupported provider.connections.%s.mode %q", name, conn.Mode)
 		}
