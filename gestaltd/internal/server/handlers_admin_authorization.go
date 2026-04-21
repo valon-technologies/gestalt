@@ -33,6 +33,7 @@ type adminAuthorizationMemberRow struct {
 	Mutable       bool   `json:"mutable"`
 	SelectorKind  string `json:"selectorKind"`
 	SelectorValue string `json:"selectorValue"`
+	Email         string `json:"email,omitempty"`
 	ShadowedBy    string `json:"shadowedBy,omitempty"`
 }
 
@@ -182,6 +183,7 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 		Mutable:       true,
 		SelectorKind:  "subject_id",
 		SelectorValue: principal.UserSubjectID(strings.TrimSpace(membership.UserID)),
+		Email:         strings.TrimSpace(user.Email),
 	}
 	if err := s.reloadAuthorizationState(r.Context()); err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]any{
@@ -295,6 +297,7 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 		Mutable:       true,
 		SelectorKind:  "subject_id",
 		SelectorValue: principal.UserSubjectID(strings.TrimSpace(membership.UserID)),
+		Email:         strings.TrimSpace(user.Email),
 	}
 	if err := s.reloadAuthorizationState(r.Context()); err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]any{
@@ -383,7 +386,7 @@ func (s *Server) adminAuthorizationMemberRows(ctx context.Context, plugin string
 	if s.authorizer == nil || s.authorizationProvider == nil {
 		return nil, errAdminAuthorizationUnavailable
 	}
-	staticRows := s.adminAuthorizationStaticRows(plugin)
+	staticRows := s.adminAuthorizationStaticRows(ctx, plugin)
 	dynamicRows, err := s.providerPluginAuthorizationRows(ctx, plugin)
 	if err != nil {
 		return nil, err
@@ -395,7 +398,7 @@ func (s *Server) adminAuthorizationAdminRows(ctx context.Context) ([]adminAuthor
 	if s.authorizer == nil || s.authorizationProvider == nil {
 		return nil, errAdminAuthorizationUnavailable
 	}
-	staticRows := s.adminAuthorizationStaticAdminRows()
+	staticRows := s.adminAuthorizationStaticAdminRows(ctx)
 	dynamicRows, err := s.providerAdminAuthorizationRows(ctx)
 	if err != nil {
 		return nil, err
@@ -403,23 +406,23 @@ func (s *Server) adminAuthorizationAdminRows(ctx context.Context) ([]adminAuthor
 	return mergeAdminAuthorizationRows(staticRows, dynamicRows), nil
 }
 
-func (s *Server) adminAuthorizationStaticRows(plugin string) []adminAuthorizationMemberRow {
+func (s *Server) adminAuthorizationStaticRows(ctx context.Context, plugin string) []adminAuthorizationMemberRow {
 	_, members, ok := s.authorizer.StaticMembersForProvider(plugin)
 	if !ok {
 		return nil
 	}
-	return s.adminAuthorizationRowsFromStaticMembers(plugin, members)
+	return s.adminAuthorizationRowsFromStaticMembers(ctx, plugin, members)
 }
 
-func (s *Server) adminAuthorizationStaticAdminRows() []adminAuthorizationMemberRow {
+func (s *Server) adminAuthorizationStaticAdminRows(ctx context.Context) []adminAuthorizationMemberRow {
 	members, ok := s.authorizer.StaticMembersForPolicy(s.adminRoute.AuthorizationPolicy)
 	if !ok {
 		return nil
 	}
-	return s.adminAuthorizationRowsFromStaticMembers("", members)
+	return s.adminAuthorizationRowsFromStaticMembers(ctx, "", members)
 }
 
-func (s *Server) adminAuthorizationRowsFromStaticMembers(plugin string, members []authorization.StaticHumanMember) []adminAuthorizationMemberRow {
+func (s *Server) adminAuthorizationRowsFromStaticMembers(ctx context.Context, plugin string, members []authorization.StaticHumanMember) []adminAuthorizationMemberRow {
 	rows := make([]adminAuthorizationMemberRow, 0, len(members))
 	for _, member := range members {
 		rows = append(rows, adminAuthorizationMemberRow{
@@ -430,6 +433,7 @@ func (s *Server) adminAuthorizationRowsFromStaticMembers(plugin string, members 
 			Mutable:       false,
 			SelectorKind:  "subject_id",
 			SelectorValue: member.SubjectID,
+			Email:         s.adminAuthorizationEmailForSubjectID(ctx, member.SubjectID),
 		})
 	}
 	return rows
@@ -492,6 +496,18 @@ func (s *Server) reloadAuthorizationState(ctx context.Context) error {
 
 func (r adminAuthorizationMemberRow) adminAuthorizationRowKey() string {
 	return r.Source + ":" + r.SelectorKind + ":" + r.SelectorValue
+}
+
+func (s *Server) adminAuthorizationEmailForSubjectID(ctx context.Context, subjectID string) string {
+	userID := strings.TrimSpace(principal.UserIDFromSubjectID(subjectID))
+	if userID == "" || s.users == nil {
+		return ""
+	}
+	user, err := s.users.GetUser(ctx, userID)
+	if err != nil || user == nil {
+		return ""
+	}
+	return strings.TrimSpace(user.Email)
 }
 
 func (s *Server) resolveAdminAuthorizationWriteUser(ctx context.Context, req putAdminAuthorizationMemberRequest) (*core.User, int, string) {
