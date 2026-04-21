@@ -110,7 +110,7 @@ func stubServicesWithToken(t *testing.T, integrations ...string) (*coredata.Serv
 	}
 	for i, intg := range integrations {
 		if err := svc.Tokens.StoreToken(ctx, &core.IntegrationToken{
-			ID: fmt.Sprintf("tok%d", i+1), UserID: u.ID, Integration: intg,
+			ID: fmt.Sprintf("tok%d", i+1), SubjectID: principal.UserSubjectID(u.ID), Integration: intg,
 			Connection: "", Instance: "default",
 			AccessToken: intg + "-token",
 		}); err != nil {
@@ -1152,7 +1152,7 @@ func TestNewServer_HumanListToolsUsesSessionMetadataForStaticCollisions(t *testi
 	const userID = "viewer-user"
 	if err := ds.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
 		ID:          "tok-default",
-		UserID:      userID,
+		SubjectID:   principal.UserSubjectID(userID),
 		Integration: "sampledb",
 		Connection:  "workspace",
 		Instance:    "default",
@@ -1831,7 +1831,7 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 	ctx := context.Background()
 	if err := ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
 		ID:          "tok-identity",
-		UserID:      principal.IdentityPrincipal,
+		SubjectID:   principal.IdentitySubjectID(),
 		Integration: "clickhouse",
 		Connection:  "workspace",
 		Instance:    "team-a",
@@ -1924,7 +1924,7 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 	ctx := context.Background()
 	if err := ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
 		ID:          "tok-identity",
-		UserID:      principal.IdentityPrincipal,
+		SubjectID:   principal.IdentitySubjectID(),
 		Integration: "sampledb",
 		Connection:  "workspace",
 		Instance:    "team-a",
@@ -2025,7 +2025,7 @@ func TestNewServer_HumanCallToolUsesInstanceMetadataForStaticCollisions(t *testi
 	const userID = "viewer-user"
 	if err := ds.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
 		ID:          "tok-team-b",
-		UserID:      userID,
+		SubjectID:   principal.UserSubjectID(userID),
 		Integration: "sampledb",
 		Connection:  "workspace",
 		Instance:    "team-b",
@@ -2332,7 +2332,7 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 	const userID = "viewer-user"
 	if err := ds.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
 		ID:          "tok-catalog",
-		UserID:      userID,
+		SubjectID:   principal.UserSubjectID(userID),
 		Integration: "sampledb",
 		Connection:  "catalog-conn",
 		Instance:    "default",
@@ -2342,7 +2342,7 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 	}
 	if err := ds.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
 		ID:          "tok-rest",
-		UserID:      userID,
+		SubjectID:   principal.UserSubjectID(userID),
 		Integration: "sampledb",
 		Connection:  "rest-conn",
 		Instance:    "default",
@@ -2683,11 +2683,11 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 	ds, userID := stubServicesWithToken(t, "hybrid")
 	ctx := context.Background()
 	_ = ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
-		ID: "tok-plugin", UserID: userID, Integration: "hybrid", Connection: config.PluginConnectionName, Instance: "default",
+		ID: "tok-plugin", SubjectID: principal.UserSubjectID(userID), Integration: "hybrid", Connection: config.PluginConnectionName, Instance: "default",
 		AccessToken: testPluginAccessToken,
 	})
 	_ = ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
-		ID: "tok-api", UserID: userID, Integration: "hybrid", Connection: testAPIConnectionName, Instance: "default",
+		ID: "tok-api", SubjectID: principal.UserSubjectID(userID), Integration: "hybrid", Connection: testAPIConnectionName, Instance: "default",
 		AccessToken: testNamedAPIAccessToken,
 	})
 	broker := invocation.NewBroker(

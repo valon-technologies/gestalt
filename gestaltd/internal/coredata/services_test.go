@@ -302,7 +302,7 @@ func TestNew(t *testing.T) {
 		}
 		if err := db.ObjectStore(coredata.StoreIntegrationTokens).Add(ctx, indexeddb.Record{
 			"id":                      "good-token",
-			"user_id":                 "legacy-user",
+			"subject_id":              principal.UserSubjectID("legacy-user"),
 			"integration":             "slack",
 			"connection":              "workspace",
 			"instance":                "",
@@ -316,7 +316,7 @@ func TestNew(t *testing.T) {
 		}
 		if err := db.ObjectStore(coredata.StoreIntegrationTokens).Add(ctx, indexeddb.Record{
 			"id":                      "bad-token",
-			"user_id":                 "legacy-user",
+			"subject_id":              principal.UserSubjectID("legacy-user"),
 			"integration":             "github",
 			"connection":              "workspace",
 			"instance":                "",
@@ -648,7 +648,7 @@ func TestTokenService(t *testing.T) {
 		expires := time.Now().Add(time.Hour).Truncate(time.Second)
 		token := &core.IntegrationToken{
 			ID:           "tok-1",
-			UserID:       user.ID,
+			SubjectID:    principal.UserSubjectID(user.ID),
 			Integration:  "test-svc",
 			Connection:   "default",
 			Instance:     "inst-1",
@@ -712,9 +712,9 @@ func TestTokenService(t *testing.T) {
 		userB := mustCreateUser(t, svc, "bob@test.com")
 
 		for _, tok := range []*core.IntegrationToken{
-			{ID: "tok-a1", UserID: userA.ID, Integration: "svc-a", Connection: "default", Instance: "i1", AccessToken: "a1", RefreshToken: "r1"},
-			{ID: "tok-a2", UserID: userA.ID, Integration: "svc-b", Connection: "default", Instance: "i2", AccessToken: "a2", RefreshToken: "r2"},
-			{ID: "tok-b1", UserID: userB.ID, Integration: "svc-a", Connection: "default", Instance: "i1", AccessToken: "a3", RefreshToken: "r3"},
+			{ID: "tok-a1", SubjectID: principal.UserSubjectID(userA.ID), Integration: "svc-a", Connection: "default", Instance: "i1", AccessToken: "a1", RefreshToken: "r1"},
+			{ID: "tok-a2", SubjectID: principal.UserSubjectID(userA.ID), Integration: "svc-b", Connection: "default", Instance: "i2", AccessToken: "a2", RefreshToken: "r2"},
+			{ID: "tok-b1", SubjectID: principal.UserSubjectID(userB.ID), Integration: "svc-a", Connection: "default", Instance: "i1", AccessToken: "a3", RefreshToken: "r3"},
 		} {
 			if err := svc.Tokens.StoreToken(ctx, tok); err != nil {
 				t.Fatalf("StoreToken(%s): %v", tok.ID, err)
@@ -737,9 +737,9 @@ func TestTokenService(t *testing.T) {
 
 		user := mustCreateUser(t, svc, "alice@test.com")
 		for _, tok := range []*core.IntegrationToken{
-			{ID: "tok-1", UserID: user.ID, Integration: "svc-a", Connection: "default", Instance: "i1", AccessToken: "a", RefreshToken: "r"},
-			{ID: "tok-2", UserID: user.ID, Integration: "svc-a", Connection: "default", Instance: "i2", AccessToken: "b", RefreshToken: "s"},
-			{ID: "tok-3", UserID: user.ID, Integration: "svc-b", Connection: "default", Instance: "i1", AccessToken: "c", RefreshToken: "u"},
+			{ID: "tok-1", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc-a", Connection: "default", Instance: "i1", AccessToken: "a", RefreshToken: "r"},
+			{ID: "tok-2", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc-a", Connection: "default", Instance: "i2", AccessToken: "b", RefreshToken: "s"},
+			{ID: "tok-3", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc-b", Connection: "default", Instance: "i1", AccessToken: "c", RefreshToken: "u"},
 		} {
 			if err := svc.Tokens.StoreToken(ctx, tok); err != nil {
 				t.Fatalf("StoreToken(%s): %v", tok.ID, err)
@@ -762,9 +762,9 @@ func TestTokenService(t *testing.T) {
 
 		user := mustCreateUser(t, svc, "alice@test.com")
 		for _, tok := range []*core.IntegrationToken{
-			{ID: "tok-1", UserID: user.ID, Integration: "svc", Connection: "conn-a", Instance: "i1", AccessToken: "a", RefreshToken: "r"},
-			{ID: "tok-2", UserID: user.ID, Integration: "svc", Connection: "conn-a", Instance: "i2", AccessToken: "b", RefreshToken: "s"},
-			{ID: "tok-3", UserID: user.ID, Integration: "svc", Connection: "conn-b", Instance: "i1", AccessToken: "c", RefreshToken: "u"},
+			{ID: "tok-1", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc", Connection: "conn-a", Instance: "i1", AccessToken: "a", RefreshToken: "r"},
+			{ID: "tok-2", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc", Connection: "conn-a", Instance: "i2", AccessToken: "b", RefreshToken: "s"},
+			{ID: "tok-3", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc", Connection: "conn-b", Instance: "i1", AccessToken: "c", RefreshToken: "u"},
 		} {
 			if err := svc.Tokens.StoreToken(ctx, tok); err != nil {
 				t.Fatalf("StoreToken(%s): %v", tok.ID, err)
@@ -787,7 +787,7 @@ func TestTokenService(t *testing.T) {
 
 		user := mustCreateUser(t, svc, "alice@test.com")
 		tok := &core.IntegrationToken{
-			ID: "tok-del", UserID: user.ID, Integration: "svc",
+			ID: "tok-del", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc",
 			Connection: "default", Instance: "i1",
 			AccessToken: "a", RefreshToken: "r",
 		}
@@ -824,7 +824,7 @@ func TestTokenService(t *testing.T) {
 
 		user := mustCreateUser(t, svc, "alice@test.com")
 		tok := &core.IntegrationToken{
-			ID: "tok-upsert", UserID: user.ID, Integration: "svc",
+			ID: "tok-upsert", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc",
 			Connection: "default", Instance: "i1",
 			AccessToken: "original", RefreshToken: "r",
 		}
@@ -866,7 +866,7 @@ func TestTokenService(t *testing.T) {
 		user := mustCreateUser(t, svc, "dupes@test.com")
 		newest := &core.IntegrationToken{
 			ID:           "tok-primary",
-			UserID:       user.ID,
+			SubjectID:    principal.UserSubjectID(user.ID),
 			Integration:  "svc",
 			Connection:   "default",
 			Instance:     "i1",
@@ -879,7 +879,7 @@ func TestTokenService(t *testing.T) {
 
 		legacySource := &core.IntegrationToken{
 			ID:           "tok-legacy-source",
-			UserID:       user.ID,
+			SubjectID:    principal.UserSubjectID(user.ID),
 			Integration:  "svc",
 			Connection:   "default",
 			Instance:     "legacy-source",
@@ -908,7 +908,7 @@ func TestTokenService(t *testing.T) {
 			duplicate[k] = v
 		}
 		duplicate["id"] = "tok-legacy-duplicate"
-		duplicate["user_id"] = user.ID
+		duplicate["subject_id"] = principal.UserSubjectID(user.ID)
 		duplicate["integration"] = "svc"
 		duplicate["connection"] = "default"
 		duplicate["instance"] = "i1"
@@ -962,7 +962,7 @@ func TestTokenService(t *testing.T) {
 
 		newest := &core.IntegrationToken{
 			ID:           "tok-startup-primary",
-			UserID:       user.ID,
+			SubjectID:    principal.UserSubjectID(user.ID),
 			Integration:  "svc",
 			Connection:   "default",
 			Instance:     "i1",
@@ -974,7 +974,7 @@ func TestTokenService(t *testing.T) {
 		}
 		legacySource := &core.IntegrationToken{
 			ID:           "tok-startup-legacy",
-			UserID:       user.ID,
+			SubjectID:    principal.UserSubjectID(user.ID),
 			Integration:  "svc",
 			Connection:   "default",
 			Instance:     "legacy-source",
@@ -1003,7 +1003,7 @@ func TestTokenService(t *testing.T) {
 			duplicate[k] = v
 		}
 		duplicate["id"] = "tok-startup-duplicate"
-		duplicate["user_id"] = user.ID
+		duplicate["subject_id"] = principal.UserSubjectID(user.ID)
 		duplicate["integration"] = "svc"
 		duplicate["connection"] = "default"
 		duplicate["instance"] = "i1"
@@ -1064,7 +1064,7 @@ func TestTokenService(t *testing.T) {
 
 				token := &core.IntegrationToken{
 					ID:           "tok-" + tc.name,
-					UserID:       user.ID,
+					SubjectID:    principal.UserSubjectID(user.ID),
 					Integration:  "svc",
 					Connection:   "default",
 					Instance:     "i1",
@@ -1111,7 +1111,7 @@ func TestTokenService(t *testing.T) {
 				defer wg.Done()
 				errs[idx] = svc.Tokens.StoreToken(ctx, &core.IntegrationToken{
 					ID:           fmt.Sprintf("tok-%d", idx),
-					UserID:       user.ID,
+					SubjectID:    principal.UserSubjectID(user.ID),
 					Integration:  "svc",
 					Connection:   "default",
 					Instance:     fmt.Sprintf("inst-%d", idx),
@@ -1145,7 +1145,7 @@ func TestTokenService(t *testing.T) {
 		user := mustCreateUser(t, svc, "enc@test.com")
 		tok := &core.IntegrationToken{
 			ID:           "enc-tok",
-			UserID:       user.ID,
+			SubjectID:    principal.UserSubjectID(user.ID),
 			Integration:  "svc",
 			Connection:   "default",
 			Instance:     "i1",
@@ -1206,11 +1206,13 @@ func TestAPITokenService(t *testing.T) {
 
 		user := mustCreateUser(t, svc, "alice@test.com")
 		token := &core.APIToken{
-			ID:          "api-1",
-			UserID:      user.ID,
-			Name:        "ci-token",
-			HashedToken: "sha256:abc123",
-			Scopes:      "read:tokens",
+			ID:                  "api-1",
+			OwnerKind:           core.APITokenOwnerKindUser,
+			OwnerID:             user.ID,
+			CredentialSubjectID: principal.UserSubjectID(user.ID),
+			Name:                "ci-token",
+			HashedToken:         "sha256:abc123",
+			Scopes:              "read:tokens",
 			Permissions: []core.AccessPermission{
 				{Plugin: "sample", Operations: []string{"read"}},
 				{Plugin: "other"},
@@ -1224,8 +1226,11 @@ func TestAPITokenService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ValidateAPIToken: %v", err)
 		}
-		if got.UserID != user.ID {
-			t.Errorf("UserID = %q, want %q", got.UserID, user.ID)
+		if got.OwnerKind != core.APITokenOwnerKindUser || got.OwnerID != user.ID {
+			t.Errorf("owner = (%q, %q), want (%q, %q)", got.OwnerKind, got.OwnerID, core.APITokenOwnerKindUser, user.ID)
+		}
+		if got.CredentialSubjectID != principal.UserSubjectID(user.ID) {
+			t.Errorf("CredentialSubjectID = %q, want %q", got.CredentialSubjectID, principal.UserSubjectID(user.ID))
 		}
 		if got.Name != "ci-token" {
 			t.Errorf("Name = %q, want %q", got.Name, "ci-token")
@@ -1266,11 +1271,13 @@ func TestAPITokenService(t *testing.T) {
 		user := mustCreateUser(t, svc, "alice@test.com")
 		past := time.Now().Add(-time.Hour)
 		token := &core.APIToken{
-			ID:          "api-expired",
-			UserID:      user.ID,
-			Name:        "expired",
-			HashedToken: "sha256:expired",
-			ExpiresAt:   &past,
+			ID:                  "api-expired",
+			OwnerKind:           core.APITokenOwnerKindUser,
+			OwnerID:             user.ID,
+			CredentialSubjectID: principal.UserSubjectID(user.ID),
+			Name:                "expired",
+			HashedToken:         "sha256:expired",
+			ExpiresAt:           &past,
 		}
 		if err := svc.APITokens.StoreAPIToken(ctx, token); err != nil {
 			t.Fatalf("StoreAPIToken: %v", err)
@@ -1290,11 +1297,13 @@ func TestAPITokenService(t *testing.T) {
 		user := mustCreateUser(t, svc, "alice@test.com")
 		future := time.Now().Add(time.Hour)
 		token := &core.APIToken{
-			ID:          "api-valid",
-			UserID:      user.ID,
-			Name:        "valid",
-			HashedToken: "sha256:valid",
-			ExpiresAt:   &future,
+			ID:                  "api-valid",
+			OwnerKind:           core.APITokenOwnerKindUser,
+			OwnerID:             user.ID,
+			CredentialSubjectID: principal.UserSubjectID(user.ID),
+			Name:                "valid",
+			HashedToken:         "sha256:valid",
+			ExpiresAt:           &future,
 		}
 		if err := svc.APITokens.StoreAPIToken(ctx, token); err != nil {
 			t.Fatalf("StoreAPIToken: %v", err)
@@ -1316,8 +1325,8 @@ func TestAPITokenService(t *testing.T) {
 
 		user := mustCreateUser(t, svc, "alice@test.com")
 		for _, tok := range []*core.APIToken{
-			{ID: "api-a", UserID: user.ID, Name: "a", HashedToken: "sha256:aaa"},
-			{ID: "api-b", UserID: user.ID, Name: "b", HashedToken: "sha256:bbb"},
+			{ID: "api-a", OwnerKind: core.APITokenOwnerKindUser, OwnerID: user.ID, CredentialSubjectID: principal.UserSubjectID(user.ID), Name: "a", HashedToken: "sha256:aaa"},
+			{ID: "api-b", OwnerKind: core.APITokenOwnerKindUser, OwnerID: user.ID, CredentialSubjectID: principal.UserSubjectID(user.ID), Name: "b", HashedToken: "sha256:bbb"},
 		} {
 			if err := svc.APITokens.StoreAPIToken(ctx, tok); err != nil {
 				t.Fatalf("StoreAPIToken(%s): %v", tok.ID, err)
@@ -1340,10 +1349,12 @@ func TestAPITokenService(t *testing.T) {
 
 		user := mustCreateUser(t, svc, "alice@test.com")
 		token := &core.APIToken{
-			ID:          "api-rev",
-			UserID:      user.ID,
-			Name:        "revokable",
-			HashedToken: "sha256:revoke",
+			ID:                  "api-rev",
+			OwnerKind:           core.APITokenOwnerKindUser,
+			OwnerID:             user.ID,
+			CredentialSubjectID: principal.UserSubjectID(user.ID),
+			Name:                "revokable",
+			HashedToken:         "sha256:revoke",
 		}
 		if err := svc.APITokens.StoreAPIToken(ctx, token); err != nil {
 			t.Fatalf("StoreAPIToken: %v", err)
@@ -1384,10 +1395,12 @@ func TestAPITokenService(t *testing.T) {
 		user := mustCreateUser(t, svc, "alice@test.com")
 		for i, hash := range []string{"sha256:one", "sha256:two", "sha256:three"} {
 			tok := &core.APIToken{
-				ID:          fmt.Sprintf("api-%d", i),
-				UserID:      user.ID,
-				Name:        fmt.Sprintf("token-%d", i),
-				HashedToken: hash,
+				ID:                  fmt.Sprintf("api-%d", i),
+				OwnerKind:           core.APITokenOwnerKindUser,
+				OwnerID:             user.ID,
+				CredentialSubjectID: principal.UserSubjectID(user.ID),
+				Name:                fmt.Sprintf("token-%d", i),
+				HashedToken:         hash,
 			}
 			if err := svc.APITokens.StoreAPIToken(ctx, tok); err != nil {
 				t.Fatalf("StoreAPIToken(%d): %v", i, err)
@@ -1411,42 +1424,36 @@ func TestAPITokenService(t *testing.T) {
 		}
 	})
 
-	t.Run("RevokeAllAPITokens_preserves_access_for_owner_only_survivors", func(t *testing.T) {
+	t.Run("RevokeAllAPITokens_preserves_access_for_other_owners", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 		ctx := context.Background()
 
 		user := mustCreateUser(t, svc, "alice@test.com")
-		legacy := &core.APIToken{
-			ID:          "legacy-token",
-			UserID:      user.ID,
-			Name:        "legacy",
-			HashedToken: "sha256:legacy",
-			Permissions: []core.AccessPermission{{Plugin: "legacy"}},
+		owned := &core.APIToken{
+			ID:                  "owned-token",
+			OwnerKind:           core.APITokenOwnerKindUser,
+			OwnerID:             user.ID,
+			CredentialSubjectID: principal.UserSubjectID(user.ID),
+			Name:                "owned",
+			HashedToken:         "sha256:owned",
+			Permissions:         []core.AccessPermission{{Plugin: "owned"}},
 		}
-		if err := svc.APITokens.StoreAPIToken(ctx, legacy); err != nil {
-			t.Fatalf("StoreAPIToken legacy: %v", err)
+		if err := svc.APITokens.StoreAPIToken(ctx, owned); err != nil {
+			t.Fatalf("StoreAPIToken owned: %v", err)
 		}
 
-		permissionsJSON, err := json.Marshal([]core.AccessPermission{{Plugin: "owner-only"}})
-		if err != nil {
-			t.Fatalf("Marshal permissions: %v", err)
+		otherOwner := &core.APIToken{
+			ID:                  "managed-token",
+			OwnerKind:           core.APITokenOwnerKindManagedIdentity,
+			OwnerID:             "managed-123",
+			CredentialSubjectID: "managed_identity:managed-123",
+			Name:                "managed",
+			HashedToken:         "sha256:managed",
+			Permissions:         []core.AccessPermission{{Plugin: "managed"}},
 		}
-		now := time.Now()
-		if err := svc.DB.ObjectStore(coredata.StoreAPITokens).Add(ctx, indexeddb.Record{
-			"id":               "owner-only-token",
-			"owner_kind":       core.APITokenOwnerKindUser,
-			"owner_id":         user.ID,
-			"name":             "owner-only",
-			"hashed_token":     "sha256:owner-only",
-			"permissions_json": string(permissionsJSON),
-			"created_at":       now,
-			"updated_at":       now,
-		}); err != nil {
-			t.Fatalf("seed owner-only token: %v", err)
-		}
-		if err := svc.APITokens.BackfillTokenAccess(ctx); err != nil {
-			t.Fatalf("BackfillTokenAccess: %v", err)
+		if err := svc.APITokens.StoreAPIToken(ctx, otherOwner); err != nil {
+			t.Fatalf("StoreAPIToken managed: %v", err)
 		}
 
 		deleted, err := svc.APITokens.RevokeAllAPITokens(ctx, user.ID)
@@ -1461,16 +1468,24 @@ func TestAPITokenService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListAPITokens: %v", err)
 		}
-		if len(tokens) != 1 || tokens[0].ID != "owner-only-token" {
-			t.Fatalf("remaining tokens = %+v, want owner-only survivor", tokens)
+		if len(tokens) != 0 {
+			t.Fatalf("remaining user tokens = %+v, want none", tokens)
 		}
 
-		access, err := svc.APITokenAccess.ListByToken(ctx, "owner-only-token")
+		managedTokens, err := svc.APITokens.ListAPITokensByOwner(ctx, core.APITokenOwnerKindManagedIdentity, "managed-123")
 		if err != nil {
-			t.Fatalf("ListByToken owner-only-token: %v", err)
+			t.Fatalf("ListAPITokensByOwner(managed): %v", err)
 		}
-		if len(access) != 1 || access[0].Plugin != "owner-only" {
-			t.Fatalf("owner-only token access = %+v, want surviving access", access)
+		if len(managedTokens) != 1 || managedTokens[0].ID != otherOwner.ID {
+			t.Fatalf("remaining managed tokens = %+v, want managed survivor", managedTokens)
+		}
+
+		access, err := svc.APITokenAccess.ListByToken(ctx, otherOwner.ID)
+		if err != nil {
+			t.Fatalf("ListByToken managed-token: %v", err)
+		}
+		if len(access) != 1 || access[0].Plugin != "managed" {
+			t.Fatalf("managed token access = %+v, want surviving access", access)
 		}
 	})
 
@@ -1482,13 +1497,15 @@ func TestAPITokenService(t *testing.T) {
 		user := mustCreateUser(t, svc, "scoped@test.com")
 		now := time.Now().UTC()
 		if err := svc.DB.ObjectStore(coredata.StoreAPITokens).Add(ctx, indexeddb.Record{
-			"id":           "scoped-token",
-			"user_id":      user.ID,
-			"name":         "scoped",
-			"hashed_token": "sha256:scoped",
-			"scopes":       "alpha beta alpha",
-			"created_at":   now,
-			"updated_at":   now,
+			"id":                    "scoped-token",
+			"owner_kind":            core.APITokenOwnerKindUser,
+			"owner_id":              user.ID,
+			"credential_subject_id": principal.UserSubjectID(user.ID),
+			"name":                  "scoped",
+			"hashed_token":          "sha256:scoped",
+			"scopes":                "alpha beta alpha",
+			"created_at":            now,
+			"updated_at":            now,
 		}); err != nil {
 			t.Fatalf("seed scoped api token: %v", err)
 		}
@@ -1519,9 +1536,11 @@ func TestAPITokenService(t *testing.T) {
 
 		user := mustCreateUser(t, svc, "alice@test.com")
 		token := &core.APIToken{
-			UserID:      user.ID,
-			Name:        "auto-id",
-			HashedToken: "sha256:auto",
+			OwnerKind:           core.APITokenOwnerKindUser,
+			OwnerID:             user.ID,
+			CredentialSubjectID: principal.UserSubjectID(user.ID),
+			Name:                "auto-id",
+			HashedToken:         "sha256:auto",
 		}
 		if err := svc.APITokens.StoreAPIToken(ctx, token); err != nil {
 			t.Fatalf("StoreAPIToken: %v", err)

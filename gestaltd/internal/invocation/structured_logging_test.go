@@ -41,7 +41,7 @@ func TestBrokerMalformedMetadataJSON_StructuredLog(t *testing.T) { //nolint:para
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
 	if err := svc.Tokens.StoreToken(ctx, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "myservice",
+		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "myservice",
 		Connection: "", Instance: "default", AccessToken: "test-token",
 		MetadataJSON: "not-valid-json{",
 	}); err != nil {
