@@ -64,7 +64,7 @@ Current scope:
 - generated protocol bindings exposed via `proto::v1`
 - typed integration-provider authoring helpers for requests, responses, catalogs, and routing
 - auth-provider, cache-provider, secrets-provider, and workflow-provider traits that map to the shared executable runtime protocol
-- `Workflow` and `WorkflowHost` client helpers for plugin-side workflow control and workflow-provider host callbacks
+- `WorkflowHost` client helpers for workflow-provider host callbacks
 - `S3` client helpers and the `S3Provider` trait for S3-compatible provider components
 - runtime servers for the integration, auth, cache, secrets, workflow, and S3 provider surfaces over the Unix socket exposed by `gestaltd`
 - `export_provider!`, `export_auth_provider!`, `export_cache_provider!`, `export_secrets_provider!`, `export_workflow_provider!`, and `export_s3_provider!` macros for source builds that let `gestaltd` synthesize the executable wrapper
@@ -96,7 +96,7 @@ The crate is intentionally small:
 - `AuthProvider`, `BeginLoginRequest`, `BeginLoginResponse`, `CompleteLoginRequest`, and `AuthenticatedUser` model auth providers
 - `Cache`, `CacheProvider`, `CacheEntry`, and `CacheSetOptions` model cache clients and providers
 - `SecretsProvider` models secrets providers
-- `Workflow`, `WorkflowHost`, and `WorkflowProvider` model workflow clients, host callbacks, and workflow base providers
+- `WorkflowHost` and `WorkflowProvider` model workflow host callbacks and workflow base providers
 - `S3`, `S3Provider`, and `gestalt::s3::*` model S3-compatible object-store clients and providers
 - `Router` and `Operation` register typed operations and derive catalog metadata from `serde` + `schemars`
 - `Catalog` types expose explicit static or session-scoped catalogs when needed
