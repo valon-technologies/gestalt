@@ -10,7 +10,7 @@ Implement runtime-managed non-human identities across:
 
 - `gestaltd` backend + HTTP API
 - CLI
-- default web client in `~/src/gestalt-providers/web/default`
+- default UI client in `~/src/gestalt-providers/ui/default`
 
 The implementation should be additive and preserve existing behavior for:
 

@@ -33,7 +33,7 @@ const (
 
 	DefaultIndexedDBProvider = DefaultProviderRepo + "/indexeddb/relationaldb"
 	DefaultIndexedDBVersion  = "0.0.1-alpha.1"
-	DefaultUIProvider        = DefaultProviderRepo + "/web/default"
+	DefaultUIProvider        = DefaultProviderRepo + "/ui/default"
 	DefaultUIVersion         = "0.0.1-alpha.12"
 	DefaultProviderInstance  = "default"
 )
