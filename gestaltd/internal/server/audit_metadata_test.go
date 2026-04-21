@@ -256,7 +256,7 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 				cfg.AuditSink = auditSink
 				cfg.Services = coretesting.NewStubServices(t)
 				if tc.pluginName != "" {
-					cfg.AuthProviders = map[string]core.AuthProvider{
+					cfg.AuthProviders = map[string]core.AuthenticationProvider{
 						tc.routeAuth: &coretesting.StubAuthProvider{
 							N: tc.routeAuth,
 							ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {

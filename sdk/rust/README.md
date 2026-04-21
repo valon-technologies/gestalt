@@ -63,7 +63,6 @@ Current scope:
 - maintainer-only stub generation via vendored `protoc`
 - generated protocol bindings exposed via `proto::v1`
 - typed integration-provider authoring helpers for requests, responses, catalogs, and routing
-<<<<<<< HEAD
 - authentication-provider, cache-provider, secrets-provider, and workflow-provider traits that map to the shared executable runtime protocol
 - `Workflow` and `WorkflowHost` client helpers for plugin-side workflow control and workflow-provider host callbacks
 - `S3` client helpers and the `S3Provider` trait for S3-compatible provider components
