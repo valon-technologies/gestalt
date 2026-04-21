@@ -71,7 +71,7 @@ workflow_pb2_grpc: Any = _workflow_pb2_grpc
 
 ENV_PROVIDER_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
 ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
-CURRENT_PROTOCOL_VERSION: Final[int] = 2
+CURRENT_PROTOCOL_VERSION: Final[int] = 3
 GRPC_SERVER_MAX_WORKERS: Final[int] = 4
 GRPC_SHUTDOWN_GRACE_SECONDS: Final[int] = 2
 USAGE: Final[str] = (
@@ -672,7 +672,7 @@ def _plugin_request(request: Any) -> Request:
         credential=_credential_from_proto(getattr(request, "context", None)),
         access=_access_from_proto(getattr(request, "context", None)),
         workflow=_workflow_from_proto(getattr(request, "context", None)),
-        request_handle=getattr(request, "request_handle", ""),
+        invocation_token=getattr(request, "invocation_token", ""),
     )
 
 

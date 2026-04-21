@@ -40,12 +40,12 @@ export type WorkflowManagerResumeScheduleInput = MessageInitShape<
 
 export class WorkflowManager {
   private readonly client: Client<typeof WorkflowManagerHostService>;
-  private readonly requestHandle: string;
+  private readonly invocationToken: string;
 
   constructor(request: Request);
-  constructor(requestHandle: string);
-  constructor(requestOrHandle: Request | string) {
-    this.requestHandle = normalizeRequestHandle(requestOrHandle);
+  constructor(invocationToken: string);
+  constructor(requestOrToken: Request | string) {
+    this.invocationToken = normalizeInvocationToken(requestOrToken);
 
     const socketPath = process.env[ENV_WORKFLOW_MANAGER_SOCKET];
     if (!socketPath) {
@@ -68,7 +68,7 @@ export class WorkflowManager {
   ): Promise<ManagedWorkflowScheduleMessage> {
     return await this.client.createSchedule({
       ...request,
-      requestHandle: this.requestHandle,
+      invocationToken: this.invocationToken,
     });
   }
 
@@ -77,7 +77,7 @@ export class WorkflowManager {
   ): Promise<ManagedWorkflowScheduleMessage> {
     return await this.client.getSchedule({
       ...request,
-      requestHandle: this.requestHandle,
+      invocationToken: this.invocationToken,
     });
   }
 
@@ -86,7 +86,7 @@ export class WorkflowManager {
   ): Promise<ManagedWorkflowScheduleMessage> {
     return await this.client.updateSchedule({
       ...request,
-      requestHandle: this.requestHandle,
+      invocationToken: this.invocationToken,
     });
   }
 
@@ -95,7 +95,7 @@ export class WorkflowManager {
   ): Promise<void> {
     await this.client.deleteSchedule({
       ...request,
-      requestHandle: this.requestHandle,
+      invocationToken: this.invocationToken,
     });
   }
 
@@ -104,7 +104,7 @@ export class WorkflowManager {
   ): Promise<ManagedWorkflowScheduleMessage> {
     return await this.client.pauseSchedule({
       ...request,
-      requestHandle: this.requestHandle,
+      invocationToken: this.invocationToken,
     });
   }
 
@@ -113,19 +113,19 @@ export class WorkflowManager {
   ): Promise<ManagedWorkflowScheduleMessage> {
     return await this.client.resumeSchedule({
       ...request,
-      requestHandle: this.requestHandle,
+      invocationToken: this.invocationToken,
     });
   }
 }
 
-function normalizeRequestHandle(requestOrHandle: Request | string): string {
-  const requestHandle =
-    typeof requestOrHandle === "string"
-      ? requestOrHandle
-      : requestOrHandle.requestHandle;
-  const trimmed = requestHandle.trim();
+function normalizeInvocationToken(requestOrToken: Request | string): string {
+  const invocationToken =
+    typeof requestOrToken === "string"
+      ? requestOrToken
+      : requestOrToken.invocationToken;
+  const trimmed = invocationToken.trim();
   if (!trimmed) {
-    throw new Error("workflow manager: request handle is not available");
+    throw new Error("workflow manager: invocation token is not available");
   }
   return trimmed;
 }

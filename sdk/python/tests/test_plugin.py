@@ -107,6 +107,7 @@ class PluginOperationTests(unittest.TestCase):
                 "subject_id": req.subject.id,
                 "credential_mode": req.credential.mode,
                 "access_role": req.access.role,
+                "invocation_token": req.invocation_token,
             }
 
         result = plugin.execute(
@@ -118,6 +119,7 @@ class PluginOperationTests(unittest.TestCase):
                 subject=Subject(id="user:user-123", kind="user"),
                 credential=Credential(mode="identity"),
                 access=Access(role="admin"),
+                invocation_token="invoke-123",
             ),
         )
         body = json.loads(result.body)
@@ -126,6 +128,7 @@ class PluginOperationTests(unittest.TestCase):
         self.assertEqual(body["subject_id"], "user:user-123")
         self.assertEqual(body["credential_mode"], "identity")
         self.assertEqual(body["access_role"], "admin")
+        self.assertEqual(body["invocation_token"], "invoke-123")
 
     def test_async_handler(self) -> None:
         plugin = Plugin("test-plugin")

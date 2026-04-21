@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,9 +21,14 @@ type InvokeOptions struct {
 	Instance   string
 }
 
+type InvocationGrant struct {
+	Plugin     string
+	Operations []string
+}
+
 type InvokerClient struct {
-	client        proto.PluginInvokerClient
-	requestHandle string
+	client          proto.PluginInvokerClient
+	invocationToken string
 }
 
 var sharedInvokerTransport struct {
@@ -32,9 +38,9 @@ var sharedInvokerTransport struct {
 	client     proto.PluginInvokerClient
 }
 
-func Invoker(requestHandle string) (*InvokerClient, error) {
-	if requestHandle == "" {
-		return nil, fmt.Errorf("plugin invoker: request handle is not available")
+func Invoker(invocationToken string) (*InvokerClient, error) {
+	if strings.TrimSpace(invocationToken) == "" {
+		return nil, fmt.Errorf("plugin invoker: invocation token is not available")
 	}
 	socketPath := os.Getenv(EnvPluginInvokerSocket)
 	if socketPath == "" {
@@ -50,8 +56,8 @@ func Invoker(requestHandle string) (*InvokerClient, error) {
 	}
 
 	return &InvokerClient{
-		client:        client,
-		requestHandle: requestHandle,
+		client:          client,
+		invocationToken: strings.TrimSpace(invocationToken),
 	}, nil
 }
 
@@ -92,7 +98,7 @@ func sharedPluginInvokerClient(ctx context.Context, socketPath string) (proto.Pl
 }
 
 func InvokerFromContext(ctx context.Context) (*InvokerClient, error) {
-	return Invoker(RequestHandleFromContext(ctx))
+	return Invoker(InvocationTokenFromContext(ctx))
 }
 
 func (c *InvokerClient) Close() error {
@@ -112,10 +118,10 @@ func (c *InvokerClient) Invoke(ctx context.Context, plugin, operation string, pa
 	}
 
 	req := &proto.PluginInvokeRequest{
-		RequestHandle: c.requestHandle,
-		Plugin:        plugin,
-		Operation:     operation,
-		Params:        msg,
+		InvocationToken: c.invocationToken,
+		Plugin:          plugin,
+		Operation:       operation,
+		Params:          msg,
 	}
 	if opts != nil {
 		req.Connection = opts.Connection
@@ -130,4 +136,56 @@ func (c *InvokerClient) Invoke(ctx context.Context, plugin, operation string, pa
 		Status: int(resp.GetStatus()),
 		Body:   resp.GetBody(),
 	}, nil
+}
+
+func (c *InvokerClient) ExchangeInvocationToken(ctx context.Context, grants []InvocationGrant, ttl time.Duration) (string, error) {
+	if c == nil || c.client == nil {
+		return "", fmt.Errorf("plugin invoker: client is not initialized")
+	}
+
+	req := &proto.ExchangeInvocationTokenRequest{
+		ParentInvocationToken: c.invocationToken,
+		Grants:                encodeInvocationGrants(grants),
+	}
+	if ttl > 0 {
+		req.TtlSeconds = int64(ttl / time.Second)
+		if req.TtlSeconds == 0 {
+			req.TtlSeconds = 1
+		}
+	}
+
+	resp, err := c.client.ExchangeInvocationToken(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	return resp.GetInvocationToken(), nil
+}
+
+func encodeInvocationGrants(grants []InvocationGrant) []*proto.PluginInvocationGrant {
+	if len(grants) == 0 {
+		return nil
+	}
+	out := make([]*proto.PluginInvocationGrant, 0, len(grants))
+	for _, grant := range grants {
+		plugin := strings.TrimSpace(grant.Plugin)
+		if plugin == "" {
+			continue
+		}
+		ops := make([]string, 0, len(grant.Operations))
+		for _, operation := range grant.Operations {
+			operation = strings.TrimSpace(operation)
+			if operation == "" {
+				continue
+			}
+			ops = append(ops, operation)
+		}
+		out = append(out, &proto.PluginInvocationGrant{
+			Plugin:     plugin,
+			Operations: ops,
+		})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

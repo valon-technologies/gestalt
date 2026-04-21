@@ -61,10 +61,10 @@ type RequestContextAccess struct {
 }
 
 type RequestContextOutput struct {
-	Subject       RequestContextSubject    `json:"subject"`
-	Credential    RequestContextCredential `json:"credential"`
-	Access        RequestContextAccess     `json:"access"`
-	RequestHandle string                   `json:"request_handle"`
+	Subject         RequestContextSubject    `json:"subject"`
+	Credential      RequestContextCredential `json:"credential"`
+	Access          RequestContextAccess     `json:"access"`
+	InvocationToken string                   `json:"invocation_token"`
 }
 
 var (
@@ -150,7 +150,7 @@ func (p *Provider) requestContext(_ context.Context, _ RequestContextInput, req 
 			Policy: req.Access.Policy,
 			Role:   req.Access.Role,
 		},
-		RequestHandle: req.RequestHandle(),
+		InvocationToken: req.InvocationToken(),
 	}), nil
 }
 

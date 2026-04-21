@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use hyper_util::rt::TokioIo;
 use serde::Serialize;
 use tokio::net::UnixStream;
@@ -13,8 +15,8 @@ pub const ENV_PLUGIN_INVOKER_SOCKET: &str = "GESTALT_PLUGIN_INVOKER_SOCKET";
 
 #[derive(Debug, thiserror::Error)]
 pub enum PluginInvokerError {
-    #[error("plugin invoker: request handle is not available")]
-    MissingRequestHandle,
+    #[error("plugin invoker: invocation token is not available")]
+    MissingInvocationToken,
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
     #[error("{0}")]
@@ -28,6 +30,12 @@ pub enum PluginInvokerError {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct InvocationGrant {
+    pub plugin: String,
+    pub operations: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct InvokeOptions {
     pub connection: String,
     pub instance: String,
@@ -35,16 +43,16 @@ pub struct InvokeOptions {
 
 pub struct PluginInvoker {
     client: ProtoPluginInvokerClient<Channel>,
-    request_handle: String,
+    invocation_token: String,
 }
 
 impl PluginInvoker {
     pub async fn connect(
-        request_handle: impl AsRef<str>,
+        invocation_token: impl AsRef<str>,
     ) -> std::result::Result<Self, PluginInvokerError> {
-        let request_handle = request_handle.as_ref().trim().to_owned();
-        if request_handle.is_empty() {
-            return Err(PluginInvokerError::MissingRequestHandle);
+        let invocation_token = invocation_token.as_ref().trim().to_owned();
+        if invocation_token.is_empty() {
+            return Err(PluginInvokerError::MissingInvocationToken);
         }
 
         let socket_path = std::env::var(ENV_PLUGIN_INVOKER_SOCKET).map_err(|_| {
@@ -60,7 +68,7 @@ impl PluginInvoker {
 
         Ok(Self {
             client: ProtoPluginInvokerClient::new(channel),
-            request_handle,
+            invocation_token,
         })
     }
 
@@ -77,7 +85,6 @@ impl PluginInvoker {
         let response = self
             .client
             .invoke(pb::PluginInvokeRequest {
-                request_handle: self.request_handle.clone(),
                 plugin: plugin.to_string(),
                 operation: operation.to_string(),
                 params: Some(json_to_struct(serde_json::to_value(params)?)?),
@@ -89,6 +96,7 @@ impl PluginInvoker {
                     .as_ref()
                     .map(|opts| opts.instance.clone())
                     .unwrap_or_default(),
+                invocation_token: self.invocation_token.clone(),
             })
             .await?
             .into_inner();
@@ -105,6 +113,65 @@ impl PluginInvoker {
             body: response.body,
         })
     }
+
+    pub async fn exchange_invocation_token(
+        &mut self,
+        grants: &[InvocationGrant],
+        ttl: Option<Duration>,
+    ) -> std::result::Result<String, PluginInvokerError> {
+        let ttl_seconds = ttl
+            .map(duration_to_ttl_seconds)
+            .transpose()?
+            .unwrap_or_default();
+        let response = self
+            .client
+            .exchange_invocation_token(pb::ExchangeInvocationTokenRequest {
+                parent_invocation_token: self.invocation_token.clone(),
+                grants: encode_invocation_grants(grants),
+                ttl_seconds,
+            })
+            .await?
+            .into_inner();
+
+        Ok(response.invocation_token)
+    }
+}
+
+fn encode_invocation_grants(grants: &[InvocationGrant]) -> Vec<pb::PluginInvocationGrant> {
+    grants
+        .iter()
+        .filter_map(|grant| {
+            let plugin = grant.plugin.trim();
+            if plugin.is_empty() {
+                return None;
+            }
+            let operations = grant
+                .operations
+                .iter()
+                .map(|operation| operation.trim())
+                .filter(|operation| !operation.is_empty())
+                .map(ToOwned::to_owned)
+                .collect();
+
+            Some(pb::PluginInvocationGrant {
+                plugin: plugin.to_owned(),
+                operations,
+            })
+        })
+        .collect()
+}
+
+fn duration_to_ttl_seconds(ttl: Duration) -> std::result::Result<i64, PluginInvokerError> {
+    if ttl.is_zero() {
+        return Ok(0);
+    }
+
+    let ttl_seconds = ttl.as_secs().max(1);
+    i64::try_from(ttl_seconds).map_err(|_| {
+        PluginInvokerError::Protocol(
+            "plugin invoker: exchange token ttl exceeds supported range".to_string(),
+        )
+    })
 }
 
 fn json_to_struct(

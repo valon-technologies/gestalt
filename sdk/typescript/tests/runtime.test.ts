@@ -460,7 +460,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
           role: "admin",
         }),
       }),
-      requestHandle: "request-handle-123",
+      invocationToken: "invocation-token-123",
     }),
   );
   expect(JSON.parse(result.body)).toEqual({
@@ -472,7 +472,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
     credentialMode: "identity",
     accessPolicy: "sample_policy",
     accessRole: "admin",
-    requestHandle: "request-handle-123",
+    invocationToken: "invocation-token-123",
   });
 
   const sessionCatalog = await (service.getSessionCatalog as any)(
@@ -982,7 +982,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
     create(ConfigureProviderRequestSchema, {
       name: "fixture-workflow",
       config: {},
-      protocolVersion: 2,
+      protocolVersion: CURRENT_PROTOCOL_VERSION,
     }),
   );
 

@@ -23,7 +23,7 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 #[derive(Clone, Debug, Default, PartialEq)]
 struct SeenRequest {
     method: String,
-    request_handle: String,
+    invocation_token: String,
     schedule_id: String,
 }
 
@@ -41,7 +41,7 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "create".to_string(),
-            request_handle: request.request_handle.clone(),
+            invocation_token: request.invocation_token.clone(),
             schedule_id: String::new(),
         });
         Ok(GrpcResponse::new(ManagedWorkflowSchedule {
@@ -68,7 +68,7 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "get".to_string(),
-            request_handle: request.request_handle.clone(),
+            invocation_token: request.invocation_token.clone(),
             schedule_id: request.schedule_id.clone(),
         });
         Ok(GrpcResponse::new(ManagedWorkflowSchedule {
@@ -87,7 +87,7 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "update".to_string(),
-            request_handle: request.request_handle.clone(),
+            invocation_token: request.invocation_token.clone(),
             schedule_id: request.schedule_id.clone(),
         });
         Ok(GrpcResponse::new(ManagedWorkflowSchedule {
@@ -114,7 +114,7 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "delete".to_string(),
-            request_handle: request.request_handle,
+            invocation_token: request.invocation_token,
             schedule_id: request.schedule_id,
         });
         Ok(GrpcResponse::new(()))
@@ -127,7 +127,7 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "pause".to_string(),
-            request_handle: request.request_handle.clone(),
+            invocation_token: request.invocation_token.clone(),
             schedule_id: request.schedule_id.clone(),
         });
         Ok(GrpcResponse::new(ManagedWorkflowSchedule {
@@ -147,7 +147,7 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "resume".to_string(),
-            request_handle: request.request_handle.clone(),
+            invocation_token: request.invocation_token.clone(),
             schedule_id: request.schedule_id.clone(),
         });
         Ok(GrpcResponse::new(ManagedWorkflowSchedule {
@@ -162,7 +162,7 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
 }
 
 #[tokio::test]
-async fn workflow_manager_connects_over_unix_socket_and_sends_request_handle() {
+async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-wm.sock");
     let _socket_guard = helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET, socket.as_os_str());
@@ -178,7 +178,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_request_handle() {
 
     helpers::wait_for_socket(&socket).await;
 
-    let mut manager = WorkflowManager::connect("handle-123")
+    let mut manager = WorkflowManager::connect("token-123")
         .await
         .expect("connect workflow manager");
     let created = manager
@@ -255,32 +255,32 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_request_handle() {
         vec![
             SeenRequest {
                 method: "create".to_string(),
-                request_handle: "handle-123".to_string(),
+                invocation_token: "token-123".to_string(),
                 schedule_id: String::new(),
             },
             SeenRequest {
                 method: "get".to_string(),
-                request_handle: "handle-123".to_string(),
+                invocation_token: "token-123".to_string(),
                 schedule_id: "sched-1".to_string(),
             },
             SeenRequest {
                 method: "update".to_string(),
-                request_handle: "handle-123".to_string(),
+                invocation_token: "token-123".to_string(),
                 schedule_id: "sched-1".to_string(),
             },
             SeenRequest {
                 method: "pause".to_string(),
-                request_handle: "handle-123".to_string(),
+                invocation_token: "token-123".to_string(),
                 schedule_id: "sched-1".to_string(),
             },
             SeenRequest {
                 method: "resume".to_string(),
-                request_handle: "handle-123".to_string(),
+                invocation_token: "token-123".to_string(),
                 schedule_id: "sched-1".to_string(),
             },
             SeenRequest {
                 method: "delete".to_string(),
-                request_handle: "handle-123".to_string(),
+                invocation_token: "token-123".to_string(),
                 schedule_id: "sched-1".to_string(),
             },
         ]
@@ -291,7 +291,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_request_handle() {
 }
 
 #[tokio::test]
-async fn request_workflow_manager_uses_embedded_request_handle() {
+async fn request_workflow_manager_uses_embedded_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-req-wm.sock");
     let _socket_guard = helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET, socket.as_os_str());
@@ -308,7 +308,7 @@ async fn request_workflow_manager_uses_embedded_request_handle() {
     helpers::wait_for_socket(&socket).await;
 
     let request = Request {
-        request_handle: "handle-embedded".to_string(),
+        invocation_token: "token-embedded".to_string(),
         ..Request::default()
     };
     let mut manager = request
@@ -327,7 +327,7 @@ async fn request_workflow_manager_uses_embedded_request_handle() {
 
     let seen = server.seen.lock().expect("lock seen").clone();
     assert_eq!(seen.len(), 1);
-    assert_eq!(seen[0].request_handle, "handle-embedded");
+    assert_eq!(seen[0].invocation_token, "token-embedded");
     assert_eq!(seen[0].method, "get");
 
     serve_task.abort();

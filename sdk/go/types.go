@@ -110,7 +110,7 @@ type connectionParamsKey struct{}
 type subjectKey struct{}
 type credentialKey struct{}
 type accessKey struct{}
-type requestHandleKey struct{}
+type invocationTokenKey struct{}
 type workflowKey struct{}
 
 // WithConnectionParams returns a child context carrying the given connection
@@ -162,17 +162,17 @@ func AccessFromContext(ctx context.Context) Access {
 	return access
 }
 
-func withRequestHandle(ctx context.Context, handle string) context.Context {
-	return context.WithValue(ctx, requestHandleKey{}, handle)
+func withInvocationToken(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, invocationTokenKey{}, token)
 }
 
-func requestHandleFromContext(ctx context.Context) string {
-	handle, _ := ctx.Value(requestHandleKey{}).(string)
-	return handle
+func invocationTokenFromContext(ctx context.Context) string {
+	token, _ := ctx.Value(invocationTokenKey{}).(string)
+	return token
 }
 
-func RequestHandleFromContext(ctx context.Context) string {
-	return requestHandleFromContext(ctx)
+func InvocationTokenFromContext(ctx context.Context) string {
+	return invocationTokenFromContext(ctx)
 }
 
 // WithWorkflowContext attaches workflow callback metadata to the context.

@@ -24,12 +24,12 @@ type proxyProvider struct {
 }
 
 type invokePluginInput struct {
-	Plugin        string         `json:"plugin"`
-	Operation     string         `json:"operation"`
-	Connection    string         `json:"connection,omitempty"`
-	Instance      string         `json:"instance,omitempty"`
-	RequestHandle string         `json:"request_handle,omitempty"`
-	Params        map[string]any `json:"params,omitempty"`
+	Plugin          string         `json:"plugin"`
+	Operation       string         `json:"operation"`
+	Connection      string         `json:"connection,omitempty"`
+	Instance        string         `json:"instance,omitempty"`
+	InvocationToken string         `json:"invocation_token,omitempty"`
+	Params          map[string]any `json:"params,omitempty"`
 }
 
 type workflowScheduleTargetInput struct {
@@ -41,27 +41,27 @@ type workflowScheduleTargetInput struct {
 }
 
 type createWorkflowScheduleInput struct {
-	ProviderName  string                      `json:"provider_name,omitempty"`
-	Cron          string                      `json:"cron"`
-	Timezone      string                      `json:"timezone,omitempty"`
-	Target        workflowScheduleTargetInput `json:"target"`
-	Paused        bool                        `json:"paused,omitempty"`
-	RequestHandle string                      `json:"request_handle,omitempty"`
+	ProviderName    string                      `json:"provider_name,omitempty"`
+	Cron            string                      `json:"cron"`
+	Timezone        string                      `json:"timezone,omitempty"`
+	Target          workflowScheduleTargetInput `json:"target"`
+	Paused          bool                        `json:"paused,omitempty"`
+	InvocationToken string                      `json:"invocation_token,omitempty"`
 }
 
 type getWorkflowScheduleInput struct {
-	ScheduleID    string `json:"schedule_id"`
-	RequestHandle string `json:"request_handle,omitempty"`
+	ScheduleID      string `json:"schedule_id"`
+	InvocationToken string `json:"invocation_token,omitempty"`
 }
 
 type updateWorkflowScheduleInput struct {
-	ScheduleID    string                      `json:"schedule_id"`
-	ProviderName  string                      `json:"provider_name,omitempty"`
-	Cron          string                      `json:"cron"`
-	Timezone      string                      `json:"timezone,omitempty"`
-	Target        workflowScheduleTargetInput `json:"target"`
-	Paused        bool                        `json:"paused,omitempty"`
-	RequestHandle string                      `json:"request_handle,omitempty"`
+	ScheduleID      string                      `json:"schedule_id"`
+	ProviderName    string                      `json:"provider_name,omitempty"`
+	Cron            string                      `json:"cron"`
+	Timezone        string                      `json:"timezone,omitempty"`
+	Target          workflowScheduleTargetInput `json:"target"`
+	Paused          bool                        `json:"paused,omitempty"`
+	InvocationToken string                      `json:"invocation_token,omitempty"`
 }
 
 func newProxyProvider(inner core.Provider) *proxyProvider {
@@ -130,7 +130,7 @@ func (p *proxyProvider) Catalog() *catalog.Catalog {
 				{Name: "operation", Type: "string", Description: "Target operation id", Required: true},
 				{Name: "connection", Type: "string", Description: "Optional connection override"},
 				{Name: "instance", Type: "string", Description: "Optional target instance override"},
-				{Name: "request_handle", Type: "string", Description: "Optional request handle override for raw-provider compatibility"},
+				{Name: "invocation_token", Type: "string", Description: "Optional invocation token override for token propagation tests"},
 				{Name: "params", Type: "object", Description: "Nested params forwarded to the target operation"},
 			},
 		},
@@ -187,16 +187,16 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			"used_connection_override": strings.TrimSpace(input.Connection) != "",
 		}
 
-		requestHandle := input.RequestHandle
-		if requestHandle == "" {
-			requestHandle = providerhost.RequestHandleFromContext(ctx)
+		invocationToken := input.InvocationToken
+		if invocationToken == "" {
+			invocationToken = providerhost.InvocationTokenFromContext(ctx)
 		}
-		if requestHandle == "" {
-			envelope["error"] = "request handle is not available"
+		if invocationToken == "" {
+			envelope["error"] = "invocation token is not available"
 			return jsonResult(http.StatusOK, envelope), nil
 		}
 
-		invoker, err := gestalt.Invoker(requestHandle)
+		invoker, err := gestalt.Invoker(invocationToken)
 		if err != nil {
 			envelope["error"] = err.Error()
 			return jsonResult(http.StatusOK, envelope), nil
@@ -227,7 +227,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowManagerFromContext(ctx, input.RequestHandle)
+		client, err := workflowManagerFromContext(ctx, input.InvocationToken)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
@@ -253,7 +253,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowManagerFromContext(ctx, input.RequestHandle)
+		client, err := workflowManagerFromContext(ctx, input.InvocationToken)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
@@ -271,7 +271,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowManagerFromContext(ctx, input.RequestHandle)
+		client, err := workflowManagerFromContext(ctx, input.InvocationToken)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
@@ -298,7 +298,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowManagerFromContext(ctx, input.RequestHandle)
+		client, err := workflowManagerFromContext(ctx, input.InvocationToken)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
@@ -315,7 +315,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowManagerFromContext(ctx, input.RequestHandle)
+		client, err := workflowManagerFromContext(ctx, input.InvocationToken)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
@@ -333,7 +333,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowManagerFromContext(ctx, input.RequestHandle)
+		client, err := workflowManagerFromContext(ctx, input.InvocationToken)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
@@ -504,12 +504,12 @@ func decodeJSONParams[T any](params map[string]any) (T, error) {
 	return input, nil
 }
 
-func workflowManagerFromContext(ctx context.Context, requestHandle string) (*gestalt.WorkflowManagerClient, error) {
-	handle := strings.TrimSpace(requestHandle)
-	if handle == "" {
-		handle = providerhost.RequestHandleFromContext(ctx)
+func workflowManagerFromContext(ctx context.Context, invocationToken string) (*gestalt.WorkflowManagerClient, error) {
+	token := strings.TrimSpace(invocationToken)
+	if token == "" {
+		token = providerhost.InvocationTokenFromContext(ctx)
 	}
-	return gestalt.WorkflowManager(handle)
+	return gestalt.WorkflowManager(token)
 }
 
 func workflowTargetInputToProto(target workflowScheduleTargetInput) (*proto.BoundWorkflowTarget, error) {

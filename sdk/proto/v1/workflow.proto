@@ -219,42 +219,54 @@ message ManagedWorkflowSchedule {
 }
 
 message WorkflowManagerCreateScheduleRequest {
-  string request_handle = 1;
+  reserved 1;
+  reserved "request_handle";
   string provider_name = 2;
   string cron = 3;
   string timezone = 4;
   BoundWorkflowTarget target = 5;
   bool paused = 6;
+  string invocation_token = 7;
 }
 
 message WorkflowManagerGetScheduleRequest {
-  string request_handle = 1;
+  reserved 1;
+  reserved "request_handle";
   string schedule_id = 2;
+  string invocation_token = 3;
 }
 
 message WorkflowManagerUpdateScheduleRequest {
-  string request_handle = 1;
+  reserved 1;
+  reserved "request_handle";
   string schedule_id = 2;
   string provider_name = 3;
   string cron = 4;
   string timezone = 5;
   BoundWorkflowTarget target = 6;
   bool paused = 7;
+  string invocation_token = 8;
 }
 
 message WorkflowManagerDeleteScheduleRequest {
-  string request_handle = 1;
+  reserved 1;
+  reserved "request_handle";
   string schedule_id = 2;
+  string invocation_token = 3;
 }
 
 message WorkflowManagerPauseScheduleRequest {
-  string request_handle = 1;
+  reserved 1;
+  reserved "request_handle";
   string schedule_id = 2;
+  string invocation_token = 3;
 }
 
 message WorkflowManagerResumeScheduleRequest {
-  string request_handle = 1;
+  reserved 1;
+  reserved "request_handle";
   string schedule_id = 2;
+  string invocation_token = 3;
 }
 
 service WorkflowProvider {

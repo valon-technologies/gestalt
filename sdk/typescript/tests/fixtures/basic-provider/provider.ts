@@ -62,7 +62,7 @@ export const plugin = definePlugin({
         credentialMode: s.string(),
         accessPolicy: s.string(),
         accessRole: s.string(),
-        requestHandle: s.string(),
+        invocationToken: s.string(),
       }),
       handler(input, request) {
         const region = connectionParam(request, "region") ?? "";
@@ -75,7 +75,7 @@ export const plugin = definePlugin({
           credentialMode: request.credential.mode,
           accessPolicy: request.access.policy,
           accessRole: request.access.role,
-          requestHandle: request.requestHandle,
+          invocationToken: request.invocationToken,
         });
       },
     },

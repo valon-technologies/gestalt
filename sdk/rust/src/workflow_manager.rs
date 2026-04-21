@@ -12,8 +12,8 @@ pub const ENV_WORKFLOW_MANAGER_SOCKET: &str = "GESTALT_WORKFLOW_MANAGER_SOCKET";
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkflowManagerError {
-    #[error("workflow manager: request handle is not available")]
-    MissingRequestHandle,
+    #[error("workflow manager: invocation token is not available")]
+    MissingInvocationToken,
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
     #[error("{0}")]
@@ -24,16 +24,16 @@ pub enum WorkflowManagerError {
 
 pub struct WorkflowManager {
     client: ProtoWorkflowManagerHostClient<Channel>,
-    request_handle: String,
+    invocation_token: String,
 }
 
 impl WorkflowManager {
     pub async fn connect(
-        request_handle: impl AsRef<str>,
+        invocation_token: impl AsRef<str>,
     ) -> std::result::Result<Self, WorkflowManagerError> {
-        let request_handle = request_handle.as_ref().trim().to_owned();
-        if request_handle.is_empty() {
-            return Err(WorkflowManagerError::MissingRequestHandle);
+        let invocation_token = invocation_token.as_ref().trim().to_owned();
+        if invocation_token.is_empty() {
+            return Err(WorkflowManagerError::MissingInvocationToken);
         }
 
         let socket_path = std::env::var(ENV_WORKFLOW_MANAGER_SOCKET).map_err(|_| {
@@ -48,7 +48,7 @@ impl WorkflowManager {
 
         Ok(Self {
             client: ProtoWorkflowManagerHostClient::new(channel),
-            request_handle,
+            invocation_token,
         })
     }
 
@@ -56,7 +56,7 @@ impl WorkflowManager {
         &mut self,
         mut request: pb::WorkflowManagerCreateScheduleRequest,
     ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
-        request.request_handle = self.request_handle.clone();
+        request.invocation_token = self.invocation_token.clone();
         Ok(self.client.create_schedule(request).await?.into_inner())
     }
 
@@ -64,7 +64,7 @@ impl WorkflowManager {
         &mut self,
         mut request: pb::WorkflowManagerGetScheduleRequest,
     ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
-        request.request_handle = self.request_handle.clone();
+        request.invocation_token = self.invocation_token.clone();
         Ok(self.client.get_schedule(request).await?.into_inner())
     }
 
@@ -72,7 +72,7 @@ impl WorkflowManager {
         &mut self,
         mut request: pb::WorkflowManagerUpdateScheduleRequest,
     ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
-        request.request_handle = self.request_handle.clone();
+        request.invocation_token = self.invocation_token.clone();
         Ok(self.client.update_schedule(request).await?.into_inner())
     }
 
@@ -80,7 +80,7 @@ impl WorkflowManager {
         &mut self,
         mut request: pb::WorkflowManagerDeleteScheduleRequest,
     ) -> std::result::Result<(), WorkflowManagerError> {
-        request.request_handle = self.request_handle.clone();
+        request.invocation_token = self.invocation_token.clone();
         self.client.delete_schedule(request).await?;
         Ok(())
     }
@@ -89,7 +89,7 @@ impl WorkflowManager {
         &mut self,
         mut request: pb::WorkflowManagerPauseScheduleRequest,
     ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
-        request.request_handle = self.request_handle.clone();
+        request.invocation_token = self.invocation_token.clone();
         Ok(self.client.pause_schedule(request).await?.into_inner())
     }
 
@@ -97,7 +97,7 @@ impl WorkflowManager {
         &mut self,
         mut request: pb::WorkflowManagerResumeScheduleRequest,
     ) -> std::result::Result<pb::ManagedWorkflowSchedule, WorkflowManagerError> {
-        request.request_handle = self.request_handle.clone();
+        request.invocation_token = self.invocation_token.clone();
         Ok(self.client.resume_schedule(request).await?.into_inner())
     }
 }

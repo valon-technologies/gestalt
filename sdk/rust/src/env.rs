@@ -8,4 +8,4 @@ pub const ENV_WRITE_CATALOG: &str = "GESTALT_PLUGIN_WRITE_CATALOG";
 /// Provider name override supplied by the host runtime.
 pub const ENV_PROVIDER_NAME: &str = "GESTALT_PLUGIN_NAME";
 /// Current Gestalt provider protocol version spoken by this SDK.
-pub const CURRENT_PROTOCOL_VERSION: i32 = 2;
+pub const CURRENT_PROTOCOL_VERSION: i32 = 3;

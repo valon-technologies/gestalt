@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,8 +17,8 @@ import (
 const EnvWorkflowManagerSocket = proto.EnvWorkflowManagerSocket
 
 type WorkflowManagerClient struct {
-	client        proto.WorkflowManagerHostClient
-	requestHandle string
+	client          proto.WorkflowManagerHostClient
+	invocationToken string
 }
 
 var sharedWorkflowManagerTransport struct {
@@ -27,9 +28,9 @@ var sharedWorkflowManagerTransport struct {
 	client     proto.WorkflowManagerHostClient
 }
 
-func WorkflowManager(requestHandle string) (*WorkflowManagerClient, error) {
-	if requestHandle == "" {
-		return nil, fmt.Errorf("workflow manager: request handle is not available")
+func WorkflowManager(invocationToken string) (*WorkflowManagerClient, error) {
+	if strings.TrimSpace(invocationToken) == "" {
+		return nil, fmt.Errorf("workflow manager: invocation token is not available")
 	}
 	socketPath := os.Getenv(EnvWorkflowManagerSocket)
 	if socketPath == "" {
@@ -45,8 +46,8 @@ func WorkflowManager(requestHandle string) (*WorkflowManagerClient, error) {
 	}
 
 	return &WorkflowManagerClient{
-		client:        client,
-		requestHandle: requestHandle,
+		client:          client,
+		invocationToken: strings.TrimSpace(invocationToken),
 	}, nil
 }
 
@@ -87,7 +88,7 @@ func sharedWorkflowManagerClient(ctx context.Context, socketPath string) (proto.
 }
 
 func WorkflowManagerFromContext(ctx context.Context) (*WorkflowManagerClient, error) {
-	return WorkflowManager(RequestHandleFromContext(ctx))
+	return WorkflowManager(InvocationTokenFromContext(ctx))
 }
 
 func (c *WorkflowManagerClient) Close() error {
@@ -102,7 +103,7 @@ func (c *WorkflowManagerClient) CreateSchedule(ctx context.Context, req *proto.W
 	if req != nil {
 		value = gproto.Clone(req).(*proto.WorkflowManagerCreateScheduleRequest)
 	}
-	value.RequestHandle = c.requestHandle
+	value.InvocationToken = c.invocationToken
 	return c.client.CreateSchedule(ctx, value)
 }
 
@@ -114,7 +115,7 @@ func (c *WorkflowManagerClient) GetSchedule(ctx context.Context, req *proto.Work
 	if req != nil {
 		value = gproto.Clone(req).(*proto.WorkflowManagerGetScheduleRequest)
 	}
-	value.RequestHandle = c.requestHandle
+	value.InvocationToken = c.invocationToken
 	return c.client.GetSchedule(ctx, value)
 }
 
@@ -126,7 +127,7 @@ func (c *WorkflowManagerClient) UpdateSchedule(ctx context.Context, req *proto.W
 	if req != nil {
 		value = gproto.Clone(req).(*proto.WorkflowManagerUpdateScheduleRequest)
 	}
-	value.RequestHandle = c.requestHandle
+	value.InvocationToken = c.invocationToken
 	return c.client.UpdateSchedule(ctx, value)
 }
 
@@ -138,7 +139,7 @@ func (c *WorkflowManagerClient) DeleteSchedule(ctx context.Context, req *proto.W
 	if req != nil {
 		value = gproto.Clone(req).(*proto.WorkflowManagerDeleteScheduleRequest)
 	}
-	value.RequestHandle = c.requestHandle
+	value.InvocationToken = c.invocationToken
 	_, err := c.client.DeleteSchedule(ctx, value)
 	return err
 }
@@ -151,7 +152,7 @@ func (c *WorkflowManagerClient) PauseSchedule(ctx context.Context, req *proto.Wo
 	if req != nil {
 		value = gproto.Clone(req).(*proto.WorkflowManagerPauseScheduleRequest)
 	}
-	value.RequestHandle = c.requestHandle
+	value.InvocationToken = c.invocationToken
 	return c.client.PauseSchedule(ctx, value)
 }
 
@@ -163,6 +164,6 @@ func (c *WorkflowManagerClient) ResumeSchedule(ctx context.Context, req *proto.W
 	if req != nil {
 		value = gproto.Clone(req).(*proto.WorkflowManagerResumeScheduleRequest)
 	}
-	value.RequestHandle = c.requestHandle
+	value.InvocationToken = c.invocationToken
 	return c.client.ResumeSchedule(ctx, value)
 }

@@ -51,7 +51,8 @@ type ExecConfig struct {
 	HostBinary       string
 	Cleanup          func()
 	HostServices     []HostService
-	RequestSnapshots *RequestSnapshotStore
+	InvocationTokens *InvocationTokenManager
+	InvocationGrants map[string]map[string]struct{}
 }
 
 type HostService struct {
@@ -86,8 +87,11 @@ func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, 
 
 	conn := &PluginProcess{proc: proc}
 	opts := []RemoteProviderOption{WithCloser(conn)}
-	if cfg.RequestSnapshots != nil {
-		opts = append(opts, WithRequestSnapshots(cfg.RequestSnapshots))
+	if cfg.InvocationTokens != nil {
+		opts = append(opts,
+			WithInvocationTokens(cfg.InvocationTokens),
+			WithInvocationTokenSubject(cfg.StaticSpec.Name, cfg.InvocationGrants),
+		)
 	}
 	prov, err := NewRemoteProvider(
 		ctx,

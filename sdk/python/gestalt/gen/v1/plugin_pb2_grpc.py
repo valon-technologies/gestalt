@@ -282,6 +282,11 @@ class PluginInvokerStub(object):
         Args:
             channel: A grpc.Channel.
         """
+        self.ExchangeInvocationToken = channel.unary_unary(
+                '/gestalt.provider.v1.PluginInvoker/ExchangeInvocationToken',
+                request_serializer=v1_dot_plugin__pb2.ExchangeInvocationTokenRequest.SerializeToString,
+                response_deserializer=v1_dot_plugin__pb2.ExchangeInvocationTokenResponse.FromString,
+                _registered_method=True)
         self.Invoke = channel.unary_unary(
                 '/gestalt.provider.v1.PluginInvoker/Invoke',
                 request_serializer=v1_dot_plugin__pb2.PluginInvokeRequest.SerializeToString,
@@ -292,6 +297,12 @@ class PluginInvokerStub(object):
 class PluginInvokerServicer(object):
     """Missing associated documentation comment in .proto file."""
 
+    def ExchangeInvocationToken(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def Invoke(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -301,6 +312,11 @@ class PluginInvokerServicer(object):
 
 def add_PluginInvokerServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'ExchangeInvocationToken': grpc.unary_unary_rpc_method_handler(
+                    servicer.ExchangeInvocationToken,
+                    request_deserializer=v1_dot_plugin__pb2.ExchangeInvocationTokenRequest.FromString,
+                    response_serializer=v1_dot_plugin__pb2.ExchangeInvocationTokenResponse.SerializeToString,
+            ),
             'Invoke': grpc.unary_unary_rpc_method_handler(
                     servicer.Invoke,
                     request_deserializer=v1_dot_plugin__pb2.PluginInvokeRequest.FromString,
@@ -316,6 +332,33 @@ def add_PluginInvokerServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class PluginInvoker(object):
     """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def ExchangeInvocationToken(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.PluginInvoker/ExchangeInvocationToken',
+            v1_dot_plugin__pb2.ExchangeInvocationTokenRequest.SerializeToString,
+            v1_dot_plugin__pb2.ExchangeInvocationTokenResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def Invoke(request,

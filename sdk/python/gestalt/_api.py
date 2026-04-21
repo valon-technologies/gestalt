@@ -54,7 +54,7 @@ class Request:
     subject: Subject = dataclasses.field(default_factory=Subject)
     credential: Credential = dataclasses.field(default_factory=Credential)
     access: Access = dataclasses.field(default_factory=Access)
-    request_handle: str = ""
+    invocation_token: str = ""
     # Workflow callback metadata uses a JSON-style lowerCamelCase object such
     # as runId, target.pluginName, trigger.scheduleId, and
     # trigger.event.specVersion.
@@ -68,7 +68,7 @@ class Request:
     def invoker(self) -> "PluginInvoker":
         from ._invoker import PluginInvoker
 
-        return PluginInvoker(self.request_handle)
+        return PluginInvoker(self.invocation_token)
 
 
 @dataclasses.dataclass(slots=True)

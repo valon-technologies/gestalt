@@ -259,7 +259,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
             token: "tok".to_owned(),
             connection_params: BTreeMap::from([("api_key".to_owned(), "secret".to_owned())]),
             invocation_id: String::new(),
-            request_handle: "handle-123".to_owned(),
+            invocation_token: "token-123".to_owned(),
             context: Some(RequestContext {
                 subject: Some(SubjectContext {
                     id: "user:user-123".to_owned(),

@@ -328,7 +328,7 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
         credentialMode: "identity",
         accessPolicy: "sample_policy",
         accessRole: "admin",
-        requestHandle: "",
+        invocationToken: "",
       });
 
       const countResult = await provider.execute(

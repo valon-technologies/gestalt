@@ -21,9 +21,28 @@ plugin_pb2_grpc: Any = _plugin_pb2_grpc
 _server: grpc.Server | None = None
 _socket_path: str = ""
 _previous_socket_env: str | None = None
+_exchange_requests: list[dict[str, Any]] = []
 
 
 class _PluginInvokerServicer(plugin_pb2_grpc.PluginInvokerServicer):
+    def ExchangeInvocationToken(self, request, context):
+        _exchange_requests.append(
+            {
+                "parent_invocation_token": request.parent_invocation_token,
+                "grants": [
+                    {
+                        "plugin": grant.plugin,
+                        "operations": list(grant.operations),
+                    }
+                    for grant in request.grants
+                ],
+                "ttl_seconds": request.ttl_seconds,
+            }
+        )
+        return plugin_pb2.ExchangeInvocationTokenResponse(
+            invocation_token=f"{request.parent_invocation_token}:child"
+        )
+
     def Invoke(self, request, context):
         if request.operation == "plain_text":
             return plugin_pb2.OperationResult(
@@ -43,7 +62,7 @@ class _PluginInvokerServicer(plugin_pb2_grpc.PluginInvokerServicer):
             status=200,
             body=json.dumps(
                 {
-                    "request_handle": request.request_handle,
+                    "invocation_token": request.invocation_token,
                     "plugin": request.plugin,
                     "operation": request.operation,
                     "params": params,
@@ -86,10 +105,20 @@ def tearDownModule() -> None:
 
 
 class PluginInvokerTransportTests(unittest.TestCase):
+    def setUp(self) -> None:
+        _exchange_requests.clear()
+
     def test_request_helper_roundtrip(self) -> None:
-        request = Request(request_handle="req-123")
+        request = Request(invocation_token="invoke-123")
 
         with request.invoker() as client:
+            child_token = client.exchange_invocation_token(
+                grants=[
+                    {"plugin": "github", "operations": ["get_issue", " "]},
+                    {"plugin": "   ", "operations": ["ignored"]},
+                ],
+                ttl_seconds=45,
+            )
             response = client.invoke(
                 "github",
                 "get_issue",
@@ -98,11 +127,27 @@ class PluginInvokerTransportTests(unittest.TestCase):
                 instance="prod",
             )
 
+        self.assertEqual(child_token, "invoke-123:child")
+        self.assertEqual(
+            _exchange_requests,
+            [
+                {
+                    "parent_invocation_token": "invoke-123",
+                    "grants": [
+                        {
+                            "plugin": "github",
+                            "operations": ["get_issue"],
+                        }
+                    ],
+                    "ttl_seconds": 45,
+                }
+            ],
+        )
         self.assertEqual(response.status, 200)
         self.assertEqual(
             json.loads(response.body),
             {
-                "request_handle": "req-123",
+                "invocation_token": "invoke-123",
                 "plugin": "github",
                 "operation": "get_issue",
                 "params": {
@@ -115,22 +160,22 @@ class PluginInvokerTransportTests(unittest.TestCase):
             },
         )
 
-    def test_request_handle_constructor_roundtrip(self) -> None:
-        with PluginInvoker("req-456") as client:
+    def test_invocation_token_constructor_roundtrip(self) -> None:
+        with PluginInvoker("invoke-456") as client:
             response = client.invoke("slack", "plain_text")
 
         self.assertEqual(response.status, 200)
         self.assertEqual(response.body, "plain response")
 
     def test_empty_dict_params_are_preserved_as_present(self) -> None:
-        with PluginInvoker("req-789") as client:
+        with PluginInvoker("invoke-789") as client:
             response = client.invoke("github", "get_issue", {})
 
         self.assertEqual(response.status, 200)
         self.assertEqual(
             json.loads(response.body),
             {
-                "request_handle": "req-789",
+                "invocation_token": "invoke-789",
                 "plugin": "github",
                 "operation": "get_issue",
                 "params": {},
@@ -140,8 +185,8 @@ class PluginInvokerTransportTests(unittest.TestCase):
             },
         )
 
-    def test_whitespace_only_request_handle_is_rejected(self) -> None:
+    def test_whitespace_only_invocation_token_is_rejected(self) -> None:
         with self.assertRaisesRegex(
-            RuntimeError, "plugin invoker: request handle is not available"
+            RuntimeError, "plugin invoker: invocation token is not available"
         ):
             PluginInvoker("   ")

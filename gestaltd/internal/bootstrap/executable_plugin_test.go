@@ -68,7 +68,7 @@ type requestContextBody struct {
 		Policy string `json:"policy"`
 		Role   string `json:"role"`
 	} `json:"access"`
-	RequestHandle string `json:"request_handle"`
+	InvocationToken string `json:"invocation_token"`
 }
 
 type nestedInvokeHarness struct {
@@ -1892,7 +1892,7 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 	}
 }
 
-func TestPluginWorkflowManagerRejectsInvalidRequestHandle(t *testing.T) {
+func TestPluginWorkflowManagerRejectsInvalidInvocationToken(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -1929,8 +1929,8 @@ func TestPluginWorkflowManagerRejectsInvalidRequestHandle(t *testing.T) {
 	}
 
 	result, err := prov.Execute(context.Background(), "create_workflow_schedule", map[string]any{
-		"request_handle": "forged-handle",
-		"cron":           "*/5 * * * *",
+		"invocation_token": "forged-token",
+		"cron":             "*/5 * * * *",
 		"target": map[string]any{
 			"plugin":    "roadmap",
 			"operation": "sync",
@@ -1947,7 +1947,7 @@ func TestPluginWorkflowManagerRejectsInvalidRequestHandle(t *testing.T) {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !strings.Contains(body.Error, "invalid or expired") {
-		t.Fatalf("invalid request handle error = %q, want invalid or expired", body.Error)
+		t.Fatalf("invalid invocation token error = %q, want invalid or expired", body.Error)
 	}
 }
 
@@ -2194,8 +2194,8 @@ func TestPluginInvokesSupportInvokerFromContext(t *testing.T) {
 	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
-	if got.RequestHandle == "" {
-		t.Fatalf("nested request_handle = %q, want non-empty", got.RequestHandle)
+	if got.InvocationToken == "" {
+		t.Fatalf("nested invocation_token = %q, want non-empty", got.InvocationToken)
 	}
 	if got.Credential.Connection != "work" {
 		t.Fatalf("nested credential.connection = %q, want %q", got.Credential.Connection, "work")
@@ -2296,7 +2296,7 @@ func TestPluginInvokesRejectUndeclaredTargets(t *testing.T) {
 	}
 }
 
-func TestPluginInvokesRejectInvalidRequestHandle(t *testing.T) {
+func TestPluginInvokesRejectInvalidInvocationToken(t *testing.T) {
 	t.Parallel()
 
 	harness := newNestedInvokeHarness(t)
@@ -2317,9 +2317,9 @@ func TestPluginInvokesRejectInvalidRequestHandle(t *testing.T) {
 		"",
 		"invoke_plugin",
 		map[string]any{
-			"plugin":         "example",
-			"operation":      "request_context",
-			"request_handle": "forged-handle",
+			"plugin":           "example",
+			"operation":        "request_context",
+			"invocation_token": "forged-token",
 		},
 	)
 	if err != nil {
@@ -2331,10 +2331,10 @@ func TestPluginInvokesRejectInvalidRequestHandle(t *testing.T) {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if got.OK {
-		t.Fatalf("expected invalid request handle rejection, got success: %+v", got)
+		t.Fatalf("expected invalid invocation token rejection, got success: %+v", got)
 	}
 	if !strings.Contains(got.Error, "invalid or expired") {
-		t.Fatalf("invalid request handle error = %q, want invalid or expired", got.Error)
+		t.Fatalf("invalid invocation token error = %q, want invalid or expired", got.Error)
 	}
 }
 

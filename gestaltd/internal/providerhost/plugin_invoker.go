@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -20,32 +21,40 @@ type PluginInvokerServer struct {
 
 	pluginName string
 	invoker    invocation.Invoker
-	snapshots  *RequestSnapshotStore
+	tokens     *InvocationTokenManager
 	allowed    map[string]map[string]struct{}
 }
 
-func NewPluginInvokerServer(pluginName string, deps []config.PluginInvocationDependency, invoker invocation.Invoker, snapshots *RequestSnapshotStore) *PluginInvokerServer {
-	allowed := make(map[string]map[string]struct{}, len(deps))
-	for i := range deps {
-		targetPlugin := strings.TrimSpace(deps[i].Plugin)
-		targetOperation := strings.TrimSpace(deps[i].Operation)
-		if targetPlugin == "" || targetOperation == "" {
-			continue
-		}
-		ops, ok := allowed[targetPlugin]
-		if !ok {
-			ops = make(map[string]struct{})
-			allowed[targetPlugin] = ops
-		}
-		ops[targetOperation] = struct{}{}
-	}
-
+func NewPluginInvokerServer(pluginName string, deps []config.PluginInvocationDependency, invoker invocation.Invoker, tokens *InvocationTokenManager) *PluginInvokerServer {
 	return &PluginInvokerServer{
 		pluginName: pluginName,
 		invoker:    invoker,
-		snapshots:  snapshots,
-		allowed:    allowed,
+		tokens:     tokens,
+		allowed:    InvocationDependencyGrants(deps),
 	}
+}
+
+func (s *PluginInvokerServer) ExchangeInvocationToken(_ context.Context, req *proto.ExchangeInvocationTokenRequest) (*proto.ExchangeInvocationTokenResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	grants := decodePluginInvocationGrantProto(req.GetGrants())
+	if len(grants) > 0 && !operationMapSubset(grants, s.allowed) {
+		return nil, status.Error(codes.PermissionDenied, "requested invocation grants exceed the plugin's declared invokes")
+	}
+	exchangedToken, err := s.tokens.ExchangeToken(
+		req.GetParentInvocationToken(),
+		s.pluginName,
+		grants,
+		time.Duration(req.GetTtlSeconds())*time.Second,
+	)
+	if err != nil {
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	}
+
+	return &proto.ExchangeInvocationTokenResponse{
+		InvocationToken: exchangedToken,
+	}, nil
 }
 
 func (s *PluginInvokerServer) Invoke(ctx context.Context, req *proto.PluginInvokeRequest) (*proto.OperationResult, error) {
@@ -61,28 +70,24 @@ func (s *PluginInvokerServer) Invoke(ctx context.Context, req *proto.PluginInvok
 	if targetOperation == "" {
 		return nil, status.Error(codes.InvalidArgument, "operation is required")
 	}
-	if !s.allows(targetPlugin, targetOperation) {
-		return nil, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s", s.pluginName, targetPlugin, targetOperation)
-	}
-
-	snapshot, err := s.snapshots.snapshot(req.GetRequestHandle())
+	tokenCtx, err := s.tokenContextForInvoke(req, targetPlugin, targetOperation)
 	if err != nil {
-		return nil, status.Error(codes.FailedPrecondition, err.Error())
+		return nil, err
 	}
 
 	connection := strings.TrimSpace(req.GetConnection())
-	invokeCtx := restoreRequestSnapshotContext(ctx, snapshot, connection)
+	invokeCtx := restoreInvocationTokenContext(ctx, tokenCtx, connection)
 	params := map[string]any{}
 	if raw := req.GetParams(); raw != nil {
 		params = raw.AsMap()
 	}
 
 	instance := strings.TrimSpace(req.GetInstance())
-	if instance == "" && connection == "" && shouldInheritCredentialSelectors(snapshot) {
-		instance = snapshot.credential.Instance
+	if instance == "" && connection == "" && shouldInheritCredentialSelectors(tokenCtx.principal) {
+		instance = tokenCtx.credential.Instance
 	}
 
-	result, err := s.invoker.Invoke(invokeCtx, snapshot.principal, targetPlugin, instance, targetOperation, params)
+	result, err := s.invoker.Invoke(invokeCtx, tokenCtx.principal, targetPlugin, instance, targetOperation, params)
 	if err != nil {
 		return nil, invocationStatusError(err)
 	}
@@ -106,6 +111,21 @@ func (s *PluginInvokerServer) allows(plugin, operation string) bool {
 	}
 	_, ok = ops[operation]
 	return ok
+}
+
+func (s *PluginInvokerServer) tokenContextForInvoke(req *proto.PluginInvokeRequest, targetPlugin, targetOperation string) (invocationTokenContext, error) {
+	invocationToken := strings.TrimSpace(req.GetInvocationToken())
+	if invocationToken == "" {
+		return invocationTokenContext{}, status.Error(codes.FailedPrecondition, "invocation token is required")
+	}
+	tokenCtx, err := s.tokens.resolveToken(invocationToken, s.pluginName)
+	if err != nil {
+		return invocationTokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
+	}
+	if !allowsOperation(tokenCtx.grants, targetPlugin, targetOperation) || !s.allows(targetPlugin, targetOperation) {
+		return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s", s.pluginName, targetPlugin, targetOperation)
+	}
+	return tokenCtx, nil
 }
 
 func invocationStatusError(err error) error {

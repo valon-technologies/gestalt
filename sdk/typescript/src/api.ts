@@ -38,7 +38,7 @@ export interface Request {
   // Workflow callback metadata uses a JSON-style lowerCamelCase object such as
   // runId, target.pluginName, trigger.scheduleId, and trigger.event.specVersion.
   workflow: Record<string, unknown>;
-  requestHandle: string;
+  invocationToken: string;
 }
 
 /**
@@ -102,8 +102,8 @@ export function request(
   subject: Partial<Subject> = {},
   credential: Partial<Credential> = {},
   access: Partial<Access> = {},
-  requestHandle = "",
   workflow: Record<string, unknown> = {},
+  invocationToken = "",
 ): Request {
   return {
     token,
@@ -129,7 +129,7 @@ export function request(
     workflow: {
       ...workflow,
     },
-    requestHandle,
+    invocationToken,
   };
 }
 
