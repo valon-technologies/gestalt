@@ -192,9 +192,12 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 		body           string
 		authHeader     string
 		withMCPHandler bool
+		pluginName     string
+		routeAuth      string
 		wantSource     string
 		wantError      string
 		wantAuthSource string
+		wantProvider   string
 	}{
 		{
 			name:       "missing_http_auth",
@@ -223,6 +226,16 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 			wantError:      "invalid token",
 			wantAuthSource: "session",
 		},
+		{
+			name:         "missing_plugin_route_auth_uses_named_provider_in_audit",
+			method:       http.MethodGet,
+			path:         "/api/v1/locked/ping",
+			pluginName:   "locked",
+			routeAuth:    "alt",
+			wantSource:   "http",
+			wantError:    "missing authorization",
+			wantProvider: "alt",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -242,6 +255,26 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 				}
 				cfg.AuditSink = auditSink
 				cfg.Services = coretesting.NewStubServices(t)
+				if tc.pluginName != "" {
+					cfg.AuthProviders = map[string]core.AuthProvider{
+						tc.routeAuth: &coretesting.StubAuthProvider{
+							N: tc.routeAuth,
+							ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
+								return nil, fmt.Errorf("invalid token")
+							},
+						},
+					}
+					cfg.PluginDefs = map[string]*config.ProviderEntry{
+						tc.pluginName: {RouteAuth: &config.RouteAuthDef{Provider: tc.routeAuth}},
+					}
+					cfg.Providers = testutil.NewProviderRegistry(t, &stubIntegrationWithOps{
+						StubIntegration: coretesting.StubIntegration{
+							N:        tc.pluginName,
+							ConnMode: core.ConnectionModeNone,
+						},
+						ops: []core.Operation{{Name: "ping", Method: http.MethodGet}},
+					})
+				}
 				if tc.withMCPHandler {
 					cfg.MCPHandler = http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 						t.Fatal("unexpected MCP handler invocation")
@@ -290,8 +323,8 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 			if record["error"] != tc.wantError {
 				t.Fatalf("expected error %q, got %v", tc.wantError, record["error"])
 			}
-			if record["provider"] != "" {
-				t.Fatalf("expected empty provider, got %v", record["provider"])
+			if record["provider"] != tc.wantProvider {
+				t.Fatalf("expected provider %q, got %v", tc.wantProvider, record["provider"])
 			}
 			if tc.wantAuthSource == "" {
 				if authSource, ok := record["auth_source"]; ok && authSource != "" {

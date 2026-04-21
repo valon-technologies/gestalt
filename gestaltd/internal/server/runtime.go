@@ -61,13 +61,15 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 	managementAddr := cfg.Server.ManagementAddr()
 	mcpSlot := &switchableHandler{}
 	baseConfig := Config{
-		Auth:              result.Auth,
-		AuditSink:         result.AuditSink,
-		Services:          result.Services,
-		Providers:         result.Providers,
-		Workflow:          result.WorkflowControl,
-		Invoker:           httpInvoker,
-		DefaultConnection: connMaps.DefaultConnection,
+		Auth:                 result.Auth,
+		SelectedAuthProvider: result.SelectedAuthProvider,
+		AuthProviders:        result.AuthProviders,
+		AuditSink:            result.AuditSink,
+		Services:             result.Services,
+		Providers:            result.Providers,
+		Workflow:             result.WorkflowControl,
+		Invoker:              httpInvoker,
+		DefaultConnection:    connMaps.DefaultConnection,
 		// HTTP routes expose REST-visible operations, so unqualified session-catalog
 		// resolution should follow the API surface by default. The MCP server keeps
 		// its own MCP-specific routing below.

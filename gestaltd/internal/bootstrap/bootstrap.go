@@ -177,6 +177,8 @@ func NewFactoryRegistry() *FactoryRegistry {
 
 type Result struct {
 	Auth                  core.AuthProvider
+	SelectedAuthProvider  string
+	AuthProviders         map[string]core.AuthProvider
 	AuthorizationProvider core.AuthorizationProvider
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
@@ -234,9 +236,13 @@ func (r *Result) Close(ctx context.Context) error {
 	}
 
 	var errs []error
+	authCloseErr := closeAuth(r.Auth)
+	if len(r.AuthProviders) != 0 {
+		authCloseErr = closeAuthProviders(r.AuthProviders)
+	}
 	errs = append(errs,
 		closeAuthorizer(r.Authorizer),
-		closeAuth(r.Auth),
+		authCloseErr,
 		closeAuthorizationProvider(r.AuthorizationProvider),
 		CloseProviders(r.Providers),
 		r.Services.Close(),
@@ -322,6 +328,8 @@ func (p *workflowProviderWithCleanup) Close() error {
 
 type preparedCore struct {
 	Auth                  core.AuthProvider
+	SelectedAuthProvider  string
+	AuthProviders         map[string]core.AuthProvider
 	AuthorizationProvider core.AuthorizationProvider
 	Services              *coredata.Services
 	ExtraIndexedDBs       []indexeddb.IndexedDB
@@ -483,10 +491,11 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	workflowRuntime.InitProviderPlaceholders(cfg.Providers.Workflow)
 	deps.WorkflowRuntime = workflowRuntime
 
-	auth, err := buildAuth(cfg, factories, deps)
+	selectedAuthName, authProviders, err := buildAuthProviders(cfg, factories, deps)
 	if err != nil {
 		return nil, err
 	}
+	auth := authProviders[selectedAuthName]
 	var authzProvider core.AuthorizationProvider
 	closeAuthorizationOnError := true
 	defer func() {
@@ -576,7 +585,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 
 	authzProvider, err = buildAuthorization(cfg, factories, deps)
 	if err != nil {
-		_ = closeAuth(auth)
+		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
 
@@ -588,6 +597,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	closeAuthorizationOnError = false
 	return &preparedCore{
 		Auth:                  auth,
+		SelectedAuthProvider:  selectedAuthName,
+		AuthProviders:         authProviders,
 		AuthorizationProvider: authzProvider,
 		Services:              svc,
 		ExtraIndexedDBs:       extraIndexedDBs,
@@ -604,8 +615,12 @@ func (p *preparedCore) Close(ctx context.Context) error {
 	}
 
 	var errs []error
+	authCloseErr := closeAuth(p.Auth)
+	if len(p.AuthProviders) != 0 {
+		authCloseErr = closeAuthProviders(p.AuthProviders)
+	}
 	errs = append(errs,
-		closeAuth(p.Auth),
+		authCloseErr,
 		closeAuthorizationProvider(p.AuthorizationProvider),
 		p.Services.Close(),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
@@ -717,6 +732,8 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeWorkflowsOnError = false
 	return &Result{
 		Auth:                  prepared.Auth,
+		SelectedAuthProvider:  prepared.SelectedAuthProvider,
+		AuthProviders:         prepared.AuthProviders,
 		AuthorizationProvider: prepared.AuthorizationProvider,
 		Services:              prepared.Services,
 		ExtraIndexedDBs:       prepared.ExtraIndexedDBs,
@@ -885,6 +902,20 @@ func closeAuth(provider core.AuthProvider) error {
 	return closer.Close()
 }
 
+func closeAuthProviders(providers map[string]core.AuthProvider) error {
+	if len(providers) == 0 {
+		return nil
+	}
+	var errs []error
+	for _, provider := range providers {
+		if provider == nil {
+			continue
+		}
+		errs = append(errs, closeAuth(provider))
+	}
+	return errors.Join(errs...)
+}
+
 func closeAuthorizer(authorizer authorization.RuntimeAuthorizer) error {
 	if authorizer == nil {
 		return nil
@@ -908,28 +939,47 @@ func closeSecretManager(sm core.SecretManager) error {
 	return closer.Close()
 }
 
-func buildAuth(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.AuthProvider, error) {
-	_, authEntry, err := cfg.SelectedAuthProvider()
+func buildAuthProviders(cfg *config.Config, factories *FactoryRegistry, deps Deps) (string, map[string]core.AuthProvider, error) {
+	selectedName, _, err := cfg.SelectedAuthProvider()
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	if authEntry == nil {
-		return nil, nil
+	if len(cfg.Providers.Auth) == 0 {
+		return selectedName, nil, nil
 	}
 	if factories.Auth == nil {
-		return nil, fmt.Errorf("bootstrap: auth factory is not registered")
+		return "", nil, fmt.Errorf("bootstrap: auth factory is not registered")
+	}
+	providers := make(map[string]core.AuthProvider, len(cfg.Providers.Auth))
+	for name, authEntry := range cfg.Providers.Auth {
+		if authEntry == nil {
+			continue
+		}
+		auth, err := buildNamedAuthProvider(name, authEntry, factories, deps)
+		if err != nil {
+			_ = closeAuthProviders(providers)
+			return "", nil, err
+		}
+		providers[name] = auth
+	}
+	return selectedName, providers, nil
+}
+
+func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.AuthProvider, error) {
+	if authEntry == nil {
+		return nil, nil
 	}
 	node := authEntry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
 		var err error
-		node, err = config.BuildComponentRuntimeConfigNode("auth", "auth", authEntry, authEntry.Config)
+		node, err = config.BuildComponentRuntimeConfigNode(name, "auth", authEntry, authEntry.Config)
 		if err != nil {
-			return nil, fmt.Errorf("bootstrap: auth provider: %w", err)
+			return nil, fmt.Errorf("bootstrap: auth provider %q: %w", name, err)
 		}
 	}
 	auth, err := factories.Auth(node, deps)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: auth provider: %w", err)
+		return nil, fmt.Errorf("bootstrap: auth provider %q: %w", name, err)
 	}
 	return auth, nil
 }
