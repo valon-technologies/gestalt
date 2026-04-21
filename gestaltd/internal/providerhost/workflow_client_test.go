@@ -15,8 +15,8 @@ func TestNewExecutableWorkflowForwardsDefaultEgressAction(t *testing.T) {
 	defer func() { startWorkflowProviderProcess = originalStart }()
 
 	wantErr := errors.New("boom")
-	var got ExecConfig
-	startWorkflowProviderProcess = func(_ context.Context, cfg ExecConfig) (*providerProcess, error) {
+	var got ProcessConfig
+	startWorkflowProviderProcess = func(_ context.Context, cfg ProcessConfig) (*providerProcess, error) {
 		got = cfg
 		return nil, wantErr
 	}

@@ -32,7 +32,7 @@ type remoteS3 struct {
 }
 
 func NewExecutableS3(ctx context.Context, cfg S3ExecConfig) (s3store.Client, error) {
-	proc, err := startProviderProcess(ctx, ExecConfig{
+	execCfg := ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,
@@ -40,7 +40,8 @@ func NewExecutableS3(ctx context.Context, cfg S3ExecConfig) (s3store.Client, err
 		AllowedHosts: cfg.AllowedHosts,
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
-	})
+	}
+	proc, err := startProviderProcess(ctx, execCfg.processConfig())
 	if err != nil {
 		return nil, err
 	}

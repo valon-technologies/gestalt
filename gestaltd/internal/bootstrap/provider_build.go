@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
@@ -30,6 +31,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
 	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
+	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
@@ -682,55 +684,210 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			maps.Copy(env, execEnv)
 		}
 	}
-	execCfg := providerhost.ExecConfig{
+	runtimeProvider, runtimeOwned := effectivePluginRuntime(deps)
+	session, err := runtimeProvider.StartSession(ctx, pluginruntime.StartSessionRequest{
+		PluginName: name,
+		Metadata:   map[string]string{"plugin": name},
+	})
+	if err != nil {
+		if runtimeOwned {
+			_ = runtimeProvider.Close()
+		}
+		return nil, fmt.Errorf("start plugin runtime session: %w", err)
+	}
+	sessionID := session.ID
+	stopSession := true
+	defer func() {
+		if !stopSession {
+			return
+		}
+		_ = stopPluginRuntimeSession(runtimeProvider, sessionID)
+		if runtimeOwned {
+			_ = runtimeProvider.Close()
+		}
+	}()
+	if err := waitForPluginRuntimeSessionReady(ctx, runtimeProvider, sessionID); err != nil {
+		return nil, fmt.Errorf("wait for plugin runtime session %q ready: %w", sessionID, err)
+	}
+
+	hostServices, snapshots, runtimeCleanup, err := buildPluginRuntimeHostServices(name, entry, deps)
+	if err != nil {
+		return nil, err
+	}
+	cleanup = chainCleanup(cleanup, runtimeCleanup)
+	for _, hostService := range hostServices {
+		if _, err := runtimeProvider.BindHostService(ctx, pluginruntime.BindHostServiceRequest{
+			SessionID: sessionID,
+			EnvVar:    hostService.EnvVar,
+			Register:  hostService.Register,
+		}); err != nil {
+			return nil, fmt.Errorf("bind host service %q: %w", hostService.EnvVar, err)
+		}
+	}
+
+	hostedPlugin, err := runtimeProvider.StartPlugin(ctx, pluginruntime.StartPluginRequest{
+		SessionID:     sessionID,
+		PluginName:    name,
 		Command:       command,
 		Args:          args,
 		Env:           env,
-		StaticSpec:    spec,
-		Config:        pluginConfig,
 		AllowedHosts:  entry.AllowedHosts,
 		DefaultAction: deps.Egress.DefaultAction,
 		HostBinary:    entry.HostBinary,
-	}
-	effectiveIndexedDB, err := config.ResolveEffectivePluginIndexedDB(name, entry, deps.SelectedIndexedDBName, deps.IndexedDBDefs)
+		Cleanup:       cleanup,
+	})
 	if err != nil {
+		return nil, fmt.Errorf("start hosted plugin: %w", err)
+	}
+	// The started plugin process now owns cleanup through the runtime session.
+	cleanup = nil
+	conn, err := runtimeProvider.DialPlugin(ctx, pluginruntime.DialPluginRequest{
+		SessionID: sessionID,
+		PluginID:  hostedPlugin.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("dial hosted plugin: %w", err)
+	}
+	opts := []providerhost.RemoteProviderOption{providerhost.WithCloser(&runtimeBackedPluginCloser{
+		conn:         conn,
+		runtime:      runtimeProvider,
+		sessionID:    sessionID,
+		closeRuntime: runtimeOwned,
+	})}
+	if snapshots != nil {
+		opts = append(opts, providerhost.WithRequestSnapshots(snapshots))
+	}
+	prov, err := providerhost.NewRemoteProvider(ctx, conn.Integration(), spec, pluginConfig, opts...)
+	if err != nil {
+		_ = conn.Close()
 		return nil, err
 	}
-	if effectiveIndexedDB.Enabled {
-		hostServices, indexedDBCleanup, err := buildPluginIndexedDBHostServices(name, effectiveIndexedDB, deps)
+	stopSession = false
+	cleanup = nil
+	return prov, nil
+}
+
+func effectivePluginRuntime(deps Deps) (pluginruntime.Provider, bool) {
+	if deps.PluginRuntime != nil {
+		return deps.PluginRuntime, false
+	}
+	return pluginruntime.NewLocalProvider(), true
+}
+
+const pluginRuntimeStopTimeout = 3 * time.Second
+
+type runtimeBackedPluginCloser struct {
+	conn         pluginruntime.HostedPluginConn
+	runtime      pluginruntime.Provider
+	sessionID    string
+	closeRuntime bool
+}
+
+func (c *runtimeBackedPluginCloser) Close() error {
+	if c == nil {
+		return nil
+	}
+	var errs []error
+	if c.runtime != nil && c.sessionID != "" {
+		errs = append(errs, stopPluginRuntimeSession(c.runtime, c.sessionID))
+	}
+	if c.conn != nil {
+		errs = append(errs, c.conn.Close())
+	}
+	if c.closeRuntime && c.runtime != nil {
+		errs = append(errs, c.runtime.Close())
+	}
+	return errors.Join(errs...)
+}
+
+func stopPluginRuntimeSession(runtimeProvider pluginruntime.Provider, sessionID string) error {
+	if runtimeProvider == nil || sessionID == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), pluginRuntimeStopTimeout)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runtimeProvider.StopSession(ctx, pluginruntime.StopSessionRequest{SessionID: sessionID})
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return fmt.Errorf("stop plugin runtime session %q: %w", sessionID, ctx.Err())
+	}
+}
+
+func waitForPluginRuntimeSessionReady(ctx context.Context, runtimeProvider pluginruntime.Provider, sessionID string) error {
+	for {
+		session, err := runtimeProvider.GetSession(ctx, pluginruntime.GetSessionRequest{SessionID: sessionID})
 		if err != nil {
-			return nil, err
+			return err
 		}
-		execCfg.HostServices = append(execCfg.HostServices, hostServices...)
+		switch session.State {
+		case pluginruntime.SessionStateReady, pluginruntime.SessionStateRunning:
+			return nil
+		case pluginruntime.SessionStateFailed, pluginruntime.SessionStateStopped:
+			return fmt.Errorf("session entered %q state", session.State)
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
+}
+
+func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]providerhost.HostService, *providerhost.RequestSnapshotStore, func(), error) {
+	var (
+		hostServices []providerhost.HostService
+		cleanup      func()
+		snapshots    *providerhost.RequestSnapshotStore
+	)
+	fail := func(err error) ([]providerhost.HostService, *providerhost.RequestSnapshotStore, func(), error) {
+		if cleanup != nil {
+			cleanup()
+			cleanup = nil
+		}
+		return nil, nil, nil, err
+	}
+
+	effectiveIndexedDB, err := config.ResolveEffectivePluginIndexedDB(name, entry, deps.SelectedIndexedDBName, deps.IndexedDBDefs)
+	if err != nil {
+		return fail(err)
+	}
+	if effectiveIndexedDB.Enabled {
+		services, indexedDBCleanup, err := buildPluginIndexedDBHostServices(name, effectiveIndexedDB, deps)
+		if err != nil {
+			return fail(err)
+		}
+		hostServices = append(hostServices, services...)
 		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
 	if len(entry.Cache) > 0 {
-		hostServices, cacheCleanup, err := buildPluginCacheHostServices(name, entry, deps)
+		services, cacheCleanup, err := buildPluginCacheHostServices(name, entry, deps)
 		if err != nil {
-			return nil, err
+			return fail(err)
 		}
-		execCfg.HostServices = append(execCfg.HostServices, hostServices...)
+		hostServices = append(hostServices, services...)
 		cleanup = chainCleanup(cleanup, cacheCleanup)
 	}
 	if len(entry.S3) > 0 {
-		hostServices, err := buildPluginS3HostServices(name, entry, deps)
+		services, err := buildPluginS3HostServices(name, entry, deps)
 		if err != nil {
-			return nil, err
+			return fail(err)
 		}
-		execCfg.HostServices = append(execCfg.HostServices, hostServices...)
+		hostServices = append(hostServices, services...)
 	}
 	if len(entry.Invokes) > 0 {
-		hostService, snapshots := buildPluginInvokerHostService(name, entry, deps)
-		execCfg.HostServices = append(execCfg.HostServices, hostService)
-		execCfg.RequestSnapshots = snapshots
+		hostService, requestSnapshots := buildPluginInvokerHostService(name, entry, deps)
+		hostServices = append(hostServices, hostService)
+		snapshots = requestSnapshots
 	}
-	execCfg.Cleanup = cleanup
-	prov, err := providerhost.NewExecutableProvider(ctx, execCfg)
-	if err != nil {
-		return nil, err
-	}
-	cleanup = nil
-	return prov, nil
+	return hostServices, snapshots, cleanup, nil
 }
 
 func buildPluginIndexedDBHostServices(pluginName string, effective config.EffectivePluginIndexedDB, deps Deps) ([]providerhost.HostService, func(), error) {

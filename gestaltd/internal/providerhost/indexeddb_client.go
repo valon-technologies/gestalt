@@ -31,7 +31,7 @@ type remoteIndexedDB struct {
 }
 
 func NewExecutableIndexedDB(ctx context.Context, cfg IndexedDBExecConfig) (indexeddb.IndexedDB, error) {
-	proc, err := startProviderProcess(ctx, ExecConfig{
+	execCfg := ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,
@@ -39,7 +39,8 @@ func NewExecutableIndexedDB(ctx context.Context, cfg IndexedDBExecConfig) (index
 		AllowedHosts: cfg.AllowedHosts,
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
-	})
+	}
+	proc, err := startProviderProcess(ctx, execCfg.processConfig())
 	if err != nil {
 		return nil, err
 	}

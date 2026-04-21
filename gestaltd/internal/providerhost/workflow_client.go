@@ -32,7 +32,7 @@ type remoteWorkflow struct {
 }
 
 func NewExecutableWorkflow(ctx context.Context, cfg WorkflowExecConfig) (coreworkflow.Provider, error) {
-	proc, err := startWorkflowProviderProcess(ctx, ExecConfig{
+	execCfg := ExecConfig{
 		Command:       cfg.Command,
 		Args:          cfg.Args,
 		Env:           cfg.Env,
@@ -42,7 +42,8 @@ func NewExecutableWorkflow(ctx context.Context, cfg WorkflowExecConfig) (corewor
 		HostBinary:    cfg.HostBinary,
 		Cleanup:       cfg.Cleanup,
 		HostServices:  cfg.HostServices,
-	})
+	}
+	proc, err := startWorkflowProviderProcess(ctx, execCfg.processConfig())
 	if err != nil {
 		return nil, err
 	}

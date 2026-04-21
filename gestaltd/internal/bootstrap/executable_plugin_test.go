@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -27,6 +28,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
@@ -68,6 +70,92 @@ type requestContextBody struct {
 type nestedInvokeHarness struct {
 	invoker  invocation.Invoker
 	services *coredata.Services
+}
+
+type trackingPluginRuntime struct {
+	inner     pluginruntime.Provider
+	stopCount atomic.Int32
+}
+
+func (r *trackingPluginRuntime) Capabilities(ctx context.Context) (pluginruntime.Capabilities, error) {
+	return r.inner.Capabilities(ctx)
+}
+
+func (r *trackingPluginRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
+	return r.inner.StartSession(ctx, req)
+}
+
+func (r *trackingPluginRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
+	return r.inner.GetSession(ctx, req)
+}
+
+func (r *trackingPluginRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
+	r.stopCount.Add(1)
+	return r.inner.StopSession(ctx, req)
+}
+
+func (r *trackingPluginRuntime) BindHostService(ctx context.Context, req pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
+	return r.inner.BindHostService(ctx, req)
+}
+
+func (r *trackingPluginRuntime) StartPlugin(ctx context.Context, req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
+	return r.inner.StartPlugin(ctx, req)
+}
+
+func (r *trackingPluginRuntime) DialPlugin(ctx context.Context, req pluginruntime.DialPluginRequest) (pluginruntime.HostedPluginConn, error) {
+	return r.inner.DialPlugin(ctx, req)
+}
+
+func (r *trackingPluginRuntime) Close() error {
+	return r.inner.Close()
+}
+
+type slowStopPluginRuntime struct {
+	inner     pluginruntime.Provider
+	stopCount atomic.Int32
+}
+
+func (r *slowStopPluginRuntime) Capabilities(ctx context.Context) (pluginruntime.Capabilities, error) {
+	return r.inner.Capabilities(ctx)
+}
+
+func (r *slowStopPluginRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
+	return r.inner.StartSession(ctx, req)
+}
+
+func (r *slowStopPluginRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
+	return r.inner.GetSession(ctx, req)
+}
+
+func (r *slowStopPluginRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
+	r.stopCount.Add(1)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (r *slowStopPluginRuntime) BindHostService(ctx context.Context, req pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
+	return r.inner.BindHostService(ctx, req)
+}
+
+func (r *slowStopPluginRuntime) StartPlugin(ctx context.Context, req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
+	return r.inner.StartPlugin(ctx, req)
+}
+
+func (r *slowStopPluginRuntime) DialPlugin(ctx context.Context, req pluginruntime.DialPluginRequest) (pluginruntime.HostedPluginConn, error) {
+	return r.inner.DialPlugin(ctx, req)
+}
+
+func (r *slowStopPluginRuntime) Close() error {
+	return r.inner.Close()
+}
+
+type failingBindSlowStopPluginRuntime struct {
+	slowStopPluginRuntime
+	err error
+}
+
+func (r *failingBindSlowStopPluginRuntime) BindHostService(context.Context, pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
+	return nil, r.err
 }
 
 func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
@@ -1853,6 +1941,159 @@ func TestPluginCacheBindingsExposeHostSocketEnv(t *testing.T) {
 	}
 	if got := checkEnv(t, []string{"session", "rate_limit"}, providerhost.CacheSocketEnv("rate_limit")); !got {
 		t.Fatal(`named cache env for "rate_limit" should be set with multiple plugin cache bindings`)
+	}
+}
+
+func TestInjectedPluginRuntimeStopsSessionOnProviderClose(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := &trackingPluginRuntime{inner: pluginruntime.NewLocalProvider()}
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+		PluginRuntime: runtimeProvider,
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+	if _, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": "PATH"}, ""); err != nil {
+		t.Fatalf("Execute read_env: %v", err)
+	}
+	if err := CloseProviders(providers); err != nil {
+		t.Fatalf("CloseProviders: %v", err)
+	}
+	if runtimeProvider.stopCount.Load() == 0 {
+		t.Fatal("expected CloseProviders to stop the hosted plugin runtime session")
+	}
+}
+
+func TestInjectedPluginRuntimeStopSessionTimeoutDoesNotHangProviderClose(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := &slowStopPluginRuntime{inner: pluginruntime.NewLocalProvider()}
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+		PluginRuntime: runtimeProvider,
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+	if _, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": "PATH"}, ""); err != nil {
+		t.Fatalf("Execute read_env: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- CloseProviders(providers)
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
+			t.Fatalf("CloseProviders error = %v, want deadline exceeded", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("CloseProviders hung waiting for hosted runtime shutdown")
+	}
+
+	if runtimeProvider.stopCount.Load() == 0 {
+		t.Fatal("expected CloseProviders to attempt stopping the hosted plugin runtime session")
+	}
+}
+
+func TestInjectedPluginRuntimeStopSessionTimeoutDoesNotHangBootstrapFailure(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := &failingBindSlowStopPluginRuntime{
+		slowStopPluginRuntime: slowStopPluginRuntime{inner: pluginruntime.NewLocalProvider()},
+		err:                   fmt.Errorf("bind failed"),
+	}
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Invokes: []config.PluginInvocationDependency{
+					{Plugin: "other", Operation: "read"},
+				},
+			},
+		},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+			PluginRuntime: runtimeProvider,
+		})
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "bind host service") {
+			t.Fatalf("buildProvidersStrict error = %v, want bind host service failure", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("buildProvidersStrict hung waiting for hosted runtime shutdown")
+	}
+
+	if runtimeProvider.stopCount.Load() == 0 {
+		t.Fatal("expected bootstrap failure to attempt stopping the hosted plugin runtime session")
 	}
 }
 
