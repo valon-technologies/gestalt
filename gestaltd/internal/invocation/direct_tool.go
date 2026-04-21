@@ -25,15 +25,7 @@ func CallDirectTool(ctx context.Context, resolver TokenResolver, p *principal.Pr
 	if resolver != nil && prov.ConnectionMode() != core.ConnectionModeNone {
 		var token string
 		var err error
-		if boundCredential.HasBinding {
-			if bindingResolver, ok := resolver.(bindingTokenResolver); ok {
-				ctx, token, err = bindingResolver.ResolveTokenWithBinding(ctx, p, provName, connection, instance, boundCredential)
-			} else {
-				ctx, token, err = resolver.ResolveToken(ctx, p, provName, connection, instance)
-			}
-		} else {
-			ctx, token, err = resolver.ResolveToken(ctx, p, provName, connection, instance)
-		}
+		ctx, token, err = ResolveTokenForBinding(ctx, resolver, p, provName, connection, instance, boundCredential)
 		if err != nil {
 			return nil, err
 		}
