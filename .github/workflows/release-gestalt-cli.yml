@@ -24,16 +24,7 @@ jobs:
         run: |
           expected="${GITHUB_REF_NAME#gestalt/v}"
           actual="$(
-            cargo metadata --format-version 1 --no-deps | python3 -c '
-            import json, sys
-            data = json.load(sys.stdin)
-            for package in data["packages"]:
-                if package["name"] == "gestalt":
-                    print(package["version"])
-                    break
-            else:
-                raise SystemExit("gestalt package not found in cargo metadata")
-            '
+            cargo metadata --format-version 1 --no-deps | jq -r '.packages[] | select(.name=="gestalt") | .version'
           )"
           if [ "$actual" != "$expected" ]; then
             echo "gestalt Cargo version $actual does not match release tag $expected" >&2
