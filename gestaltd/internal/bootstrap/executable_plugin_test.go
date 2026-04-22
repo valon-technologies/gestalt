@@ -2,12 +2,15 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -21,6 +24,7 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
@@ -43,7 +47,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"golang.org/x/net/http2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 	"gopkg.in/yaml.v3"
 )
 
@@ -312,22 +320,48 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 			Name: req.PluginName,
 			Operations: []catalog.CatalogOperation{
 				{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+				{
+					ID:     "indexeddb_roundtrip",
+					Method: http.MethodPost,
+					Parameters: []catalog.CatalogParameter{
+						{Name: "binding", Type: "string"},
+						{Name: "store", Type: "string", Required: true},
+						{Name: "id", Type: "string", Required: true},
+						{Name: "value", Type: "string", Required: true},
+					},
+				},
 			},
 		},
 		ExecuteFn: func(_ context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
-			if operation != "read_env" {
+			switch operation {
+			case "read_env":
+				name, _ := params["name"].(string)
+				value, found := env[name]
+				body, err := json.Marshal(map[string]any{
+					"value": value,
+					"found": found,
+				})
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			case "indexeddb_roundtrip":
+				store, _ := params["store"].(string)
+				id, _ := params["id"].(string)
+				value, _ := params["value"].(string)
+				binding, _ := params["binding"].(string)
+				record, err := fakeHostedIndexedDBRoundTrip(store, id, value, binding, env)
+				if err != nil {
+					return nil, err
+				}
+				body, err := json.Marshal(record)
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			default:
 				return nil, fmt.Errorf("unknown operation %q", operation)
 			}
-			name, _ := params["name"].(string)
-			value, found := env[name]
-			body, err := json.Marshal(map[string]any{
-				"value": value,
-				"found": found,
-			})
-			if err != nil {
-				return nil, err
-			}
-			return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 		},
 	}))
 	go func() {
@@ -360,6 +394,65 @@ func (r *capturingBundlePluginRuntime) cleanupFakeHostedPlugin(sessionID string)
 	fake.server.Stop()
 	_ = fake.listener.Close()
 	_ = os.RemoveAll(fake.dir)
+}
+
+func fakeHostedIndexedDBRoundTrip(store, id, value, binding string, env map[string]string) (map[string]any, error) {
+	envName := providerhost.DefaultIndexedDBSocketEnv
+	tokenEnvName := providerhost.IndexedDBSocketTokenEnv("")
+	if strings.TrimSpace(binding) != "" {
+		envName = providerhost.IndexedDBSocketEnv(binding)
+		tokenEnvName = providerhost.IndexedDBSocketTokenEnv(binding)
+	}
+	target := strings.TrimSpace(env[envName])
+	if target == "" {
+		return nil, fmt.Errorf("missing indexeddb relay target in %s", envName)
+	}
+	token := strings.TrimSpace(env[tokenEnvName])
+	if token == "" {
+		return nil, fmt.Errorf("missing indexeddb relay token in %s", tokenEnvName)
+	}
+	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
+	if address == "" || address == target {
+		return nil, fmt.Errorf("unsupported indexeddb relay target %q", target)
+	}
+
+	conn, err := grpc.NewClient(
+		address,
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true,
+			MinVersion:         tls.VersionTLS12,
+			NextProtos:         []string{"h2"},
+		})),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("connect indexeddb relay: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+
+	client := proto.NewIndexedDBClient(conn)
+	if _, err := client.CreateObjectStore(ctx, &proto.CreateObjectStoreRequest{Name: store}); err != nil {
+		return nil, fmt.Errorf("create object store: %w", err)
+	}
+	recordValue, err := gestalt.RecordToProto(gestalt.Record{"id": id, "value": value})
+	if err != nil {
+		return nil, fmt.Errorf("encode record: %w", err)
+	}
+	if _, err := client.Put(ctx, &proto.RecordRequest{Store: store, Record: recordValue}); err != nil {
+		return nil, fmt.Errorf("put record: %w", err)
+	}
+	resp, err := client.Get(ctx, &proto.ObjectStoreRequest{Store: store, Id: id})
+	if err != nil {
+		return nil, fmt.Errorf("get record: %w", err)
+	}
+	record, err := gestalt.RecordFromProto(resp.GetRecord())
+	if err != nil {
+		return nil, fmt.Errorf("decode record: %w", err)
+	}
+	return record, nil
 }
 
 func (r *capturingBundlePluginRuntime) startPluginRequestsCopy() []pluginruntime.StartPluginRequest {
@@ -4416,6 +4509,131 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 	}
 }
 
+func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	relaySrv.EnableHTTP2 = true
+	relaySrv.StartTLS()
+	testutil.CloseOnCleanup(t, relaySrv)
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:     "indexeddb_roundtrip",
+				Method: http.MethodPost,
+				Parameters: []catalog.CatalogParameter{
+					{Name: "store", Type: "string", Required: true},
+					{Name: "id", Type: "string", Required: true},
+					{Name: "value", Type: "string", Required: true},
+				},
+			},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
+
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {Driver: config.RuntimeProviderDriver("capture")},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+				IndexedDB:            &config.PluginIndexedDBConfig{ObjectStores: []string{"tasks"}},
+			},
+		},
+	}
+
+	boundDB := &trackedIndexedDB{StubIndexedDB: coretesting.StubIndexedDB{}}
+	deps := Deps{
+		BaseURL:               relaySrv.URL,
+		EncryptionKey:         secret,
+		SelectedIndexedDBName: "memory",
+		IndexedDBDefs: map[string]*config.ProviderEntry{
+			"memory": {
+				Source: config.ProviderSource{Path: "./providers/datastore/memory"},
+				Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
+			},
+		},
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
+			return boundDB, nil
+		},
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+		"store": "tasks",
+		"id":    "task-1",
+		"value": "ship-it",
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute indexeddb_roundtrip: %v", err)
+	}
+
+	var record map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
+		t.Fatalf("unmarshal indexeddb_roundtrip: %v", err)
+	}
+	if got := record["value"]; got != "ship-it" {
+		t.Fatalf("indexeddb_roundtrip value = %#v, want %q", got, "ship-it")
+	}
+
+	gotRecord, err := boundDB.ObjectStore("echoext_tasks").Get(context.Background(), "task-1")
+	if err != nil {
+		t.Fatalf("bound IndexedDB Get: %v", err)
+	}
+	if got := gotRecord["value"]; got != "ship-it" {
+		t.Fatalf("bound IndexedDB stored value = %#v, want %q", got, "ship-it")
+	}
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env[providerhost.IndexedDBSocketTokenEnv("")]; got == "" {
+		t.Fatal("StartPlugin env should include the IndexedDB relay token")
+	}
+	bindRequests := runtimeProvider.bindHostServiceRequests()
+	if len(bindRequests) != 1 {
+		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
+	}
+	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
+		t.Fatalf("BindHostService relay target = %q, want tls relay target", got)
+	}
+}
+
 func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T) {
 	t.Parallel()
 
@@ -4468,6 +4686,78 @@ func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T)
 	if err == nil || !strings.Contains(err.Error(), "hostname-based egress controls") {
 		t.Fatalf("buildProvidersStrict error = %v, want missing hostname-based egress controls", err)
 	}
+}
+
+func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte) http.Handler {
+	t.Helper()
+
+	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(stateSecret)
+	if err != nil {
+		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := strings.TrimSpace(r.Header.Get(providerhost.HostServiceRelayTokenHeader))
+		target, err := tokenManager.ResolveToken(token)
+		if err != nil {
+			writeRuntimeRelayGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-token")
+			return
+		}
+		if !runtimeRelayMethodAllowed(r.URL.Path, target.MethodPrefix) {
+			writeRuntimeRelayGRPCTrailersOnly(w, codes.PermissionDenied, "host-service-relay-method-not-allowed")
+			return
+		}
+		newRuntimeRelayProxy(target.SocketPath).ServeHTTP(w, r)
+	})
+}
+
+func runtimeRelayMethodAllowed(path, methodPrefix string) bool {
+	methodPrefix = strings.TrimSpace(methodPrefix)
+	if methodPrefix == "" {
+		return true
+	}
+	if path == methodPrefix {
+		return true
+	}
+	if strings.HasSuffix(methodPrefix, "/") {
+		return strings.HasPrefix(path, methodPrefix)
+	}
+	return strings.HasPrefix(path, methodPrefix+"/")
+}
+
+func newRuntimeRelayProxy(socketPath string) *httputil.ReverseProxy {
+	target := &url.URL{
+		Scheme: "http",
+		Host:   "gestalt-test-host-service-relay",
+	}
+	return &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.SetURL(target)
+			pr.Out.Host = target.Host
+			pr.Out.Header.Del(providerhost.HostServiceRelayTokenHeader)
+		},
+		Transport: &http2.Transport{
+			AllowHTTP: true,
+			DialTLSContext: func(ctx context.Context, _, _ string, _ *tls.Config) (net.Conn, error) {
+				var dialer net.Dialer
+				return dialer.DialContext(ctx, "unix", socketPath)
+			},
+		},
+		FlushInterval: -1,
+		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
+			writeRuntimeRelayGRPCTrailersOnly(w, codes.Unavailable, "host-service-relay-unavailable")
+		},
+	}
+}
+
+func writeRuntimeRelayGRPCTrailersOnly(w http.ResponseWriter, code codes.Code, message string) {
+	headers := w.Header()
+	headers.Set("Content-Type", "application/grpc")
+	headers.Set("Trailer", "Grpc-Status, Grpc-Message")
+	headers.Set("Grpc-Status", strconv.Itoa(int(code)))
+	if message != "" {
+		headers.Set("Grpc-Message", message)
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapabilityWithWorkflowProvider(t *testing.T) {
