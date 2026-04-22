@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -158,15 +159,22 @@ func (p *executableProvider) BindHostService(ctx context.Context, req BindHostSe
 		SessionId:      req.SessionID,
 		EnvVar:         req.EnvVar,
 		HostSocketPath: req.HostSocketPath,
+		Relay:          hostServiceRelayToProto(req.Relay),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bind runtime host service: %w", err)
+	}
+	relay := hostServiceRelayFromProto(resp.GetRelay())
+	socketPath := ""
+	if strings.HasPrefix(relay.DialTarget, "unix://") {
+		socketPath = strings.TrimPrefix(relay.DialTarget, "unix://")
 	}
 	return &HostServiceBinding{
 		ID:         resp.GetId(),
 		SessionID:  resp.GetSessionId(),
 		EnvVar:     resp.GetEnvVar(),
-		SocketPath: resp.GetSocketPath(),
+		SocketPath: socketPath,
+		Relay:      relay,
 	}, nil
 }
 
@@ -255,5 +263,23 @@ func cloneHostedSession(session *Session) *Session {
 		ID:       session.ID,
 		State:    session.State,
 		Metadata: cloneStringMap(session.Metadata),
+	}
+}
+
+func hostServiceRelayToProto(src HostServiceRelay) *proto.PluginRuntimeHostServiceRelay {
+	if src.DialTarget == "" {
+		return nil
+	}
+	return &proto.PluginRuntimeHostServiceRelay{
+		DialTarget: src.DialTarget,
+	}
+}
+
+func hostServiceRelayFromProto(src *proto.PluginRuntimeHostServiceRelay) HostServiceRelay {
+	if src == nil {
+		return HostServiceRelay{}
+	}
+	return HostServiceRelay{
+		DialTarget: src.GetDialTarget(),
 	}
 }

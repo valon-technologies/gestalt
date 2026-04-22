@@ -17,6 +17,7 @@ import (
 func main() {
 	socket := flag.String("socket", "", "Unix socket path to listen on")
 	tcp := flag.String("tcp", "", "TCP host:port to listen on")
+	expectToken := flag.String("expect-token", "", "Require the relay token header to match this value")
 	flag.Parse()
 	target := *socket
 	if strings.TrimSpace(*tcp) != "" {
@@ -27,7 +28,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv, err := indexeddbtransport.Start(target)
+	srv, err := indexeddbtransport.Start(target, indexeddbtransport.Options{
+		ExpectRelayToken: strings.TrimSpace(*expectToken),
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to start: %v\n", err)
 		os.Exit(1)

@@ -7,7 +7,7 @@ use std::process::{Command, Stdio};
 
 use gestalt::indexeddb::{
     CursorDirection, ENV_INDEXEDDB_SOCKET, IndexSchema, IndexedDB, IndexedDBError, KeyRange,
-    ObjectStoreSchema, Record, indexeddb_socket_env,
+    ObjectStoreSchema, Record, indexeddb_socket_env, indexeddb_socket_token_env,
 };
 
 struct Harness {
@@ -72,7 +72,7 @@ async fn start_harness(socket_name: &str) -> Harness {
     }
 }
 
-async fn start_tcp_harness() -> Harness {
+async fn start_tcp_harness(expect_token: Option<&str>) -> Harness {
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
@@ -100,9 +100,12 @@ async fn start_tcp_harness() -> Harness {
     let address = listener.local_addr().expect("tcp local addr");
     drop(listener);
 
-    let mut child = Command::new(&binary)
-        .arg("--tcp")
-        .arg(address.to_string())
+    let mut command = Command::new(&binary);
+    command.arg("--tcp").arg(address.to_string());
+    if let Some(token) = expect_token {
+        command.arg("--expect-token").arg(token);
+    }
+    let mut child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
@@ -196,6 +199,33 @@ async fn named_unix_target_round_trip() {
 }
 
 #[tokio::test]
+async fn tcp_target_with_token_round_trip() {
+    let _lock = helpers::env_lock().lock().await;
+    let _harness = start_tcp_harness(Some("relay-token-rust")).await;
+    let _token_env = helpers::EnvGuard::set(indexeddb_socket_token_env(""), "relay-token-rust");
+
+    let mut db = IndexedDB::connect().await.expect("connect");
+    db.create_object_store(
+        "tcp_target_token_env",
+        ObjectStoreSchema { indexes: vec![] },
+    )
+    .await
+    .expect("create store");
+
+    let mut store = db.object_store("tcp_target_token_env");
+    store
+        .put(make_record(&[
+            ("id", serde_json::json!("row-1")),
+            ("value", serde_json::json!("token")),
+        ]))
+        .await
+        .expect("put");
+
+    let got = store.get("row-1").await.expect("get");
+    assert_eq!(got["value"], serde_json::json!("token"));
+}
+
+#[tokio::test]
 async fn object_store_bulk_helpers() {
     let _lock = helpers::env_lock().lock().await;
     let _harness = start_harness("idb-store-helpers.sock").await;
@@ -266,7 +296,7 @@ async fn object_store_bulk_helpers() {
 #[tokio::test]
 async fn tcp_target_round_trip() {
     let _lock = helpers::env_lock().lock().await;
-    let _harness = start_tcp_harness().await;
+    let _harness = start_tcp_harness(None).await;
 
     let mut db = IndexedDB::connect().await.expect("connect");
     db.create_object_store("tcp_target_env", ObjectStoreSchema { indexes: vec![] })

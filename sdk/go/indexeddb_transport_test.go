@@ -113,7 +113,7 @@ func buildAndStartHarness(binaryName, socketName string) (string, string, *exec.
 	return bin, sock, cmd
 }
 
-func buildAndStartTCPHarness(binaryName string) (string, string, *exec.Cmd) {
+func buildAndStartTCPHarness(binaryName, expectToken string) (string, string, *exec.Cmd) {
 	harnessDir := filepath.Join("..", "..", "gestaltd", "internal", "testutil", "cmd", binaryName)
 	bin := filepath.Join(os.TempDir(), binaryName+"-tcp")
 	build := exec.Command("go", "build", "-o", bin, ".")
@@ -127,7 +127,11 @@ func buildAndStartTCPHarness(binaryName string) (string, string, *exec.Cmd) {
 	if err != nil {
 		panic("split tcp address: " + err.Error())
 	}
-	cmd := exec.Command(bin, "--tcp", net.JoinHostPort(host, port))
+	args := []string{"--tcp", net.JoinHostPort(host, port)}
+	if expectToken != "" {
+		args = append(args, "--expect-token", expectToken)
+	}
+	cmd := exec.Command(bin, args...)
 	stdout, _ := cmd.StdoutPipe()
 	if err := cmd.Start(); err != nil {
 		panic("start tcp harness: " + err.Error())
@@ -176,7 +180,7 @@ func TestTransport_NamedSocketEnv(t *testing.T) {
 }
 
 func TestTransport_TCPTargetEnv(t *testing.T) {
-	bin, target, cmd := buildAndStartTCPHarness("indexeddbtransportd")
+	bin, target, cmd := buildAndStartTCPHarness("indexeddbtransportd", "")
 	t.Cleanup(func() {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
@@ -204,6 +208,40 @@ func TestTransport_TCPTargetEnv(t *testing.T) {
 	}
 	if got["value"] != "ok" {
 		t.Fatalf("value = %v, want ok", got["value"])
+	}
+}
+
+func TestTransport_TCPTargetTokenEnv(t *testing.T) {
+	const token = "relay-token-go"
+	bin, target, cmd := buildAndStartTCPHarness("indexeddbtransportd", token)
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		_ = os.Remove(bin)
+	})
+
+	t.Setenv(gestalt.EnvIndexedDBSocket, target)
+	t.Setenv(gestalt.IndexedDBSocketTokenEnv(""), token)
+	client, err := gestalt.IndexedDB()
+	if err != nil {
+		t.Fatalf("connect tcp indexeddb with token: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	ctx := context.Background()
+	store := "tcp_target_token_" + t.Name()
+	if err := client.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+	if err := client.ObjectStore(store).Put(ctx, gestalt.Record{"id": "tcp", "value": "token"}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	got, err := client.ObjectStore(store).Get(ctx, "tcp")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got["value"] != "token" {
+		t.Fatalf("value = %v, want token", got["value"])
 	}
 }
 

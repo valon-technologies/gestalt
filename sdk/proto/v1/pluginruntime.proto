@@ -42,17 +42,23 @@ message StopPluginRuntimeSessionRequest {
   string session_id = 1;
 }
 
+message PluginRuntimeHostServiceRelay {
+  string dial_target = 1;
+}
+
 message BindPluginRuntimeHostServiceRequest {
   string session_id = 1;
   string env_var = 2;
-  string host_socket_path = 3;
+  string host_socket_path = 3 [deprecated = true];
+  PluginRuntimeHostServiceRelay relay = 4;
 }
 
 message PluginRuntimeHostServiceBinding {
   string id = 1;
   string session_id = 2;
   string env_var = 3;
-  string socket_path = 4;
+  string socket_path = 4 [deprecated = true];
+  PluginRuntimeHostServiceRelay relay = 5;
 }
 
 // StartHostedPluginRequest describes the plugin process to launch inside a

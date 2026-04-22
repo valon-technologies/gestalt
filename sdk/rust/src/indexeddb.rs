@@ -3,13 +3,21 @@ use std::collections::BTreeMap;
 use hyper_util::rt::TokioIo;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
+use tonic::Request;
+use tonic::metadata::MetadataValue;
+use tonic::service::Interceptor;
+use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
 
 use crate::generated::v1::{self as pb, indexed_db_client::IndexedDbClient};
 
+type IndexedDbTransport = InterceptedService<Channel, RelayTokenInterceptor>;
+
 /// Default Unix-socket environment variable used by [`IndexedDB::connect`].
 pub const ENV_INDEXEDDB_SOCKET: &str = "GESTALT_INDEXEDDB_SOCKET";
+pub const ENV_INDEXEDDB_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
+const INDEXEDDB_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 const CURSOR_CHANNEL_BUFFER: usize = 1;
 
@@ -259,7 +267,7 @@ impl Cursor {
 }
 
 async fn open_cursor_inner(
-    client: &mut IndexedDbClient<Channel>,
+    client: &mut IndexedDbClient<IndexedDbTransport>,
     req: pb::OpenCursorRequest,
 ) -> Result<Cursor, IndexedDBError> {
     let keys_only = req.keys_only;
@@ -310,7 +318,7 @@ async fn open_cursor_inner(
 
 /// Client for a running IndexedDB provider.
 pub struct IndexedDB {
-    client: IndexedDbClient<Channel>,
+    client: IndexedDbClient<IndexedDbTransport>,
 }
 
 impl IndexedDB {
@@ -324,6 +332,7 @@ impl IndexedDB {
         let env_name = indexeddb_socket_env(name);
         let target = std::env::var(&env_name)
             .map_err(|_| IndexedDBError::Env(format!("{env_name} is not set")))?;
+        let token = std::env::var(indexeddb_socket_token_env(name)).unwrap_or_default();
         let channel = match parse_indexeddb_target(&target)? {
             IndexedDBTarget::Unix(path) => {
                 Endpoint::try_from("http://[::]:50051")?
@@ -349,9 +358,10 @@ impl IndexedDB {
             }
         };
 
-        Ok(Self {
-            client: IndexedDbClient::new(channel),
-        })
+        let client =
+            IndexedDbClient::with_interceptor(channel, relay_token_interceptor(token.trim())?);
+
+        Ok(Self { client })
     }
 
     /// Creates a named object store.
@@ -453,7 +463,7 @@ fn parse_indexeddb_target(raw_target: &str) -> Result<IndexedDBTarget, IndexedDB
 
 /// CRUD, range-query, and cursor access for one object store.
 pub struct ObjectStore {
-    client: IndexedDbClient<Channel>,
+    client: IndexedDbClient<IndexedDbTransport>,
     store: String,
 }
 
@@ -645,7 +655,7 @@ impl ObjectStore {
 
 /// Lookup and cursor access through one secondary index.
 pub struct IndexClient {
-    client: IndexedDbClient<Channel>,
+    client: IndexedDbClient<IndexedDbTransport>,
     store: String,
     index: String,
 }
@@ -981,4 +991,40 @@ pub fn indexeddb_socket_env(name: &str) -> String {
         }
     }
     env
+}
+
+/// Returns the environment variable used for a named IndexedDB relay token.
+pub fn indexeddb_socket_token_env(name: &str) -> String {
+    format!(
+        "{}{}",
+        indexeddb_socket_env(name),
+        ENV_INDEXEDDB_SOCKET_TOKEN_SUFFIX
+    )
+}
+
+fn relay_token_interceptor(token: &str) -> Result<RelayTokenInterceptor, IndexedDBError> {
+    let header = if token.trim().is_empty() {
+        None
+    } else {
+        Some(MetadataValue::try_from(token.to_string()).map_err(|err| {
+            IndexedDBError::Env(format!("invalid IndexedDB relay token metadata: {err}"))
+        })?)
+    };
+    Ok(RelayTokenInterceptor { header })
+}
+
+#[derive(Clone)]
+struct RelayTokenInterceptor {
+    header: Option<MetadataValue<tonic::metadata::Ascii>>,
+}
+
+impl Interceptor for RelayTokenInterceptor {
+    fn call(&mut self, mut request: Request<()>) -> Result<Request<()>, tonic::Status> {
+        if let Some(header) = self.header.clone() {
+            request
+                .metadata_mut()
+                .insert(INDEXEDDB_RELAY_TOKEN_HEADER, header);
+        }
+        Ok(request)
+    }
 }

@@ -24,8 +24,10 @@ import (
 )
 
 const (
-	processStartupTimeout  = 10 * time.Second
+	processStartupTimeout  = 20 * time.Second
 	processShutdownTimeout = 2 * time.Second
+	processStartRetryCount = 5
+	processStartRetryDelay = 100 * time.Millisecond
 )
 
 type ProcessConfig struct {
@@ -284,35 +286,34 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 		env["HTTP_PROXY"] = proxyAddr
 		env["HTTPS_PROXY"] = proxyAddr
 
-		cmd := exec.Command(cfg.Command, cfg.Args...)
-		cmd.Env = buildPluginEnv(env, sandboxActive)
-		cmd.Stdout = os.Stderr
-		cmd.Stderr = os.Stderr
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd, cleanup, err := startCommandWithRetry(ctx, func() (*exec.Cmd, func(), error) {
+			cmd := exec.Command(cfg.Command, cfg.Args...)
+			cmd.Env = buildPluginEnv(env, sandboxActive)
+			cmd.Stdout = os.Stderr
+			cmd.Stderr = os.Stderr
+			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-		wrapped, cleanup, err := sandbox.Wrap(policy, cmd)
-		if err != nil {
-			_ = proc.Close()
-			return nil, fmt.Errorf("sandbox wrap: %w", err)
-		}
-		proc.sandboxCleanup = cleanup
-		cmd = wrapped
-
-		if err := cmd.Start(); err != nil {
-			if proc.sandboxCleanup != nil {
-				proc.sandboxCleanup()
+			wrapped, cleanup, err := sandbox.Wrap(policy, cmd)
+			if err != nil {
+				return nil, nil, fmt.Errorf("sandbox wrap: %w", err)
 			}
+			return wrapped, cleanup, nil
+		})
+		if err != nil {
 			_ = proc.Close()
 			return nil, fmt.Errorf("start plugin process: %w", err)
 		}
+		proc.sandboxCleanup = cleanup
 		proc.cmd = cmd
 	} else {
-		cmd := exec.Command(cfg.Command, cfg.Args...)
-		cmd.Env = append(safeBaseEnv(), envSlice(env)...)
-		cmd.Stdout = os.Stderr
-		cmd.Stderr = os.Stderr
-
-		if err := cmd.Start(); err != nil {
+		cmd, _, err := startCommandWithRetry(ctx, func() (*exec.Cmd, func(), error) {
+			cmd := exec.Command(cfg.Command, cfg.Args...)
+			cmd.Env = append(safeBaseEnv(), envSlice(env)...)
+			cmd.Stdout = os.Stderr
+			cmd.Stderr = os.Stderr
+			return cmd, nil, nil
+		})
+		if err != nil {
 			_ = proc.Close()
 			return nil, fmt.Errorf("start plugin process: %w", err)
 		}
@@ -448,6 +449,37 @@ func cleanupStartupHostServices(proc *providerProcess) {
 		}
 		_ = os.Remove(socketPath)
 	}
+}
+
+func startCommandWithRetry(
+	ctx context.Context,
+	build func() (*exec.Cmd, func(), error),
+) (*exec.Cmd, func(), error) {
+	var lastErr error
+	for attempt := 0; attempt < processStartRetryCount; attempt++ {
+		cmd, cleanup, err := build()
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := cmd.Start(); err == nil {
+			return cmd, cleanup, nil
+		} else {
+			if cleanup != nil {
+				cleanup()
+			}
+			if !errors.Is(err, syscall.ETXTBSY) {
+				return nil, nil, err
+			}
+			lastErr = err
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, nil, ctx.Err()
+		case <-time.After(time.Duration(attempt+1) * processStartRetryDelay):
+		}
+	}
+	return nil, nil, lastErr
 }
 
 func NewPluginTempDir(pattern string) (string, error) {

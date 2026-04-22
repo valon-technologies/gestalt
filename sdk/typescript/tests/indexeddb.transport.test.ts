@@ -12,6 +12,7 @@ import {
   AlreadyExistsError,
   ColumnType,
   indexedDBSocketEnv,
+  indexedDBSocketTokenEnv,
 } from "../src/indexeddb.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
@@ -83,9 +84,13 @@ async function reserveTCPAddress(): Promise<string> {
   });
 }
 
-async function startTCPHarness(): Promise<{ proc: Subprocess; target: string }> {
+async function startTCPHarness(expectToken?: string): Promise<{ proc: Subprocess; target: string }> {
   const address = await reserveTCPAddress();
-  const tcpProc = spawn([harnessBinPath, "--tcp", address], {
+  const args = [harnessBinPath, "--tcp", address];
+  if (expectToken) {
+    args.push("--expect-token", expectToken);
+  }
+  const tcpProc = spawn(args, {
     stdout: "pipe",
     stderr: "inherit",
   });
@@ -216,6 +221,26 @@ describe("IndexedDB transport", () => {
     } finally {
       tcpProc.kill();
       delete process.env.GESTALT_INDEXEDDB_SOCKET;
+      process.env.GESTALT_INDEXEDDB_SOCKET = socketPath;
+    }
+  });
+
+  test("tcp target token env selects the requested binding", async () => {
+    const token = "relay-token-typescript";
+    const { proc: tcpProc, target } = await startTCPHarness(token);
+    process.env.GESTALT_INDEXEDDB_SOCKET = target;
+    process.env[indexedDBSocketTokenEnv()] = token;
+    try {
+      const tcpDb = new IndexedDB();
+      const store = "tcp_target_token_env";
+      await tcpDb.createObjectStore(store);
+      await tcpDb.objectStore(store).put({ id: "row-1", value: "token" });
+      const got = await tcpDb.objectStore(store).get("row-1");
+      expect(got.value).toBe("token");
+    } finally {
+      tcpProc.kill();
+      delete process.env.GESTALT_INDEXEDDB_SOCKET;
+      delete process.env[indexedDBSocketTokenEnv()];
       process.env.GESTALT_INDEXEDDB_SOCKET = socketPath;
     }
   });

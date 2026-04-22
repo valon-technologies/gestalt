@@ -209,6 +209,7 @@ export {
   AlreadyExistsError,
   ColumnType,
   indexedDBSocketEnv,
+  indexedDBSocketTokenEnv,
   type Record,
   type KeyRange,
   type ColumnSchema,

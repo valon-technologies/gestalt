@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,6 +21,7 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -41,6 +43,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
 
@@ -84,6 +87,7 @@ type capturingPluginRuntime struct {
 
 	mu            sync.Mutex
 	startRequests []pluginruntime.StartSessionRequest
+	bindRequests  []pluginruntime.BindHostServiceRequest
 	stopCount     atomic.Int32
 }
 
@@ -121,6 +125,9 @@ func (r *capturingPluginRuntime) StopSession(ctx context.Context, req pluginrunt
 }
 
 func (r *capturingPluginRuntime) BindHostService(ctx context.Context, req pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
+	r.mu.Lock()
+	r.bindRequests = append(r.bindRequests, cloneBindHostServiceRequest(req))
+	r.mu.Unlock()
 	return r.provider.BindHostService(ctx, req)
 }
 
@@ -147,13 +154,32 @@ func (r *capturingPluginRuntime) startSessionRequests() []pluginruntime.StartSes
 	return out
 }
 
+func (r *capturingPluginRuntime) bindHostServiceRequests() []pluginruntime.BindHostServiceRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]pluginruntime.BindHostServiceRequest, len(r.bindRequests))
+	for i, req := range r.bindRequests {
+		out[i] = cloneBindHostServiceRequest(req)
+	}
+	return out
+}
+
 type capturingBundlePluginRuntime struct {
 	provider      *pluginruntime.LocalProvider
 	capabilities  pluginruntime.Capabilities
 	bindHostCalls atomic.Int32
+	fakeHosted    bool
 
 	mu                  sync.Mutex
+	bindRequests        []pluginruntime.BindHostServiceRequest
 	startPluginRequests []pluginruntime.StartPluginRequest
+	fakePlugins         map[string]*fakeHostedPluginServer
+}
+
+type fakeHostedPluginServer struct {
+	dir      string
+	listener net.Listener
+	server   *grpc.Server
 }
 
 func newCapturingBundlePluginRuntime() *capturingBundlePluginRuntime {
@@ -165,6 +191,7 @@ func newCapturingBundlePluginRuntime() *capturingBundlePluginRuntime {
 			ExecutionGOOS:       runtime.GOOS,
 			ExecutionGOARCH:     runtime.GOARCH,
 		},
+		fakePlugins: make(map[string]*fakeHostedPluginServer),
 	}
 }
 
@@ -185,22 +212,30 @@ func (r *capturingBundlePluginRuntime) GetSession(ctx context.Context, req plugi
 }
 
 func (r *capturingBundlePluginRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
+	r.cleanupFakeHostedPlugin(req.SessionID)
 	return r.provider.StopSession(ctx, req)
 }
 
 func (r *capturingBundlePluginRuntime) BindHostService(ctx context.Context, req pluginruntime.BindHostServiceRequest) (*pluginruntime.HostServiceBinding, error) {
 	r.bindHostCalls.Add(1)
+	r.mu.Lock()
+	r.bindRequests = append(r.bindRequests, cloneBindHostServiceRequest(req))
+	r.mu.Unlock()
 	return r.provider.BindHostService(ctx, req)
 }
 
 func (r *capturingBundlePluginRuntime) StartPlugin(ctx context.Context, req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
 	r.mu.Lock()
 	r.startPluginRequests = append(r.startPluginRequests, pluginruntime.StartPluginRequest{
-		SessionID:  req.SessionID,
-		PluginName: req.PluginName,
-		Command:    req.Command,
-		Args:       slices.Clone(req.Args),
-		BundleDir:  req.BundleDir,
+		SessionID:     req.SessionID,
+		PluginName:    req.PluginName,
+		Command:       req.Command,
+		Args:          slices.Clone(req.Args),
+		Env:           cloneRuntimeMetadata(req.Env),
+		BundleDir:     req.BundleDir,
+		AllowedHosts:  slices.Clone(req.AllowedHosts),
+		DefaultAction: req.DefaultAction,
+		HostBinary:    req.HostBinary,
 	})
 	r.mu.Unlock()
 
@@ -223,11 +258,108 @@ func (r *capturingBundlePluginRuntime) StartPlugin(ctx context.Context, req plug
 			}
 		}
 	}
+	if r.fakeHosted {
+		return r.startFakeHostedPlugin(req)
+	}
 	return r.provider.StartPlugin(ctx, translated)
 }
 
 func (r *capturingBundlePluginRuntime) Close() error {
+	r.mu.Lock()
+	sessionIDs := make([]string, 0, len(r.fakePlugins))
+	for sessionID := range r.fakePlugins {
+		sessionIDs = append(sessionIDs, sessionID)
+	}
+	r.mu.Unlock()
+	for _, sessionID := range sessionIDs {
+		r.cleanupFakeHostedPlugin(sessionID)
+	}
 	return r.provider.Close()
+}
+
+func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
+	env := cloneRuntimeMetadata(req.Env)
+	r.mu.Lock()
+	for _, binding := range r.bindRequests {
+		if binding.SessionID != req.SessionID {
+			continue
+		}
+		if env == nil {
+			env = map[string]string{}
+		}
+		env[binding.EnvVar] = binding.Relay.DialTarget
+	}
+	r.mu.Unlock()
+
+	dir, err := providerhost.NewPluginTempDir("gstp-fake-")
+	if err != nil {
+		return nil, fmt.Errorf("create fake hosted plugin dir: %w", err)
+	}
+	socketPath := filepath.Join(dir, "plugin.sock")
+	lis, err := net.Listen("unix", socketPath)
+	if err != nil {
+		_ = os.RemoveAll(dir)
+		return nil, fmt.Errorf("listen for fake hosted plugin: %w", err)
+	}
+
+	srv := grpc.NewServer()
+	proto.RegisterIntegrationProviderServer(srv, providerhost.NewProviderServer(&coretesting.StubIntegration{
+		N:        req.PluginName,
+		DN:       "Fake Hosted Plugin",
+		Desc:     "test-only fake hosted plugin",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: req.PluginName,
+			Operations: []catalog.CatalogOperation{
+				{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+			},
+		},
+		ExecuteFn: func(_ context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
+			if operation != "read_env" {
+				return nil, fmt.Errorf("unknown operation %q", operation)
+			}
+			name, _ := params["name"].(string)
+			value, found := env[name]
+			body, err := json.Marshal(map[string]any{
+				"value": value,
+				"found": found,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+		},
+	}))
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+
+	r.mu.Lock()
+	r.fakePlugins[req.SessionID] = &fakeHostedPluginServer{
+		dir:      dir,
+		listener: lis,
+		server:   srv,
+	}
+	r.mu.Unlock()
+	return &pluginruntime.HostedPlugin{
+		ID:         "fake-" + req.SessionID,
+		SessionID:  req.SessionID,
+		PluginName: req.PluginName,
+		DialTarget: "unix://" + socketPath,
+	}, nil
+}
+
+func (r *capturingBundlePluginRuntime) cleanupFakeHostedPlugin(sessionID string) {
+	r.mu.Lock()
+	fake := r.fakePlugins[sessionID]
+	delete(r.fakePlugins, sessionID)
+	r.mu.Unlock()
+	if fake == nil {
+		return
+	}
+	fake.server.Stop()
+	_ = fake.listener.Close()
+	_ = os.RemoveAll(fake.dir)
 }
 
 func (r *capturingBundlePluginRuntime) startPluginRequestsCopy() []pluginruntime.StartPluginRequest {
@@ -236,12 +368,26 @@ func (r *capturingBundlePluginRuntime) startPluginRequestsCopy() []pluginruntime
 	out := make([]pluginruntime.StartPluginRequest, len(r.startPluginRequests))
 	for i, req := range r.startPluginRequests {
 		out[i] = pluginruntime.StartPluginRequest{
-			SessionID:  req.SessionID,
-			PluginName: req.PluginName,
-			Command:    req.Command,
-			Args:       slices.Clone(req.Args),
-			BundleDir:  req.BundleDir,
+			SessionID:     req.SessionID,
+			PluginName:    req.PluginName,
+			Command:       req.Command,
+			Args:          slices.Clone(req.Args),
+			Env:           cloneRuntimeMetadata(req.Env),
+			BundleDir:     req.BundleDir,
+			AllowedHosts:  slices.Clone(req.AllowedHosts),
+			DefaultAction: req.DefaultAction,
+			HostBinary:    req.HostBinary,
 		}
+	}
+	return out
+}
+
+func (r *capturingBundlePluginRuntime) bindHostServiceRequests() []pluginruntime.BindHostServiceRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]pluginruntime.BindHostServiceRequest, len(r.bindRequests))
+	for i, req := range r.bindRequests {
+		out[i] = cloneBindHostServiceRequest(req)
 	}
 	return out
 }
@@ -255,6 +401,35 @@ func cloneRuntimeMetadata(values map[string]string) map[string]string {
 		out[key] = value
 	}
 	return out
+}
+
+func cloneBindHostServiceRequest(req pluginruntime.BindHostServiceRequest) pluginruntime.BindHostServiceRequest {
+	return pluginruntime.BindHostServiceRequest{
+		SessionID: req.SessionID,
+		EnvVar:    req.EnvVar,
+		Relay: pluginruntime.HostServiceRelay{
+			DialTarget: req.Relay.DialTarget,
+		},
+	}
+}
+
+func assertHostServiceRelayBindings(t *testing.T, requests []pluginruntime.BindHostServiceRequest, wantEnvVar string) {
+	t.Helper()
+	if len(requests) == 0 {
+		t.Fatal("BindHostService requests = 0, want at least one relay binding")
+	}
+	foundWantEnv := false
+	for _, req := range requests {
+		if !strings.HasPrefix(req.Relay.DialTarget, "unix://") {
+			t.Fatalf("BindHostService(%s) Relay.DialTarget = %q, want unix:// host relay target", req.EnvVar, req.Relay.DialTarget)
+		}
+		if req.EnvVar == wantEnvVar {
+			foundWantEnv = true
+		}
+	}
+	if !foundWantEnv {
+		t.Fatalf("BindHostService env vars = %+v, want %q", requests, wantEnvVar)
+	}
 }
 
 type slowStopPluginRuntime struct {
@@ -4121,6 +4296,121 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapability(t *testing
 	}
 }
 
+func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapability(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+				IndexedDB:            &config.PluginIndexedDBConfig{ObjectStores: []string{"tasks"}},
+			},
+		},
+	}
+
+	deps := Deps{
+		BaseURL:               "https://gestalt.example.test",
+		EncryptionKey:         []byte("0123456789abcdef0123456789abcdef"),
+		SelectedIndexedDBName: "memory",
+		IndexedDBDefs: map[string]*config.ProviderEntry{
+			"memory": {
+				Source: config.ProviderSource{Path: "./providers/datastore/memory"},
+				Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
+			},
+		},
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
+			return &coretesting.StubIndexedDB{}, nil
+		},
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+	checkEnv := func(envName string) string {
+		t.Helper()
+		result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": envName}, "")
+		if err != nil {
+			t.Fatalf("Execute read_env(%s): %v", envName, err)
+		}
+		var env struct {
+			Value string `json:"value"`
+			Found bool   `json:"found"`
+		}
+		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+			t.Fatalf("unmarshal env result for %s: %v", envName, err)
+		}
+		if !env.Found {
+			t.Fatalf("env %s not found", envName)
+		}
+		return env.Value
+	}
+
+	if got := checkEnv(providerhost.DefaultIndexedDBSocketEnv); got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin indexeddb socket env = %q, want %q", got, "tls://gestalt.example.test:443")
+	}
+	if got := checkEnv(providerhost.IndexedDBSocketTokenEnv("")); got == "" {
+		t.Fatal("plugin indexeddb socket token env should be set for the public relay")
+	}
+
+	bindRequests := runtimeProvider.bindHostServiceRequests()
+	if len(bindRequests) != 1 {
+		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
+	}
+	if got := bindRequests[0].Relay.DialTarget; got != "tls://gestalt.example.test:443" {
+		t.Fatalf("BindHostService relay target = %q, want %q", got, "tls://gestalt.example.test:443")
+	}
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env[providerhost.IndexedDBSocketTokenEnv("")]; got == "" {
+		t.Fatal("StartPlugin env should include the IndexedDB relay token")
+	}
+	if !slices.Contains(startRequests[0].AllowedHosts, "gestalt.example.test") {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", startRequests[0].AllowedHosts)
+	}
+}
+
 func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T) {
 	t.Parallel()
 
@@ -4360,63 +4650,84 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 		{name: "empty indexeddb inherits host selection", indexedDB: &config.PluginIndexedDBConfig{}},
 		{name: "objectStores-only indexeddb inherits host selection", indexedDB: &config.PluginIndexedDBConfig{ObjectStores: []string{"tasks"}}},
 	}
+	runtimeModes := []struct {
+		name   string
+		hosted bool
+	}{
+		{name: "local executable"},
+		{name: "hosted runtime relay", hosted: true},
+	}
 
 	for _, tc := range cases {
 		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+		for _, runtimeMode := range runtimeModes {
+			runtimeMode := runtimeMode
+			t.Run(tc.name+"/"+runtimeMode.name, func(t *testing.T) {
+				t.Parallel()
 
-			boundDB := &trackedIndexedDB{StubIndexedDB: coretesting.StubIndexedDB{}}
-			providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
-				Plugins: map[string]*config.ProviderEntry{
-					"echoext": {
-						Command:              bin,
-						Args:                 []string{"provider"},
-						ResolvedManifest:     manifest,
-						ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-						IndexedDB:            tc.indexedDB,
+				boundDB := &trackedIndexedDB{StubIndexedDB: coretesting.StubIndexedDB{}}
+				var runtimeProvider *capturingPluginRuntime
+				deps := Deps{
+					SelectedIndexedDBName: "memory",
+					IndexedDBDefs: map[string]*config.ProviderEntry{
+						"memory": {
+							Source: config.ProviderSource{Path: "./providers/datastore/memory"},
+							Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
+						},
 					},
-				},
-			}, NewFactoryRegistry(), Deps{
-				SelectedIndexedDBName: "memory",
-				IndexedDBDefs: map[string]*config.ProviderEntry{
-					"memory": {
-						Source: config.ProviderSource{Path: "./providers/datastore/memory"},
-						Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
+					IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
+						return boundDB, nil
 					},
-				},
-				IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
-					return boundDB, nil
-				},
+				}
+				if runtimeMode.hosted {
+					runtimeProvider = newCapturingPluginRuntime()
+					deps.PluginRuntime = runtimeProvider
+					t.Cleanup(func() { _ = runtimeProvider.Close() })
+				}
+
+				providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
+					Plugins: map[string]*config.ProviderEntry{
+						"echoext": {
+							Command:              bin,
+							Args:                 []string{"provider"},
+							ResolvedManifest:     manifest,
+							ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+							IndexedDB:            tc.indexedDB,
+						},
+					},
+				}, NewFactoryRegistry(), deps)
+				if err != nil {
+					t.Fatalf("buildProvidersStrict: %v", err)
+				}
+				t.Cleanup(func() { _ = CloseProviders(providers) })
+
+				prov, err := providers.Get("echoext")
+				if err != nil {
+					t.Fatalf("providers.Get: %v", err)
+				}
+				result, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+					"store": "tasks",
+					"id":    "task-1",
+					"value": "ship-it",
+				}, "")
+				if err != nil {
+					t.Fatalf("Execute indexeddb_roundtrip: %v", err)
+				}
+				var record map[string]any
+				if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
+					t.Fatalf("unmarshal record: %v", err)
+				}
+				if got := record["value"]; got != "ship-it" {
+					t.Fatalf("record value = %#v, want %q", got, "ship-it")
+				}
+				if _, err := boundDB.ObjectStore("echoext_tasks").Get(context.Background(), "task-1"); err != nil {
+					t.Fatalf("inherited host indexeddb should use plugin-name default db prefix: %v", err)
+				}
+				if runtimeProvider != nil {
+					assertHostServiceRelayBindings(t, runtimeProvider.bindHostServiceRequests(), providerhost.DefaultIndexedDBSocketEnv)
+				}
 			})
-			if err != nil {
-				t.Fatalf("buildProvidersStrict: %v", err)
-			}
-			t.Cleanup(func() { _ = CloseProviders(providers) })
-
-			prov, err := providers.Get("echoext")
-			if err != nil {
-				t.Fatalf("providers.Get: %v", err)
-			}
-			result, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
-				"store": "tasks",
-				"id":    "task-1",
-				"value": "ship-it",
-			}, "")
-			if err != nil {
-				t.Fatalf("Execute indexeddb_roundtrip: %v", err)
-			}
-			var record map[string]any
-			if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
-				t.Fatalf("unmarshal record: %v", err)
-			}
-			if got := record["value"]; got != "ship-it" {
-				t.Fatalf("record value = %#v, want %q", got, "ship-it")
-			}
-			if _, err := boundDB.ObjectStore("echoext_tasks").Get(context.Background(), "task-1"); err != nil {
-				t.Fatalf("inherited host indexeddb should use plugin-name default db prefix: %v", err)
-			}
-		})
+		}
 	}
 }
 
@@ -4610,84 +4921,110 @@ func TestPluginIndexedDBRouteObjectStoresAndTransportPrefix(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 
-	var (
-		closeCount atomic.Int32
-		boundDB    *trackedIndexedDB
-	)
-	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
-		Plugins: map[string]*config.ProviderEntry{
-			"echoext": {
-				Command:              bin,
-				Args:                 []string{"provider"},
-				ResolvedManifest:     manifest,
-				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				IndexedDB: &config.PluginIndexedDBConfig{
-					Provider:     "memory",
-					DB:           "roadmap",
-					ObjectStores: []string{"tasks"},
+	runtimeModes := []struct {
+		name   string
+		hosted bool
+	}{
+		{name: "local executable"},
+		{name: "hosted runtime relay", hosted: true},
+	}
+
+	for _, runtimeMode := range runtimeModes {
+		runtimeMode := runtimeMode
+		t.Run(runtimeMode.name, func(t *testing.T) {
+			t.Parallel()
+
+			var (
+				closeCount      atomic.Int32
+				boundDB         *trackedIndexedDB
+				runtimeProvider *capturingPluginRuntime
+			)
+			deps := Deps{
+				SelectedIndexedDBName: "memory",
+				IndexedDBDefs: map[string]*config.ProviderEntry{
+					"memory": {
+						Source: config.ProviderSource{Path: "./providers/datastore/memory"},
+						Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
+					},
 				},
-			},
-		},
-	}, NewFactoryRegistry(), Deps{
-		SelectedIndexedDBName: "memory",
-		IndexedDBDefs: map[string]*config.ProviderEntry{
-			"memory": {
-				Source: config.ProviderSource{Path: "./providers/datastore/memory"},
-				Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
-			},
-		},
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
-			boundDB = &trackedIndexedDB{
-				StubIndexedDB: coretesting.StubIndexedDB{},
-				onClose:       closeCount.Add,
+				IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
+					boundDB = &trackedIndexedDB{
+						StubIndexedDB: coretesting.StubIndexedDB{},
+						onClose:       closeCount.Add,
+					}
+					return boundDB, nil
+				},
 			}
-			return boundDB, nil
-		},
-	})
-	if err != nil {
-		t.Fatalf("buildProvidersStrict: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseProviders(providers) })
+			if runtimeMode.hosted {
+				runtimeProvider = newCapturingPluginRuntime()
+				deps.PluginRuntime = runtimeProvider
+				t.Cleanup(func() { _ = runtimeProvider.Close() })
+			}
 
-	prov, err := providers.Get("echoext")
-	if err != nil {
-		t.Fatalf("providers.Get: %v", err)
-	}
+			providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
+				Plugins: map[string]*config.ProviderEntry{
+					"echoext": {
+						Command:              bin,
+						Args:                 []string{"provider"},
+						ResolvedManifest:     manifest,
+						ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+						IndexedDB: &config.PluginIndexedDBConfig{
+							Provider:     "memory",
+							DB:           "roadmap",
+							ObjectStores: []string{"tasks"},
+						},
+					},
+				},
+			}, NewFactoryRegistry(), deps)
+			if err != nil {
+				t.Fatalf("buildProvidersStrict: %v", err)
+			}
+			t.Cleanup(func() { _ = CloseProviders(providers) })
 
-	result, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
-		"store": "tasks",
-		"id":    "task-1",
-		"value": "ship-it",
-	}, "")
-	if err != nil {
-		t.Fatalf("Execute indexeddb_roundtrip: %v", err)
-	}
-	var record map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
-		t.Fatalf("unmarshal record: %v", err)
-	}
-	if got := record["value"]; got != "ship-it" {
-		t.Fatalf("record value = %#v, want %q", got, "ship-it")
-	}
-	if _, err := boundDB.ObjectStore("roadmap_tasks").Get(context.Background(), "task-1"); err != nil {
-		t.Fatalf("prefixed backing store should contain task: %v", err)
-	}
-	if _, err := boundDB.ObjectStore("tasks").Get(context.Background(), "task-1"); err == nil {
-		t.Fatal("unprefixed backing store should remain empty")
-	}
+			prov, err := providers.Get("echoext")
+			if err != nil {
+				t.Fatalf("providers.Get: %v", err)
+			}
 
-	if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
-		"store": "events",
-		"id":    "evt-1",
-		"value": "blocked",
-	}, ""); err == nil {
-		t.Fatal("indexeddb_roundtrip on disallowed object store should fail")
-	}
+			result, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+				"store": "tasks",
+				"id":    "task-1",
+				"value": "ship-it",
+			}, "")
+			if err != nil {
+				t.Fatalf("Execute indexeddb_roundtrip: %v", err)
+			}
+			var record map[string]any
+			if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
+				t.Fatalf("unmarshal record: %v", err)
+			}
+			if got := record["value"]; got != "ship-it" {
+				t.Fatalf("record value = %#v, want %q", got, "ship-it")
+			}
+			if _, err := boundDB.ObjectStore("roadmap_tasks").Get(context.Background(), "task-1"); err != nil {
+				t.Fatalf("prefixed backing store should contain task: %v", err)
+			}
+			if _, err := boundDB.ObjectStore("tasks").Get(context.Background(), "task-1"); err == nil {
+				t.Fatal("unprefixed backing store should remain empty")
+			}
 
-	_ = CloseProviders(providers)
-	providers = nil
-	if got := closeCount.Load(); got != 1 {
-		t.Fatalf("closeCount after provider shutdown = %d, want 1", got)
+			if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+				"store": "events",
+				"id":    "evt-1",
+				"value": "blocked",
+			}, ""); err == nil {
+				t.Fatal("indexeddb_roundtrip on disallowed object store should fail")
+			}
+			if runtimeProvider != nil {
+				assertHostServiceRelayBindings(t, runtimeProvider.bindHostServiceRequests(), providerhost.DefaultIndexedDBSocketEnv)
+			}
+
+			_ = CloseProviders(providers)
+			providers = nil
+			if got := closeCount.Load(); got != 1 {
+				t.Fatalf("closeCount after provider shutdown = %d, want 1", got)
+			}
+		})
 	}
 }
 

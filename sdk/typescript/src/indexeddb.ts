@@ -1,4 +1,4 @@
-import { createClient, type Client } from "@connectrpc/connect";
+import { createClient, type Client, type Interceptor } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import {
   IndexedDB as IndexedDBService,
@@ -6,6 +6,8 @@ import {
 } from "../gen/v1/datastore_pb";
 
 const ENV_INDEXEDDB_SOCKET = "GESTALT_INDEXEDDB_SOCKET";
+const INDEXEDDB_SOCKET_TOKEN_SUFFIX = "_TOKEN";
+const INDEXEDDB_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
 /**
  * Returns the environment variable name used to discover an IndexedDB socket.
@@ -14,6 +16,13 @@ export function indexedDBSocketEnv(name?: string): string {
   const trimmed = name?.trim() ?? "";
   if (!trimmed) return ENV_INDEXEDDB_SOCKET;
   return `${ENV_INDEXEDDB_SOCKET}_${trimmed.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`;
+}
+
+/**
+ * Returns the environment variable name used to discover an IndexedDB relay token.
+ */
+export function indexedDBSocketTokenEnv(name?: string): string {
+  return `${indexedDBSocketEnv(name)}${INDEXEDDB_SOCKET_TOKEN_SUFFIX}`;
 }
 
 function indexedDBTransportOptions(rawTarget: string): {
@@ -489,7 +498,11 @@ export class IndexedDB {
     if (!target) {
       throw new Error(`${envName} is not set`);
     }
-    const transport = createGrpcTransport(indexedDBTransportOptions(target));
+    const token = process.env[indexedDBSocketTokenEnv(name)]?.trim() ?? "";
+    const transport = createGrpcTransport({
+      ...indexedDBTransportOptions(target),
+      interceptors: token ? [indexedDBRelayTokenInterceptor(token)] : [],
+    });
     this.client = createClient(IndexedDBService, transport);
   }
 
@@ -529,6 +542,13 @@ export class IndexedDB {
   objectStore(name: string): ObjectStore {
     return new ObjectStore(this.client, name);
   }
+}
+
+function indexedDBRelayTokenInterceptor(token: string): Interceptor {
+  return (next) => async (req) => {
+    req.header.set(INDEXEDDB_RELAY_TOKEN_HEADER, token);
+    return next(req);
+  };
 }
 
 /**

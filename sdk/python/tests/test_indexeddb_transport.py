@@ -17,6 +17,7 @@ from gestalt import (
     NotFoundError,
     ObjectStoreSchema,
     indexeddb_socket_env,
+    indexeddb_socket_token_env,
 )
 
 
@@ -81,11 +82,14 @@ def _reserve_tcp_address() -> str:
     return f"{host}:{port}"
 
 
-def _start_tcp_harness() -> tuple[subprocess.Popen[bytes], str]:
+def _start_tcp_harness(expect_token: str = "") -> tuple[subprocess.Popen[bytes], str]:
     harness_bin = _build_harness()
     address = _reserve_tcp_address()
+    args = [harness_bin, "--tcp", address]
+    if expect_token:
+        args.extend(["--expect-token", expect_token])
     proc = subprocess.Popen(
-        [harness_bin, "--tcp", address],
+        args,
         stdout=subprocess.PIPE,
     )
     assert proc.stdout is not None
@@ -155,6 +159,24 @@ class TestTCPTarget(unittest.TestCase):
         s.put({"id": "row-1", "value": "tcp"})
         got = s.get("row-1")
         self.assertEqual(got["value"], "tcp")
+        c.close()
+
+    def test_tcp_target_token_roundtrip(self) -> None:
+        token = "relay-token-python"
+        proc, target = _start_tcp_harness(expect_token=token)
+        self.addCleanup(proc.wait)
+        self.addCleanup(proc.kill)
+        os.environ["GESTALT_INDEXEDDB_SOCKET"] = target
+        os.environ[indexeddb_socket_token_env()] = token
+        self.addCleanup(os.environ.pop, "GESTALT_INDEXEDDB_SOCKET", None)
+        self.addCleanup(os.environ.pop, indexeddb_socket_token_env(), None)
+
+        c = _client()
+        c.create_object_store("tcp_target_token_env")
+        s = c.object_store("tcp_target_token_env")
+        s.put({"id": "row-1", "value": "token"})
+        got = s.get("row-1")
+        self.assertEqual(got["value"], "token")
         c.close()
 
 

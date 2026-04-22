@@ -44,7 +44,10 @@ pub use cache::{
 pub use catalog::{Catalog, CatalogOperation};
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET, ENV_WRITE_MANIFEST_METADATA};
 pub use error::{Error, Result};
-pub use indexeddb::{Cursor, CursorDirection, IndexedDB, IndexedDBError};
+pub use indexeddb::{
+    Cursor, CursorDirection, ENV_INDEXEDDB_SOCKET, IndexedDB, IndexedDBError, indexeddb_socket_env,
+    indexeddb_socket_token_env,
+};
 pub use invoker::{
     ENV_PLUGIN_INVOKER_SOCKET, InvocationGrant, InvokeOptions, PluginInvoker, PluginInvokerError,
 };

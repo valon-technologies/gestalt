@@ -22,6 +22,7 @@ import (
 // EnvIndexedDBSocket is the default Unix-socket environment variable used by
 // [IndexedDB].
 const EnvIndexedDBSocket = "GESTALT_INDEXEDDB_SOCKET"
+const indexedDBSocketTokenSuffix = "_TOKEN"
 
 // IndexedDBSocketEnv returns the environment variable name used for a named
 // IndexedDB transport socket.
@@ -44,6 +45,12 @@ func IndexedDBSocketEnv(name string) string {
 		}
 	}
 	return b.String()
+}
+
+// IndexedDBSocketTokenEnv returns the companion environment variable name used
+// to discover a host-service relay token for an IndexedDB binding.
+func IndexedDBSocketTokenEnv(name string) string {
+	return IndexedDBSocketEnv(name) + indexedDBSocketTokenSuffix
 }
 
 var (
@@ -117,24 +124,30 @@ func IndexedDB(name ...string) (*IndexedDBClient, error) {
 	if err != nil {
 		return nil, err
 	}
+	token := os.Getenv(IndexedDBSocketTokenEnv(firstIndex(name)))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var conn *grpc.ClientConn
+	opts := indexedDBDialOptions(token)
 	switch network {
 	case "unix":
 		conn, err = grpc.DialContext(ctx, "passthrough:///localhost",
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-				var d net.Dialer
-				return d.DialContext(ctx, "unix", address)
-			}),
-			grpc.WithAuthority("localhost"),
-			grpc.WithBlock(),
+			append([]grpc.DialOption{
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+				grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+					var d net.Dialer
+					return d.DialContext(ctx, "unix", address)
+				}),
+				grpc.WithAuthority("localhost"),
+				grpc.WithBlock(),
+			}, opts...)...,
 		)
 	case "tcp":
 		conn, err = grpc.DialContext(ctx, address,
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithBlock(),
+			append([]grpc.DialOption{
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+				grpc.WithBlock(),
+			}, opts...)...,
 		)
 	case "tls":
 		host, _, splitErr := net.SplitHostPort(address)
@@ -142,12 +155,14 @@ func IndexedDB(name ...string) (*IndexedDBClient, error) {
 			return nil, fmt.Errorf("indexeddb: parse tls target %q: %w", address, splitErr)
 		}
 		conn, err = grpc.DialContext(ctx, address,
-			grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
-				MinVersion: tls.VersionTLS12,
-				ServerName: host,
-				NextProtos: []string{"h2"},
-			})),
-			grpc.WithBlock(),
+			append([]grpc.DialOption{
+				grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+					MinVersion: tls.VersionTLS12,
+					ServerName: host,
+					NextProtos: []string{"h2"},
+				})),
+				grpc.WithBlock(),
+			}, opts...)...,
 		)
 	default:
 		return nil, fmt.Errorf("indexeddb: unsupported transport network %q", network)
@@ -160,6 +175,33 @@ func IndexedDB(name ...string) (*IndexedDBClient, error) {
 		conn:   conn,
 	}, nil
 }
+
+func indexedDBDialOptions(token string) []grpc.DialOption {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil
+	}
+	return []grpc.DialOption{grpc.WithPerRPCCredentials(indexedDBRelayPerRPCCredentials{token: token})}
+}
+
+func firstIndex(name []string) string {
+	if len(name) == 0 {
+		return ""
+	}
+	return name[0]
+}
+
+type indexedDBRelayPerRPCCredentials struct {
+	token string
+}
+
+func (c indexedDBRelayPerRPCCredentials) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
+	return map[string]string{
+		"x-gestalt-host-service-relay-token": c.token,
+	}, nil
+}
+
+func (indexedDBRelayPerRPCCredentials) RequireTransportSecurity() bool { return false }
 
 func parseIndexedDBTarget(raw string) (network string, address string, err error) {
 	target := strings.TrimSpace(raw)

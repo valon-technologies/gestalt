@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net"
 	"net/url"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -853,14 +855,23 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			_ = startedHostServices.Close()
 		})
 	}
+	startEnv := maps.Clone(env)
+	allowedHosts := slices.Clone(entry.AllowedHosts)
 	for _, hostService := range startedHostServices.Bindings() {
-		if _, err := runtimeProvider.BindHostService(ctx, pluginruntime.BindHostServiceRequest{
-			SessionID:      sessionID,
-			EnvVar:         hostService.EnvVar,
-			HostSocketPath: hostService.SocketPath,
-		}); err != nil {
+		bindingReq, bindingEnv, relayHost, err := buildPluginRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimeCapabilities.HostServiceTunnels)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := runtimeProvider.BindHostService(ctx, bindingReq); err != nil {
 			return nil, fmt.Errorf("bind host service %q: %w", hostService.EnvVar, err)
 		}
+		if len(bindingEnv) > 0 {
+			if startEnv == nil {
+				startEnv = make(map[string]string, len(bindingEnv))
+			}
+			maps.Copy(startEnv, bindingEnv)
+		}
+		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
 	}
 
 	hostedPlugin, err := runtimeProvider.StartPlugin(ctx, pluginruntime.StartPluginRequest{
@@ -868,9 +879,9 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		PluginName:    name,
 		Command:       command,
 		Args:          args,
-		Env:           env,
+		Env:           startEnv,
 		BundleDir:     launch.bundleDir,
-		AllowedHosts:  entry.AllowedHosts,
+		AllowedHosts:  allowedHosts,
 		DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
 		HostBinary:    entry.HostBinary,
 	})
@@ -934,16 +945,14 @@ type pluginRuntimeCapabilityRequirements struct {
 	HostnameProxyEgress bool
 }
 
+const pluginRuntimeIndexedDBRelayTokenTTL = 30 * 24 * time.Hour
+
 func pluginRuntimeRequirementsForPlugin(name string, entry *config.ProviderEntry, deps Deps) (pluginRuntimeCapabilityRequirements, error) {
 	if entry == nil {
 		return pluginRuntimeCapabilityRequirements{}, nil
 	}
-	effectiveIndexedDB, err := config.ResolveEffectivePluginIndexedDB(name, entry, deps.SelectedIndexedDBName, deps.IndexedDBDefs)
-	if err != nil {
-		return pluginRuntimeCapabilityRequirements{}, err
-	}
 	return pluginRuntimeCapabilityRequirements{
-		HostServiceTunnels:  effectiveIndexedDB.Enabled || len(entry.Cache) > 0 || len(entry.S3) > 0 || len(entry.Invokes) > 0 || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders()),
+		HostServiceTunnels:  len(entry.Cache) > 0 || len(entry.S3) > 0 || len(entry.Invokes) > 0 || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders()),
 		HostnameProxyEgress: len(entry.AllowedHosts) > 0 || deps.Egress.DefaultAction == egress.PolicyDeny,
 	}, nil
 }
@@ -1063,9 +1072,6 @@ func waitForPluginRuntimeSessionReady(ctx context.Context, runtimeProvider plugi
 }
 
 func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps, includeHostServices bool) ([]providerhost.HostService, *providerhost.InvocationTokenManager, func(), error) {
-	if !includeHostServices {
-		return nil, nil, nil, nil
-	}
 	var (
 		hostServices []providerhost.HostService
 		cleanup      func()
@@ -1091,6 +1097,9 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		hostServices = append(hostServices, services...)
 		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
+	if !includeHostServices {
+		return hostServices, nil, cleanup, nil
+	}
 	if len(entry.Cache) > 0 {
 		services, cacheCleanup, err := buildPluginCacheHostServices(name, entry, deps)
 		if err != nil {
@@ -1115,6 +1124,109 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
 	}
 	return hostServices, invTokens, cleanup, nil
+}
+
+func buildPluginRuntimeHostServiceBinding(pluginName, sessionID string, hostService providerhost.StartedHostService, deps Deps, allowUnixRelay bool) (pluginruntime.BindHostServiceRequest, map[string]string, string, error) {
+	if isIndexedDBHostServiceEnv(hostService.EnvVar) && !allowUnixRelay {
+		relay, relayEnv, relayHost, ok, err := buildPluginRuntimeIndexedDBRelay(pluginName, sessionID, hostService, deps)
+		if err != nil {
+			return pluginruntime.BindHostServiceRequest{}, nil, "", err
+		}
+		if ok {
+			return pluginruntime.BindHostServiceRequest{
+				SessionID: sessionID,
+				EnvVar:    hostService.EnvVar,
+				Relay:     relay,
+			}, relayEnv, relayHost, nil
+		}
+		if !allowUnixRelay {
+			return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("plugin %q requires server.baseURL and server.encryptionKey to relay IndexedDB without host service tunnels", pluginName)
+		}
+	}
+	if !allowUnixRelay {
+		return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("host service %q requires host service tunnels", hostService.EnvVar)
+	}
+	return pluginruntime.BindHostServiceRequest{
+		SessionID:      sessionID,
+		EnvVar:         hostService.EnvVar,
+		HostSocketPath: hostService.SocketPath,
+		Relay: pluginruntime.HostServiceRelay{
+			DialTarget: "unix://" + hostService.SocketPath,
+		},
+	}, nil, "", nil
+}
+
+func buildPluginRuntimeIndexedDBRelay(pluginName, sessionID string, hostService providerhost.StartedHostService, deps Deps) (pluginruntime.HostServiceRelay, map[string]string, string, bool, error) {
+	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
+		return pluginruntime.HostServiceRelay{}, nil, "", false, nil
+	}
+	dialTarget, relayHost, err := pluginRuntimePublicRelayTarget(deps.BaseURL)
+	if err != nil {
+		return pluginruntime.HostServiceRelay{}, nil, "", false, err
+	}
+	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(deps.EncryptionKey)
+	if err != nil {
+		return pluginruntime.HostServiceRelay{}, nil, "", false, fmt.Errorf("init host service relay tokens: %w", err)
+	}
+	token, err := tokenManager.MintToken(providerhost.HostServiceRelayTokenRequest{
+		PluginName:   pluginName,
+		SessionID:    sessionID,
+		Service:      "indexeddb",
+		SocketPath:   hostService.SocketPath,
+		MethodPrefix: "/" + proto.IndexedDB_ServiceDesc.ServiceName + "/",
+		TTL:          pluginRuntimeIndexedDBRelayTokenTTL,
+	})
+	if err != nil {
+		return pluginruntime.HostServiceRelay{}, nil, "", false, fmt.Errorf("mint indexeddb host service relay token: %w", err)
+	}
+	return pluginruntime.HostServiceRelay{
+			DialTarget: dialTarget,
+		}, map[string]string{
+			hostService.EnvVar + "_TOKEN": token,
+		}, relayHost, true, nil
+}
+
+func pluginRuntimePublicRelayTarget(baseURL string) (string, string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return "", "", fmt.Errorf("parse server.baseURL for host service relay: %w", err)
+	}
+	host := strings.TrimSpace(parsed.Hostname())
+	if host == "" {
+		return "", "", fmt.Errorf("server.baseURL %q is missing a hostname", baseURL)
+	}
+	port := parsed.Port()
+	if path := strings.TrimSpace(parsed.EscapedPath()); path != "" && path != "/" {
+		return "", "", fmt.Errorf("server.baseURL %q must not include a path for host service relay", baseURL)
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", "", fmt.Errorf("server.baseURL %q must not include a query or fragment for host service relay", baseURL)
+	}
+	if !strings.EqualFold(parsed.Scheme, "https") {
+		return "", "", fmt.Errorf("server.baseURL %q must use https for host service relay", baseURL)
+	}
+	if port == "" {
+		port = "443"
+	}
+	return "tls://" + net.JoinHostPort(host, port), host, nil
+}
+
+func isIndexedDBHostServiceEnv(envVar string) bool {
+	envVar = strings.TrimSpace(envVar)
+	return envVar == providerhost.DefaultIndexedDBSocketEnv || strings.HasPrefix(envVar, providerhost.DefaultIndexedDBSocketEnv+"_")
+}
+
+func appendAllowedHost(allowedHosts []string, host string) []string {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return allowedHosts
+	}
+	for _, allowed := range allowedHosts {
+		if strings.EqualFold(strings.TrimSpace(allowed), host) {
+			return allowedHosts
+		}
+	}
+	return append(allowedHosts, host)
 }
 
 func buildPluginIndexedDBHostServices(pluginName string, effective config.EffectivePluginIndexedDB, deps Deps) ([]providerhost.HostService, func(), error) {
