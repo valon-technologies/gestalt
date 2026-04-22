@@ -41,6 +41,7 @@ func (s *Server) workloadBinding(p *principal.Principal, provider string) (autho
 }
 
 func isWorkloadPrincipal(p *principal.Principal) bool {
+	p = principal.Canonicalized(p)
 	return p != nil && p.Kind == principal.KindWorkload
 }
 

@@ -626,6 +626,7 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 }
 
 func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principal) error {
+	p = principal.Canonicalize(p)
 	if p == nil || p.UserID != "" || p.Kind == principal.KindWorkload || p.Identity == nil || p.Identity.Email == "" {
 		return nil
 	}
