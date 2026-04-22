@@ -32,6 +32,7 @@ export {
   Authorization,
   AuthorizationClient,
   ENV_AUTHORIZATION_SOCKET,
+  ENV_AUTHORIZATION_SOCKET_TOKEN,
   type AuthorizationActionSearchMessage,
   type AuthorizationDecisionMessage,
   type AuthorizationEvaluateInput,

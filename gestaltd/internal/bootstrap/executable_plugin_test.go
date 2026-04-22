@@ -55,6 +55,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
 )
 
@@ -139,6 +140,53 @@ func (p *hostedHTTPAuthorizationProvider) ListModels(context.Context, *core.List
 
 func (p *hostedHTTPAuthorizationProvider) WriteModel(context.Context, *core.WriteModelRequest) (*core.AuthorizationModelRef, error) {
 	return &core.AuthorizationModelRef{}, nil
+}
+
+type authorizationSearchCall struct {
+	SubjectType  string
+	ResourceType string
+	ResourceID   string
+	ActionName   string
+	PageSize     int32
+}
+
+type recordingHostedAuthorizationProvider struct {
+	hostedHTTPAuthorizationProvider
+
+	mu          sync.Mutex
+	searchCalls []authorizationSearchCall
+}
+
+func (p *recordingHostedAuthorizationProvider) SearchSubjects(_ context.Context, req *core.SubjectSearchRequest) (*core.SubjectSearchResponse, error) {
+	call := authorizationSearchCall{
+		SubjectType: req.GetSubjectType(),
+		PageSize:    req.GetPageSize(),
+	}
+	if resource := req.GetResource(); resource != nil {
+		call.ResourceType = resource.GetType()
+		call.ResourceID = resource.GetId()
+	}
+	if action := req.GetAction(); action != nil {
+		call.ActionName = action.GetName()
+	}
+
+	p.mu.Lock()
+	p.searchCalls = append(p.searchCalls, call)
+	p.mu.Unlock()
+
+	return &core.SubjectSearchResponse{
+		Subjects: []*core.SubjectRef{{
+			Type: "user",
+			Id:   "user:user-123",
+		}},
+		ModelId: "authz-model-1",
+	}, nil
+}
+
+func (p *recordingHostedAuthorizationProvider) Calls() []authorizationSearchCall {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.searchCalls)
 }
 
 type capturingPluginRuntime struct {
@@ -412,6 +460,10 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 					ID:     "workflow_manager_roundtrip",
 					Method: http.MethodPost,
 				},
+				{
+					ID:     "authorization_roundtrip",
+					Method: http.MethodPost,
+				},
 			},
 		},
 		ExecuteFn: func(ctx context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
@@ -487,6 +539,16 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 			case "workflow_manager_roundtrip":
 				record, err := fakeHostedWorkflowManagerRoundTrip(providerhost.InvocationTokenFromContext(ctx), env)
+				if err != nil {
+					return nil, err
+				}
+				body, err := json.Marshal(record)
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			case "authorization_roundtrip":
+				record, err := fakeHostedAuthorizationRoundTrip(env)
 				if err != nil {
 					return nil, err
 				}
@@ -825,6 +887,66 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 		"schedule_id":   scheduleID,
 		"cron":          fetched.GetSchedule().GetCron(),
 		"operation":     fetched.GetSchedule().GetTarget().GetOperation(),
+	}, nil
+}
+
+func fakeHostedAuthorizationRoundTrip(env map[string]string) (map[string]any, error) {
+	target := strings.TrimSpace(env[providerhost.DefaultAuthorizationSocketEnv])
+	if target == "" {
+		return nil, fmt.Errorf("missing authorization relay target in %s", providerhost.DefaultAuthorizationSocketEnv)
+	}
+	token := strings.TrimSpace(env[providerhost.AuthorizationSocketTokenEnv()])
+	if token == "" {
+		return nil, fmt.Errorf("missing authorization relay token in %s", providerhost.AuthorizationSocketTokenEnv())
+	}
+	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
+	if address == "" || address == target {
+		return nil, fmt.Errorf("unsupported authorization relay target %q", target)
+	}
+
+	conn, err := grpc.NewClient(
+		address,
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true,
+			MinVersion:         tls.VersionTLS12,
+			NextProtos:         []string{"h2"},
+		})),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("connect authorization relay: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+
+	client := proto.NewAuthorizationProviderClient(conn)
+	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
+	if err != nil {
+		return nil, fmt.Errorf("get authorization metadata: %w", err)
+	}
+	resp, err := client.SearchSubjects(ctx, &proto.SubjectSearchRequest{
+		SubjectType: "user",
+		Resource: &proto.Resource{
+			Type: "slack_identity",
+			Id:   "team:T123:user:U456",
+		},
+		Action:   &proto.Action{Name: "assume"},
+		PageSize: 1,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("search authorization subjects: %w", err)
+	}
+	if len(resp.GetSubjects()) == 0 {
+		return nil, fmt.Errorf("authorization search did not return any subjects")
+	}
+
+	return map[string]any{
+		"model_id":     resp.GetModelId(),
+		"subject_id":   resp.GetSubjects()[0].GetId(),
+		"subject_type": resp.GetSubjects()[0].GetType(),
+		"capabilities": meta.GetCapabilities(),
 	}, nil
 }
 
@@ -4955,7 +5077,7 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 	}
 }
 
-func TestPluginRuntimeHostedHTTPDoesNotRequireHostServiceTunnelCapabilityForAuthorizationLookup(t *testing.T) {
+func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCapability(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -5014,6 +5136,8 @@ func TestPluginRuntimeHostedHTTPDoesNotRequireHostServiceTunnelCapabilityForAuth
 
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
 		return runtimeProvider, nil
@@ -5040,34 +5164,67 @@ func TestPluginRuntimeHostedHTTPDoesNotRequireHostServiceTunnelCapabilityForAuth
 		},
 	}
 
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
+	deps := Deps{
+		BaseURL:               "https://gestalt.example.test",
+		EncryptionKey:         []byte("0123456789abcdef0123456789abcdef"),
 		AuthorizationProvider: &hostedHTTPAuthorizationProvider{},
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
-	})
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
-	defer func() { _ = CloseProviders(providers) }()
+	t.Cleanup(func() { _ = CloseProviders(providers) })
 
 	prov, err := providers.Get("echoext")
 	if err != nil {
 		t.Fatalf("providers.Get(echoext): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": providerhost.DefaultAuthorizationSocketEnv}, "")
-	if err != nil {
-		t.Fatalf("Execute read_env: %v", err)
+	checkEnv := func(envName string) (string, bool) {
+		t.Helper()
+		result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": envName}, "")
+		if err != nil {
+			t.Fatalf("Execute read_env(%s): %v", envName, err)
+		}
+		var env struct {
+			Value string `json:"value"`
+			Found bool   `json:"found"`
+		}
+		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+			t.Fatalf("json.Unmarshal(%s): %v", envName, err)
+		}
+		return env.Value, env.Found
 	}
 
-	var env struct {
-		Value string `json:"value"`
-		Found bool   `json:"found"`
+	if got, found := checkEnv(providerhost.DefaultAuthorizationSocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin authorization env %s = (%q, %v), want (%q, true)", providerhost.DefaultAuthorizationSocketEnv, got, found, "tls://gestalt.example.test:443")
 	}
-	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
-		t.Fatalf("json.Unmarshal: %v", err)
+	if got, found := checkEnv(providerhost.AuthorizationSocketTokenEnv()); !found || got == "" {
+		t.Fatalf("plugin authorization token env %s = (%q, %v), want non-empty token", providerhost.AuthorizationSocketTokenEnv(), got, found)
 	}
-	if env.Found || env.Value != "" {
-		t.Fatalf("authorization env %q should not be set when the runtime lacks host service tunnels", providerhost.DefaultAuthorizationSocketEnv)
+
+	bindRequests := runtimeProvider.bindHostServiceRequests()
+	if len(bindRequests) != 1 {
+		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
+	}
+	if bindRequests[0].EnvVar != providerhost.DefaultAuthorizationSocketEnv {
+		t.Fatalf("BindHostService env = %q, want %q", bindRequests[0].EnvVar, providerhost.DefaultAuthorizationSocketEnv)
+	}
+	if got := bindRequests[0].Relay.DialTarget; got != "tls://gestalt.example.test:443" {
+		t.Fatalf("BindHostService(%s) relay target = %q, want %q", bindRequests[0].EnvVar, got, "tls://gestalt.example.test:443")
+	}
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env[providerhost.AuthorizationSocketTokenEnv()]; got == "" {
+		t.Fatal("StartPlugin env should include the authorization relay token")
+	}
+	if !slices.Contains(startRequests[0].AllowedHosts, "gestalt.example.test") {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", startRequests[0].AllowedHosts)
 	}
 }
 
@@ -6237,6 +6394,150 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	}
 	if got := startRequests[0].Env[providerhost.WorkflowManagerSocketTokenEnv()]; got == "" {
 		t.Fatal("StartPlugin env should include the workflow manager relay token")
+	}
+	bindRequests := runtimeProvider.bindHostServiceRequests()
+	if len(bindRequests) != 1 {
+		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
+	}
+	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
+		t.Fatalf("BindHostService(%s) relay target = %q, want tls relay target", bindRequests[0].EnvVar, got)
+	}
+}
+
+func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	relaySrv.EnableHTTP2 = true
+	relaySrv.StartTLS()
+	testutil.CloseOnCleanup(t, relaySrv)
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "authorization_roundtrip", Method: http.MethodPost},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Authorization relay roundtrip")
+	manifest.Spec.SecuritySchemes = map[string]*providermanifestv1.HTTPSecurityScheme{
+		"public": {
+			Type: providermanifestv1.HTTPSecuritySchemeTypeNone,
+		},
+	}
+	manifest.Spec.HTTP = map[string]*providermanifestv1.HTTPBinding{
+		"command": {
+			Path:     "/command",
+			Method:   http.MethodPost,
+			Security: "public",
+			Target:   "authorization_roundtrip",
+			RequestBody: &providermanifestv1.HTTPRequestBody{
+				Content: map[string]*providermanifestv1.HTTPMediaType{
+					"application/x-www-form-urlencoded": {},
+				},
+			},
+		},
+	}
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+			},
+		},
+	}
+
+	authz := &recordingHostedAuthorizationProvider{}
+	deps := Deps{
+		BaseURL:               relaySrv.URL,
+		EncryptionKey:         secret,
+		AuthorizationProvider: authz,
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "authorization_roundtrip", nil, "")
+	if err != nil {
+		t.Fatalf("Execute authorization_roundtrip: %v", err)
+	}
+
+	var body struct {
+		ModelID      string   `json:"model_id"`
+		SubjectID    string   `json:"subject_id"`
+		SubjectType  string   `json:"subject_type"`
+		Capabilities []string `json:"capabilities"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+		t.Fatalf("unmarshal authorization_roundtrip: %v", err)
+	}
+	if body.ModelID != "authz-model-1" {
+		t.Fatalf("model_id = %q, want %q", body.ModelID, "authz-model-1")
+	}
+	if body.SubjectID != "user:user-123" {
+		t.Fatalf("subject_id = %q, want %q", body.SubjectID, "user:user-123")
+	}
+	if body.SubjectType != "user" {
+		t.Fatalf("subject_type = %q, want %q", body.SubjectType, "user")
+	}
+	if !slices.Equal(body.Capabilities, []string{"search_subjects"}) {
+		t.Fatalf("capabilities = %#v, want [search_subjects]", body.Capabilities)
+	}
+
+	if got := authz.Calls(); len(got) != 1 {
+		t.Fatalf("authorization search calls = %d, want 1", len(got))
+	} else {
+		if got[0].SubjectType != "user" {
+			t.Fatalf("subject type = %q, want %q", got[0].SubjectType, "user")
+		}
+		if got[0].ResourceType != "slack_identity" || got[0].ResourceID != "team:T123:user:U456" {
+			t.Fatalf("resource = (%q, %q), want (%q, %q)", got[0].ResourceType, got[0].ResourceID, "slack_identity", "team:T123:user:U456")
+		}
+		if got[0].ActionName != "assume" {
+			t.Fatalf("action name = %q, want %q", got[0].ActionName, "assume")
+		}
+		if got[0].PageSize != 1 {
+			t.Fatalf("page size = %d, want 1", got[0].PageSize)
+		}
+	}
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env[providerhost.AuthorizationSocketTokenEnv()]; got == "" {
+		t.Fatal("StartPlugin env should include the authorization relay token")
 	}
 	bindRequests := runtimeProvider.bindHostServiceRequests()
 	if len(bindRequests) != 1 {

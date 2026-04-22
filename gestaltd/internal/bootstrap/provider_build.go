@@ -1124,14 +1124,14 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 	if includeWorkflowManager {
 		hostServices = append(hostServices, buildPluginWorkflowManagerHostService(name, deps, invTokens))
 	}
+	if deps.AuthorizationProvider != nil && len(entry.EffectiveHTTPBindings()) > 0 {
+		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
+	}
 	if !includeHostServices {
 		if len(entry.Invokes) > 0 {
 			hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
 		}
 		return hostServices, invTokens, cleanup, nil
-	}
-	if deps.AuthorizationProvider != nil && len(entry.EffectiveHTTPBindings()) > 0 {
-		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
 	}
 	if len(entry.Invokes) > 0 {
 		hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
@@ -1163,6 +1163,10 @@ func buildPluginRuntimeHostServiceBinding(pluginName, sessionID string, hostServ
 			serviceKey = "workflow_manager"
 			serviceLabel = "workflow manager"
 			methodPrefix = "/" + proto.WorkflowManagerHost_ServiceDesc.ServiceName + "/"
+		case hostService.EnvVar == providerhost.DefaultAuthorizationSocketEnv:
+			serviceKey = "authorization"
+			serviceLabel = "authorization"
+			methodPrefix = "/" + proto.AuthorizationProvider_ServiceDesc.ServiceName + "/"
 		case hostService.EnvVar == providerhost.DefaultPluginInvokerSocketEnv:
 			serviceKey = "plugin_invoker"
 			serviceLabel = "plugin invoker"

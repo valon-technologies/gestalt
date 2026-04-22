@@ -132,32 +132,33 @@ describe("S3 transport", () => {
 
   test("tcp target env selects the requested binding", async () => {
     const { proc: tcpProc, target } = await startTCPHarness();
-    process.env.GESTALT_S3_SOCKET = target;
+    const envName = s3SocketEnv("tcp");
+    process.env[envName] = target;
     try {
-      const object = new S3().object("tcp-bucket", "hello.txt");
+      const object = new S3("tcp").object("tcp-bucket", "hello.txt");
       await object.writeString("tcp binding");
       expect(await object.text()).toBe("tcp binding");
     } finally {
       tcpProc.kill();
-      delete process.env.GESTALT_S3_SOCKET;
-      process.env.GESTALT_S3_SOCKET = socketPath;
+      delete process.env[envName];
     }
   });
 
   test("tcp target token env selects the requested binding", async () => {
     const token = "relay-token-typescript";
     const { proc: tcpProc, target } = await startTCPHarness(token);
-    process.env.GESTALT_S3_SOCKET = target;
-    process.env[s3SocketTokenEnv()] = token;
+    const envName = s3SocketEnv("tcp-token");
+    const tokenEnvName = s3SocketTokenEnv("tcp-token");
+    process.env[envName] = target;
+    process.env[tokenEnvName] = token;
     try {
-      const object = new S3().object("tcp-token-bucket", "hello.txt");
+      const object = new S3("tcp-token").object("tcp-token-bucket", "hello.txt");
       await object.writeString("token binding");
       expect(await object.text()).toBe("token binding");
     } finally {
       tcpProc.kill();
-      delete process.env.GESTALT_S3_SOCKET;
-      delete process.env[s3SocketTokenEnv()];
-      process.env.GESTALT_S3_SOCKET = socketPath;
+      delete process.env[envName];
+      delete process.env[tokenEnvName];
     }
   });
 
