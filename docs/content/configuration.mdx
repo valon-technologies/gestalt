@@ -4,7 +4,7 @@ Gestalt is configured from one or more YAML files. This page covers the key conc
 
 ## Config file structure
 
-A Gestalt config has five top-level keys: `server` for host settings and host-provider selection, `authorization` for shared human/workload access policy, `providers` for named host-scoped providers and UIs, `workflows` for config-managed schedules and event triggers, and `plugins` for executable integrations and optional plugin-backed UI mounts.
+A Gestalt config has five top-level keys: `server` for host settings and host-provider selection, `authorization` for shared human/workload access policy, `providers` for named host-scoped providers and UIs, `workflows` for config-managed schedules and triggers, and `plugins` for executable integrations and optional plugin-backed UI mounts.
 
 ```yaml
 authorization:
@@ -60,7 +60,7 @@ providers:
 
 workflows:
   schedules: {}             # config-managed schedules
-  eventTriggers: {}         # config-managed event triggers
+  eventTriggers: {}         # config-managed triggers
 
 server:
   # public URL for OAuth callbacks
@@ -106,7 +106,7 @@ Gestalt has nine core concepts you configure in YAML:
 - **[S3.](/providers/s3)** Plugin-bound object storage. The provider config chooses the backend, credentials, and endpoint; plugin code chooses buckets, keys, and versions at runtime.
 - **[Authentication.](/providers/authentication)** Platform login for the Gestalt server. Separate from connection authentication, which is per-plugin and per-upstream.
 - **[Secrets.](/providers/secrets)** Resolves structured secret refs in the config at startup. Backed by environment variables, files, or cloud secret managers.
-- **[Workflow.](/providers/workflow)** Global workflow runs, schedules, and event triggers backed by a workflow provider and optional host IndexedDB storage.
+- **[Workflow.](/providers/workflow)** Global workflow runs, schedules, and triggers backed by a workflow provider and optional host IndexedDB storage.
 - **[UI.](/providers/ui)** Public static UI bundles served under configured path prefixes, either directly from `providers.ui` or through `plugins.<name>.mountPath`. Omit `providers.ui` to run headless.
 
 ## Adding a plugin

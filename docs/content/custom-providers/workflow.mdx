@@ -6,7 +6,7 @@ This page covers building custom workflow providers. If you only need to
 configure workflow storage for a deployment, use
 [Providers > Workflow](/providers/workflow).
 
-Workflow providers back global workflow runs, schedules, and event triggers.
+Workflow providers back global workflow runs, schedules, and triggers.
 Gestalt uses them to persist workflow state and to call back into target plugin
 operations through the workflow host socket.
 
@@ -32,7 +32,7 @@ The workflow service includes:
 | --- | --- |
 | `StartRun` / `GetRun` / `ListRuns` / `CancelRun` | Manage workflow runs |
 | `UpsertSchedule` / `GetSchedule` / `ListSchedules` / `DeleteSchedule` / `PauseSchedule` / `ResumeSchedule` | Manage schedules |
-| `UpsertEventTrigger` / `GetEventTrigger` / `ListEventTriggers` / `DeleteEventTrigger` / `PauseEventTrigger` / `ResumeEventTrigger` | Manage event triggers |
+| `UpsertEventTrigger` / `GetEventTrigger` / `ListEventTriggers` / `DeleteEventTrigger` / `PauseEventTrigger` / `ResumeEventTrigger` | Manage triggers |
 | `PublishEvent` | Deliver an event into the provider |
 
 The examples below show the core methods. The remaining methods follow the same

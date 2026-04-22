@@ -49,6 +49,20 @@ const RUN_JSON: &str = r#"{
     "resultBody":"{\"ok\":true}"
 }"#;
 
+const PUBLISHED_EVENT_JSON: &str = r#"{
+    "status":"published",
+    "event":{
+        "id":"evt-1",
+        "type":"roadmap.item.updated",
+        "source":"roadmap",
+        "subject":"item",
+        "specVersion":"1.0",
+        "time":"2026-04-21T00:00:00Z",
+        "data":{"id":"item-1"},
+        "extensions":{"traceId":"trace-1"}
+    }
+}"#;
+
 #[test]
 fn test_cli_lists_schedules() {
     let mut server = Server::new();
@@ -478,9 +492,7 @@ fn test_cli_deletes_event_trigger() {
         .args(["workflows", "triggers", "delete", "trg-1"])
         .assert()
         .success()
-        .stderr(predicate::str::contains(
-            "Workflow event trigger trg-1 deleted.",
-        ));
+        .stderr(predicate::str::contains("Workflow trigger trg-1 deleted."));
 }
 
 #[test]
@@ -627,4 +639,53 @@ fn test_cli_cancels_run() {
         .success()
         .stdout(predicate::str::contains("run-1"))
         .stdout(predicate::str::contains("canceled"));
+}
+
+#[test]
+fn test_cli_publishes_event() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/workflow/events",
+        StatusCode::ACCEPTED
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{
+            "type":"roadmap.item.updated",
+            "source":"roadmap",
+            "subject":"item",
+            "dataContentType":"application/json",
+            "data":{"id":"item-1"},
+            "extensions":{"traceId":"trace-1"}
+        }"#
+        .to_string(),
+    ))
+    .with_body(PUBLISHED_EVENT_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "workflows",
+            "events",
+            "publish",
+            "--type",
+            "roadmap.item.updated",
+            "--source",
+            "roadmap",
+            "--subject",
+            "item",
+            "--data-content-type",
+            "application/json",
+            "-p",
+            "id=item-1",
+            "-e",
+            "traceId=trace-1",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("evt-1"))
+        .stdout(predicate::str::contains("roadmap.item.updated"));
 }

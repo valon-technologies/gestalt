@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/graphql"
@@ -1217,6 +1218,10 @@ func (unavailableWorkflowManager) GetRun(context.Context, *principal.Principal, 
 
 func (unavailableWorkflowManager) CancelRun(context.Context, *principal.Principal, string, string) (*workflowmanager.ManagedRun, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) PublishEvent(context.Context, *principal.Principal, coreworkflow.Event) (coreworkflow.Event, error) {
+	return coreworkflow.Event{}, fmt.Errorf("workflow manager is not available")
 }
 
 func buildPluginScopedIndexedDB(pluginName string, effective config.EffectivePluginIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {

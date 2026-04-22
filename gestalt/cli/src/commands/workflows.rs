@@ -3,12 +3,13 @@ use serde_json::{Map, Value, json};
 
 use crate::api::ApiClient;
 use crate::cli::{
-    WorkflowScheduleCreateArgs, WorkflowScheduleUpdateArgs, WorkflowTriggerCreateArgs,
-    WorkflowTriggerUpdateArgs,
+    WorkflowEventPublishArgs, WorkflowScheduleCreateArgs, WorkflowScheduleUpdateArgs,
+    WorkflowTriggerCreateArgs, WorkflowTriggerUpdateArgs,
 };
 use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
 
+const EVENTS_PATH: &str = "/api/v1/workflow/events";
 const SCHEDULES_PATH: &str = "/api/v1/workflow/schedules";
 const TRIGGERS_PATH: &str = "/api/v1/workflow/event-triggers";
 const RUNS_PATH: &str = "/api/v1/workflow/runs";
@@ -31,7 +32,7 @@ pub fn get(client: &ApiClient, id: &str, format: Format) -> Result<()> {
 }
 
 pub fn create(client: &ApiClient, args: &WorkflowScheduleCreateArgs, format: Format) -> Result<()> {
-    let input = build_target_input(&args.params, args.input_file.as_deref())?;
+    let input = build_optional_map(&args.params, args.input_file.as_deref())?;
     let body = build_upsert_body(
         &args.cron,
         args.timezone.as_deref(),
@@ -98,7 +99,7 @@ pub fn list_triggers(
 ) -> Result<()> {
     let resp = client
         .get(TRIGGERS_PATH)
-        .context("failed to list workflow event triggers")?;
+        .context("failed to list workflow triggers")?;
     let filtered = filter_triggers(resp, plugin, event_type);
     print_triggers(&filtered, format);
     Ok(())
@@ -107,7 +108,7 @@ pub fn list_triggers(
 pub fn get_trigger(client: &ApiClient, id: &str, format: Format) -> Result<()> {
     let resp = client
         .get(&format!("{TRIGGERS_PATH}/{id}"))
-        .with_context(|| format!("failed to get workflow event trigger {id}"))?;
+        .with_context(|| format!("failed to get workflow trigger {id}"))?;
     print_trigger(&resp, format);
     Ok(())
 }
@@ -117,7 +118,7 @@ pub fn create_trigger(
     args: &WorkflowTriggerCreateArgs,
     format: Format,
 ) -> Result<()> {
-    let input = build_target_input(&args.params, args.input_file.as_deref())?;
+    let input = build_optional_map(&args.params, args.input_file.as_deref())?;
     let body = build_trigger_upsert_body(
         None,
         &args.event_type,
@@ -133,7 +134,7 @@ pub fn create_trigger(
 
     let resp = client
         .post(TRIGGERS_PATH, &body)
-        .context("failed to create workflow event trigger")?;
+        .context("failed to create workflow trigger")?;
     print_trigger(&resp, format);
     Ok(())
 }
@@ -145,12 +146,12 @@ pub fn update_trigger(
 ) -> Result<()> {
     let existing = client
         .get(&format!("{TRIGGERS_PATH}/{id}", id = args.id))
-        .with_context(|| format!("failed to load workflow event trigger {}", args.id))?;
+        .with_context(|| format!("failed to load workflow trigger {}", args.id))?;
 
     let body = merge_trigger_update(args, &existing)?;
     let resp = client
         .put(&format!("{TRIGGERS_PATH}/{id}", id = args.id), &body)
-        .with_context(|| format!("failed to update workflow event trigger {}", args.id))?;
+        .with_context(|| format!("failed to update workflow trigger {}", args.id))?;
     print_trigger(&resp, format);
     Ok(())
 }
@@ -158,10 +159,10 @@ pub fn update_trigger(
 pub fn delete_trigger(client: &ApiClient, id: &str, format: Format) -> Result<()> {
     let resp = client
         .delete(&format!("{TRIGGERS_PATH}/{id}"))
-        .with_context(|| format!("failed to delete workflow event trigger {id}"))?;
+        .with_context(|| format!("failed to delete workflow trigger {id}"))?;
     match format {
         Format::Json => output::print_json(&resp),
-        Format::Table => output::print_success(&format!("Workflow event trigger {id} deleted.")),
+        Format::Table => output::print_success(&format!("Workflow trigger {id} deleted.")),
     }
     Ok(())
 }
@@ -169,7 +170,7 @@ pub fn delete_trigger(client: &ApiClient, id: &str, format: Format) -> Result<()
 pub fn pause_trigger(client: &ApiClient, id: &str, format: Format) -> Result<()> {
     let resp = client
         .post(&format!("{TRIGGERS_PATH}/{id}/pause"), &json!({}))
-        .with_context(|| format!("failed to pause workflow event trigger {id}"))?;
+        .with_context(|| format!("failed to pause workflow trigger {id}"))?;
     print_trigger(&resp, format);
     Ok(())
 }
@@ -177,7 +178,7 @@ pub fn pause_trigger(client: &ApiClient, id: &str, format: Format) -> Result<()>
 pub fn resume_trigger(client: &ApiClient, id: &str, format: Format) -> Result<()> {
     let resp = client
         .post(&format!("{TRIGGERS_PATH}/{id}/resume"), &json!({}))
-        .with_context(|| format!("failed to resume workflow event trigger {id}"))?;
+        .with_context(|| format!("failed to resume workflow trigger {id}"))?;
     print_trigger(&resp, format);
     Ok(())
 }
@@ -218,6 +219,25 @@ pub fn cancel_run(
         .post(&format!("{RUNS_PATH}/{id}/cancel"), &body)
         .with_context(|| format!("failed to cancel workflow run {id}"))?;
     print_run(&resp, format);
+    Ok(())
+}
+
+pub fn publish_event(
+    client: &ApiClient,
+    args: &WorkflowEventPublishArgs,
+    format: Format,
+) -> Result<()> {
+    let data = build_optional_map(&args.data, args.data_file.as_deref())?;
+    let extensions = if args.extensions.is_empty() {
+        None
+    } else {
+        Some(params::assemble_params(&args.extensions, None, "")?)
+    };
+    let body = build_event_publish_body(args, data.as_ref(), extensions.as_ref());
+    let resp = client
+        .post(EVENTS_PATH, &body)
+        .context("failed to publish workflow event")?;
+    print_published_event(&resp, format);
     Ok(())
 }
 
@@ -274,7 +294,7 @@ fn filter_triggers(value: Value, plugin: Option<&str>, event_type: Option<&str>)
     )
 }
 
-fn build_target_input(
+fn build_optional_map(
     params: &[ParamEntry],
     input_file: Option<&str>,
 ) -> Result<Option<Map<String, Value>>> {
@@ -296,6 +316,43 @@ fn build_target_input(
     } else {
         Ok(Some(merged))
     }
+}
+
+fn build_event_publish_body(
+    args: &WorkflowEventPublishArgs,
+    data: Option<&Map<String, Value>>,
+    extensions: Option<&Map<String, Value>>,
+) -> Value {
+    let mut body = Map::new();
+    body.insert("type".to_string(), Value::String(args.event_type.clone()));
+    if let Some(value) = args.source.as_deref() {
+        body.insert("source".to_string(), Value::String(value.to_string()));
+    }
+    if let Some(value) = args.subject.as_deref() {
+        body.insert("subject".to_string(), Value::String(value.to_string()));
+    }
+    if let Some(value) = args.id.as_deref() {
+        body.insert("id".to_string(), Value::String(value.to_string()));
+    }
+    if let Some(value) = args.spec_version.as_deref() {
+        body.insert("specVersion".to_string(), Value::String(value.to_string()));
+    }
+    if let Some(value) = args.time.as_deref() {
+        body.insert("time".to_string(), Value::String(value.to_string()));
+    }
+    if let Some(value) = args.data_content_type.as_deref() {
+        body.insert(
+            "dataContentType".to_string(),
+            Value::String(value.to_string()),
+        );
+    }
+    if let Some(data) = data {
+        body.insert("data".to_string(), Value::Object(data.clone()));
+    }
+    if let Some(extensions) = extensions {
+        body.insert("extensions".to_string(), Value::Object(extensions.clone()));
+    }
+    Value::Object(body)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -393,7 +450,7 @@ fn merge_update(args: &WorkflowScheduleUpdateArgs, existing: &Value) -> Result<V
     let input = if args.clear_input {
         None
     } else if !args.params.is_empty() || args.input_file.is_some() {
-        build_target_input(&args.params, args.input_file.as_deref())?
+        build_optional_map(&args.params, args.input_file.as_deref())?
     } else {
         existing["target"]["input"].as_object().cloned()
     };
@@ -423,7 +480,7 @@ fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> R
         Some(value) => value.to_string(),
         None => existing["match"]["type"]
             .as_str()
-            .ok_or_else(|| anyhow!("existing event trigger is missing match.type; pass --type"))?
+            .ok_or_else(|| anyhow!("existing trigger is missing match.type; pass --type"))?
             .to_string(),
     };
     let source =
@@ -436,9 +493,7 @@ fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> R
         Some(value) => value.to_string(),
         None => existing["target"]["plugin"]
             .as_str()
-            .ok_or_else(|| {
-                anyhow!("existing event trigger is missing target.plugin; pass --plugin")
-            })?
+            .ok_or_else(|| anyhow!("existing trigger is missing target.plugin; pass --plugin"))?
             .to_string(),
     };
     let operation = match args.operation.as_deref() {
@@ -446,7 +501,7 @@ fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> R
         None => existing["target"]["operation"]
             .as_str()
             .ok_or_else(|| {
-                anyhow!("existing event trigger is missing target.operation; pass --operation")
+                anyhow!("existing trigger is missing target.operation; pass --operation")
             })?
             .to_string(),
     };
@@ -462,7 +517,7 @@ fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> R
     let input = if args.clear_input {
         None
     } else if !args.params.is_empty() || args.input_file.is_some() {
-        build_target_input(&args.params, args.input_file.as_deref())?
+        build_optional_map(&args.params, args.input_file.as_deref())?
     } else {
         existing["target"]["input"].as_object().cloned()
     };
@@ -600,6 +655,17 @@ fn print_runs(value: &Value, format: Format) {
     }
 }
 
+fn print_published_event(value: &Value, format: Format) {
+    match format {
+        Format::Json => output::print_json(value),
+        Format::Table => {
+            let event = value.get("event").unwrap_or(value);
+            let rows = vec![published_event_row(event)];
+            output::print_table(&published_event_headers(), &rows);
+        }
+    }
+}
+
 fn trigger_headers() -> [&'static str; 8] {
     [
         "ID",
@@ -676,6 +742,20 @@ fn run_headers() -> [&'static str; 7] {
         "Trigger",
         "Started",
         "Created",
+    ]
+}
+
+fn published_event_headers() -> [&'static str; 5] {
+    ["ID", "Type", "Source", "Subject", "Time"]
+}
+
+fn published_event_row(value: &Value) -> Vec<String> {
+    vec![
+        value["id"].as_str().unwrap_or("-").to_string(),
+        value["type"].as_str().unwrap_or("-").to_string(),
+        value["source"].as_str().unwrap_or("-").to_string(),
+        value["subject"].as_str().unwrap_or("-").to_string(),
+        value["time"].as_str().unwrap_or("-").to_string(),
     ]
 }
 

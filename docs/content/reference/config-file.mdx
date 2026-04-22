@@ -8,7 +8,7 @@ and bootstrap. The top-level keys are `server` (listener, encryption, egress,
 and host-provider selection), `authorization` (shared human/workload access
 policy), `providers` (named authentication, secrets, telemetry, audit, UI,
 indexeddb, authorization, workflow, cache, and s3 entries), `workflows`
-(config-managed schedules and event triggers), and `plugins` (executable
+(config-managed schedules and triggers), and `plugins` (executable
 integrations and optional plugin-backed UI mounts):
 
 ```yaml
@@ -325,13 +325,13 @@ The exact config fields depend on the selected authorization provider package. T
 
 ## `providers.workflow`
 
-Workflow providers back global runs, schedules, and event triggers. Configure
+Workflow providers back global runs, schedules, and triggers. Configure
 one or more named entries under `providers.workflow`, then reference them from
 top-level `workflows.schedules.*.provider` or
 `workflows.eventTriggers.*.provider`. There is no
 `server.providers.workflow`: config-managed workflow objects choose a provider
 explicitly, or inherit the sole/default workflow provider when `provider` is
-omitted. User-owned schedules and event triggers use the same provider pool
+omitted. User-owned schedules and triggers use the same provider pool
 through `/api/v1/workflow/schedules`,
 `/api/v1/workflow/event-triggers`, and `gestalt workflows ...`.
 
@@ -390,7 +390,7 @@ allowlist logical stores exposed through that binding.
 
 ## `workflows`
 
-Top-level `workflows` declares config-managed schedules and event triggers.
+Top-level `workflows` declares config-managed schedules and triggers.
 These objects are reconciled into the selected workflow provider at startup and
 invoke explicit workflow targets: `plugin`, `operation`, and optional
 `connection`, `instance`, and `input`.

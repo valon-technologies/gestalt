@@ -374,10 +374,15 @@ pub enum WorkflowCommands {
         #[command(subcommand)]
         command: WorkflowScheduleCommands,
     },
-    /// Manage workflow event triggers
+    /// Manage workflow triggers
     Triggers {
         #[command(subcommand)]
         command: WorkflowTriggerCommands,
+    },
+    /// Publish workflow events
+    Events {
+        #[command(subcommand)]
+        command: WorkflowEventCommands,
     },
     /// Inspect workflow runs
     Runs {
@@ -422,35 +427,35 @@ pub enum WorkflowScheduleCommands {
 
 #[derive(Subcommand)]
 pub enum WorkflowTriggerCommands {
-    /// List workflow event triggers
+    /// List workflow triggers
     List {
-        /// Filter event triggers by target plugin
+        /// Filter triggers by target plugin
         #[arg(long)]
         plugin: Option<String>,
-        /// Filter event triggers by event type
+        /// Filter triggers by event type
         #[arg(long = "type")]
         event_type: Option<String>,
     },
-    /// Show a single workflow event trigger
+    /// Show a single workflow trigger
     Get {
         /// Trigger ID
         id: String,
     },
-    /// Create a workflow event trigger
+    /// Create a workflow trigger
     Create(WorkflowTriggerCreateArgs),
-    /// Update an existing workflow event trigger
+    /// Update an existing workflow trigger
     Update(WorkflowTriggerUpdateArgs),
-    /// Delete a workflow event trigger
+    /// Delete a workflow trigger
     Delete {
         /// Trigger ID
         id: String,
     },
-    /// Pause a workflow event trigger
+    /// Pause a workflow trigger
     Pause {
         /// Trigger ID
         id: String,
     },
-    /// Resume a paused workflow event trigger
+    /// Resume a paused workflow trigger
     Resume {
         /// Trigger ID
         id: String,
@@ -481,6 +486,12 @@ pub enum WorkflowRunCommands {
         #[arg(long)]
         reason: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+pub enum WorkflowEventCommands {
+    /// Publish a workflow event
+    Publish(WorkflowEventPublishArgs),
 }
 
 #[derive(Args)]
@@ -648,11 +659,11 @@ pub struct WorkflowTriggerUpdateArgs {
     #[arg(long)]
     pub instance: Option<String>,
 
-    /// Mark the event trigger as paused
+    /// Mark the trigger as paused
     #[arg(long, conflicts_with = "unpaused", action = clap::ArgAction::SetTrue)]
     pub paused: bool,
 
-    /// Mark the event trigger as not paused
+    /// Mark the trigger as not paused
     #[arg(long = "no-paused", action = clap::ArgAction::SetTrue)]
     pub unpaused: bool,
 
@@ -667,6 +678,49 @@ pub struct WorkflowTriggerUpdateArgs {
     /// Clear the target input instead of keeping the existing value
     #[arg(long = "clear-input", conflicts_with_all = ["params", "input_file"])]
     pub clear_input: bool,
+}
+
+#[derive(Args)]
+pub struct WorkflowEventPublishArgs {
+    /// Event type
+    #[arg(long = "type")]
+    pub event_type: String,
+
+    /// Event source
+    #[arg(long)]
+    pub source: Option<String>,
+
+    /// Event subject
+    #[arg(long)]
+    pub subject: Option<String>,
+
+    /// Explicit event ID
+    #[arg(long)]
+    pub id: Option<String>,
+
+    /// CloudEvents spec version
+    #[arg(long = "spec-version")]
+    pub spec_version: Option<String>,
+
+    /// Event timestamp in RFC 3339 format
+    #[arg(long)]
+    pub time: Option<String>,
+
+    /// Event data content type
+    #[arg(long = "data-content-type")]
+    pub data_content_type: Option<String>,
+
+    /// Event data fields as key=value or key:=json
+    #[arg(short = 'p', long = "data", value_parser = params::parse_param_entry)]
+    pub data: Vec<params::ParamEntry>,
+
+    /// Load event data from a JSON file (use "-" for stdin)
+    #[arg(long = "data-file")]
+    pub data_file: Option<String>,
+
+    /// Event extension fields as key=value or key:=json
+    #[arg(short = 'e', long = "extension", value_parser = params::parse_param_entry)]
+    pub extensions: Vec<params::ParamEntry>,
 }
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]

@@ -26,15 +26,18 @@ var (
 	ErrWorkflowSubjectRequired    = errors.New("workflow subject is required")
 	ErrWorkflowScheduleSubject    = ErrWorkflowSubjectRequired
 	ErrDuplicateExecutionRefs     = errors.New("workflow object matched multiple execution references")
-	ErrWorkflowEventMatchRequired = errors.New("workflow event trigger match.type is required")
+	ErrWorkflowEventMatchRequired = errors.New("workflow trigger match.type is required")
+	ErrWorkflowEventTypeRequired  = errors.New("workflow event type is required")
 )
 
 const workflowScheduleExecutionRefBasePrefix = "workflow_schedule:"
 const workflowEventTriggerExecutionRefBasePrefix = "workflow_event_trigger:"
+const defaultWorkflowEventSpecVersion = "1.0"
 
 type WorkflowControl interface {
 	ResolveProvider(name string) (coreworkflow.Provider, error)
 	ResolveProviderSelection(name string) (providerName string, provider coreworkflow.Provider, err error)
+	ProviderNames() []string
 }
 
 type Service interface {
@@ -55,6 +58,7 @@ type Service interface {
 	ListRuns(ctx context.Context, p *principal.Principal) ([]*ManagedRun, error)
 	GetRun(ctx context.Context, p *principal.Principal, runID string) (*ManagedRun, error)
 	CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*ManagedRun, error)
+	PublishEvent(ctx context.Context, p *principal.Principal, event coreworkflow.Event) (coreworkflow.Event, error)
 }
 
 type Config struct {
@@ -244,6 +248,42 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, 
 	}
 	value.Run = run
 	return value, nil
+}
+
+func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, event coreworkflow.Event) (coreworkflow.Event, error) {
+	p = principal.Canonicalized(p)
+	if strings.TrimSpace(principalSubjectID(p)) == "" {
+		return coreworkflow.Event{}, ErrWorkflowSubjectRequired
+	}
+	if m == nil || m.workflow == nil {
+		return coreworkflow.Event{}, ErrWorkflowNotConfigured
+	}
+
+	event = normalizePublishedEvent(event, m.now())
+	if strings.TrimSpace(event.Type) == "" {
+		return coreworkflow.Event{}, ErrWorkflowEventTypeRequired
+	}
+
+	providerNames := m.workflow.ProviderNames()
+	pluginNames := []string{}
+	if m.providers != nil {
+		pluginNames = m.providers.List()
+	}
+	for _, providerName := range providerNames {
+		provider, err := m.resolveProviderByName(providerName)
+		if err != nil {
+			return coreworkflow.Event{}, err
+		}
+		for _, pluginName := range pluginNames {
+			if err := provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
+				PluginName: pluginName,
+				Event:      event,
+			}); err != nil {
+				return coreworkflow.Event{}, err
+			}
+		}
+	}
+	return event, nil
 }
 
 func (m *Manager) ListSchedules(ctx context.Context, p *principal.Principal) ([]*ManagedSchedule, error) {
@@ -1133,4 +1173,29 @@ func existingEventTriggerProvider(value *ManagedEventTrigger) coreworkflow.Provi
 		return nil
 	}
 	return value.provider
+}
+
+func normalizePublishedEvent(event coreworkflow.Event, now time.Time) coreworkflow.Event {
+	event.ID = strings.TrimSpace(event.ID)
+	event.Source = strings.TrimSpace(event.Source)
+	event.SpecVersion = strings.TrimSpace(event.SpecVersion)
+	event.Type = strings.TrimSpace(event.Type)
+	event.Subject = strings.TrimSpace(event.Subject)
+	event.DataContentType = strings.TrimSpace(event.DataContentType)
+	event.Data = maps.Clone(event.Data)
+	event.Extensions = maps.Clone(event.Extensions)
+	if event.ID == "" {
+		event.ID = uuid.NewString()
+	}
+	if event.SpecVersion == "" {
+		event.SpecVersion = defaultWorkflowEventSpecVersion
+	}
+	if event.Time == nil || event.Time.IsZero() {
+		value := now.UTC()
+		event.Time = &value
+	} else {
+		value := event.Time.UTC()
+		event.Time = &value
+	}
+	return event
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -158,6 +159,23 @@ func (r *workflowRuntime) ResolveProviderSelection(name string) (string, corewor
 		return "", nil, fmt.Errorf("workflow provider %q is not available", selectedName)
 	}
 	return selectedName, provider, nil
+}
+
+func (r *workflowRuntime) ProviderNames() []string {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	names := make([]string, 0, len(r.providers))
+	for name := range r.providers {
+		if strings.TrimSpace(name) == "" {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOperationRequest) (*coreworkflow.InvokeOperationResponse, error) {

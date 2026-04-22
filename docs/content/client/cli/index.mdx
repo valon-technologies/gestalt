@@ -28,7 +28,8 @@ asIndexPage: true
 | `gestalt plugins invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
 | `gestalt plugins describe NAME OPERATION` | Show one operation's parameter contract. |
 | `gestalt workflows schedules ...` | Create, list, inspect, update, pause, resume, or delete workflow schedules. |
-| `gestalt workflows triggers ...` | Create, list, inspect, update, pause, resume, or delete workflow event triggers. |
+| `gestalt workflows triggers ...` | Create, list, inspect, update, pause, resume, or delete workflow triggers. |
+| `gestalt workflows events publish ...` | Publish an event into the workflow system. |
 | `gestalt workflows runs ...` | List, inspect, and cancel workflow runs. |
 | `gestalt tokens create\|list\|revoke` | Manage Gestalt API tokens. |
 
@@ -105,13 +106,19 @@ gestalt workflows triggers create \
   --operation chat.postMessage \
   -p channel=C123 \
   -p text='Roadmap item updated'
+gestalt workflows events publish \
+  --type roadmap.item.updated \
+  --source roadmap \
+  --subject item \
+  -p id=item-1 \
+  -e traceId=trace-1
 gestalt workflows runs list --plugin github --status failed
 gestalt tokens create --name automation
 ```
 
 ## Workflow commands
 
-The workflow CLI currently covers global schedules, global event triggers, and
+The workflow CLI currently covers global schedules, global triggers, and
 workflow runs.
 
 ### Schedules
@@ -139,7 +146,7 @@ gestalt workflows schedules delete <schedule-id>
 Use `-p key=value` for strings and `-p key:=json` for structured values. Use
 `--input-file file.json` to load the target input from JSON instead of flags.
 
-### Event triggers
+### Triggers
 
 ```sh
 gestalt workflows triggers list
@@ -162,9 +169,24 @@ gestalt workflows triggers delete <trigger-id>
 
 The create and update commands use the same target input conventions as
 schedules. `--type` is required. `--source` and `--subject` are optional exact
-match fields. There is still no generic public event-publish endpoint, so a
-trigger only fires when some provider or internal component publishes matching
-events into the workflow provider.
+match fields.
+
+### Event publishing
+
+```sh
+gestalt workflows events publish \
+  --type roadmap.item.updated \
+  --source roadmap \
+  --subject item \
+  --data-content-type application/json \
+  -p id=item-1 \
+  -e traceId=trace-1
+```
+
+The publish command sends one event to `POST /api/v1/workflow/events`. Gestalt
+fills in the event ID, spec version, and timestamp when you omit them, then
+fans the event out across the configured workflow providers so matching
+triggers can create runs.
 
 ### Runs
 
