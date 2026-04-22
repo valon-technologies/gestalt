@@ -163,10 +163,12 @@ plugins:
 	entry := cfg.Plugins["signed"]
 	if entry == nil {
 		t.Fatal("Plugins[signed] = nil")
+		return
 	}
 	scheme := entry.SecuritySchemes["signed"]
 	if scheme == nil || scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeHMAC {
 		t.Fatalf("SecuritySchemes[signed] = %#v", entry.SecuritySchemes["signed"])
+		return
 	}
 	if got, want := scheme.SignatureHeader, "X-Request-Signature"; got != want {
 		t.Fatalf("SecuritySchemes[signed].SignatureHeader = %q, want %q", got, want)
@@ -229,6 +231,7 @@ func TestProviderEntryEffectiveHTTPSecuritySchemes_MergesHMACFields(t *testing.T
 	scheme := effective["signed"]
 	if scheme == nil {
 		t.Fatal("EffectiveHTTPSecuritySchemes()[signed] = nil")
+		return
 	}
 	if got, want := scheme.SignatureHeader, "X-Request-Signature"; got != want {
 		t.Fatalf("SignatureHeader = %q, want %q", got, want)
@@ -451,10 +454,11 @@ plugins:
 		t.Fatalf("Server.Public.Port = %d, want 8080", cfg.Server.Public.Port)
 	}
 	_, secrets := mustSelectedProvider(t, cfg, HostProviderKindSecrets)
-	if secrets == nil || secrets.Source.Builtin != "env" {
-		if secrets == nil {
-			t.Fatal("SelectedSecretsProvider = nil, want env builtin")
-		}
+	if secrets == nil {
+		t.Fatal("SelectedSecretsProvider = nil, want env builtin")
+		return
+	}
+	if secrets.Source.Builtin != "env" {
 		t.Fatalf("Secrets.Source.Builtin = %q, want env", secrets.Source.Builtin)
 	}
 	if cfg.Server.EncryptionKey != "encryption-from-env" {
