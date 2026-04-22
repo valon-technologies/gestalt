@@ -5,6 +5,8 @@ from importlib import import_module
 __all__ = [
     "authentication_pb2",
     "authentication_pb2_grpc",
+    "authorization_pb2",
+    "authorization_pb2_grpc",
     "cache_pb2",
     "cache_pb2_grpc",
     "datastore_pb2",

@@ -20,6 +20,7 @@ from gestalt import (
     CatalogOperation,
     ExternalTokenValidator,
     HealthChecker,
+    HTTPSubjectRequest,
     MetadataProvider,
     Plugin,
     PluginProviderAdapter,
@@ -32,6 +33,7 @@ from gestalt import (
     WorkflowProvider,
     _bootstrap,
     _runtime,
+    http_subject_error,
 )
 from gestalt.gen.v1 import authentication_pb2 as _authentication_pb2
 from gestalt.gen.v1 import cache_pb2 as _cache_pb2
@@ -524,6 +526,121 @@ class MainEntrypointTests(unittest.TestCase):
         context.abort.assert_called_once_with(
             grpc.StatusCode.UNIMPLEMENTED,
             "provider does not support session catalogs",
+        )
+
+    def test_provider_servicer_resolves_hosted_http_subjects(self) -> None:
+        plugin = Plugin("source-name")
+        seen_request: HTTPSubjectRequest | None = None
+        seen_context: Request | None = None
+
+        @plugin.http_subject
+        def resolve(request: HTTPSubjectRequest, context: Request):
+            nonlocal seen_request, seen_context
+            seen_request = request
+            seen_context = context
+            if request.binding == "events":
+                return None
+            if request.binding == "reject":
+                raise http_subject_error(403, "unmapped slack subject")
+            if request.binding == "boom":
+                raise RuntimeError("boom")
+            return _runtime.Subject(
+                id="user:user-456",
+                kind="user",
+                display_name="Slack User",
+                auth_source="slack",
+            )
+
+        request_params = struct_pb2.Struct()
+        request_params.update({"team_id": "T123", "user_id": "U456"})
+        workflow = struct_pb2.Struct()
+        workflow.update({"http": {"binding": "command"}})
+
+        servicer = _runtime._provider_servicer(plugin=plugin)
+        resolved = servicer.ResolveHTTPSubject(
+            plugin_pb2.ResolveHTTPSubjectRequest(
+                request=plugin_pb2.HTTPSubjectRequest(
+                    binding="command",
+                    method="POST",
+                    path="/api/v1/agent/command",
+                    content_type="application/x-www-form-urlencoded",
+                    headers={
+                        "x-slack-signature": plugin_pb2.StringList(values=["v0=abc123"])
+                    },
+                    query={
+                        "trace": plugin_pb2.StringList(values=["a", "b"])
+                    },
+                    params=request_params,
+                    raw_body=b"payload",
+                    security_scheme="slack",
+                    verified_subject="slack:T123:U456",
+                    verified_claims={"team_id": "T123"},
+                ),
+                context=plugin_pb2.RequestContext(
+                    subject=plugin_pb2.SubjectContext(
+                        id="system:http_binding:agent:command",
+                        kind="workload",
+                        auth_source="http_binding",
+                    ),
+                    credential=plugin_pb2.CredentialContext(mode="none"),
+                    access=plugin_pb2.AccessContext(
+                        policy="hosted_http",
+                        role="binding",
+                    ),
+                    workflow=workflow,
+                ),
+            ),
+            mock.Mock(),
+        )
+
+        self.assertEqual(resolved.subject.id, "user:user-456")
+        self.assertEqual(resolved.subject.kind, "user")
+        self.assertEqual(resolved.subject.display_name, "Slack User")
+        self.assertEqual(resolved.subject.auth_source, "slack")
+        assert seen_request is not None
+        assert seen_context is not None
+        self.assertEqual(seen_request.binding, "command")
+        self.assertEqual(
+            seen_request.headers["x-slack-signature"],
+            ["v0=abc123"],
+        )
+        self.assertEqual(seen_request.query["trace"], ["a", "b"])
+        self.assertEqual(seen_request.params["team_id"], "T123")
+        self.assertEqual(seen_request.raw_body, b"payload")
+        self.assertEqual(seen_request.security_scheme, "slack")
+        self.assertEqual(seen_request.verified_subject, "slack:T123:U456")
+        self.assertEqual(seen_request.verified_claims["team_id"], "T123")
+        self.assertEqual(seen_context.subject.id, "system:http_binding:agent:command")
+        self.assertEqual(seen_context.access.role, "binding")
+        self.assertEqual(seen_context.workflow["http"]["binding"], "command")
+
+        fallback = servicer.ResolveHTTPSubject(
+            plugin_pb2.ResolveHTTPSubjectRequest(
+                request=plugin_pb2.HTTPSubjectRequest(binding="events"),
+            ),
+            mock.Mock(),
+        )
+        self.assertFalse(fallback.HasField("subject"))
+
+        rejected = servicer.ResolveHTTPSubject(
+            plugin_pb2.ResolveHTTPSubjectRequest(
+                request=plugin_pb2.HTTPSubjectRequest(binding="reject"),
+            ),
+            mock.Mock(),
+        )
+        self.assertEqual(rejected.reject_status, 403)
+        self.assertEqual(rejected.reject_message, "unmapped slack subject")
+
+        broken_context = mock.Mock()
+        servicer.ResolveHTTPSubject(
+            plugin_pb2.ResolveHTTPSubjectRequest(
+                request=plugin_pb2.HTTPSubjectRequest(binding="boom"),
+            ),
+            broken_context,
+        )
+        broken_context.abort.assert_called_once_with(
+            grpc.StatusCode.UNKNOWN,
+            "resolve http subject: boom",
         )
 
 

@@ -14,8 +14,12 @@ from typing import TYPE_CHECKING, Any, Final
 
 import yaml
 
-from ._api import Request
+from ._api import Access, Credential, Request, Subject
 from ._catalog_helpers import catalog_parameters
+from ._http_subject import (
+    HTTPSubjectRequest,
+    clone_http_subject_request,
+)
 from ._manifest_metadata import (
     HTTPBinding,
     HTTPSecurityScheme,
@@ -75,6 +79,7 @@ class Plugin:
         self._module_name = module_name
         self._operations: dict[str, OperationDefinition] = {}
         self._configure_handler: Any = None
+        self._http_subject_handler: tuple[Any, bool] | None = None
         self._session_catalog_handler: tuple[Any, bool] | None = None
         self._security_schemes = copy.deepcopy(
             dict(
@@ -128,6 +133,12 @@ class Plugin:
         """Register a per-request catalog hook."""
 
         self._session_catalog_handler = (func, _inspect_session_catalog_handler(func))
+        return func
+
+    def http_subject(self, func: Any) -> Any:
+        """Register a hosted HTTP subject-resolution hook."""
+
+        self._http_subject_handler = (func, _inspect_http_subject_handler(func))
         return func
 
     def operation(
@@ -246,6 +257,50 @@ class Plugin:
 
         return self._resolve_session_catalog_handler() is not None
 
+    def supports_http_subject(self) -> bool:
+        """Report whether the plugin exposes hosted HTTP subject resolution."""
+
+        return self._resolve_http_subject_handler() is not None
+
+    def resolve_http_subject(
+        self,
+        request: HTTPSubjectRequest,
+        context: Request,
+    ) -> Subject | None:
+        """Resolve one hosted HTTP request into a concrete Gestalt subject."""
+
+        definition = self._resolve_http_subject_handler()
+        if definition is None:
+            return None
+
+        handler, takes_context = definition
+        cloned_request = clone_http_subject_request(request)
+        cloned_context = Request(
+            token=context.token,
+            connection_params=dict(context.connection_params),
+            subject=Subject(
+                id=context.subject.id,
+                kind=context.subject.kind,
+                display_name=context.subject.display_name,
+                auth_source=context.subject.auth_source,
+            ),
+            credential=Credential(
+                mode=context.credential.mode,
+                subject_id=context.credential.subject_id,
+                connection=context.credential.connection,
+                instance=context.credential.instance,
+            ),
+            access=Access(
+                policy=context.access.policy,
+                role=context.access.role,
+            ),
+            invocation_token=context.invocation_token,
+            workflow=dict(context.workflow),
+        )
+        if takes_context:
+            return run_sync(handler(cloned_request, cloned_context))
+        return run_sync(handler(cloned_request))
+
     def catalog_for_request(self, request: Request) -> Catalog | dict[str, Any] | None:
         """Return a per-request catalog if the plugin defines one."""
 
@@ -300,6 +355,24 @@ class Plugin:
                 _inspect_session_catalog_handler(session_catalog),
             )
         return self._session_catalog_handler
+
+    def _resolve_http_subject_handler(self) -> tuple[Any, bool] | None:
+        if self._http_subject_handler is not None:
+            return self._http_subject_handler
+        if not self._module_name:
+            return None
+
+        module = sys.modules.get(self._module_name)
+        if module is None:
+            return None
+
+        http_subject = getattr(module, "http_subject", None)
+        if callable(http_subject) and getattr(http_subject, "__module__", None) == module.__name__:
+            self._http_subject_handler = (
+                http_subject,
+                _inspect_http_subject_handler(http_subject),
+            )
+        return self._http_subject_handler
 
 
 class _ModulePluginRegistry:
@@ -393,6 +466,18 @@ def session_catalog(func: Any | None = None, /) -> Any:
     return decorator(func)
 
 
+def http_subject(func: Any | None = None, /) -> Any:
+    """Register a hosted HTTP subject hook on the implicit module plugin."""
+
+    def decorator(handler: Any) -> Any:
+        plugin = _MODULE_PLUGINS.for_function(handler)
+        return plugin.http_subject(handler)
+
+    if func is None:
+        return decorator
+    return decorator(func)
+
+
 def _module_plugin(module: types.ModuleType) -> "Plugin":
     return _MODULE_PLUGINS.for_module(module)
 
@@ -425,6 +510,17 @@ def _inspect_session_catalog_handler(func: Any) -> bool:
             "session catalog handler parameter must be annotated as gestalt.Request"
         )
     return True
+
+
+def _inspect_http_subject_handler(func: Any) -> bool:
+    signature = inspect.signature(func)
+    parameters = list(signature.parameters.values())
+
+    if len(parameters) == 1:
+        return False
+    if len(parameters) == 2:
+        return True
+    raise TypeError("http subject handlers must declare one or two parameters")
 
 
 def _catalog_operation_dict(operation: OperationDefinition) -> dict[str, Any]:

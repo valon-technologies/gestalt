@@ -22,6 +22,7 @@ else:
                 return decorator
 
 if TYPE_CHECKING:
+    from ._authorization import AuthorizationClient
     from ._invoker import PluginInvoker
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
@@ -82,6 +83,11 @@ class Request:
         from ._invoker import PluginInvoker
 
         return PluginInvoker(self.invocation_token)
+
+    def authorization(self) -> "AuthorizationClient":
+        from ._authorization import Authorization
+
+        return Authorization()
 
 
 @dataclasses.dataclass(slots=True)

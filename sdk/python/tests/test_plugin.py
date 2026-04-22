@@ -4,7 +4,19 @@ import tempfile
 import unittest
 from dataclasses import dataclass
 
-from gestalt import OK, Access, Credential, Error, Plugin, Request, Response, Subject
+from gestalt import (
+    OK,
+    Access,
+    Credential,
+    Error,
+    HTTPSubjectRequest,
+    Plugin,
+    Request,
+    Response,
+    Subject,
+    http_subject,
+    http_subject_error,
+)
 
 
 class PluginOperationTests(unittest.TestCase):
@@ -183,6 +195,76 @@ class PluginConfigureTests(unittest.TestCase):
         """Without a configure handler, configure_provider should be a no-op."""
         plugin = Plugin("test-plugin")
         plugin.configure_provider("my-provider", {"key": "value"})
+
+
+class PluginHTTPSubjectTests(unittest.TestCase):
+    def test_http_subject_handler_receives_copied_request_and_context(self) -> None:
+        plugin = Plugin("test-plugin")
+
+        @plugin.http_subject
+        def resolve(
+            request: HTTPSubjectRequest,
+            context: Request,
+        ) -> Subject | None:
+            request.binding = "mutated"
+            request.headers["x-slack-signature"] = ["changed"]
+            context.subject.id = "mutated"
+            context.workflow["binding"] = "mutated"
+            return Subject(
+                id="user:user-456",
+                kind="user",
+                display_name="Slack User",
+                auth_source="slack",
+            )
+
+        original_request = HTTPSubjectRequest(
+            binding="command",
+            headers={"x-slack-signature": ["v0=abc123"]},
+        )
+        original_context = Request(
+            subject=Subject(id="system:http_binding:agent:command", kind="workload"),
+            workflow={"binding": "command"},
+        )
+
+        resolved = plugin.resolve_http_subject(original_request, original_context)
+
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
+        self.assertEqual(resolved.id, "user:user-456")
+        self.assertEqual(original_request.binding, "command")
+        self.assertEqual(original_request.headers["x-slack-signature"], ["v0=abc123"])
+        self.assertEqual(original_context.subject.id, "system:http_binding:agent:command")
+        self.assertEqual(original_context.workflow["binding"], "command")
+
+    def test_module_level_http_subject_decorator_uses_implicit_plugin(self) -> None:
+        @http_subject
+        def resolve(request: HTTPSubjectRequest) -> Subject | None:
+            return Subject(id=f"user:{request.binding}", kind="user")
+
+        plugin = resolve.__globals__["plugin"]
+        resolved = plugin.resolve_http_subject(
+            HTTPSubjectRequest(binding="command"),
+            Request(),
+        )
+
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
+        self.assertEqual(resolved.id, "user:command")
+
+    def test_http_subject_decorator_rejects_bad_signatures(self) -> None:
+        plugin = Plugin("test-plugin")
+
+        with self.assertRaisesRegex(TypeError, "http subject handlers must declare one or two parameters"):
+
+            @plugin.http_subject
+            def bad(a, b, c):  # type: ignore[no-untyped-def]
+                return None
+
+    def test_http_subject_error_carries_explicit_status(self) -> None:
+        error = http_subject_error(403, "forbidden")
+
+        self.assertEqual(error.status, 403)
+        self.assertEqual(str(error), "forbidden")
 
 
 class PluginCatalogTests(unittest.TestCase):
