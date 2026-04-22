@@ -10,8 +10,11 @@ import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { expect, test } from "bun:test";
 
 import {
+  BoundWorkflowEventTriggerSchema,
   BoundWorkflowScheduleSchema,
   ManagedWorkflowScheduleSchema,
+  ManagedWorkflowEventTriggerSchema,
+  WorkflowEventSchema,
   WorkflowManagerHost as WorkflowManagerHostService,
 } from "../gen/v1/workflow_pb.ts";
 import {
@@ -25,7 +28,13 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
   const tempDir = mkdtempSync(join(tmpdir(), "gts-workflow-manager-"));
   const socketPath = join(tempDir, "workflow-manager.sock");
   const previousSocket = process.env[ENV_WORKFLOW_MANAGER_SOCKET];
-  const calls: Array<{ method: string; invocationToken: string; scheduleId?: string }> = [];
+  const calls: Array<{
+    method: string;
+    invocationToken: string;
+    scheduleId?: string;
+    triggerId?: string;
+    eventType?: string;
+  }> = [];
 
   const handler = connectNodeAdapter({
     grpc: true,
@@ -117,6 +126,99 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
               }),
             });
           },
+          async createEventTrigger(input) {
+            calls.push({
+              method: "create-trigger",
+              invocationToken: input.invocationToken,
+            });
+            return create(ManagedWorkflowEventTriggerSchema, {
+              providerName: input.providerName || "basic",
+              trigger: create(BoundWorkflowEventTriggerSchema, {
+                id: "trg-1",
+                paused: input.paused,
+                ...(input.match ? { match: input.match } : {}),
+                ...(input.target ? { target: input.target } : {}),
+              }),
+            });
+          },
+          async getEventTrigger(input) {
+            calls.push({
+              method: "get-trigger",
+              invocationToken: input.invocationToken,
+              triggerId: input.triggerId,
+            });
+            return create(ManagedWorkflowEventTriggerSchema, {
+              providerName: "basic",
+              trigger: create(BoundWorkflowEventTriggerSchema, {
+                id: input.triggerId,
+              }),
+            });
+          },
+          async updateEventTrigger(input) {
+            calls.push({
+              method: "update-trigger",
+              invocationToken: input.invocationToken,
+              triggerId: input.triggerId,
+            });
+            return create(ManagedWorkflowEventTriggerSchema, {
+              providerName: input.providerName || "basic",
+              trigger: create(BoundWorkflowEventTriggerSchema, {
+                id: input.triggerId,
+                paused: input.paused,
+                ...(input.match ? { match: input.match } : {}),
+                ...(input.target ? { target: input.target } : {}),
+              }),
+            });
+          },
+          async deleteEventTrigger(input) {
+            calls.push({
+              method: "delete-trigger",
+              invocationToken: input.invocationToken,
+              triggerId: input.triggerId,
+            });
+            return create(EmptySchema, {});
+          },
+          async pauseEventTrigger(input) {
+            calls.push({
+              method: "pause-trigger",
+              invocationToken: input.invocationToken,
+              triggerId: input.triggerId,
+            });
+            return create(ManagedWorkflowEventTriggerSchema, {
+              providerName: "basic",
+              trigger: create(BoundWorkflowEventTriggerSchema, {
+                id: input.triggerId,
+                paused: true,
+              }),
+            });
+          },
+          async resumeEventTrigger(input) {
+            calls.push({
+              method: "resume-trigger",
+              invocationToken: input.invocationToken,
+              triggerId: input.triggerId,
+            });
+            return create(ManagedWorkflowEventTriggerSchema, {
+              providerName: "basic",
+              trigger: create(BoundWorkflowEventTriggerSchema, {
+                id: input.triggerId,
+                paused: false,
+              }),
+            });
+          },
+          async publishEvent(input) {
+            calls.push({
+              method: "publish-event",
+              invocationToken: input.invocationToken,
+              ...(input.event?.type ? { eventType: input.event.type } : {}),
+            });
+            return create(WorkflowEventSchema, {
+              id: input.event?.id || "evt-1",
+              type: input.event?.type || "dummy.event",
+              source: input.event?.source || "tests",
+              subject: input.event?.subject || "subject",
+            });
+          },
         } satisfies Partial<ServiceImpl<typeof WorkflowManagerHostService>>,
       );
     },
@@ -167,12 +269,54 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     const paused = await fromRequest.pauseSchedule({ scheduleId: "sched-1" });
     const resumed = await fromRequest.resumeSchedule({ scheduleId: "sched-1" });
     await fromRequest.deleteSchedule({ scheduleId: "sched-1" });
+    const createdTrigger = await fromRequest.createTrigger({
+      providerName: "basic",
+      match: {
+        type: "roadmap.item.updated",
+        source: "roadmap",
+      },
+      target: {
+        pluginName: "slack",
+        operation: "chat.postMessage",
+      },
+      paused: false,
+    });
+    const fetchedTrigger = await fromRequest.getTrigger({ triggerId: "trg-1" });
+    const updatedTrigger = await fromRequest.updateTrigger({
+      triggerId: "trg-1",
+      providerName: "secondary",
+      match: {
+        type: "roadmap.item.synced",
+      },
+      target: {
+        pluginName: "slack",
+        operation: "chat.postMessage",
+      },
+      paused: true,
+    });
+    const pausedTrigger = await fromRequest.pauseTrigger({ triggerId: "trg-1" });
+    const resumedTrigger = await fromRequest.resumeTrigger({ triggerId: "trg-1" });
+    await fromRequest.deleteTrigger({ triggerId: "trg-1" });
+    const publishedEvent = await fromRequest.publishEvent({
+      event: {
+        type: "roadmap.item.updated",
+        source: "roadmap",
+      },
+    });
 
     expect(fetched.schedule?.id).toBe("sched-1");
     expect(updated.providerName).toBe("secondary");
     expect(updated.schedule?.paused).toBe(true);
     expect(paused.schedule?.paused).toBe(true);
     expect(resumed.schedule?.paused).toBe(false);
+    expect(createdTrigger.providerName).toBe("basic");
+    expect(createdTrigger.trigger?.id).toBe("trg-1");
+    expect(fetchedTrigger.trigger?.id).toBe("trg-1");
+    expect(updatedTrigger.providerName).toBe("secondary");
+    expect(updatedTrigger.trigger?.paused).toBe(true);
+    expect(pausedTrigger.trigger?.paused).toBe(true);
+    expect(resumedTrigger.trigger?.paused).toBe(false);
+    expect(publishedEvent.type).toBe("roadmap.item.updated");
     expect(calls).toEqual([
       { method: "create", invocationToken: "invocation-token-123" },
       { method: "get", invocationToken: "invocation-token-456", scheduleId: "sched-1" },
@@ -180,6 +324,13 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       { method: "pause", invocationToken: "invocation-token-456", scheduleId: "sched-1" },
       { method: "resume", invocationToken: "invocation-token-456", scheduleId: "sched-1" },
       { method: "delete", invocationToken: "invocation-token-456", scheduleId: "sched-1" },
+      { method: "create-trigger", invocationToken: "invocation-token-456" },
+      { method: "get-trigger", invocationToken: "invocation-token-456", triggerId: "trg-1" },
+      { method: "update-trigger", invocationToken: "invocation-token-456", triggerId: "trg-1" },
+      { method: "pause-trigger", invocationToken: "invocation-token-456", triggerId: "trg-1" },
+      { method: "resume-trigger", invocationToken: "invocation-token-456", triggerId: "trg-1" },
+      { method: "delete-trigger", invocationToken: "invocation-token-456", triggerId: "trg-1" },
+      { method: "publish-event", invocationToken: "invocation-token-456", eventType: "roadmap.item.updated" },
     ]);
   } finally {
     if (previousSocket === undefined) {

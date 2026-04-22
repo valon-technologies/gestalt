@@ -6,36 +6,68 @@ import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
   WorkflowManagerCreateScheduleRequestSchema,
+  WorkflowManagerCreateEventTriggerRequestSchema,
   WorkflowManagerDeleteScheduleRequestSchema,
+  WorkflowManagerDeleteEventTriggerRequestSchema,
   WorkflowManagerGetScheduleRequestSchema,
+  WorkflowManagerGetEventTriggerRequestSchema,
   WorkflowManagerHost as WorkflowManagerHostService,
   WorkflowManagerPauseScheduleRequestSchema,
+  WorkflowManagerPauseEventTriggerRequestSchema,
+  WorkflowManagerPublishEventRequestSchema,
   WorkflowManagerResumeScheduleRequestSchema,
+  WorkflowManagerResumeEventTriggerRequestSchema,
   WorkflowManagerUpdateScheduleRequestSchema,
+  WorkflowManagerUpdateEventTriggerRequestSchema,
   type ManagedWorkflowSchedule,
+  type ManagedWorkflowEventTrigger,
+  type WorkflowEvent,
 } from "../gen/v1/workflow_pb.ts";
 import type { Request } from "./api.ts";
 
 export const ENV_WORKFLOW_MANAGER_SOCKET = "GESTALT_WORKFLOW_MANAGER_SOCKET";
 
 export type ManagedWorkflowScheduleMessage = ManagedWorkflowSchedule;
+export type ManagedWorkflowEventTriggerMessage = ManagedWorkflowEventTrigger;
+export type WorkflowEventMessage = WorkflowEvent;
 export type WorkflowManagerCreateScheduleInput = MessageInitShape<
   typeof WorkflowManagerCreateScheduleRequestSchema
+>;
+export type WorkflowManagerCreateTriggerInput = MessageInitShape<
+  typeof WorkflowManagerCreateEventTriggerRequestSchema
 >;
 export type WorkflowManagerGetScheduleInput = MessageInitShape<
   typeof WorkflowManagerGetScheduleRequestSchema
 >;
+export type WorkflowManagerGetTriggerInput = MessageInitShape<
+  typeof WorkflowManagerGetEventTriggerRequestSchema
+>;
 export type WorkflowManagerUpdateScheduleInput = MessageInitShape<
   typeof WorkflowManagerUpdateScheduleRequestSchema
+>;
+export type WorkflowManagerUpdateTriggerInput = MessageInitShape<
+  typeof WorkflowManagerUpdateEventTriggerRequestSchema
 >;
 export type WorkflowManagerDeleteScheduleInput = MessageInitShape<
   typeof WorkflowManagerDeleteScheduleRequestSchema
 >;
+export type WorkflowManagerDeleteTriggerInput = MessageInitShape<
+  typeof WorkflowManagerDeleteEventTriggerRequestSchema
+>;
 export type WorkflowManagerPauseScheduleInput = MessageInitShape<
   typeof WorkflowManagerPauseScheduleRequestSchema
 >;
+export type WorkflowManagerPauseTriggerInput = MessageInitShape<
+  typeof WorkflowManagerPauseEventTriggerRequestSchema
+>;
 export type WorkflowManagerResumeScheduleInput = MessageInitShape<
   typeof WorkflowManagerResumeScheduleRequestSchema
+>;
+export type WorkflowManagerResumeTriggerInput = MessageInitShape<
+  typeof WorkflowManagerResumeEventTriggerRequestSchema
+>;
+export type WorkflowManagerPublishEventInput = MessageInitShape<
+  typeof WorkflowManagerPublishEventRequestSchema
 >;
 
 export class WorkflowManager {
@@ -112,6 +144,69 @@ export class WorkflowManager {
     request: WorkflowManagerResumeScheduleInput,
   ): Promise<ManagedWorkflowScheduleMessage> {
     return await this.client.resumeSchedule({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  async createTrigger(
+    request: WorkflowManagerCreateTriggerInput,
+  ): Promise<ManagedWorkflowEventTriggerMessage> {
+    return await this.client.createEventTrigger({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  async getTrigger(
+    request: WorkflowManagerGetTriggerInput,
+  ): Promise<ManagedWorkflowEventTriggerMessage> {
+    return await this.client.getEventTrigger({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  async updateTrigger(
+    request: WorkflowManagerUpdateTriggerInput,
+  ): Promise<ManagedWorkflowEventTriggerMessage> {
+    return await this.client.updateEventTrigger({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  async deleteTrigger(
+    request: WorkflowManagerDeleteTriggerInput,
+  ): Promise<void> {
+    await this.client.deleteEventTrigger({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  async pauseTrigger(
+    request: WorkflowManagerPauseTriggerInput,
+  ): Promise<ManagedWorkflowEventTriggerMessage> {
+    return await this.client.pauseEventTrigger({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  async resumeTrigger(
+    request: WorkflowManagerResumeTriggerInput,
+  ): Promise<ManagedWorkflowEventTriggerMessage> {
+    return await this.client.resumeEventTrigger({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  async publishEvent(
+    request: WorkflowManagerPublishEventInput,
+  ): Promise<WorkflowEventMessage> {
+    return await this.client.publishEvent({
       ...request,
       invocationToken: this.invocationToken,
     });

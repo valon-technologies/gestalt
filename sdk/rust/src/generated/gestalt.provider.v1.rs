@@ -6211,6 +6211,13 @@ pub struct ManagedWorkflowSchedule {
     pub schedule: ::core::option::Option<BoundWorkflowSchedule>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ManagedWorkflowEventTrigger {
+    #[prost(string, tag = "1")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub trigger: ::core::option::Option<BoundWorkflowEventTrigger>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowManagerCreateScheduleRequest {
     #[prost(string, tag = "2")]
     pub provider_name: ::prost::alloc::string::String,
@@ -6267,6 +6274,69 @@ pub struct WorkflowManagerPauseScheduleRequest {
 pub struct WorkflowManagerResumeScheduleRequest {
     #[prost(string, tag = "2")]
     pub schedule_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowManagerCreateEventTriggerRequest {
+    #[prost(string, tag = "2")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub r#match: ::core::option::Option<WorkflowEventMatch>,
+    #[prost(message, optional, tag = "4")]
+    pub target: ::core::option::Option<BoundWorkflowTarget>,
+    #[prost(bool, tag = "5")]
+    pub paused: bool,
+    #[prost(string, tag = "6")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowManagerGetEventTriggerRequest {
+    #[prost(string, tag = "2")]
+    pub trigger_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowManagerUpdateEventTriggerRequest {
+    #[prost(string, tag = "2")]
+    pub trigger_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub r#match: ::core::option::Option<WorkflowEventMatch>,
+    #[prost(message, optional, tag = "5")]
+    pub target: ::core::option::Option<BoundWorkflowTarget>,
+    #[prost(bool, tag = "6")]
+    pub paused: bool,
+    #[prost(string, tag = "7")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowManagerDeleteEventTriggerRequest {
+    #[prost(string, tag = "2")]
+    pub trigger_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowManagerPauseEventTriggerRequest {
+    #[prost(string, tag = "2")]
+    pub trigger_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowManagerResumeEventTriggerRequest {
+    #[prost(string, tag = "2")]
+    pub trigger_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowManagerPublishEventRequest {
+    #[prost(message, optional, tag = "2")]
+    pub event: ::core::option::Option<WorkflowEvent>,
     #[prost(string, tag = "3")]
     pub invocation_token: ::prost::alloc::string::String,
 }
@@ -8134,6 +8204,137 @@ pub mod workflow_manager_host_client {
             ));
             self.inner.unary(req, path, codec).await
         }
+        pub async fn create_event_trigger(
+            &mut self,
+            request: impl tonic::IntoRequest<super::WorkflowManagerCreateEventTriggerRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowEventTrigger>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowManagerHost/CreateEventTrigger",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowManagerHost",
+                "CreateEventTrigger",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn get_event_trigger(
+            &mut self,
+            request: impl tonic::IntoRequest<super::WorkflowManagerGetEventTriggerRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowEventTrigger>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowManagerHost/GetEventTrigger",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowManagerHost",
+                "GetEventTrigger",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn update_event_trigger(
+            &mut self,
+            request: impl tonic::IntoRequest<super::WorkflowManagerUpdateEventTriggerRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowEventTrigger>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowManagerHost/UpdateEventTrigger",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowManagerHost",
+                "UpdateEventTrigger",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn delete_event_trigger(
+            &mut self,
+            request: impl tonic::IntoRequest<super::WorkflowManagerDeleteEventTriggerRequest>,
+        ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowManagerHost/DeleteEventTrigger",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowManagerHost",
+                "DeleteEventTrigger",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn pause_event_trigger(
+            &mut self,
+            request: impl tonic::IntoRequest<super::WorkflowManagerPauseEventTriggerRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowEventTrigger>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowManagerHost/PauseEventTrigger",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowManagerHost",
+                "PauseEventTrigger",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn resume_event_trigger(
+            &mut self,
+            request: impl tonic::IntoRequest<super::WorkflowManagerResumeEventTriggerRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowEventTrigger>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowManagerHost/ResumeEventTrigger",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowManagerHost",
+                "ResumeEventTrigger",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn publish_event(
+            &mut self,
+            request: impl tonic::IntoRequest<super::WorkflowManagerPublishEventRequest>,
+        ) -> std::result::Result<tonic::Response<super::WorkflowEvent>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowManagerHost/PublishEvent",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowManagerHost",
+                "PublishEvent",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -8173,6 +8374,34 @@ pub mod workflow_manager_host_server {
             &self,
             request: tonic::Request<super::WorkflowManagerResumeScheduleRequest>,
         ) -> std::result::Result<tonic::Response<super::ManagedWorkflowSchedule>, tonic::Status>;
+        async fn create_event_trigger(
+            &self,
+            request: tonic::Request<super::WorkflowManagerCreateEventTriggerRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowEventTrigger>, tonic::Status>;
+        async fn get_event_trigger(
+            &self,
+            request: tonic::Request<super::WorkflowManagerGetEventTriggerRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowEventTrigger>, tonic::Status>;
+        async fn update_event_trigger(
+            &self,
+            request: tonic::Request<super::WorkflowManagerUpdateEventTriggerRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowEventTrigger>, tonic::Status>;
+        async fn delete_event_trigger(
+            &self,
+            request: tonic::Request<super::WorkflowManagerDeleteEventTriggerRequest>,
+        ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
+        async fn pause_event_trigger(
+            &self,
+            request: tonic::Request<super::WorkflowManagerPauseEventTriggerRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowEventTrigger>, tonic::Status>;
+        async fn resume_event_trigger(
+            &self,
+            request: tonic::Request<super::WorkflowManagerResumeEventTriggerRequest>,
+        ) -> std::result::Result<tonic::Response<super::ManagedWorkflowEventTrigger>, tonic::Status>;
+        async fn publish_event(
+            &self,
+            request: tonic::Request<super::WorkflowManagerPublishEventRequest>,
+        ) -> std::result::Result<tonic::Response<super::WorkflowEvent>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct WorkflowManagerHostServer<T> {
@@ -8484,6 +8713,313 @@ pub mod workflow_manager_host_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = ResumeScheduleSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.WorkflowManagerHost/CreateEventTrigger" => {
+                    #[allow(non_camel_case_types)]
+                    struct CreateEventTriggerSvc<T: WorkflowManagerHost>(pub Arc<T>);
+                    impl<T: WorkflowManagerHost>
+                        tonic::server::UnaryService<super::WorkflowManagerCreateEventTriggerRequest>
+                        for CreateEventTriggerSvc<T>
+                    {
+                        type Response = super::ManagedWorkflowEventTrigger;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::WorkflowManagerCreateEventTriggerRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowManagerHost>::create_event_trigger(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = CreateEventTriggerSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.WorkflowManagerHost/GetEventTrigger" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetEventTriggerSvc<T: WorkflowManagerHost>(pub Arc<T>);
+                    impl<T: WorkflowManagerHost>
+                        tonic::server::UnaryService<super::WorkflowManagerGetEventTriggerRequest>
+                        for GetEventTriggerSvc<T>
+                    {
+                        type Response = super::ManagedWorkflowEventTrigger;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::WorkflowManagerGetEventTriggerRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowManagerHost>::get_event_trigger(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetEventTriggerSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.WorkflowManagerHost/UpdateEventTrigger" => {
+                    #[allow(non_camel_case_types)]
+                    struct UpdateEventTriggerSvc<T: WorkflowManagerHost>(pub Arc<T>);
+                    impl<T: WorkflowManagerHost>
+                        tonic::server::UnaryService<super::WorkflowManagerUpdateEventTriggerRequest>
+                        for UpdateEventTriggerSvc<T>
+                    {
+                        type Response = super::ManagedWorkflowEventTrigger;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::WorkflowManagerUpdateEventTriggerRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowManagerHost>::update_event_trigger(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = UpdateEventTriggerSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.WorkflowManagerHost/DeleteEventTrigger" => {
+                    #[allow(non_camel_case_types)]
+                    struct DeleteEventTriggerSvc<T: WorkflowManagerHost>(pub Arc<T>);
+                    impl<T: WorkflowManagerHost>
+                        tonic::server::UnaryService<super::WorkflowManagerDeleteEventTriggerRequest>
+                        for DeleteEventTriggerSvc<T>
+                    {
+                        type Response = ();
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::WorkflowManagerDeleteEventTriggerRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowManagerHost>::delete_event_trigger(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = DeleteEventTriggerSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.WorkflowManagerHost/PauseEventTrigger" => {
+                    #[allow(non_camel_case_types)]
+                    struct PauseEventTriggerSvc<T: WorkflowManagerHost>(pub Arc<T>);
+                    impl<T: WorkflowManagerHost>
+                        tonic::server::UnaryService<super::WorkflowManagerPauseEventTriggerRequest>
+                        for PauseEventTriggerSvc<T>
+                    {
+                        type Response = super::ManagedWorkflowEventTrigger;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::WorkflowManagerPauseEventTriggerRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowManagerHost>::pause_event_trigger(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = PauseEventTriggerSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.WorkflowManagerHost/ResumeEventTrigger" => {
+                    #[allow(non_camel_case_types)]
+                    struct ResumeEventTriggerSvc<T: WorkflowManagerHost>(pub Arc<T>);
+                    impl<T: WorkflowManagerHost>
+                        tonic::server::UnaryService<super::WorkflowManagerResumeEventTriggerRequest>
+                        for ResumeEventTriggerSvc<T>
+                    {
+                        type Response = super::ManagedWorkflowEventTrigger;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::WorkflowManagerResumeEventTriggerRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowManagerHost>::resume_event_trigger(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ResumeEventTriggerSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.WorkflowManagerHost/PublishEvent" => {
+                    #[allow(non_camel_case_types)]
+                    struct PublishEventSvc<T: WorkflowManagerHost>(pub Arc<T>);
+                    impl<T: WorkflowManagerHost>
+                        tonic::server::UnaryService<super::WorkflowManagerPublishEventRequest>
+                        for PublishEventSvc<T>
+                    {
+                        type Response = super::WorkflowEvent;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::WorkflowManagerPublishEventRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowManagerHost>::publish_event(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = PublishEventSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

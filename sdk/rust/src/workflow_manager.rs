@@ -100,4 +100,73 @@ impl WorkflowManager {
         request.invocation_token = self.invocation_token.clone();
         Ok(self.client.resume_schedule(request).await?.into_inner())
     }
+
+    pub async fn create_trigger(
+        &mut self,
+        mut request: pb::WorkflowManagerCreateEventTriggerRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self
+            .client
+            .create_event_trigger(request)
+            .await?
+            .into_inner())
+    }
+
+    pub async fn get_trigger(
+        &mut self,
+        mut request: pb::WorkflowManagerGetEventTriggerRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.get_event_trigger(request).await?.into_inner())
+    }
+
+    pub async fn update_trigger(
+        &mut self,
+        mut request: pb::WorkflowManagerUpdateEventTriggerRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self
+            .client
+            .update_event_trigger(request)
+            .await?
+            .into_inner())
+    }
+
+    pub async fn delete_trigger(
+        &mut self,
+        mut request: pb::WorkflowManagerDeleteEventTriggerRequest,
+    ) -> std::result::Result<(), WorkflowManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        self.client.delete_event_trigger(request).await?;
+        Ok(())
+    }
+
+    pub async fn pause_trigger(
+        &mut self,
+        mut request: pb::WorkflowManagerPauseEventTriggerRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.pause_event_trigger(request).await?.into_inner())
+    }
+
+    pub async fn resume_trigger(
+        &mut self,
+        mut request: pb::WorkflowManagerResumeEventTriggerRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowEventTrigger, WorkflowManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self
+            .client
+            .resume_event_trigger(request)
+            .await?
+            .into_inner())
+    }
+
+    pub async fn publish_event(
+        &mut self,
+        mut request: pb::WorkflowManagerPublishEventRequest,
+    ) -> std::result::Result<pb::WorkflowEvent, WorkflowManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.publish_event(request).await?.into_inner())
+    }
 }

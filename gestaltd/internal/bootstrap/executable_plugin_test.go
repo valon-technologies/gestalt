@@ -243,23 +243,27 @@ func (r *staticCapabilityPluginRuntime) Close() error {
 }
 
 type stubWorkflowManager struct {
-	mu       sync.Mutex
-	subjects []string
-	nextID   int
-	items    map[string]*workflowmanager.ManagedSchedule
+	mu              sync.Mutex
+	subjects        []string
+	nextScheduleID  int
+	nextTriggerID   int
+	schedules       map[string]*workflowmanager.ManagedSchedule
+	triggers        map[string]*workflowmanager.ManagedEventTrigger
+	publishedEvents []coreworkflow.Event
 }
 
 func newStubWorkflowManager() *stubWorkflowManager {
 	return &stubWorkflowManager{
-		items: make(map[string]*workflowmanager.ManagedSchedule),
+		schedules: make(map[string]*workflowmanager.ManagedSchedule),
+		triggers:  make(map[string]*workflowmanager.ManagedEventTrigger),
 	}
 }
 
 func (m *stubWorkflowManager) ListSchedules(context.Context, *principal.Principal) ([]*workflowmanager.ManagedSchedule, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make([]*workflowmanager.ManagedSchedule, 0, len(m.items))
-	for _, item := range m.items {
+	out := make([]*workflowmanager.ManagedSchedule, 0, len(m.schedules))
+	for _, item := range m.schedules {
 		out = append(out, cloneManagedSchedule(item))
 	}
 	return out, nil
@@ -268,8 +272,8 @@ func (m *stubWorkflowManager) ListSchedules(context.Context, *principal.Principa
 func (m *stubWorkflowManager) CreateSchedule(_ context.Context, p *principal.Principal, req workflowmanager.ScheduleUpsert) (*workflowmanager.ManagedSchedule, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.nextID++
-	id := fmt.Sprintf("sched-%d", m.nextID)
+	m.nextScheduleID++
+	id := fmt.Sprintf("sched-%d", m.nextScheduleID)
 	now := time.Now().UTC().Truncate(time.Second)
 	value := &workflowmanager.ManagedSchedule{
 		ProviderName: defaultWorkflowProviderName(req.ProviderName),
@@ -283,7 +287,7 @@ func (m *stubWorkflowManager) CreateSchedule(_ context.Context, p *principal.Pri
 			UpdatedAt: &now,
 		},
 	}
-	m.items[id] = value
+	m.schedules[id] = value
 	m.subjects = append(m.subjects, subjectIDOf(p))
 	return cloneManagedSchedule(value), nil
 }
@@ -292,7 +296,7 @@ func (m *stubWorkflowManager) GetSchedule(_ context.Context, p *principal.Princi
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.subjects = append(m.subjects, subjectIDOf(p))
-	value, ok := m.items[scheduleID]
+	value, ok := m.schedules[scheduleID]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
@@ -303,7 +307,7 @@ func (m *stubWorkflowManager) UpdateSchedule(_ context.Context, p *principal.Pri
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.subjects = append(m.subjects, subjectIDOf(p))
-	value, ok := m.items[scheduleID]
+	value, ok := m.schedules[scheduleID]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
@@ -321,10 +325,10 @@ func (m *stubWorkflowManager) DeleteSchedule(_ context.Context, p *principal.Pri
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.subjects = append(m.subjects, subjectIDOf(p))
-	if _, ok := m.items[scheduleID]; !ok {
+	if _, ok := m.schedules[scheduleID]; !ok {
 		return core.ErrNotFound
 	}
-	delete(m.items, scheduleID)
+	delete(m.schedules, scheduleID)
 	return nil
 }
 
@@ -332,7 +336,7 @@ func (m *stubWorkflowManager) PauseSchedule(_ context.Context, p *principal.Prin
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.subjects = append(m.subjects, subjectIDOf(p))
-	value, ok := m.items[scheduleID]
+	value, ok := m.schedules[scheduleID]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
@@ -346,7 +350,7 @@ func (m *stubWorkflowManager) ResumeSchedule(_ context.Context, p *principal.Pri
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.subjects = append(m.subjects, subjectIDOf(p))
-	value, ok := m.items[scheduleID]
+	value, ok := m.schedules[scheduleID]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
@@ -357,31 +361,102 @@ func (m *stubWorkflowManager) ResumeSchedule(_ context.Context, p *principal.Pri
 }
 
 func (m *stubWorkflowManager) ListEventTriggers(context.Context, *principal.Principal) ([]*workflowmanager.ManagedEventTrigger, error) {
-	return nil, nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]*workflowmanager.ManagedEventTrigger, 0, len(m.triggers))
+	for _, item := range m.triggers {
+		out = append(out, cloneManagedEventTrigger(item))
+	}
+	return out, nil
 }
 
-func (m *stubWorkflowManager) CreateEventTrigger(context.Context, *principal.Principal, workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
-	return nil, fmt.Errorf("event triggers are not implemented in this test stub")
+func (m *stubWorkflowManager) CreateEventTrigger(_ context.Context, p *principal.Principal, req workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.nextTriggerID++
+	id := fmt.Sprintf("trg-%d", m.nextTriggerID)
+	now := time.Now().UTC().Truncate(time.Second)
+	value := &workflowmanager.ManagedEventTrigger{
+		ProviderName: defaultWorkflowProviderName(req.ProviderName),
+		Trigger: &coreworkflow.EventTrigger{
+			ID:        id,
+			Match:     cloneWorkflowEventMatch(req.Match),
+			Target:    cloneWorkflowTarget(req.Target),
+			Paused:    req.Paused,
+			CreatedAt: &now,
+			UpdatedAt: &now,
+		},
+	}
+	m.triggers[id] = value
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	return cloneManagedEventTrigger(value), nil
 }
 
-func (m *stubWorkflowManager) GetEventTrigger(context.Context, *principal.Principal, string) (*workflowmanager.ManagedEventTrigger, error) {
-	return nil, core.ErrNotFound
+func (m *stubWorkflowManager) GetEventTrigger(_ context.Context, p *principal.Principal, triggerID string) (*workflowmanager.ManagedEventTrigger, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	value, ok := m.triggers[triggerID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	return cloneManagedEventTrigger(value), nil
 }
 
-func (m *stubWorkflowManager) UpdateEventTrigger(context.Context, *principal.Principal, string, workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
-	return nil, core.ErrNotFound
+func (m *stubWorkflowManager) UpdateEventTrigger(_ context.Context, p *principal.Principal, triggerID string, req workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	value, ok := m.triggers[triggerID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	value.ProviderName = defaultWorkflowProviderName(req.ProviderName)
+	value.Trigger.Match = cloneWorkflowEventMatch(req.Match)
+	value.Trigger.Target = cloneWorkflowTarget(req.Target)
+	value.Trigger.Paused = req.Paused
+	value.Trigger.UpdatedAt = &now
+	return cloneManagedEventTrigger(value), nil
 }
 
-func (m *stubWorkflowManager) DeleteEventTrigger(context.Context, *principal.Principal, string) error {
-	return core.ErrNotFound
+func (m *stubWorkflowManager) DeleteEventTrigger(_ context.Context, p *principal.Principal, triggerID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	if _, ok := m.triggers[triggerID]; !ok {
+		return core.ErrNotFound
+	}
+	delete(m.triggers, triggerID)
+	return nil
 }
 
-func (m *stubWorkflowManager) PauseEventTrigger(context.Context, *principal.Principal, string) (*workflowmanager.ManagedEventTrigger, error) {
-	return nil, core.ErrNotFound
+func (m *stubWorkflowManager) PauseEventTrigger(_ context.Context, p *principal.Principal, triggerID string) (*workflowmanager.ManagedEventTrigger, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	value, ok := m.triggers[triggerID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	value.Trigger.Paused = true
+	value.Trigger.UpdatedAt = &now
+	return cloneManagedEventTrigger(value), nil
 }
 
-func (m *stubWorkflowManager) ResumeEventTrigger(context.Context, *principal.Principal, string) (*workflowmanager.ManagedEventTrigger, error) {
-	return nil, core.ErrNotFound
+func (m *stubWorkflowManager) ResumeEventTrigger(_ context.Context, p *principal.Principal, triggerID string) (*workflowmanager.ManagedEventTrigger, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	value, ok := m.triggers[triggerID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	value.Trigger.Paused = false
+	value.Trigger.UpdatedAt = &now
+	return cloneManagedEventTrigger(value), nil
 }
 
 func (m *stubWorkflowManager) ListRuns(context.Context, *principal.Principal) ([]*workflowmanager.ManagedRun, error) {
@@ -396,8 +471,15 @@ func (m *stubWorkflowManager) CancelRun(context.Context, *principal.Principal, s
 	return nil, core.ErrNotFound
 }
 
-func (m *stubWorkflowManager) PublishEvent(context.Context, *principal.Principal, coreworkflow.Event) (coreworkflow.Event, error) {
-	return coreworkflow.Event{}, fmt.Errorf("event publishing is not implemented in this test stub")
+func (m *stubWorkflowManager) PublishEvent(_ context.Context, p *principal.Principal, event coreworkflow.Event) (coreworkflow.Event, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	if strings.TrimSpace(event.ID) == "" {
+		event.ID = fmt.Sprintf("evt-%d", len(m.publishedEvents)+1)
+	}
+	m.publishedEvents = append(m.publishedEvents, cloneWorkflowEvent(event))
+	return cloneWorkflowEvent(event), nil
 }
 
 func (m *stubWorkflowManager) Subjects() []string {
@@ -424,6 +506,25 @@ func cloneManagedSchedule(value *workflowmanager.ManagedSchedule) *workflowmanag
 	return &out
 }
 
+func cloneManagedEventTrigger(value *workflowmanager.ManagedEventTrigger) *workflowmanager.ManagedEventTrigger {
+	if value == nil {
+		return nil
+	}
+	out := *value
+	if value.Trigger != nil {
+		trigger := *value.Trigger
+		trigger.Match = cloneWorkflowEventMatch(value.Trigger.Match)
+		trigger.Target = cloneWorkflowTarget(value.Trigger.Target)
+		out.Trigger = &trigger
+	}
+	if value.ExecutionRef != nil {
+		executionRef := *value.ExecutionRef
+		executionRef.Target = cloneWorkflowTarget(value.ExecutionRef.Target)
+		out.ExecutionRef = &executionRef
+	}
+	return &out
+}
+
 func cloneWorkflowTarget(value coreworkflow.Target) coreworkflow.Target {
 	return coreworkflow.Target{
 		PluginName: value.PluginName,
@@ -431,6 +532,28 @@ func cloneWorkflowTarget(value coreworkflow.Target) coreworkflow.Target {
 		Connection: value.Connection,
 		Instance:   value.Instance,
 		Input:      maps.Clone(value.Input),
+	}
+}
+
+func cloneWorkflowEventMatch(value coreworkflow.EventMatch) coreworkflow.EventMatch {
+	return coreworkflow.EventMatch{
+		Type:    value.Type,
+		Source:  value.Source,
+		Subject: value.Subject,
+	}
+}
+
+func cloneWorkflowEvent(value coreworkflow.Event) coreworkflow.Event {
+	return coreworkflow.Event{
+		ID:              value.ID,
+		Source:          value.Source,
+		SpecVersion:     value.SpecVersion,
+		Type:            value.Type,
+		Subject:         value.Subject,
+		Time:            value.Time,
+		DataContentType: value.DataContentType,
+		Data:            maps.Clone(value.Data),
+		Extensions:      maps.Clone(value.Extensions),
 	}
 }
 
@@ -1988,6 +2111,13 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 			{ID: "delete_workflow_schedule", Method: http.MethodPost},
 			{ID: "pause_workflow_schedule", Method: http.MethodPost},
 			{ID: "resume_workflow_schedule", Method: http.MethodPost},
+			{ID: "create_workflow_trigger", Method: http.MethodPost},
+			{ID: "get_workflow_trigger", Method: http.MethodGet},
+			{ID: "update_workflow_trigger", Method: http.MethodPost},
+			{ID: "delete_workflow_trigger", Method: http.MethodPost},
+			{ID: "pause_workflow_trigger", Method: http.MethodPost},
+			{ID: "resume_workflow_trigger", Method: http.MethodPost},
+			{ID: "publish_workflow_event", Method: http.MethodPost},
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Workflow manager CRUD")
@@ -2168,7 +2298,188 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 		t.Fatalf("delete result = %+v, want deleted", deleted)
 	}
 
-	if got := manager.Subjects(); len(got) != 6 || slices.Contains(got, "") || !slices.Equal(got, []string{
+	createTriggerResult, err := prov.Execute(ctx, "create_workflow_trigger", map[string]any{
+		"provider_name": "basic",
+		"match": map[string]any{
+			"type":    "roadmap.item.updated",
+			"source":  "roadmap",
+			"subject": "item-123",
+		},
+		"target": map[string]any{
+			"plugin":    "slack",
+			"operation": "chat.postMessage",
+		},
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(create_workflow_trigger): %v", err)
+	}
+	var createdTrigger struct {
+		ProviderName string `json:"provider_name"`
+		Trigger      struct {
+			ID     string `json:"id"`
+			Paused bool   `json:"paused"`
+			Match  struct {
+				Type    string `json:"type"`
+				Source  string `json:"source"`
+				Subject string `json:"subject"`
+			} `json:"match"`
+			Target struct {
+				Plugin    string `json:"plugin"`
+				Operation string `json:"operation"`
+			} `json:"target"`
+		} `json:"trigger"`
+	}
+	if err := json.Unmarshal([]byte(createTriggerResult.Body), &createdTrigger); err != nil {
+		t.Fatalf("json.Unmarshal(create trigger): %v", err)
+	}
+	if createdTrigger.ProviderName != "basic" || createdTrigger.Trigger.ID == "" {
+		t.Fatalf("unexpected create trigger result: %+v", createdTrigger)
+	}
+	if createdTrigger.Trigger.Match.Type != "roadmap.item.updated" || createdTrigger.Trigger.Target.Plugin != "slack" || createdTrigger.Trigger.Target.Operation != "chat.postMessage" {
+		t.Fatalf("unexpected trigger payload: %+v", createdTrigger.Trigger)
+	}
+
+	getTriggerResult, err := prov.Execute(ctx, "get_workflow_trigger", map[string]any{
+		"trigger_id": createdTrigger.Trigger.ID,
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(get_workflow_trigger): %v", err)
+	}
+	var fetchedTrigger map[string]any
+	if err := json.Unmarshal([]byte(getTriggerResult.Body), &fetchedTrigger); err != nil {
+		t.Fatalf("json.Unmarshal(get trigger): %v", err)
+	}
+	if fetchedTrigger["provider_name"] != "basic" {
+		t.Fatalf("fetched trigger provider_name = %v, want basic", fetchedTrigger["provider_name"])
+	}
+
+	updateTriggerResult, err := prov.Execute(ctx, "update_workflow_trigger", map[string]any{
+		"trigger_id":    createdTrigger.Trigger.ID,
+		"provider_name": "secondary",
+		"paused":        true,
+		"match": map[string]any{
+			"type": "roadmap.item.synced",
+		},
+		"target": map[string]any{
+			"plugin":    "roadmap",
+			"operation": "status",
+		},
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(update_workflow_trigger): %v", err)
+	}
+	var updatedTrigger struct {
+		ProviderName string `json:"provider_name"`
+		Trigger      struct {
+			Paused bool `json:"paused"`
+			Match  struct {
+				Type string `json:"type"`
+			} `json:"match"`
+			Target struct {
+				Operation string `json:"operation"`
+			} `json:"target"`
+		} `json:"trigger"`
+	}
+	if err := json.Unmarshal([]byte(updateTriggerResult.Body), &updatedTrigger); err != nil {
+		t.Fatalf("json.Unmarshal(update trigger): %v", err)
+	}
+	if updatedTrigger.ProviderName != "secondary" || !updatedTrigger.Trigger.Paused || updatedTrigger.Trigger.Match.Type != "roadmap.item.synced" || updatedTrigger.Trigger.Target.Operation != "status" {
+		t.Fatalf("unexpected update trigger result: %+v", updatedTrigger)
+	}
+
+	pauseTriggerResult, err := prov.Execute(ctx, "pause_workflow_trigger", map[string]any{
+		"trigger_id": createdTrigger.Trigger.ID,
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(pause_workflow_trigger): %v", err)
+	}
+	var pausedTrigger struct {
+		Trigger struct {
+			Paused bool `json:"paused"`
+		} `json:"trigger"`
+	}
+	if err := json.Unmarshal([]byte(pauseTriggerResult.Body), &pausedTrigger); err != nil {
+		t.Fatalf("json.Unmarshal(pause trigger): %v", err)
+	}
+	if !pausedTrigger.Trigger.Paused {
+		t.Fatalf("pause trigger result = %+v, want paused trigger", pausedTrigger)
+	}
+
+	resumeTriggerResult, err := prov.Execute(ctx, "resume_workflow_trigger", map[string]any{
+		"trigger_id": createdTrigger.Trigger.ID,
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(resume_workflow_trigger): %v", err)
+	}
+	var resumedTrigger struct {
+		Trigger struct {
+			Paused bool `json:"paused"`
+		} `json:"trigger"`
+	}
+	if err := json.Unmarshal([]byte(resumeTriggerResult.Body), &resumedTrigger); err != nil {
+		t.Fatalf("json.Unmarshal(resume trigger): %v", err)
+	}
+	if resumedTrigger.Trigger.Paused {
+		t.Fatalf("resume trigger result = %+v, want resumed trigger", resumedTrigger)
+	}
+
+	deleteTriggerResult, err := prov.Execute(ctx, "delete_workflow_trigger", map[string]any{
+		"trigger_id": createdTrigger.Trigger.ID,
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(delete_workflow_trigger): %v", err)
+	}
+	var deletedTrigger struct {
+		Deleted bool `json:"deleted"`
+	}
+	if err := json.Unmarshal([]byte(deleteTriggerResult.Body), &deletedTrigger); err != nil {
+		t.Fatalf("json.Unmarshal(delete trigger): %v", err)
+	}
+	if !deletedTrigger.Deleted {
+		t.Fatalf("delete trigger result = %+v, want deleted", deletedTrigger)
+	}
+
+	publishEventResult, err := prov.Execute(ctx, "publish_workflow_event", map[string]any{
+		"type":    "roadmap.item.updated",
+		"source":  "roadmap",
+		"subject": "item-123",
+		"data": map[string]any{
+			"id":    "item-123",
+			"title": "Ship parity",
+		},
+		"extensions": map[string]any{
+			"tenant": "acme",
+		},
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute(publish_workflow_event): %v", err)
+	}
+	var publishedEvent struct {
+		ID         string         `json:"id"`
+		Type       string         `json:"type"`
+		Source     string         `json:"source"`
+		Subject    string         `json:"subject"`
+		Data       map[string]any `json:"data"`
+		Extensions map[string]any `json:"extensions"`
+	}
+	if err := json.Unmarshal([]byte(publishEventResult.Body), &publishedEvent); err != nil {
+		t.Fatalf("json.Unmarshal(publish event): %v", err)
+	}
+	if publishedEvent.ID == "" || publishedEvent.Type != "roadmap.item.updated" || publishedEvent.Source != "roadmap" || publishedEvent.Subject != "item-123" {
+		t.Fatalf("unexpected published event result: %+v", publishedEvent)
+	}
+	if publishedEvent.Data["title"] != "Ship parity" || publishedEvent.Extensions["tenant"] != "acme" {
+		t.Fatalf("unexpected published event data: %+v", publishedEvent)
+	}
+
+	if got := manager.Subjects(); len(got) != 13 || slices.Contains(got, "") || !slices.Equal(got, []string{
+		"user:user-123",
+		"user:user-123",
+		"user:user-123",
+		"user:user-123",
+		"user:user-123",
+		"user:user-123",
+		"user:user-123",
 		"user:user-123",
 		"user:user-123",
 		"user:user-123",

@@ -272,6 +272,11 @@ class PluginInvokerStub(object):
                 request_serializer=v1_dot_plugin__pb2.PluginInvokeRequest.SerializeToString,
                 response_deserializer=v1_dot_plugin__pb2.OperationResult.FromString,
                 _registered_method=True)
+        self.InvokeGraphQL = channel.unary_unary(
+                '/gestalt.provider.v1.PluginInvoker/InvokeGraphQL',
+                request_serializer=v1_dot_plugin__pb2.PluginInvokeGraphQLRequest.SerializeToString,
+                response_deserializer=v1_dot_plugin__pb2.OperationResult.FromString,
+                _registered_method=True)
 
 
 class PluginInvokerServicer(object):
@@ -289,6 +294,12 @@ class PluginInvokerServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def InvokeGraphQL(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_PluginInvokerServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -300,6 +311,11 @@ def add_PluginInvokerServicer_to_server(servicer, server):
             'Invoke': grpc.unary_unary_rpc_method_handler(
                     servicer.Invoke,
                     request_deserializer=v1_dot_plugin__pb2.PluginInvokeRequest.FromString,
+                    response_serializer=v1_dot_plugin__pb2.OperationResult.SerializeToString,
+            ),
+            'InvokeGraphQL': grpc.unary_unary_rpc_method_handler(
+                    servicer.InvokeGraphQL,
+                    request_deserializer=v1_dot_plugin__pb2.PluginInvokeGraphQLRequest.FromString,
                     response_serializer=v1_dot_plugin__pb2.OperationResult.SerializeToString,
             ),
     }
@@ -356,6 +372,33 @@ class PluginInvoker(object):
             target,
             '/gestalt.provider.v1.PluginInvoker/Invoke',
             v1_dot_plugin__pb2.PluginInvokeRequest.SerializeToString,
+            v1_dot_plugin__pb2.OperationResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def InvokeGraphQL(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.PluginInvoker/InvokeGraphQL',
+            v1_dot_plugin__pb2.PluginInvokeGraphQLRequest.SerializeToString,
             v1_dot_plugin__pb2.OperationResult.FromString,
             options,
             channel_credentials,

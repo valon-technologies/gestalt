@@ -298,6 +298,26 @@ func workflowEventTriggerFromProto(trigger *proto.BoundWorkflowEventTrigger) (*c
 	}, nil
 }
 
+func workflowEventTriggerToProto(trigger *coreworkflow.EventTrigger) (*proto.BoundWorkflowEventTrigger, error) {
+	if trigger == nil {
+		return nil, nil
+	}
+	target, err := workflowTargetToProto(trigger.Target)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.BoundWorkflowEventTrigger{
+		Id:           trigger.ID,
+		Match:        workflowEventMatchToProto(trigger.Match),
+		Target:       target,
+		Paused:       trigger.Paused,
+		CreatedAt:    timeToProto(trigger.CreatedAt),
+		UpdatedAt:    timeToProto(trigger.UpdatedAt),
+		CreatedBy:    workflowActorToProto(trigger.CreatedBy),
+		ExecutionRef: trigger.ExecutionRef,
+	}, nil
+}
+
 func workflowInvokeRequestFromProto(req *proto.InvokeWorkflowOperationRequest) (coreworkflow.InvokeOperationRequest, error) {
 	if req == nil {
 		return coreworkflow.InvokeOperationRequest{}, nil
@@ -338,6 +358,20 @@ func managedWorkflowScheduleToProto(managed *workflowmanager.ManagedSchedule) (*
 	return &proto.ManagedWorkflowSchedule{
 		ProviderName: managed.ProviderName,
 		Schedule:     schedule,
+	}, nil
+}
+
+func managedWorkflowEventTriggerToProto(managed *workflowmanager.ManagedEventTrigger) (*proto.ManagedWorkflowEventTrigger, error) {
+	if managed == nil {
+		return nil, nil
+	}
+	trigger, err := workflowEventTriggerToProto(managed.Trigger)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.ManagedWorkflowEventTrigger{
+		ProviderName: managed.ProviderName,
+		Trigger:      trigger,
 	}, nil
 }
 

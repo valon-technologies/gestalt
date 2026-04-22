@@ -218,6 +218,11 @@ message ManagedWorkflowSchedule {
   BoundWorkflowSchedule schedule = 2;
 }
 
+message ManagedWorkflowEventTrigger {
+  string provider_name = 1;
+  BoundWorkflowEventTrigger trigger = 2;
+}
+
 message WorkflowManagerCreateScheduleRequest {
   reserved 1;
   reserved "request_handle";
@@ -269,6 +274,62 @@ message WorkflowManagerResumeScheduleRequest {
   string invocation_token = 3;
 }
 
+message WorkflowManagerCreateEventTriggerRequest {
+  reserved 1;
+  reserved "request_handle";
+  string provider_name = 2;
+  WorkflowEventMatch match = 3;
+  BoundWorkflowTarget target = 4;
+  bool paused = 5;
+  string invocation_token = 6;
+}
+
+message WorkflowManagerGetEventTriggerRequest {
+  reserved 1;
+  reserved "request_handle";
+  string trigger_id = 2;
+  string invocation_token = 3;
+}
+
+message WorkflowManagerUpdateEventTriggerRequest {
+  reserved 1;
+  reserved "request_handle";
+  string trigger_id = 2;
+  string provider_name = 3;
+  WorkflowEventMatch match = 4;
+  BoundWorkflowTarget target = 5;
+  bool paused = 6;
+  string invocation_token = 7;
+}
+
+message WorkflowManagerDeleteEventTriggerRequest {
+  reserved 1;
+  reserved "request_handle";
+  string trigger_id = 2;
+  string invocation_token = 3;
+}
+
+message WorkflowManagerPauseEventTriggerRequest {
+  reserved 1;
+  reserved "request_handle";
+  string trigger_id = 2;
+  string invocation_token = 3;
+}
+
+message WorkflowManagerResumeEventTriggerRequest {
+  reserved 1;
+  reserved "request_handle";
+  string trigger_id = 2;
+  string invocation_token = 3;
+}
+
+message WorkflowManagerPublishEventRequest {
+  reserved 1;
+  reserved "request_handle";
+  WorkflowEvent event = 2;
+  string invocation_token = 3;
+}
+
 service WorkflowProvider {
   rpc StartRun(StartWorkflowProviderRunRequest) returns (BoundWorkflowRun);
   rpc GetRun(GetWorkflowProviderRunRequest) returns (BoundWorkflowRun);
@@ -303,4 +364,13 @@ service WorkflowManagerHost {
   rpc DeleteSchedule(WorkflowManagerDeleteScheduleRequest) returns (google.protobuf.Empty);
   rpc PauseSchedule(WorkflowManagerPauseScheduleRequest) returns (ManagedWorkflowSchedule);
   rpc ResumeSchedule(WorkflowManagerResumeScheduleRequest) returns (ManagedWorkflowSchedule);
+
+  rpc CreateEventTrigger(WorkflowManagerCreateEventTriggerRequest) returns (ManagedWorkflowEventTrigger);
+  rpc GetEventTrigger(WorkflowManagerGetEventTriggerRequest) returns (ManagedWorkflowEventTrigger);
+  rpc UpdateEventTrigger(WorkflowManagerUpdateEventTriggerRequest) returns (ManagedWorkflowEventTrigger);
+  rpc DeleteEventTrigger(WorkflowManagerDeleteEventTriggerRequest) returns (google.protobuf.Empty);
+  rpc PauseEventTrigger(WorkflowManagerPauseEventTriggerRequest) returns (ManagedWorkflowEventTrigger);
+  rpc ResumeEventTrigger(WorkflowManagerResumeEventTriggerRequest) returns (ManagedWorkflowEventTrigger);
+
+  rpc PublishEvent(WorkflowManagerPublishEventRequest) returns (WorkflowEvent);
 }
