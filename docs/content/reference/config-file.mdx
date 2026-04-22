@@ -464,6 +464,54 @@ allowlist logical stores exposed through that binding.
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
+## `providers.agent`
+
+Agent providers back global agent runs. Configure one or more named entries
+under `providers.agent`. There is no `server.providers.agent`: each run request
+either selects a provider explicitly or inherits the sole/default
+`providers.agent` entry when `provider` is omitted. The same provider pool is
+used by the global agent runs API/CLI and by plugins that call the host agent
+manager.
+
+```yaml
+providers:
+  agent:
+    openai:
+      source: ./providers/agent/openai/manifest.yaml
+      default: true
+      config:
+        model: gpt-5.4
+        baseURL: https://api.openai.com/v1
+        apiKey:
+          secret:
+            provider: default
+            name: openai-api-key
+
+    claude:
+      source: ./providers/agent/claude/manifest.yaml
+      config:
+        model: claude-sonnet
+        apiKey:
+          secret:
+            provider: default
+            name: anthropic-api-key
+```
+
+Agent providers receive neutral run requests with `messages`, optional
+resolved `tools`, optional `responseSchema`, optional `sessionRef`, and
+provider-specific `config`. In V1 there is no standardized host IndexedDB or
+other storage binding for agent providers. If an agent backend needs durable
+state, define that in the provider's own `config` schema.
+
+| Field | Description |
+| --- | --- |
+| `default` | Marks this named agent entry as the default selection when a run request omits `provider`. |
+| `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
+| `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
+| `config` | Provider-specific config passed into the agent provider. |
+| `env` | Extra environment variables passed to the provider process. |
+| `allowedHosts` | Outbound host allowlist. For executable providers, this is only a complete boundary when a supported sandboxed runtime is active. |
+
 ## `workflows`
 
 Top-level `workflows` declares config-managed schedules and triggers.

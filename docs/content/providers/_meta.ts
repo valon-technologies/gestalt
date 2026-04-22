@@ -1,6 +1,7 @@
 export default {
   authentication: "Authentication",
   authorization: "Authorization",
+  agent: "Agent",
   cache: "Cache",
   indexeddb: "IndexedDB",
   plugins: "Plugin",

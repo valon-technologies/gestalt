@@ -49,6 +49,14 @@ func (l *lazyAgentManager) ListRuns(ctx context.Context, p *principal.Principal)
 	return target.ListRuns(ctx, p)
 }
 
+func (l *lazyAgentManager) ListRunsByProvider(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.ManagedRun, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ListRunsByProvider(ctx, p, providerName)
+}
+
 func (l *lazyAgentManager) CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*coreagent.ManagedRun, error) {
 	target, err := l.current()
 	if err != nil {

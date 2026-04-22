@@ -1,0 +1,196 @@
+import { Tabs } from 'nextra/components'
+
+# Agent
+
+This page covers building custom agent providers. If you only need to
+configure an agent backend for a deployment, use
+[Providers > Agent](/providers/agent).
+
+Agent providers implement a neutral run lifecycle over messages, tools, and
+optional session continuation state. They are a good fit when you want Gestalt
+to select between OpenAI-, Anthropic-, or custom-backed agent engines without
+hard-coding those SDKs into every caller.
+
+## Manifest
+
+An agent provider manifest declares `kind: agent`:
+
+```yaml
+kind: agent
+source: github.com/your-org/agent/example
+version: 0.0.1
+displayName: Example Agent
+description: Neutral agent provider that queues runs onto a vendor backend.
+spec:
+  configSchemaPath: ./agent_config.json
+```
+
+## Provider interface
+
+The agent service includes four run methods:
+
+| Method | Purpose |
+| --- | --- |
+| `StartRun` | Create or queue a run from messages, resolved tools, and optional session state |
+| `GetRun` | Inspect one run by `run_id` |
+| `ListRuns` | Return currently known runs for this provider |
+| `CancelRun` | Request cancellation for one run |
+
+Providers can also call back into Gestalt through `AgentHost.ExecuteTool` when
+they want the host to execute a bound plugin operation during a run.
+
+## Run shape
+
+```json
+{
+  "runId": "run-123",
+  "providerName": "openai",
+  "model": "gpt-5.4",
+  "messages": [
+    { "role": "system", "text": "Be concise." },
+    { "role": "user", "text": "Summarize the roadmap risk." }
+  ],
+  "tools": [
+    {
+      "id": "roadmap/sync",
+      "name": "sync_roadmap",
+      "description": "Sync the roadmap plugin operation",
+      "target": { "pluginName": "roadmap", "operation": "sync" }
+    }
+  ],
+  "sessionRef": "session-123",
+  "executionRef": "run-123"
+}
+```
+
+<Tabs items={['Go', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package main
+
+    import (
+    	"context"
+    	"log"
+
+    	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+    )
+
+    type provider struct {
+    	proto.UnimplementedAgentProviderServer
+    }
+
+    func (p *provider) StartRun(ctx context.Context, req *proto.StartAgentProviderRunRequest) (*proto.BoundAgentRun, error) {
+    	return &proto.BoundAgentRun{
+    		Id:           req.GetRunId(),
+    		ProviderName: req.GetProviderName(),
+    		Model:        req.GetModel(),
+    		Status:       proto.AgentRunStatus_AGENT_RUN_STATUS_PENDING,
+    		Messages:     req.GetMessages(),
+    		SessionRef:   req.GetSessionRef(),
+    		ExecutionRef: req.GetExecutionRef(),
+    	}, nil
+    }
+
+    func (p *provider) GetRun(_ context.Context, req *proto.GetAgentProviderRunRequest) (*proto.BoundAgentRun, error) {
+    	return &proto.BoundAgentRun{Id: req.GetRunId()}, nil
+    }
+
+    func (p *provider) ListRuns(context.Context, *proto.ListAgentProviderRunsRequest) (*proto.ListAgentProviderRunsResponse, error) {
+    	return &proto.ListAgentProviderRunsResponse{}, nil
+    }
+
+    func (p *provider) CancelRun(_ context.Context, req *proto.CancelAgentProviderRunRequest) (*proto.BoundAgentRun, error) {
+    	return &proto.BoundAgentRun{
+    		Id:     req.GetRunId(),
+    		Status: proto.AgentRunStatus_AGENT_RUN_STATUS_CANCELED,
+    	}, nil
+    }
+
+    func main() {
+    	if err := gestalt.ServeAgentProvider(context.Background(), &provider{}); err != nil {
+    		log.Fatal(err)
+    	}
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import {
+      AgentHost,
+      AgentRunStatus,
+      defineAgentProvider,
+    } from "@valon-technologies/gestalt";
+
+    const host = new AgentHost();
+
+    export const provider = defineAgentProvider({
+      displayName: "Example Agent",
+      description: "Neutral run-based agent provider",
+      async startRun(request) {
+        if (request.tools.length > 0) {
+          await host.executeTool({
+            runId: request.runId,
+            toolCallId: "call-1",
+            toolId: request.tools[0].id,
+            arguments: { taskId: "task-123" },
+          });
+        }
+
+        return {
+          id: request.runId,
+          providerName: request.providerName || "example",
+          model: request.model,
+          status: AgentRunStatus.PENDING,
+          messages: request.messages,
+          sessionRef: request.sessionRef,
+          executionRef: request.executionRef,
+        };
+      },
+      async getRun(request) {
+        return { id: request.runId, providerName: "example", status: AgentRunStatus.RUNNING };
+      },
+      async listRuns() {
+        return [];
+      },
+      async cancelRun(request) {
+        return { id: request.runId, providerName: "example", status: AgentRunStatus.CANCELED };
+      },
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Tool callbacks
+
+When the provider wants Gestalt to execute a bound plugin operation, it calls
+`AgentHost.ExecuteTool`:
+
+```json
+{
+  "runId": "run-123",
+  "toolCallId": "call-1",
+  "toolId": "roadmap/sync",
+  "arguments": {
+    "taskId": "task-123"
+  }
+}
+```
+
+Gestalt returns an HTTP-like envelope:
+
+```json
+{
+  "status": 200,
+  "body": "{\"ok\":true,\"taskId\":\"task-123\",\"synced\":true}"
+}
+```
+
+In V1 there is no standardized IndexedDB or general storage binding for agent
+providers. If your provider needs durable state, define it in your own config
+schema and manage it behind the provider.
+
+## What to read next
+
+- [Providers > Agent](/providers/agent): operator-facing configuration model
+- [Custom Providers > Releasing](/custom-providers/releasing): packaging and publishing provider releases

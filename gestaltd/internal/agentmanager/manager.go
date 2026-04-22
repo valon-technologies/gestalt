@@ -42,6 +42,7 @@ type Service interface {
 	Run(ctx context.Context, p *principal.Principal, req coreagent.ManagerRunRequest) (*coreagent.ManagedRun, error)
 	GetRun(ctx context.Context, p *principal.Principal, runID string) (*coreagent.ManagedRun, error)
 	ListRuns(ctx context.Context, p *principal.Principal) ([]*coreagent.ManagedRun, error)
+	ListRunsByProvider(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.ManagedRun, error)
 	CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*coreagent.ManagedRun, error)
 }
 
@@ -203,11 +204,27 @@ func (m *Manager) GetRun(ctx context.Context, p *principal.Principal, runID stri
 }
 
 func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal) ([]*coreagent.ManagedRun, error) {
+	return m.listRuns(ctx, p, "")
+}
+
+func (m *Manager) ListRunsByProvider(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.ManagedRun, error) {
+	return m.listRuns(ctx, p, providerName)
+}
+
+func (m *Manager) listRuns(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.ManagedRun, error) {
 	refs, err := m.listOwnedRunMetadata(ctx, p, false)
 	if err != nil {
 		return nil, err
 	}
 	refsByProvider := executionRefsByProvider(refs)
+	providerName = strings.TrimSpace(providerName)
+	if providerName != "" {
+		if providerRefs, ok := refsByProvider[providerName]; ok {
+			refsByProvider = map[string][]*coreagent.ExecutionReference{providerName: providerRefs}
+		} else {
+			refsByProvider = map[string][]*coreagent.ExecutionReference{}
+		}
+	}
 	out := make([]*coreagent.ManagedRun, 0, len(refs))
 	for providerName, providerRefs := range refsByProvider {
 		provider, err := m.resolveProviderByName(providerName)

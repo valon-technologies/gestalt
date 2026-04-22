@@ -69,6 +69,12 @@ pub enum Commands {
         #[command(subcommand)]
         command: WorkflowCommands,
     },
+
+    /// Manage global agent runs
+    Agent {
+        #[command(subcommand)]
+        command: AgentCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -392,6 +398,15 @@ pub enum WorkflowCommands {
 }
 
 #[derive(Subcommand)]
+pub enum AgentCommands {
+    /// Inspect and control agent runs
+    Runs {
+        #[command(subcommand)]
+        command: AgentRunCommands,
+    },
+}
+
+#[derive(Subcommand)]
 pub enum WorkflowScheduleCommands {
     /// List workflow schedules
     List {
@@ -489,6 +504,34 @@ pub enum WorkflowRunCommands {
 }
 
 #[derive(Subcommand)]
+pub enum AgentRunCommands {
+    /// Create an agent run
+    Create(AgentRunCreateArgs),
+    /// List agent runs
+    List {
+        /// Filter runs by provider
+        #[arg(long)]
+        provider: Option<String>,
+        /// Filter runs by status
+        #[arg(long)]
+        status: Option<String>,
+    },
+    /// Show a single agent run
+    Get {
+        /// Run ID
+        id: String,
+    },
+    /// Cancel an agent run
+    Cancel {
+        /// Run ID
+        id: String,
+        /// Optional cancellation reason
+        #[arg(long)]
+        reason: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 pub enum WorkflowEventCommands {
     /// Publish a workflow event
     Publish(WorkflowEventPublishArgs),
@@ -531,6 +574,70 @@ pub struct WorkflowScheduleCreateArgs {
     /// Load target input from a JSON file (use "-" for stdin)
     #[arg(long = "input-file")]
     pub input_file: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentToolArg {
+    pub plugin: String,
+    pub operation: String,
+}
+
+impl AgentToolArg {
+    pub fn parse(input: &str) -> Result<Self, String> {
+        let trimmed = input.trim();
+        if trimmed.is_empty() {
+            return Err("tool cannot be empty".to_string());
+        }
+        let (plugin, operation) = trimmed
+            .split_once(':')
+            .ok_or_else(|| format!("tool '{trimmed}' must use plugin:operation"))?;
+        let plugin = plugin.trim();
+        let operation = operation.trim();
+        if plugin.is_empty() || operation.is_empty() {
+            return Err(format!(
+                "tool '{trimmed}' must include both plugin and operation"
+            ));
+        }
+        Ok(Self {
+            plugin: plugin.to_string(),
+            operation: operation.to_string(),
+        })
+    }
+}
+
+#[derive(Args)]
+pub struct AgentRunCreateArgs {
+    /// Agent provider name
+    #[arg(long)]
+    pub provider: Option<String>,
+
+    /// Model name override
+    #[arg(long)]
+    pub model: Option<String>,
+
+    /// Add a system message
+    #[arg(long = "system")]
+    pub system: Vec<String>,
+
+    /// Add a user message
+    #[arg(long = "message")]
+    pub messages: Vec<String>,
+
+    /// Attach a tool reference in plugin:operation form
+    #[arg(long = "tool", value_parser = AgentToolArg::parse)]
+    pub tools: Vec<AgentToolArg>,
+
+    /// Continue an existing provider session reference
+    #[arg(long = "session-ref")]
+    pub session_ref: Option<String>,
+
+    /// Idempotency key for safe retries
+    #[arg(long = "idempotency-key")]
+    pub idempotency_key: Option<String>,
+
+    /// Load the JSON request body from a file (use "-" for stdin)
+    #[arg(long = "request-file")]
+    pub request_file: Option<String>,
 }
 
 #[derive(Args)]

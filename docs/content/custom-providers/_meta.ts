@@ -3,6 +3,7 @@ export default {
   runtime: "Runtime",
   authentication: "Authentication",
   authorization: "Authorization",
+  agent: "Agent",
   cache: "Cache",
   indexeddb: "IndexedDB",
   s3: "S3",
