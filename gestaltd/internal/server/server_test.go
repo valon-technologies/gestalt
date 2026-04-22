@@ -15629,7 +15629,7 @@ func TestMCPOAuthAuthorizationCodeFlow(t *testing.T) {
 	redirectURI := "http://127.0.0.1:4318/callback"
 	verifier := oauth.GenerateVerifier()
 	challenge := oauth.ComputeS256Challenge(verifier)
-	authState := "state-123"
+	authState := "   "
 	authorizeURL := ts.URL + "/oauth/authorize?response_type=code" +
 		"&client_id=" + url.QueryEscape(clientID) +
 		"&redirect_uri=" + url.QueryEscape(redirectURI) +

@@ -475,7 +475,7 @@ func redirectMCPOAuthSuccess(w http.ResponseWriter, r *http.Request, redirectURI
 	}
 	query := target.Query()
 	for key, value := range params {
-		if strings.TrimSpace(value) == "" {
+		if value == "" {
 			continue
 		}
 		query.Set(key, value)
