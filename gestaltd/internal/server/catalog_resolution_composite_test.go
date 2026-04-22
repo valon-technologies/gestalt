@@ -91,3 +91,65 @@ func TestResolveOperation_CompositeProviderPrefersStaticRESTWithoutSessionLookup
 		t.Fatalf("request catalog calls = %d, want 0", requestCatalogCalls)
 	}
 }
+
+func TestResolveOperation_CompositeProviderPreservesGraphQLTransport(t *testing.T) {
+	t.Parallel()
+
+	apiProv := &stubCatalogProvider{
+		stubProvider: stubProvider{
+			name:     "linear",
+			connMode: core.ConnectionModeUser,
+		},
+		cat: &catalog.Catalog{
+			Name: "linear",
+			Operations: []catalog.CatalogOperation{
+				{ID: "viewer", Transport: "graphql", Query: "query Viewer { viewer { id } }"},
+			},
+		},
+	}
+
+	var requestCatalogCalls int
+	mcpUpstream := &stubCompositeMCPUpstream{
+		stubProvider: stubProvider{
+			name:     "linear",
+			connMode: core.ConnectionModeUser,
+		},
+		cat: &catalog.Catalog{Name: "linear"},
+		catalogForRequestFn: func(context.Context, string) (*catalog.Catalog, error) {
+			requestCatalogCalls++
+			return nil, fmt.Errorf("unexpected session catalog lookup")
+		},
+	}
+
+	prov := composite.New("linear", apiProv, mcpUpstream)
+	cat := prov.Catalog()
+	if got, ok := invocation.CatalogOperationTransport(cat, "viewer"); !ok || got != "graphql" {
+		t.Fatalf("viewer transport = %q, ok=%v, want %q", got, ok, "graphql")
+	}
+
+	op, transport, connection, err := invocation.ResolveOperation(
+		context.Background(),
+		prov,
+		"linear",
+		&stubTokenResolver{err: fmt.Errorf("unexpected token resolution")},
+		&principal.Principal{UserID: "u1"},
+		"viewer",
+		[]string{"MCP"},
+		"",
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if op.ID != "viewer" {
+		t.Fatalf("operation = %q, want %q", op.ID, "viewer")
+	}
+	if transport != "graphql" {
+		t.Fatalf("transport = %q, want %q", transport, "graphql")
+	}
+	if connection != "" {
+		t.Fatalf("connection = %q, want empty", connection)
+	}
+	if requestCatalogCalls != 0 {
+		t.Fatalf("request catalog calls = %d, want 0", requestCatalogCalls)
+	}
+}

@@ -79,12 +79,6 @@ func BuildStaticConnectionPlan(plugin *ProviderEntry, manifestPlugin *providerma
 		resolved.Connection = conn
 		plan.surfaces[surface] = resolved
 	}
-	if _, hasOpenAPI := plan.surfaces[SpecSurfaceOpenAPI]; hasOpenAPI {
-		if _, hasGraphQL := plan.surfaces[SpecSurfaceGraphQL]; hasGraphQL {
-			return StaticConnectionPlan{}, fmt.Errorf("openapi and graphql surfaces cannot both be configured for the same plugin")
-		}
-	}
-
 	if err := plan.validateConnectionModes(); err != nil {
 		return StaticConnectionPlan{}, err
 	}
@@ -119,12 +113,21 @@ func (plan StaticConnectionPlan) LookupConnection(name string) (ConnectionDef, b
 }
 
 func (plan StaticConnectionPlan) ConfiguredAPISurface() (ResolvedSpecSurface, bool) {
-	for _, surface := range []SpecSurface{SpecSurfaceOpenAPI, SpecSurfaceGraphQL} {
-		if resolved, ok := plan.ResolvedSurface(surface); ok {
-			return resolved, true
-		}
+	surfaces := plan.ConfiguredAPISurfaces()
+	if len(surfaces) > 0 {
+		return surfaces[0], true
 	}
 	return ResolvedSpecSurface{}, false
+}
+
+func (plan StaticConnectionPlan) ConfiguredAPISurfaces() []ResolvedSpecSurface {
+	surfaces := make([]ResolvedSpecSurface, 0, 2)
+	for _, surface := range []SpecSurface{SpecSurfaceOpenAPI, SpecSurfaceGraphQL} {
+		if resolved, ok := plan.ResolvedSurface(surface); ok {
+			surfaces = append(surfaces, resolved)
+		}
+	}
+	return surfaces
 }
 
 func (plan StaticConnectionPlan) ConfiguredSpecSurface() (ResolvedSpecSurface, bool) {

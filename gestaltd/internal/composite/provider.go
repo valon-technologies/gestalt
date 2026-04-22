@@ -178,7 +178,9 @@ func (p *Provider) buildCatalog() *catalog.Catalog {
 	}
 	for i := range apiCat.Operations {
 		op := apiCat.Operations[i]
-		op.Transport = catalog.TransportREST
+		if op.Transport == "" {
+			op.Transport = catalog.TransportREST
+		}
 		merged.Operations = append(merged.Operations, op)
 	}
 	return merged

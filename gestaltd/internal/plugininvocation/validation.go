@@ -280,11 +280,7 @@ func readStaticCatalog(name string, entry *config.ProviderEntry, manifest *provi
 }
 
 func loadConfiguredAPICatalog(ctx context.Context, name string, entry *config.ProviderEntry, spec *providermanifestv1.Spec, allowed map[string]*config.OperationOverride) (*catalog.Catalog, error) {
-	if _, hasOpenAPI := resolvedSurfaceURL(entry, spec, config.SpecSurfaceOpenAPI); hasOpenAPI {
-		if _, hasGraphQL := resolvedSurfaceURL(entry, spec, config.SpecSurfaceGraphQL); hasGraphQL {
-			return nil, fmt.Errorf("plugin %q openapi and graphql surfaces cannot both be configured for the same plugin", name)
-		}
-	}
+	var merged *catalog.Catalog
 	for _, surface := range []config.SpecSurface{config.SpecSurfaceOpenAPI, config.SpecSurfaceGraphQL} {
 		url, ok := resolvedSurfaceURL(entry, spec, surface)
 		if !ok {
@@ -303,9 +299,12 @@ func loadConfiguredAPICatalog(ctx context.Context, name string, entry *config.Pr
 		if err != nil {
 			return nil, fmt.Errorf("plugin %q %s catalog: %w", name, surface, err)
 		}
-		return provider.CatalogFromDefinition(def), nil
+		merged, err = mergeCatalogs(name, merged, provider.CatalogFromDefinition(def))
+		if err != nil {
+			return nil, err
+		}
 	}
-	return nil, nil
+	return merged, nil
 }
 
 func resolvedSurfaceURL(entry *config.ProviderEntry, spec *providermanifestv1.Spec, surface config.SpecSurface) (string, bool) {
@@ -374,7 +373,7 @@ func mergeCatalogs(name string, first, second *catalog.Catalog) (*catalog.Catalo
 	}
 	for i := range second.Operations {
 		if _, ok := seen[second.Operations[i].ID]; ok {
-			return nil, fmt.Errorf("plugin %q exposes duplicate operation %q across static and API catalogs", name, second.Operations[i].ID)
+			return nil, fmt.Errorf("plugin %q exposes duplicate operation %q across merged catalogs", name, second.Operations[i].ID)
 		}
 		merged.Operations = append(merged.Operations, second.Operations[i])
 	}

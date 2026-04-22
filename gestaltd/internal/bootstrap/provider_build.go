@@ -241,6 +241,12 @@ func operationConnectionsForCatalog(cat *catalog.Catalog, plan config.StaticConn
 		switch operation.Transport {
 		case catalog.TransportREST:
 			connection = plan.APIConnection()
+		case "graphql":
+			if resolved, ok := plan.ResolvedSurface(config.SpecSurfaceGraphQL); ok {
+				connection = resolved.ConnectionName
+			} else {
+				connection = plan.APIConnection()
+			}
 		case catalog.TransportMCPPassthrough:
 			connection = plan.MCPConnection()
 		}
@@ -342,10 +348,6 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 	if err != nil {
 		return nil, err
 	}
-	mcpURL := ""
-	if resolved, ok := plan.ResolvedSurface(config.SpecSurfaceMCP); ok {
-		mcpURL = resolved.URL
-	}
 	allowedOperations := entry.AllowedOperations
 	if allowedOperations == nil && manifestPlugin != nil {
 		allowedOperations = maps.Clone(manifestPlugin.AllowedOperations)
@@ -390,8 +392,12 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 		return newProviderBuildResult(name, entry, manifest, pluginConfig, merged, nil, deps)
 	}
 
-	resolved, hasSpecSurface := plan.ConfiguredSpecSurface()
-	if !hasSpecSurface {
+	specProv, authFallback, err := buildConfiguredSpecComposite(ctx, name, entry, plan, manifestPlugin, meta, deps, allowedOperations)
+	if err != nil {
+		closeIfPossible(pluginProv)
+		return nil, fmt.Errorf("build hybrid spec provider %q: %w", name, err)
+	}
+	if specProv == nil {
 		restricted, err := applyAllowedOperations(name, allowedOperations, pluginProv)
 		if err != nil {
 			closeIfPossible(pluginProv)
@@ -405,39 +411,17 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 		return nil, err
 	}
 	pluginProv = filteredPluginProv
-
-	specProv, specDef, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
-		manifestPlugin:       manifestPlugin,
-		allowedOperations:    allowedOperations,
-		allowedHosts:         entry.AllowedHosts,
-		baseURL:              config.EffectiveProviderSpecBaseURL(entry, manifestPlugin),
-		applyResponseMapping: true,
-		providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
-			return mcpOAuthBuildOpts(conn, mcpURL, deps)
-		},
-	}, deps)
-	if err != nil {
-		closeIfPossible(pluginProv)
-		return nil, fmt.Errorf("build hybrid spec provider %q: %w", name, err)
-	}
 	merged, err := composite.NewMergedWithConnections(
 		name,
 		pluginProv.DisplayName(),
 		pluginProv.Description(),
 		firstProviderIconSVG(pluginProv, specProv),
-		composite.BoundProvider{Provider: pluginProv, Connection: hybridPluginOperationConnection(plan, resolved.ConnectionName)},
-		composite.BoundProvider{Provider: specProv, Connection: resolved.ConnectionName},
+		composite.BoundProvider{Provider: pluginProv, Connection: hybridPluginOperationConnection(plan, configuredSpecConnection(plan))},
+		composite.BoundProvider{Provider: specProv},
 	)
 	if err != nil {
 		closeIfPossible(specProv, pluginProv)
 		return nil, err
-	}
-	var authFallback *specAuthFallback
-	if specDef != nil {
-		authFallback = &specAuthFallback{
-			definition:     specDef,
-			connectionName: resolved.ConnectionName,
-		}
 	}
 	return newProviderBuildResult(name, entry, manifest, pluginConfig, merged, authFallback, deps)
 }
@@ -452,8 +436,40 @@ type specProviderConfig struct {
 }
 
 type specAuthFallback struct {
-	definition     *provider.Definition
-	connectionName string
+	definitions map[string]*provider.Definition
+}
+
+func newSpecAuthFallback() *specAuthFallback {
+	return &specAuthFallback{definitions: make(map[string]*provider.Definition)}
+}
+
+func (f *specAuthFallback) add(connectionName string, def *provider.Definition) {
+	if f == nil || def == nil {
+		return
+	}
+	resolvedName := config.ResolveConnectionAlias(connectionName)
+	if resolvedName == "" {
+		resolvedName = config.PluginConnectionName
+	}
+	if _, ok := f.definitions[resolvedName]; ok {
+		return
+	}
+	f.definitions[resolvedName] = def
+}
+
+func (f *specAuthFallback) definitionFor(connectionName string) *provider.Definition {
+	if f == nil {
+		return nil
+	}
+	resolvedName := config.ResolveConnectionAlias(connectionName)
+	if resolvedName == "" {
+		resolvedName = config.PluginConnectionName
+	}
+	return f.definitions[resolvedName]
+}
+
+func (f *specAuthFallback) empty() bool {
+	return f == nil || len(f.definitions) == 0
 }
 
 func newProviderBuildResult(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, pluginConfig map[string]any, prov core.Provider, authFallback *specAuthFallback, deps Deps) (*ProviderBuildResult, error) {
@@ -467,65 +483,64 @@ func newProviderBuildResult(name string, entry *config.ProviderEntry, manifest *
 	return result, nil
 }
 
+type builtSpecSurface struct {
+	provider   core.Provider
+	resolved   config.ResolvedSpecSurface
+	definition *provider.Definition
+}
+
 func buildSpecLoadedProvider(ctx context.Context, name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, pluginConfig map[string]any, meta providerMetadata, deps Deps, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
 	mp := manifest.Spec
 	plan, err := config.BuildStaticConnectionPlan(entry, mp)
 	if err != nil {
 		return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
 	}
-	apiResolved, hasAPI := plan.ConfiguredAPISurface()
+
+	prov, authFallback, err := buildConfiguredSpecComposite(ctx, name, entry, plan, mp, meta, deps, allowedOperations)
+	if err != nil {
+		return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
+	}
+	if prov == nil {
+		return nil, fmt.Errorf("build spec-loaded provider %q: no spec URL", name)
+	}
+	return newProviderBuildResult(name, entry, manifest, pluginConfig, prov, authFallback, deps)
+}
+
+func buildConfiguredSpecComposite(ctx context.Context, name string, entry *config.ProviderEntry, plan config.StaticConnectionPlan, manifestPlugin *providermanifestv1.Spec, meta providerMetadata, deps Deps, allowedOperations map[string]*config.OperationOverride) (core.Provider, *specAuthFallback, error) {
 	mcpResolved, hasMCP := plan.ResolvedSurface(config.SpecSurfaceMCP)
 	mcpURL := ""
 	if hasMCP {
 		mcpURL = mcpResolved.URL
 	}
-	if !hasAPI && !hasMCP {
-		return nil, fmt.Errorf("build spec-loaded provider %q: no spec URL", name)
+
+	cfg := specProviderConfig{
+		manifestPlugin:       manifestPlugin,
+		allowedOperations:    allowedOperations,
+		allowedHosts:         entry.AllowedHosts,
+		baseURL:              config.EffectiveProviderSpecBaseURL(entry, manifestPlugin),
+		applyResponseMapping: true,
+		providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
+			return mcpOAuthBuildOpts(conn, mcpURL, deps)
+		},
 	}
 
-	buildSpec := func(resolved config.ResolvedSpecSurface, allowed map[string]*config.OperationOverride) (core.Provider, *provider.Definition, error) {
-		return buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
-			manifestPlugin:       mp,
-			allowedOperations:    allowed,
-			allowedHosts:         entry.AllowedHosts,
-			baseURL:              config.EffectiveProviderSpecBaseURL(entry, mp),
-			applyResponseMapping: true,
-			providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
-				return mcpOAuthBuildOpts(conn, mcpURL, deps)
-			},
-		}, deps)
-	}
-
-	if !hasAPI {
-		prov, _, err := buildSpec(mcpResolved, allowedOperations)
-		if err != nil {
-			return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
-		}
-		return newProviderBuildResult(name, entry, manifest, pluginConfig, prov, nil, deps)
-	}
-
-	apiProv, apiDef, err := buildSpec(apiResolved, allowedOperations)
+	apiProv, authFallback, err := buildConfiguredAPIProvider(ctx, name, plan, meta, cfg, deps)
 	if err != nil {
-		return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
+		return nil, nil, err
 	}
-	authFallback := &specAuthFallback{
-		definition:     apiDef,
-		connectionName: apiResolved.ConnectionName,
-	}
-
 	if !hasMCP {
-		return newProviderBuildResult(name, entry, manifest, pluginConfig, apiProv, authFallback, deps)
+		return apiProv, authFallback, nil
 	}
 
-	mcpProv, _, err := buildSpec(mcpResolved, nil)
+	mcpProv, _, err := buildConfiguredSpecProvider(ctx, name, mcpResolved, meta, cfg, deps)
 	if err != nil {
 		closeIfPossible(apiProv)
-		return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
+		return nil, nil, err
 	}
 	mcpUp, ok := mcpProv.(composite.MCPUpstream)
 	if !ok {
 		closeIfPossible(mcpProv, apiProv)
-		return nil, fmt.Errorf("build spec-loaded provider %q: unexpected mcp provider type %T", name, mcpProv)
+		return nil, nil, fmt.Errorf("unexpected mcp provider type %T", mcpProv)
 	}
 
 	filtered := operationexposure.MatchingAllowedOperations(allowedOperations, mcpUp.Catalog())
@@ -535,15 +550,82 @@ func buildSpecLoadedProvider(ctx context.Context, name string, entry *config.Pro
 		})
 		if !ok {
 			closeIfPossible(mcpUp, apiProv)
-			return nil, fmt.Errorf("build spec-loaded provider %q: unexpected non-filterable mcp provider type %T", name, mcpProv)
+			return nil, nil, fmt.Errorf("unexpected non-filterable mcp provider type %T", mcpProv)
 		}
 		if err := filterable.FilterOperations(filtered); err != nil {
 			closeIfPossible(mcpUp, apiProv)
-			return nil, fmt.Errorf("build spec-loaded provider %q: filter mcp operations: %w", name, err)
+			return nil, nil, fmt.Errorf("filter mcp operations: %w", err)
 		}
 	}
 
-	return newProviderBuildResult(name, entry, manifest, pluginConfig, composite.New(name, apiProv, mcpUp), authFallback, deps)
+	if apiProv == nil {
+		return mcpUp, nil, nil
+	}
+	return composite.New(name, apiProv, mcpUp), authFallback, nil
+}
+
+func buildConfiguredAPIProvider(ctx context.Context, name string, plan config.StaticConnectionPlan, meta providerMetadata, cfg specProviderConfig, deps Deps) (core.Provider, *specAuthFallback, error) {
+	resolvedSurfaces := plan.ConfiguredAPISurfaces()
+	if len(resolvedSurfaces) == 0 {
+		return nil, nil, nil
+	}
+
+	built := make([]builtSpecSurface, 0, len(resolvedSurfaces))
+	authFallback := newSpecAuthFallback()
+	for i := range resolvedSurfaces {
+		resolved := resolvedSurfaces[i]
+		prov, def, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, cfg, deps)
+		if err != nil {
+			closeBuiltSpecSurfaces(built)
+			return nil, nil, fmt.Errorf("build %s provider: %w", resolved.Surface, err)
+		}
+		built = append(built, builtSpecSurface{
+			provider:   prov,
+			resolved:   resolved,
+			definition: def,
+		})
+		authFallback.add(resolved.ConnectionName, def)
+	}
+
+	if len(built) == 1 {
+		if authFallback.empty() {
+			authFallback = nil
+		}
+		return bindProviderConnection(built[0].provider, built[0].resolved.ConnectionName), authFallback, nil
+	}
+
+	boundProviders := make([]composite.BoundProvider, 0, len(built))
+	providers := make([]core.Provider, 0, len(built))
+	for i := range built {
+		specSurface := &built[i]
+		boundProviders = append(boundProviders, composite.BoundProvider{
+			Provider:   specSurface.provider,
+			Connection: specSurface.resolved.ConnectionName,
+		})
+		providers = append(providers, specSurface.provider)
+	}
+
+	merged, err := composite.NewMergedWithConnections(
+		name,
+		built[0].provider.DisplayName(),
+		built[0].provider.Description(),
+		firstProviderIconSVG(providers...),
+		boundProviders...,
+	)
+	if err != nil {
+		closeBuiltSpecSurfaces(built)
+		return nil, nil, err
+	}
+	if authFallback.empty() {
+		authFallback = nil
+	}
+	return merged, authFallback, nil
+}
+
+func closeBuiltSpecSurfaces(surfaces []builtSpecSurface) {
+	for i := range surfaces {
+		closeIfPossible(surfaces[i].provider)
+	}
 }
 
 func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved config.ResolvedSpecSurface, meta providerMetadata, cfg specProviderConfig) (*provider.Definition, error) {
@@ -551,7 +633,7 @@ func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved conf
 	if err != nil {
 		return nil, fmt.Errorf("load %s definition: %w", resolved.Surface, err)
 	}
-	if cfg.baseURL != "" {
+	if cfg.baseURL != "" && resolved.Surface == config.SpecSurfaceOpenAPI {
 		def.BaseURL = cfg.baseURL
 	}
 	applyProviderHeaders(def, cfg.manifestPlugin)
