@@ -639,7 +639,7 @@ A Slack plugin could use this to check which Slack workspace the caller is conne
 
 ## Testing locally
 
-Point a local config at the source plugin. Gestalt synthesizes the executable wrapper and materializes the catalog automatically:
+Point a local config at the source plugin. Gestalt synthesizes the executable wrapper, materializes the catalog, and merges any code-defined hosted HTTP metadata (`securitySchemes` / `http`) automatically:
 
 ```yaml
 plugins:
@@ -648,6 +648,14 @@ plugins:
     allowedHosts:
       - slack.com
 ```
+
+Hosted HTTP bindings stay layered on top of operations. A plugin can define an
+operation like `handle_command` in code, then attach `/command` with generated
+`securitySchemes` / `http` metadata. Gestalt writes that metadata into the
+effective manifest during local source execution and `gestaltd provider release`.
+Hand-authored manifest `spec.securitySchemes` / `spec.http` entries are still
+valid, but source-generated metadata is merged first and manifest values then
+override populated fields rather than replacing the generated binding wholesale.
 
 Start the server and invoke an operation:
 

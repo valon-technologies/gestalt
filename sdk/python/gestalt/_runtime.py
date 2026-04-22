@@ -11,37 +11,31 @@ import traceback
 from concurrent import futures
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Any, Final, cast
-
-from google.protobuf import json_format
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from ._api import Access, Credential, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
-from ._catalog import catalog_to_proto
 from ._operations import INTERNAL_ERROR_MESSAGE
 from ._plugin import Plugin, _module_plugin
-from ._providers import (
-    AuthenticationProvider,
-    CacheProvider,
-    Closer,
-    ExternalTokenValidator,
-    HealthChecker,
-    MetadataProvider,
-    PluginProvider,
-    PluginProviderAdapter,
-    ProviderKind,
-    ProviderMetadata,
-    S3Provider,
-    SecretsProvider,
-    SessionTTLProvider,
-    WarningsProvider,
-    WorkflowProvider,
-)
 from ._serialization import json_body
+
+if TYPE_CHECKING:
+    from ._providers import (
+        AuthenticationProvider,
+        CacheProvider,
+        PluginProvider,
+        PluginProviderAdapter,
+        ProviderKind,
+        ProviderMetadata,
+        S3Provider,
+        SecretsProvider,
+        WorkflowProvider,
+    )
 
 grpc: Any = None
 empty_pb2: Any = None
 duration_pb2: Any = None
+json_format: Any = None
 plugin_pb2: Any = None
 plugin_pb2_grpc: Any = None
 runtime_pb2: Any = None
@@ -62,6 +56,13 @@ ENV_WRITE_MANIFEST_METADATA: Final[str] = "GESTALT_PLUGIN_WRITE_MANIFEST_METADAT
 CURRENT_PROTOCOL_VERSION: Final[int] = 3
 GRPC_SERVER_MAX_WORKERS: Final[int] = 4
 GRPC_SHUTDOWN_GRACE_SECONDS: Final[int] = 2
+RUNTIME_KIND_INTEGRATION: Final[str] = "integration"
+RUNTIME_KIND_AUTHENTICATION: Final[str] = "authentication"
+RUNTIME_KIND_CACHE: Final[str] = "cache"
+RUNTIME_KIND_S3: Final[str] = "s3"
+RUNTIME_KIND_WORKFLOW: Final[str] = "workflow"
+RUNTIME_KIND_SECRETS: Final[str] = "secrets"
+RUNTIME_KIND_TELEMETRY: Final[str] = "telemetry"
 USAGE: Final[str] = (
     "usage: python -m gestalt._runtime ROOT MODULE[:ATTRIBUTE] [RUNTIME_KIND]"
 )
@@ -75,6 +76,7 @@ def _ensure_grpc_runtime() -> None:
     global duration_pb2
     global empty_pb2
     global grpc
+    global json_format
     global plugin_pb2
     global plugin_pb2_grpc
     global runtime_pb2
@@ -91,6 +93,7 @@ def _ensure_grpc_runtime() -> None:
     import grpc as _grpc
     from google.protobuf import duration_pb2 as _duration_pb2
     from google.protobuf import empty_pb2 as _empty_pb2
+    from google.protobuf import json_format as _json_format
 
     from .gen.v1 import authentication_pb2 as _authentication_pb2
     from .gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
@@ -109,6 +112,7 @@ def _ensure_grpc_runtime() -> None:
     grpc = _grpc
     duration_pb2 = _duration_pb2
     empty_pb2 = _empty_pb2
+    json_format = _json_format
     plugin_pb2 = _plugin_pb2
     plugin_pb2_grpc = _plugin_pb2_grpc
     runtime_pb2 = _runtime_pb2
@@ -130,6 +134,10 @@ class RuntimeArgs:
     root: pathlib.Path | None = None
     plugin_name: str | None = None
     runtime_kind: str | None = None
+
+
+def _providers_module() -> Any:
+    return importlib.import_module("._providers", __package__)
 
 
 def _grpc_handler(label: str):
@@ -222,8 +230,8 @@ def _parse_runtime_args(args: list[str]) -> RuntimeArgs | None:
 
         root, target = args[:2]
         runtime_kind = _normalized_runtime_kind(
-            args[2] if len(args) == 3 else ProviderKind.INTEGRATION.value
-        ).value
+            args[2] if len(args) == 3 else RUNTIME_KIND_INTEGRATION
+        )
         return RuntimeArgs(
             target=target,
             root=pathlib.Path(root),
@@ -242,8 +250,8 @@ def _parse_runtime_args(args: list[str]) -> RuntimeArgs | None:
         target=bundled_config.target,
         plugin_name=bundled_config.plugin_name,
         runtime_kind=_normalized_runtime_kind(
-            bundled_config.runtime_kind or ProviderKind.INTEGRATION.value
-        ).value,
+            bundled_config.runtime_kind or RUNTIME_KIND_INTEGRATION
+        ),
     )
 
 
@@ -261,22 +269,25 @@ def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginPr
     else:
         target = getattr(module, plugin_target.attribute_name, None)
 
-    if isinstance(target, (Plugin, PluginProviderAdapter)):
+    if isinstance(target, Plugin):
+        return target
+    providers = _providers_module()
+    if isinstance(target, providers.PluginProviderAdapter):
         return target
 
-    if resolved_kind == ProviderKind.AUTHENTICATION and isinstance(
-        target, AuthenticationProvider
+    if resolved_kind == RUNTIME_KIND_AUTHENTICATION and isinstance(
+        target, providers.AuthenticationProvider
     ):
         return _authentication_runtime_plugin(target)
-    if resolved_kind == ProviderKind.CACHE and isinstance(target, CacheProvider):
+    if resolved_kind == RUNTIME_KIND_CACHE and isinstance(target, providers.CacheProvider):
         return _cache_runtime_plugin(target)
-    if resolved_kind == ProviderKind.S3 and isinstance(target, S3Provider):
+    if resolved_kind == RUNTIME_KIND_S3 and isinstance(target, providers.S3Provider):
         return _s3_runtime_plugin(target)
-    if resolved_kind == ProviderKind.WORKFLOW and isinstance(target, WorkflowProvider):
+    if resolved_kind == RUNTIME_KIND_WORKFLOW and isinstance(target, providers.WorkflowProvider):
         return _workflow_runtime_plugin(target)
-    if resolved_kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
+    if resolved_kind == RUNTIME_KIND_SECRETS and isinstance(target, providers.SecretsProvider):
         return _secrets_runtime_plugin(target)
-    if isinstance(target, PluginProvider):
+    if isinstance(target, providers.PluginProvider):
         raise RuntimeError(
             "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is authentication, cache, s3, workflow, or secrets"
         )
@@ -285,12 +296,12 @@ def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginPr
 
 def _module_target(
     module: Any,
-    runtime_kind: ProviderKind,
+    runtime_kind: str,
 ) -> Plugin | PluginProviderAdapter | PluginProvider | Any:
-    if runtime_kind == ProviderKind.INTEGRATION:
+    if runtime_kind == RUNTIME_KIND_INTEGRATION:
         return _module_plugin(module)
 
-    for attribute_name in (runtime_kind.value, "provider", "plugin"):
+    for attribute_name in (runtime_kind, "provider", "plugin"):
         value = getattr(module, attribute_name, None)
         if value is not None:
             return value
@@ -333,7 +344,11 @@ def _register_services(
 
 
 def _close_once_callable(target: Plugin | PluginProviderAdapter) -> Any:
-    provider = target.provider if isinstance(target, PluginProviderAdapter) else target
+    if isinstance(target, Plugin):
+        provider = target
+    else:
+        providers = _providers_module()
+        provider = target.provider if isinstance(target, providers.PluginProviderAdapter) else target
     closed = False
 
     def _close() -> None:
@@ -341,7 +356,8 @@ def _close_once_callable(target: Plugin | PluginProviderAdapter) -> Any:
         if closed:
             return
         closed = True
-        if isinstance(provider, Closer):
+        providers = _providers_module()
+        if isinstance(provider, providers.Closer):
             provider.close()
 
     return _close
@@ -352,21 +368,25 @@ def _servable_target(
     *,
     runtime_kind: ProviderKind | str | None,
 ) -> Plugin | PluginProviderAdapter:
-    if isinstance(target, (Plugin, PluginProviderAdapter)):
+    if isinstance(target, Plugin):
+        return target
+
+    providers = _providers_module()
+    if isinstance(target, providers.PluginProviderAdapter):
         return target
 
     kind = _normalized_runtime_kind(runtime_kind)
-    if kind == ProviderKind.AUTHENTICATION and isinstance(
-        target, AuthenticationProvider
+    if kind == RUNTIME_KIND_AUTHENTICATION and isinstance(
+        target, providers.AuthenticationProvider
     ):
         return _authentication_runtime_plugin(target)
-    if kind == ProviderKind.CACHE and isinstance(target, CacheProvider):
+    if kind == RUNTIME_KIND_CACHE and isinstance(target, providers.CacheProvider):
         return _cache_runtime_plugin(target)
-    if kind == ProviderKind.S3 and isinstance(target, S3Provider):
+    if kind == RUNTIME_KIND_S3 and isinstance(target, providers.S3Provider):
         return _s3_runtime_plugin(target)
-    if kind == ProviderKind.WORKFLOW and isinstance(target, WorkflowProvider):
+    if kind == RUNTIME_KIND_WORKFLOW and isinstance(target, providers.WorkflowProvider):
         return _workflow_runtime_plugin(target)
-    if kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
+    if kind == RUNTIME_KIND_SECRETS and isinstance(target, providers.SecretsProvider):
         return _secrets_runtime_plugin(target)
     raise RuntimeError("unsupported runtime target")
 
@@ -374,8 +394,9 @@ def _servable_target(
 def _authentication_runtime_plugin(
     provider: AuthenticationProvider,
 ) -> PluginProviderAdapter:
-    return PluginProviderAdapter(
-        kind=ProviderKind.AUTHENTICATION,
+    providers = _providers_module()
+    return providers.PluginProviderAdapter(
+        kind=RUNTIME_KIND_AUTHENTICATION,
         provider=provider,
         register_services=_register_authentication_services,
     )
@@ -384,7 +405,7 @@ def _authentication_runtime_plugin(
 def _register_authentication_services(server: Any, provider: PluginProvider) -> None:
     _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
-        _runtime_servicer(provider=provider, kind=ProviderKind.AUTHENTICATION),
+        _runtime_servicer(provider=provider, kind=RUNTIME_KIND_AUTHENTICATION),
         server,
     )
     authentication_pb2_grpc.add_AuthenticationProviderServicer_to_server(
@@ -394,8 +415,9 @@ def _register_authentication_services(server: Any, provider: PluginProvider) -> 
 
 
 def _s3_runtime_plugin(provider: S3Provider) -> PluginProviderAdapter:
-    return PluginProviderAdapter(
-        kind=ProviderKind.S3,
+    providers = _providers_module()
+    return providers.PluginProviderAdapter(
+        kind=RUNTIME_KIND_S3,
         provider=provider,
         register_services=_register_s3_services,
     )
@@ -404,15 +426,16 @@ def _s3_runtime_plugin(provider: S3Provider) -> PluginProviderAdapter:
 def _register_s3_services(server: Any, provider: PluginProvider) -> None:
     _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
-        _runtime_servicer(provider=provider, kind=ProviderKind.S3),
+        _runtime_servicer(provider=provider, kind=RUNTIME_KIND_S3),
         server,
     )
     s3_pb2_grpc.add_S3Servicer_to_server(provider, server)
 
 
 def _workflow_runtime_plugin(provider: WorkflowProvider) -> PluginProviderAdapter:
-    return PluginProviderAdapter(
-        kind=ProviderKind.WORKFLOW,
+    providers = _providers_module()
+    return providers.PluginProviderAdapter(
+        kind=RUNTIME_KIND_WORKFLOW,
         provider=provider,
         register_services=_register_workflow_services,
     )
@@ -421,15 +444,16 @@ def _workflow_runtime_plugin(provider: WorkflowProvider) -> PluginProviderAdapte
 def _register_workflow_services(server: Any, provider: PluginProvider) -> None:
     _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
-        _runtime_servicer(provider=provider, kind=ProviderKind.WORKFLOW),
+        _runtime_servicer(provider=provider, kind=RUNTIME_KIND_WORKFLOW),
         server,
     )
     workflow_pb2_grpc.add_WorkflowProviderServicer_to_server(provider, server)
 
 
 def _secrets_runtime_plugin(provider: SecretsProvider) -> PluginProviderAdapter:
-    return PluginProviderAdapter(
-        kind=ProviderKind.SECRETS,
+    providers = _providers_module()
+    return providers.PluginProviderAdapter(
+        kind=RUNTIME_KIND_SECRETS,
         provider=provider,
         register_services=_register_secrets_services,
     )
@@ -438,7 +462,7 @@ def _secrets_runtime_plugin(provider: SecretsProvider) -> PluginProviderAdapter:
 def _register_secrets_services(server: Any, provider: PluginProvider) -> None:
     _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
-        _runtime_servicer(provider=provider, kind=ProviderKind.SECRETS),
+        _runtime_servicer(provider=provider, kind=RUNTIME_KIND_SECRETS),
         server,
     )
     secrets_pb2_grpc.add_SecretsProviderServicer_to_server(
@@ -448,8 +472,9 @@ def _register_secrets_services(server: Any, provider: PluginProvider) -> None:
 
 
 def _cache_runtime_plugin(provider: CacheProvider) -> PluginProviderAdapter:
-    return PluginProviderAdapter(
-        kind=ProviderKind.CACHE,
+    providers = _providers_module()
+    return providers.PluginProviderAdapter(
+        kind=RUNTIME_KIND_CACHE,
         provider=provider,
         register_services=_register_cache_services,
     )
@@ -458,7 +483,7 @@ def _cache_runtime_plugin(provider: CacheProvider) -> PluginProviderAdapter:
 def _register_cache_services(server: Any, provider: PluginProvider) -> None:
     _ensure_grpc_runtime()
     runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
-        _runtime_servicer(provider=provider, kind=ProviderKind.CACHE),
+        _runtime_servicer(provider=provider, kind=RUNTIME_KIND_CACHE),
         server,
     )
     cache_pb2_grpc.add_CacheServicer_to_server(
@@ -527,6 +552,8 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
                 )
 
             try:
+                from ._catalog import catalog_to_proto
+
                 proto_catalog = catalog_to_proto(catalog)
             except Exception as error:
                 return context.abort(
@@ -539,7 +566,7 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
     return ProviderServicer()
 
 
-def _runtime_servicer(*, provider: PluginProvider, kind: ProviderKind) -> Any:
+def _runtime_servicer(*, provider: PluginProvider, kind: str) -> Any:
     _ensure_grpc_runtime()
     class RuntimeServicer(runtime_pb2_grpc.ProviderLifecycleServicer):
         def GetProviderIdentity(self, _request: Any, _context: Any) -> Any:
@@ -570,7 +597,8 @@ def _runtime_servicer(*, provider: PluginProvider, kind: ProviderKind) -> Any:
             )
 
         def HealthCheck(self, _request: Any, _context: Any) -> Any:
-            if isinstance(provider, HealthChecker):
+            providers = _providers_module()
+            if isinstance(provider, providers.HealthChecker):
                 try:
                     provider.health_check()
                 except Exception as error:
@@ -586,7 +614,8 @@ def _runtime_servicer(*, provider: PluginProvider, kind: ProviderKind) -> Any:
 
 def _authentication_servicer(*, provider: PluginProvider) -> Any:
     _ensure_grpc_runtime()
-    auth_provider = cast(AuthenticationProvider, provider)
+    providers = _providers_module()
+    auth_provider = cast(Any, provider)
 
     class AuthenticationServicer(authentication_pb2_grpc.AuthenticationProviderServicer):
         @_grpc_handler("begin login")
@@ -610,7 +639,7 @@ def _authentication_servicer(*, provider: PluginProvider) -> Any:
             return user
 
         def ValidateExternalToken(self, request: Any, context: Any) -> Any:
-            if not isinstance(auth_provider, ExternalTokenValidator):
+            if not isinstance(auth_provider, providers.ExternalTokenValidator):
                 return context.abort(
                     grpc.StatusCode.UNIMPLEMENTED,
                     "authentication provider does not support external token validation",
@@ -631,7 +660,7 @@ def _authentication_servicer(*, provider: PluginProvider) -> Any:
             return user
 
         def GetSessionSettings(self, request: Any, context: Any) -> Any:
-            if not isinstance(auth_provider, SessionTTLProvider):
+            if not isinstance(auth_provider, providers.SessionTTLProvider):
                 return context.abort(
                     grpc.StatusCode.UNIMPLEMENTED,
                     "authentication provider does not expose session settings",
@@ -647,7 +676,7 @@ def _authentication_servicer(*, provider: PluginProvider) -> Any:
 
 def _secrets_servicer(*, provider: PluginProvider) -> Any:
     _ensure_grpc_runtime()
-    secrets_provider = cast(SecretsProvider, provider)
+    secrets_provider = cast(Any, provider)
 
     class SecretsServicer(secrets_pb2_grpc.SecretsProviderServicer):
         @_grpc_handler("get secret")
@@ -662,7 +691,7 @@ def _cache_servicer(*, provider: PluginProvider) -> Any:
     _ensure_grpc_runtime()
     from ._cache import CacheEntry
 
-    cache_provider = cast(CacheProvider, provider)
+    cache_provider = cast(Any, provider)
 
     class CacheServicer(cache_pb2_grpc.CacheServicer):
         @_grpc_handler("cache get")
@@ -789,6 +818,7 @@ def _workflow_from_proto(request_context: Any) -> dict[str, Any]:
     workflow = getattr(request_context, "workflow", None)
     if workflow is None:
         return {}
+    _ensure_grpc_runtime()
     return cast(
         dict[str, Any],
         json_format.MessageToDict(
@@ -807,6 +837,7 @@ def _message_to_dict(
     if not request.HasField(field_name):
         return {}
 
+    _ensure_grpc_runtime()
     return json_format.MessageToDict(
         message,
         preserving_proto_field_name=True,
@@ -814,51 +845,65 @@ def _message_to_dict(
 
 
 def _provider_metadata(
-    *, provider: PluginProvider, kind: ProviderKind
+    *, provider: PluginProvider, kind: str
 ) -> ProviderMetadata:
-    if isinstance(provider, MetadataProvider):
+    providers = _providers_module()
+    if isinstance(provider, providers.MetadataProvider):
         metadata = provider.metadata()
-        if isinstance(metadata, ProviderMetadata):
+        if isinstance(metadata, providers.ProviderMetadata):
             return metadata
-    return ProviderMetadata(kind=kind)
+    return providers.ProviderMetadata(kind=kind)
 
 
 def _provider_warnings(provider: PluginProvider) -> list[str]:
-    if isinstance(provider, WarningsProvider):
+    providers = _providers_module()
+    if isinstance(provider, providers.WarningsProvider):
         return list(provider.warnings())
     return []
 
 
-def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
+def _provider_kind_to_proto(kind: object | None) -> Any:
     _ensure_grpc_runtime()
     normalized = _normalized_runtime_kind(kind)
     return {
-        ProviderKind.INTEGRATION: runtime_pb2.ProviderKind.PROVIDER_KIND_INTEGRATION,
-        ProviderKind.AUTHENTICATION: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTHENTICATION,
-        ProviderKind.CACHE: runtime_pb2.ProviderKind.PROVIDER_KIND_CACHE,
-        ProviderKind.S3: runtime_pb2.ProviderKind.PROVIDER_KIND_S3,
-        ProviderKind.WORKFLOW: runtime_pb2.ProviderKind.PROVIDER_KIND_WORKFLOW,
-        ProviderKind.SECRETS: runtime_pb2.ProviderKind.PROVIDER_KIND_SECRETS,
-        ProviderKind.TELEMETRY: runtime_pb2.ProviderKind.PROVIDER_KIND_TELEMETRY,
+        RUNTIME_KIND_INTEGRATION: runtime_pb2.ProviderKind.PROVIDER_KIND_INTEGRATION,
+        RUNTIME_KIND_AUTHENTICATION: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTHENTICATION,
+        RUNTIME_KIND_CACHE: runtime_pb2.ProviderKind.PROVIDER_KIND_CACHE,
+        RUNTIME_KIND_S3: runtime_pb2.ProviderKind.PROVIDER_KIND_S3,
+        RUNTIME_KIND_WORKFLOW: runtime_pb2.ProviderKind.PROVIDER_KIND_WORKFLOW,
+        RUNTIME_KIND_SECRETS: runtime_pb2.ProviderKind.PROVIDER_KIND_SECRETS,
+        RUNTIME_KIND_TELEMETRY: runtime_pb2.ProviderKind.PROVIDER_KIND_TELEMETRY,
     }.get(normalized, runtime_pb2.ProviderKind.PROVIDER_KIND_UNSPECIFIED)
 
 
-def _normalized_runtime_kind(kind: object | None) -> ProviderKind:
+def _normalized_runtime_kind(kind: object | None) -> str:
     if kind is None:
-        return ProviderKind.INTEGRATION
-    if isinstance(kind, ProviderKind):
-        return kind
+        return RUNTIME_KIND_INTEGRATION
+
+    normalized: str
     if isinstance(kind, str):
         normalized = kind.strip().lower()
-        if normalized == "":
-            return ProviderKind.INTEGRATION
-        if normalized == "auth":
-            return ProviderKind.AUTHENTICATION
-        try:
-            return ProviderKind(normalized)
-        except ValueError as exc:
-            raise ValueError(f"unsupported runtime kind: {kind!r}") from exc
-    raise TypeError(f"unsupported runtime kind: {kind!r}")
+    else:
+        value = getattr(kind, "value", None)
+        if not isinstance(value, str):
+            raise TypeError(f"unsupported runtime kind: {kind!r}")
+        normalized = value.strip().lower()
+
+    if normalized == "":
+        return RUNTIME_KIND_INTEGRATION
+    if normalized == "auth":
+        return RUNTIME_KIND_AUTHENTICATION
+    if normalized in {
+        RUNTIME_KIND_INTEGRATION,
+        RUNTIME_KIND_AUTHENTICATION,
+        RUNTIME_KIND_CACHE,
+        RUNTIME_KIND_S3,
+        RUNTIME_KIND_WORKFLOW,
+        RUNTIME_KIND_SECRETS,
+        RUNTIME_KIND_TELEMETRY,
+    }:
+        return normalized
+    raise ValueError(f"unsupported runtime kind: {kind!r}")
 
 
 def _duration_to_timedelta(duration: Any) -> dt.timedelta | None:

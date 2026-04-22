@@ -1,5 +1,7 @@
 """Plugin registration and decorator helpers for integration providers."""
 
+from __future__ import annotations
+
 import copy
 import inspect
 import json
@@ -8,18 +10,12 @@ import re
 import sys
 import types
 from collections.abc import Mapping
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 import yaml
 
 from ._api import Request
-from ._catalog import (
-    Catalog,
-    SessionCatalogProvider,
-    build_catalog,
-    catalog_to_dict,
-    write_catalog,
-)
+from ._catalog_helpers import catalog_parameters
 from ._manifest_metadata import (
     HTTPBinding,
     HTTPSecurityScheme,
@@ -37,8 +33,11 @@ from ._operations import (
 
 DEFAULT_OPERATION_METHOD: Final[str] = "POST"
 
+if TYPE_CHECKING:
+    from ._catalog import Catalog
 
-class Plugin(SessionCatalogProvider):
+
+class Plugin:
     """Integration plugin definition and operation registry.
 
     ``Plugin`` collects operation handlers, optional configuration hooks, and
@@ -193,21 +192,31 @@ class Plugin(SessionCatalogProvider):
             request=request,
         )
 
-    def _static_catalog(self) -> Catalog:
-        return build_catalog(
-            plugin_name=self.name,
-            operations=self._operations.values(),
-        )
+    def _static_catalog_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "operations": [
+                _catalog_operation_dict(operation)
+                for operation in self._operations.values()
+            ],
+        }
 
     def catalog_dict(self) -> dict[str, Any]:
         """Return the static plugin catalog as a plain dictionary."""
 
-        return catalog_to_dict(self._static_catalog())
+        return copy.deepcopy(self._static_catalog_dict())
 
     def write_catalog(self, path: str | pathlib.Path) -> None:
         """Write the static plugin catalog to disk."""
 
-        write_catalog(path, catalog=self._static_catalog())
+        catalog_path = pathlib.Path(path)
+        catalog_path.parent.mkdir(parents=True, exist_ok=True)
+        data = yaml.dump(
+            self._static_catalog_dict(),
+            default_flow_style=False,
+            sort_keys=False,
+        )
+        catalog_path.write_text(data, encoding="utf-8")
 
     def static_manifest_metadata(self) -> PluginManifestMetadata:
         """Return generated manifest-backed HTTP/security metadata."""
@@ -416,6 +425,47 @@ def _inspect_session_catalog_handler(func: Any) -> bool:
             "session catalog handler parameter must be annotated as gestalt.Request"
         )
     return True
+
+
+def _catalog_operation_dict(operation: OperationDefinition) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": operation.id,
+        "method": operation.method,
+    }
+    if operation.title:
+        payload["title"] = operation.title
+    if operation.description:
+        payload["description"] = operation.description
+    if operation.read_only:
+        payload["read_only"] = True
+    parameters = _catalog_parameters_dict(operation.input_type)
+    if parameters:
+        payload["parameters"] = parameters
+    if operation.allowed_roles:
+        payload["allowed_roles"] = list(operation.allowed_roles)
+    if operation.tags:
+        payload["tags"] = list(operation.tags)
+    if operation.visible is not None:
+        payload["visible"] = operation.visible
+    return payload
+
+
+def _catalog_parameters_dict(input_type: Any) -> list[dict[str, Any]]:
+    parameters: list[dict[str, Any]] = []
+    for parameter in catalog_parameters(input_type):
+        param: dict[str, Any] = {
+            "name": parameter.name,
+            "type": parameter.type,
+        }
+        if parameter.description:
+            param["description"] = parameter.description
+        if parameter.required:
+            param["required"] = True
+        if parameter.has_default:
+            param["default"] = parameter.default
+        parameters.append(param)
+
+    return parameters
 
 
 def _module_plugin_name(module: types.ModuleType) -> str:
