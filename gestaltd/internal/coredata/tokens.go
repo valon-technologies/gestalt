@@ -339,39 +339,15 @@ func (s *TokenService) syncExternalCredentialRecord(ctx context.Context, rec ind
 	if s.externalCredentials == nil {
 		return nil
 	}
-	subjectID := tokenRecordSubjectID(rec)
-	plugin := recString(rec, "integration")
-	connection := recString(rec, "connection")
-	if subjectID == "" || plugin == "" || connection == "" {
-		return nil
-	}
-	accessTokenEncrypted := recString(rec, "access_token_encrypted")
-	refreshTokenEncrypted := recString(rec, "refresh_token_encrypted")
-	payloadEncrypted, err := encodeLegacyCredentialPayload(accessTokenEncrypted, refreshTokenEncrypted)
-	if err != nil {
-		return err
-	}
 	token, err := s.recordToToken(rec)
 	if err != nil {
-		return fmt.Errorf("decode token for canonical external credential %q/%q/%q/%q: %w", subjectID, plugin, connection, recString(rec, "instance"), err)
+		return fmt.Errorf("decode token for canonical external credential %q/%q/%q/%q: %w", tokenRecordSubjectID(rec), recString(rec, "integration"), recString(rec, "connection"), recString(rec, "instance"), err)
 	}
-	if _, err := s.externalCredentials.UpsertCredential(ctx, &core.ExternalCredential{
-		ID:                recString(rec, "id"),
-		SubjectID:         subjectID,
-		Plugin:            plugin,
-		Connection:        connection,
-		Instance:          recString(rec, "instance"),
-		AuthType:          externalCredentialAuthType(token),
-		PayloadEncrypted:  payloadEncrypted,
-		Scopes:            recString(rec, "scopes"),
-		ExpiresAt:         recTimePtr(rec, "expires_at"),
-		LastRefreshedAt:   recTimePtr(rec, "last_refreshed_at"),
-		RefreshErrorCount: recInt(rec, "refresh_error_count"),
-		MetadataJSON:      recString(rec, "metadata_json"),
-		CreatedAt:         recTime(rec, "created_at"),
-		UpdatedAt:         recTime(rec, "updated_at"),
-	}); err != nil {
-		return fmt.Errorf("sync canonical external credential record %q/%q/%q/%q: %w", subjectID, plugin, connection, recString(rec, "instance"), err)
+	if token.SubjectID == "" || token.Integration == "" || token.Connection == "" {
+		return nil
+	}
+	if err := s.syncExternalCredential(ctx, token, recString(rec, "access_token_encrypted"), recString(rec, "refresh_token_encrypted")); err != nil {
+		return fmt.Errorf("sync canonical external credential record %q/%q/%q/%q: %w", token.SubjectID, token.Integration, token.Connection, token.Instance, err)
 	}
 	return nil
 }
