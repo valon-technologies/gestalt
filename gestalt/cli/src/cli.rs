@@ -64,7 +64,7 @@ pub enum Commands {
         command: IdentityCommands,
     },
 
-    /// Manage workflow resources (schedules)
+    /// Manage workflow resources
     Workflows {
         #[command(subcommand)]
         command: WorkflowCommands,
@@ -374,6 +374,11 @@ pub enum WorkflowCommands {
         #[command(subcommand)]
         command: WorkflowScheduleCommands,
     },
+    /// Manage workflow event triggers
+    Triggers {
+        #[command(subcommand)]
+        command: WorkflowTriggerCommands,
+    },
     /// Inspect workflow runs
     Runs {
         #[command(subcommand)]
@@ -411,6 +416,43 @@ pub enum WorkflowScheduleCommands {
     /// Resume a paused workflow schedule
     Resume {
         /// Schedule ID
+        id: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum WorkflowTriggerCommands {
+    /// List workflow event triggers
+    List {
+        /// Filter event triggers by target plugin
+        #[arg(long)]
+        plugin: Option<String>,
+        /// Filter event triggers by event type
+        #[arg(long = "type")]
+        event_type: Option<String>,
+    },
+    /// Show a single workflow event trigger
+    Get {
+        /// Trigger ID
+        id: String,
+    },
+    /// Create a workflow event trigger
+    Create(WorkflowTriggerCreateArgs),
+    /// Update an existing workflow event trigger
+    Update(WorkflowTriggerUpdateArgs),
+    /// Delete a workflow event trigger
+    Delete {
+        /// Trigger ID
+        id: String,
+    },
+    /// Pause a workflow event trigger
+    Pause {
+        /// Trigger ID
+        id: String,
+    },
+    /// Resume a paused workflow event trigger
+    Resume {
+        /// Trigger ID
         id: String,
     },
 }
@@ -481,6 +523,49 @@ pub struct WorkflowScheduleCreateArgs {
 }
 
 #[derive(Args)]
+pub struct WorkflowTriggerCreateArgs {
+    /// Event type to match exactly
+    #[arg(long = "type")]
+    pub event_type: String,
+
+    /// Optional event source to match exactly
+    #[arg(long)]
+    pub source: Option<String>,
+
+    /// Optional event subject to match exactly
+    #[arg(long)]
+    pub subject: Option<String>,
+
+    /// Target plugin (e.g. "slack", "github")
+    #[arg(long)]
+    pub plugin: String,
+
+    /// Target operation (e.g. "chat.postMessage")
+    #[arg(long)]
+    pub operation: String,
+
+    /// Select a named connection
+    #[arg(long)]
+    pub connection: Option<String>,
+
+    /// Select a stored connection instance
+    #[arg(long)]
+    pub instance: Option<String>,
+
+    /// Create the trigger in paused state
+    #[arg(long)]
+    pub paused: bool,
+
+    /// Target input parameters as key=value or key:=json
+    #[arg(short = 'p', long = "param", value_parser = params::parse_param_entry)]
+    pub params: Vec<params::ParamEntry>,
+
+    /// Load target input from a JSON file (use "-" for stdin)
+    #[arg(long = "input-file")]
+    pub input_file: Option<String>,
+}
+
+#[derive(Args)]
 pub struct WorkflowScheduleUpdateArgs {
     /// Schedule ID
     pub id: String,
@@ -514,6 +599,60 @@ pub struct WorkflowScheduleUpdateArgs {
     pub paused: bool,
 
     /// Mark the schedule as not paused
+    #[arg(long = "no-paused", action = clap::ArgAction::SetTrue)]
+    pub unpaused: bool,
+
+    /// Replace target input with these key=value / key:=json entries
+    #[arg(short = 'p', long = "param", value_parser = params::parse_param_entry)]
+    pub params: Vec<params::ParamEntry>,
+
+    /// Replace target input with the contents of this JSON file ("-" for stdin)
+    #[arg(long = "input-file")]
+    pub input_file: Option<String>,
+
+    /// Clear the target input instead of keeping the existing value
+    #[arg(long = "clear-input", conflicts_with_all = ["params", "input_file"])]
+    pub clear_input: bool,
+}
+
+#[derive(Args)]
+pub struct WorkflowTriggerUpdateArgs {
+    /// Trigger ID
+    pub id: String,
+
+    /// Event type (leave unset to keep existing)
+    #[arg(long = "type")]
+    pub event_type: Option<String>,
+
+    /// Event source (leave unset to keep existing; pass empty string to clear)
+    #[arg(long)]
+    pub source: Option<String>,
+
+    /// Event subject (leave unset to keep existing; pass empty string to clear)
+    #[arg(long)]
+    pub subject: Option<String>,
+
+    /// Target plugin (leave unset to keep existing)
+    #[arg(long)]
+    pub plugin: Option<String>,
+
+    /// Target operation (leave unset to keep existing)
+    #[arg(long)]
+    pub operation: Option<String>,
+
+    /// Named connection (leave unset to keep existing; pass empty string to clear)
+    #[arg(long)]
+    pub connection: Option<String>,
+
+    /// Stored connection instance (leave unset to keep existing; pass empty string to clear)
+    #[arg(long)]
+    pub instance: Option<String>,
+
+    /// Mark the event trigger as paused
+    #[arg(long, conflicts_with = "unpaused", action = clap::ArgAction::SetTrue)]
+    pub paused: bool,
+
+    /// Mark the event trigger as not paused
     #[arg(long = "no-paused", action = clap::ArgAction::SetTrue)]
     pub unpaused: bool,
 

@@ -4,6 +4,7 @@ use gestalt::cli::{
     AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs, IdentityCommands,
     IdentityGrantCommands, IdentityMemberCommands, IdentityTokenCommands, InvokeArgs,
     PluginCommands, TokenCommands, WorkflowCommands, WorkflowRunCommands, WorkflowScheduleCommands,
+    WorkflowTriggerCommands,
 };
 use gestalt::commands;
 use gestalt::output;
@@ -150,6 +151,34 @@ fn run() -> anyhow::Result<()> {
                     }
                     WorkflowScheduleCommands::Resume { id } => {
                         commands::workflows::resume(&client, &id, format)
+                    }
+                },
+                WorkflowCommands::Triggers { command } => match command {
+                    WorkflowTriggerCommands::List { plugin, event_type } => {
+                        commands::workflows::list_triggers(
+                            &client,
+                            plugin.as_deref(),
+                            event_type.as_deref(),
+                            format,
+                        )
+                    }
+                    WorkflowTriggerCommands::Get { id } => {
+                        commands::workflows::get_trigger(&client, &id, format)
+                    }
+                    WorkflowTriggerCommands::Create(args) => {
+                        commands::workflows::create_trigger(&client, &args, format)
+                    }
+                    WorkflowTriggerCommands::Update(args) => {
+                        commands::workflows::update_trigger(&client, &args, format)
+                    }
+                    WorkflowTriggerCommands::Delete { id } => {
+                        commands::workflows::delete_trigger(&client, &id, format)
+                    }
+                    WorkflowTriggerCommands::Pause { id } => {
+                        commands::workflows::pause_trigger(&client, &id, format)
+                    }
+                    WorkflowTriggerCommands::Resume { id } => {
+                        commands::workflows::resume_trigger(&client, &id, format)
                     }
                 },
                 WorkflowCommands::Runs { command } => match command {

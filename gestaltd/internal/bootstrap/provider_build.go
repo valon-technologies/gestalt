@@ -1179,6 +1179,34 @@ func (unavailableWorkflowManager) ResumeSchedule(context.Context, *principal.Pri
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
+func (unavailableWorkflowManager) ListEventTriggers(context.Context, *principal.Principal) ([]*workflowmanager.ManagedEventTrigger, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) CreateEventTrigger(context.Context, *principal.Principal, workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) GetEventTrigger(context.Context, *principal.Principal, string) (*workflowmanager.ManagedEventTrigger, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) UpdateEventTrigger(context.Context, *principal.Principal, string, workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) DeleteEventTrigger(context.Context, *principal.Principal, string) error {
+	return fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) PauseEventTrigger(context.Context, *principal.Principal, string) (*workflowmanager.ManagedEventTrigger, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) ResumeEventTrigger(context.Context, *principal.Principal, string) (*workflowmanager.ManagedEventTrigger, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
 func (unavailableWorkflowManager) ListRuns(context.Context, *principal.Principal) ([]*workflowmanager.ManagedRun, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }

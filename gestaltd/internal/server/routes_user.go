@@ -18,6 +18,15 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Post("/{scheduleID}/pause", s.pauseGlobalWorkflowSchedule)
 			r.Post("/{scheduleID}/resume", s.resumeGlobalWorkflowSchedule)
 		})
+		r.Route("/workflow/event-triggers", func(r chi.Router) {
+			r.Get("/", s.listGlobalWorkflowEventTriggers)
+			r.Post("/", s.createGlobalWorkflowEventTrigger)
+			r.Get("/{triggerID}", s.getGlobalWorkflowEventTrigger)
+			r.Put("/{triggerID}", s.updateGlobalWorkflowEventTrigger)
+			r.Delete("/{triggerID}", s.deleteGlobalWorkflowEventTrigger)
+			r.Post("/{triggerID}/pause", s.pauseGlobalWorkflowEventTrigger)
+			r.Post("/{triggerID}/resume", s.resumeGlobalWorkflowEventTrigger)
+		})
 		r.Route("/workflow/runs", func(r chi.Router) {
 			r.Get("/", s.listGlobalWorkflowRuns)
 			r.Get("/{runID}", s.getGlobalWorkflowRun)

@@ -354,6 +354,34 @@ func (m *stubWorkflowManager) ResumeSchedule(_ context.Context, p *principal.Pri
 	return cloneManagedSchedule(value), nil
 }
 
+func (m *stubWorkflowManager) ListEventTriggers(context.Context, *principal.Principal) ([]*workflowmanager.ManagedEventTrigger, error) {
+	return nil, nil
+}
+
+func (m *stubWorkflowManager) CreateEventTrigger(context.Context, *principal.Principal, workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
+	return nil, fmt.Errorf("event triggers are not implemented in this test stub")
+}
+
+func (m *stubWorkflowManager) GetEventTrigger(context.Context, *principal.Principal, string) (*workflowmanager.ManagedEventTrigger, error) {
+	return nil, core.ErrNotFound
+}
+
+func (m *stubWorkflowManager) UpdateEventTrigger(context.Context, *principal.Principal, string, workflowmanager.EventTriggerUpsert) (*workflowmanager.ManagedEventTrigger, error) {
+	return nil, core.ErrNotFound
+}
+
+func (m *stubWorkflowManager) DeleteEventTrigger(context.Context, *principal.Principal, string) error {
+	return core.ErrNotFound
+}
+
+func (m *stubWorkflowManager) PauseEventTrigger(context.Context, *principal.Principal, string) (*workflowmanager.ManagedEventTrigger, error) {
+	return nil, core.ErrNotFound
+}
+
+func (m *stubWorkflowManager) ResumeEventTrigger(context.Context, *principal.Principal, string) (*workflowmanager.ManagedEventTrigger, error) {
+	return nil, core.ErrNotFound
+}
+
 func (m *stubWorkflowManager) ListRuns(context.Context, *principal.Principal) ([]*workflowmanager.ManagedRun, error) {
 	return nil, nil
 }

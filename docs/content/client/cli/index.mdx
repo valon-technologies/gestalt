@@ -28,6 +28,7 @@ asIndexPage: true
 | `gestalt plugins invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
 | `gestalt plugins describe NAME OPERATION` | Show one operation's parameter contract. |
 | `gestalt workflows schedules ...` | Create, list, inspect, update, pause, resume, or delete workflow schedules. |
+| `gestalt workflows triggers ...` | Create, list, inspect, update, pause, resume, or delete workflow event triggers. |
 | `gestalt workflows runs ...` | List, inspect, and cancel workflow runs. |
 | `gestalt tokens create\|list\|revoke` | Manage Gestalt API tokens. |
 
@@ -96,13 +97,22 @@ gestalt workflows schedules create \
   --operation issues.list \
   -p owner=valon-technologies \
   -p repo=gestalt
+gestalt workflows triggers create \
+  --type roadmap.item.updated \
+  --source roadmap \
+  --subject item \
+  --plugin slack \
+  --operation chat.postMessage \
+  -p channel=C123 \
+  -p text='Roadmap item updated'
 gestalt workflows runs list --plugin github --status failed
 gestalt tokens create --name automation
 ```
 
 ## Workflow commands
 
-The workflow CLI currently covers global schedules and workflow runs.
+The workflow CLI currently covers global schedules, global event triggers, and
+workflow runs.
 
 ### Schedules
 
@@ -129,6 +139,33 @@ gestalt workflows schedules delete <schedule-id>
 Use `-p key=value` for strings and `-p key:=json` for structured values. Use
 `--input-file file.json` to load the target input from JSON instead of flags.
 
+### Event triggers
+
+```sh
+gestalt workflows triggers list
+gestalt workflows triggers list --plugin slack --type roadmap.item.updated
+gestalt workflows triggers get <trigger-id>
+gestalt workflows triggers create \
+  --type roadmap.item.updated \
+  --source roadmap \
+  --subject item \
+  --plugin slack \
+  --operation chat.postMessage \
+  --connection default \
+  -p channel=C123 \
+  -p text='Roadmap item updated'
+gestalt workflows triggers update <trigger-id> --type roadmap.item.synced
+gestalt workflows triggers pause <trigger-id>
+gestalt workflows triggers resume <trigger-id>
+gestalt workflows triggers delete <trigger-id>
+```
+
+The create and update commands use the same target input conventions as
+schedules. `--type` is required. `--source` and `--subject` are optional exact
+match fields. There is still no generic public event-publish endpoint, so a
+trigger only fires when some provider or internal component publishes matching
+events into the workflow provider.
+
 ### Runs
 
 ```sh
@@ -137,9 +174,3 @@ gestalt workflows runs list --plugin github --status failed
 gestalt workflows runs get <run-id>
 gestalt workflows runs cancel <run-id> --reason "operator requested"
 ```
-
-### Event triggers
-
-Event triggers are not exposed as a CLI CRUD surface yet. Define them in the
-server config under top-level `workflows.eventTriggers`. See
-[Workflow](/providers/workflow) for examples.
