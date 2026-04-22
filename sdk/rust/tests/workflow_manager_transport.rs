@@ -8,10 +8,15 @@ use gestalt::proto::v1::workflow_manager_host_server::{
     WorkflowManagerHost as ProtoWorkflowManagerHost, WorkflowManagerHostServer,
 };
 use gestalt::proto::v1::{
-    BoundWorkflowSchedule, BoundWorkflowTarget, ManagedWorkflowSchedule,
-    WorkflowManagerCreateScheduleRequest, WorkflowManagerDeleteScheduleRequest,
-    WorkflowManagerGetScheduleRequest, WorkflowManagerPauseScheduleRequest,
-    WorkflowManagerResumeScheduleRequest, WorkflowManagerUpdateScheduleRequest,
+    BoundWorkflowEventTrigger, BoundWorkflowSchedule, BoundWorkflowTarget,
+    ManagedWorkflowEventTrigger, ManagedWorkflowSchedule, WorkflowEvent, WorkflowEventMatch,
+    WorkflowManagerCreateEventTriggerRequest, WorkflowManagerCreateScheduleRequest,
+    WorkflowManagerDeleteEventTriggerRequest, WorkflowManagerDeleteScheduleRequest,
+    WorkflowManagerGetEventTriggerRequest, WorkflowManagerGetScheduleRequest,
+    WorkflowManagerPauseEventTriggerRequest, WorkflowManagerPauseScheduleRequest,
+    WorkflowManagerPublishEventRequest, WorkflowManagerResumeEventTriggerRequest,
+    WorkflowManagerResumeScheduleRequest, WorkflowManagerUpdateEventTriggerRequest,
+    WorkflowManagerUpdateScheduleRequest,
 };
 use gestalt::{ENV_WORKFLOW_MANAGER_SOCKET, Request, WorkflowManager};
 use tokio::net::UnixListener;
@@ -25,6 +30,8 @@ struct SeenRequest {
     method: String,
     invocation_token: String,
     schedule_id: String,
+    trigger_id: String,
+    event_type: String,
 }
 
 #[derive(Clone, Default)]
@@ -43,6 +50,8 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             method: "create".to_string(),
             invocation_token: request.invocation_token.clone(),
             schedule_id: String::new(),
+            trigger_id: String::new(),
+            event_type: String::new(),
         });
         Ok(GrpcResponse::new(ManagedWorkflowSchedule {
             provider_name: if request.provider_name.is_empty() {
@@ -70,6 +79,8 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             method: "get".to_string(),
             invocation_token: request.invocation_token.clone(),
             schedule_id: request.schedule_id.clone(),
+            trigger_id: String::new(),
+            event_type: String::new(),
         });
         Ok(GrpcResponse::new(ManagedWorkflowSchedule {
             provider_name: "basic".to_string(),
@@ -89,6 +100,8 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             method: "update".to_string(),
             invocation_token: request.invocation_token.clone(),
             schedule_id: request.schedule_id.clone(),
+            trigger_id: String::new(),
+            event_type: String::new(),
         });
         Ok(GrpcResponse::new(ManagedWorkflowSchedule {
             provider_name: if request.provider_name.is_empty() {
@@ -116,6 +129,8 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             method: "delete".to_string(),
             invocation_token: request.invocation_token,
             schedule_id: request.schedule_id,
+            trigger_id: String::new(),
+            event_type: String::new(),
         });
         Ok(GrpcResponse::new(()))
     }
@@ -129,6 +144,8 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             method: "pause".to_string(),
             invocation_token: request.invocation_token.clone(),
             schedule_id: request.schedule_id.clone(),
+            trigger_id: String::new(),
+            event_type: String::new(),
         });
         Ok(GrpcResponse::new(ManagedWorkflowSchedule {
             provider_name: "basic".to_string(),
@@ -149,6 +166,8 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             method: "resume".to_string(),
             invocation_token: request.invocation_token.clone(),
             schedule_id: request.schedule_id.clone(),
+            trigger_id: String::new(),
+            event_type: String::new(),
         });
         Ok(GrpcResponse::new(ManagedWorkflowSchedule {
             provider_name: "basic".to_string(),
@@ -158,6 +177,165 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
                 ..Default::default()
             }),
         }))
+    }
+
+    async fn create_event_trigger(
+        &self,
+        request: GrpcRequest<WorkflowManagerCreateEventTriggerRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "create-trigger".to_string(),
+            invocation_token: request.invocation_token.clone(),
+            schedule_id: String::new(),
+            trigger_id: String::new(),
+            event_type: String::new(),
+        });
+        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
+            provider_name: if request.provider_name.is_empty() {
+                "basic".to_string()
+            } else {
+                request.provider_name
+            },
+            trigger: Some(BoundWorkflowEventTrigger {
+                id: "trg-1".to_string(),
+                r#match: request.r#match,
+                target: request.target,
+                paused: request.paused,
+                ..Default::default()
+            }),
+        }))
+    }
+
+    async fn get_event_trigger(
+        &self,
+        request: GrpcRequest<WorkflowManagerGetEventTriggerRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "get-trigger".to_string(),
+            invocation_token: request.invocation_token.clone(),
+            schedule_id: String::new(),
+            trigger_id: request.trigger_id.clone(),
+            event_type: String::new(),
+        });
+        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
+            provider_name: "basic".to_string(),
+            trigger: Some(BoundWorkflowEventTrigger {
+                id: request.trigger_id,
+                ..Default::default()
+            }),
+        }))
+    }
+
+    async fn update_event_trigger(
+        &self,
+        request: GrpcRequest<WorkflowManagerUpdateEventTriggerRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "update-trigger".to_string(),
+            invocation_token: request.invocation_token.clone(),
+            schedule_id: String::new(),
+            trigger_id: request.trigger_id.clone(),
+            event_type: String::new(),
+        });
+        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
+            provider_name: if request.provider_name.is_empty() {
+                "basic".to_string()
+            } else {
+                request.provider_name
+            },
+            trigger: Some(BoundWorkflowEventTrigger {
+                id: request.trigger_id,
+                r#match: request.r#match,
+                target: request.target,
+                paused: request.paused,
+                ..Default::default()
+            }),
+        }))
+    }
+
+    async fn delete_event_trigger(
+        &self,
+        request: GrpcRequest<WorkflowManagerDeleteEventTriggerRequest>,
+    ) -> std::result::Result<GrpcResponse<()>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "delete-trigger".to_string(),
+            invocation_token: request.invocation_token,
+            schedule_id: String::new(),
+            trigger_id: request.trigger_id,
+            event_type: String::new(),
+        });
+        Ok(GrpcResponse::new(()))
+    }
+
+    async fn pause_event_trigger(
+        &self,
+        request: GrpcRequest<WorkflowManagerPauseEventTriggerRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "pause-trigger".to_string(),
+            invocation_token: request.invocation_token.clone(),
+            schedule_id: String::new(),
+            trigger_id: request.trigger_id.clone(),
+            event_type: String::new(),
+        });
+        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
+            provider_name: "basic".to_string(),
+            trigger: Some(BoundWorkflowEventTrigger {
+                id: request.trigger_id,
+                paused: true,
+                ..Default::default()
+            }),
+        }))
+    }
+
+    async fn resume_event_trigger(
+        &self,
+        request: GrpcRequest<WorkflowManagerResumeEventTriggerRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "resume-trigger".to_string(),
+            invocation_token: request.invocation_token.clone(),
+            schedule_id: String::new(),
+            trigger_id: request.trigger_id.clone(),
+            event_type: String::new(),
+        });
+        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
+            provider_name: "basic".to_string(),
+            trigger: Some(BoundWorkflowEventTrigger {
+                id: request.trigger_id,
+                paused: false,
+                ..Default::default()
+            }),
+        }))
+    }
+
+    async fn publish_event(
+        &self,
+        request: GrpcRequest<WorkflowManagerPublishEventRequest>,
+    ) -> std::result::Result<GrpcResponse<WorkflowEvent>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "publish-event".to_string(),
+            invocation_token: request.invocation_token.clone(),
+            schedule_id: String::new(),
+            trigger_id: String::new(),
+            event_type: request
+                .event
+                .as_ref()
+                .map(|event| event.r#type.clone())
+                .unwrap_or_default(),
+        });
+        let mut event = request.event.unwrap_or_default();
+        if event.id.is_empty() {
+            event.id = "evt-1".to_string();
+        }
+        Ok(GrpcResponse::new(event))
     }
 }
 
@@ -240,6 +418,81 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         })
         .await
         .expect("delete schedule");
+    let created_trigger = manager
+        .create_trigger(WorkflowManagerCreateEventTriggerRequest {
+            provider_name: "basic".to_string(),
+            r#match: Some(WorkflowEventMatch {
+                r#type: "roadmap.item.updated".to_string(),
+                source: "roadmap".to_string(),
+                ..Default::default()
+            }),
+            target: Some(BoundWorkflowTarget {
+                plugin_name: "slack".to_string(),
+                operation: "chat.postMessage".to_string(),
+                ..Default::default()
+            }),
+            paused: false,
+            ..Default::default()
+        })
+        .await
+        .expect("create trigger");
+    let fetched_trigger = manager
+        .get_trigger(WorkflowManagerGetEventTriggerRequest {
+            trigger_id: "trg-1".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("get trigger");
+    let updated_trigger = manager
+        .update_trigger(WorkflowManagerUpdateEventTriggerRequest {
+            trigger_id: "trg-1".to_string(),
+            provider_name: "secondary".to_string(),
+            r#match: Some(WorkflowEventMatch {
+                r#type: "roadmap.item.synced".to_string(),
+                ..Default::default()
+            }),
+            target: Some(BoundWorkflowTarget {
+                plugin_name: "slack".to_string(),
+                operation: "chat.postMessage".to_string(),
+                ..Default::default()
+            }),
+            paused: true,
+            ..Default::default()
+        })
+        .await
+        .expect("update trigger");
+    let paused_trigger = manager
+        .pause_trigger(WorkflowManagerPauseEventTriggerRequest {
+            trigger_id: "trg-1".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("pause trigger");
+    let resumed_trigger = manager
+        .resume_trigger(WorkflowManagerResumeEventTriggerRequest {
+            trigger_id: "trg-1".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("resume trigger");
+    manager
+        .delete_trigger(WorkflowManagerDeleteEventTriggerRequest {
+            trigger_id: "trg-1".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("delete trigger");
+    let published_event = manager
+        .publish_event(WorkflowManagerPublishEventRequest {
+            event: Some(WorkflowEvent {
+                r#type: "roadmap.item.updated".to_string(),
+                source: "roadmap".to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .expect("publish event");
 
     assert_eq!(created.provider_name, "basic");
     assert_eq!(created.schedule.expect("created schedule").id, "sched-1");
@@ -248,6 +501,20 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
     assert!(updated.schedule.expect("updated schedule").paused);
     assert!(paused.schedule.expect("paused schedule").paused);
     assert!(!resumed.schedule.expect("resumed schedule").paused);
+    assert_eq!(created_trigger.provider_name, "basic");
+    assert_eq!(
+        created_trigger.trigger.expect("created trigger").id,
+        "trg-1"
+    );
+    assert_eq!(
+        fetched_trigger.trigger.expect("fetched trigger").id,
+        "trg-1"
+    );
+    assert_eq!(updated_trigger.provider_name, "secondary");
+    assert!(updated_trigger.trigger.expect("updated trigger").paused);
+    assert!(paused_trigger.trigger.expect("paused trigger").paused);
+    assert!(!resumed_trigger.trigger.expect("resumed trigger").paused);
+    assert_eq!(published_event.r#type, "roadmap.item.updated");
 
     let seen = server.seen.lock().expect("lock seen").clone();
     assert_eq!(
@@ -257,31 +524,92 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
                 method: "create".to_string(),
                 invocation_token: "token-123".to_string(),
                 schedule_id: String::new(),
+                trigger_id: String::new(),
+                event_type: String::new(),
             },
             SeenRequest {
                 method: "get".to_string(),
                 invocation_token: "token-123".to_string(),
                 schedule_id: "sched-1".to_string(),
+                trigger_id: String::new(),
+                event_type: String::new(),
             },
             SeenRequest {
                 method: "update".to_string(),
                 invocation_token: "token-123".to_string(),
                 schedule_id: "sched-1".to_string(),
+                trigger_id: String::new(),
+                event_type: String::new(),
             },
             SeenRequest {
                 method: "pause".to_string(),
                 invocation_token: "token-123".to_string(),
                 schedule_id: "sched-1".to_string(),
+                trigger_id: String::new(),
+                event_type: String::new(),
             },
             SeenRequest {
                 method: "resume".to_string(),
                 invocation_token: "token-123".to_string(),
                 schedule_id: "sched-1".to_string(),
+                trigger_id: String::new(),
+                event_type: String::new(),
             },
             SeenRequest {
                 method: "delete".to_string(),
                 invocation_token: "token-123".to_string(),
                 schedule_id: "sched-1".to_string(),
+                trigger_id: String::new(),
+                event_type: String::new(),
+            },
+            SeenRequest {
+                method: "create-trigger".to_string(),
+                invocation_token: "token-123".to_string(),
+                schedule_id: String::new(),
+                trigger_id: String::new(),
+                event_type: String::new(),
+            },
+            SeenRequest {
+                method: "get-trigger".to_string(),
+                invocation_token: "token-123".to_string(),
+                schedule_id: String::new(),
+                trigger_id: "trg-1".to_string(),
+                event_type: String::new(),
+            },
+            SeenRequest {
+                method: "update-trigger".to_string(),
+                invocation_token: "token-123".to_string(),
+                schedule_id: String::new(),
+                trigger_id: "trg-1".to_string(),
+                event_type: String::new(),
+            },
+            SeenRequest {
+                method: "pause-trigger".to_string(),
+                invocation_token: "token-123".to_string(),
+                schedule_id: String::new(),
+                trigger_id: "trg-1".to_string(),
+                event_type: String::new(),
+            },
+            SeenRequest {
+                method: "resume-trigger".to_string(),
+                invocation_token: "token-123".to_string(),
+                schedule_id: String::new(),
+                trigger_id: "trg-1".to_string(),
+                event_type: String::new(),
+            },
+            SeenRequest {
+                method: "delete-trigger".to_string(),
+                invocation_token: "token-123".to_string(),
+                schedule_id: String::new(),
+                trigger_id: "trg-1".to_string(),
+                event_type: String::new(),
+            },
+            SeenRequest {
+                method: "publish-event".to_string(),
+                invocation_token: "token-123".to_string(),
+                schedule_id: String::new(),
+                trigger_id: String::new(),
+                event_type: "roadmap.item.updated".to_string(),
             },
         ]
     );

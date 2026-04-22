@@ -179,6 +179,176 @@ func (s *WorkflowManagerServer) ResumeSchedule(ctx context.Context, req *proto.W
 	return resp, nil
 }
 
+func (s *WorkflowManagerServer) CreateEventTrigger(ctx context.Context, req *proto.WorkflowManagerCreateEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	if err != nil {
+		return nil, err
+	}
+	upsert, err := workflowManagerEventTriggerUpsert(
+		req.GetProviderName(),
+		req.GetMatch(),
+		req.GetTarget(),
+		req.GetPaused(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	managed, err := s.manager.CreateEventTrigger(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, upsert)
+	if err != nil {
+		return nil, workflowManagerStatusError(err)
+	}
+	resp, err := managedWorkflowEventTriggerToProto(managed)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode workflow trigger: %v", err)
+	}
+	return resp, nil
+}
+
+func (s *WorkflowManagerServer) GetEventTrigger(ctx context.Context, req *proto.WorkflowManagerGetEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	if err != nil {
+		return nil, err
+	}
+	triggerID := strings.TrimSpace(req.GetTriggerId())
+	if triggerID == "" {
+		return nil, status.Error(codes.InvalidArgument, "trigger_id is required")
+	}
+	managed, err := s.manager.GetEventTrigger(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, triggerID)
+	if err != nil {
+		return nil, workflowManagerStatusError(err)
+	}
+	resp, err := managedWorkflowEventTriggerToProto(managed)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode workflow trigger: %v", err)
+	}
+	return resp, nil
+}
+
+func (s *WorkflowManagerServer) UpdateEventTrigger(ctx context.Context, req *proto.WorkflowManagerUpdateEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	if err != nil {
+		return nil, err
+	}
+	triggerID := strings.TrimSpace(req.GetTriggerId())
+	if triggerID == "" {
+		return nil, status.Error(codes.InvalidArgument, "trigger_id is required")
+	}
+	upsert, err := workflowManagerEventTriggerUpsert(
+		req.GetProviderName(),
+		req.GetMatch(),
+		req.GetTarget(),
+		req.GetPaused(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	managed, err := s.manager.UpdateEventTrigger(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, triggerID, upsert)
+	if err != nil {
+		return nil, workflowManagerStatusError(err)
+	}
+	resp, err := managedWorkflowEventTriggerToProto(managed)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode workflow trigger: %v", err)
+	}
+	return resp, nil
+}
+
+func (s *WorkflowManagerServer) DeleteEventTrigger(ctx context.Context, req *proto.WorkflowManagerDeleteEventTriggerRequest) (*emptypb.Empty, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	if err != nil {
+		return nil, err
+	}
+	triggerID := strings.TrimSpace(req.GetTriggerId())
+	if triggerID == "" {
+		return nil, status.Error(codes.InvalidArgument, "trigger_id is required")
+	}
+	if err := s.manager.DeleteEventTrigger(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, triggerID); err != nil {
+		return nil, workflowManagerStatusError(err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *WorkflowManagerServer) PauseEventTrigger(ctx context.Context, req *proto.WorkflowManagerPauseEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	if err != nil {
+		return nil, err
+	}
+	triggerID := strings.TrimSpace(req.GetTriggerId())
+	if triggerID == "" {
+		return nil, status.Error(codes.InvalidArgument, "trigger_id is required")
+	}
+	managed, err := s.manager.PauseEventTrigger(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, triggerID)
+	if err != nil {
+		return nil, workflowManagerStatusError(err)
+	}
+	resp, err := managedWorkflowEventTriggerToProto(managed)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode workflow trigger: %v", err)
+	}
+	return resp, nil
+}
+
+func (s *WorkflowManagerServer) ResumeEventTrigger(ctx context.Context, req *proto.WorkflowManagerResumeEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	if err != nil {
+		return nil, err
+	}
+	triggerID := strings.TrimSpace(req.GetTriggerId())
+	if triggerID == "" {
+		return nil, status.Error(codes.InvalidArgument, "trigger_id is required")
+	}
+	managed, err := s.manager.ResumeEventTrigger(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, triggerID)
+	if err != nil {
+		return nil, workflowManagerStatusError(err)
+	}
+	resp, err := managedWorkflowEventTriggerToProto(managed)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode workflow trigger: %v", err)
+	}
+	return resp, nil
+}
+
+func (s *WorkflowManagerServer) PublishEvent(ctx context.Context, req *proto.WorkflowManagerPublishEventRequest) (*proto.WorkflowEvent, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	if err != nil {
+		return nil, err
+	}
+	event, err := workflowEventFromProto(req.GetEvent())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "event: %v", err)
+	}
+	published, err := s.manager.PublishEvent(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, event)
+	if err != nil {
+		return nil, workflowManagerStatusError(err)
+	}
+	resp, err := workflowEventToProto(published)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode workflow event: %v", err)
+	}
+	return resp, nil
+}
+
 func (s *WorkflowManagerServer) tokenContext(token string) (invocationTokenContext, error) {
 	tokenCtx, err := s.tokens.resolveToken(token, s.pluginName)
 	if err != nil {
@@ -210,6 +380,31 @@ func workflowManagerScheduleUpsert(
 	}, nil
 }
 
+func workflowManagerEventTriggerUpsert(
+	providerName string,
+	matchProto *proto.WorkflowEventMatch,
+	targetProto *proto.BoundWorkflowTarget,
+	paused bool,
+) (workflowmanager.EventTriggerUpsert, error) {
+	target := workflowTargetFromProto(targetProto)
+	if strings.TrimSpace(target.PluginName) == "" {
+		return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "target.plugin_name is required")
+	}
+	if strings.TrimSpace(target.Operation) == "" {
+		return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "target.operation is required")
+	}
+	match := workflowEventMatchFromProto(matchProto)
+	if strings.TrimSpace(match.Type) == "" {
+		return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "match.type is required")
+	}
+	return workflowmanager.EventTriggerUpsert{
+		ProviderName: strings.TrimSpace(providerName),
+		Match:        match,
+		Target:       target,
+		Paused:       paused,
+	}, nil
+}
+
 func workflowManagerStatusError(err error) error {
 	if err == nil {
 		return nil
@@ -220,7 +415,7 @@ func workflowManagerStatusError(err error) error {
 	switch {
 	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured), errors.Is(err, workflowmanager.ErrExecutionRefsNotConfigured), errors.Is(err, invocation.ErrNoToken), errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
 		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, workflowmanager.ErrWorkflowEventMatchRequired):
+	case errors.Is(err, workflowmanager.ErrWorkflowEventMatchRequired), errors.Is(err, workflowmanager.ErrWorkflowEventTypeRequired):
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, workflowmanager.ErrWorkflowScheduleSubject), errors.Is(err, invocation.ErrNotAuthenticated):
 		return status.Error(codes.Unauthenticated, err.Error())

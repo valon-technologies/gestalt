@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -71,6 +72,47 @@ type updateWorkflowScheduleInput struct {
 	Target          workflowScheduleTargetInput `json:"target"`
 	Paused          bool                        `json:"paused,omitempty"`
 	InvocationToken string                      `json:"invocation_token,omitempty"`
+}
+
+type workflowEventMatchInput struct {
+	Type    string `json:"type"`
+	Source  string `json:"source,omitempty"`
+	Subject string `json:"subject,omitempty"`
+}
+
+type createWorkflowTriggerInput struct {
+	ProviderName    string                      `json:"provider_name,omitempty"`
+	Match           workflowEventMatchInput     `json:"match"`
+	Target          workflowScheduleTargetInput `json:"target"`
+	Paused          bool                        `json:"paused,omitempty"`
+	InvocationToken string                      `json:"invocation_token,omitempty"`
+}
+
+type getWorkflowTriggerInput struct {
+	TriggerID       string `json:"trigger_id"`
+	InvocationToken string `json:"invocation_token,omitempty"`
+}
+
+type updateWorkflowTriggerInput struct {
+	TriggerID       string                      `json:"trigger_id"`
+	ProviderName    string                      `json:"provider_name,omitempty"`
+	Match           workflowEventMatchInput     `json:"match"`
+	Target          workflowScheduleTargetInput `json:"target"`
+	Paused          bool                        `json:"paused,omitempty"`
+	InvocationToken string                      `json:"invocation_token,omitempty"`
+}
+
+type publishWorkflowEventInput struct {
+	ID              string         `json:"id,omitempty"`
+	Source          string         `json:"source,omitempty"`
+	SpecVersion     string         `json:"spec_version,omitempty"`
+	Type            string         `json:"type"`
+	Subject         string         `json:"subject,omitempty"`
+	Time            string         `json:"time,omitempty"`
+	DataContentType string         `json:"data_content_type,omitempty"`
+	Data            map[string]any `json:"data,omitempty"`
+	Extensions      map[string]any `json:"extensions,omitempty"`
+	InvocationToken string         `json:"invocation_token,omitempty"`
 }
 
 func newProxyProvider(inner core.Provider) *proxyProvider {
@@ -162,6 +204,13 @@ func (p *proxyProvider) Catalog() *catalog.Catalog {
 		catalog.CatalogOperation{ID: "delete_workflow_schedule", Method: http.MethodPost, Transport: catalog.TransportPlugin},
 		catalog.CatalogOperation{ID: "pause_workflow_schedule", Method: http.MethodPost, Transport: catalog.TransportPlugin},
 		catalog.CatalogOperation{ID: "resume_workflow_schedule", Method: http.MethodPost, Transport: catalog.TransportPlugin},
+		catalog.CatalogOperation{ID: "create_workflow_trigger", Method: http.MethodPost, Transport: catalog.TransportPlugin},
+		catalog.CatalogOperation{ID: "get_workflow_trigger", Method: http.MethodGet, Transport: catalog.TransportPlugin},
+		catalog.CatalogOperation{ID: "update_workflow_trigger", Method: http.MethodPost, Transport: catalog.TransportPlugin},
+		catalog.CatalogOperation{ID: "delete_workflow_trigger", Method: http.MethodPost, Transport: catalog.TransportPlugin},
+		catalog.CatalogOperation{ID: "pause_workflow_trigger", Method: http.MethodPost, Transport: catalog.TransportPlugin},
+		catalog.CatalogOperation{ID: "resume_workflow_trigger", Method: http.MethodPost, Transport: catalog.TransportPlugin},
+		catalog.CatalogOperation{ID: "publish_workflow_event", Method: http.MethodPost, Transport: catalog.TransportPlugin},
 		catalog.CatalogOperation{
 			ID:        "indexeddb_roundtrip",
 			Method:    http.MethodPost,
@@ -422,6 +471,150 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		}
 		return jsonResult(http.StatusOK, managedWorkflowScheduleBody(result)), nil
 
+	case "create_workflow_trigger":
+		input, err := decodeJSONParams[createWorkflowTriggerInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowManagerFromContext(ctx, input.InvocationToken)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		target, err := workflowTargetInputToProto(input.Target)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		result, err := client.CreateTrigger(ctx, &proto.WorkflowManagerCreateEventTriggerRequest{
+			ProviderName: input.ProviderName,
+			Match:        workflowEventMatchInputToProto(input.Match),
+			Target:       target,
+			Paused:       input.Paused,
+		})
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, managedWorkflowTriggerBody(result)), nil
+
+	case "get_workflow_trigger":
+		input, err := decodeJSONParams[getWorkflowTriggerInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowManagerFromContext(ctx, input.InvocationToken)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		result, err := client.GetTrigger(ctx, &proto.WorkflowManagerGetEventTriggerRequest{
+			TriggerId: input.TriggerID,
+		})
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, managedWorkflowTriggerBody(result)), nil
+
+	case "update_workflow_trigger":
+		input, err := decodeJSONParams[updateWorkflowTriggerInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowManagerFromContext(ctx, input.InvocationToken)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		target, err := workflowTargetInputToProto(input.Target)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		result, err := client.UpdateTrigger(ctx, &proto.WorkflowManagerUpdateEventTriggerRequest{
+			TriggerId:    input.TriggerID,
+			ProviderName: input.ProviderName,
+			Match:        workflowEventMatchInputToProto(input.Match),
+			Target:       target,
+			Paused:       input.Paused,
+		})
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, managedWorkflowTriggerBody(result)), nil
+
+	case "delete_workflow_trigger":
+		input, err := decodeJSONParams[getWorkflowTriggerInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowManagerFromContext(ctx, input.InvocationToken)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		if err := client.DeleteTrigger(ctx, &proto.WorkflowManagerDeleteEventTriggerRequest{
+			TriggerId: input.TriggerID,
+		}); err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, map[string]any{"deleted": true, "trigger_id": input.TriggerID}), nil
+
+	case "pause_workflow_trigger":
+		input, err := decodeJSONParams[getWorkflowTriggerInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowManagerFromContext(ctx, input.InvocationToken)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		result, err := client.PauseTrigger(ctx, &proto.WorkflowManagerPauseEventTriggerRequest{
+			TriggerId: input.TriggerID,
+		})
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, managedWorkflowTriggerBody(result)), nil
+
+	case "resume_workflow_trigger":
+		input, err := decodeJSONParams[getWorkflowTriggerInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowManagerFromContext(ctx, input.InvocationToken)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		result, err := client.ResumeTrigger(ctx, &proto.WorkflowManagerResumeEventTriggerRequest{
+			TriggerId: input.TriggerID,
+		})
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, managedWorkflowTriggerBody(result)), nil
+
+	case "publish_workflow_event":
+		input, err := decodeJSONParams[publishWorkflowEventInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowManagerFromContext(ctx, input.InvocationToken)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		event, err := workflowEventInputToProto(input)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		result, err := client.PublishEvent(ctx, &proto.WorkflowManagerPublishEventRequest{
+			Event: event,
+		})
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, workflowEventBody(result)), nil
+
 	case "read_env":
 		name, _ := params["name"].(string)
 		val, ok := os.LookupEnv(name)
@@ -606,6 +799,43 @@ func workflowTargetInputToProto(target workflowScheduleTargetInput) (*proto.Boun
 	}, nil
 }
 
+func workflowEventMatchInputToProto(match workflowEventMatchInput) *proto.WorkflowEventMatch {
+	return &proto.WorkflowEventMatch{
+		Type:    match.Type,
+		Source:  match.Source,
+		Subject: match.Subject,
+	}
+}
+
+func workflowEventInputToProto(input publishWorkflowEventInput) (*proto.WorkflowEvent, error) {
+	data, err := structpb.NewStruct(input.Data)
+	if err != nil {
+		return nil, err
+	}
+	extensions, err := structpb.NewStruct(input.Extensions)
+	if err != nil {
+		return nil, err
+	}
+	event := &proto.WorkflowEvent{
+		Id:              input.ID,
+		Source:          input.Source,
+		SpecVersion:     input.SpecVersion,
+		Type:            input.Type,
+		Subject:         input.Subject,
+		Datacontenttype: input.DataContentType,
+		Data:            data,
+		Extensions:      extensions.GetFields(),
+	}
+	if strings.TrimSpace(input.Time) != "" {
+		timestamp, err := time.Parse(time.RFC3339, input.Time)
+		if err != nil {
+			return nil, err
+		}
+		event.Time = timestamppb.New(timestamp)
+	}
+	return event, nil
+}
+
 func managedWorkflowScheduleBody(value *proto.ManagedWorkflowSchedule) map[string]any {
 	if value == nil {
 		return map[string]any{}
@@ -649,6 +879,84 @@ func managedWorkflowScheduleBody(value *proto.ManagedWorkflowSchedule) map[strin
 		}
 	}
 	return body
+}
+
+func managedWorkflowTriggerBody(value *proto.ManagedWorkflowEventTrigger) map[string]any {
+	if value == nil {
+		return map[string]any{}
+	}
+	trigger := value.GetTrigger()
+	body := map[string]any{
+		"provider_name": value.GetProviderName(),
+	}
+	if trigger == nil {
+		return body
+	}
+	target := trigger.GetTarget()
+	match := trigger.GetMatch()
+	body["trigger"] = map[string]any{
+		"id":         trigger.GetId(),
+		"paused":     trigger.GetPaused(),
+		"created_at": timestampBody(trigger.GetCreatedAt()),
+		"updated_at": timestampBody(trigger.GetUpdatedAt()),
+		"match": map[string]any{
+			"type":    "",
+			"source":  "",
+			"subject": "",
+		},
+		"target": map[string]any{
+			"plugin":     "",
+			"operation":  "",
+			"connection": "",
+			"instance":   "",
+			"input":      map[string]any{},
+		},
+	}
+	if match != nil {
+		body["trigger"].(map[string]any)["match"] = map[string]any{
+			"type":    match.GetType(),
+			"source":  match.GetSource(),
+			"subject": match.GetSubject(),
+		}
+	}
+	if target != nil {
+		body["trigger"].(map[string]any)["target"] = map[string]any{
+			"plugin":     target.GetPluginName(),
+			"operation":  target.GetOperation(),
+			"connection": target.GetConnection(),
+			"instance":   target.GetInstance(),
+			"input":      target.GetInput().AsMap(),
+		}
+	}
+	return body
+}
+
+func workflowEventBody(value *proto.WorkflowEvent) map[string]any {
+	if value == nil {
+		return map[string]any{}
+	}
+	return map[string]any{
+		"id":                value.GetId(),
+		"source":            value.GetSource(),
+		"spec_version":      value.GetSpecVersion(),
+		"type":              value.GetType(),
+		"subject":           value.GetSubject(),
+		"time":              timestampBody(value.GetTime()),
+		"data_content_type": value.GetDatacontenttype(),
+		"data":              value.GetData().AsMap(),
+		"extensions": func() map[string]any {
+			if len(value.GetExtensions()) == 0 {
+				return map[string]any{}
+			}
+			out := make(map[string]any, len(value.GetExtensions()))
+			for key, field := range value.GetExtensions() {
+				if field != nil {
+					out[key] = field.AsInterface()
+				}
+			}
+			return out
+		}(),
+	}
 }
 
 func timestampBody(value *timestamppb.Timestamp) any {

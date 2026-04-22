@@ -84,12 +84,21 @@ export {
 export {
   ENV_WORKFLOW_MANAGER_SOCKET,
   WorkflowManager,
+  type ManagedWorkflowEventTriggerMessage,
   type ManagedWorkflowScheduleMessage,
+  type WorkflowEventMessage,
+  type WorkflowManagerCreateTriggerInput,
   type WorkflowManagerCreateScheduleInput,
+  type WorkflowManagerDeleteTriggerInput,
   type WorkflowManagerDeleteScheduleInput,
+  type WorkflowManagerGetTriggerInput,
   type WorkflowManagerGetScheduleInput,
+  type WorkflowManagerPauseTriggerInput,
   type WorkflowManagerPauseScheduleInput,
+  type WorkflowManagerPublishEventInput,
+  type WorkflowManagerResumeTriggerInput,
   type WorkflowManagerResumeScheduleInput,
+  type WorkflowManagerUpdateTriggerInput,
   type WorkflowManagerUpdateScheduleInput,
 } from "./workflow-manager.ts";
 export {

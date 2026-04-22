@@ -167,3 +167,88 @@ func (c *WorkflowManagerClient) ResumeSchedule(ctx context.Context, req *proto.W
 	value.InvocationToken = c.invocationToken
 	return c.client.ResumeSchedule(ctx, value)
 }
+
+func (c *WorkflowManagerClient) CreateTrigger(ctx context.Context, req *proto.WorkflowManagerCreateEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("workflow manager: client is not initialized")
+	}
+	value := &proto.WorkflowManagerCreateEventTriggerRequest{}
+	if req != nil {
+		value = gproto.Clone(req).(*proto.WorkflowManagerCreateEventTriggerRequest)
+	}
+	value.InvocationToken = c.invocationToken
+	return c.client.CreateEventTrigger(ctx, value)
+}
+
+func (c *WorkflowManagerClient) GetTrigger(ctx context.Context, req *proto.WorkflowManagerGetEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("workflow manager: client is not initialized")
+	}
+	value := &proto.WorkflowManagerGetEventTriggerRequest{}
+	if req != nil {
+		value = gproto.Clone(req).(*proto.WorkflowManagerGetEventTriggerRequest)
+	}
+	value.InvocationToken = c.invocationToken
+	return c.client.GetEventTrigger(ctx, value)
+}
+
+func (c *WorkflowManagerClient) UpdateTrigger(ctx context.Context, req *proto.WorkflowManagerUpdateEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("workflow manager: client is not initialized")
+	}
+	value := &proto.WorkflowManagerUpdateEventTriggerRequest{}
+	if req != nil {
+		value = gproto.Clone(req).(*proto.WorkflowManagerUpdateEventTriggerRequest)
+	}
+	value.InvocationToken = c.invocationToken
+	return c.client.UpdateEventTrigger(ctx, value)
+}
+
+func (c *WorkflowManagerClient) DeleteTrigger(ctx context.Context, req *proto.WorkflowManagerDeleteEventTriggerRequest) error {
+	if c == nil || c.client == nil {
+		return fmt.Errorf("workflow manager: client is not initialized")
+	}
+	value := &proto.WorkflowManagerDeleteEventTriggerRequest{}
+	if req != nil {
+		value = gproto.Clone(req).(*proto.WorkflowManagerDeleteEventTriggerRequest)
+	}
+	value.InvocationToken = c.invocationToken
+	_, err := c.client.DeleteEventTrigger(ctx, value)
+	return err
+}
+
+func (c *WorkflowManagerClient) PauseTrigger(ctx context.Context, req *proto.WorkflowManagerPauseEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("workflow manager: client is not initialized")
+	}
+	value := &proto.WorkflowManagerPauseEventTriggerRequest{}
+	if req != nil {
+		value = gproto.Clone(req).(*proto.WorkflowManagerPauseEventTriggerRequest)
+	}
+	value.InvocationToken = c.invocationToken
+	return c.client.PauseEventTrigger(ctx, value)
+}
+
+func (c *WorkflowManagerClient) ResumeTrigger(ctx context.Context, req *proto.WorkflowManagerResumeEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("workflow manager: client is not initialized")
+	}
+	value := &proto.WorkflowManagerResumeEventTriggerRequest{}
+	if req != nil {
+		value = gproto.Clone(req).(*proto.WorkflowManagerResumeEventTriggerRequest)
+	}
+	value.InvocationToken = c.invocationToken
+	return c.client.ResumeEventTrigger(ctx, value)
+}
+
+func (c *WorkflowManagerClient) PublishEvent(ctx context.Context, req *proto.WorkflowManagerPublishEventRequest) (*proto.WorkflowEvent, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("workflow manager: client is not initialized")
+	}
+	value := &proto.WorkflowManagerPublishEventRequest{}
+	if req != nil {
+		value = gproto.Clone(req).(*proto.WorkflowManagerPublishEventRequest)
+	}
+	value.InvocationToken = c.invocationToken
+	return c.client.PublishEvent(ctx, value)
+}
