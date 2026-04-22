@@ -160,8 +160,6 @@ export {
   CURRENT_PROTOCOL_VERSION,
   ENV_PROVIDER_PARENT_PID,
   ENV_PROVIDER_SOCKET,
-  ENV_WRITE_CATALOG,
-  ENV_WRITE_MANIFEST_METADATA,
   createAuthenticationService,
   createCacheService,
   createSecretsService,

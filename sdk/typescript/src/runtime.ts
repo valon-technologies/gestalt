@@ -105,12 +105,11 @@ export const ENV_PROVIDER_PARENT_PID = "GESTALT_PLUGIN_PARENT_PID";
 /**
  * Environment variable used to request static catalog generation.
  */
-export const ENV_WRITE_CATALOG = "GESTALT_PLUGIN_WRITE_CATALOG";
+const ENV_WRITE_CATALOG = "GESTALT_PLUGIN_WRITE_CATALOG";
 /**
  * Environment variable used to request generated manifest metadata export.
  */
-export const ENV_WRITE_MANIFEST_METADATA =
-  "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA";
+const ENV_WRITE_MANIFEST_METADATA = "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA";
 /**
  * Protocol version currently implemented by the TypeScript runtime.
  */

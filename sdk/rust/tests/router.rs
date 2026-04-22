@@ -17,6 +17,8 @@ use tonic::codegen::async_trait;
 
 use gestalt::{Operation, Provider, Request, Response, Router, ok};
 
+const ENV_WRITE_MANIFEST_METADATA: &str = "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA";
+
 #[derive(Default)]
 struct TestProvider;
 
@@ -151,8 +153,7 @@ async fn serve_provider_writes_catalog_and_manifest_metadata_when_requested() {
     let catalog_path = helpers::temp_socket("router-catalog.json");
     let metadata_path = helpers::temp_socket("router-manifest-metadata.yaml");
     let _catalog_guard = helpers::EnvGuard::set("GESTALT_PLUGIN_WRITE_CATALOG", &catalog_path);
-    let _metadata_guard =
-        helpers::EnvGuard::set(gestalt::ENV_WRITE_MANIFEST_METADATA, &metadata_path);
+    let _metadata_guard = helpers::EnvGuard::set(ENV_WRITE_MANIFEST_METADATA, &metadata_path);
     let _name_guard = helpers::EnvGuard::set("GESTALT_PLUGIN_NAME", "manifest-provider");
 
     gestalt::runtime::serve_provider(
@@ -181,8 +182,7 @@ async fn export_provider_writes_manifest_metadata_with_catalog_exports() {
     let catalog_path = helpers::temp_socket("macro-catalog.json");
     let metadata_path = helpers::temp_socket("macro-manifest-metadata.yaml");
     let direct_metadata_path = helpers::temp_socket("direct-manifest-metadata.yaml");
-    let _metadata_guard =
-        helpers::EnvGuard::set(gestalt::ENV_WRITE_MANIFEST_METADATA, &metadata_path);
+    let _metadata_guard = helpers::EnvGuard::set(ENV_WRITE_MANIFEST_METADATA, &metadata_path);
 
     __gestalt_write_catalog("macro-provider", catalog_path.to_str().expect("utf8 path"))
         .expect("write catalog");

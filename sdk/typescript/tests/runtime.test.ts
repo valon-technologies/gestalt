@@ -48,8 +48,6 @@ import {
 import {
   CURRENT_PROTOCOL_VERSION,
   createCacheService,
-  ENV_WRITE_CATALOG,
-  ENV_WRITE_MANIFEST_METADATA,
   ENV_PROVIDER_SOCKET,
   createAuthenticationService,
   createProviderService,
@@ -78,6 +76,9 @@ import {
   waitForPath,
 } from "./helpers.ts";
 
+const ENV_WRITE_CATALOG = "GESTALT_PLUGIN_WRITE_CATALOG";
+const ENV_WRITE_MANIFEST_METADATA = "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA";
+
 async function expectConnectCode(
   promise: Promise<unknown>,
   code: Code,
@@ -97,6 +98,22 @@ test("runtime arg parsing requires root and target", () => {
     target: "plugin:./provider.ts#plugin",
   });
   expect(parseRuntimeArgs(["root"])).toBeUndefined();
+});
+
+test("catalog export handshake env vars stay out of the public TypeScript API", async () => {
+  const runtimeModule = await import("../src/runtime.ts");
+  const packageModule = await import("../src/index.ts");
+
+  expect(Object.hasOwn(runtimeModule, "ENV_WRITE_CATALOG")).toBe(false);
+  expect(Object.hasOwn(runtimeModule, "ENV_WRITE_MANIFEST_METADATA")).toBe(
+    false,
+  );
+  expect(Object.hasOwn(packageModule, "ENV_WRITE_CATALOG")).toBe(false);
+  expect(Object.hasOwn(packageModule, "ENV_WRITE_MANIFEST_METADATA")).toBe(
+    false,
+  );
+  expect(Object.hasOwn(runtimeModule, "ENV_PROVIDER_SOCKET")).toBe(true);
+  expect(Object.hasOwn(packageModule, "ENV_PROVIDER_SOCKET")).toBe(true);
 });
 
 test("runtime main writes a static catalog in catalog mode", async () => {

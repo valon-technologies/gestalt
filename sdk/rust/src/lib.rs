@@ -42,7 +42,7 @@ pub use cache::{
     cache_socket_env,
 };
 pub use catalog::{Catalog, CatalogOperation};
-pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET, ENV_WRITE_MANIFEST_METADATA};
+pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
 pub use error::{Error, Result};
 pub use indexeddb::{Cursor, CursorDirection, IndexedDB, IndexedDBError};
 pub use invoker::{

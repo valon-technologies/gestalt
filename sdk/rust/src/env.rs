@@ -4,9 +4,9 @@ pub const ENV_PROVIDER_SOCKET: &str = "GESTALT_PLUGIN_SOCKET";
 /// Parent process id used for lifecycle shutdown detection.
 pub const ENV_PROVIDER_PARENT_PID: &str = "GESTALT_PLUGIN_PARENT_PID";
 /// Optional path where the runtime should write the derived static catalog.
-pub const ENV_WRITE_CATALOG: &str = "GESTALT_PLUGIN_WRITE_CATALOG";
+pub(crate) const ENV_WRITE_CATALOG: &str = "GESTALT_PLUGIN_WRITE_CATALOG";
 /// Optional path where the runtime should write generated manifest metadata.
-pub const ENV_WRITE_MANIFEST_METADATA: &str = "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA";
+pub(crate) const ENV_WRITE_MANIFEST_METADATA: &str = "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA";
 /// Provider name override supplied by the host runtime.
 pub const ENV_PROVIDER_NAME: &str = "GESTALT_PLUGIN_NAME";
 /// Current Gestalt provider protocol version spoken by this SDK.
