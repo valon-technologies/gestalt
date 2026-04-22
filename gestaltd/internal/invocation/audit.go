@@ -62,7 +62,6 @@ func buildAuditEntry(ctx context.Context, p *principal.Principal, source, provid
 		UserAgent:  reqMeta.UserAgent,
 	}
 	if p != nil {
-		entry.UserID = p.UserID
 		entry.AuthSource = p.AuthSource()
 		entry.SubjectID = p.SubjectID
 		if p.Kind != "" {
@@ -110,7 +109,6 @@ func SetCredentialAudit(ctx context.Context, mode core.ConnectionMode, subjectID
 
 func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 	auditPrincipal := principal.Canonicalized(&principal.Principal{
-		UserID:    strings.TrimSpace(entry.UserID),
 		SubjectID: strings.TrimSpace(entry.SubjectID),
 		Kind:      principal.Kind(strings.TrimSpace(entry.SubjectKind)),
 	})

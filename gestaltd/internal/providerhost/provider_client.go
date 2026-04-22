@@ -323,19 +323,15 @@ func requestContextProto(ctx context.Context) (*proto.RequestContext, error) {
 }
 
 func subjectIDForPrincipal(p *principal.Principal) string {
+	p = principal.Canonicalized(p)
 	if p == nil {
 		return ""
 	}
-	if p.SubjectID != "" {
-		return p.SubjectID
-	}
-	if p.UserID != "" {
-		return principal.UserSubjectID(p.UserID)
-	}
-	return ""
+	return p.SubjectID
 }
 
 func subjectKindForPrincipal(p *principal.Principal) string {
+	p = principal.Canonicalized(p)
 	if p == nil {
 		return ""
 	}
@@ -348,7 +344,7 @@ func subjectKindForPrincipal(p *principal.Principal) string {
 	case strings.HasPrefix(p.SubjectID, string(principal.KindWorkload)+":"):
 		return string(principal.KindWorkload)
 	}
-	if p.UserID != "" || p.Identity != nil {
+	if p.Identity != nil {
 		return string(principal.KindUser)
 	}
 	return ""

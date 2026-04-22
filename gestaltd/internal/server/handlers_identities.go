@@ -76,14 +76,13 @@ type putManagedIdentityGrantRequest struct {
 }
 
 type managedIdentityActor struct {
-	UserID     string
 	SubjectID  string
 	Identity   *core.ManagedIdentity
 	Membership *core.ManagedIdentityMembership
 }
 
 func (s *Server) listManagedIdentities(w http.ResponseWriter, r *http.Request) {
-	_, subjectID, _, ok := s.resolveManagedIdentityUser(w, r)
+	_, subjectID, ok := s.resolveManagedIdentityUser(w, r)
 	if !ok {
 		return
 	}
@@ -135,7 +134,7 @@ func (s *Server) createManagedIdentity(w http.ResponseWriter, r *http.Request) {
 		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), "", "identity.create", auditAllowed, auditErr, auditTarget)
 	}()
 
-	userID, subjectID, user, ok := s.resolveManagedIdentityUser(w, r)
+	user, subjectID, ok := s.resolveManagedIdentityUser(w, r)
 	if !ok {
 		return
 	}
@@ -160,7 +159,7 @@ func (s *Server) createManagedIdentity(w http.ResponseWriter, r *http.Request) {
 	identity := &core.ManagedIdentity{
 		ID:                  uuid.NewString(),
 		DisplayName:         req.DisplayName,
-		CreatedByIdentityID: userID,
+		CreatedByIdentityID: user.ID,
 		CreatedAt:           now,
 		UpdatedAt:           now,
 	}
@@ -655,7 +654,7 @@ func (s *Server) putManagedIdentityGrant(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	p := managedIdentityGrantValidationPrincipal(PrincipalFromContext(r.Context()), actor.UserID)
+	p := managedIdentityGrantValidationPrincipal(PrincipalFromContext(r.Context()), actor.SubjectID)
 	if !s.managedIdentityGrantPluginVisible(r.Context(), plugin, p) {
 		auditErr = errors.New("plugin not found")
 		writeError(w, http.StatusNotFound, "plugin not found")
@@ -765,24 +764,24 @@ func (s *Server) deleteManagedIdentityGrant(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-func (s *Server) resolveManagedIdentityUser(w http.ResponseWriter, r *http.Request) (string, string, *core.User, bool) {
+func (s *Server) resolveManagedIdentityUser(w http.ResponseWriter, r *http.Request) (*core.User, string, bool) {
 	if !s.ensureManagedIdentityRoutesAvailable(w) {
-		return "", "", nil, false
+		return nil, "", false
 	}
 	userID, err := s.resolveUserID(w, r)
 	if err != nil {
-		return "", "", nil, false
+		return nil, "", false
 	}
 	user, err := s.users.GetUser(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
-		return "", "", nil, false
+		return nil, "", false
 	}
-	return userID, principal.UserSubjectID(userID), user, true
+	return user, principal.UserSubjectID(userID), true
 }
 
 func (s *Server) resolveManagedIdentityActor(w http.ResponseWriter, r *http.Request, requiredRole string) (*managedIdentityActor, bool) {
-	userID, subjectID, _, ok := s.resolveManagedIdentityUser(w, r)
+	_, subjectID, ok := s.resolveManagedIdentityUser(w, r)
 	if !ok {
 		return nil, false
 	}
@@ -815,7 +814,6 @@ func (s *Server) resolveManagedIdentityActor(w http.ResponseWriter, r *http.Requ
 		return nil, false
 	}
 	return &managedIdentityActor{
-		UserID:     userID,
 		SubjectID:  subjectID,
 		Identity:   identity,
 		Membership: membership,
@@ -1216,22 +1214,22 @@ func (s *Server) managedIdentityGrantSessionCatalog(
 	return cat, true, err
 }
 
-func managedIdentityGrantValidationPrincipal(p *principal.Principal, userID string) *principal.Principal {
-	userID = strings.TrimSpace(userID)
-	if userID == "" {
+func managedIdentityGrantValidationPrincipal(p *principal.Principal, subjectID string) *principal.Principal {
+	subjectID = strings.TrimSpace(subjectID)
+	if subjectID == "" {
 		return p
 	}
 	if p == nil {
 		return principal.Canonicalize(&principal.Principal{
-			Kind:   principal.KindUser,
-			UserID: userID,
+			Kind:      principal.KindUser,
+			SubjectID: subjectID,
 		})
 	}
-	if p.UserID == userID {
+	if strings.TrimSpace(p.SubjectID) == subjectID {
 		return principal.Canonicalized(p)
 	}
 	clone := *p
-	clone.UserID = userID
+	clone.SubjectID = subjectID
 	return principal.Canonicalize(&clone)
 }
 

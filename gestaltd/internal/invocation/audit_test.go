@@ -24,14 +24,15 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 
 	eventTime := time.Date(2026, 3, 15, 12, 30, 0, 0, time.UTC)
 	entry := core.AuditEntry{
-		Timestamp: eventTime,
-		RequestID: "req-abc-123",
-		Source:    "binding:test-hook",
-		UserID:    "user-42",
-		Provider:  "alpha",
-		Operation: "fetch",
-		Depth:     1,
-		Allowed:   true,
+		Timestamp:   eventTime,
+		RequestID:   "req-abc-123",
+		Source:      "binding:test-hook",
+		SubjectID:   principal.UserSubjectID("user-42"),
+		SubjectKind: string(principal.KindUser),
+		Provider:    "alpha",
+		Operation:   "fetch",
+		Depth:       1,
+		Allowed:     true,
 	}
 
 	sink.Log(context.Background(), entry)
@@ -93,15 +94,16 @@ func TestSlogAuditSink_DeniedEntry(t *testing.T) {
 	sink := invocation.NewSlogAuditSink(&buf)
 
 	entry := core.AuditEntry{
-		Timestamp: time.Now(),
-		RequestID: "req-deny-456",
-		Source:    "binding:test-hook",
-		UserID:    "user-99",
-		Provider:  "beta",
-		Operation: "write",
-		Depth:     2,
-		Allowed:   false,
-		Error:     "provider \"beta\" is not available in this scope",
+		Timestamp:   time.Now(),
+		RequestID:   "req-deny-456",
+		Source:      "binding:test-hook",
+		SubjectID:   principal.UserSubjectID("user-99"),
+		SubjectKind: string(principal.KindUser),
+		Provider:    "beta",
+		Operation:   "write",
+		Depth:       2,
+		Allowed:     false,
+		Error:       "provider \"beta\" is not available in this scope",
 	}
 
 	sink.Log(context.Background(), entry)

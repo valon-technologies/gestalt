@@ -324,19 +324,15 @@ func shouldInheritCredentialSelectors(p *principal.Principal) bool {
 }
 
 func subjectIDForInvocationClaims(p *principal.Principal) string {
+	p = principal.Canonicalized(p)
 	if p == nil {
 		return ""
 	}
-	if subjectID := strings.TrimSpace(p.SubjectID); subjectID != "" {
-		return subjectID
-	}
-	if userID := strings.TrimSpace(p.UserID); userID != "" {
-		return principal.UserSubjectID(userID)
-	}
-	return ""
+	return strings.TrimSpace(p.SubjectID)
 }
 
 func subjectKindForInvocationClaims(p *principal.Principal) principal.Kind {
+	p = principal.Canonicalized(p)
 	if p == nil {
 		return ""
 	}

@@ -37,7 +37,7 @@ func (s *Server) listManagedIdentityTokens(w http.ResponseWriter, r *http.Reques
 	}
 	grantPermissions := principal.CompileManagedIdentityGrants(grants)
 
-	viewer := managedIdentityGrantValidationPrincipal(PrincipalFromContext(r.Context()), actor.UserID)
+	viewer := managedIdentityGrantValidationPrincipal(PrincipalFromContext(r.Context()), actor.SubjectID)
 	out := make([]apiTokenInfo, 0, len(tokens))
 	for _, token := range tokens {
 		info := apiTokenInfoFromCore(token)
@@ -93,7 +93,7 @@ func (s *Server) createManagedIdentityToken(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	viewer := managedIdentityGrantValidationPrincipal(PrincipalFromContext(r.Context()), actor.UserID)
+	viewer := managedIdentityGrantValidationPrincipal(PrincipalFromContext(r.Context()), actor.SubjectID)
 	s.managedIdentityMu.Lock()
 	defer s.managedIdentityMu.Unlock()
 
