@@ -86,8 +86,8 @@ func TestBrokerResolveToken_WorkflowContextDoesNotBypassWorkloadIdentityBinding(
 	broker := NewBroker(providers, svc.Users, svc.Tokens, WithAuthorizer(authz))
 
 	if err := svc.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-		ID:          "identity-workspace-team-a",
-		SubjectID:   principal.IdentitySubjectID(),
+		ID:          "workload-workspace-team-a",
+		SubjectID:   principal.WorkloadSubjectID("workflow.roadmap"),
 		Integration: "slack",
 		Connection:  "workspace",
 		Instance:    "team-a",
@@ -96,8 +96,8 @@ func TestBrokerResolveToken_WorkflowContextDoesNotBypassWorkloadIdentityBinding(
 		t.Fatalf("StoreToken team-a: %v", err)
 	}
 	if err := svc.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-		ID:          "identity-workspace-team-b",
-		SubjectID:   principal.IdentitySubjectID(),
+		ID:          "workload-workspace-team-b",
+		SubjectID:   principal.WorkloadSubjectID("workflow.roadmap"),
 		Integration: "slack",
 		Connection:  "workspace",
 		Instance:    "team-b",

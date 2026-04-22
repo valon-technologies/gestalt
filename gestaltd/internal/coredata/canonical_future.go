@@ -109,19 +109,19 @@ func (s *ExternalCredentialService) UpsertCredential(ctx context.Context, creden
 	if credential == nil {
 		return nil, fmt.Errorf("upsert external credential: credential is required")
 	}
-	identityID := strings.TrimSpace(credential.IdentityID)
+	subjectID := strings.TrimSpace(credential.SubjectID)
 	plugin := strings.TrimSpace(credential.Plugin)
 	connection := strings.TrimSpace(credential.Connection)
 	instance := strings.TrimSpace(credential.Instance)
 	authType := strings.TrimSpace(credential.AuthType)
-	if identityID == "" || plugin == "" || connection == "" || authType == "" {
-		return nil, fmt.Errorf("upsert external credential: identity_id, plugin, connection, and auth_type are required")
+	if subjectID == "" || plugin == "" || connection == "" || authType == "" {
+		return nil, fmt.Errorf("upsert external credential: subject_id, plugin, connection, and auth_type are required")
 	}
 
 	now := time.Now()
 	id := credential.ID
 	createdAt := credential.CreatedAt
-	if existing, err := s.store.Index("by_lookup").Get(ctx, identityID, plugin, connection, instance); err == nil {
+	if existing, err := s.store.Index("by_lookup").Get(ctx, subjectID, plugin, connection, instance); err == nil {
 		id = recString(existing, "id")
 		if created := recTime(existing, "created_at"); !created.IsZero() {
 			createdAt = created
@@ -138,7 +138,7 @@ func (s *ExternalCredentialService) UpsertCredential(ctx context.Context, creden
 
 	rec := indexeddb.Record{
 		"id":                  id,
-		"identity_id":         identityID,
+		"subject_id":          subjectID,
 		"plugin":              plugin,
 		"connection":          connection,
 		"instance":            instance,
@@ -158,8 +158,8 @@ func (s *ExternalCredentialService) UpsertCredential(ctx context.Context, creden
 	return recordToExternalCredential(rec), nil
 }
 
-func (s *ExternalCredentialService) DeleteCredential(ctx context.Context, identityID, plugin, connection, instance string) error {
-	deleted, err := s.store.Index("by_lookup").Delete(ctx, strings.TrimSpace(identityID), strings.TrimSpace(plugin), strings.TrimSpace(connection), strings.TrimSpace(instance))
+func (s *ExternalCredentialService) DeleteCredential(ctx context.Context, subjectID, plugin, connection, instance string) error {
+	deleted, err := s.store.Index("by_lookup").Delete(ctx, strings.TrimSpace(subjectID), strings.TrimSpace(plugin), strings.TrimSpace(connection), strings.TrimSpace(instance))
 	if err != nil {
 		return fmt.Errorf("delete external credential: %w", err)
 	}
@@ -169,8 +169,8 @@ func (s *ExternalCredentialService) DeleteCredential(ctx context.Context, identi
 	return nil
 }
 
-func (s *ExternalCredentialService) GetCredential(ctx context.Context, identityID, plugin, connection, instance string) (*core.ExternalCredential, error) {
-	rec, err := s.store.Index("by_lookup").Get(ctx, strings.TrimSpace(identityID), strings.TrimSpace(plugin), strings.TrimSpace(connection), strings.TrimSpace(instance))
+func (s *ExternalCredentialService) GetCredential(ctx context.Context, subjectID, plugin, connection, instance string) (*core.ExternalCredential, error) {
+	rec, err := s.store.Index("by_lookup").Get(ctx, strings.TrimSpace(subjectID), strings.TrimSpace(plugin), strings.TrimSpace(connection), strings.TrimSpace(instance))
 	if err != nil {
 		if err == indexeddb.ErrNotFound {
 			return nil, core.ErrNotFound
@@ -195,7 +195,7 @@ func encodeLegacyCredentialPayload(accessTokenEncrypted, refreshTokenEncrypted s
 func recordToExternalCredential(rec indexeddb.Record) *core.ExternalCredential {
 	return &core.ExternalCredential{
 		ID:                recString(rec, "id"),
-		IdentityID:        recString(rec, "identity_id"),
+		SubjectID:         recString(rec, "subject_id"),
 		Plugin:            recString(rec, "plugin"),
 		Connection:        recString(rec, "connection"),
 		Instance:          recString(rec, "instance"),

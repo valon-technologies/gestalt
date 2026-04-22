@@ -178,7 +178,7 @@ type APITokenAccess struct {
 
 type ExternalCredential struct {
 	ID                string
-	IdentityID        string
+	SubjectID         string
 	Plugin            string
 	Connection        string
 	Instance          string

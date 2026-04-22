@@ -247,14 +247,14 @@ var APITokenAccessSchema = indexeddb.ObjectStoreSchema{
 
 var ExternalCredentialsSchema = indexeddb.ObjectStoreSchema{
 	Indexes: []indexeddb.IndexSchema{
-		{Name: "by_identity", KeyPath: []string{"identity_id"}},
-		{Name: "by_identity_plugin", KeyPath: []string{"identity_id", "plugin"}},
-		{Name: "by_identity_connection", KeyPath: []string{"identity_id", "plugin", "connection"}},
-		{Name: "by_lookup", KeyPath: []string{"identity_id", "plugin", "connection", "instance"}, Unique: true},
+		{Name: "by_subject", KeyPath: []string{"subject_id"}},
+		{Name: "by_subject_plugin", KeyPath: []string{"subject_id", "plugin"}},
+		{Name: "by_subject_connection", KeyPath: []string{"subject_id", "plugin", "connection"}},
+		{Name: "by_lookup", KeyPath: []string{"subject_id", "plugin", "connection", "instance"}, Unique: true},
 	},
 	Columns: []indexeddb.ColumnDef{
 		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-		{Name: "identity_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "subject_id", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "plugin", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "connection", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "instance", Type: indexeddb.TypeString, NotNull: true},

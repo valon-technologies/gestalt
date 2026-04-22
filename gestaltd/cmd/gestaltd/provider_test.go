@@ -1936,7 +1936,7 @@ paths:
 	if err == nil {
 		t.Fatalf("expected provider release to fail, got output: %s", out)
 	}
-	if !strings.Contains(string(out), `duplicate operation \"generated_op\" across static and API catalogs`) {
+	if !strings.Contains(string(out), `duplicate operation \"generated_op\" across merged catalogs`) {
 		t.Fatalf("expected duplicate effective operation error, got: %s", out)
 	}
 }

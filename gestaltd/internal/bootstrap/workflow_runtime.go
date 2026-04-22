@@ -282,7 +282,7 @@ func workflowExecutionPrincipal(ref *coreworkflow.ExecutionReference) *principal
 		TokenPermissions: permissions,
 	}
 	if principal.IsSystemSubjectID(value.SubjectID) {
-		value.CredentialSubjectID = principal.IdentitySubjectID()
+		value.CredentialSubjectID = value.SubjectID
 	}
 	return principal.Canonicalize(value)
 }

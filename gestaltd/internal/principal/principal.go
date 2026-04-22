@@ -18,7 +18,6 @@ const (
 	SourceEnv
 )
 
-const IdentityPrincipal = "__identity__"
 const managedIdentitySubjectPrefix = "managed_identity:"
 
 type Kind string
@@ -101,10 +100,6 @@ func WorkloadSubjectID(workloadID string) string {
 		return ""
 	}
 	return string(KindWorkload) + ":" + workloadID
-}
-
-func IdentitySubjectID() string {
-	return "identity:" + IdentityPrincipal
 }
 
 func IsSystemSubjectID(subjectID string) bool {
@@ -372,8 +367,7 @@ func Canonicalize(p *Principal) *Principal {
 	if p.Kind == "" {
 		switch {
 		case strings.HasPrefix(p.SubjectID, string(KindWorkload)+":"),
-			ManagedIdentityIDFromSubjectID(p.SubjectID) != "",
-			p.SubjectID == IdentitySubjectID():
+			ManagedIdentityIDFromSubjectID(p.SubjectID) != "":
 			p.Kind = KindWorkload
 		}
 	}

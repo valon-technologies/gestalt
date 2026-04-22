@@ -568,7 +568,7 @@ plugins:
 	if err == nil {
 		t.Fatalf("expected validate to fail, got success:\n%s", out)
 	}
-	if !strings.Contains(string(out), `duplicate operation \"echo\" across static and API catalogs`) {
+	if !strings.Contains(string(out), `duplicate operation \"echo\" across merged catalogs`) {
 		t.Fatalf("expected validate output to mention duplicate effective operation, got: %s", out)
 	}
 }

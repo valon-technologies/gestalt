@@ -93,7 +93,7 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	identityMemberships := NewManagedIdentityMembershipService(ds, identityManagementGrants, users)
 	identityGrants := NewManagedIdentityGrantService(ds, identityPluginAccess)
 	apiTokens := NewAPITokenService(ds, apiTokenAccess, users)
-	tokens := NewTokenService(ds, enc, externalCredentials, users)
+	tokens := NewTokenService(ds, enc, externalCredentials)
 
 	if err := rebuildCanonicalIdentityGraph(ctx, identities, authBindings, identityManagementGrants, workspaceRoles, identityPluginAccess, apiTokenAccess, externalCredentials); err != nil {
 		return nil, err

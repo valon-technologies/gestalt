@@ -871,7 +871,7 @@ server:
 	}
 
 	_, err := NewLifecycle().InitAtPath(cfgPath)
-	if err == nil || !strings.Contains(err.Error(), `duplicate operation "ping" across static and API catalogs`) {
+	if err == nil || !strings.Contains(err.Error(), `duplicate operation "ping" across merged catalogs`) {
 		t.Fatalf("InitAtPath error = %v, want duplicate operation error", err)
 	}
 }

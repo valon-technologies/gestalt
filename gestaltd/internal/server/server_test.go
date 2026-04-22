@@ -16251,7 +16251,7 @@ func TestExecuteOperation_ConnectionModeUserDoesNotFallbackToIdentity(t *testing
 		}
 		seedAPIToken(t, svc, apiToken, hashed, "api-user")
 		seedToken(t, svc, &core.IntegrationToken{
-			ID: "tok-identity", SubjectID: principal.IdentitySubjectID(), Integration: "svc",
+			ID: "tok-identity", SubjectID: "identity:__identity__", Integration: "svc",
 			Connection: "", Instance: "default", AccessToken: "identity-tok",
 		})
 
