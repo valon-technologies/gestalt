@@ -90,8 +90,7 @@ type connectionParamInfo struct {
 }
 
 func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, error) {
-	if p := PrincipalFromContext(r.Context()); p != nil && p.Kind == principal.KindWorkload {
-		writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
+	if err := rejectWorkloadCaller(w, PrincipalFromContext(r.Context())); err != nil {
 		return "", errWorkloadForbidden
 	}
 	user := UserFromContext(r.Context())
@@ -127,7 +126,7 @@ func (s *Server) readinessCheck(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	p := PrincipalFromContext(r.Context())
 	connected := map[string][]instanceInfo{}
-	if p == nil || p.Kind != principal.KindWorkload {
+	if !isWorkloadPrincipal(p) {
 		var err error
 		connected, err = s.userConnectedIntegrations(r)
 		if err != nil {
@@ -164,7 +163,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
 			info.MountedPath = strings.TrimSpace(entry.MountPath)
 		}
-		if p != nil && p.Kind == principal.KindWorkload {
+		if isWorkloadPrincipal(p) {
 			if binding, ok := s.workloadBinding(p, name); ok {
 				bindingConnected, err := s.workloadBindingConnected(r.Context(), binding, name)
 				if err != nil {

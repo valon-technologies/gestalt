@@ -20,7 +20,7 @@ func (s *Server) integrationHasUsableSurfaceContext(ctx context.Context, p *prin
 }
 
 func (s *Server) integrationHasSettingsSurface(p *principal.Principal, info integrationInfo) bool {
-	if p != nil && p.Kind == principal.KindWorkload {
+	if isWorkloadPrincipal(p) {
 		return false
 	}
 	return info.Connected || len(info.AuthTypes) > 0 || len(info.Connections) > 0
@@ -69,7 +69,7 @@ func (s *Server) mountedUIRootAccessibleContext(ctx context.Context, p *principa
 	if mounted.AuthorizationPolicy == "" {
 		return true
 	}
-	if s.authorizer == nil || p == nil || p.Kind == principal.KindWorkload {
+	if s.authorizer == nil || p == nil || isWorkloadPrincipal(p) {
 		return false
 	}
 

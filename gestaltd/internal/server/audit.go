@@ -40,7 +40,7 @@ func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Princi
 	if p == nil {
 		return nil, nil
 	}
-	if p.Kind == principal.KindWorkload {
+	if isWorkloadPrincipal(p) {
 		return p, nil
 	}
 	if p.UserID != "" {

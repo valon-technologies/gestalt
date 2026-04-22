@@ -573,9 +573,8 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		s.auditHTTPEvent(r.Context(), auditPrincipal, s.authProviderName(), "auth.logout", auditAllowed, auditErr)
 	}()
-	if auditPrincipal != nil && auditPrincipal.Kind == principal.KindWorkload {
-		auditErr = errWorkloadForbidden
-		writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
+	if err := rejectWorkloadCaller(w, auditPrincipal); err != nil {
+		auditErr = err
 		return
 	}
 

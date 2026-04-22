@@ -77,19 +77,13 @@ func (s *PluginInvokerServer) Invoke(ctx context.Context, req *proto.PluginInvok
 		return nil, err
 	}
 
-	connection := strings.TrimSpace(req.GetConnection())
-	invokeCtx := restoreInvocationTokenContext(ctx, tokenCtx, connection)
+	invokeCtx, instance, err := prepareInvocationSelectors(ctx, tokenCtx, req.GetConnection(), req.GetInstance())
+	if err != nil {
+		return nil, err
+	}
 	params := map[string]any{}
 	if raw := req.GetParams(); raw != nil {
 		params = raw.AsMap()
-	}
-
-	instance := strings.TrimSpace(req.GetInstance())
-	if tokenCtx.principal != nil && tokenCtx.principal.Kind == principal.KindWorkload && (connection != "" || instance != "") {
-		return nil, status.Error(codes.PermissionDenied, "workloads may not override connection or instance bindings")
-	}
-	if instance == "" && connection == "" && shouldInheritCredentialSelectors(tokenCtx.principal) {
-		instance = tokenCtx.credential.Instance
 	}
 
 	result, err := s.invoker.Invoke(invokeCtx, tokenCtx.principal, targetPlugin, instance, targetOperation, params)
@@ -130,14 +124,9 @@ func (s *PluginInvokerServer) InvokeGraphQL(ctx context.Context, req *proto.Plug
 		return nil, status.Error(codes.Unimplemented, "plugin graphql invocation is not available")
 	}
 
-	connection := strings.TrimSpace(req.GetConnection())
-	invokeCtx := restoreInvocationTokenContext(ctx, tokenCtx, connection)
-	instance := strings.TrimSpace(req.GetInstance())
-	if tokenCtx.principal != nil && tokenCtx.principal.Kind == principal.KindWorkload && (connection != "" || instance != "") {
-		return nil, status.Error(codes.PermissionDenied, "workloads may not override connection or instance bindings")
-	}
-	if instance == "" && connection == "" && shouldInheritCredentialSelectors(tokenCtx.principal) {
-		instance = tokenCtx.credential.Instance
+	invokeCtx, instance, err := prepareInvocationSelectors(ctx, tokenCtx, req.GetConnection(), req.GetInstance())
+	if err != nil {
+		return nil, err
 	}
 
 	variables := map[string]any{}
@@ -203,6 +192,28 @@ func (s *PluginInvokerServer) tokenContextForSurfaceInvoke(req *proto.PluginInvo
 		return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s surface %q", s.pluginName, targetPlugin, surface)
 	}
 	return tokenCtx, nil
+}
+
+func prepareInvocationSelectors(ctx context.Context, tokenCtx invocationTokenContext, rawConnection, rawInstance string) (context.Context, string, error) {
+	connection := strings.TrimSpace(rawConnection)
+	instance := strings.TrimSpace(rawInstance)
+	if err := rejectWorkloadSelectorOverride(tokenCtx.principal, connection, instance); err != nil {
+		return nil, "", err
+	}
+	if instance == "" && connection == "" && shouldInheritCredentialSelectors(tokenCtx.principal) {
+		instance = tokenCtx.credential.Instance
+	}
+	return restoreInvocationTokenContext(ctx, tokenCtx, connection), instance, nil
+}
+
+func rejectWorkloadSelectorOverride(p *principal.Principal, connection, instance string) error {
+	if shouldInheritCredentialSelectors(p) {
+		return nil
+	}
+	if connection == "" && instance == "" {
+		return nil
+	}
+	return status.Error(codes.PermissionDenied, "workloads may not override connection or instance bindings")
 }
 
 func invocationStatusError(err error) error {
