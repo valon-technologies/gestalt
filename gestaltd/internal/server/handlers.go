@@ -523,7 +523,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestedConnection := r.URL.Query().Get(httpConnectionParam)
+	requestedConnectionInput := r.URL.Query().Get(httpConnectionParam)
+	requestedConnection := requestedConnectionInput
 	if requestedConnection != "" {
 		var ok bool
 		requestedConnection, ok = s.resolveRequestedConnection(w, providerName, requestedConnection)
@@ -563,7 +564,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 
 	bodyInstance, _ := params[httpInstanceParam].(string)
 	delete(params, httpInstanceParam)
-	bodyConnection, _ := params[httpConnectionParam].(string)
+	bodyConnectionInput, _ := params[httpConnectionParam].(string)
+	bodyConnection := bodyConnectionInput
 	delete(params, httpConnectionParam)
 
 	if bodyInstance != "" {
@@ -598,8 +600,10 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	connection := bodyConnection
+	connectionInput := bodyConnectionInput
 	if connection == "" {
 		connection = requestedConnection
+		connectionInput = requestedConnectionInput
 	}
 	ctx := r.Context()
 	ctx = invocation.WithAccessContext(ctx, access)
@@ -622,6 +626,27 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		})
 		writeError(w, http.StatusForbidden, "operation access denied")
 		return
+	}
+	explicitConnection := connectionInput
+	if explicitConnection != "" {
+		if !safeParamValue.MatchString(explicitConnection) {
+			writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
+			return
+		}
+		if operationConnection := config.ResolveConnectionAlias(prov.ConnectionForOperation(opMeta.ID)); operationConnection != "" && operationConnection != connection {
+			writeError(
+				w,
+				http.StatusBadRequest,
+				fmt.Sprintf(
+					"operation %q on integration %q uses connection %q; omit the connection override or use that connection instead of %q",
+					opMeta.ID,
+					providerName,
+					operationConnection,
+					explicitConnection,
+				),
+			)
+			return
+		}
 	}
 	ctx = invocation.WithCatalogOperation(ctx, providerName, opMeta)
 	if connection == "" {
