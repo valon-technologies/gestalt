@@ -3855,6 +3855,29 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
+	t.Run("accepts plugin configured with graphql surface without eager introspection", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"linear": {
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{
+						Surfaces: &providermanifestv1.ProviderSurfaces{
+							GraphQL: &providermanifestv1.GraphQLSurface{
+								URL: "http://127.0.0.1:1/graphql",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		if _, err := bootstrap.Validate(context.Background(), cfg, validFactories()); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+	})
+
 	t.Run("workflow managed workloads allow normalized credentialed providers", func(t *testing.T) {
 		t.Parallel()
 
@@ -4072,19 +4095,27 @@ func TestBootstrapAllowsPluginConfiguredWithBothOpenAPIAndGraphQLAPISurfaces(t *
 	if got := prov.ConnectionForOperation("status"); got != "rest" {
 		t.Fatalf("ConnectionForOperation(status) = %q, want %q", got, "rest")
 	}
-	if got := prov.ConnectionForOperation("viewer"); got != "graphql" {
-		t.Fatalf("ConnectionForOperation(viewer) = %q, want %q", got, "graphql")
+	if got := prov.ConnectionForOperation("viewer"); got != "" {
+		t.Fatalf("ConnectionForOperation(viewer) = %q, want empty static connection for lazy graphql op", got)
 	}
 
 	cat := prov.Catalog()
 	if cat == nil {
-		t.Fatal("Catalog() = nil, want mixed API catalog")
+		t.Fatal("Catalog() = nil, want static API catalog")
 	}
 	if got, ok := invocation.CatalogOperationTransport(cat, "status"); !ok || got != catalog.TransportREST {
 		t.Fatalf("status transport = %q, ok=%v, want %q", got, ok, catalog.TransportREST)
 	}
-	if got, ok := invocation.CatalogOperationTransport(cat, "viewer"); !ok || got != "graphql" {
-		t.Fatalf("viewer transport = %q, ok=%v, want %q", got, ok, "graphql")
+	if got, ok := invocation.CatalogOperationTransport(cat, "viewer"); ok {
+		t.Fatalf("viewer should not be in the static catalog; got transport = %q", got)
+	}
+
+	sessionCat, _, err := core.CatalogForRequest(context.Background(), prov, "")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if got, ok := invocation.CatalogOperationTransport(sessionCat, "viewer"); !ok || got != "graphql" {
+		t.Fatalf("session viewer transport = %q, ok=%v, want %q", got, ok, "graphql")
 	}
 
 	statusResult, err := prov.Execute(context.Background(), "status", nil, "")

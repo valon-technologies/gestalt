@@ -9,7 +9,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
 	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
@@ -286,16 +285,14 @@ func loadConfiguredAPICatalog(ctx context.Context, name string, entry *config.Pr
 		if !ok {
 			continue
 		}
+		if surface == config.SpecSurfaceGraphQL {
+			continue
+		}
 		var (
 			def *provider.Definition
 			err error
 		)
-		switch surface {
-		case config.SpecSurfaceOpenAPI:
-			def, err = openapi.LoadDefinition(ctx, name, url, allowed)
-		case config.SpecSurfaceGraphQL:
-			def, err = graphql.LoadDefinition(ctx, name, url, allowed, spec.GraphQLOperationSelections())
-		}
+		def, err = openapi.LoadDefinition(ctx, name, url, allowed)
 		if err != nil {
 			return nil, fmt.Errorf("plugin %q %s catalog: %w", name, surface, err)
 		}

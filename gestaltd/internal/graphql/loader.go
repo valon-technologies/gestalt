@@ -2,9 +2,12 @@ package graphql
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 )
@@ -14,12 +17,21 @@ func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[s
 	if err != nil {
 		return nil, fmt.Errorf("introspecting %s: %w", endpoint, err)
 	}
+	return DefinitionFromSchema(name, endpoint, schema, allowedOps, selectionOverrides)
+}
 
+func StaticDefinition(name, endpoint string) *provider.Definition {
 	def := &provider.Definition{
-		Provider: name,
-		BaseURL:  strings.TrimRight(endpoint, "/"),
+		Provider:   name,
+		BaseURL:    strings.TrimRight(endpoint, "/"),
+		Operations: map[string]provider.OperationDef{},
 	}
 
+	return def
+}
+
+func DefinitionFromSchema(name, endpoint string, schema *Schema, allowedOps map[string]*config.OperationOverride, selectionOverrides map[string]string) (*provider.Definition, error) {
+	def := StaticDefinition(name, endpoint)
 	def.Operations = make(map[string]provider.OperationDef)
 	addOperations(schema, def, schema.QueryType, false, allowedOps, selectionOverrides)
 	addOperations(schema, def, schema.MutationType, true, allowedOps, selectionOverrides)
@@ -29,6 +41,32 @@ func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[s
 	}
 
 	return def, nil
+}
+
+func SchemaFromBody(body []byte) (*Schema, error) {
+	var resp struct {
+		Schema Schema `json:"__schema"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("parsing introspection response: %w", err)
+	}
+
+	resp.Schema.buildIndex()
+	return &resp.Schema, nil
+}
+
+func IntrospectionRequest() core.GraphQLRequest {
+	return core.GraphQLRequest{Document: introspectionQuery}
+}
+
+func SchemaFromResult(result *core.OperationResult) (*Schema, error) {
+	if result == nil {
+		return nil, fmt.Errorf("graphql introspection returned no result")
+	}
+	if result.Status >= http.StatusBadRequest {
+		return nil, fmt.Errorf("graphql introspection returned HTTP %d", result.Status)
+	}
+	return SchemaFromBody([]byte(result.Body))
 }
 
 func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isMutation bool, allowedOps map[string]*config.OperationOverride, selectionOverrides map[string]string) {

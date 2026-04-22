@@ -673,6 +673,9 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved conf
 		if err != nil {
 			return nil, nil, err
 		}
+		if resolved.Surface == config.SpecSurfaceGraphQL {
+			prov = wrapGraphQLSessionCatalogProvider(prov, name, resolved.URL, cfg.allowedOperations, resolved.GraphQLSelections)
+		}
 		return prov, def, nil
 	case config.SpecSurfaceMCP:
 		connMode := core.ConnectionMode(resolved.Connection.Mode)
@@ -708,7 +711,7 @@ func loadSpecDefinition(ctx context.Context, name string, resolved config.Resolv
 	case config.SpecSurfaceOpenAPI:
 		return openapi.LoadDefinition(ctx, name, resolved.URL, allowedOperations)
 	case config.SpecSurfaceGraphQL:
-		return graphql.LoadDefinition(ctx, name, resolved.URL, allowedOperations, resolved.GraphQLSelections)
+		return graphql.StaticDefinition(name, resolved.URL), nil
 	default:
 		return nil, fmt.Errorf("unsupported spec definition surface %q", resolved.Surface)
 	}
