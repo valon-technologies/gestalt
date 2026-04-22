@@ -197,7 +197,7 @@ func (s *Server) validateManagedIdentityTokenPermissions(ctx context.Context, id
 	}
 
 	for _, permission := range permissions {
-		if !s.managedIdentityGrantPluginVisible(ctx, permission.Plugin, viewer) {
+		if _, err := s.providers.Get(permission.Plugin); err != nil || !s.allowProviderContext(ctx, viewer, permission.Plugin) {
 			return fmt.Errorf("plugin %q is not available", permission.Plugin)
 		}
 		if len(permission.Operations) > 0 {
