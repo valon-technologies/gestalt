@@ -12484,6 +12484,111 @@ func TestHostedHTTPBinding_RejectsInvalidConfigBindings(t *testing.T) {
 			wantErr: "secret is required",
 		},
 		{
+			name: "unsupported security scheme type",
+			entry: &config.ProviderEntry{
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"eventKey": {
+						Type: "bogus",
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:     "/event",
+						Method:   http.MethodPost,
+						Security: "eventKey",
+						Target:   "handle_event",
+					},
+				},
+			},
+			wantErr: `type "bogus" is not supported`,
+		},
+		{
+			name: "invalid api key location",
+			entry: &config.ProviderEntry{
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"eventKey": {
+						Type:   providermanifestv1.HTTPSecuritySchemeTypeAPIKey,
+						Name:   "X-Webhook-Key",
+						In:     "cookie",
+						Secret: &providermanifestv1.HTTPSecretRef{Secret: "shared-key"},
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:     "/event",
+						Method:   http.MethodPost,
+						Security: "eventKey",
+						Target:   "handle_event",
+					},
+				},
+			},
+			wantErr: `in "cookie" is not supported`,
+		},
+		{
+			name: "invalid http auth scheme",
+			entry: &config.ProviderEntry{
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"eventKey": {
+						Type:   providermanifestv1.HTTPSecuritySchemeTypeHTTP,
+						Scheme: "digest",
+						Secret: &providermanifestv1.HTTPSecretRef{Secret: "shared-key"},
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:     "/event",
+						Method:   http.MethodPost,
+						Security: "eventKey",
+						Target:   "handle_event",
+					},
+				},
+			},
+			wantErr: `scheme "digest" is not supported`,
+		},
+		{
+			name: "blank secret reference",
+			entry: &config.ProviderEntry{
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"eventKey": {
+						Type:   providermanifestv1.HTTPSecuritySchemeTypeAPIKey,
+						Name:   "X-Webhook-Key",
+						In:     providermanifestv1.HTTPInHeader,
+						Secret: &providermanifestv1.HTTPSecretRef{},
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:     "/event",
+						Method:   http.MethodPost,
+						Security: "eventKey",
+						Target:   "handle_event",
+					},
+				},
+			},
+			wantErr: "secret must set env or secret",
+		},
+		{
+			name: "missing hmac signature header",
+			entry: &config.ProviderEntry{
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"eventKey": {
+						Type:            providermanifestv1.HTTPSecuritySchemeTypeHMAC,
+						Secret:          &providermanifestv1.HTTPSecretRef{Secret: "shared-key"},
+						PayloadTemplate: "{raw_body}",
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:     "/event",
+						Method:   http.MethodPost,
+						Security: "eventKey",
+						Target:   "handle_event",
+					},
+				},
+			},
+			wantErr: "signatureHeader is required",
+		},
+		{
 			name: "duplicate normalized content types",
 			entry: &config.ProviderEntry{
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{

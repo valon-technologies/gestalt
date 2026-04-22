@@ -1,6 +1,7 @@
 package providerpkg
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -679,6 +680,105 @@ spec:
 			}
 			if !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("error = %v, want substring %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestManifestWorkflow_RejectsInvalidHTTPSecuritySchemes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		schemeYAML  string
+		wantErrPart string
+	}{
+		{
+			name: "unsupported type",
+			schemeYAML: `
+      type: bogus
+`,
+			wantErrPart: `provider.securitySchemes.bad.type "bogus" is not supported`,
+		},
+		{
+			name: "invalid api key location",
+			schemeYAML: `
+      type: apiKey
+      name: X-Webhook-Key
+      in: cookie
+      secret:
+        secret: shared-key
+`,
+			wantErrPart: `provider.securitySchemes.bad.in "cookie" is not supported`,
+		},
+		{
+			name: "invalid http scheme",
+			schemeYAML: `
+      type: http
+      scheme: digest
+      secret:
+        secret: shared-key
+`,
+			wantErrPart: `provider.securitySchemes.bad.scheme "digest" is not supported`,
+		},
+		{
+			name: "missing secret",
+			schemeYAML: `
+      type: apiKey
+      name: X-Webhook-Key
+      in: header
+`,
+			wantErrPart: `provider.securitySchemes.bad.secret is required`,
+		},
+		{
+			name: "blank secret ref",
+			schemeYAML: `
+      type: apiKey
+      name: X-Webhook-Key
+      in: header
+      secret: {}
+`,
+			wantErrPart: `provider.securitySchemes.bad.secret must set env or secret`,
+		},
+		{
+			name: "missing hmac signature header",
+			schemeYAML: `
+      type: hmac
+      secret:
+        secret: shared-key
+      payloadTemplate: "{raw_body}"
+`,
+			wantErrPart: `provider.securitySchemes.bad.signatureHeader is required`,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(fmt.Sprintf(`
+kind: plugin
+source: github.com/acme/plugins/bad-http-security
+version: 1.0.0
+spec:
+  securitySchemes:
+    bad:%s
+  http:
+    command:
+      path: /command
+      method: POST
+      security: bad
+      target: handle_command
+`, tt.schemeYAML)))
+
+			_, _, err := ReadSourceManifestFile(manifestPath)
+			if err == nil {
+				t.Fatal("expected invalid manifest")
+			}
+			if !strings.Contains(err.Error(), tt.wantErrPart) {
+				t.Fatalf("error = %v", err)
 			}
 		})
 	}
