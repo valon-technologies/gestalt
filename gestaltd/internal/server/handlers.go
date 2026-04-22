@@ -484,7 +484,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		name,
 		resolver,
 		p,
-		s.boundSessionCatalogTargets(name, p, requestedConnection, requestedInstance),
+		s.catalogSelectorConfig().BoundSessionCatalogTargets(name, p, requestedConnection, requestedInstance),
 		strictCatalog,
 	)
 	discoveryFailed = metadata.SessionFailed
@@ -517,7 +517,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	}
 	access := s.providerAccessContextWithContext(r.Context(), p, providerName)
 	providerAllowed := s.allowProviderContext(r.Context(), p, providerName)
-	operationAllowed := s.allowOperationContext(r.Context(), p, providerName, operationName)
+	operationAllowed := s.authorizer == nil || s.authorizer.AllowOperation(r.Context(), p, providerName, operationName)
 	if !providerAllowed || !operationAllowed {
 		authz := auditAuthorization{
 			Policy: access.Policy,
@@ -618,7 +618,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	boundSessionConnections, sessionInstance := s.boundSessionCatalogConnections(providerName, p, connection, instance)
+	boundSessionConnections, sessionInstance := s.catalogSelectorConfig().BoundSessionCatalogConnections(providerName, p, connection, instance)
 	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, providerName, resolver, p, operationName, boundSessionConnections, sessionInstance)
 	if err != nil {
 		s.writeInvocationError(w, r, providerName, operationName, err)
@@ -719,18 +719,6 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 		slog.ErrorContext(r.Context(), "operation failed", "provider", providerName, "operation", operationName, "error", err)
 		writeError(w, http.StatusBadGateway, "operation failed")
 	}
-}
-
-func (s *Server) sessionCatalogConnections(providerName string, p *principal.Principal, explicit string) []string {
-	return s.catalogSelectorConfig().SessionCatalogConnections(providerName, p, explicit)
-}
-
-func (s *Server) boundSessionCatalogConnections(providerName string, p *principal.Principal, explicit, instance string) ([]string, string) {
-	return s.catalogSelectorConfig().BoundSessionCatalogConnections(providerName, p, explicit, instance)
-}
-
-func (s *Server) boundSessionCatalogTargets(providerName string, p *principal.Principal, explicit, instance string) []invocation.CatalogResolutionTarget {
-	return s.catalogSelectorConfig().BoundSessionCatalogTargets(providerName, p, explicit, instance)
 }
 
 func httpVisibleCatalogOperations(ops []catalog.CatalogOperation) []catalog.CatalogOperation {

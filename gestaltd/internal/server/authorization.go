@@ -15,13 +15,6 @@ func (s *Server) allowProviderContext(ctx context.Context, p *principal.Principa
 	return s.authorizer.AllowProvider(ctx, p, provider)
 }
 
-func (s *Server) allowOperationContext(ctx context.Context, p *principal.Principal, provider, operation string) bool {
-	if s.authorizer == nil {
-		return true
-	}
-	return s.authorizer.AllowOperation(ctx, p, provider, operation)
-}
-
 func (s *Server) providerAccessContextWithContext(ctx context.Context, p *principal.Principal, provider string) invocation.AccessContext {
 	if s.authorizer == nil {
 		return invocation.AccessContext{}
