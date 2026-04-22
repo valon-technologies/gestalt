@@ -56,6 +56,17 @@ gestalt plugins list
 gestalt plugins invoke httpbin get_ip
 ```
 
+Managed identities are available from the same client CLI via the top-level
+`gestalt identities` command:
+
+```sh
+gestalt identities list
+gestalt identities create --name "Release Bot"
+```
+
+See [CLI docs](https://gestaltd.ai/client/cli) for identity members, grants,
+and identity-owned token commands.
+
 For the full walkthrough, see [Getting Started](https://gestaltd.ai/getting-started).
 
 ## Repository Layout
@@ -63,6 +74,6 @@ For the full walkthrough, see [Getting Started](https://gestaltd.ai/getting-star
 | Path | Description |
 | --- | --- |
 | [`gestaltd`](./gestaltd) | Go server daemon, config loading, provider bootstrap, HTTP API, MCP surface, deployment assets, and admin UI serving code. |
-| [`gestalt`](./gestalt) | Rust CLI client for setup, auth, invocation, and token management. |
+| [`gestalt`](./gestalt) | Rust CLI client for setup, auth, managed identity operations, invocation, and token management. |
 | [`sdk`](./sdk) | Go, Python, Rust, and TypeScript SDKs plus shared protocol definitions. |
 | [`docs`](./docs) | Source for the public documentation site at [gestaltd.ai](https://gestaltd.ai). |

@@ -3,7 +3,7 @@ use reqwest::Method;
 use reqwest::StatusCode;
 use reqwest::blocking::Client;
 use reqwest::header::{self, HeaderValue};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -32,6 +32,109 @@ pub struct TokenPermission {
     pub plugin: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub operations: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityDisplayNameRequest {
+    pub display_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityMemberRequest {
+    pub email: String,
+    pub role: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityGrantRequest {
+    pub operations: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityTokenCreateRequest {
+    pub name: String,
+    pub permissions: Vec<TokenPermission>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityRecord {
+    pub id: String,
+    pub display_name: String,
+    pub role: String,
+    #[serde(alias = "created_at")]
+    pub created_at: String,
+    #[serde(alias = "updated_at")]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityMemberRecord {
+    pub subject_id: String,
+    pub email: String,
+    pub role: String,
+    #[serde(alias = "created_at")]
+    pub created_at: String,
+    #[serde(alias = "updated_at")]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityGrantRecord {
+    pub plugin: String,
+    #[serde(default)]
+    pub operations: Vec<String>,
+    #[serde(alias = "created_at")]
+    pub created_at: String,
+    #[serde(alias = "updated_at")]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityTokenRecord {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub scopes: String,
+    #[serde(default)]
+    pub permissions: Vec<TokenPermission>,
+    #[serde(alias = "created_at")]
+    pub created_at: String,
+    #[serde(default, alias = "expires_at", skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityTokenCreateResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<Vec<TokenPermission>>,
+    #[serde(default, alias = "created_at", skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    #[serde(default, alias = "expires_at", skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StatusResponse {
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleanup: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warnings: Option<Vec<String>>,
 }
 
 pub fn normalize_url(url: &str) -> String {
@@ -343,23 +446,63 @@ impl ApiClient {
         self.delete(&format!("/api/v1/tokens/{id}"))
     }
 
+    pub fn list_identities(&self) -> Result<Vec<IdentityRecord>> {
+        self.parse_response(self.get("/api/v1/identities")?)
+    }
+
+    pub fn create_identity(&self, request: &IdentityDisplayNameRequest) -> Result<IdentityRecord> {
+        self.parse_response(self.post("/api/v1/identities", request)?)
+    }
+
+    pub fn list_identity_members(&self, identity: &str) -> Result<Vec<IdentityMemberRecord>> {
+        self.parse_response(self.get(&format!("/api/v1/identities/{identity}/members"))?)
+    }
+
+    pub fn put_identity_member(
+        &self,
+        identity: &str,
+        request: &IdentityMemberRequest,
+    ) -> Result<IdentityMemberRecord> {
+        self.parse_response(self.put(&format!("/api/v1/identities/{identity}/members"), request)?)
+    }
+
+    pub fn delete_identity_member(&self, identity: &str, email: &str) -> Result<StatusResponse> {
+        let encoded_email = encode_path_segment(email);
+        self.parse_response(self.delete(&format!(
+            "/api/v1/identities/{identity}/members/{encoded_email}"
+        ))?)
+    }
+
+    pub fn list_identity_grants(&self, identity: &str) -> Result<Vec<IdentityGrantRecord>> {
+        self.parse_response(self.get(&format!("/api/v1/identities/{identity}/grants"))?)
+    }
+
+    pub fn put_identity_grant(
+        &self,
+        identity: &str,
+        plugin: &str,
+        request: &IdentityGrantRequest,
+    ) -> Result<IdentityGrantRecord> {
+        self.parse_response(self.put(
+            &format!("/api/v1/identities/{identity}/grants/{plugin}"),
+            request,
+        )?)
+    }
+
+    pub fn delete_identity_grant(&self, identity: &str, plugin: &str) -> Result<StatusResponse> {
+        self.parse_response(self.delete(&format!("/api/v1/identities/{identity}/grants/{plugin}"))?)
+    }
+
     pub fn create_identity_api_token(
         &self,
         identity: &str,
-        name: &str,
-        permissions: &[TokenPermission],
-    ) -> Result<serde_json::Value> {
-        self.post(
-            &format!("/api/v1/identities/{identity}/tokens"),
-            &serde_json::json!({
-                "name": name,
-                "permissions": permissions,
-            }),
-        )
+        request: &IdentityTokenCreateRequest,
+    ) -> Result<IdentityTokenCreateResponse> {
+        self.parse_response(self.post(&format!("/api/v1/identities/{identity}/tokens"), request)?)
     }
 
-    pub fn revoke_identity_api_token(&self, identity: &str, id: &str) -> Result<serde_json::Value> {
-        self.delete(&format!("/api/v1/identities/{identity}/tokens/{id}"))
+    pub fn revoke_identity_api_token(&self, identity: &str, id: &str) -> Result<StatusResponse> {
+        self.parse_response(self.delete(&format!("/api/v1/identities/{identity}/tokens/{id}"))?)
     }
 
     fn send(&self, method: Method, path: &str) -> Result<serde_json::Value> {
@@ -483,6 +626,13 @@ impl ApiClient {
         }
         Ok(())
     }
+
+    fn parse_response<T>(&self, value: serde_json::Value) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
+        serde_json::from_value(value).context("failed to parse response JSON")
+    }
 }
 
 fn extract_api_error(value: &serde_json::Value) -> Option<ApiError> {
@@ -532,4 +682,16 @@ fn extract_api_error(value: &serde_json::Value) -> Option<ApiError> {
         }
         _ => None,
     }
+}
+
+fn encode_path_segment(value: &str) -> String {
+    let mut url = url::Url::parse("https://managed-identities.invalid/").expect("static URL");
+    {
+        let mut segments = url
+            .path_segments_mut()
+            .expect("static URL should support path segments");
+        segments.pop_if_empty();
+        segments.push(value);
+    }
+    url.path().trim_start_matches('/').to_string()
 }

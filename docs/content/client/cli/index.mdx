@@ -4,7 +4,7 @@ asIndexPage: true
 
 # CLI
 
-`gestalt` is the client CLI for interacting with a running `gestaltd` server. It handles authentication, plugin connections, operation invocation, and API token management. A [Docker image](/client/cli/docker) is also available for CI and containerized environments.
+`gestalt` is the client CLI for interacting with a running `gestaltd` server. It handles authentication, managed identity resources, plugin connections, operation invocation, and API token management. A [Docker image](/client/cli/docker) is also available for CI and containerized environments.
 
 ## Global flags
 
@@ -27,6 +27,7 @@ asIndexPage: true
 | `gestalt plugins disconnect NAME` | Disconnect a plugin, removing stored credentials. |
 | `gestalt plugins invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
 | `gestalt plugins describe NAME OPERATION` | Show one operation's parameter contract. |
+| `gestalt identities ...` | Manage workspace-owned managed identities, members, grants, and identity-owned API tokens. |
 | `gestalt workflows schedules ...` | Create, list, inspect, update, pause, resume, or delete workflow schedules. |
 | `gestalt workflows triggers ...` | Create, list, inspect, update, pause, resume, or delete workflow triggers. |
 | `gestalt workflows events publish ...` | Publish an event into the workflow system. |
@@ -114,6 +115,49 @@ gestalt workflows events publish \
   -e traceId=trace-1
 gestalt workflows runs list --plugin github --status failed
 gestalt tokens create --name automation
+```
+
+## Managed identities
+
+`gestalt identities` is the first-class CLI surface for the managed identity HTTP API at `/api/v1/identities`.
+
+| Command | Purpose |
+| --- | --- |
+| `gestalt identities list` | List managed identities you can access. |
+| `gestalt identities create\|get\|update\|delete ...` | Create, inspect, rename, or delete one managed identity. |
+| `gestalt identities members list\|add\|update\|remove ID ...` | Manage identity membership by email. `--role` accepts `viewer`, `editor`, or `admin`. |
+| `gestalt identities grants list\|set\|revoke ID ...` | Manage plugin grants. Repeat `--operation` to scope access; omit it for plugin-wide access. |
+| `gestalt identities tokens list\|create\|revoke ID ...` | Manage identity-owned API tokens. Repeat `--permission plugin` or `--permission plugin:op1,op2`. |
+
+Token permissions cannot exceed the identity's own grants. For grants, omitting `--operation` means plugin-wide access.
+
+### Examples
+
+```sh
+gestalt identities list
+gestalt identities create --name "Release Bot"
+gestalt identities get <identity-id>
+gestalt identities update <identity-id> --name "Release Bot CI"
+gestalt identities delete <identity-id>
+
+gestalt identities members list <identity-id>
+gestalt identities members add <identity-id> viewer@example.com --role viewer
+gestalt identities members update <identity-id> operator@example.com --role admin
+gestalt identities members remove <identity-id> viewer@example.com
+
+gestalt identities grants list <identity-id>
+gestalt identities grants set <identity-id> github
+gestalt identities grants set <identity-id> slack \
+  --operation chat.postMessage \
+  --operation channels.history
+gestalt identities grants revoke <identity-id> slack
+
+gestalt identities tokens list <identity-id>
+gestalt identities tokens create <identity-id> \
+  --name deploy-bot \
+  --permission github \
+  --permission slack:chat.postMessage,channels.history
+gestalt identities tokens revoke <identity-id> <token-id>
 ```
 
 ## Workflow commands

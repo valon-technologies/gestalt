@@ -1,66 +1,81 @@
 use anyhow::{Context, Result};
-use serde_json::json;
+use serde::de::DeserializeOwned;
 
-use crate::api::{ApiClient, TokenPermission};
+use crate::api::{self, ApiClient, TokenPermission};
 use crate::cli::IdentityPermissionArg;
 use crate::output::{self, Format};
 
 pub fn list(client: &ApiClient, format: Format) -> Result<()> {
     let resp = client
-        .get("/api/v1/identities")
+        .list_identities()
         .context("failed to list identities")?;
     print_identities(&resp, format);
     Ok(())
 }
 
 pub fn get(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let resp = client
+    let raw = client
         .get(&format!("/api/v1/identities/{id}"))
         .with_context(|| format!("failed to get identity {id}"))?;
-    print_identity(&resp, format);
+    if format == Format::Json {
+        output::print_json(&raw);
+        return Ok(());
+    }
+    match parse_raw::<api::IdentityRecord>(&raw) {
+        Ok(resp) => print_identity(&resp, format),
+        Err(_) => output::print_json_table(&raw),
+    }
     Ok(())
 }
 
 pub fn create(client: &ApiClient, display_name: &str, format: Format) -> Result<()> {
     let resp = client
-        .post(
-            "/api/v1/identities",
-            &json!({
-                "displayName": display_name,
-            }),
-        )
+        .create_identity(&api::IdentityDisplayNameRequest {
+            display_name: display_name.to_string(),
+        })
         .context("failed to create identity")?;
     print_identity(&resp, format);
     Ok(())
 }
 
 pub fn update(client: &ApiClient, id: &str, display_name: &str, format: Format) -> Result<()> {
-    let resp = client
+    let raw = client
         .patch(
             &format!("/api/v1/identities/{id}"),
-            &json!({
-                "displayName": display_name,
-            }),
+            &api::IdentityDisplayNameRequest {
+                display_name: display_name.to_string(),
+            },
         )
         .with_context(|| format!("failed to update identity {id}"))?;
-    print_identity(&resp, format);
+    if format == Format::Json {
+        output::print_json(&raw);
+        return Ok(());
+    }
+    match parse_raw::<api::IdentityRecord>(&raw) {
+        Ok(resp) => print_identity(&resp, format),
+        Err(_) => output::print_json_table(&raw),
+    }
     Ok(())
 }
 
 pub fn delete(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let resp = client
+    let raw = client
         .delete(&format!("/api/v1/identities/{id}"))
         .with_context(|| format!("failed to delete identity {id}"))?;
-    match format {
-        Format::Json => output::print_json(&resp),
-        Format::Table => output::print_success(&format!("Identity {id} deleted.")),
+    if format == Format::Json {
+        output::print_json(&raw);
+        return Ok(());
+    }
+    match parse_raw::<api::StatusResponse>(&raw) {
+        Ok(resp) => print_status(&resp, format, &format!("Identity {id} deleted.")),
+        Err(_) => output::print_json_table(&raw),
     }
     Ok(())
 }
 
 pub fn list_members(client: &ApiClient, identity: &str, format: Format) -> Result<()> {
     let resp = client
-        .get(&format!("/api/v1/identities/{identity}/members"))
+        .list_identity_members(identity)
         .with_context(|| format!("failed to list members for identity {identity}"))?;
     print_members(&resp, format);
     Ok(())
@@ -74,12 +89,12 @@ pub fn upsert_member(
     format: Format,
 ) -> Result<()> {
     let resp = client
-        .put(
-            &format!("/api/v1/identities/{identity}/members"),
-            &json!({
-                "email": email,
-                "role": role,
-            }),
+        .put_identity_member(
+            identity,
+            &api::IdentityMemberRequest {
+                email: email.to_string(),
+                role: role.to_string(),
+            },
         )
         .with_context(|| format!("failed to update member {email} on identity {identity}"))?;
     print_member(&resp, format);
@@ -92,24 +107,20 @@ pub fn remove_member(
     email: &str,
     format: Format,
 ) -> Result<()> {
-    let encoded_email = encode_path_segment(email);
     let resp = client
-        .delete(&format!(
-            "/api/v1/identities/{identity}/members/{encoded_email}"
-        ))
+        .delete_identity_member(identity, email)
         .with_context(|| format!("failed to remove member {email} from identity {identity}"))?;
-    match format {
-        Format::Json => output::print_json(&resp),
-        Format::Table => {
-            output::print_success(&format!("Removed member {email} from identity {identity}."))
-        }
-    }
+    print_status(
+        &resp,
+        format,
+        &format!("Removed member {email} from identity {identity}."),
+    );
     Ok(())
 }
 
 pub fn list_grants(client: &ApiClient, identity: &str, format: Format) -> Result<()> {
     let resp = client
-        .get(&format!("/api/v1/identities/{identity}/grants"))
+        .list_identity_grants(identity)
         .with_context(|| format!("failed to list grants for identity {identity}"))?;
     print_grants(&resp, format);
     Ok(())
@@ -123,11 +134,12 @@ pub fn set_grant(
     format: Format,
 ) -> Result<()> {
     let resp = client
-        .put(
-            &format!("/api/v1/identities/{identity}/grants/{plugin}"),
-            &json!({
-                "operations": operations,
-            }),
+        .put_identity_grant(
+            identity,
+            plugin,
+            &api::IdentityGrantRequest {
+                operations: operations.to_vec(),
+            },
         )
         .with_context(|| {
             format!("failed to set grant for plugin {plugin} on identity {identity}")
@@ -143,24 +155,30 @@ pub fn revoke_grant(
     format: Format,
 ) -> Result<()> {
     let resp = client
-        .delete(&format!("/api/v1/identities/{identity}/grants/{plugin}"))
+        .delete_identity_grant(identity, plugin)
         .with_context(|| {
             format!("failed to revoke grant for plugin {plugin} on identity {identity}")
         })?;
-    match format {
-        Format::Json => output::print_json(&resp),
-        Format::Table => output::print_success(&format!(
-            "Revoked plugin {plugin} from identity {identity}."
-        )),
-    }
+    print_status(
+        &resp,
+        format,
+        &format!("Revoked plugin {plugin} from identity {identity}."),
+    );
     Ok(())
 }
 
 pub fn list_tokens(client: &ApiClient, identity: &str, format: Format) -> Result<()> {
-    let resp = client
+    let raw = client
         .get(&format!("/api/v1/identities/{identity}/tokens"))
         .with_context(|| format!("failed to list tokens for identity {identity}"))?;
-    print_tokens(&resp, format);
+    if format == Format::Json {
+        output::print_json(&raw);
+        return Ok(());
+    }
+    match parse_raw::<Vec<api::IdentityTokenRecord>>(&raw) {
+        Ok(resp) => print_tokens(&resp, format),
+        Err(_) => output::print_json_table(&raw),
+    }
     Ok(())
 }
 
@@ -180,13 +198,19 @@ pub fn create_token(
         })
         .collect();
     let resp = client
-        .create_identity_api_token(identity, token_name, &permissions)
+        .create_identity_api_token(
+            identity,
+            &api::IdentityTokenCreateRequest {
+                name: token_name.to_string(),
+                permissions,
+            },
+        )
         .with_context(|| format!("failed to create token for identity {identity}"))?;
 
     match format {
         Format::Json => output::print_json(&resp),
         Format::Table => {
-            if let Some(token) = resp["token"].as_str() {
+            if let Some(token) = resp.token.as_deref() {
                 output::print_success("Token created. Save it now; it won't be shown again.");
                 println!("{token}");
             } else {
@@ -202,47 +226,50 @@ pub fn revoke_token(client: &ApiClient, identity: &str, id: &str, format: Format
     let resp = client
         .revoke_identity_api_token(identity, id)
         .with_context(|| format!("failed to revoke token {id} for identity {identity}"))?;
-
-    match format {
-        Format::Json => output::print_json(&resp),
-        Format::Table => {
-            output::print_success(&format!("Token {id} for identity {identity} revoked."))
-        }
-    }
-
+    print_status(
+        &resp,
+        format,
+        &format!("Token {id} for identity {identity} revoked."),
+    );
     Ok(())
 }
 
-fn print_identity(value: &serde_json::Value, format: Format) {
+fn print_status(value: &api::StatusResponse, format: Format, table_message: &str) {
+    match format {
+        Format::Json => output::print_json(value),
+        Format::Table => output::print_success(table_message),
+    }
+}
+
+fn print_identity(value: &api::IdentityRecord, format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
             let row = vec![vec![
-                value["id"].as_str().unwrap_or("-").to_string(),
-                value["displayName"].as_str().unwrap_or("-").to_string(),
-                value["role"].as_str().unwrap_or("-").to_string(),
-                value["createdAt"].as_str().unwrap_or("-").to_string(),
-                value["updatedAt"].as_str().unwrap_or("-").to_string(),
+                value.id.clone(),
+                value.display_name.clone(),
+                value.role.clone(),
+                value.created_at.clone(),
+                value.updated_at.clone(),
             ]];
             output::print_table(&["ID", "Name", "Role", "Created", "Updated"], &row);
         }
     }
 }
 
-fn print_identities(value: &serde_json::Value, format: Format) {
+fn print_identities(value: &[api::IdentityRecord], format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
-            let items = value.as_array().unwrap_or(&Vec::new()).clone();
-            let rows: Vec<Vec<String>> = items
+            let rows: Vec<Vec<String>> = value
                 .iter()
                 .map(|item| {
                     vec![
-                        item["id"].as_str().unwrap_or("-").to_string(),
-                        item["displayName"].as_str().unwrap_or("-").to_string(),
-                        item["role"].as_str().unwrap_or("-").to_string(),
-                        item["createdAt"].as_str().unwrap_or("-").to_string(),
-                        item["updatedAt"].as_str().unwrap_or("-").to_string(),
+                        item.id.clone(),
+                        item.display_name.clone(),
+                        item.role.clone(),
+                        item.created_at.clone(),
+                        item.updated_at.clone(),
                     ]
                 })
                 .collect();
@@ -251,36 +278,35 @@ fn print_identities(value: &serde_json::Value, format: Format) {
     }
 }
 
-fn print_member(value: &serde_json::Value, format: Format) {
+fn print_member(value: &api::IdentityMemberRecord, format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
             let row = vec![vec![
-                value["subjectId"].as_str().unwrap_or("-").to_string(),
-                value["email"].as_str().unwrap_or("-").to_string(),
-                value["role"].as_str().unwrap_or("-").to_string(),
-                value["createdAt"].as_str().unwrap_or("-").to_string(),
-                value["updatedAt"].as_str().unwrap_or("-").to_string(),
+                value.subject_id.clone(),
+                value.email.clone(),
+                value.role.clone(),
+                value.created_at.clone(),
+                value.updated_at.clone(),
             ]];
             output::print_table(&["Subject ID", "Email", "Role", "Created", "Updated"], &row);
         }
     }
 }
 
-fn print_members(value: &serde_json::Value, format: Format) {
+fn print_members(value: &[api::IdentityMemberRecord], format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
-            let items = value.as_array().unwrap_or(&Vec::new()).clone();
-            let rows: Vec<Vec<String>> = items
+            let rows: Vec<Vec<String>> = value
                 .iter()
                 .map(|item| {
                     vec![
-                        item["subjectId"].as_str().unwrap_or("-").to_string(),
-                        item["email"].as_str().unwrap_or("-").to_string(),
-                        item["role"].as_str().unwrap_or("-").to_string(),
-                        item["createdAt"].as_str().unwrap_or("-").to_string(),
-                        item["updatedAt"].as_str().unwrap_or("-").to_string(),
+                        item.subject_id.clone(),
+                        item.email.clone(),
+                        item.role.clone(),
+                        item.created_at.clone(),
+                        item.updated_at.clone(),
                     ]
                 })
                 .collect();
@@ -292,36 +318,33 @@ fn print_members(value: &serde_json::Value, format: Format) {
     }
 }
 
-fn print_grant(value: &serde_json::Value, format: Format) {
+fn print_grant(value: &api::IdentityGrantRecord, format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
-            let operations = render_operations_cell(value.get("operations"));
             let row = vec![vec![
-                value["plugin"].as_str().unwrap_or("-").to_string(),
-                operations,
-                value["createdAt"].as_str().unwrap_or("-").to_string(),
-                value["updatedAt"].as_str().unwrap_or("-").to_string(),
+                value.plugin.clone(),
+                render_operations_cell(Some(value.operations.as_slice())),
+                value.created_at.clone(),
+                value.updated_at.clone(),
             ]];
             output::print_table(&["Plugin", "Operations", "Created", "Updated"], &row);
         }
     }
 }
 
-fn print_grants(value: &serde_json::Value, format: Format) {
+fn print_grants(value: &[api::IdentityGrantRecord], format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
-            let items = value.as_array().unwrap_or(&Vec::new()).clone();
-            let rows: Vec<Vec<String>> = items
+            let rows: Vec<Vec<String>> = value
                 .iter()
                 .map(|item| {
-                    let operations = render_operations_cell(item.get("operations"));
                     vec![
-                        item["plugin"].as_str().unwrap_or("-").to_string(),
-                        operations,
-                        item["createdAt"].as_str().unwrap_or("-").to_string(),
-                        item["updatedAt"].as_str().unwrap_or("-").to_string(),
+                        item.plugin.clone(),
+                        render_operations_cell(Some(item.operations.as_slice())),
+                        item.created_at.clone(),
+                        item.updated_at.clone(),
                     ]
                 })
                 .collect();
@@ -330,14 +353,16 @@ fn print_grants(value: &serde_json::Value, format: Format) {
     }
 }
 
-fn render_operations_cell(operations: Option<&serde_json::Value>) -> String {
-    match operations.and_then(|value| value.as_array()) {
+fn render_operations_cell(operations: Option<&[String]>) -> String {
+    match operations {
         None => "all".to_string(),
-        Some(ops) if ops.is_empty() => "all".to_string(),
+        Some([]) => "all".to_string(),
         Some(ops) => {
             let joined = ops
                 .iter()
-                .filter_map(|op| op.as_str())
+                .map(String::as_str)
+                .map(str::trim)
+                .filter(|op| !op.is_empty())
                 .collect::<Vec<_>>()
                 .join(",");
             if joined.is_empty() {
@@ -349,24 +374,19 @@ fn render_operations_cell(operations: Option<&serde_json::Value>) -> String {
     }
 }
 
-fn print_tokens(value: &serde_json::Value, format: Format) {
+fn print_tokens(value: &[api::IdentityTokenRecord], format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
-            let items = value.as_array().unwrap_or(&Vec::new()).clone();
-            let rows: Vec<Vec<String>> = items
+            let rows: Vec<Vec<String>> = value
                 .iter()
                 .map(|item| {
                     vec![
-                        item["id"].as_str().unwrap_or("-").to_string(),
-                        item["name"].as_str().unwrap_or("-").to_string(),
-                        format_permissions(item),
-                        string_field(item, &["createdAt", "created_at"])
-                            .unwrap_or("-")
-                            .to_string(),
-                        string_field(item, &["expiresAt", "expires_at"])
-                            .unwrap_or("never")
-                            .to_string(),
+                        item.id.clone(),
+                        item.name.clone(),
+                        format_permissions(Some(item.permissions.as_slice())),
+                        item.created_at.clone(),
+                        display_cell(item.expires_at.as_deref(), "never"),
                     ]
                 })
                 .collect();
@@ -375,42 +395,50 @@ fn print_tokens(value: &serde_json::Value, format: Format) {
     }
 }
 
-fn string_field<'a>(value: &'a serde_json::Value, keys: &[&str]) -> Option<&'a str> {
-    keys.iter().find_map(|key| value[*key].as_str())
-}
-
-fn format_permissions(value: &serde_json::Value) -> String {
-    let Some(permissions) = value["permissions"].as_array() else {
+fn format_permissions(permissions: Option<&[TokenPermission]>) -> String {
+    let Some(permissions) = permissions else {
         return "-".to_string();
     };
     if permissions.is_empty() {
         return "-".to_string();
     }
-    permissions
+
+    let rendered = permissions
         .iter()
         .filter_map(|permission| {
-            let plugin = permission["plugin"].as_str()?;
-            let operations: Vec<&str> = permission["operations"]
-                .as_array()
-                .map(|items| items.iter().filter_map(|item| item.as_str()).collect())
-                .unwrap_or_default();
+            let plugin = permission.plugin.trim();
+            if plugin.is_empty() {
+                return None;
+            }
+            let operations = permission
+                .operations
+                .iter()
+                .map(String::as_str)
+                .map(str::trim)
+                .filter(|operation| !operation.is_empty())
+                .collect::<Vec<_>>();
             if operations.is_empty() {
                 Some(plugin.to_string())
             } else {
                 Some(format!("{plugin}:{}", operations.join(",")))
             }
         })
-        .collect::<Vec<_>>()
-        .join("; ")
-}
-fn encode_path_segment(value: &str) -> String {
-    let mut url = url::Url::parse("https://managed-identities.invalid/").expect("static URL");
-    {
-        let mut segments = url
-            .path_segments_mut()
-            .expect("static URL should support path segments");
-        segments.pop_if_empty();
-        segments.push(value);
+        .collect::<Vec<_>>();
+
+    if rendered.is_empty() {
+        "-".to_string()
+    } else {
+        rendered.join("; ")
     }
-    url.path().trim_start_matches('/').to_string()
+}
+
+fn parse_raw<T>(value: &serde_json::Value) -> Result<T, serde_json::Error>
+where
+    T: DeserializeOwned,
+{
+    serde_json::from_value(value.clone())
+}
+
+fn display_cell(value: Option<&str>, fallback: &str) -> String {
+    value.unwrap_or(fallback).to_string()
 }

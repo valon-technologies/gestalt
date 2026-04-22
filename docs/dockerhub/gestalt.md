@@ -1,8 +1,9 @@
 # gestalt Docker image
 
 `gestalt` is a CLI client for the Gestalt API. It connects to a running
-`gestaltd` server and provides commands for authenticating, listing plugins,
-invoking integration operations, and managing credentials.
+`gestaltd` server and provides commands for authenticating, managing workspace
+identities, listing plugins, invoking integration operations, and managing
+credentials.
 
 > **Alpha.** Gestalt is under active development. Images are tagged
 > with alpha versions and may introduce breaking changes. See the
@@ -49,6 +50,42 @@ docker run --rm \
   plugins invoke github search_code -p "query=gestalt org:my-org"
 ```
 
+### Manage managed identities
+
+The same image exposes the top-level `identities` command surface:
+
+```sh
+docker run --rm \
+  -e GESTALT_URL=https://gestalt.example.com \
+  -e GESTALT_API_KEY=gst_api_... \
+  valontechnologies/gestalt:latest \
+  identities list
+
+docker run --rm \
+  -e GESTALT_URL=https://gestalt.example.com \
+  -e GESTALT_API_KEY=gst_api_... \
+  valontechnologies/gestalt:latest \
+  identities create --name "Release Bot"
+
+docker run --rm \
+  -e GESTALT_URL=https://gestalt.example.com \
+  -e GESTALT_API_KEY=gst_api_... \
+  valontechnologies/gestalt:latest \
+  identities members add <identity-id> deployer@example.com --role editor
+
+docker run --rm \
+  -e GESTALT_URL=https://gestalt.example.com \
+  -e GESTALT_API_KEY=gst_api_... \
+  valontechnologies/gestalt:latest \
+  identities grants set <identity-id> github --operation issues.list
+
+docker run --rm \
+  -e GESTALT_URL=https://gestalt.example.com \
+  -e GESTALT_API_KEY=gst_api_... \
+  valontechnologies/gestalt:latest \
+  identities tokens create <identity-id> --name ci --permission github:issues.list
+```
+
 ### Use in CI pipelines
 
 The Docker image works well in CI environments where installing the native
@@ -75,10 +112,11 @@ jobs:
 | `plugins connect NAME` | Connect a plugin via OAuth or manual authentication |
 | `plugins disconnect NAME` | Disconnect a plugin |
 | `plugins invoke NAME OP` | Execute a plugin operation |
+| `identities ...` | Manage managed identities, members, grants, and identity-owned tokens |
 | `tokens create/list/revoke` | Manage API tokens |
 
 Use `--format json` or `--format table` to control output format. See the
-[CLI reference](https://gestaltd.ai/reference/cli) for the full command list.
+[CLI guide](https://gestaltd.ai/client/cli) for the full command list.
 
 ## Environment variables
 
@@ -103,5 +141,5 @@ of the Docker image.
 ## Learn more
 
 - Docs: https://gestaltd.ai
-- CLI reference: https://gestaltd.ai/reference/cli
+- CLI guide: https://gestaltd.ai/client/cli
 - Source: https://github.com/valon-technologies/gestalt

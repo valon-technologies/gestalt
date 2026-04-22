@@ -57,6 +57,154 @@ fn test_cli_creates_identity() {
 }
 
 #[test]
+fn test_cli_gets_identity() {
+    let mut server = Server::new();
+    let _get = authed_json_mock!(server, Method::GET, "/api/v1/identities/id-1", StatusCode::OK)
+        .with_body(
+            r#"{"id":"id-1","displayName":"Release Bot","role":"admin","createdAt":"2026-04-15T00:00:00Z","updatedAt":"2026-04-16T00:00:00Z"}"#,
+        )
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["identities", "get", "id-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Release Bot"))
+        .stdout(predicate::str::contains("2026-04-16T00:00:00Z"));
+}
+
+#[test]
+fn test_cli_get_identity_preserves_provider_passthrough_json() {
+    let mut server = Server::new();
+    let _get = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/identities/read",
+        StatusCode::OK
+    )
+    .with_body(r#"{"operation":"read","ok":true}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["--format", "json", "identities", "get", "read"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(r#""operation": "read""#))
+        .stdout(predicate::str::contains(r#""ok": true"#));
+}
+
+#[test]
+fn test_cli_updates_identity() {
+    let mut server = Server::new();
+    let _update = authed_json_mock!(server, Method::PATCH, "/api/v1/identities/id-1", StatusCode::OK)
+        .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+        .match_body(Matcher::JsonString(
+            r#"{"displayName":"Release Automation"}"#.to_string(),
+        ))
+        .with_body(
+            r#"{"id":"id-1","displayName":"Release Automation","role":"admin","createdAt":"2026-04-15T00:00:00Z","updatedAt":"2026-04-16T00:00:00Z"}"#,
+        )
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "--format",
+            "json",
+            "identities",
+            "update",
+            "id-1",
+            "--name",
+            "Release Automation",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            r#""displayName": "Release Automation""#,
+        ))
+        .stdout(predicate::str::contains(
+            r#""updatedAt": "2026-04-16T00:00:00Z""#,
+        ));
+}
+
+#[test]
+fn test_cli_update_identity_preserves_provider_passthrough_json() {
+    let mut server = Server::new();
+    let _update = authed_json_mock!(
+        server,
+        Method::PATCH,
+        "/api/v1/identities/update",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"displayName":"Updated"}"#.to_string(),
+    ))
+    .with_body(r#"{"operation":"update","accepted":true}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "--format",
+            "json",
+            "identities",
+            "update",
+            "update",
+            "--name",
+            "Updated",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(r#""operation": "update""#))
+        .stdout(predicate::str::contains(r#""accepted": true"#));
+}
+
+#[test]
+fn test_cli_deletes_identity() {
+    let mut server = Server::new();
+    let _delete = authed_json_mock!(
+        server,
+        Method::DELETE,
+        "/api/v1/identities/id-1",
+        StatusCode::OK
+    )
+    .with_body(r#"{"status":"deleted"}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["identities", "delete", "id-1"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Identity id-1 deleted."));
+}
+
+#[test]
+fn test_cli_delete_identity_falls_back_for_provider_passthrough_table_output() {
+    let mut server = Server::new();
+    let _delete = authed_json_mock!(
+        server,
+        Method::DELETE,
+        "/api/v1/identities/delete",
+        StatusCode::OK
+    )
+    .with_body(r#"{"operation":"delete","ok":true}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["identities", "delete", "delete"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("operation"))
+        .stdout(predicate::str::contains("delete"))
+        .stderr(predicate::str::contains("Identity delete deleted.").not());
+}
+
+#[test]
 fn test_cli_adds_identity_member() {
     let mut server = Server::new();
     let _member = authed_json_mock!(
@@ -185,6 +333,24 @@ fn test_cli_lists_explicit_empty_grant_operations_as_plugin_wide_access() {
 }
 
 #[test]
+fn test_cli_identities_help_lists_first_class_subcommands() {
+    let home = tempfile::tempdir().unwrap();
+    cli_command(home.path())
+        .args(["identities", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Manage workspace-owned identities",
+        ))
+        .stdout(predicate::str::contains("list"))
+        .stdout(predicate::str::contains("get"))
+        .stdout(predicate::str::contains("update"))
+        .stdout(predicate::str::contains("members"))
+        .stdout(predicate::str::contains("grants"))
+        .stdout(predicate::str::contains("tokens"));
+}
+
+#[test]
 fn test_cli_lists_identity_tokens() {
     let mut server = Server::new();
     let _tokens = authed_json_mock!(
@@ -207,6 +373,57 @@ fn test_cli_lists_identity_tokens() {
         .stdout(predicate::str::contains("github"))
         .stdout(predicate::str::contains("slack:chat.po"))
         .stdout(predicate::str::contains("channels.hi"));
+}
+
+#[test]
+fn test_cli_list_identity_tokens_json_preserves_scopes() {
+    let mut server = Server::new();
+    let _tokens = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/identities/agent-1/tokens",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"[{"id":"itok-1","name":"deploy-bot","scopes":"github slack","permissions":[{"plugin":"github"}],"createdAt":"2026-04-15T00:00:00Z"}]"#,
+    )
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "--format",
+            "json",
+            "identities",
+            "tokens",
+            "list",
+            "agent-1",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(r#""scopes": "github slack""#))
+        .stdout(predicate::str::contains(r#""plugin": "github""#));
+}
+
+#[test]
+fn test_cli_list_identity_tokens_falls_back_for_provider_passthrough_table_output() {
+    let mut server = Server::new();
+    let _tokens = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/identities/agent-1/tokens",
+        StatusCode::OK
+    )
+    .with_body(r#"{"operation":"list_tokens","ok":true}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["identities", "tokens", "list", "agent-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("operation"))
+        .stdout(predicate::str::contains("list_tokens"));
 }
 
 #[test]
