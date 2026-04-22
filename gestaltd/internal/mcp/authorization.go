@@ -16,7 +16,7 @@ func allowOperation(ctx context.Context, cfg Config, p *principal.Principal, pro
 	if cfg.Authorizer == nil {
 		return true
 	}
-	if cfg.Authorizer.IsWorkload(p) {
+	if principal.IsWorkloadPrincipal(p) {
 		return cfg.Authorizer.AllowOperation(ctx, p, provider, operation)
 	}
 	op, ok := catalogOperationForTool(ctx, cfg, provider, operation)

@@ -256,7 +256,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		conn = boundCredential.Connection
 		instance = boundCredential.Instance
 	}
-	if b.authorizer != nil && b.authorizer.IsWorkload(p) && !b.authorizer.AllowOperation(ctx, p, providerName, operation) {
+	if b.authorizer != nil && principal.IsWorkloadPrincipal(p) && !b.authorizer.AllowOperation(ctx, p, providerName, operation) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
 	}
 
@@ -429,7 +429,7 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 		conn = boundCredential.Connection
 		instance = boundCredential.Instance
 	}
-	if b.authorizer != nil && b.authorizer.IsWorkload(p) && !b.authorizer.AllowOperation(ctx, p, providerName, graphQLOperationID) {
+	if b.authorizer != nil && principal.IsWorkloadPrincipal(p) && !b.authorizer.AllowOperation(ctx, p, providerName, graphQLOperationID) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, graphQLOperationID))
 	}
 	if conn == "" && b.connMapper != nil {

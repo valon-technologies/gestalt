@@ -150,7 +150,7 @@ func withSessionAccessContext(ctx context.Context, cfg Config, provName string) 
 		return ctx
 	}
 	p := principal.FromContext(ctx)
-	if p == nil || cfg.Authorizer.IsWorkload(p) {
+	if p == nil || principal.IsWorkloadPrincipal(p) {
 		return ctx
 	}
 	access, allowed := cfg.Authorizer.ResolveAccess(ctx, p, provName)

@@ -201,18 +201,11 @@ func (a *ProviderBackedAuthorizer) ResolveWorkloadToken(token string) (*principa
 	return a.base.ResolveWorkloadToken(token)
 }
 
-func (a *ProviderBackedAuthorizer) IsWorkload(p *principal.Principal) bool {
-	if a == nil {
-		return false
-	}
-	return a.base.IsWorkload(p)
-}
-
 func (a *ProviderBackedAuthorizer) AllowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
 	if a == nil {
 		return true
 	}
-	if a.base.IsWorkload(p) || principal.IsSystemPrincipal(p) {
+	if principal.IsWorkloadPrincipal(p) || principal.IsSystemPrincipal(p) {
 		return a.base.AllowProvider(ctx, p, provider)
 	}
 	_, allowed := a.ResolveAccess(ctx, p, provider)
@@ -223,7 +216,7 @@ func (a *ProviderBackedAuthorizer) AllowOperation(ctx context.Context, p *princi
 	if a == nil {
 		return true
 	}
-	if a.base.IsWorkload(p) || principal.IsSystemPrincipal(p) {
+	if principal.IsWorkloadPrincipal(p) || principal.IsSystemPrincipal(p) {
 		return a.base.AllowOperation(ctx, p, provider, operation)
 	}
 	return a.AllowProvider(ctx, p, provider)
@@ -240,7 +233,7 @@ func (a *ProviderBackedAuthorizer) ResolveAccess(ctx context.Context, p *princip
 	if a == nil {
 		return AccessContext{}, true
 	}
-	if a.base.IsWorkload(p) || principal.IsSystemPrincipal(p) {
+	if principal.IsWorkloadPrincipal(p) || principal.IsSystemPrincipal(p) {
 		return a.base.ResolveAccess(ctx, p, provider)
 	}
 
@@ -278,7 +271,7 @@ func (a *ProviderBackedAuthorizer) ResolvePolicyAccess(ctx context.Context, p *p
 	if a == nil {
 		return AccessContext{}, true
 	}
-	if a.base.IsWorkload(p) {
+	if principal.IsWorkloadPrincipal(p) {
 		return a.base.ResolvePolicyAccess(ctx, p, policyName)
 	}
 	policyName = strings.TrimSpace(policyName)
@@ -315,7 +308,7 @@ func (a *ProviderBackedAuthorizer) ResolveAdminAccess(ctx context.Context, p *pr
 	if a == nil {
 		return AccessContext{}, true
 	}
-	if a.base.IsWorkload(p) {
+	if principal.IsWorkloadPrincipal(p) {
 		return a.base.ResolveAdminAccess(ctx, p, policyName)
 	}
 	policyName = strings.TrimSpace(policyName)
@@ -365,7 +358,7 @@ func (a *ProviderBackedAuthorizer) AllowCatalogOperation(ctx context.Context, p 
 	if a == nil {
 		return true
 	}
-	if a.base.IsWorkload(p) || principal.IsSystemPrincipal(p) {
+	if principal.IsWorkloadPrincipal(p) || principal.IsSystemPrincipal(p) {
 		return a.base.AllowCatalogOperation(ctx, p, provider, op)
 	}
 

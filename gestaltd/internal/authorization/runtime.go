@@ -18,7 +18,6 @@ type RuntimeAuthorizer interface {
 
 	ReloadAuthorizationState(ctx context.Context) error
 
-	IsWorkload(p *principal.Principal) bool
 	AllowProvider(ctx context.Context, p *principal.Principal, provider string) bool
 	AllowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool
 	Binding(p *principal.Principal, provider string) (CredentialBinding, bool)

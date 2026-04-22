@@ -185,16 +185,11 @@ func (a *Authorizer) ResolveWorkloadToken(token string) (*principal.ResolvedWork
 	return &principal.ResolvedWorkload{ID: workload.ID, DisplayName: workload.DisplayName}, true
 }
 
-func (a *Authorizer) IsWorkload(p *principal.Principal) bool {
-	p = principal.Canonicalized(p)
-	return p != nil && p.Kind == principal.KindWorkload
-}
-
 func (a *Authorizer) AllowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
 	if principal.IsSystemPrincipal(p) {
 		return principal.AllowsProviderPermission(p, provider)
 	}
-	if !a.IsWorkload(p) {
+	if !principal.IsWorkloadPrincipal(p) {
 		_, allowed := a.ResolveAccess(ctx, p, provider)
 		return allowed
 	}
@@ -206,7 +201,7 @@ func (a *Authorizer) AllowOperation(ctx context.Context, p *principal.Principal,
 	if principal.IsSystemPrincipal(p) {
 		return principal.AllowsOperationPermission(p, provider, operation)
 	}
-	if !a.IsWorkload(p) {
+	if !principal.IsWorkloadPrincipal(p) {
 		return a.AllowProvider(ctx, p, provider)
 	}
 	binding, ok := a.bindingForPrincipal(p, provider)
@@ -221,7 +216,7 @@ func (a *Authorizer) AllowOperation(ctx context.Context, p *principal.Principal,
 }
 
 func (a *Authorizer) Binding(p *principal.Principal, provider string) (CredentialBinding, bool) {
-	if !a.IsWorkload(p) {
+	if !principal.IsWorkloadPrincipal(p) {
 		return CredentialBinding{}, false
 	}
 	binding, ok := a.bindingForPrincipal(p, provider)
@@ -238,7 +233,7 @@ func (a *Authorizer) ResolveAccess(_ context.Context, p *principal.Principal, pr
 	if principal.IsSystemPrincipal(p) {
 		return AccessContext{}, principal.AllowsProviderPermission(p, provider)
 	}
-	if a.IsWorkload(p) {
+	if principal.IsWorkloadPrincipal(p) {
 		if _, ok := a.bindingForSubject(p, provider); ok {
 			policyName := strings.TrimSpace(a.providerPolicies[provider])
 			if policyName == "" {
@@ -350,7 +345,7 @@ func (a *Authorizer) ResolvePolicyAccess(_ context.Context, p *principal.Princip
 	if policyName == "" {
 		return AccessContext{}, true
 	}
-	if a.IsWorkload(p) {
+	if principal.IsWorkloadPrincipal(p) {
 		return AccessContext{Policy: policyName}, false
 	}
 	policy := a.policies[policyName]
@@ -377,7 +372,7 @@ func (a *Authorizer) ResolveAdminAccess(_ context.Context, p *principal.Principa
 	if policyName == "" {
 		return AccessContext{}, true
 	}
-	if a.IsWorkload(p) {
+	if principal.IsWorkloadPrincipal(p) {
 		return AccessContext{Policy: policyName}, false
 	}
 	policy := a.policies[policyName]
@@ -400,7 +395,7 @@ func (a *Authorizer) AllowCatalogOperation(ctx context.Context, p *principal.Pri
 	if principal.IsSystemPrincipal(p) {
 		return principal.AllowsOperationPermission(p, provider, op.ID)
 	}
-	if a.IsWorkload(p) {
+	if principal.IsWorkloadPrincipal(p) {
 		return a.AllowOperation(ctx, p, provider, op.ID)
 	}
 	access, allowed := a.ResolveAccess(ctx, p, provider)
@@ -426,7 +421,7 @@ func (a *Authorizer) AllowCatalogOperation(ctx context.Context, p *principal.Pri
 }
 
 func (a *Authorizer) bindingForPrincipal(p *principal.Principal, provider string) (WorkloadProviderBinding, bool) {
-	if !a.IsWorkload(p) {
+	if !principal.IsWorkloadPrincipal(p) {
 		return WorkloadProviderBinding{}, false
 	}
 	if binding, ok := a.bindingForSubject(p, provider); ok {

@@ -2873,6 +2873,7 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 	scheme := manifest.Spec.SecuritySchemes["signed"]
 	if scheme == nil {
 		t.Fatal(`manifest.Spec.SecuritySchemes["signed"] = nil, want generated scheme`)
+		return
 	}
 	if scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeHMAC {
 		t.Fatalf("scheme.Type = %q, want %q", scheme.Type, providermanifestv1.HTTPSecuritySchemeTypeHMAC)
@@ -2899,6 +2900,7 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 	binding := manifest.Spec.HTTP["command"]
 	if binding == nil {
 		t.Fatal(`manifest.Spec.HTTP["command"] = nil, want generated HTTP binding`)
+		return
 	}
 	if binding.Path != "/command" {
 		t.Fatalf("binding.Path = %q, want %q", binding.Path, "/command")
