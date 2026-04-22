@@ -615,7 +615,11 @@ func (s *Server) listManagedIdentityGrants(w http.ResponseWriter, r *http.Reques
 	p := PrincipalFromContext(r.Context())
 	out := make([]managedIdentityGrantInfo, 0, len(grants))
 	for _, grant := range grants {
-		if !s.managedIdentityGrantVisibleToActor(r.Context(), grant.Plugin, p, actor.Membership.Role) {
+		if _, err := s.providers.Get(grant.Plugin); err != nil {
+			if !errors.Is(err, core.ErrNotFound) || !managedIdentityRoleAllows(actor.Membership.Role, managedIdentityRoleEditor) {
+				continue
+			}
+		} else if !s.allowProviderContext(r.Context(), p, grant.Plugin) {
 			continue
 		}
 		out = append(out, managedIdentityGrantInfo{
@@ -1044,12 +1048,6 @@ func (s *Server) managedIdentityGrantPluginVisible(ctx context.Context, plugin s
 	return s.allowProviderContext(ctx, p, plugin)
 }
 
-func (s *Server) managedIdentityGrantVisibleToActor(ctx context.Context, plugin string, p *principal.Principal, role string) bool {
-	if _, err := s.providers.Get(plugin); err != nil {
-		return errors.Is(err, core.ErrNotFound) && managedIdentityRoleAllows(role, managedIdentityRoleEditor)
-	}
-	return s.allowProviderContext(ctx, p, plugin)
-}
 func (s *Server) managedIdentityGrantCatalog(ctx context.Context, plugin string, p *principal.Principal) (*catalog.Catalog, error) {
 	prov, err := s.providers.Get(plugin)
 	if err != nil {
@@ -1099,7 +1097,7 @@ func (s *Server) managedIdentityGrantCatalogTargets(ctx context.Context, plugin 
 		})
 	}
 
-	for _, connection := range s.sessionCatalogConnections(plugin, p, "") {
+	for _, connection := range s.catalogSelectorConfig().SessionCatalogConnections(plugin, p, "") {
 		connection, instance := s.catalogSelectorConfig().WorkloadBindingSelectors(p, plugin, connection, "")
 		addTarget(connection, instance)
 	}
