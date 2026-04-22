@@ -315,8 +315,7 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 		}
 		return nil, false
 	}
-	if p != nil && p.Kind == principal.KindWorkload {
-		writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
+	if err := rejectWorkloadCaller(w, p); err != nil {
 		return nil, false
 	}
 

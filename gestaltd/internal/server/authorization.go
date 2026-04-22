@@ -40,8 +40,20 @@ func (s *Server) workloadBinding(p *principal.Principal, provider string) (autho
 	return s.authorizer.Binding(p, provider)
 }
 
+func isWorkloadPrincipal(p *principal.Principal) bool {
+	return p != nil && p.Kind == principal.KindWorkload
+}
+
+func rejectWorkloadCaller(w http.ResponseWriter, p *principal.Principal) error {
+	if !isWorkloadPrincipal(p) {
+		return nil
+	}
+	writeError(w, http.StatusForbidden, errWorkloadForbidden.Error())
+	return errWorkloadForbidden
+}
+
 func rejectWorkloadSelectors(w http.ResponseWriter, p *principal.Principal, connection, instance string) error {
-	if p == nil || p.Kind != principal.KindWorkload {
+	if !isWorkloadPrincipal(p) {
 		return nil
 	}
 	if connection == "" && instance == "" {

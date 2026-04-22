@@ -38,9 +38,8 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, metricProviderName, "manual", "complete", connectionMode, auditErr != nil)
 		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.manual.connect", auditAllowed, auditErr, auditTarget)
 	}()
-	if p := PrincipalFromContext(r.Context()); p != nil && p.Kind == principal.KindWorkload {
-		auditErr = errWorkloadForbidden
-		writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
+	if err := rejectWorkloadCaller(w, PrincipalFromContext(r.Context())); err != nil {
+		auditErr = err
 		return
 	}
 

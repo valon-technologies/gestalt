@@ -133,10 +133,10 @@ func (s *Server) resolveRequestPrincipalWithResolver(r *http.Request, resolver *
 
 	if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
 		p, err := resolver.ResolveToken(r.Context(), c.Value)
-		if p != nil && p.Kind != principal.KindWorkload {
+		if p != nil && !isWorkloadPrincipal(p) {
 			return p, nil
 		}
-		if p != nil && p.Kind == principal.KindWorkload {
+		if isWorkloadPrincipal(p) {
 			lastErr = principal.ErrInvalidToken
 		} else {
 			lastErr = err
