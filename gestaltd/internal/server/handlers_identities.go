@@ -1100,7 +1100,7 @@ func (s *Server) managedIdentityGrantCatalogTargets(ctx context.Context, plugin 
 	}
 
 	for _, connection := range s.sessionCatalogConnections(plugin, p, "") {
-		connection, instance := s.workloadBindingSelectors(p, plugin, connection, "")
+		connection, instance := s.catalogSelectorConfig().WorkloadBindingSelectors(p, plugin, connection, "")
 		addTarget(connection, instance)
 	}
 	subjectID := ""
@@ -1110,7 +1110,7 @@ func (s *Server) managedIdentityGrantCatalogTargets(ctx context.Context, plugin 
 			subjectID = principal.UserSubjectID(p.UserID)
 		}
 	}
-	if p == nil || isWorkloadPrincipal(p) || subjectID == "" {
+	if p == nil || principal.IsWorkloadPrincipal(p) || subjectID == "" {
 		if len(targets) == 0 {
 			addTarget("", "")
 		}
