@@ -94,6 +94,73 @@ Then import the authored surface as:
 from gestalt import Model, Plugin
 ```
 
+Hosted HTTP subject resolution is exposed directly on the handwritten SDK
+surface. Python plugins can register a local subject resolver and call the
+host's read-only authorization client without vendoring generated protobuf
+code into their own repository:
+
+```python
+import gestalt
+
+plugin = gestalt.Plugin(
+    "agent",
+    securitySchemes={
+        "slack": {
+            "type": "hmac",
+            "secret": {"env": "SLACK_SIGNING_SECRET"},
+            "signatureHeader": "X-Slack-Signature",
+            "signaturePrefix": "v0=",
+            "payloadTemplate": "v0:{header:X-Slack-Request-Timestamp}:{raw_body}",
+            "timestampHeader": "X-Slack-Request-Timestamp",
+            "maxAgeSeconds": 300,
+        }
+    },
+    http={
+        "command": {
+            "path": "/command",
+            "method": "POST",
+            "security": "slack",
+            "target": "handle_slack_command",
+            "requestBody": {
+                "required": True,
+                "content": {"application/x-www-form-urlencoded": {}},
+            },
+            "ack": {"status": 200, "body": {"text": "Working on it..."}},
+        }
+    },
+)
+
+
+@plugin.http_subject
+def resolve_http_subject(
+    request: gestalt.HTTPSubjectRequest,
+    context: gestalt.Request,
+) -> gestalt.Subject:
+    del context
+    team_id = str(request.params.get("team_id", "")).strip()
+    user_id = str(request.params.get("user_id", "")).strip()
+    matches = gestalt.Authorization().search_subjects(
+        {
+            "resource": {
+                "type": "slack_identity",
+                "id": f"team:{team_id}:user:{user_id}",
+            },
+            "action": {"name": "assume"},
+            "subject_type": "user",
+            "page_size": 2,
+        }
+    )
+    if len(matches.subjects) != 1:
+        raise gestalt.http_subject_error(403, "unmapped Slack subject")
+
+    subject = matches.subjects[0]
+    return gestalt.Subject(
+        id=subject.id,
+        kind=subject.type,
+        auth_source="slack",
+    )
+```
+
 ## Local SDK Checks
 
 From `sdk/python`, install the SDK plus its dev tooling and run the checks used

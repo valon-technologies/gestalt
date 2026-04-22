@@ -20,6 +20,7 @@ from gestalt import (
     CatalogOperation,
     ExternalTokenValidator,
     HealthChecker,
+    HTTPSubjectRequest,
     MetadataProvider,
     Plugin,
     PluginProviderAdapter,
@@ -28,10 +29,12 @@ from gestalt import (
     Request,
     S3Provider,
     SessionTTLProvider,
+    Subject,
     WarningsProvider,
     WorkflowProvider,
     _bootstrap,
     _runtime,
+    http_subject_error,
 )
 from gestalt.gen.v1 import authentication_pb2 as _authentication_pb2
 from gestalt.gen.v1 import cache_pb2 as _cache_pb2
@@ -513,6 +516,104 @@ class MainEntrypointTests(unittest.TestCase):
 
         self.assertEqual(execute_response.status, 500)
         self.assertEqual(json.loads(execute_response.body), {"error": "internal error"})
+
+    def test_provider_servicer_resolves_hosted_http_subject(self) -> None:
+        plugin = Plugin("source-name")
+        captured: dict[str, Any] = {}
+
+        @plugin.http_subject
+        def resolve(
+            request: HTTPSubjectRequest,
+            context: Request,
+        ) -> Subject:
+            captured["binding"] = request.binding
+            captured["team_id"] = str(request.params.get("team_id", ""))
+            captured["header"] = request.headers.get("x-slack-signature", [""])[0]
+            captured["query"] = request.query.get("workflow", [""])[0]
+            captured["security_scheme"] = request.security_scheme
+            captured["verified_subject"] = request.verified_subject
+            captured["verified_claim"] = request.verified_claims.get("team_id", "")
+            captured["context_subject"] = context.subject.id
+            captured["context_role"] = context.access.role
+            captured["workflow_run_id"] = str(context.workflow.get("runId", ""))
+            return Subject(
+                id="user:usr_42",
+                kind="user",
+                display_name="Ada Lovelace",
+                auth_source="slack",
+            )
+
+        workflow = struct_pb2.Struct()
+        workflow.update({"runId": "run-789"})
+        request = plugin_pb2.ResolveHTTPSubjectRequest(
+            request=plugin_pb2.HTTPSubjectRequest(
+                binding="command",
+                method="POST",
+                path="/command",
+                content_type="application/x-www-form-urlencoded",
+                headers={
+                    "x-slack-signature": plugin_pb2.StringList(values=["v0=abc123"])
+                },
+                query={"workflow": plugin_pb2.StringList(values=["refresh"])},
+                raw_body=b"team_id=T123&user_id=U456",
+                security_scheme="slack",
+                verified_subject="system:http_binding:agent:command",
+                verified_claims={"team_id": "T123"},
+            ),
+            context=plugin_pb2.RequestContext(
+                subject=plugin_pb2.SubjectContext(id="system:http_binding:agent:command"),
+                access=plugin_pb2.AccessContext(role="admin"),
+                workflow=workflow,
+            ),
+        )
+        json_format.ParseDict(
+            {"team_id": "T123", "user_id": "U456"},
+            request.request.params,
+        )
+
+        response = _runtime._provider_servicer(plugin=plugin).ResolveHTTPSubject(
+            request,
+            mock.Mock(),
+        )
+
+        self.assertEqual(response.subject.id, "user:usr_42")
+        self.assertEqual(response.subject.kind, "user")
+        self.assertEqual(response.subject.display_name, "Ada Lovelace")
+        self.assertEqual(response.subject.auth_source, "slack")
+        self.assertEqual(
+            captured,
+            {
+                "binding": "command",
+                "team_id": "T123",
+                "header": "v0=abc123",
+                "query": "refresh",
+                "security_scheme": "slack",
+                "verified_subject": "system:http_binding:agent:command",
+                "verified_claim": "T123",
+                "context_subject": "system:http_binding:agent:command",
+                "context_role": "admin",
+                "workflow_run_id": "run-789",
+            },
+        )
+
+    def test_provider_servicer_preserves_explicit_http_subject_rejection(self) -> None:
+        plugin = Plugin("source-name")
+
+        @plugin.http_subject
+        def resolve(
+            request: HTTPSubjectRequest,
+            context: Request,
+        ) -> Subject | None:
+            del request, context
+            raise http_subject_error(403, "unmapped Slack subject")
+
+        response = _runtime._provider_servicer(plugin=plugin).ResolveHTTPSubject(
+            plugin_pb2.ResolveHTTPSubjectRequest(),
+            mock.Mock(),
+        )
+
+        self.assertEqual(response.reject_status, 403)
+        self.assertEqual(response.reject_message, "unmapped Slack subject")
 
     def test_provider_servicer_rejects_missing_session_catalog_support(self) -> None:
         plugin = Plugin("source-name")

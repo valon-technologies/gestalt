@@ -34,6 +34,9 @@ Core authoring types
    Response
    OK
    Error
+   Authorization
+   AuthorizationClient
+   ENV_AUTHORIZATION_SOCKET
 
 .. autoclass:: Model
    :members:
@@ -55,6 +58,14 @@ Core authoring types
 
 .. autoexception:: Error
 
+.. autofunction:: Authorization
+
+.. autoclass:: AuthorizationClient
+   :members:
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autodata:: ENV_AUTHORIZATION_SOCKET
+
 Plugin authoring
 ----------------
 
@@ -62,6 +73,10 @@ Plugin authoring
    :nosignatures:
 
    Plugin
+   http_subject
+   HTTPSubjectRequest
+   HTTPSubjectResolutionError
+   http_subject_error
    operation
    session_catalog
    SessionCatalogProvider
@@ -73,6 +88,14 @@ Plugin authoring
 .. autoclass:: Plugin
    :members:
    :exclude-members: __dict__, __module__, __weakref__
+
+.. autofunction:: http_subject
+
+.. autoclass:: HTTPSubjectRequest
+
+.. autoexception:: HTTPSubjectResolutionError
+
+.. autofunction:: http_subject_error
 
 .. autofunction:: operation
 

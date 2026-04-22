@@ -14,9 +14,10 @@ from enum import Enum
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Any, Final, cast
 
-from ._api import Access, Credential, Request, Subject
+from ._api import Access, Credential, Error, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
+from ._http_subject import HTTPSubjectRequest
 from ._operations import INTERNAL_ERROR_MESSAGE
 from ._plugin import Plugin, _module_plugin
 
@@ -649,6 +650,36 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
                 return plugin_pb2.OperationResult(status=status, body=body)
             return plugin_pb2.OperationResult(status=result.status, body=result.body)
 
+        def ResolveHTTPSubject(self, request: Any, context: Any) -> Any:
+            try:
+                subject = plugin.resolve_http_subject(
+                    _http_subject_request_from_proto(getattr(request, "request", None)),
+                    _http_subject_context(getattr(request, "context", None)),
+                )
+            except Error as error:
+                return plugin_pb2.ResolveHTTPSubjectResponse(
+                    reject_status=int(error.status),
+                    reject_message=error.message,
+                )
+            except Exception as error:
+                traceback.print_exception(error)
+                return context.abort(
+                    grpc.StatusCode.UNKNOWN,
+                    f"resolve http subject: {error}",
+                )
+
+            if subject is None:
+                return plugin_pb2.ResolveHTTPSubjectResponse()
+
+            return plugin_pb2.ResolveHTTPSubjectResponse(
+                subject=plugin_pb2.SubjectContext(
+                    id=subject.id,
+                    kind=subject.kind,
+                    display_name=subject.display_name,
+                    auth_source=subject.auth_source,
+                )
+            )
+
         def GetSessionCatalog(self, request: Any, context: Any) -> Any:
             if not plugin.supports_session_catalog():
                 return context.abort(
@@ -879,6 +910,34 @@ def _plugin_request(request: Any) -> Request:
     )
 
 
+def _http_subject_request_from_proto(request: Any) -> HTTPSubjectRequest:
+    if request is None:
+        return HTTPSubjectRequest()
+
+    return HTTPSubjectRequest(
+        binding=getattr(request, "binding", ""),
+        method=getattr(request, "method", ""),
+        path=getattr(request, "path", ""),
+        content_type=getattr(request, "content_type", ""),
+        headers=_string_lists_from_proto(getattr(request, "headers", {})),
+        query=_string_lists_from_proto(getattr(request, "query", {})),
+        params=_optional_message_to_dict(request=request, field_name="params"),
+        raw_body=bytes(getattr(request, "raw_body", b"")),
+        security_scheme=getattr(request, "security_scheme", ""),
+        verified_subject=getattr(request, "verified_subject", ""),
+        verified_claims=dict(getattr(request, "verified_claims", {})),
+    )
+
+
+def _http_subject_context(request_context: Any) -> Request:
+    return Request(
+        subject=_subject_from_proto(request_context),
+        credential=_credential_from_proto(request_context),
+        access=_access_from_proto(request_context),
+        workflow=_workflow_from_proto(request_context),
+    )
+
+
 def _subject_from_proto(request_context: Any) -> Subject:
     if request_context is None:
         return Subject()
@@ -949,6 +1008,29 @@ def _message_to_dict(
         message,
         preserving_proto_field_name=True,
     )
+
+
+def _optional_message_to_dict(*, request: Any, field_name: str) -> dict[str, Any]:
+    if request is None:
+        return {}
+    if hasattr(request, "HasField") and not request.HasField(field_name):
+        return {}
+
+    message = getattr(request, field_name, None)
+    if message is None:
+        return {}
+
+    return json_format.MessageToDict(
+        message,
+        preserving_proto_field_name=True,
+    )
+
+
+def _string_lists_from_proto(values: Any) -> dict[str, list[str]]:
+    output: dict[str, list[str]] = {}
+    for key, value in dict(values or {}).items():
+        output[str(key)] = [str(entry) for entry in getattr(value, "values", [])]
+    return output
 
 
 def _provider_metadata(

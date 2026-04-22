@@ -14,8 +14,9 @@ from typing import TYPE_CHECKING, Any, Final
 
 import yaml
 
-from ._api import Request
+from ._api import Request, Subject
 from ._catalog_helpers import catalog_parameters
+from ._http_subject import HTTPSubjectRequest
 from ._manifest_metadata import (
     HTTPBinding,
     HTTPSecurityScheme,
@@ -65,10 +66,16 @@ class Plugin:
         security_schemes: Mapping[str, HTTPSecurityScheme] | None = None,
         securitySchemes: Mapping[str, HTTPSecurityScheme] | None = None,
         http: Mapping[str, HTTPBinding] | None = None,
+        resolve_http_subject: Any | None = None,
+        resolveHTTPSubject: Any | None = None,
     ) -> None:
         if security_schemes is not None and securitySchemes is not None:
             raise ValueError(
                 "security_schemes and securitySchemes cannot both be provided"
+            )
+        if resolve_http_subject is not None and resolveHTTPSubject is not None:
+            raise ValueError(
+                "resolve_http_subject and resolveHTTPSubject cannot both be provided"
             )
 
         self.name = _slug_name(name)
@@ -76,6 +83,7 @@ class Plugin:
         self._operations: dict[str, OperationDefinition] = {}
         self._configure_handler: Any = None
         self._session_catalog_handler: tuple[Any, bool] | None = None
+        self._http_subject_handler: tuple[Any, int] | None = None
         self._security_schemes = copy.deepcopy(
             dict(
                 security_schemes
@@ -84,6 +92,16 @@ class Plugin:
             )
         )
         self._http = copy.deepcopy(dict(http or {}))
+        raw_http_subject_handler = (
+            resolve_http_subject
+            if resolve_http_subject is not None
+            else resolveHTTPSubject
+        )
+        if raw_http_subject_handler is not None:
+            self._http_subject_handler = (
+                raw_http_subject_handler,
+                _inspect_http_subject_handler(raw_http_subject_handler),
+            )
 
     @property
     def security_schemes(self) -> dict[str, HTTPSecurityScheme]:
@@ -128,6 +146,12 @@ class Plugin:
         """Register a per-request catalog hook."""
 
         self._session_catalog_handler = (func, _inspect_session_catalog_handler(func))
+        return func
+
+    def http_subject(self, func: Any) -> Any:
+        """Register a hosted HTTP subject-resolution hook."""
+
+        self._http_subject_handler = (func, _inspect_http_subject_handler(func))
         return func
 
     def operation(
@@ -258,6 +282,26 @@ class Plugin:
             return run_sync(handler(request))
         return run_sync(handler())
 
+    def resolve_http_subject(
+        self,
+        request: HTTPSubjectRequest,
+        context: Request,
+    ) -> Any:
+        """Resolve a concrete Gestalt subject for a hosted HTTP request."""
+
+        definition = self._resolve_http_subject_handler()
+        if definition is None:
+            return None
+
+        handler, parameter_count = definition
+        cloned_request = copy.deepcopy(request)
+        cloned_context = copy.deepcopy(context)
+        if parameter_count == 1:
+            return _normalize_http_subject_result(run_sync(handler(cloned_request)))
+        return _normalize_http_subject_result(
+            run_sync(handler(cloned_request, cloned_context))
+        )
+
     def serve(self) -> None:
         """Start the integration runtime for this plugin."""
 
@@ -300,6 +344,27 @@ class Plugin:
                 _inspect_session_catalog_handler(session_catalog),
             )
         return self._session_catalog_handler
+
+    def _resolve_http_subject_handler(self) -> tuple[Any, int] | None:
+        if self._http_subject_handler is not None:
+            return self._http_subject_handler
+        if not self._module_name:
+            return None
+
+        module = sys.modules.get(self._module_name)
+        if module is None:
+            return None
+
+        handler = getattr(module, "resolve_http_subject", None)
+        if (
+            callable(handler)
+            and getattr(handler, "__module__", None) == module.__name__
+        ):
+            self._http_subject_handler = (
+                handler,
+                _inspect_http_subject_handler(handler),
+            )
+        return self._http_subject_handler
 
 
 class _ModulePluginRegistry:
@@ -393,6 +458,18 @@ def session_catalog(func: Any | None = None, /) -> Any:
     return decorator(func)
 
 
+def http_subject(func: Any | None = None, /) -> Any:
+    """Register a hosted HTTP subject hook on the implicit module plugin."""
+
+    def decorator(handler: Any) -> Any:
+        plugin = _MODULE_PLUGINS.for_function(handler)
+        return plugin.http_subject(handler)
+
+    if func is None:
+        return decorator
+    return decorator(func)
+
+
 def _module_plugin(module: types.ModuleType) -> "Plugin":
     return _MODULE_PLUGINS.for_module(module)
 
@@ -425,6 +502,57 @@ def _inspect_session_catalog_handler(func: Any) -> bool:
             "session catalog handler parameter must be annotated as gestalt.Request"
         )
     return True
+
+
+def _inspect_http_subject_handler(func: Any) -> int:
+    signature = inspect.signature(func)
+    parameters = list(signature.parameters.values())
+    type_hints = inspect.get_annotations(func, eval_str=True)
+
+    if len(parameters) not in (1, 2):
+        raise TypeError(
+            "http subject handlers must declare one or two parameters"
+        )
+
+    request_annotation = type_hints.get(
+        parameters[0].name, parameters[0].annotation
+    )
+    if request_annotation not in (inspect.Signature.empty, HTTPSubjectRequest):
+        raise TypeError(
+            "http subject handler request parameter must be annotated as gestalt.HTTPSubjectRequest"
+        )
+
+    if len(parameters) == 2:
+        context_annotation = type_hints.get(
+            parameters[1].name, parameters[1].annotation
+        )
+        if context_annotation not in (inspect.Signature.empty, Request):
+            raise TypeError(
+                "http subject handler context parameter must be annotated as gestalt.Request"
+            )
+
+    return len(parameters)
+
+
+def _normalize_http_subject_result(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, Subject):
+        return value
+    if isinstance(value, Request):
+        raise TypeError("http subject handlers must return gestalt.Subject or a mapping")
+    if isinstance(value, Mapping):
+        return Subject(
+            id=str(value.get("id", "")),
+            kind=str(value.get("kind", "")),
+            display_name=str(
+                value.get("display_name", value.get("displayName", ""))
+            ),
+            auth_source=str(
+                value.get("auth_source", value.get("authSource", ""))
+            ),
+        )
+    raise TypeError("http subject handlers must return gestalt.Subject, a mapping, or None")
 
 
 def _catalog_operation_dict(operation: OperationDefinition) -> dict[str, Any]:

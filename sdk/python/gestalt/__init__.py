@@ -34,6 +34,12 @@ from ._api import (
     Subject,
     field,
 )
+from ._authorization import ENV_AUTHORIZATION_SOCKET, Authorization, AuthorizationClient
+from ._http_subject import (
+    HTTPSubjectRequest,
+    HTTPSubjectResolutionError,
+    http_subject_error,
+)
 from ._manifest_metadata import (
     HTTPAck,
     HTTPBinding,
@@ -66,6 +72,7 @@ _LAZY_EXPORTS = {
     "CompleteLoginRequest": ("._providers", "CompleteLoginRequest"),
     "CopyOptions": ("._s3", "CopyOptions"),
     "Cursor": ("._indexeddb", "Cursor"),
+    "http_subject": ("._plugin", "http_subject"),
     "ENV_PLUGIN_INVOKER_SOCKET": ("._invoker", "ENV_PLUGIN_INVOKER_SOCKET"),
     "ENV_PLUGIN_INVOKER_SOCKET_TOKEN": ("._invoker", "ENV_PLUGIN_INVOKER_SOCKET_TOKEN"),
     "ENV_S3_SOCKET": ("._s3", "ENV_S3_SOCKET"),
@@ -131,6 +138,8 @@ def __getattr__(name: str):
 __all__ = [
     "AlreadyExistsError",
     "AuthenticationProvider",
+    "Authorization",
+    "AuthorizationClient",
     "AuthenticatedUser",
     "Cache",
     "CacheEntry",
@@ -150,6 +159,7 @@ __all__ = [
     "Closer",
     "CompleteLoginRequest",
     "Cursor",
+    "ENV_AUTHORIZATION_SOCKET",
     "Error",
     "ENV_S3_SOCKET",
     "ENV_PLUGIN_INVOKER_SOCKET",
@@ -163,6 +173,8 @@ __all__ = [
     "HTTPRequestBody",
     "HTTPSecretRef",
     "HTTPSecurityScheme",
+    "HTTPSubjectRequest",
+    "HTTPSubjectResolutionError",
     "Index",
     "IndexedDB",
     "IndexSchema",
@@ -211,6 +223,8 @@ __all__ = [
     "ByteRange",
     "CopyOptions",
     "field",
+    "http_subject",
+    "http_subject_error",
     "indexeddb_socket_env",
     "indexeddb_socket_token_env",
     "operation",
