@@ -27,11 +27,15 @@ type Config struct {
 	Authorizer       authorization.RuntimeAuthorizer
 	AllowedProviders []string
 	ToolPrefixes     map[string]string
+	ToolTargets      *toolTargetIndex
 	IncludeREST      map[string]bool
 	MCPConnection    map[string]string
 }
 
 func NewServer(cfg Config) *mcpserver.MCPServer {
+	if cfg.ToolTargets == nil {
+		cfg.ToolTargets = newToolTargetIndex()
+	}
 	hooks := &mcpserver.Hooks{}
 	srv := mcpserver.NewMCPServer(
 		serverName,
