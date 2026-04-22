@@ -79,6 +79,11 @@ func BuildStaticConnectionPlan(plugin *ProviderEntry, manifestPlugin *providerma
 		resolved.Connection = conn
 		plan.surfaces[surface] = resolved
 	}
+	if _, hasOpenAPI := plan.surfaces[SpecSurfaceOpenAPI]; hasOpenAPI {
+		if _, hasGraphQL := plan.surfaces[SpecSurfaceGraphQL]; hasGraphQL {
+			return StaticConnectionPlan{}, fmt.Errorf("openapi and graphql surfaces cannot both be configured for the same plugin")
+		}
+	}
 
 	if err := plan.validateConnectionModes(); err != nil {
 		return StaticConnectionPlan{}, err

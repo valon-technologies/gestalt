@@ -455,13 +455,18 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 	for i := range entry.Invokes {
 		entry.Invokes[i].Plugin = strings.TrimSpace(entry.Invokes[i].Plugin)
 		entry.Invokes[i].Operation = strings.TrimSpace(entry.Invokes[i].Operation)
+		entry.Invokes[i].Surface = strings.ToLower(strings.TrimSpace(entry.Invokes[i].Surface))
 		switch {
 		case entry.Invokes[i].Plugin == "":
 			return fmt.Errorf("config validation: plugins.%s.invokes[%d].plugin is required", name, i)
-		case entry.Invokes[i].Operation == "":
-			return fmt.Errorf("config validation: plugins.%s.invokes[%d].operation is required", name, i)
+		case entry.Invokes[i].Operation == "" && entry.Invokes[i].Surface == "":
+			return fmt.Errorf("config validation: plugins.%s.invokes[%d].operation or .surface is required", name, i)
+		case entry.Invokes[i].Operation != "" && entry.Invokes[i].Surface != "":
+			return fmt.Errorf("config validation: plugins.%s.invokes[%d] may set only one of .operation or .surface", name, i)
+		case entry.Invokes[i].Surface != "" && entry.Invokes[i].Surface != string(SpecSurfaceGraphQL):
+			return fmt.Errorf("config validation: plugins.%s.invokes[%d].surface %q is not supported", name, i, entry.Invokes[i].Surface)
 		}
-		key := entry.Invokes[i].Plugin + "\x00" + entry.Invokes[i].Operation
+		key := entry.Invokes[i].Plugin + "\x00op:" + entry.Invokes[i].Operation + "\x00surface:" + entry.Invokes[i].Surface
 		if prev, ok := seenInvokes[key]; ok {
 			return fmt.Errorf("config validation: plugins.%s.invokes[%d] duplicates invokes[%d]", name, i, prev)
 		}

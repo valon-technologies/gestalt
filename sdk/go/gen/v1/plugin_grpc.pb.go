@@ -280,6 +280,7 @@ var IntegrationProvider_ServiceDesc = grpc.ServiceDesc{
 const (
 	PluginInvoker_ExchangeInvocationToken_FullMethodName = "/gestalt.provider.v1.PluginInvoker/ExchangeInvocationToken"
 	PluginInvoker_Invoke_FullMethodName                  = "/gestalt.provider.v1.PluginInvoker/Invoke"
+	PluginInvoker_InvokeGraphQL_FullMethodName           = "/gestalt.provider.v1.PluginInvoker/InvokeGraphQL"
 )
 
 // PluginInvokerClient is the client API for PluginInvoker service.
@@ -288,6 +289,7 @@ const (
 type PluginInvokerClient interface {
 	ExchangeInvocationToken(ctx context.Context, in *ExchangeInvocationTokenRequest, opts ...grpc.CallOption) (*ExchangeInvocationTokenResponse, error)
 	Invoke(ctx context.Context, in *PluginInvokeRequest, opts ...grpc.CallOption) (*OperationResult, error)
+	InvokeGraphQL(ctx context.Context, in *PluginInvokeGraphQLRequest, opts ...grpc.CallOption) (*OperationResult, error)
 }
 
 type pluginInvokerClient struct {
@@ -318,12 +320,23 @@ func (c *pluginInvokerClient) Invoke(ctx context.Context, in *PluginInvokeReques
 	return out, nil
 }
 
+func (c *pluginInvokerClient) InvokeGraphQL(ctx context.Context, in *PluginInvokeGraphQLRequest, opts ...grpc.CallOption) (*OperationResult, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OperationResult)
+	err := c.cc.Invoke(ctx, PluginInvoker_InvokeGraphQL_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginInvokerServer is the server API for PluginInvoker service.
 // All implementations must embed UnimplementedPluginInvokerServer
 // for forward compatibility.
 type PluginInvokerServer interface {
 	ExchangeInvocationToken(context.Context, *ExchangeInvocationTokenRequest) (*ExchangeInvocationTokenResponse, error)
 	Invoke(context.Context, *PluginInvokeRequest) (*OperationResult, error)
+	InvokeGraphQL(context.Context, *PluginInvokeGraphQLRequest) (*OperationResult, error)
 	mustEmbedUnimplementedPluginInvokerServer()
 }
 
@@ -339,6 +352,9 @@ func (UnimplementedPluginInvokerServer) ExchangeInvocationToken(context.Context,
 }
 func (UnimplementedPluginInvokerServer) Invoke(context.Context, *PluginInvokeRequest) (*OperationResult, error) {
 	return nil, status.Error(codes.Unimplemented, "method Invoke not implemented")
+}
+func (UnimplementedPluginInvokerServer) InvokeGraphQL(context.Context, *PluginInvokeGraphQLRequest) (*OperationResult, error) {
+	return nil, status.Error(codes.Unimplemented, "method InvokeGraphQL not implemented")
 }
 func (UnimplementedPluginInvokerServer) mustEmbedUnimplementedPluginInvokerServer() {}
 func (UnimplementedPluginInvokerServer) testEmbeddedByValue()                       {}
@@ -397,6 +413,24 @@ func _PluginInvoker_Invoke_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginInvoker_InvokeGraphQL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginInvokeGraphQLRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginInvokerServer).InvokeGraphQL(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginInvoker_InvokeGraphQL_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginInvokerServer).InvokeGraphQL(ctx, req.(*PluginInvokeGraphQLRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginInvoker_ServiceDesc is the grpc.ServiceDesc for PluginInvoker service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -411,6 +445,10 @@ var PluginInvoker_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Invoke",
 			Handler:    _PluginInvoker_Invoke_Handler,
+		},
+		{
+			MethodName: "InvokeGraphQL",
+			Handler:    _PluginInvoker_InvokeGraphQL_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -32,9 +32,22 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
     connection: string;
     instance: string;
   }> = [];
+  const graphqlCalls: Array<{
+    invocationToken: string;
+    plugin: string;
+    document: string;
+    variables: Record<string, unknown>;
+    connection: string;
+    instance: string;
+  }> = [];
   const exchanges: Array<{
     parentInvocationToken: string;
-    grants: Array<{ plugin: string; operations: string[] }>;
+    grants: Array<{
+      plugin: string;
+      operations: string[];
+      surfaces: string[];
+      allOperations: boolean;
+    }>;
     ttlSeconds: bigint;
   }> = [];
 
@@ -52,6 +65,8 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
               grants: input.grants.map((grant) => ({
                 plugin: grant.plugin,
                 operations: [...grant.operations],
+                surfaces: [...grant.surfaces],
+                allOperations: grant.allOperations,
               })),
               ttlSeconds: input.ttlSeconds,
             });
@@ -81,6 +96,28 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
               }),
             });
           },
+          async invokeGraphQL(input) {
+            const variables = Object.fromEntries(Object.entries(input.variables ?? {}));
+            graphqlCalls.push({
+              invocationToken: input.invocationToken,
+              plugin: input.plugin,
+              document: input.document,
+              variables,
+              connection: input.connection,
+              instance: input.instance,
+            });
+            return create(OperationResultSchema, {
+              status: 208,
+              body: JSON.stringify({
+                invocationToken: input.invocationToken,
+                plugin: input.plugin,
+                document: input.document,
+                variables,
+                connection: input.connection,
+                instance: input.instance,
+              }),
+            });
+          },
         } satisfies Partial<ServiceImpl<typeof PluginInvokerService>>,
       );
     },
@@ -104,6 +141,14 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
         {
           plugin: "github",
           operations: ["get_issue"],
+        },
+        {
+          plugin: "linear",
+          surfaces: ["graphql"],
+        },
+        {
+          plugin: "google_sheets",
+          allOperations: true,
         },
       ],
       ttlSeconds: 45,
@@ -155,6 +200,27 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
       instance: "",
     });
 
+    const graphql = await fromRequest.invokeGraphQL(
+      "linear",
+      "query Viewer($team: String!) { viewer(team: $team) { id } }",
+      {
+        variables: { team: "eng" },
+        connection: "workspace",
+      },
+    );
+
+    expect(graphql.status).toBe(208);
+    expect(JSON.parse(graphql.body)).toEqual({
+      invocationToken: "invocation-token-456",
+      plugin: "linear",
+      document: "query Viewer($team: String!) { viewer(team: $team) { id } }",
+      variables: {
+        team: "eng",
+      },
+      connection: "workspace",
+      instance: "",
+    });
+
     expect(exchanges).toEqual([
       {
         parentInvocationToken: "invocation-token-123",
@@ -162,6 +228,20 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
           {
             plugin: "github",
             operations: ["get_issue"],
+            surfaces: [],
+            allOperations: false,
+          },
+          {
+            plugin: "linear",
+            operations: [],
+            surfaces: ["graphql"],
+            allOperations: false,
+          },
+          {
+            plugin: "google_sheets",
+            operations: [],
+            surfaces: [],
+            allOperations: true,
           },
         ],
         ttlSeconds: 45n,
@@ -188,6 +268,19 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
           text: "hello",
         },
         connection: "",
+        instance: "",
+      },
+    ]);
+
+    expect(graphqlCalls).toEqual([
+      {
+        invocationToken: "invocation-token-456",
+        plugin: "linear",
+        document: "query Viewer($team: String!) { viewer(team: $team) { id } }",
+        variables: {
+          team: "eng",
+        },
+        connection: "workspace",
         instance: "",
       },
     ]);

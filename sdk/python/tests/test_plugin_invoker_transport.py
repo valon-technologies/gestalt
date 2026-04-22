@@ -22,6 +22,7 @@ _server: grpc.Server | None = None
 _socket_path: str = ""
 _previous_socket_env: str | None = None
 _exchange_requests: list[dict[str, Any]] = []
+_graphql_requests: list[dict[str, Any]] = []
 
 
 class _PluginInvokerServicer(plugin_pb2_grpc.PluginInvokerServicer):
@@ -33,6 +34,8 @@ class _PluginInvokerServicer(plugin_pb2_grpc.PluginInvokerServicer):
                     {
                         "plugin": grant.plugin,
                         "operations": list(grant.operations),
+                        "surfaces": list(grant.surfaces),
+                        "all_operations": grant.all_operations,
                     }
                     for grant in request.grants
                 ],
@@ -73,6 +76,41 @@ class _PluginInvokerServicer(plugin_pb2_grpc.PluginInvokerServicer):
             ),
         )
 
+    def InvokeGraphQL(self, request, context):
+        variables = (
+            json_format.MessageToDict(
+                request.variables,
+                preserving_proto_field_name=True,
+            )
+            if request.HasField("variables")
+            else {}
+        )
+        _graphql_requests.append(
+            {
+                "invocation_token": request.invocation_token,
+                "plugin": request.plugin,
+                "document": request.document,
+                "variables": variables,
+                "variables_present": request.HasField("variables"),
+                "connection": request.connection,
+                "instance": request.instance,
+            }
+        )
+        return plugin_pb2.OperationResult(
+            status=208,
+            body=json.dumps(
+                {
+                    "invocation_token": request.invocation_token,
+                    "plugin": request.plugin,
+                    "document": request.document,
+                    "variables": variables,
+                    "variables_present": request.HasField("variables"),
+                    "connection": request.connection,
+                    "instance": request.instance,
+                }
+            ),
+        )
+
 
 def setUpModule() -> None:
     global _server, _socket_path, _previous_socket_env
@@ -107,6 +145,7 @@ def tearDownModule() -> None:
 class PluginInvokerTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _exchange_requests.clear()
+        _graphql_requests.clear()
 
     def test_request_helper_roundtrip(self) -> None:
         request = Request(invocation_token="invoke-123")
@@ -115,6 +154,8 @@ class PluginInvokerTransportTests(unittest.TestCase):
             child_token = client.exchange_invocation_token(
                 grants=[
                     {"plugin": "github", "operations": ["get_issue", " "]},
+                    {"plugin": "linear", "surfaces": [" GraphQL ", " "]},
+                    {"plugin": "google_sheets", "all_operations": True},
                     {"plugin": "   ", "operations": ["ignored"]},
                 ],
                 ttl_seconds=45,
@@ -137,6 +178,20 @@ class PluginInvokerTransportTests(unittest.TestCase):
                         {
                             "plugin": "github",
                             "operations": ["get_issue"],
+                            "surfaces": [],
+                            "all_operations": False,
+                        },
+                        {
+                            "plugin": "linear",
+                            "operations": [],
+                            "surfaces": ["graphql"],
+                            "all_operations": False,
+                        },
+                        {
+                            "plugin": "google_sheets",
+                            "operations": [],
+                            "surfaces": [],
+                            "all_operations": True,
                         }
                     ],
                     "ttl_seconds": 45,
@@ -160,12 +215,60 @@ class PluginInvokerTransportTests(unittest.TestCase):
             },
         )
 
+    def test_invoke_graphql_roundtrip(self) -> None:
+        with PluginInvoker("invoke-graphql") as client:
+            response = client.invoke_graphql(
+                "linear",
+                "  query Viewer($team: String!) { viewer(team: $team) { id } }  ",
+                {"team": "eng"},
+                connection="workspace",
+            )
+
+        self.assertEqual(response.status, 208)
+        self.assertEqual(
+            json.loads(response.body),
+            {
+                "invocation_token": "invoke-graphql",
+                "plugin": "linear",
+                "document": "query Viewer($team: String!) { viewer(team: $team) { id } }",
+                "variables": {
+                    "team": "eng",
+                },
+                "variables_present": True,
+                "connection": "workspace",
+                "instance": "",
+            },
+        )
+        self.assertEqual(
+            _graphql_requests,
+            [
+                {
+                    "invocation_token": "invoke-graphql",
+                    "plugin": "linear",
+                    "document": "query Viewer($team: String!) { viewer(team: $team) { id } }",
+                    "variables": {
+                        "team": "eng",
+                    },
+                    "variables_present": True,
+                    "connection": "workspace",
+                    "instance": "",
+                }
+            ],
+        )
+
     def test_invocation_token_constructor_roundtrip(self) -> None:
         with PluginInvoker("invoke-456") as client:
             response = client.invoke("slack", "plain_text")
 
         self.assertEqual(response.status, 200)
         self.assertEqual(response.body, "plain response")
+
+    def test_invoke_graphql_requires_nonempty_document(self) -> None:
+        with PluginInvoker("invoke-graphql-empty") as client:
+            with self.assertRaisesRegex(
+                RuntimeError, "plugin invoker: graphql document is required"
+            ):
+                client.invoke_graphql("linear", "   ")
 
     def test_empty_dict_params_are_preserved_as_present(self) -> None:
         with PluginInvoker("invoke-789") as client:

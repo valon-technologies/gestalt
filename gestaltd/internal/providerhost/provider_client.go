@@ -45,7 +45,7 @@ type remoteProviderBase struct {
 	closer       io.Closer
 	invTokens    *InvocationTokenManager
 	callerPlugin string
-	invokeGrants map[string]map[string]struct{}
+	invokeGrants invocationGrants
 }
 
 // RemoteProviderOption configures a remote provider returned by NewRemoteProvider.
@@ -61,10 +61,10 @@ func WithInvocationTokens(tokens *InvocationTokenManager) RemoteProviderOption {
 	return func(b *remoteProviderBase) { b.invTokens = tokens }
 }
 
-func WithInvocationTokenSubject(pluginName string, grants map[string]map[string]struct{}) RemoteProviderOption {
+func WithInvocationTokenSubject(pluginName string, grants invocationGrants) RemoteProviderOption {
 	return func(b *remoteProviderBase) {
 		b.callerPlugin = strings.TrimSpace(pluginName)
-		b.invokeGrants = cloneOperationMap(grants)
+		b.invokeGrants = cloneInvocationGrants(grants)
 	}
 }
 

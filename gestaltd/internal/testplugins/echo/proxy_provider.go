@@ -32,6 +32,15 @@ type invokePluginInput struct {
 	Params          map[string]any `json:"params,omitempty"`
 }
 
+type invokePluginGraphQLInput struct {
+	Plugin          string         `json:"plugin"`
+	Document        string         `json:"document"`
+	Connection      string         `json:"connection,omitempty"`
+	Instance        string         `json:"instance,omitempty"`
+	InvocationToken string         `json:"invocation_token,omitempty"`
+	Variables       map[string]any `json:"variables,omitempty"`
+}
+
 type workflowScheduleTargetInput struct {
 	Plugin     string         `json:"plugin"`
 	Operation  string         `json:"operation"`
@@ -134,6 +143,19 @@ func (p *proxyProvider) Catalog() *catalog.Catalog {
 				{Name: "params", Type: "object", Description: "Nested params forwarded to the target operation"},
 			},
 		},
+		catalog.CatalogOperation{
+			ID:        "invoke_plugin_graphql",
+			Method:    http.MethodPost,
+			Transport: catalog.TransportPlugin,
+			Parameters: []catalog.CatalogParameter{
+				{Name: "plugin", Type: "string", Description: "Target plugin name", Required: true},
+				{Name: "document", Type: "string", Description: "GraphQL document forwarded to the target plugin", Required: true},
+				{Name: "connection", Type: "string", Description: "Optional connection override"},
+				{Name: "instance", Type: "string", Description: "Optional target instance override"},
+				{Name: "invocation_token", Type: "string", Description: "Optional invocation token override for token propagation tests"},
+				{Name: "variables", Type: "object", Description: "Variables forwarded to the target GraphQL surface"},
+			},
+		},
 		catalog.CatalogOperation{ID: "create_workflow_schedule", Method: http.MethodPost, Transport: catalog.TransportPlugin},
 		catalog.CatalogOperation{ID: "get_workflow_schedule", Method: http.MethodGet, Transport: catalog.TransportPlugin},
 		catalog.CatalogOperation{ID: "update_workflow_schedule", Method: http.MethodPost, Transport: catalog.TransportPlugin},
@@ -213,6 +235,60 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			}
 		}
 		result, err := invoker.Invoke(ctx, input.Plugin, input.Operation, input.Params, opts)
+		if err != nil {
+			envelope["error"] = err.Error()
+			return jsonResult(http.StatusOK, envelope), nil
+		}
+		envelope["ok"] = true
+		envelope["status"] = result.Status
+		envelope["body"] = decodeResultBody(result.Body)
+		return jsonResult(http.StatusOK, envelope), nil
+
+	case "invoke_plugin_graphql":
+		input, err := decodeInvokePluginGraphQLInput(params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		if strings.TrimSpace(input.Plugin) == "" {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": "plugin is required"}), nil
+		}
+		if strings.TrimSpace(input.Document) == "" {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": "document is required"}), nil
+		}
+
+		envelope := map[string]any{
+			"ok":                       false,
+			"target_plugin":            input.Plugin,
+			"target_operation":         "graphql",
+			"used_connection_override": strings.TrimSpace(input.Connection) != "",
+		}
+
+		invocationToken := input.InvocationToken
+		if invocationToken == "" {
+			invocationToken = providerhost.InvocationTokenFromContext(ctx)
+		}
+		if invocationToken == "" {
+			envelope["error"] = "invocation token is not available"
+			return jsonResult(http.StatusOK, envelope), nil
+		}
+
+		invoker, err := gestalt.Invoker(invocationToken)
+		if err != nil {
+			envelope["error"] = err.Error()
+			return jsonResult(http.StatusOK, envelope), nil
+		}
+		defer func() { _ = invoker.Close() }()
+
+		connection := strings.TrimSpace(input.Connection)
+		instance := strings.TrimSpace(input.Instance)
+		var opts *gestalt.InvokeOptions
+		if connection != "" || instance != "" {
+			opts = &gestalt.InvokeOptions{
+				Connection: connection,
+				Instance:   instance,
+			}
+		}
+		result, err := invoker.InvokeGraphQL(ctx, input.Plugin, input.Document, input.Variables, opts)
 		if err != nil {
 			envelope["error"] = err.Error()
 			return jsonResult(http.StatusOK, envelope), nil
@@ -487,6 +563,10 @@ func (p *proxyProvider) Close() error {
 
 func decodeInvokePluginInput(params map[string]any) (invokePluginInput, error) {
 	return decodeJSONParams[invokePluginInput](params)
+}
+
+func decodeInvokePluginGraphQLInput(params map[string]any) (invokePluginGraphQLInput, error) {
+	return decodeJSONParams[invokePluginGraphQLInput](params)
 }
 
 func decodeJSONParams[T any](params map[string]any) (T, error) {

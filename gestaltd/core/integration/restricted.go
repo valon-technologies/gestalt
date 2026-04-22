@@ -115,6 +115,14 @@ func (r *Restricted) Execute(ctx context.Context, operation string, params map[s
 	return r.inner.Execute(ctx, innerName, params, token)
 }
 
+func (r *Restricted) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
+	invoker, ok := r.inner.(core.GraphQLSurfaceInvoker)
+	if !ok {
+		return nil, fmt.Errorf("graphql surface is not available")
+	}
+	return invoker.InvokeGraphQL(ctx, request, token)
+}
+
 func (r *Restricted) Catalog() *catalog.Catalog {
 	cat := r.inner.Catalog()
 	if cat == nil {

@@ -38,6 +38,17 @@ type Provider interface {
 	Execute(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
 }
 
+// GraphQLSurfaceInvoker is an optional interface for providers that expose a
+// raw GraphQL surface in addition to cataloged operations.
+type GraphQLSurfaceInvoker interface {
+	InvokeGraphQL(ctx context.Context, request GraphQLRequest, token string) (*OperationResult, error)
+}
+
+type GraphQLRequest struct {
+	Document  string
+	Variables map[string]any
+}
+
 type OAuthProvider interface {
 	Provider
 	AuthorizationURL(state string, scopes []string) string

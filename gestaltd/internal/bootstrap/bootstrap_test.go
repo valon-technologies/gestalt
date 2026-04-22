@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"net"
@@ -30,6 +31,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
+	graphqlschema "github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
@@ -48,6 +50,62 @@ func explicitStartupWorkflowActor() *proto.WorkflowActor {
 		SubjectId:   "system:workflow-startup",
 		SubjectKind: "system",
 	}
+}
+
+func bootstrapGraphQLStringPtr(value string) *string {
+	return &value
+}
+
+func bootstrapGraphQLSchema() graphqlschema.Schema {
+	return graphqlschema.Schema{
+		QueryType: &graphqlschema.TypeName{Name: "Query"},
+		Types: []graphqlschema.FullType{
+			{
+				Kind: "OBJECT",
+				Name: "Query",
+				Fields: []graphqlschema.Field{
+					{
+						Name: "viewer",
+						Args: []graphqlschema.InputValue{
+							{Name: "team", Type: graphqlschema.TypeRef{Kind: "NON_NULL", OfType: &graphqlschema.TypeRef{Kind: "SCALAR", Name: bootstrapGraphQLStringPtr("String")}}},
+						},
+						Type: graphqlschema.TypeRef{Kind: "OBJECT", Name: bootstrapGraphQLStringPtr("Viewer")},
+					},
+				},
+			},
+			{
+				Kind: "OBJECT",
+				Name: "Viewer",
+				Fields: []graphqlschema.Field{
+					{Name: "id", Type: graphqlschema.TypeRef{Kind: "SCALAR", Name: bootstrapGraphQLStringPtr("ID")}},
+					{Name: "name", Type: graphqlschema.TypeRef{Kind: "SCALAR", Name: bootstrapGraphQLStringPtr("String")}},
+				},
+			},
+		},
+	}
+}
+
+func startBootstrapGraphQLIntrospectionServer(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	schema := bootstrapGraphQLSchema()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"__schema": schema,
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	return srv
 }
 
 func stubAuthFactory(name string) bootstrap.AuthFactory {
@@ -3597,6 +3655,120 @@ func TestValidate(t *testing.T) {
 		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
 		if err == nil || !strings.Contains(err.Error(), `plugins.caller.invokes[0] references unknown plugin "missing"`) {
 			t.Fatalf("Validate error = %v, want unknown plugin invokes error", err)
+		}
+	})
+
+	t.Run("accepts graphql surface plugin invokes dependency", func(t *testing.T) {
+		t.Parallel()
+
+		srv := startBootstrapGraphQLIntrospectionServer(t)
+		root := t.TempDir()
+		callerManifestPath := filepath.Join(root, "caller-manifest.yaml")
+		if err := os.WriteFile(callerManifestPath, []byte("kind: plugin\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile(caller-manifest.yaml): %v", err)
+		}
+
+		cfg := validConfig()
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"caller": {
+				Source:               config.NewMetadataSource("https://example.invalid/github-com-acme-caller/v1.0.0/provider-release.yaml"),
+				ResolvedManifestPath: callerManifestPath,
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
+					Spec:       &providermanifestv1.Spec{},
+				},
+				Invokes: []config.PluginInvocationDependency{
+					{Plugin: "linear", Surface: "graphql"},
+				},
+			},
+			"linear": {
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{
+						Surfaces: &providermanifestv1.ProviderSurfaces{
+							GraphQL: &providermanifestv1.GraphQLSurface{
+								URL: srv.URL,
+							},
+						},
+					},
+				},
+			},
+		}
+
+		if _, err := bootstrap.Validate(context.Background(), cfg, validFactories()); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+	})
+
+	t.Run("rejects graphql surface invoke when target plugin has no graphql surface", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		callerManifestPath := filepath.Join(root, "caller-manifest.yaml")
+		if err := os.WriteFile(callerManifestPath, []byte("kind: plugin\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile(caller-manifest.yaml): %v", err)
+		}
+
+		cfg := validConfig()
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"caller": {
+				Source:               config.NewMetadataSource("https://example.invalid/github-com-acme-caller/v1.0.0/provider-release.yaml"),
+				ResolvedManifestPath: callerManifestPath,
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
+					Spec:       &providermanifestv1.Spec{},
+				},
+				Invokes: []config.PluginInvocationDependency{
+					{Plugin: "linear", Surface: "graphql"},
+				},
+			},
+			"linear": {
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{
+						Surfaces: &providermanifestv1.ProviderSurfaces{
+							REST: &providermanifestv1.RESTSurface{
+								BaseURL: "https://linear.example/api",
+								Operations: []providermanifestv1.ProviderOperation{
+									{Name: "status", Method: http.MethodGet, Path: "/status"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
+		if err == nil || !strings.Contains(err.Error(), `plugins.caller.invokes[0] references plugin "linear" surface "graphql", but that surface is not configured`) {
+			t.Fatalf("Validate error = %v, want missing graphql surface error", err)
+		}
+	})
+
+	t.Run("rejects plugin configured with both openapi and graphql api surfaces", func(t *testing.T) {
+		t.Parallel()
+
+		srv := startBootstrapGraphQLIntrospectionServer(t)
+		cfg := validConfig()
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"linear": {
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{
+						Surfaces: &providermanifestv1.ProviderSurfaces{
+							OpenAPI: &providermanifestv1.OpenAPISurface{
+								Document: "https://example.invalid/openapi.json",
+								BaseURL:  "https://example.invalid/api",
+							},
+							GraphQL: &providermanifestv1.GraphQLSurface{
+								URL: srv.URL,
+							},
+						},
+					},
+				},
+			},
+		}
+
+		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
+		if err == nil || !strings.Contains(err.Error(), `openapi and graphql surfaces cannot both be configured for the same plugin`) {
+			t.Fatalf("Validate error = %v, want mixed api surface rejection", err)
 		}
 	})
 

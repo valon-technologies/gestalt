@@ -16,7 +16,13 @@ export interface PluginInvokeOptions {
 
 export interface PluginInvocationGrant {
   plugin: string;
-  operations: string[];
+  operations?: string[];
+  surfaces?: string[];
+  allOperations?: boolean;
+}
+
+export interface PluginGraphQLInvokeOptions extends PluginInvokeOptions {
+  variables?: Record<string, unknown>;
 }
 
 export class PluginInvoker {
@@ -62,6 +68,32 @@ export class PluginInvoker {
     };
   }
 
+  async invokeGraphQL(
+    plugin: string,
+    document: string,
+    options?: PluginGraphQLInvokeOptions,
+  ): Promise<OperationResult> {
+    const trimmedDocument = document.trim();
+    if (!trimmedDocument) {
+      throw new Error("plugin invoker: graphql document is required");
+    }
+
+    const response = await this.client.invokeGraphQL({
+      invocationToken: this.invocationToken,
+      plugin,
+      document: trimmedDocument,
+      ...(options?.variables
+        ? { variables: toJsonObject(options.variables) }
+        : {}),
+      connection: options?.connection ?? "",
+      instance: options?.instance ?? "",
+    });
+    return {
+      status: response.status,
+      body: response.body,
+    };
+  }
+
   async exchangeInvocationToken(options?: {
     grants?: PluginInvocationGrant[];
     ttlSeconds?: number;
@@ -71,9 +103,13 @@ export class PluginInvoker {
       grants: (options?.grants ?? [])
         .map((grant) => ({
           plugin: grant.plugin.trim(),
-          operations: grant.operations
+          operations: (grant.operations ?? [])
             .map((operation) => operation.trim())
             .filter(Boolean),
+          surfaces: (grant.surfaces ?? [])
+            .map((surface) => surface.trim().toLowerCase())
+            .filter(Boolean),
+          allOperations: grant.allOperations ?? false,
         }))
         .filter((grant) => grant.plugin.length > 0),
       ttlSeconds: BigInt(Math.max(0, options?.ttlSeconds ?? 0)),

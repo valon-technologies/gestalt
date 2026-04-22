@@ -683,6 +683,10 @@ pub struct PluginInvocationGrant {
     pub plugin: ::prost::alloc::string::String,
     #[prost(string, repeated, tag = "2")]
     pub operations: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, repeated, tag = "3")]
+    pub surfaces: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(bool, tag = "4")]
+    pub all_operations: bool,
 }
 /// ExchangeInvocationTokenRequest narrows an existing invocation token to a
 /// child token that carries only the requested plugin grants.
@@ -716,6 +720,23 @@ pub struct PluginInvokeRequest {
     #[prost(string, tag = "6")]
     pub instance: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+/// PluginInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
+/// through the host-side invoker service.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PluginInvokeGraphQlRequest {
+    #[prost(string, tag = "1")]
+    pub plugin: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub document: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub variables: ::core::option::Option<::prost_types::Struct>,
+    #[prost(string, tag = "4")]
+    pub connection: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub instance: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 /// IntegrationToken is the host-managed token payload passed into post-connect
@@ -1561,6 +1582,24 @@ pub mod plugin_invoker_client {
             ));
             self.inner.unary(req, path, codec).await
         }
+        pub async fn invoke_graph_ql(
+            &mut self,
+            request: impl tonic::IntoRequest<super::PluginInvokeGraphQlRequest>,
+        ) -> std::result::Result<tonic::Response<super::OperationResult>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.PluginInvoker/InvokeGraphQL",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.PluginInvoker",
+                "InvokeGraphQL",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -1586,6 +1625,10 @@ pub mod plugin_invoker_server {
         async fn invoke(
             &self,
             request: tonic::Request<super::PluginInvokeRequest>,
+        ) -> std::result::Result<tonic::Response<super::OperationResult>, tonic::Status>;
+        async fn invoke_graph_ql(
+            &self,
+            request: tonic::Request<super::PluginInvokeGraphQlRequest>,
         ) -> std::result::Result<tonic::Response<super::OperationResult>, tonic::Status>;
     }
     #[derive(Debug)]
@@ -1727,6 +1770,48 @@ pub mod plugin_invoker_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = InvokeSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.PluginInvoker/InvokeGraphQL" => {
+                    #[allow(non_camel_case_types)]
+                    struct InvokeGraphQLSvc<T: PluginInvoker>(pub Arc<T>);
+                    impl<T: PluginInvoker>
+                        tonic::server::UnaryService<super::PluginInvokeGraphQlRequest>
+                        for InvokeGraphQLSvc<T>
+                    {
+                        type Response = super::OperationResult;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::PluginInvokeGraphQlRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PluginInvoker>::invoke_graph_ql(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = InvokeGraphQLSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

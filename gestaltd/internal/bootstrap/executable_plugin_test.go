@@ -28,8 +28,10 @@ import (
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	graphqlschema "github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -1303,6 +1305,145 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 	}
 }
 
+func graphqlStringPtr(value string) *string {
+	return &value
+}
+
+func pluginInvokeGraphQLSchema() graphqlschema.Schema {
+	return graphqlschema.Schema{
+		QueryType: &graphqlschema.TypeName{Name: "Query"},
+		Types: []graphqlschema.FullType{
+			{
+				Kind: "OBJECT",
+				Name: "Query",
+				Fields: []graphqlschema.Field{
+					{
+						Name: "viewer",
+						Args: []graphqlschema.InputValue{
+							{Name: "team", Type: graphqlschema.TypeRef{Kind: "NON_NULL", OfType: &graphqlschema.TypeRef{Kind: "SCALAR", Name: graphqlStringPtr("String")}}},
+						},
+						Type: graphqlschema.TypeRef{Kind: "OBJECT", Name: graphqlStringPtr("Viewer")},
+					},
+				},
+			},
+			{
+				Kind: "OBJECT",
+				Name: "Viewer",
+				Fields: []graphqlschema.Field{
+					{Name: "id", Type: graphqlschema.TypeRef{Kind: "SCALAR", Name: graphqlStringPtr("ID")}},
+					{Name: "name", Type: graphqlschema.TypeRef{Kind: "SCALAR", Name: graphqlStringPtr("String")}},
+				},
+			},
+		},
+	}
+}
+
+func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurface bool, authCfg config.AuthorizationConfig, brokerOpts ...invocation.BrokerOption) *nestedInvokeHarness {
+	t.Helper()
+
+	callerBin := buildEchoPluginBinary(t)
+	callerRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "caller",
+		Operations: []catalog.CatalogOperation{
+			{ID: "invoke_plugin_graphql", Method: http.MethodPost},
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	callerManifest := newExecutableManifest("Caller", "Invokes graphql on another plugin")
+	callerManifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
+		"default": {
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+		},
+	}
+
+	linearRoot := t.TempDir()
+	linearManifestPath := filepath.Join(linearRoot, "manifest.yaml")
+	if err := os.WriteFile(linearManifestPath, []byte("kind: plugin\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(manifest.yaml): %v", err)
+	}
+	linearManifest := &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      "github.com/acme/plugins/linear",
+		Version:     "1.0.0",
+		DisplayName: "Linear",
+		Description: "GraphQL target",
+		Spec: &providermanifestv1.Spec{
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+				},
+			},
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				GraphQL: &providermanifestv1.GraphQLSurface{
+					Connection: "default",
+					URL:        graphQLURL,
+				},
+			},
+		},
+	}
+
+	callerInvokes := []config.PluginInvocationDependency{
+		{Plugin: "linear", Operation: "viewer"},
+	}
+	if allowSurface {
+		callerInvokes = append(callerInvokes, config.PluginInvocationDependency{
+			Plugin:  "linear",
+			Surface: "graphql",
+		})
+	}
+
+	bridge := newLazyInvoker()
+	cfg := &config.Config{
+		Authorization: authCfg,
+		Plugins: map[string]*config.ProviderEntry{
+			"caller": {
+				Command:              callerBin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     callerManifest,
+				ResolvedManifestPath: filepath.Join(callerRoot, "manifest.yaml"),
+				Invokes:              callerInvokes,
+			},
+			"linear": {
+				ResolvedManifest:     linearManifest,
+				ResolvedManifestPath: linearManifestPath,
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+		PluginInvoker: bridge,
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	enc, err := corecrypto.NewAESGCM(corecrypto.DeriveKey("plugin-graphql-invokes-test-key"))
+	if err != nil {
+		t.Fatalf("NewAESGCM: %v", err)
+	}
+	services, err := coredata.New(&coretesting.StubIndexedDB{}, enc)
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	t.Cleanup(func() { _ = services.Close() })
+
+	if len(authCfg.Workloads) > 0 || len(authCfg.Policies) > 0 {
+		authz, err := authorization.New(authCfg, cfg.Plugins, providers, nil)
+		if err != nil {
+			t.Fatalf("authorization.New: %v", err)
+		}
+		brokerOpts = append(brokerOpts, invocation.WithAuthorizer(authz))
+	}
+	broker := invocation.NewBroker(providers, services.Users, services.Tokens, brokerOpts...)
+	bridge.SetTarget(invocation.NewGuarded(broker, nil, "plugin", nil, invocation.WithoutRateLimit()))
+
+	return &nestedInvokeHarness{
+		invoker:  invocation.NewGuarded(broker, nil, "test", nil, invocation.WithoutRateLimit()),
+		services: services,
+	}
+}
+
 func newNestedInvokeUser(t *testing.T, harness *nestedInvokeHarness, ctx context.Context, email string) *core.User {
 	t.Helper()
 
@@ -1316,8 +1457,14 @@ func newNestedInvokeUser(t *testing.T, harness *nestedInvokeHarness, ctx context
 func storeNestedInvokeToken(t *testing.T, harness *nestedInvokeHarness, ctx context.Context, userID, plugin, connection, instance string) {
 	t.Helper()
 
+	storeNestedInvokeTokenForSubject(t, harness, ctx, principal.UserSubjectID(userID), plugin, connection, instance)
+}
+
+func storeNestedInvokeTokenForSubject(t *testing.T, harness *nestedInvokeHarness, ctx context.Context, subjectID, plugin, connection, instance string) {
+	t.Helper()
+
 	if err := harness.services.Tokens.StoreToken(ctx, &core.IntegrationToken{
-		SubjectID:    principal.UserSubjectID(userID),
+		SubjectID:    subjectID,
 		Integration:  plugin,
 		Connection:   connection,
 		Instance:     instance,
@@ -2343,6 +2490,317 @@ func TestPluginInvokesSupportInvokerFromContext(t *testing.T) {
 	}
 	if got.Credential.Instance != "primary" {
 		t.Fatalf("nested credential.instance = %q, want %q", got.Credential.Instance, "primary")
+	}
+}
+
+func TestPluginInvokesGraphQLSurface(t *testing.T) {
+	t.Parallel()
+
+	type capturedGraphQLRequest struct {
+		Query         string
+		Variables     map[string]any
+		Authorization string
+	}
+
+	var (
+		mu       sync.Mutex
+		captured []capturedGraphQLRequest
+	)
+	schema := pluginInvokeGraphQLSchema()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Query     string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(payload.Query, "__schema") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"__schema": schema,
+				},
+			})
+			return
+		}
+		mu.Lock()
+		captured = append(captured, capturedGraphQLRequest{
+			Query:         payload.Query,
+			Variables:     maps.Clone(payload.Variables),
+			Authorization: r.Header.Get("Authorization"),
+		})
+		mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"echo": map[string]any{
+					"authorization": r.Header.Get("Authorization"),
+					"query":         payload.Query,
+					"variables":     payload.Variables,
+				},
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	harness := newGraphQLSurfaceInvokeHarness(t, srv.URL, true, config.AuthorizationConfig{})
+	ctx := context.Background()
+	user := newNestedInvokeUser(t, harness, ctx, "nested-graphql-surface@test.com")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "linear", "work", "default")
+
+	document := "query Viewer($team: String!) { viewer(team: $team) { id } }"
+	result, err := harness.invoker.Invoke(
+		invocation.WithConnection(context.Background(), "work"),
+		&principal.Principal{
+			UserID: user.ID,
+			Kind:   principal.KindUser,
+			Source: principal.SourceSession,
+			Scopes: []string{"caller", "linear"},
+		},
+		"caller",
+		"",
+		"invoke_plugin_graphql",
+		map[string]any{
+			"plugin":   "linear",
+			"document": document,
+			"variables": map[string]any{
+				"team": "eng",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin_graphql): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+
+	var got struct {
+		OK                     bool           `json:"ok"`
+		TargetPlugin           string         `json:"target_plugin"`
+		TargetOperation        string         `json:"target_operation"`
+		UsedConnectionOverride bool           `json:"used_connection_override"`
+		Status                 int            `json:"status"`
+		Body                   map[string]any `json:"body"`
+		Error                  string         `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if !got.OK {
+		t.Fatalf("invoke_plugin_graphql returned error envelope: %+v", got)
+	}
+	if got.TargetPlugin != "linear" || got.TargetOperation != "graphql" {
+		t.Fatalf("unexpected target: %+v", got)
+	}
+	if got.UsedConnectionOverride {
+		t.Fatalf("used_connection_override = %v, want false", got.UsedConnectionOverride)
+	}
+	if got.Status != http.StatusOK {
+		t.Fatalf("nested status = %d, want %d", got.Status, http.StatusOK)
+	}
+
+	echo, ok := got.Body["echo"].(map[string]any)
+	if !ok {
+		t.Fatalf("body.echo = %#v, want object", got.Body["echo"])
+	}
+	if echo["authorization"] != "Bearer linear-work-token" {
+		t.Fatalf("body.echo.authorization = %#v, want %q", echo["authorization"], "Bearer linear-work-token")
+	}
+	if echo["query"] != document {
+		t.Fatalf("body.echo.query = %#v, want %q", echo["query"], document)
+	}
+	variables, ok := echo["variables"].(map[string]any)
+	if !ok {
+		t.Fatalf("body.echo.variables = %#v, want object", echo["variables"])
+	}
+	if variables["team"] != "eng" {
+		t.Fatalf("body.echo.variables.team = %#v, want %q", variables["team"], "eng")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(captured) != 1 {
+		t.Fatalf("captured graphql requests = %d, want 1", len(captured))
+	}
+	if captured[0].Query != document {
+		t.Fatalf("captured query = %q, want %q", captured[0].Query, document)
+	}
+	if captured[0].Authorization != "Bearer linear-work-token" {
+		t.Fatalf("captured authorization = %q, want %q", captured[0].Authorization, "Bearer linear-work-token")
+	}
+	if captured[0].Variables["team"] != "eng" {
+		t.Fatalf("captured variables.team = %#v, want %q", captured[0].Variables["team"], "eng")
+	}
+}
+
+func TestPluginInvokesRejectUndeclaredGraphQLSurface(t *testing.T) {
+	t.Parallel()
+
+	var nonIntrospectionCalls atomic.Int32
+	schema := pluginInvokeGraphQLSchema()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(payload.Query, "__schema") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"__schema": schema,
+				},
+			})
+			return
+		}
+		nonIntrospectionCalls.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"ok": true},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	harness := newGraphQLSurfaceInvokeHarness(t, srv.URL, false, config.AuthorizationConfig{})
+	ctx := context.Background()
+	user := newNestedInvokeUser(t, harness, ctx, "nested-graphql-surface-denied@test.com")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "linear", "work", "default")
+
+	result, err := harness.invoker.Invoke(
+		invocation.WithConnection(context.Background(), "work"),
+		&principal.Principal{
+			UserID: user.ID,
+			Kind:   principal.KindUser,
+			Source: principal.SourceSession,
+			Scopes: []string{"caller", "linear"},
+		},
+		"caller",
+		"",
+		"invoke_plugin_graphql",
+		map[string]any{
+			"plugin":   "linear",
+			"document": "query Viewer($team: String!) { viewer(team: $team) { id } }",
+			"variables": map[string]any{
+				"team": "eng",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin_graphql): %v", err)
+	}
+
+	var got struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if got.OK {
+		t.Fatalf("expected undeclared graphql surface rejection, got success: %+v", got)
+	}
+	if !strings.Contains(got.Error, `may not invoke linear surface "graphql"`) {
+		t.Fatalf("undeclared graphql surface error = %q, want target rejection", got.Error)
+	}
+	if got := nonIntrospectionCalls.Load(); got != 0 {
+		t.Fatalf("non-introspection graphql calls = %d, want 0", got)
+	}
+}
+
+func TestPluginInvokesGraphQLSurfaceRejectsWorkloadWithoutGraphQLPermission(t *testing.T) {
+	t.Parallel()
+
+	var nonIntrospectionCalls atomic.Int32
+	schema := pluginInvokeGraphQLSchema()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Query string `json:"query"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(payload.Query, "__schema") {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"__schema": schema,
+				},
+			})
+			return
+		}
+		nonIntrospectionCalls.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"ok": true},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	authCfg := config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: "gst_wld_triage-bot",
+				Providers: map[string]config.WorkloadProviderDef{
+					"caller": {
+						Connection: "default",
+						Allow:      []string{"invoke_plugin_graphql"},
+					},
+					"linear": {
+						Connection: "default",
+						Allow:      []string{"viewer"},
+					},
+				},
+			},
+		},
+	}
+	harness := newGraphQLSurfaceInvokeHarness(t, srv.URL, true, authCfg)
+	ctx := context.Background()
+	workloadSubjectID := principal.WorkloadSubjectID("triage-bot")
+	storeNestedInvokeTokenForSubject(t, harness, ctx, workloadSubjectID, "caller", "default", "default")
+	storeNestedInvokeTokenForSubject(t, harness, ctx, workloadSubjectID, "linear", "default", "default")
+
+	result, err := harness.invoker.Invoke(
+		invocation.WithConnection(context.Background(), "default"),
+		&principal.Principal{
+			SubjectID: workloadSubjectID,
+			Kind:      principal.KindWorkload,
+			Source:    principal.SourceWorkloadToken,
+		},
+		"caller",
+		"",
+		"invoke_plugin_graphql",
+		map[string]any{
+			"plugin":   "linear",
+			"document": "query Viewer($team: String!) { viewer(team: $team) { id } }",
+			"variables": map[string]any{
+				"team": "eng",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin_graphql): %v", err)
+	}
+
+	var got struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if got.OK {
+		t.Fatalf("expected workload graphql authorization rejection, got success: %+v", got)
+	}
+	if !strings.Contains(got.Error, `authorization denied: linear.graphql`) {
+		t.Fatalf("workload graphql error = %q, want graphql authorization rejection", got.Error)
+	}
+	if got := nonIntrospectionCalls.Load(); got != 0 {
+		t.Fatalf("non-introspection graphql calls = %d, want 0", got)
 	}
 }
 

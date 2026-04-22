@@ -8,6 +8,7 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -23,7 +24,7 @@ type PluginInvokerServer struct {
 	pluginName string
 	invoker    invocation.Invoker
 	tokens     *InvocationTokenManager
-	allowed    map[string]map[string]struct{}
+	allowed    invocationGrants
 }
 
 func NewPluginInvokerServer(pluginName string, deps []config.PluginInvocationDependency, invoker invocation.Invoker, tokens *InvocationTokenManager) *PluginInvokerServer {
@@ -40,7 +41,7 @@ func (s *PluginInvokerServer) ExchangeInvocationToken(_ context.Context, req *pr
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	grants := decodePluginInvocationGrantProto(req.GetGrants())
-	if len(grants) > 0 && !operationMapSubset(grants, s.allowed) {
+	if len(grants) > 0 && !invocationGrantSubset(grants, s.allowed) {
 		return nil, status.Error(codes.PermissionDenied, "requested invocation grants exceed the plugin's declared invokes")
 	}
 	exchangedToken, err := s.tokens.ExchangeToken(
@@ -105,16 +106,73 @@ func (s *PluginInvokerServer) Invoke(ctx context.Context, req *proto.PluginInvok
 	}, nil
 }
 
+func (s *PluginInvokerServer) InvokeGraphQL(ctx context.Context, req *proto.PluginInvokeGraphQLRequest) (*proto.OperationResult, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+
+	targetPlugin := strings.TrimSpace(req.GetPlugin())
+	if targetPlugin == "" {
+		return nil, status.Error(codes.InvalidArgument, "plugin is required")
+	}
+	document := strings.TrimSpace(req.GetDocument())
+	if document == "" {
+		return nil, status.Error(codes.InvalidArgument, "document is required")
+	}
+	tokenCtx, err := s.tokenContextForSurfaceInvoke(req, targetPlugin, "graphql")
+	if err != nil {
+		return nil, err
+	}
+	graphQLInvoker, ok := s.invoker.(interface {
+		InvokeGraphQL(context.Context, *principal.Principal, string, string, invocation.GraphQLRequest) (*core.OperationResult, error)
+	})
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "plugin graphql invocation is not available")
+	}
+
+	connection := strings.TrimSpace(req.GetConnection())
+	invokeCtx := restoreInvocationTokenContext(ctx, tokenCtx, connection)
+	instance := strings.TrimSpace(req.GetInstance())
+	if tokenCtx.principal != nil && tokenCtx.principal.Kind == principal.KindWorkload && (connection != "" || instance != "") {
+		return nil, status.Error(codes.PermissionDenied, "workloads may not override connection or instance bindings")
+	}
+	if instance == "" && connection == "" && shouldInheritCredentialSelectors(tokenCtx.principal) {
+		instance = tokenCtx.credential.Instance
+	}
+
+	variables := map[string]any{}
+	if raw := req.GetVariables(); raw != nil {
+		variables = raw.AsMap()
+	}
+	result, err := graphQLInvoker.InvokeGraphQL(invokeCtx, tokenCtx.principal, targetPlugin, instance, invocation.GraphQLRequest{
+		Document:  document,
+		Variables: variables,
+	})
+	if err != nil {
+		return nil, invocationStatusError(err)
+	}
+	if result == nil {
+		return nil, status.Error(codes.Internal, "plugin invocation returned no result")
+	}
+
+	return &proto.OperationResult{
+		Status: int32(result.Status),
+		Body:   result.Body,
+	}, nil
+}
+
 func (s *PluginInvokerServer) allows(plugin, operation string) bool {
 	if s == nil {
 		return false
 	}
-	ops, ok := s.allowed[plugin]
-	if !ok {
+	return allowsOperation(s.allowed, plugin, operation)
+}
+
+func (s *PluginInvokerServer) allowsSurface(plugin, surface string) bool {
+	if s == nil {
 		return false
 	}
-	_, ok = ops[operation]
-	return ok
+	return allowsSurface(s.allowed, plugin, surface)
 }
 
 func (s *PluginInvokerServer) tokenContextForInvoke(req *proto.PluginInvokeRequest, targetPlugin, targetOperation string) (invocationTokenContext, error) {
@@ -128,6 +186,21 @@ func (s *PluginInvokerServer) tokenContextForInvoke(req *proto.PluginInvokeReque
 	}
 	if !allowsOperation(tokenCtx.grants, targetPlugin, targetOperation) || !s.allows(targetPlugin, targetOperation) {
 		return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s", s.pluginName, targetPlugin, targetOperation)
+	}
+	return tokenCtx, nil
+}
+
+func (s *PluginInvokerServer) tokenContextForSurfaceInvoke(req *proto.PluginInvokeGraphQLRequest, targetPlugin, surface string) (invocationTokenContext, error) {
+	invocationToken := strings.TrimSpace(req.GetInvocationToken())
+	if invocationToken == "" {
+		return invocationTokenContext{}, status.Error(codes.FailedPrecondition, "invocation token is required")
+	}
+	tokenCtx, err := s.tokens.resolveToken(invocationToken, s.pluginName)
+	if err != nil {
+		return invocationTokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
+	}
+	if !allowsSurface(tokenCtx.grants, targetPlugin, surface) || !s.allowsSurface(targetPlugin, surface) {
+		return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s surface %q", s.pluginName, targetPlugin, surface)
 	}
 	return tokenCtx, nil
 }

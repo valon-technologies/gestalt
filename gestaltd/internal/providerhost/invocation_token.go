@@ -34,19 +34,19 @@ type InvocationTokenManager struct {
 
 type invocationTokenClaims struct {
 	jwt.RegisteredClaims
-	DelegationExpiresAt *jwt.NumericDate    `json:"delegation_expires_at,omitempty"`
-	CallerPlugin        string              `json:"caller_plugin,omitempty"`
-	SubjectKind         string              `json:"subject_kind,omitempty"`
-	Email               string              `json:"email,omitempty"`
-	DisplayName         string              `json:"display_name,omitempty"`
-	AuthSource          string              `json:"auth_source,omitempty"`
-	CredentialSubjectID string              `json:"credential_subject_id,omitempty"`
-	TokenPermissions    map[string][]string `json:"token_permissions,omitempty"`
-	Grants              map[string][]string `json:"grants,omitempty"`
-	RequestMeta         requestMetaClaims   `json:"request_meta,omitempty"`
-	Credential          credentialClaims    `json:"credential,omitempty"`
-	Invocation          invocationClaims    `json:"invocation,omitempty"`
-	Connection          string              `json:"connection,omitempty"`
+	DelegationExpiresAt *jwt.NumericDate                 `json:"delegation_expires_at,omitempty"`
+	CallerPlugin        string                           `json:"caller_plugin,omitempty"`
+	SubjectKind         string                           `json:"subject_kind,omitempty"`
+	Email               string                           `json:"email,omitempty"`
+	DisplayName         string                           `json:"display_name,omitempty"`
+	AuthSource          string                           `json:"auth_source,omitempty"`
+	CredentialSubjectID string                           `json:"credential_subject_id,omitempty"`
+	TokenPermissions    map[string][]string              `json:"token_permissions,omitempty"`
+	Grants              map[string]invocationGrantClaims `json:"grants,omitempty"`
+	RequestMeta         requestMetaClaims                `json:"request_meta,omitempty"`
+	Credential          credentialClaims                 `json:"credential,omitempty"`
+	Invocation          invocationClaims                 `json:"invocation,omitempty"`
+	Connection          string                           `json:"connection,omitempty"`
 }
 
 type requestMetaClaims struct {
@@ -76,7 +76,7 @@ type invocationTokenContext struct {
 	invocation  *invocation.InvocationMeta
 	surface     invocation.InvocationSurface
 	connection  string
-	grants      map[string]map[string]struct{}
+	grants      invocationGrants
 }
 
 func NewInvocationTokenManager(secret []byte) (*InvocationTokenManager, error) {
@@ -95,7 +95,7 @@ func NewInvocationTokenManager(secret []byte) (*InvocationTokenManager, error) {
 	}, nil
 }
 
-func (m *InvocationTokenManager) MintRootToken(ctx context.Context, pluginName string, grants map[string]map[string]struct{}) (string, error) {
+func (m *InvocationTokenManager) MintRootToken(ctx context.Context, pluginName string, grants invocationGrants) (string, error) {
 	if m == nil {
 		return "", fmt.Errorf("invocation tokens are not available")
 	}
@@ -104,7 +104,7 @@ func (m *InvocationTokenManager) MintRootToken(ctx context.Context, pluginName s
 	return m.signClaims(claimsFromContext(ctx, pluginName, grants, now, expiresAt, m.delegationExpiry(expiresAt, now)))
 }
 
-func (m *InvocationTokenManager) ExchangeToken(parentToken, pluginName string, grants map[string]map[string]struct{}, ttl time.Duration) (string, error) {
+func (m *InvocationTokenManager) ExchangeToken(parentToken, pluginName string, grants invocationGrants, ttl time.Duration) (string, error) {
 	if m == nil {
 		return "", fmt.Errorf("invocation tokens are not available")
 	}
@@ -115,11 +115,11 @@ func (m *InvocationTokenManager) ExchangeToken(parentToken, pluginName string, g
 	if strings.TrimSpace(claims.CallerPlugin) != strings.TrimSpace(pluginName) {
 		return "", fmt.Errorf("plugin invocation token is not valid for %q", pluginName)
 	}
-	parentGrants := decodeOperationMap(claims.Grants)
+	parentGrants := decodeInvocationGrantClaims(claims.Grants)
 	switch {
 	case len(grants) == 0:
 		grants = parentGrants
-	case !operationMapSubset(grants, parentGrants):
+	case !invocationGrantSubset(grants, parentGrants):
 		return "", fmt.Errorf("requested invocation grants exceed the parent token")
 	}
 	child := *claims
@@ -133,7 +133,7 @@ func (m *InvocationTokenManager) ExchangeToken(parentToken, pluginName string, g
 	child.NotBefore = jwt.NewNumericDate(now)
 	child.ExpiresAt = jwt.NewNumericDate(minTime(now.Add(m.childTTL(ttl)), delegationExpiresAt))
 	child.DelegationExpiresAt = jwt.NewNumericDate(delegationExpiresAt)
-	child.Grants = encodeOperationMap(grants)
+	child.Grants = encodeInvocationGrantClaims(grants)
 	return m.signClaims(&child)
 }
 
@@ -168,7 +168,7 @@ func (m *InvocationTokenManager) resolveToken(token, pluginName string) (invocat
 		},
 		surface:    invocation.InvocationSurface(strings.TrimSpace(claims.Invocation.Surface)),
 		connection: strings.TrimSpace(claims.Connection),
-		grants:     decodeOperationMap(claims.Grants),
+		grants:     decodeInvocationGrantClaims(claims.Grants),
 	}, nil
 }
 
@@ -234,7 +234,7 @@ func (m *InvocationTokenManager) delegationExpiresAt(claims *invocationTokenClai
 	return expiresAt, nil
 }
 
-func claimsFromContext(ctx context.Context, pluginName string, grants map[string]map[string]struct{}, now, expiresAt, delegationExpiresAt time.Time) *invocationTokenClaims {
+func claimsFromContext(ctx context.Context, pluginName string, grants invocationGrants, now, expiresAt, delegationExpiresAt time.Time) *invocationTokenClaims {
 	p := principal.FromContext(ctx)
 	meta := invocation.MetaFromContext(ctx)
 	if meta == nil {
@@ -260,7 +260,7 @@ func claimsFromContext(ctx context.Context, pluginName string, grants map[string
 		AuthSource:          authSourceForInvocationClaims(p),
 		CredentialSubjectID: credentialSubjectIDForInvocationClaims(p),
 		TokenPermissions:    encodePermissionSet(tokenPermissionsForInvocationClaims(p)),
-		Grants:              encodeOperationMap(grants),
+		Grants:              encodeInvocationGrantClaims(grants),
 		RequestMeta: requestMetaClaims{
 			ClientIP:   reqMeta.ClientIP,
 			RemoteAddr: reqMeta.RemoteAddr,
@@ -430,71 +430,6 @@ func principalFromInvocationClaims(claims *invocationTokenClaims) *principal.Pri
 	return p
 }
 
-func encodeOperationMap(src map[string]map[string]struct{}) map[string][]string {
-	if src == nil {
-		return nil
-	}
-	out := make(map[string][]string, len(src))
-	for plugin, ops := range src {
-		out[plugin] = encodeOperationList(ops)
-	}
-	return out
-}
-
-func encodeOperationList(ops map[string]struct{}) []string {
-	if ops == nil {
-		return nil
-	}
-	return slices.Sorted(maps.Keys(ops))
-}
-
-func decodeOperationMap(src map[string][]string) map[string]map[string]struct{} {
-	if src == nil {
-		return nil
-	}
-	out := make(map[string]map[string]struct{}, len(src))
-	for plugin, ops := range src {
-		if len(ops) == 0 {
-			out[plugin] = map[string]struct{}{}
-			continue
-		}
-		decoded := make(map[string]struct{}, len(ops))
-		for _, op := range ops {
-			op = strings.TrimSpace(op)
-			if op == "" {
-				continue
-			}
-			decoded[op] = struct{}{}
-		}
-		out[plugin] = decoded
-	}
-	return out
-}
-
-func operationMapSubset(candidate, allowed map[string]map[string]struct{}) bool {
-	if len(candidate) == 0 {
-		return true
-	}
-	for plugin, ops := range candidate {
-		allowedOps, ok := allowed[plugin]
-		if !ok {
-			return false
-		}
-		if len(allowedOps) == 0 {
-			continue
-		}
-		if len(ops) == 0 {
-			return false
-		}
-		for op := range ops {
-			if _, ok := allowedOps[op]; !ok {
-				return false
-			}
-		}
-	}
-	return true
-}
-
 func encodePermissionSet(src principal.PermissionSet) map[string][]string {
 	if src == nil {
 		return nil
@@ -531,21 +466,6 @@ func decodePermissionSet(src map[string][]string) principal.PermissionSet {
 		out[plugin] = decoded
 	}
 	return out
-}
-
-func allowsOperation(grants map[string]map[string]struct{}, plugin, operation string) bool {
-	if len(grants) == 0 {
-		return false
-	}
-	operations, ok := grants[plugin]
-	if !ok {
-		return false
-	}
-	if len(operations) == 0 {
-		return true
-	}
-	_, ok = operations[operation]
-	return ok
 }
 
 func minTime(a, b time.Time) time.Time {

@@ -30,6 +30,7 @@ import (
 const (
 	tokenRefreshThreshold = 5 * time.Minute
 	tracerName            = "gestaltd"
+	graphQLOperationID    = "graphql"
 
 	attrProvider       = attribute.Key("gestalt.provider")
 	attrOperation      = attribute.Key("gestalt.operation")
@@ -60,12 +61,19 @@ type Invoker interface {
 	Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error)
 }
 
+type GraphQLRequest = core.GraphQLRequest
+
+type GraphQLInvoker interface {
+	InvokeGraphQL(ctx context.Context, p *principal.Principal, providerName, instance string, request GraphQLRequest) (*core.OperationResult, error)
+}
+
 type CapabilityLister interface {
 	ListCapabilities() []core.Capability
 }
 
 var (
 	_ Invoker          = (*Broker)(nil)
+	_ GraphQLInvoker   = (*Broker)(nil)
 	_ CapabilityLister = (*Broker)(nil)
 )
 
@@ -309,6 +317,134 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(err)
 	}
 
+	return result, nil
+}
+
+func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, providerName, instance string, request GraphQLRequest) (_ *core.OperationResult, err error) {
+	startedAt := time.Now()
+	metricProvider := metricutil.UnknownAttrValue
+	metricOperation := metricutil.AttrValue("graphql")
+	metricTransport := metricutil.AttrValue("graphql")
+	metricConnectionMode := metricutil.UnknownAttrValue
+
+	ctx, span := otel.Tracer(tracerName).Start(ctx, "broker.invoke_graphql",
+		trace.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer span.End()
+	defer func() {
+		recordOperationMetrics(
+			ctx,
+			startedAt,
+			metricProvider,
+			metricOperation,
+			metricTransport,
+			metricConnectionMode,
+			err != nil,
+		)
+	}()
+
+	span.SetAttributes(
+		attrProvider.String(providerName),
+		attrOperation.String(graphQLOperationID),
+		attrTransport.String(metricTransport),
+	)
+
+	fail := func(err error) (*core.OperationResult, error) {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+	setSubjectAttribute := func(p *principal.Principal) {
+		if p == nil {
+			return
+		}
+		subjectID := strings.TrimSpace(p.SubjectID)
+		if subjectID == "" && strings.TrimSpace(p.UserID) != "" {
+			subjectID = principal.UserSubjectID(strings.TrimSpace(p.UserID))
+		}
+		if subjectID != "" {
+			span.SetAttributes(attrSubjectID.String(subjectID))
+		}
+	}
+
+	prov, err := b.providers.Get(providerName)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			err = fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
+		} else {
+			err = fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
+		}
+		return fail(err)
+	}
+	graphQLProv, ok := prov.(core.GraphQLSurfaceInvoker)
+	if !ok {
+		return fail(fmt.Errorf("%w: %s.%s", ErrOperationNotFound, providerName, graphQLOperationID))
+	}
+
+	metricProvider = providerName
+	metricConnectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
+	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
+
+	if p == nil {
+		return fail(ErrNotAuthenticated)
+	}
+	setSubjectAttribute(p)
+
+	if !principal.AllowsProviderPermission(p, providerName) {
+		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
+	}
+	if !principal.AllowsOperationPermission(p, providerName, graphQLOperationID) {
+		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, graphQLOperationID))
+	}
+	if err := b.resolveUserPrincipal(ctx, p); err != nil {
+		return fail(err)
+	}
+	ctx = withResolvedPrincipal(ctx, p)
+	setSubjectAttribute(p)
+
+	conn := ConnectionFromContext(ctx)
+	boundCredential, err := b.ResolveEffectiveCredentialBinding(p, providerName, conn, instance)
+	if err != nil {
+		return fail(err)
+	}
+	if b.authorizer != nil {
+		access, allowed := b.authorizer.ResolveAccess(ctx, p, providerName)
+		if access.Policy != "" || access.Role != "" {
+			ctx = WithAccessContext(ctx, access)
+		}
+		if boundCredential.HasBinding {
+			SetCredentialAudit(
+				ctx,
+				boundCredential.Binding.Mode,
+				boundCredential.CredentialSubjectID,
+				boundCredential.Connection,
+				boundCredential.Instance,
+			)
+		} else if !allowed {
+			return fail(fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName))
+		}
+	}
+
+	if boundCredential.HasBinding {
+		conn = boundCredential.Connection
+		instance = boundCredential.Instance
+	}
+	if b.authorizer != nil && b.authorizer.IsWorkload(p) && !b.authorizer.AllowOperation(ctx, p, providerName, graphQLOperationID) {
+		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, graphQLOperationID))
+	}
+	if conn == "" && b.connMapper != nil {
+		conn = b.connMapper.ConnectionForProvider(providerName)
+	}
+
+	ctx, accessToken, err := b.resolveToken(ctx, prov, p, providerName, conn, instance, boundCredential)
+	if err != nil {
+		return fail(err)
+	}
+
+	result, err := graphQLProv.InvokeGraphQL(ctx, request, accessToken)
+	if err != nil {
+		return fail(err)
+	}
 	return result, nil
 }
 
