@@ -190,9 +190,6 @@ func (a *Authorizer) IsWorkload(p *principal.Principal) bool {
 }
 
 func (a *Authorizer) AllowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
-	if a.isManagedIdentityPrincipal(p) {
-		return a.allowManagedIdentityProvider(p, provider)
-	}
 	if principal.IsSystemPrincipal(p) {
 		return principal.AllowsProviderPermission(p, provider)
 	}
@@ -200,53 +197,33 @@ func (a *Authorizer) AllowProvider(ctx context.Context, p *principal.Principal, 
 		_, allowed := a.ResolveAccess(ctx, p, provider)
 		return allowed
 	}
-	_, ok := a.bindingForSubject(p, provider)
+	_, ok := a.bindingForPrincipal(p, provider)
 	return ok
 }
 
 func (a *Authorizer) AllowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
-	if a.isManagedIdentityPrincipal(p) {
-		return a.allowManagedIdentityProvider(p, provider) && principal.AllowsOperationPermission(p, provider, operation)
-	}
 	if principal.IsSystemPrincipal(p) {
 		return principal.AllowsOperationPermission(p, provider, operation)
 	}
 	if !a.IsWorkload(p) {
 		return a.AllowProvider(ctx, p, provider)
 	}
-	binding, ok := a.bindingForSubject(p, provider)
+	binding, ok := a.bindingForPrincipal(p, provider)
 	if !ok {
 		return false
+	}
+	if len(binding.Allow) == 0 {
+		return principal.AllowsOperationPermission(p, provider, operation)
 	}
 	_, ok = binding.Allow[operation]
 	return ok
 }
 
 func (a *Authorizer) Binding(p *principal.Principal, provider string) (CredentialBinding, bool) {
-	if a.isManagedIdentityPrincipal(p) {
-		if !a.allowManagedIdentityProvider(p, provider) {
-			return CredentialBinding{}, false
-		}
-		switch core.NormalizeConnectionMode(a.providerModes[provider]) {
-		case core.ConnectionModeNone:
-			return CredentialBinding{Mode: core.ConnectionModeNone}, true
-		case core.ConnectionModeUser:
-			subjectID := principal.EffectiveCredentialSubjectID(p)
-			if subjectID == "" {
-				return CredentialBinding{}, false
-			}
-			return CredentialBinding{
-				Mode:                core.ConnectionModeUser,
-				CredentialSubjectID: subjectID,
-			}, true
-		default:
-			return CredentialBinding{}, false
-		}
-	}
 	if !a.IsWorkload(p) {
 		return CredentialBinding{}, false
 	}
-	binding, ok := a.bindingForSubject(p, provider)
+	binding, ok := a.bindingForPrincipal(p, provider)
 	if !ok {
 		return CredentialBinding{}, false
 	}
@@ -257,19 +234,21 @@ func (a *Authorizer) ResolveAccess(_ context.Context, p *principal.Principal, pr
 	if a == nil {
 		return AccessContext{}, true
 	}
-	if a.isManagedIdentityPrincipal(p) {
-		return AccessContext{}, a.allowManagedIdentityProvider(p, provider)
-	}
 	if principal.IsSystemPrincipal(p) {
 		return AccessContext{}, principal.AllowsProviderPermission(p, provider)
 	}
-	policyName := strings.TrimSpace(a.providerPolicies[provider])
 	if a.IsWorkload(p) {
-		if policyName == "" {
-			return AccessContext{}, false
+		if _, ok := a.bindingForSubject(p, provider); ok {
+			policyName := strings.TrimSpace(a.providerPolicies[provider])
+			if policyName == "" {
+				return AccessContext{}, false
+			}
+			return AccessContext{Policy: policyName}, false
 		}
-		return AccessContext{Policy: policyName}, false
+		_, ok := a.bindingForPrincipal(p, provider)
+		return AccessContext{}, ok
 	}
+	policyName := strings.TrimSpace(a.providerPolicies[provider])
 	if policyName == "" {
 		return AccessContext{}, true
 	}
@@ -417,9 +396,6 @@ func (a *Authorizer) ResolveAdminAccess(_ context.Context, p *principal.Principa
 }
 
 func (a *Authorizer) AllowCatalogOperation(ctx context.Context, p *principal.Principal, provider string, op catalog.CatalogOperation) bool {
-	if a.isManagedIdentityPrincipal(p) {
-		return a.allowManagedIdentityProvider(p, provider) && principal.AllowsOperationPermission(p, provider, op.ID)
-	}
 	if principal.IsSystemPrincipal(p) {
 		return principal.AllowsOperationPermission(p, provider, op.ID)
 	}
@@ -446,6 +422,44 @@ func (a *Authorizer) AllowCatalogOperation(ctx context.Context, p *principal.Pri
 		}
 	}
 	return false
+}
+
+func (a *Authorizer) bindingForPrincipal(p *principal.Principal, provider string) (WorkloadProviderBinding, bool) {
+	if !a.IsWorkload(p) {
+		return WorkloadProviderBinding{}, false
+	}
+	if binding, ok := a.bindingForSubject(p, provider); ok {
+		return binding, true
+	}
+	if a == nil || p == nil || principal.ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID)) == "" {
+		return WorkloadProviderBinding{}, false
+	}
+	if !principal.AllowsProviderPermission(p, provider) {
+		return WorkloadProviderBinding{}, false
+	}
+	mode, ok := a.providerModes[provider]
+	if !ok {
+		return WorkloadProviderBinding{}, false
+	}
+	switch core.NormalizeConnectionMode(mode) {
+	case core.ConnectionModeNone:
+		return WorkloadProviderBinding{
+			CredentialBinding: CredentialBinding{Mode: core.ConnectionModeNone},
+		}, true
+	case core.ConnectionModeUser:
+		subjectID := principal.EffectiveCredentialSubjectID(p)
+		if subjectID == "" {
+			return WorkloadProviderBinding{}, false
+		}
+		return WorkloadProviderBinding{
+			CredentialBinding: CredentialBinding{
+				Mode:                core.ConnectionModeUser,
+				CredentialSubjectID: subjectID,
+			},
+		}, true
+	default:
+		return WorkloadProviderBinding{}, false
+	}
 }
 
 func (a *Authorizer) bindingForSubject(p *principal.Principal, provider string) (WorkloadProviderBinding, bool) {
@@ -534,29 +548,6 @@ func normalizeAllowedOperations(ops []string) map[string]struct{} {
 		allowed[name] = struct{}{}
 	}
 	return allowed
-}
-
-func (a *Authorizer) isManagedIdentityPrincipal(p *principal.Principal) bool {
-	return a.IsWorkload(p) && principal.ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID)) != ""
-}
-
-func (a *Authorizer) allowManagedIdentityProvider(p *principal.Principal, provider string) bool {
-	if a == nil || p == nil {
-		return false
-	}
-	if !principal.AllowsProviderPermission(p, provider) {
-		return false
-	}
-	mode, ok := a.providerModes[provider]
-	if !ok {
-		return false
-	}
-	switch core.NormalizeConnectionMode(mode) {
-	case core.ConnectionModeNone, core.ConnectionModeUser:
-		return true
-	default:
-		return false
-	}
 }
 
 func providerMode(provider string, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider]) (core.ConnectionMode, bool, error) {
