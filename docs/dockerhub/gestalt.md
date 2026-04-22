@@ -86,6 +86,8 @@ docker run --rm \
   identities tokens create <identity-id> --name ci --permission github:issues.list
 ```
 
+Members with the `viewer` role can list and create identity-owned API tokens. Revoking identity-owned tokens requires `editor` or `admin` membership.
+
 ### Use in CI pipelines
 
 The Docker image works well in CI environments where installing the native

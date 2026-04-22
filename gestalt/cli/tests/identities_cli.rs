@@ -351,6 +351,24 @@ fn test_cli_identities_help_lists_first_class_subcommands() {
 }
 
 #[test]
+fn test_cli_identity_tokens_help_calls_out_role_requirements() {
+    let home = tempfile::tempdir().unwrap();
+    cli_command(home.path())
+        .args(["identities", "tokens", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "List API tokens for an identity (`viewer` or higher)",
+        ))
+        .stdout(predicate::str::contains(
+            "Create an API token for an identity (`viewer` or higher)",
+        ))
+        .stdout(predicate::str::contains(
+            "Revoke an API token owned by an identity (`editor` or higher)",
+        ));
+}
+
+#[test]
 fn test_cli_lists_identity_tokens() {
     let mut server = Server::new();
     let _tokens = authed_json_mock!(
