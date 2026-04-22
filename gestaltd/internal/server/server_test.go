@@ -12652,6 +12652,69 @@ func TestHostedHTTPBinding_APIKeyQueryDoesNotLeakCredentialParam(t *testing.T) {
 	}
 }
 
+func TestHostedHTTPBinding_RejectsReservedSystemResolvedSubject(t *testing.T) {
+	t.Parallel()
+
+	invoked := make(chan struct{}, 1)
+	provider := &stubIntegrationWithResolvedSubject{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "events",
+				ConnMode: core.ConnectionModeNone,
+				ExecuteFn: func(_ context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
+					invoked <- struct{}{}
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"accepted":true}`}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "handle_event", Method: http.MethodPost}},
+		},
+		resolveFn: func(context.Context, *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+			return &core.HTTPResolvedSubject{ID: "system:admin"}, nil
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"events": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"public": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:     "/event",
+						Method:   http.MethodPost,
+						Security: "public",
+						Target:   "handle_event",
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/events/event", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http binding request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+	}
+
+	select {
+	case <-invoked:
+		t.Fatal("operation should not execute when resolver returns a reserved system subject")
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
 func TestHostedHTTPBinding_RejectsGenericOperationRouteConflicts(t *testing.T) {
 	t.Parallel()
 
@@ -13031,6 +13094,18 @@ type stubIntegrationWithOps struct {
 
 func (s *stubIntegrationWithOps) Catalog() *catalog.Catalog {
 	return serverTestCatalogFromOperations(s.N, s.ops)
+}
+
+type stubIntegrationWithResolvedSubject struct {
+	stubIntegrationWithOps
+	resolveFn func(context.Context, *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error)
+}
+
+func (s *stubIntegrationWithResolvedSubject) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+	if s.resolveFn != nil {
+		return s.resolveFn(ctx, req)
+	}
+	return nil, nil
 }
 
 type stubIntegrationWithCatalog struct {

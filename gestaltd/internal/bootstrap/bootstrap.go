@@ -145,6 +145,7 @@ type Deps struct {
 	WorkflowRuntime       *workflowRuntime
 	WorkflowManager       workflowmanager.Service
 	Egress                EgressDeps
+	AuthorizationProvider core.AuthorizationProvider
 	PluginInvoker         invocation.Invoker
 	PluginRuntime         pluginruntime.Provider
 	PluginRuntimeRegistry *pluginRuntimeRegistry
@@ -601,6 +602,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
+	deps.AuthorizationProvider = authzProvider
 	runtimeRegistry := newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 	deps.PluginRuntimeRegistry = runtimeRegistry
 

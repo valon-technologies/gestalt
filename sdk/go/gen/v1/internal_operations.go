@@ -1,0 +1,3 @@
+package proto
+
+const InternalResolveHTTPSubjectOperation = "__gestalt_internal_resolve_http_subject__"
