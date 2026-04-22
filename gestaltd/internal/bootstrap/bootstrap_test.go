@@ -45,11 +45,22 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func explicitStartupWorkflowActor() *proto.WorkflowActor {
-	return &proto.WorkflowActor{
-		SubjectId:   "system:workflow-startup",
-		SubjectKind: "system",
+func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, providerName string, target coreworkflow.Target) string {
+	t.Helper()
+	ref, err := deps.Services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+		ID:           fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, target.Operation),
+		ProviderName: providerName,
+		Target:       target,
+		SubjectID:    "system:config",
+		Permissions: []core.AccessPermission{{
+			Plugin:     target.PluginName,
+			Operations: []string{target.Operation},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("store workflow execution ref: %v", err)
 	}
+	return ref.ID
 }
 
 func bootstrapGraphQLStringPtr(value string) *string {
@@ -3074,12 +3085,16 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		}); err != nil {
 			return nil, fmt.Errorf("store identity token: %w", err)
 		}
+		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "sync",
+		})
 		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
 				PluginName: "roadmap",
 				Operation:  "sync",
 			},
-			CreatedBy: explicitStartupWorkflowActor(),
+			ExecutionRef: executionRef,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("startup callback: %w", err)
@@ -3129,12 +3144,16 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		}); err != nil {
 			return nil, fmt.Errorf("store identity token: %w", err)
 		}
+		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "sync",
+		})
 		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
 				PluginName: "roadmap",
 				Operation:  "sync",
 			},
-			CreatedBy: explicitStartupWorkflowActor(),
+			ExecutionRef: executionRef,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("startup callback: %w", err)
@@ -3153,90 +3172,63 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 	}
 }
 
-func TestBootstrapStartupWorkflowCallbackRejectsNonStartupCreatedByForAuthorization(t *testing.T) {
+func TestBootstrapStartupWorkflowCallbackRequiresExecutionRef(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name  string
-		actor *proto.WorkflowActor
-	}{
-		{
-			name: "spoofed user actor",
-			actor: &proto.WorkflowActor{
-				SubjectId:   principal.UserSubjectID("spoofed-user"),
-				SubjectKind: string(principal.KindUser),
-				DisplayName: "Spoofed User",
-			},
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	cfg := workflowStartupCallbackConfig(srv.URL)
+	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Plugins["roadmap"].AuthorizationPolicy = "roadmap-policy"
+	cfg.Plugins["roadmap"].ResolvedManifest.Spec.Surfaces.REST.Operations[0].AllowedRoles = []string{"viewer"}
+	cfg.Authorization.Policies = map[string]config.HumanPolicyDef{
+		"roadmap-policy": {
+			Members: []config.HumanPolicyMemberDef{{
+				SubjectID: principal.UserSubjectID("viewer-user"),
+				Role:      "viewer",
+			}},
 		},
-		{
-			name: "spoofed system actor",
-			actor: &proto.WorkflowActor{
-				SubjectId:   "system:config",
-				SubjectKind: "system",
-				DisplayName: "Config",
-			},
-		},
-	} {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusAccepted)
-				_, _ = w.Write([]byte(`{"ok":true}`))
-			}))
-			defer srv.Close()
-
-			cfg := workflowStartupCallbackConfig(srv.URL)
-			cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
-			cfg.Plugins["roadmap"].AuthorizationPolicy = "roadmap-policy"
-			cfg.Plugins["roadmap"].ResolvedManifest.Spec.Surfaces.REST.Operations[0].AllowedRoles = []string{"viewer"}
-			cfg.Authorization.Policies = map[string]config.HumanPolicyDef{
-				"roadmap-policy": {
-					Members: []config.HumanPolicyMemberDef{{
-						SubjectID: principal.UserSubjectID("viewer-user"),
-						Role:      "viewer",
-					}},
-				},
-			}
-
-			factories := validFactories()
-			factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
-				if name != "temporal" {
-					return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
-				}
-				if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-					SubjectID:   principal.IdentitySubjectID(),
-					Integration: "roadmap",
-					Connection:  config.PluginConnectionName,
-					Instance:    "default",
-					AccessToken: "workflow-startup-token",
-				}); err != nil {
-					return nil, fmt.Errorf("store identity token: %w", err)
-				}
-				_, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-					Target: &proto.BoundWorkflowTarget{
-						PluginName: "roadmap",
-						Operation:  "sync",
-					},
-					CreatedBy: tc.actor,
-				})
-				if err == nil {
-					return nil, fmt.Errorf("expected startup callback authorization failure")
-				}
-				if status.Code(err) != codes.InvalidArgument {
-					return nil, fmt.Errorf("startup callback status = %s, want %s", status.Code(err), codes.InvalidArgument)
-				}
-				return &stubWorkflowProvider{}, nil
-			}
-
-			result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-			if err != nil {
-				t.Fatalf("Bootstrap: %v", err)
-			}
-			defer func() { _ = result.Close(context.Background()) }()
-		})
 	}
+
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+		if name != "temporal" {
+			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
+		}
+		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+			SubjectID:   principal.IdentitySubjectID(),
+			Integration: "roadmap",
+			Connection:  config.PluginConnectionName,
+			Instance:    "default",
+			AccessToken: "workflow-startup-token",
+		}); err != nil {
+			return nil, fmt.Errorf("store identity token: %w", err)
+		}
+		_, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
+			Target: &proto.BoundWorkflowTarget{
+				PluginName: "roadmap",
+				Operation:  "sync",
+			},
+		})
+		if err == nil {
+			return nil, fmt.Errorf("expected startup callback execution_ref failure")
+		}
+		if status.Code(err) != codes.InvalidArgument {
+			return nil, fmt.Errorf("startup callback status = %s, want %s", status.Code(err), codes.InvalidArgument)
+		}
+		return &stubWorkflowProvider{}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
 }
 
 func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedPlugin(t *testing.T) {
@@ -3378,12 +3370,16 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 				}); err != nil {
 					return nil, fmt.Errorf("store identity token: %w", err)
 				}
+				executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreworkflow.Target{
+					PluginName: "roadmap",
+					Operation:  "sync",
+				})
 				resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 					Target: &proto.BoundWorkflowTarget{
 						PluginName: "roadmap",
 						Operation:  "sync",
 					},
-					CreatedBy: explicitStartupWorkflowActor(),
+					ExecutionRef: executionRef,
 				})
 				if err != nil {
 					return nil, fmt.Errorf("startup callback: %w", err)
@@ -3480,17 +3476,17 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 				Operation:  "sync",
 			},
 		}
-		startupPrincipal := &principal.Principal{
-			SubjectID:           "system:workflow-startup",
+		configPrincipal := &principal.Principal{
+			SubjectID:           "system:config",
 			CredentialSubjectID: principal.IdentitySubjectID(),
 			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
 				Plugin:     "roadmap",
 				Operations: []string{"sync"},
 			}}),
 		}
-		resp, err := deps.WorkflowRuntime.Invoke(principal.WithPrincipal(context.Background(), startupPrincipal), req)
+		resp, err := deps.WorkflowRuntime.Invoke(principal.WithPrincipal(context.Background(), configPrincipal), req)
 		if err != nil {
-			return nil, fmt.Errorf("startup invoke: %w", err)
+			return nil, fmt.Errorf("workflow runtime invoke: %w", err)
 		}
 		if resp.Status != http.StatusOK || resp.Body != `{}` {
 			return nil, fmt.Errorf("startup invoke response = %#v", resp)
@@ -4496,20 +4492,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Fatal("expected config workflow principal to be denied for status catalog operation")
 		}
 
-		startupPrincipal := &principal.Principal{
-			SubjectID:           "system:workflow-startup",
-			CredentialSubjectID: principal.IdentitySubjectID(),
-			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
-				Plugin:     "roadmap",
-				Operations: []string{"status"},
-			}}),
-		}
-		if !result.Authorizer.AllowOperation(ctx, startupPrincipal, "roadmap", "status") {
-			t.Fatal("expected workflow startup principal to be allowed for roadmap.status")
-		}
-		if result.Authorizer.AllowOperation(ctx, startupPrincipal, "roadmap", "sync") {
-			t.Fatal("expected workflow startup principal to be denied for roadmap.sync")
-		}
 	})
 
 	t.Run("workload resolve access keeps policy context but does not signal provider allow", func(t *testing.T) {
