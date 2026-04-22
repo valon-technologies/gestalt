@@ -60,17 +60,25 @@ type StopSessionRequest struct {
 	SessionID string
 }
 
+type HostServiceRelay struct {
+	DialTarget string
+}
+
 type BindHostServiceRequest struct {
-	SessionID      string
-	EnvVar         string
+	SessionID string
+	EnvVar    string
+	// Deprecated: use Relay instead.
 	HostSocketPath string
+	Relay          HostServiceRelay
 }
 
 type HostServiceBinding struct {
-	ID         string
-	SessionID  string
-	EnvVar     string
+	ID        string
+	SessionID string
+	EnvVar    string
+	// Deprecated: use Relay instead.
 	SocketPath string
+	Relay      HostServiceRelay
 }
 
 // StartPluginRequest describes the plugin process to launch inside a runtime

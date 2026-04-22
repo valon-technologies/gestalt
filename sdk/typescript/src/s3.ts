@@ -1,5 +1,3 @@
-import { connect } from "node:net";
-
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import {
@@ -503,9 +501,9 @@ export class S3 {
       throw new Error(`${envName} is not set`);
     }
     const transport = createGrpcTransport({
-      baseUrl: "http://localhost",
+      baseUrl: unixSocketBaseUrl(socketPath),
       nodeOptions: {
-        createConnection: () => connect(socketPath),
+        path: socketPath,
       },
     });
     this.client = createClient(S3Service, transport);
@@ -738,6 +736,15 @@ export class S3Object {
   async presign(options?: PresignOptions): Promise<PresignResult> {
     return await this.client.presignObject(this.ref, options);
   }
+}
+
+function unixSocketBaseUrl(socketPath: string): string {
+  let hash = 0x811c9dc5;
+  for (const char of socketPath) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `http://unix-${(hash >>> 0).toString(16)}.local`;
 }
 
 async function invokeS3Provider<T>(label: string, fn: () => Promise<T>): Promise<T> {

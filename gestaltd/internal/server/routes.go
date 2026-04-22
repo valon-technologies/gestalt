@@ -12,6 +12,7 @@ func (s *Server) routes() {
 	r := s.router
 	r.Use(requestMetaMiddleware)
 	r.Use(s.securityHeadersMiddleware)
+	r.Use(s.hostServiceRelayMiddleware)
 	r.Use(maxBodyMiddleware(1 << 20)) // 1 MB
 
 	switch s.routeProfile {

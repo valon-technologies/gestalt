@@ -3,6 +3,7 @@ package providerhost
 import "strings"
 
 const DefaultIndexedDBSocketEnv = "GESTALT_INDEXEDDB_SOCKET"
+const defaultIndexedDBSocketTokenSuffix = "_TOKEN"
 
 func IndexedDBSocketEnv(name string) string {
 	name = strings.TrimSpace(name)
@@ -23,4 +24,8 @@ func IndexedDBSocketEnv(name string) string {
 		}
 	}
 	return b.String()
+}
+
+func IndexedDBSocketTokenEnv(name string) string {
+	return IndexedDBSocketEnv(name) + defaultIndexedDBSocketTokenSuffix
 }

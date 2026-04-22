@@ -33,9 +33,11 @@ type localSession struct {
 }
 
 type localBinding struct {
-	id             string
-	envVar         string
-	hostSocketPath string
+	id         string
+	envVar     string
+	envTarget  string
+	socketPath string
+	relay      HostServiceRelay
 }
 
 type localPlugin struct {
@@ -174,8 +176,10 @@ func (p *LocalProvider) BindHostService(_ context.Context, req BindHostServiceRe
 	if req.EnvVar == "" {
 		return nil, fmt.Errorf("host service env var is required")
 	}
-	if req.HostSocketPath == "" {
-		return nil, fmt.Errorf("host service socket path is required")
+
+	relay, envTarget, socketPath, err := normalizeHostServiceBinding(req)
+	if err != nil {
+		return nil, err
 	}
 
 	p.mu.Lock()
@@ -185,16 +189,19 @@ func (p *LocalProvider) BindHostService(_ context.Context, req BindHostServiceRe
 		return nil, err
 	}
 	binding := localBinding{
-		id:             p.newID("binding"),
-		envVar:         req.EnvVar,
-		hostSocketPath: req.HostSocketPath,
+		id:         p.newID("binding"),
+		envVar:     req.EnvVar,
+		envTarget:  envTarget,
+		socketPath: socketPath,
+		relay:      relay,
 	}
 	session.bindings = append(session.bindings, binding)
 	return &HostServiceBinding{
 		ID:         binding.id,
 		SessionID:  session.id,
 		EnvVar:     binding.envVar,
-		SocketPath: binding.hostSocketPath,
+		SocketPath: binding.socketPath,
+		Relay:      binding.relay,
 	}, nil
 }
 
@@ -218,7 +225,7 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 	}
 	boundEnv := make(map[string]string, len(session.bindings))
 	for _, binding := range session.bindings {
-		boundEnv[binding.envVar] = binding.hostSocketPath
+		boundEnv[binding.envVar] = binding.envTarget
 	}
 	session.state = SessionStateRunning
 	rootDir := session.rootDir
@@ -335,4 +342,25 @@ func cloneStringMap(values map[string]string) map[string]string {
 		out[key] = value
 	}
 	return out
+}
+
+func normalizeHostServiceBinding(req BindHostServiceRequest) (HostServiceRelay, string, string, error) {
+	if relay := req.Relay; relay.DialTarget != "" {
+		network, address, err := dialTarget(relay.DialTarget)
+		if err != nil {
+			return HostServiceRelay{}, "", "", fmt.Errorf("host service relay: %w", err)
+		}
+		switch network {
+		case "unix":
+			return relay, address, address, nil
+		case "tcp", "tls":
+			return relay, relay.DialTarget, "", nil
+		default:
+			return HostServiceRelay{}, "", "", fmt.Errorf("host service relay network %q is not supported", network)
+		}
+	}
+	if req.HostSocketPath == "" {
+		return HostServiceRelay{}, "", "", fmt.Errorf("host service relay is required")
+	}
+	return HostServiceRelay{DialTarget: "unix://" + req.HostSocketPath}, req.HostSocketPath, req.HostSocketPath, nil
 }

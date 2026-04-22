@@ -30,6 +30,8 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	gestaltsdk "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
@@ -51,12 +53,16 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
+	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/ui"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 )
@@ -153,6 +159,280 @@ func (s *staticRuntimeInspector) SnapshotPluginRuntimes(context.Context) ([]boot
 		out = append(out, cloned)
 	}
 	return out, nil
+}
+
+type relayTestCacheServer struct {
+	proto.UnimplementedCacheServer
+
+	mu             sync.Mutex
+	receivedTokens []string
+}
+
+func (s *relayTestCacheServer) Get(ctx context.Context, req *proto.CacheGetRequest) (*proto.CacheGetResponse, error) {
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		s.mu.Lock()
+		s.receivedTokens = append(s.receivedTokens, md.Get(providerhost.HostServiceRelayTokenHeader)...)
+		s.mu.Unlock()
+	}
+	return &proto.CacheGetResponse{
+		Found: true,
+		Value: []byte("relay:" + req.GetKey()),
+	}, nil
+}
+
+func (s *relayTestCacheServer) relayTokens() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.receivedTokens...)
+}
+
+func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("relay-test-secret-0123456789abcd")
+	cacheSrv := &relayTestCacheServer{}
+	hostServices, err := providerhost.StartHostServices([]providerhost.HostService{{
+		EnvVar: "GESTALT_TEST_CACHE_SOCKET",
+		Register: func(srv *grpc.Server) {
+			proto.RegisterCacheServer(srv, cacheSrv)
+		},
+	}})
+	if err != nil {
+		t.Fatalf("StartHostServices: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = hostServices.Close()
+	})
+
+	bindings := hostServices.Bindings()
+	if len(bindings) != 1 {
+		t.Fatalf("host service bindings len = %d, want 1", len(bindings))
+	}
+
+	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfilePublic
+		cfg.StateSecret = secret
+	}))
+	ts.EnableHTTP2 = true
+	ts.StartTLS()
+	testutil.CloseOnCleanup(t, ts)
+
+	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
+	}
+	token, err := tokenManager.MintToken(providerhost.HostServiceRelayTokenRequest{
+		PluginName:   "support",
+		SessionID:    "session-1",
+		Service:      "cache",
+		SocketPath:   bindings[0].SocketPath,
+		MethodPrefix: "/gestalt.provider.v1.Cache/",
+		TTL:          time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("MintToken: %v", err)
+	}
+
+	conn := newRelayGRPCConn(t, ts)
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+
+	resp, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "hello"})
+	if err != nil {
+		t.Fatalf("Cache.Get via relay: %v", err)
+	}
+	if !resp.GetFound() {
+		t.Fatalf("Cache.Get found = false, want true")
+	}
+	if got := string(resp.GetValue()); got != "relay:hello" {
+		t.Fatalf("Cache.Get value = %q, want relay:hello", got)
+	}
+	if got := cacheSrv.relayTokens(); len(got) != 0 {
+		t.Fatalf("backend unexpectedly received relay token metadata: %#v", got)
+	}
+}
+
+func TestHostServiceRelayRejectsInvalidToken(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("relay-test-secret-0123456789abcd")
+	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfilePublic
+		cfg.StateSecret = secret
+	}))
+	ts.EnableHTTP2 = true
+	ts.StartTLS()
+	testutil.CloseOnCleanup(t, ts)
+
+	conn := newRelayGRPCConn(t, ts)
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, "not-a-valid-token"))
+
+	_, err := proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "hello"})
+	if grpcstatus.Code(err) != codes.Unauthenticated {
+		t.Fatalf("Cache.Get invalid token code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)
+	}
+}
+
+func TestHostServiceRelayRejectsMethodOutsideTokenPrefix(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("relay-test-secret-0123456789abcd")
+	cacheSrv := &relayTestCacheServer{}
+	hostServices, err := providerhost.StartHostServices([]providerhost.HostService{{
+		EnvVar: "GESTALT_TEST_CACHE_SOCKET",
+		Register: func(srv *grpc.Server) {
+			proto.RegisterCacheServer(srv, cacheSrv)
+		},
+	}})
+	if err != nil {
+		t.Fatalf("StartHostServices: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = hostServices.Close()
+	})
+
+	bindings := hostServices.Bindings()
+	if len(bindings) != 1 {
+		t.Fatalf("host service bindings len = %d, want 1", len(bindings))
+	}
+
+	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfilePublic
+		cfg.StateSecret = secret
+	}))
+	ts.EnableHTTP2 = true
+	ts.StartTLS()
+	testutil.CloseOnCleanup(t, ts)
+
+	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
+	}
+	token, err := tokenManager.MintToken(providerhost.HostServiceRelayTokenRequest{
+		PluginName:   "support",
+		SessionID:    "session-1",
+		Service:      "cache",
+		SocketPath:   bindings[0].SocketPath,
+		MethodPrefix: "/gestalt.provider.v1.IndexedDB/",
+		TTL:          time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("MintToken: %v", err)
+	}
+
+	conn := newRelayGRPCConn(t, ts)
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+
+	_, err = proto.NewCacheClient(conn).Get(ctx, &proto.CacheGetRequest{Key: "hello"})
+	if grpcstatus.Code(err) != codes.PermissionDenied {
+		t.Fatalf("Cache.Get disallowed method code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.PermissionDenied, err)
+	}
+}
+
+func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("relay-test-secret-0123456789abcd")
+	stubDB := &coretesting.StubIndexedDB{}
+	hostServices, err := providerhost.StartHostServices([]providerhost.HostService{{
+		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(stubDB, "relay-plugin", providerhost.IndexedDBServerOptions{
+				AllowedStores: []string{"tasks"},
+			}))
+		},
+	}})
+	if err != nil {
+		t.Fatalf("StartHostServices: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = hostServices.Close()
+	})
+
+	bindings := hostServices.Bindings()
+	if len(bindings) != 1 {
+		t.Fatalf("host service bindings len = %d, want 1", len(bindings))
+	}
+
+	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfilePublic
+		cfg.StateSecret = secret
+	}))
+	ts.EnableHTTP2 = true
+	ts.StartTLS()
+	testutil.CloseOnCleanup(t, ts)
+
+	tokenManager, err := providerhost.NewHostServiceRelayTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
+	}
+	token, err := tokenManager.MintToken(providerhost.HostServiceRelayTokenRequest{
+		PluginName:   "relay-plugin",
+		SessionID:    "session-1",
+		Service:      "indexeddb",
+		SocketPath:   bindings[0].SocketPath,
+		MethodPrefix: "/" + proto.IndexedDB_ServiceDesc.ServiceName + "/",
+		TTL:          time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("MintToken: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+
+	recordValue, err := gestaltsdk.RecordToProto(gestaltsdk.Record{"id": "task-1", "value": "ship-it"})
+	if err != nil {
+		t.Fatalf("RecordToProto: %v", err)
+	}
+	conn := newRelayGRPCConn(t, ts)
+	defer func() { _ = conn.Close() }()
+	client := proto.NewIndexedDBClient(conn)
+	if _, err := client.CreateObjectStore(ctx, &proto.CreateObjectStoreRequest{Name: "tasks"}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+	if _, err := client.Put(ctx, &proto.RecordRequest{Store: "tasks", Record: recordValue}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	resp, err := client.Get(ctx, &proto.ObjectStoreRequest{Store: "tasks", Id: "task-1"})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	record, err := gestaltsdk.RecordFromProto(resp.GetRecord())
+	if err != nil {
+		t.Fatalf("RecordFromProto: %v", err)
+	}
+	if got := record["value"]; got != "ship-it" {
+		t.Fatalf("record value = %#v, want %q", got, "ship-it")
+	}
+}
+
+func newRelayGRPCConn(t *testing.T, ts *httptest.Server) *grpc.ClientConn {
+	t.Helper()
+	targetURL, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatalf("parse relay URL: %v", err)
+	}
+	conn, err := grpc.NewClient(
+		targetURL.Host,
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})),
+	)
+	if err != nil {
+		t.Fatalf("grpc.NewClient: %v", err)
+	}
+	return conn
 }
 
 func (s *stubResolver) ResolveToken(ctx context.Context, _ *principal.Principal, _ string, _ string, _ string) (context.Context, string, error) {
