@@ -299,6 +299,11 @@ func buildSourceTokenMap(cfg *config.Config) map[string]string {
 	for _, entry := range cfg.Plugins {
 		addEntry(entry)
 	}
+	for _, entry := range cfg.Runtime.Providers {
+		if entry != nil {
+			addEntry(&entry.ProviderEntry)
+		}
+	}
 	for _, collection := range hostProviderCollections(cfg) {
 		for _, entry := range collection.entries {
 			addEntry(entry)

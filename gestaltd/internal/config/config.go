@@ -2145,6 +2145,11 @@ func normalizeProviderSourceShapes(cfg *Config) {
 			normalizeEntry(collection.kind, entry)
 		}
 	}
+	for _, entry := range cfg.Runtime.Providers {
+		if entry != nil {
+			normalizeEntry(providermanifestv1.KindRuntime, &entry.ProviderEntry)
+		}
+	}
 	for _, entry := range cfg.Providers.UI {
 		if entry != nil {
 			normalizeEntry(providermanifestv1.KindUI, &entry.ProviderEntry)
@@ -2481,6 +2486,11 @@ func resolveRelativePathsInValue(configPath string, root map[string]any, sourceS
 			}
 		}
 	}
+	if runtimeConfig := nestedMap(root, "runtime"); runtimeConfig != nil {
+		for _, entry := range mapValues(nestedMap(runtimeConfig, "providers")) {
+			resolveRelativePathsInEntry(providermanifestv1.KindRuntime, entry, baseDir, sourceSyntax)
+		}
+	}
 
 	for _, entry := range mapValues(nestedMap(root, "plugins")) {
 		resolveRelativePathsInEntry(providermanifestv1.KindPlugin, entry, baseDir, sourceSyntax)
@@ -2556,6 +2566,7 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		}
 		entry.IconFile = resolveRelativePath(baseDir, entry.IconFile)
 		entry.Source.Path = resolveRelativePath(baseDir, entry.Source.Path)
+		entry.Source.metadataPath = resolveRelativePath(baseDir, entry.Source.metadataPath)
 	}
 
 	for _, entry := range cfg.Providers.Authentication {
@@ -2586,6 +2597,11 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 	}
 	for _, entry := range cfg.Providers.Workflow {
 		resolveEntry(entry)
+	}
+	for _, entry := range cfg.Runtime.Providers {
+		if entry != nil {
+			resolveEntry(&entry.ProviderEntry)
+		}
 	}
 	for _, entry := range cfg.Plugins {
 		resolveEntry(entry)

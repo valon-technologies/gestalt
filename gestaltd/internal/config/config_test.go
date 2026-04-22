@@ -172,6 +172,7 @@ plugins:
 	}
 	if scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeHMAC {
 		t.Fatalf("SecuritySchemes[signed] = %#v", entry.SecuritySchemes["signed"])
+		return
 	}
 	if got, want := scheme.SignatureHeader, "X-Request-Signature"; got != want {
 		t.Fatalf("SecuritySchemes[signed].SignatureHeader = %q, want %q", got, want)
