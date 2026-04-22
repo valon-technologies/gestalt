@@ -57,8 +57,7 @@ const (
 )
 
 const (
-	APITokenKindAPI      = "api"
-	APITokenKindWorkload = "workload"
+	APITokenKindAPI = "api"
 )
 
 type ManagedIdentity struct {
