@@ -91,6 +91,11 @@ func buildSelectionSet(schema *Schema, ref TypeRef, depth int, ancestors map[str
 		if strings.HasPrefix(f.Name, "__") {
 			continue
 		}
+		// Generated selection sets cannot synthesize values for nested field
+		// arguments, so arg-bearing nested fields must be opt-in via overrides.
+		if len(f.Args) > 0 {
+			continue
+		}
 
 		fieldInner := f.Type.innerType()
 		fieldTypeName := fieldInner.namedType()
