@@ -88,6 +88,7 @@ func RunIntegrationTests(t *testing.T, newIntegration func(t *testing.T, mockURL
 		}
 		if resp == nil {
 			t.Fatal("RefreshToken returned nil")
+			return
 		}
 		if resp.AccessToken == "" {
 			t.Error("AccessToken is empty")
@@ -103,6 +104,7 @@ func RunIntegrationTests(t *testing.T, newIntegration func(t *testing.T, mockURL
 		cat := integration.Catalog()
 		if cat == nil {
 			t.Fatal("Catalog returned nil")
+			return
 		}
 		if len(cat.Operations) == 0 {
 			t.Fatal("Catalog returned empty operations")
@@ -122,10 +124,12 @@ func RunIntegrationTests(t *testing.T, newIntegration func(t *testing.T, mockURL
 		cat := integration.Catalog()
 		if cat == nil || len(cat.Operations) == 0 {
 			t.Skip("no operations to execute")
+			return
 		}
 		firstOp := firstExecutableOperation(cat)
 		if firstOp == nil {
 			t.Skip("no executable operations in catalog")
+			return
 		}
 
 		result, err := integration.Execute(ctx, firstOp.ID, map[string]any{}, "valid-bearer-token")
