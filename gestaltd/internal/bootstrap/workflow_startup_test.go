@@ -222,11 +222,19 @@ func invokeWorkflowHostDuringStartup(t *testing.T, hostServices []providerhost.H
 	return proto.NewWorkflowHostClient(conn).InvokeOperation(context.Background(), req)
 }
 
-func explicitStartupWorkflowActor() *proto.WorkflowActor {
-	return &proto.WorkflowActor{
-		SubjectId:   "system:workflow-startup",
-		SubjectKind: "system",
+func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, target coreworkflow.Target) string {
+	t.Helper()
+	ref, err := deps.Services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+		ID:           fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, target.Operation),
+		ProviderName: providerName,
+		Target:       target,
+		SubjectID:    "system:config",
+		Permissions:  workflowExecutionRefPermissionsForTarget(target),
+	})
+	if err != nil {
+		t.Fatalf("store workflow execution ref: %v", err)
 	}
+	return ref.ID
 }
 
 func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testing.T) {
@@ -268,12 +276,16 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 		}); err != nil {
 			return nil, fmt.Errorf("store identity token: %w", err)
 		}
+		executionRef := storeStartupExecutionRef(t, deps, name, coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "status",
+		})
 		resp, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
 				PluginName: "roadmap",
 				Operation:  "status",
 			},
-			CreatedBy: explicitStartupWorkflowActor(),
+			ExecutionRef: executionRef,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("startup callback: %w", err)
@@ -295,7 +307,7 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 	<-result.ProvidersReady
 }
 
-func TestManagedWorkflowStartupCallbackRequiresExplicitCreatedByWithoutExecutionRef(t *testing.T) {
+func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {
 	t.Parallel()
 
 	bin, manifestRoot := buildModifiedExampleProviderBinary(t, func(source string) string { return source })
@@ -334,7 +346,7 @@ func TestManagedWorkflowStartupCallbackRequiresExplicitCreatedByWithoutExecution
 			},
 		})
 		if err == nil {
-			return nil, fmt.Errorf("startup callback unexpectedly succeeded without created_by")
+			return nil, fmt.Errorf("startup callback unexpectedly succeeded without execution_ref")
 		}
 		if got, want := status.Code(err), codes.InvalidArgument; got != want {
 			return nil, fmt.Errorf("startup callback code = %v, want %v (err=%v)", got, want, err)

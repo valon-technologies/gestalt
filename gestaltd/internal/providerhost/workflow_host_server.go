@@ -44,13 +44,7 @@ func (s *WorkflowHostServer) InvokeOperation(ctx context.Context, req *proto.Inv
 		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.operation is required")
 	}
 	if strings.TrimSpace(value.ExecutionRef) == "" {
-		subjectID := strings.TrimSpace(value.CreatedBy.SubjectID)
-		switch {
-		case subjectID == "":
-			return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: created_by.subject_id is required when execution_ref is omitted")
-		case subjectID != "system:workflow-startup":
-			return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: created_by.subject_id must be system:workflow-startup when execution_ref is omitted")
-		}
+		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: execution_ref is required")
 	}
 	value.ProviderName = s.providerName
 	resp, err := s.invoke(ctx, value)

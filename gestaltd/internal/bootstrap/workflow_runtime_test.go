@@ -249,21 +249,21 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 			},
 		},
 	}
-	startupPermissions := principal.CompilePermissions(workflowExecutionRefPermissionsForTarget(req.Target))
-	startupPrincipal := principal.Canonicalize(&principal.Principal{
-		SubjectID:           "system:workflow-startup",
+	configPermissions := principal.CompilePermissions(workflowExecutionRefPermissionsForTarget(req.Target))
+	configPrincipal := principal.Canonicalize(&principal.Principal{
+		SubjectID:           "system:config",
 		CredentialSubjectID: principal.IdentitySubjectID(),
-		Scopes:              principal.PermissionPlugins(startupPermissions),
-		TokenPermissions:    startupPermissions,
+		Scopes:              principal.PermissionPlugins(configPermissions),
+		TokenPermissions:    configPermissions,
 	})
-	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), startupPrincipal), req)
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), configPrincipal), req)
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 	if resp.Status != http.StatusAccepted || resp.Body != `{"ok":true}` {
 		t.Fatalf("response = %#v", resp)
 	}
-	if gotPrincipal == nil || gotPrincipal.SubjectID != "system:workflow-startup" {
+	if gotPrincipal == nil || gotPrincipal.SubjectID != "system:config" {
 		t.Fatalf("principal = %#v", gotPrincipal)
 	}
 	if gotPrincipal.CredentialSubjectID != principal.IdentitySubjectID() {

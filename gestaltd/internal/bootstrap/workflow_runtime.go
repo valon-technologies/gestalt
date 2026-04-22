@@ -210,10 +210,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		invokeConnection = strings.TrimSpace(target.Connection)
 		invokeInstance = strings.TrimSpace(target.Instance)
 	} else if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
-		principalValue = workflowRequestPrincipal(req)
-		if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
-			return nil, fmt.Errorf("%w: workflow execution principal is required when execution_ref is omitted", invocation.ErrInternal)
-		}
+		return nil, fmt.Errorf("%w: workflow execution principal is required when execution_ref is omitted", invocation.ErrInternal)
 	}
 	if contextValue := workflowInvocationContext(req); len(contextValue) > 0 {
 		ctx = invocation.WithWorkflowContext(ctx, contextValue)
@@ -270,27 +267,14 @@ func workflowExecutionPrincipal(ref *coreworkflow.ExecutionReference) *principal
 		return nil
 	}
 	permissions := principal.CompilePermissions(ref.Permissions)
-	return principal.Canonicalize(&principal.Principal{
+	value := &principal.Principal{
 		SubjectID:        strings.TrimSpace(ref.SubjectID),
 		Scopes:           principal.PermissionPlugins(permissions),
 		TokenPermissions: permissions,
-	})
-}
-
-func workflowRequestPrincipal(req coreworkflow.InvokeOperationRequest) *principal.Principal {
-	subjectID := strings.TrimSpace(req.CreatedBy.SubjectID)
-	if subjectID != "system:workflow-startup" {
-		return nil
 	}
-	permissions := principal.CompilePermissions(workflowExecutionRefPermissionsForTarget(req.Target))
-	value := &principal.Principal{
-		SubjectID:        subjectID,
-		DisplayName:      strings.TrimSpace(req.CreatedBy.DisplayName),
-		Source:           principal.ParseSource(req.CreatedBy.AuthSource),
-		Scopes:           principal.PermissionPlugins(permissions),
-		TokenPermissions: permissions,
+	if principal.IsSystemSubjectID(value.SubjectID) {
+		value.CredentialSubjectID = principal.IdentitySubjectID()
 	}
-	value.CredentialSubjectID = principal.IdentitySubjectID()
 	return principal.Canonicalize(value)
 }
 
