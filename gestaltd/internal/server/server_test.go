@@ -15386,8 +15386,17 @@ func TestMCPProtectedResourceMetadata(t *testing.T) {
 		t.Fatalf("resource = %v, want %q", got, ts.URL+"/mcp")
 	}
 	authServers, _ := body["authorization_servers"].([]any)
-	if len(authServers) != 1 || authServers[0] != "https://accounts.example.test" {
-		t.Fatalf("authorization_servers = %v, want [https://accounts.example.test]", authServers)
+	if len(authServers) != 1 || authServers[0] != ts.URL {
+		t.Fatalf("authorization_servers = %v, want [%s]", authServers, ts.URL)
+	}
+	if got := body["authorization_endpoint"]; got != ts.URL+"/oauth/authorize" {
+		t.Fatalf("authorization_endpoint = %v, want %q", got, ts.URL+"/oauth/authorize")
+	}
+	if got := body["token_endpoint"]; got != ts.URL+"/oauth/token" {
+		t.Fatalf("token_endpoint = %v, want %q", got, ts.URL+"/oauth/token")
+	}
+	if got := body["registration_endpoint"]; got != ts.URL+"/oauth/register" {
+		t.Fatalf("registration_endpoint = %v, want %q", got, ts.URL+"/oauth/register")
 	}
 	scopes, _ := body["scopes_supported"].([]any)
 	if !reflect.DeepEqual(scopes, []any{"openid", "email", "profile"}) {
@@ -15396,6 +15405,14 @@ func TestMCPProtectedResourceMetadata(t *testing.T) {
 	bearerMethods, _ := body["bearer_methods_supported"].([]any)
 	if !reflect.DeepEqual(bearerMethods, []any{"header"}) {
 		t.Fatalf("bearer_methods_supported = %v, want [header]", bearerMethods)
+	}
+	challengeMethods, _ := body["code_challenge_methods_supported"].([]any)
+	if !reflect.DeepEqual(challengeMethods, []any{"S256"}) {
+		t.Fatalf("code_challenge_methods_supported = %v, want [S256]", challengeMethods)
+	}
+	authMethods, _ := body["token_endpoint_auth_methods_supported"].([]any)
+	if !reflect.DeepEqual(authMethods, []any{"none", "client_secret_post", "client_secret_basic"}) {
+		t.Fatalf("token_endpoint_auth_methods_supported = %v, want [none client_secret_post client_secret_basic]", authMethods)
 	}
 }
 
@@ -15448,6 +15465,336 @@ func TestMCPProtectedResourceMetadataRoute_PrecedesRootMountedUIFallback(t *test
 	}
 	if strings.Contains(string(body), "root-shell") {
 		t.Fatalf("body = %q, want JSON metadata instead of root UI shell", body)
+	}
+}
+
+func TestMCPAuthorizationServerMetadata(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	mcpHandler := newMCPHandler(t, func() *registry.ProviderMap[core.Provider] {
+		reg := registry.New()
+		return &reg.Providers
+	}(), svc, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &stubAuthWithLoginURL{
+			StubAuthProvider: coretesting.StubAuthProvider{N: "oidc"},
+			loginURL:         "https://accounts.example.test/authorize?scope=openid+email+profile",
+		}
+		cfg.MCPHandler = mcpHandler
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	for _, path := range []string{"/.well-known/oauth-authorization-server", "/.well-known/oauth-authorization-server/mcp"} {
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			_ = resp.Body.Close()
+			t.Fatalf("%s status = %d, want %d", path, resp.StatusCode, http.StatusOK)
+		}
+
+		var body map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			_ = resp.Body.Close()
+			t.Fatalf("decode %s JSON: %v", path, err)
+		}
+		_ = resp.Body.Close()
+
+		if got := body["issuer"]; got != ts.URL {
+			t.Fatalf("%s issuer = %v, want %q", path, got, ts.URL)
+		}
+		if got := body["authorization_endpoint"]; got != ts.URL+"/oauth/authorize" {
+			t.Fatalf("%s authorization_endpoint = %v, want %q", path, got, ts.URL+"/oauth/authorize")
+		}
+		if got := body["token_endpoint"]; got != ts.URL+"/oauth/token" {
+			t.Fatalf("%s token_endpoint = %v, want %q", path, got, ts.URL+"/oauth/token")
+		}
+		if got := body["registration_endpoint"]; got != ts.URL+"/oauth/register" {
+			t.Fatalf("%s registration_endpoint = %v, want %q", path, got, ts.URL+"/oauth/register")
+		}
+	}
+}
+
+func TestMCPAuthorizationServerMetadataRoute_PrecedesRootMountedUIFallback(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>root-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	handler, err := testutilUIHandler(dir)
+	if err != nil {
+		t.Fatalf("ui handler: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	mcpHandler := newMCPHandler(t, func() *registry.ProviderMap[core.Provider] {
+		reg := registry.New()
+		return &reg.Providers
+	}(), svc, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &stubAuthWithLoginURL{
+			StubAuthProvider: coretesting.StubAuthProvider{N: "oidc"},
+			loginURL:         "https://accounts.example.test/authorize",
+		}
+		cfg.MountedUIs = []server.MountedUI{{
+			Path:    "/",
+			Handler: handler,
+		}}
+		cfg.MCPHandler = mcpHandler
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/.well-known/oauth-authorization-server")
+	if err != nil {
+		t.Fatalf("GET auth server metadata with root UI: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll metadata response: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q, want %q", got, "application/json")
+	}
+	if strings.Contains(string(body), "root-shell") {
+		t.Fatalf("body = %q, want JSON metadata instead of root UI shell", body)
+	}
+}
+
+func TestMCPOAuthAuthorizationCodeFlow(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	svc := coretesting.NewStubServices(t)
+	providers := func() *registry.ProviderMap[core.Provider] {
+		reg := registry.New()
+		return &reg.Providers
+	}()
+	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &stubHostIssuedSessionAuth{secret: secret, name: "oidc"}
+		cfg.StateSecret = secret
+		cfg.MCPHandler = mcpHandler
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	registrationResp, err := http.Post(ts.URL+"/oauth/register", "application/json", strings.NewReader(`{
+		"client_name":"Claude",
+		"redirect_uris":["http://127.0.0.1:4318/callback"],
+		"grant_types":["authorization_code","refresh_token"],
+		"response_types":["code"],
+		"token_endpoint_auth_method":"none"
+	}`))
+	if err != nil {
+		t.Fatalf("POST /oauth/register: %v", err)
+	}
+	defer func() { _ = registrationResp.Body.Close() }()
+
+	if registrationResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(registrationResp.Body)
+		t.Fatalf("register status = %d, want %d: %s", registrationResp.StatusCode, http.StatusCreated, body)
+	}
+
+	var registration map[string]any
+	if err := json.NewDecoder(registrationResp.Body).Decode(&registration); err != nil {
+		t.Fatalf("decode registration response: %v", err)
+	}
+	clientID, _ := registration["client_id"].(string)
+	if clientID == "" {
+		t.Fatal("registration response missing client_id")
+	}
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar.New: %v", err)
+	}
+	noRedirect := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	redirectURI := "http://127.0.0.1:4318/callback"
+	verifier := oauth.GenerateVerifier()
+	challenge := oauth.ComputeS256Challenge(verifier)
+	authState := "state-123"
+	authorizeURL := ts.URL + "/oauth/authorize?response_type=code" +
+		"&client_id=" + url.QueryEscape(clientID) +
+		"&redirect_uri=" + url.QueryEscape(redirectURI) +
+		"&scope=" + url.QueryEscape("openid email profile") +
+		"&state=" + url.QueryEscape(authState) +
+		"&code_challenge=" + url.QueryEscape(challenge) +
+		"&code_challenge_method=S256"
+
+	resp, err := noRedirect.Get(authorizeURL)
+	if err != nil {
+		t.Fatalf("GET /oauth/authorize: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusFound {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("authorize status = %d, want %d: %s", resp.StatusCode, http.StatusFound, body)
+	}
+	loginURL := ts.URL + resp.Header.Get("Location")
+	if !strings.Contains(loginURL, "/api/v1/auth/login?next=") {
+		t.Fatalf("authorize redirect = %q, want /api/v1/auth/login?next=...", loginURL)
+	}
+
+	loginResp, err := noRedirect.Get(loginURL)
+	if err != nil {
+		t.Fatalf("GET login redirect: %v", err)
+	}
+	defer func() { _ = loginResp.Body.Close() }()
+
+	if loginResp.StatusCode != http.StatusFound {
+		body, _ := io.ReadAll(loginResp.Body)
+		t.Fatalf("login status = %d, want %d: %s", loginResp.StatusCode, http.StatusFound, body)
+	}
+	idpURL := loginResp.Header.Get("Location")
+	idpParsed, err := url.Parse(idpURL)
+	if err != nil {
+		t.Fatalf("parse IDP redirect: %v", err)
+	}
+	idpState := idpParsed.Query().Get("state")
+	if idpState == "" {
+		t.Fatal("IDP redirect missing state")
+	}
+
+	callbackResp, err := noRedirect.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=" + url.QueryEscape(idpState))
+	if err != nil {
+		t.Fatalf("GET login callback: %v", err)
+	}
+	defer func() { _ = callbackResp.Body.Close() }()
+
+	if callbackResp.StatusCode != http.StatusFound {
+		body, _ := io.ReadAll(callbackResp.Body)
+		t.Fatalf("callback status = %d, want %d: %s", callbackResp.StatusCode, http.StatusFound, body)
+	}
+
+	resumeAuthorizeURL, err := url.Parse(callbackResp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("parse callback redirect: %v", err)
+	}
+	resumeAuthorize := callbackResp.Request.URL.ResolveReference(resumeAuthorizeURL).String()
+
+	authorizedResp, err := noRedirect.Get(resumeAuthorize)
+	if err != nil {
+		t.Fatalf("GET resumed authorize: %v", err)
+	}
+	defer func() { _ = authorizedResp.Body.Close() }()
+
+	if authorizedResp.StatusCode != http.StatusFound {
+		body, _ := io.ReadAll(authorizedResp.Body)
+		t.Fatalf("resumed authorize status = %d, want %d: %s", authorizedResp.StatusCode, http.StatusFound, body)
+	}
+	finalRedirect, err := url.Parse(authorizedResp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("parse final redirect: %v", err)
+	}
+	if got := finalRedirect.Scheme + "://" + finalRedirect.Host + finalRedirect.Path; got != redirectURI {
+		t.Fatalf("final redirect target = %q, want %q", got, redirectURI)
+	}
+	if got := finalRedirect.Query().Get("state"); got != authState {
+		t.Fatalf("final state = %q, want %q", got, authState)
+	}
+	code := finalRedirect.Query().Get("code")
+	if code == "" {
+		t.Fatal("final redirect missing code")
+	}
+
+	tokenResp, err := http.PostForm(ts.URL+"/oauth/token", url.Values{
+		"grant_type":    {"authorization_code"},
+		"client_id":     {clientID},
+		"code":          {code},
+		"redirect_uri":  {redirectURI},
+		"code_verifier": {verifier},
+	})
+	if err != nil {
+		t.Fatalf("POST /oauth/token (authorization_code): %v", err)
+	}
+	defer func() { _ = tokenResp.Body.Close() }()
+
+	if tokenResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(tokenResp.Body)
+		t.Fatalf("token status = %d, want %d: %s", tokenResp.StatusCode, http.StatusOK, body)
+	}
+
+	var tokenBody map[string]any
+	if err := json.NewDecoder(tokenResp.Body).Decode(&tokenBody); err != nil {
+		t.Fatalf("decode token response: %v", err)
+	}
+	accessToken, _ := tokenBody["access_token"].(string)
+	refreshToken, _ := tokenBody["refresh_token"].(string)
+	if accessToken == "" {
+		t.Fatal("token response missing access_token")
+	}
+	if refreshToken == "" {
+		t.Fatal("token response missing refresh_token")
+	}
+
+	status, _ := mcpJSONRPC(t, ts, map[string]string{"Authorization": "Bearer " + accessToken}, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-03-26",
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "test", "version": "1.0"},
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("initialize with access token: expected 200, got %d", status)
+	}
+
+	refreshResp, err := http.PostForm(ts.URL+"/oauth/token", url.Values{
+		"grant_type":    {"refresh_token"},
+		"client_id":     {clientID},
+		"refresh_token": {refreshToken},
+	})
+	if err != nil {
+		t.Fatalf("POST /oauth/token (refresh_token): %v", err)
+	}
+	defer func() { _ = refreshResp.Body.Close() }()
+
+	if refreshResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(refreshResp.Body)
+		t.Fatalf("refresh status = %d, want %d: %s", refreshResp.StatusCode, http.StatusOK, body)
+	}
+
+	var refreshBody map[string]any
+	if err := json.NewDecoder(refreshResp.Body).Decode(&refreshBody); err != nil {
+		t.Fatalf("decode refresh response: %v", err)
+	}
+	refreshedAccessToken, _ := refreshBody["access_token"].(string)
+	if refreshedAccessToken == "" {
+		t.Fatal("refresh response missing access_token")
+	}
+
+	status, _ = mcpJSONRPC(t, ts, map[string]string{"Authorization": "Bearer " + refreshedAccessToken}, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-03-26",
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "test", "version": "1.0"},
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("initialize with refreshed access token: expected 200, got %d", status)
 	}
 }
 

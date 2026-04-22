@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,10 +14,15 @@ const (
 )
 
 type mcpProtectedResourceMetadataResponse struct {
-	Resource               string   `json:"resource"`
-	AuthorizationServers   []string `json:"authorization_servers,omitempty"`
-	ScopesSupported        []string `json:"scopes_supported,omitempty"`
-	BearerMethodsSupported []string `json:"bearer_methods_supported,omitempty"`
+	Resource                          string   `json:"resource"`
+	AuthorizationServers              []string `json:"authorization_servers,omitempty"`
+	AuthorizationEndpoint             string   `json:"authorization_endpoint,omitempty"`
+	TokenEndpoint                     string   `json:"token_endpoint,omitempty"`
+	RegistrationEndpoint              string   `json:"registration_endpoint,omitempty"`
+	ScopesSupported                   []string `json:"scopes_supported,omitempty"`
+	BearerMethodsSupported            []string `json:"bearer_methods_supported,omitempty"`
+	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported,omitempty"`
 }
 
 func (s *Server) mcpProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
@@ -34,40 +40,48 @@ func (s *Server) mcpProtectedResourceMetadataResponse(r *http.Request) (mcpProte
 		return mcpProtectedResourceMetadataResponse{}, err
 	}
 
-	authorizationServers, scopes := s.mcpAuthorizationMetadata(r)
+	authServer, err := s.mcpAuthorizationServerConfig(r)
+	if err != nil {
+		if errors.Is(err, errMCPOAuthDisabled) {
+			return mcpProtectedResourceMetadataResponse{
+				Resource: resourceURL,
+			}, nil
+		}
+		return mcpProtectedResourceMetadataResponse{}, err
+	}
 	resp := mcpProtectedResourceMetadataResponse{
-		Resource:               resourceURL,
-		AuthorizationServers:   authorizationServers,
-		ScopesSupported:        scopes,
-		BearerMethodsSupported: []string{"header"},
+		Resource:                          resourceURL,
+		AuthorizationServers:              []string{authServer.Issuer},
+		AuthorizationEndpoint:             authServer.AuthorizationEndpoint,
+		TokenEndpoint:                     authServer.TokenEndpoint,
+		RegistrationEndpoint:              authServer.RegistrationEndpoint,
+		ScopesSupported:                   authServer.ScopesSupported,
+		BearerMethodsSupported:            []string{"header"},
+		CodeChallengeMethodsSupported:     authServer.CodeChallengeMethodsSupported,
+		TokenEndpointAuthMethodsSupported: authServer.TokenEndpointAuthMethodsSupported,
 	}
 	return resp, nil
 }
 
-func (s *Server) mcpAuthorizationMetadata(r *http.Request) ([]string, []string) {
+func (s *Server) mcpAuthorizationScopes(r *http.Request) []string {
 	auth := s.serverAuthRuntime()
 	if auth.noAuth || auth.provider == nil {
-		return nil, nil
+		return nil
 	}
 
 	loginURLRaw, err := loginURLForRequest(r.Context(), auth.provider, mcpMetadataProbeState)
 	if err != nil {
-		return nil, nil
+		return nil
 	}
 	loginURLResolved, err := s.resolvePublicURL(r, loginURLRaw)
 	if err != nil {
-		return nil, nil
+		return nil
 	}
 	loginURL, err := url.Parse(loginURLResolved)
 	if err != nil || !loginURL.IsAbs() || loginURL.Host == "" {
-		return nil, nil
+		return nil
 	}
-
-	authorizationServer := (&url.URL{
-		Scheme: loginURL.Scheme,
-		Host:   loginURL.Host,
-	}).String()
-	return []string{authorizationServer}, splitOAuthScopes(loginURL.Query().Get("scope"))
+	return splitOAuthScopes(loginURL.Query().Get("scope"))
 }
 
 func splitOAuthScopes(raw string) []string {
