@@ -117,6 +117,7 @@ type Server struct {
 	prometheusMetrics      http.Handler
 	mcpHandler             http.Handler
 	hostServiceRelayTokens *providerhost.HostServiceRelayTokenManager
+	egressProxyTokens      *providerhost.EgressProxyTokenManager
 	mountedHTTPBindings    []MountedHTTPBinding
 	mountedUIs             []MountedUI
 	adminRoute             AdminRouteConfig
@@ -264,10 +265,15 @@ func New(cfg Config) (*Server, error) {
 		otelOptions = append(otelOptions, otelhttp.WithMeterProvider(cfg.MeterProvider))
 	}
 	var hostServiceRelayTokens *providerhost.HostServiceRelayTokenManager
+	var egressProxyTokens *providerhost.EgressProxyTokenManager
 	if len(cfg.StateSecret) > 0 {
 		hostServiceRelayTokens, err = providerhost.NewHostServiceRelayTokenManager(cfg.StateSecret)
 		if err != nil {
 			return nil, fmt.Errorf("init host service relay tokens: %w", err)
+		}
+		egressProxyTokens, err = providerhost.NewEgressProxyTokenManager(cfg.StateSecret)
+		if err != nil {
+			return nil, fmt.Errorf("init egress proxy tokens: %w", err)
 		}
 	}
 	s := &Server{
@@ -311,6 +317,7 @@ func New(cfg Config) (*Server, error) {
 		prometheusMetrics:      cfg.PrometheusMetrics,
 		mcpHandler:             cfg.MCPHandler,
 		hostServiceRelayTokens: hostServiceRelayTokens,
+		egressProxyTokens:      egressProxyTokens,
 		mountedHTTPBindings:    mountedHTTPBindings,
 		mountedUIs:             mountedUIs,
 		adminRoute:             adminRoute,

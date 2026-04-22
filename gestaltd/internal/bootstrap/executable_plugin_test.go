@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -464,6 +465,13 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 					ID:     "authorization_roundtrip",
 					Method: http.MethodPost,
 				},
+				{
+					ID:     "make_http_request",
+					Method: http.MethodGet,
+					Parameters: []catalog.CatalogParameter{
+						{Name: "url", Type: "string", Required: true},
+					},
+				},
 			},
 		},
 		ExecuteFn: func(ctx context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
@@ -549,6 +557,17 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 			case "authorization_roundtrip":
 				record, err := fakeHostedAuthorizationRoundTrip(env)
+				if err != nil {
+					return nil, err
+				}
+				body, err := json.Marshal(record)
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			case "make_http_request":
+				targetURL, _ := params["url"].(string)
+				record, err := fakeHostedMakeHTTPRequest(targetURL, env)
 				if err != nil {
 					return nil, err
 				}
@@ -704,6 +723,33 @@ func fakeHostedCacheRoundTrip(key, value, binding string, env map[string]string)
 	return map[string]any{
 		"found": resp.GetFound(),
 		"value": string(resp.GetValue()),
+	}, nil
+}
+
+func fakeHostedMakeHTTPRequest(targetURL string, env map[string]string) (map[string]any, error) {
+	client := &http.Client{}
+	if proxyURL := strings.TrimSpace(env["HTTP_PROXY"]); proxyURL != "" {
+		parsed, err := url.Parse(proxyURL)
+		if err != nil {
+			return nil, fmt.Errorf("parse HTTP_PROXY: %w", err)
+		}
+		client.Transport = &http.Transport{
+			Proxy:           http.ProxyURL(parsed),
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12},
+		}
+	}
+	resp, err := client.Get(targetURL)
+	if err != nil {
+		return nil, fmt.Errorf("get via proxy: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+	return map[string]any{
+		"status": resp.StatusCode,
+		"body":   string(body),
 	}, nil
 }
 
@@ -4972,6 +5018,10 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 	runtimeProvider.capabilities.HostnameProxyEgress = true
 	runtimeProvider.capabilities.HostPathExecution = true
 	runtimeProvider.fakeHosted = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
 		return runtimeProvider, nil
@@ -6223,6 +6273,168 @@ func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte) http.Handler {
 	})
 }
 
+func newRuntimeEgressProxyTestHandler(t *testing.T, stateSecret []byte) http.Handler {
+	t.Helper()
+
+	tokenManager, err := providerhost.NewEgressProxyTokenManager(stateSecret)
+	if err != nil {
+		t.Fatalf("NewEgressProxyTokenManager: %v", err)
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := extractRuntimeProxyAuthorizationToken(r.Header.Get("Proxy-Authorization"))
+		target, err := tokenManager.ResolveToken(token)
+		if err != nil {
+			http.Error(w, "invalid egress proxy token", http.StatusProxyAuthRequired)
+			return
+		}
+		host := runtimeProxyTargetHost(r)
+		if host == "" {
+			http.Error(w, "proxy target host is required", http.StatusBadRequest)
+			return
+		}
+		if err := egress.CheckHost(target.AllowedHosts, host, target.DefaultAction); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		newRuntimeEgressProxy().ServeHTTP(w, r)
+	})
+}
+
+func extractRuntimeProxyAuthorizationToken(header string) string {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return ""
+	}
+	if token, ok := strings.CutPrefix(header, "Basic "); ok {
+		decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(token))
+		if err != nil {
+			return ""
+		}
+		user, pass, found := strings.Cut(string(decoded), ":")
+		if found && strings.TrimSpace(pass) != "" {
+			return strings.TrimSpace(pass)
+		}
+		return strings.TrimSpace(user)
+	}
+	return ""
+}
+
+func runtimeProxyTargetHost(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	var host string
+	switch {
+	case r.Method == http.MethodConnect:
+		host = strings.TrimSpace(r.Host)
+	case r.URL != nil && r.URL.Host != "":
+		host = strings.TrimSpace(r.URL.Hostname())
+	default:
+		host = strings.TrimSpace(r.Host)
+	}
+	if host == "" {
+		return ""
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		return h
+	}
+	return host
+}
+
+func newRuntimeEgressProxy() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodConnect {
+			runtimeHandleProxyConnect(w, r)
+			return
+		}
+		runtimeHandleProxyHTTP(w, r)
+	})
+}
+
+func runtimeHandleProxyHTTP(w http.ResponseWriter, r *http.Request) {
+	transport := &http.Transport{}
+	defer transport.CloseIdleConnections()
+
+	out := r.Clone(r.Context())
+	out.RequestURI = ""
+	out.Header = out.Header.Clone()
+	out.Header.Del("Proxy-Authorization")
+	if out.URL == nil || !out.URL.IsAbs() {
+		http.Error(w, "proxy target URL is required", http.StatusBadRequest)
+		return
+	}
+	out.Host = out.URL.Host
+
+	resp, err := transport.RoundTrip(out)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	for k, vv := range resp.Header {
+		for _, v := range vv {
+			w.Header().Add(k, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+}
+
+func runtimeHandleProxyConnect(w http.ResponseWriter, r *http.Request) {
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "hijacking not supported", http.StatusInternalServerError)
+		return
+	}
+
+	targetAddr := strings.TrimSpace(r.Host)
+	if targetAddr == "" {
+		http.Error(w, "proxy target address is required", http.StatusBadRequest)
+		return
+	}
+	if _, _, err := net.SplitHostPort(targetAddr); err != nil {
+		targetAddr = net.JoinHostPort(targetAddr, "443")
+	}
+	targetConn, err := net.DialTimeout("tcp", targetAddr, 10*time.Second)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	clientConn, _, err := hijacker.Hijack()
+	if err != nil {
+		_ = targetConn.Close()
+		return
+	}
+	deadline := time.Now().Add(10 * time.Minute)
+	_ = clientConn.SetDeadline(deadline)
+	_ = targetConn.SetDeadline(deadline)
+
+	done := make(chan struct{}, 2)
+	go func() {
+		_, _ = io.Copy(targetConn, clientConn)
+		closeRuntimeProxyWrite(targetConn)
+		done <- struct{}{}
+	}()
+	go func() {
+		_, _ = io.Copy(clientConn, targetConn)
+		closeRuntimeProxyWrite(clientConn)
+		done <- struct{}{}
+	}()
+	<-done
+	<-done
+	_ = clientConn.Close()
+	_ = targetConn.Close()
+}
+
+func closeRuntimeProxyWrite(c net.Conn) {
+	if closeWriter, ok := c.(interface{ CloseWrite() error }); ok {
+		_ = closeWriter.CloseWrite()
+	}
+}
+
 func runtimeRelayMethodAllowed(path, methodPrefix string) bool {
 	methodPrefix = strings.TrimSpace(methodPrefix)
 	if methodPrefix == "" {
@@ -6545,6 +6757,196 @@ func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *t
 	}
 	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
 		t.Fatalf("BindHostService(%s) relay target = %q, want tls relay target", bindRequests[0].EnvVar, got)
+	}
+}
+
+func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapability(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+				AllowedHosts:         []string{"api.github.com"},
+			},
+		},
+	}
+	deps := Deps{
+		BaseURL:       "https://gestalt.example.test",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		Egress:        EgressDeps{DefaultAction: egress.PolicyDeny},
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	httpProxy := startRequests[0].Env["HTTP_PROXY"]
+	httpsProxy := startRequests[0].Env["HTTPS_PROXY"]
+	if httpProxy == "" {
+		t.Fatal("StartPlugin env should include HTTP_PROXY")
+	}
+	if httpsProxy == "" {
+		t.Fatal("StartPlugin env should include HTTPS_PROXY")
+	}
+	if httpProxy != httpsProxy {
+		t.Fatalf("HTTP_PROXY = %q, HTTPS_PROXY = %q, want matching values", httpProxy, httpsProxy)
+	}
+	parsed, err := url.Parse(httpProxy)
+	if err != nil {
+		t.Fatalf("parse HTTP_PROXY: %v", err)
+	}
+	if parsed.Scheme != "https" {
+		t.Fatalf("HTTP_PROXY scheme = %q, want https", parsed.Scheme)
+	}
+	if parsed.Host != "gestalt.example.test" {
+		t.Fatalf("HTTP_PROXY host = %q, want gestalt.example.test", parsed.Host)
+	}
+	if parsed.User == nil {
+		t.Fatal("HTTP_PROXY should include relay credentials")
+	}
+	if got := startRequests[0].AllowedHosts; !slices.Equal(got, []string{"api.github.com"}) {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want original allowedHosts only", got)
+	}
+}
+
+func TestPluginRuntimePublicEgressProxyRoundTripsThroughHostedPlugin(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	proxySrv := httptest.NewUnstartedServer(newRuntimeEgressProxyTestHandler(t, secret))
+	proxySrv.EnableHTTP2 = true
+	proxySrv.StartTLS()
+	testutil.CloseOnCleanup(t, proxySrv)
+
+	targetSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Path; got != "/proxy-test" {
+			t.Fatalf("target path = %q, want /proxy-test", got)
+		}
+		_, _ = io.WriteString(w, "egress-proxy-ok")
+	}))
+	testutil.CloseOnCleanup(t, targetSrv)
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "make_http_request", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "url", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Hosted egress proxy roundtrip")
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+				AllowedHosts:         []string{"127.0.0.1", "localhost"},
+			},
+		},
+	}
+	deps := Deps{
+		BaseURL:       proxySrv.URL,
+		EncryptionKey: secret,
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+	result, err := prov.Execute(context.Background(), "make_http_request", map[string]any{"url": targetSrv.URL + "/proxy-test"}, "")
+	if err != nil {
+		t.Fatalf("Execute make_http_request: %v", err)
+	}
+
+	var body struct {
+		Status int    `json:"status"`
+		Body   string `json:"body"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+		t.Fatalf("unmarshal make_http_request: %v", err)
+	}
+	if body.Status != http.StatusOK {
+		t.Fatalf("result status = %d, want %d (body=%s)", body.Status, http.StatusOK, body.Body)
+	}
+	if body.Body != "egress-proxy-ok" {
+		t.Fatalf("result body = %q, want %q", body.Body, "egress-proxy-ok")
+	}
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env["HTTP_PROXY"]; got == "" {
+		t.Fatal("StartPlugin env should include HTTP_PROXY")
+	}
+	if got := startRequests[0].Env["HTTPS_PROXY"]; got == "" {
+		t.Fatal("StartPlugin env should include HTTPS_PROXY")
 	}
 }
 

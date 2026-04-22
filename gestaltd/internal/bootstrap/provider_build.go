@@ -876,6 +876,18 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		}
 		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
 	}
+	if requiresPluginRuntimePublicEgressProxy(entry, deps, runtimeCapabilities) {
+		proxyEnv, err := buildPluginRuntimePublicEgressProxy(name, sessionID, entry.AllowedHosts, deps.Egress.DefaultAction, deps)
+		if err != nil {
+			return nil, err
+		}
+		if len(proxyEnv) > 0 {
+			if startEnv == nil {
+				startEnv = make(map[string]string, len(proxyEnv))
+			}
+			maps.Copy(startEnv, proxyEnv)
+		}
+	}
 
 	hostedPlugin, err := runtimeProvider.StartPlugin(ctx, pluginruntime.StartPluginRequest{
 		SessionID:     sessionID,
@@ -947,7 +959,10 @@ type pluginRuntimeCapabilityRequirements struct {
 	HostnameProxyEgress bool
 }
 
-const pluginRuntimeHostServiceRelayTokenTTL = 30 * 24 * time.Hour
+const (
+	pluginRuntimeHostServiceRelayTokenTTL = 30 * 24 * time.Hour
+	pluginRuntimeEgressProxyTokenTTL      = 30 * 24 * time.Hour
+)
 
 func pluginRuntimeRequirementsForPlugin(name string, entry *config.ProviderEntry, deps Deps) (pluginRuntimeCapabilityRequirements, error) {
 	if entry == nil {
@@ -1197,6 +1212,43 @@ func buildPluginRuntimeHostServiceBinding(pluginName, sessionID string, hostServ
 	}, nil, "", nil
 }
 
+func requiresPluginRuntimePublicEgressProxy(entry *config.ProviderEntry, deps Deps, caps pluginruntime.Capabilities) bool {
+	if caps.HostServiceTunnels {
+		return false
+	}
+	return len(entry.AllowedHosts) > 0 || deps.Egress.DefaultAction == egress.PolicyDeny
+}
+
+func buildPluginRuntimePublicEgressProxy(pluginName, sessionID string, allowedHosts []string, defaultAction egress.PolicyAction, deps Deps) (map[string]string, error) {
+	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
+		return nil, fmt.Errorf("plugin %q requires server.baseURL and server.encryptionKey to enforce hostname-based egress on hosted runtimes without host service tunnels", pluginName)
+	}
+	proxyBaseURL, _, err := pluginRuntimePublicProxyBaseURL(deps.BaseURL)
+	if err != nil {
+		return nil, err
+	}
+	tokenManager, err := providerhost.NewEgressProxyTokenManager(deps.EncryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("init egress proxy tokens: %w", err)
+	}
+	token, err := tokenManager.MintToken(providerhost.EgressProxyTokenRequest{
+		PluginName:    pluginName,
+		SessionID:     sessionID,
+		AllowedHosts:  slices.Clone(allowedHosts),
+		DefaultAction: defaultAction,
+		TTL:           pluginRuntimeEgressProxyTokenTTL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mint public egress proxy token: %w", err)
+	}
+	proxyURL := *proxyBaseURL
+	proxyURL.User = url.UserPassword("gestalt-egress-proxy", token)
+	return map[string]string{
+		"HTTP_PROXY":  proxyURL.String(),
+		"HTTPS_PROXY": proxyURL.String(),
+	}, nil
+}
+
 func buildPluginRuntimePublicHostServiceRelay(pluginName, sessionID string, hostService providerhost.StartedHostService, deps Deps, serviceKey, serviceLabel, methodPrefix string) (pluginruntime.HostServiceRelay, map[string]string, string, bool, error) {
 	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
 		return pluginruntime.HostServiceRelay{}, nil, "", false, nil
@@ -1228,28 +1280,40 @@ func buildPluginRuntimePublicHostServiceRelay(pluginName, sessionID string, host
 }
 
 func pluginRuntimePublicRelayTarget(baseURL string) (string, string, error) {
-	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	parsed, host, err := pluginRuntimePublicProxyBaseURL(baseURL)
 	if err != nil {
-		return "", "", fmt.Errorf("parse server.baseURL for host service relay: %w", err)
-	}
-	host := strings.TrimSpace(parsed.Hostname())
-	if host == "" {
-		return "", "", fmt.Errorf("server.baseURL %q is missing a hostname", baseURL)
+		return "", "", err
 	}
 	port := parsed.Port()
-	if path := strings.TrimSpace(parsed.EscapedPath()); path != "" && path != "/" {
-		return "", "", fmt.Errorf("server.baseURL %q must not include a path for host service relay", baseURL)
-	}
-	if parsed.RawQuery != "" || parsed.Fragment != "" {
-		return "", "", fmt.Errorf("server.baseURL %q must not include a query or fragment for host service relay", baseURL)
-	}
-	if !strings.EqualFold(parsed.Scheme, "https") {
-		return "", "", fmt.Errorf("server.baseURL %q must use https for host service relay", baseURL)
-	}
 	if port == "" {
 		port = "443"
 	}
 	return "tls://" + net.JoinHostPort(host, port), host, nil
+}
+
+func pluginRuntimePublicProxyBaseURL(baseURL string) (*url.URL, string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return nil, "", fmt.Errorf("parse server.baseURL for public runtime relay: %w", err)
+	}
+	host := strings.TrimSpace(parsed.Hostname())
+	if host == "" {
+		return nil, "", fmt.Errorf("server.baseURL %q is missing a hostname", baseURL)
+	}
+	if path := strings.TrimSpace(parsed.EscapedPath()); path != "" && path != "/" {
+		return nil, "", fmt.Errorf("server.baseURL %q must not include a path for public runtime relay", baseURL)
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, "", fmt.Errorf("server.baseURL %q must not include a query or fragment for public runtime relay", baseURL)
+	}
+	if !strings.EqualFold(parsed.Scheme, "https") {
+		return nil, "", fmt.Errorf("server.baseURL %q must use https for public runtime relay", baseURL)
+	}
+	parsed.Path = ""
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed, host, nil
 }
 
 func isIndexedDBHostServiceEnv(envVar string) bool {
