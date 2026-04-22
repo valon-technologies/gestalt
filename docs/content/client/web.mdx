@@ -3,12 +3,14 @@
 Open your Gestalt server's base URL in a browser to access the web client. For a local server, that's `http://localhost:8080`.
 
 The UI lets you browse plugins, connect to upstream services through OAuth or
-manual authentication, invoke operations, and manage API tokens. It uses the
-same HTTP API and authentication model as the CLI.
+manual authentication, invoke operations, and manage personal tokens plus
+managed identities. It uses the same HTTP API and authentication model as the
+CLI.
 
 ## Dashboard
 
-The dashboard shows an overview of the workspace with plugin and API token counts.
+The dashboard shows an overview of the workspace with authorization, plugin,
+and workflow counts.
 
 ![Dashboard](/images/web-dashboard.png)
 
@@ -17,12 +19,9 @@ The dashboard shows an overview of the workspace with plugin and API token count
 When the default web bundle is mounted, the workflow UI is available at
 `/workflows`.
 
-It currently focuses on workflow runs:
-it shows recent run history, supports search and status filtering, lets you
-inspect run details, and lets you cancel pending runs.
-
-Schedules and triggers are still configured through the workflow HTTP
-API, CLI, or YAML config rather than the default UI.
+It shows workflow schedules, event triggers, and recent run history in one
+place. You can inspect individual runs, filter by status, search recent
+activity, and cancel pending runs.
 
 ## Plugins
 
@@ -30,11 +29,12 @@ The plugins page lists all configured providers. Connected plugins show a green 
 
 ![Integrations](/images/web-integrations.png)
 
-## API Tokens
+## Authorization
 
-Create and revoke API tokens for programmatic access. Each token shows its name, scopes, creation date, and expiry. Tokens prefixed with `gst_api_` are shown once at creation and cannot be retrieved later.
-
-![API Tokens](/images/web-tokens.png)
+The authorization page combines personal API tokens and managed identities.
+Use it to create tokens for your current user, create shared automation
+identities, and then open those identities to manage members, grants, tokens,
+and plugin connections separately from a personal login.
 
 ## Authentication
 
