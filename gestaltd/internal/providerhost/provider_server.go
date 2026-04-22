@@ -2,7 +2,6 @@ package providerhost
 
 import (
 	"context"
-	"strings"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
@@ -115,14 +114,8 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 	case string(principal.KindWorkload):
 		p.Kind = principal.KindWorkload
 	}
-	if strings.HasPrefix(subject.GetId(), "user:") {
-		p.UserID = strings.TrimPrefix(subject.GetId(), "user:")
-		if p.Kind == "" {
-			p.Kind = principal.KindUser
-		}
-	} else if strings.HasPrefix(subject.GetId(), "workload:") && p.Kind == "" {
-		p.Kind = principal.KindWorkload
-	}
+	p.UserID = principal.UserIDFromSubjectID(p.SubjectID)
+	p = principal.Canonicalized(p)
 	if p.Kind == principal.KindUser && subject.GetDisplayName() != "" {
 		p.Identity = &core.UserIdentity{
 			DisplayName: subject.GetDisplayName(),

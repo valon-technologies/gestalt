@@ -186,6 +186,7 @@ func (a *Authorizer) ResolveWorkloadToken(token string) (*principal.ResolvedWork
 }
 
 func (a *Authorizer) IsWorkload(p *principal.Principal) bool {
+	p = principal.Canonicalized(p)
 	return p != nil && p.Kind == principal.KindWorkload
 }
 

@@ -320,6 +320,7 @@ func restoreInvocationTokenContext(ctx context.Context, tokenCtx invocationToken
 }
 
 func shouldInheritCredentialSelectors(p *principal.Principal) bool {
+	p = principal.Canonicalized(p)
 	return p == nil || p.Kind != principal.KindWorkload
 }
 
@@ -339,11 +340,8 @@ func subjectKindForInvocationClaims(p *principal.Principal) principal.Kind {
 	if p.Kind != "" {
 		return p.Kind
 	}
-	if strings.HasPrefix(strings.TrimSpace(p.SubjectID), string(principal.KindUser)+":") {
+	if p.Identity != nil {
 		return principal.KindUser
-	}
-	if strings.HasPrefix(strings.TrimSpace(p.SubjectID), string(principal.KindWorkload)+":") {
-		return principal.KindWorkload
 	}
 	return ""
 }
