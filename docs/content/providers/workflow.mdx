@@ -439,17 +439,6 @@ workflow manager `PublishEvent` call. External publishing is useful when some
 other system already knows the step finished. Plugin-side publishing is useful
 when the operation itself owns the next handoff.
 
-If you need fan-in, joins, or barrier-style behavior, add a coordinator step.
-Let each branch publish its own completion event, have a coordinator operation
-record progress in IndexedDB or another durable store, and publish a final
-event only after it sees all required completions. That gives you DAG-like
-behavior, but the join logic lives in plugin code rather than in workflow
-configuration.
-
-This means Gestalt is best described today as event-driven orchestration and
-delayed execution. It does not yet expose first-class DAG nodes, built-in join
-semantics, a `run now` endpoint, or a retry endpoint for failed runs.
-
 ## Inspecting and canceling workflow runs
 
 Runs are the execution records produced by schedules, triggers, or other
