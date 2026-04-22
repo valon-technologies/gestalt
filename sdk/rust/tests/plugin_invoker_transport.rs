@@ -10,7 +10,7 @@ use gestalt::proto::v1::plugin_invoker_server::{
 };
 use gestalt::proto::v1::{
     ExchangeInvocationTokenRequest, ExchangeInvocationTokenResponse, OperationResult,
-    PluginInvocationGrant, PluginInvokeRequest,
+    PluginInvocationGrant, PluginInvokeGraphQlRequest, PluginInvokeRequest,
 };
 use gestalt::{ENV_PLUGIN_INVOKER_SOCKET, InvocationGrant, InvokeOptions, PluginInvoker, Request};
 use prost_types::Struct;
@@ -31,6 +31,16 @@ struct SeenRequest {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
+struct SeenGraphQlRequest {
+    invocation_token: String,
+    plugin: String,
+    document: String,
+    variables: Option<Struct>,
+    connection: String,
+    instance: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 struct SeenExchangeRequest {
     parent_invocation_token: String,
     grants: Vec<PluginInvocationGrant>,
@@ -40,6 +50,7 @@ struct SeenExchangeRequest {
 #[derive(Clone, Default)]
 struct TestPluginInvokerServer {
     seen_invokes: Arc<Mutex<Vec<SeenRequest>>>,
+    seen_graphql_invokes: Arc<Mutex<Vec<SeenGraphQlRequest>>>,
     seen_exchanges: Arc<Mutex<Vec<SeenExchangeRequest>>>,
 }
 
@@ -88,6 +99,37 @@ impl ProtoPluginInvoker for TestPluginInvokerServer {
                 "plugin": request.plugin,
                 "operation": request.operation,
                 "params": request.params.map(struct_to_json).unwrap_or_else(|| serde_json::json!({})),
+                "connection": request.connection,
+                "instance": request.instance,
+            })
+            .to_string(),
+        }))
+    }
+
+    async fn invoke_graph_ql(
+        &self,
+        request: GrpcRequest<PluginInvokeGraphQlRequest>,
+    ) -> std::result::Result<GrpcResponse<OperationResult>, Status> {
+        let request = request.into_inner();
+        self.seen_graphql_invokes
+            .lock()
+            .expect("lock seen graphql invokes")
+            .push(SeenGraphQlRequest {
+                invocation_token: request.invocation_token.clone(),
+                plugin: request.plugin.clone(),
+                document: request.document.clone(),
+                variables: request.variables.clone(),
+                connection: request.connection.clone(),
+                instance: request.instance.clone(),
+            });
+
+        Ok(GrpcResponse::new(OperationResult {
+            status: 208,
+            body: serde_json::json!({
+                "invocation_token": request.invocation_token,
+                "plugin": request.plugin,
+                "document": request.document,
+                "variables": request.variables.map(struct_to_json).unwrap_or_else(|| serde_json::json!({})),
                 "connection": request.connection,
                 "instance": request.instance,
             })
@@ -212,6 +254,76 @@ async fn request_invoker_uses_embedded_invocation_token() {
 }
 
 #[tokio::test]
+async fn plugin_invoker_invokes_graphql_surface() {
+    let _env_lock = helpers::env_lock().lock().await;
+    let socket = helpers::temp_socket("gestalt-rust-graphql-invoker.sock");
+    let _socket_guard = helpers::EnvGuard::set(ENV_PLUGIN_INVOKER_SOCKET, socket.as_os_str());
+
+    let server = TestPluginInvokerServer::default();
+    let serve_server = server.clone();
+    let serve_socket = socket.clone();
+    let serve_task = tokio::spawn(async move {
+        serve_plugin_invoker(serve_server, &serve_socket)
+            .await
+            .expect("serve plugin invoker");
+    });
+
+    helpers::wait_for_socket(&socket).await;
+
+    let mut invoker = PluginInvoker::connect("graphql-token-123")
+        .await
+        .expect("connect invoker");
+    let response = invoker
+        .invoke_graphql(
+            "linear",
+            "  query Viewer($team: String!) { viewer(team: $team) { id } }  ",
+            Some(serde_json::json!({ "team": "eng" })),
+            Some(InvokeOptions {
+                connection: "workspace".to_string(),
+                instance: "secondary".to_string(),
+            }),
+        )
+        .await
+        .expect("invoke graphql surface");
+
+    assert_eq!(response.status, 208);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&response.body).expect("parse response"),
+        serde_json::json!({
+            "invocation_token": "graphql-token-123",
+            "plugin": "linear",
+            "document": "query Viewer($team: String!) { viewer(team: $team) { id } }",
+            "variables": { "team": "eng" },
+            "connection": "workspace",
+            "instance": "secondary",
+        })
+    );
+
+    let seen = server
+        .seen_graphql_invokes
+        .lock()
+        .expect("lock seen graphql invokes")
+        .clone();
+    assert_eq!(seen.len(), 1);
+    assert_eq!(
+        seen[0],
+        SeenGraphQlRequest {
+            invocation_token: "graphql-token-123".to_string(),
+            plugin: "linear".to_string(),
+            document: "query Viewer($team: String!) { viewer(team: $team) { id } }".to_string(),
+            variables: Some(helpers::struct_from_json(
+                serde_json::json!({ "team": "eng" })
+            )),
+            connection: "workspace".to_string(),
+            instance: "secondary".to_string(),
+        }
+    );
+
+    serve_task.abort();
+    let _ = serve_task.await;
+}
+
+#[tokio::test]
 async fn plugin_invoker_exchanges_invocation_tokens_with_grants_and_ttl() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-exchange-invoker.sock");
@@ -241,10 +353,26 @@ async fn plugin_invoker_exchanges_invocation_tokens_with_grants_and_ttl() {
                         String::new(),
                         "list_labels".to_string(),
                     ],
+                    surfaces: Vec::new(),
+                    all_operations: false,
+                },
+                InvocationGrant {
+                    plugin: " linear ".to_string(),
+                    operations: Vec::new(),
+                    surfaces: vec![" GraphQL ".to_string(), String::new(), "MCP".to_string()],
+                    all_operations: false,
+                },
+                InvocationGrant {
+                    plugin: "google_sheets".to_string(),
+                    operations: Vec::new(),
+                    surfaces: Vec::new(),
+                    all_operations: true,
                 },
                 InvocationGrant {
                     plugin: "   ".to_string(),
                     operations: vec!["ignored".to_string()],
+                    surfaces: vec!["rest".to_string()],
+                    all_operations: true,
                 },
             ],
             Some(Duration::from_millis(500)),
@@ -264,10 +392,26 @@ async fn plugin_invoker_exchanges_invocation_tokens_with_grants_and_ttl() {
         seen[0],
         SeenExchangeRequest {
             parent_invocation_token: "parent-token-123".to_string(),
-            grants: vec![PluginInvocationGrant {
-                plugin: "github".to_string(),
-                operations: vec!["get_issue".to_string(), "list_labels".to_string()],
-            }],
+            grants: vec![
+                PluginInvocationGrant {
+                    plugin: "github".to_string(),
+                    operations: vec!["get_issue".to_string(), "list_labels".to_string()],
+                    surfaces: Vec::new(),
+                    all_operations: false,
+                },
+                PluginInvocationGrant {
+                    plugin: "linear".to_string(),
+                    operations: Vec::new(),
+                    surfaces: vec!["graphql".to_string(), "mcp".to_string()],
+                    all_operations: false,
+                },
+                PluginInvocationGrant {
+                    plugin: "google_sheets".to_string(),
+                    operations: Vec::new(),
+                    surfaces: Vec::new(),
+                    all_operations: true,
+                },
+            ],
             ttl_seconds: 1,
         }
     );

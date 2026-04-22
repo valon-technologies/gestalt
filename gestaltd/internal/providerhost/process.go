@@ -52,7 +52,7 @@ type ExecConfig struct {
 	Cleanup          func()
 	HostServices     []HostService
 	InvocationTokens *InvocationTokenManager
-	InvocationGrants map[string]map[string]struct{}
+	InvocationGrants invocationGrants
 }
 
 type HostService struct {

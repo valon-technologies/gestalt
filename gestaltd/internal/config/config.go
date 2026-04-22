@@ -1319,6 +1319,7 @@ type OperationOverride = providermanifestv1.ManifestOperationOverride
 type PluginInvocationDependency struct {
 	Plugin    string `yaml:"plugin,omitempty"`
 	Operation string `yaml:"operation,omitempty"`
+	Surface   string `yaml:"surface,omitempty"`
 }
 
 func Load(path string) (*Config, error) {

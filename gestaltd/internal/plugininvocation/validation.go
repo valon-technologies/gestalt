@@ -107,6 +107,12 @@ func validateDependencies(ctx context.Context, cfg *config.Config, cache *catalo
 			if !ok || targetEntry == nil {
 				return fmt.Errorf("config validation: plugins.%s.invokes[%d] references unknown plugin %q", callerName, i, dependency.Plugin)
 			}
+			if dependency.Surface != "" {
+				if !pluginSupportsSurface(targetEntry, config.SpecSurface(dependency.Surface)) {
+					return fmt.Errorf("config validation: plugins.%s.invokes[%d] references plugin %q surface %q, but that surface is not configured", callerName, i, dependency.Plugin, dependency.Surface)
+				}
+				continue
+			}
 			resolved := cache.resolve(ctx, dependency.Plugin, targetEntry)
 			if resolved.err != nil {
 				return fmt.Errorf("config validation: plugins.%s.invokes[%d]: %w", callerName, i, resolved.err)
@@ -139,6 +145,18 @@ func isExecutablePlugin(entry *config.ProviderEntry) bool {
 		return false
 	}
 	return true
+}
+
+func pluginSupportsSurface(entry *config.ProviderEntry, surface config.SpecSurface) bool {
+	if entry == nil {
+		return false
+	}
+	spec := entry.ManifestSpec()
+	if spec == nil {
+		return false
+	}
+	_, ok := resolvedSurfaceURL(entry, spec, surface)
+	return ok
 }
 
 func resolveStaticCatalog(ctx context.Context, name string, entry *config.ProviderEntry) (*catalog.Catalog, bool, error) {
@@ -262,6 +280,11 @@ func readStaticCatalog(name string, entry *config.ProviderEntry, manifest *provi
 }
 
 func loadConfiguredAPICatalog(ctx context.Context, name string, entry *config.ProviderEntry, spec *providermanifestv1.Spec, allowed map[string]*config.OperationOverride) (*catalog.Catalog, error) {
+	if _, hasOpenAPI := resolvedSurfaceURL(entry, spec, config.SpecSurfaceOpenAPI); hasOpenAPI {
+		if _, hasGraphQL := resolvedSurfaceURL(entry, spec, config.SpecSurfaceGraphQL); hasGraphQL {
+			return nil, fmt.Errorf("plugin %q openapi and graphql surfaces cannot both be configured for the same plugin", name)
+		}
+	}
 	for _, surface := range []config.SpecSurface{config.SpecSurfaceOpenAPI, config.SpecSurfaceGraphQL} {
 		url, ok := resolvedSurfaceURL(entry, spec, surface)
 		if !ok {

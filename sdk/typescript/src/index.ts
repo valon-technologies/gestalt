@@ -77,6 +77,8 @@ export {
 export {
   ENV_PLUGIN_INVOKER_SOCKET,
   PluginInvoker,
+  type PluginGraphQLInvokeOptions,
+  type PluginInvocationGrant,
   type PluginInvokeOptions,
 } from "./invoker.ts";
 export {

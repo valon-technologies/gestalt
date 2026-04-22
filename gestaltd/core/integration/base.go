@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -16,7 +17,8 @@ import (
 )
 
 var (
-	_ core.OAuthProvider = (*Base)(nil)
+	_ core.OAuthProvider         = (*Base)(nil)
+	_ core.GraphQLSurfaceInvoker = (*Base)(nil)
 )
 
 type manualChecker interface{ IsManual() bool }
@@ -159,6 +161,14 @@ func (b *Base) Execute(ctx context.Context, operation string, params map[string]
 		return b.executeGraphQL(ctx, operation, catOp.Query, params, token)
 	}
 	return b.executeREST(ctx, operation, catOp, params, token)
+}
+
+func (b *Base) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
+	document := strings.TrimSpace(request.Document)
+	if document == "" {
+		return nil, fmt.Errorf("graphql document is required")
+	}
+	return b.executeGraphQL(ctx, "graphql", document, request.Variables, token)
 }
 
 func (b *Base) egressAuthStyle() egress.AuthStyle {

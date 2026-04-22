@@ -1149,6 +1149,10 @@ func (unavailablePluginInvoker) Invoke(context.Context, *principal.Principal, st
 	return nil, fmt.Errorf("plugin invoker is not available")
 }
 
+func (unavailablePluginInvoker) InvokeGraphQL(context.Context, *principal.Principal, string, string, invocation.GraphQLRequest) (*core.OperationResult, error) {
+	return nil, fmt.Errorf("plugin invoker is not available")
+}
+
 type unavailableWorkflowManager struct{}
 
 func (unavailableWorkflowManager) ListSchedules(context.Context, *principal.Principal) ([]*workflowmanager.ManagedSchedule, error) {

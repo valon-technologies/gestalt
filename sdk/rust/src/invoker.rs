@@ -33,6 +33,8 @@ pub enum PluginInvokerError {
 pub struct InvocationGrant {
     pub plugin: String,
     pub operations: Vec<String>,
+    pub surfaces: Vec<String>,
+    pub all_operations: bool,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -114,6 +116,60 @@ impl PluginInvoker {
         })
     }
 
+    pub async fn invoke_graphql<V>(
+        &mut self,
+        plugin: &str,
+        document: &str,
+        variables: Option<V>,
+        options: Option<InvokeOptions>,
+    ) -> std::result::Result<OperationResult, PluginInvokerError>
+    where
+        V: Serialize,
+    {
+        let document = document.trim();
+        if document.is_empty() {
+            return Err(PluginInvokerError::Protocol(
+                "plugin invoker: graphql document is required".to_string(),
+            ));
+        }
+
+        let response = self
+            .client
+            .invoke_graph_ql(pb::PluginInvokeGraphQlRequest {
+                plugin: plugin.to_string(),
+                document: document.to_string(),
+                variables: variables
+                    .map(serde_json::to_value)
+                    .transpose()?
+                    .map(|value| json_to_optional_struct(value, "variables"))
+                    .transpose()?
+                    .flatten(),
+                connection: options
+                    .as_ref()
+                    .map(|opts| opts.connection.clone())
+                    .unwrap_or_default(),
+                instance: options
+                    .as_ref()
+                    .map(|opts| opts.instance.clone())
+                    .unwrap_or_default(),
+                invocation_token: self.invocation_token.clone(),
+            })
+            .await?
+            .into_inner();
+
+        let status = u16::try_from(response.status).map_err(|_| {
+            PluginInvokerError::Protocol(format!(
+                "plugin invoker: invalid response status {}",
+                response.status
+            ))
+        })?;
+
+        Ok(OperationResult {
+            status,
+            body: response.body,
+        })
+    }
+
     pub async fn exchange_invocation_token(
         &mut self,
         grants: &[InvocationGrant],
@@ -152,10 +208,19 @@ fn encode_invocation_grants(grants: &[InvocationGrant]) -> Vec<pb::PluginInvocat
                 .filter(|operation| !operation.is_empty())
                 .map(ToOwned::to_owned)
                 .collect();
+            let surfaces = grant
+                .surfaces
+                .iter()
+                .map(|surface| surface.trim())
+                .filter(|surface| !surface.is_empty())
+                .map(|surface| surface.to_ascii_lowercase())
+                .collect();
 
             Some(pb::PluginInvocationGrant {
                 plugin: plugin.to_owned(),
                 operations,
+                surfaces,
+                all_operations: grant.all_operations,
             })
         })
         .collect()
@@ -177,21 +242,28 @@ fn duration_to_ttl_seconds(ttl: Duration) -> std::result::Result<i64, PluginInvo
 fn json_to_struct(
     value: serde_json::Value,
 ) -> std::result::Result<prost_types::Struct, PluginInvokerError> {
+    Ok(json_to_optional_struct(value, "params")?.unwrap_or_default())
+}
+
+fn json_to_optional_struct(
+    value: serde_json::Value,
+    field_name: &str,
+) -> std::result::Result<Option<prost_types::Struct>, PluginInvokerError> {
     let serde_json::Value::Object(fields) = value else {
         if value.is_null() {
-            return Ok(prost_types::Struct::default());
+            return Ok(None);
         }
-        return Err(PluginInvokerError::Protocol(
-            "plugin invoker: params must serialize to a JSON object".to_string(),
-        ));
+        return Err(PluginInvokerError::Protocol(format!(
+            "plugin invoker: {field_name} must serialize to a JSON object"
+        )));
     };
 
-    Ok(prost_types::Struct {
+    Ok(Some(prost_types::Struct {
         fields: fields
             .into_iter()
             .map(|(key, value)| (key, json_value_to_prost(value)))
             .collect(),
-    })
+    }))
 }
 
 fn json_value_to_prost(value: serde_json::Value) -> prost_types::Value {

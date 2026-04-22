@@ -60,6 +60,33 @@ class PluginInvoker:
         response = self._stub.Invoke(request)
         return Response(status=int(response.status), body=response.body)
 
+    def invoke_graphql(
+        self,
+        plugin: str,
+        document: str,
+        variables: dict[str, Any] | None = None,
+        *,
+        connection: str = "",
+        instance: str = "",
+    ) -> Response[str]:
+        trimmed_document = document.strip()
+        if not trimmed_document:
+            raise RuntimeError("plugin invoker: graphql document is required")
+
+        request = pb.PluginInvokeGraphQLRequest(
+            invocation_token=self._invocation_token,
+            plugin=plugin,
+            document=trimmed_document,
+            connection=connection,
+            instance=instance,
+        )
+        message = _struct_from_dict_optional(variables, preserve_empty=False)
+        if message is not None:
+            request.variables.CopyFrom(message)
+
+        response = self._stub.InvokeGraphQL(request)
+        return Response(status=int(response.status), body=response.body)
+
     def exchange_invocation_token(
         self,
         *,
@@ -86,6 +113,19 @@ def _struct_from_dict(values: dict[str, Any] | None) -> Any:
     if values is None:
         return None
 
+    return _struct_from_dict_optional(values, preserve_empty=True)
+
+
+def _struct_from_dict_optional(
+    values: dict[str, Any] | None,
+    *,
+    preserve_empty: bool,
+) -> Any:
+    if values is None:
+        return None
+    if not preserve_empty and not values:
+        return None
+
     message = struct_pb2.Struct()
     json_format.ParseDict(values, message)
     return message
@@ -97,24 +137,47 @@ def _grants_from_values(values: Sequence[Any] | None) -> list[Any]:
 
     grants: list[Any] = []
     for value in values:
-        plugin, operations = _grant_parts(value)
+        plugin, operations, surfaces, all_operations = _grant_parts(value)
         if not plugin:
             continue
-        grants.append(pb.PluginInvocationGrant(plugin=plugin, operations=operations))
+        grants.append(
+            pb.PluginInvocationGrant(
+                plugin=plugin,
+                operations=operations,
+                surfaces=surfaces,
+                all_operations=all_operations,
+            )
+        )
     return grants
 
 
-def _grant_parts(value: Any) -> tuple[str, list[str]]:
+def _grant_parts(value: Any) -> tuple[str, list[str], list[str], bool]:
     if isinstance(value, Mapping):
         raw_plugin = value.get("plugin", "")
         raw_operations = value.get("operations", ())
+        raw_surfaces = value.get("surfaces", ())
+        raw_all_operations = value.get("all_operations", value.get("allOperations", False))
     else:
         raw_plugin = getattr(value, "plugin", "")
         raw_operations = getattr(value, "operations", ())
+        raw_surfaces = getattr(value, "surfaces", ())
+        raw_all_operations = getattr(
+            value,
+            "all_operations",
+            getattr(value, "allOperations", False),
+        )
 
     plugin = str(raw_plugin).strip()
     if isinstance(raw_operations, str):
         raw_operations = [raw_operations]
+    if isinstance(raw_surfaces, str):
+        raw_surfaces = [raw_surfaces]
 
     operations = [str(operation).strip() for operation in raw_operations or ()]
-    return plugin, [operation for operation in operations if operation]
+    surfaces = [str(surface).strip().lower() for surface in raw_surfaces or ()]
+    return (
+        plugin,
+        [operation for operation in operations if operation],
+        [surface for surface in surfaces if surface],
+        bool(raw_all_operations),
+    )

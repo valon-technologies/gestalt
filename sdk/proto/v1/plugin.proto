@@ -101,6 +101,8 @@ message OperationResult {
 message PluginInvocationGrant {
   string plugin = 1;
   repeated string operations = 2;
+  repeated string surfaces = 3;
+  bool all_operations = 4;
 }
 
 // ExchangeInvocationTokenRequest narrows an existing invocation token to a
@@ -127,6 +129,17 @@ message PluginInvokeRequest {
   string connection = 5;
   string instance = 6;
   string invocation_token = 7;
+}
+
+// PluginInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
+// through the host-side invoker service.
+message PluginInvokeGraphQLRequest {
+  string plugin = 1;
+  string document = 2;
+  google.protobuf.Struct variables = 3;
+  string connection = 4;
+  string instance = 5;
+  string invocation_token = 6;
 }
 
 // IntegrationToken is the host-managed token payload passed into post-connect
@@ -241,4 +254,5 @@ service IntegrationProvider {
 service PluginInvoker {
   rpc ExchangeInvocationToken(ExchangeInvocationTokenRequest) returns (ExchangeInvocationTokenResponse);
   rpc Invoke(PluginInvokeRequest) returns (OperationResult);
+  rpc InvokeGraphQL(PluginInvokeGraphQLRequest) returns (OperationResult);
 }

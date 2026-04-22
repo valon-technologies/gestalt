@@ -37,8 +37,8 @@ func TestInvocationTokenExchangePreservesAbsoluteDelegationExpiry(t *testing.T) 
 		),
 		&invocation.InvocationMeta{RequestID: "req-1"},
 	)
-	rootToken, err := manager.MintRootToken(ctx, "caller", map[string]map[string]struct{}{
-		"example": {"request_context": {}},
+	rootToken, err := manager.MintRootToken(ctx, "caller", invocationGrants{
+		"example": {Operations: map[string]struct{}{"request_context": {}}},
 	})
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
@@ -96,15 +96,15 @@ func TestInvocationTokenExchangeAllowsNarrowingWildcardGrants(t *testing.T) {
 			Source:    principal.SourceSession,
 		},
 	)
-	rootToken, err := manager.MintRootToken(ctx, "caller", map[string]map[string]struct{}{
-		"example": {},
+	rootToken, err := manager.MintRootToken(ctx, "caller", invocationGrants{
+		"example": {AllOperations: true},
 	})
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
 	}
 
-	if _, err := manager.ExchangeToken(rootToken, "caller", map[string]map[string]struct{}{
-		"example": {"request_context": {}},
+	if _, err := manager.ExchangeToken(rootToken, "caller", invocationGrants{
+		"example": {Operations: map[string]struct{}{"request_context": {}}},
 	}, time.Minute); err != nil {
 		t.Fatalf("ExchangeToken should allow narrowing wildcard grants: %v", err)
 	}
@@ -132,8 +132,8 @@ func TestInvocationTokenResolvePreservesEmailOnlyPrincipals(t *testing.T) {
 			Source: principal.SourceEnv,
 		},
 	)
-	token, err := manager.MintRootToken(ctx, "caller", map[string]map[string]struct{}{
-		"example": {"request_context": {}},
+	token, err := manager.MintRootToken(ctx, "caller", invocationGrants{
+		"example": {Operations: map[string]struct{}{"request_context": {}}},
 	})
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)

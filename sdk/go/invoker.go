@@ -22,8 +22,10 @@ type InvokeOptions struct {
 }
 
 type InvocationGrant struct {
-	Plugin     string
-	Operations []string
+	Plugin        string
+	Operations    []string
+	Surfaces      []string
+	AllOperations bool
 }
 
 type InvokerClient struct {
@@ -138,6 +140,45 @@ func (c *InvokerClient) Invoke(ctx context.Context, plugin, operation string, pa
 	}, nil
 }
 
+func (c *InvokerClient) InvokeGraphQL(ctx context.Context, plugin, document string, variables map[string]any, opts *InvokeOptions) (*OperationResult, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("plugin invoker: client is not initialized")
+	}
+	document = strings.TrimSpace(document)
+	if document == "" {
+		return nil, fmt.Errorf("plugin invoker: graphql document is required")
+	}
+
+	var msg *structpb.Struct
+	var err error
+	if len(variables) > 0 {
+		msg, err = structpb.NewStruct(variables)
+		if err != nil {
+			return nil, fmt.Errorf("plugin invoker: encode variables: %w", err)
+		}
+	}
+
+	req := &proto.PluginInvokeGraphQLRequest{
+		InvocationToken: c.invocationToken,
+		Plugin:          plugin,
+		Document:        document,
+		Variables:       msg,
+	}
+	if opts != nil {
+		req.Connection = opts.Connection
+		req.Instance = opts.Instance
+	}
+
+	resp, err := c.client.InvokeGraphQL(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return &OperationResult{
+		Status: int(resp.GetStatus()),
+		Body:   resp.GetBody(),
+	}, nil
+}
+
 func (c *InvokerClient) ExchangeInvocationToken(ctx context.Context, grants []InvocationGrant, ttl time.Duration) (string, error) {
 	if c == nil || c.client == nil {
 		return "", fmt.Errorf("plugin invoker: client is not initialized")
@@ -180,8 +221,10 @@ func encodeInvocationGrants(grants []InvocationGrant) []*proto.PluginInvocationG
 			ops = append(ops, operation)
 		}
 		out = append(out, &proto.PluginInvocationGrant{
-			Plugin:     plugin,
-			Operations: ops,
+			Plugin:        plugin,
+			Operations:    ops,
+			Surfaces:      grant.Surfaces,
+			AllOperations: grant.AllOperations,
 		})
 	}
 	if len(out) == 0 {

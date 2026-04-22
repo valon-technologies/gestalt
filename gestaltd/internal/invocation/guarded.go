@@ -17,6 +17,7 @@ const (
 
 var (
 	_ Invoker          = (*GuardedInvoker)(nil)
+	_ GraphQLInvoker   = (*GuardedInvoker)(nil)
 	_ CapabilityLister = (*GuardedInvoker)(nil)
 )
 
@@ -106,6 +107,58 @@ func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, pro
 	ctx = ContextWithMeta(ctx, next)
 
 	result, err := g.inner.Invoke(ctx, p, providerName, instance, operation, params)
+	if err != nil {
+		entry.Error = err.Error()
+		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
+			entry.Allowed = false
+		}
+	}
+	return result, err
+}
+
+func (g *GuardedInvoker) InvokeGraphQL(ctx context.Context, p *principal.Principal, providerName, instance string, request GraphQLRequest) (*core.OperationResult, error) {
+	graphqlInvoker, ok := g.inner.(GraphQLInvoker)
+	if !ok {
+		return nil, fmt.Errorf("plugin invoker is not available")
+	}
+
+	ctx, meta := ensureMeta(ctx)
+
+	if p == nil {
+		p = principal.FromContext(ctx)
+	}
+	if p == nil {
+		p = &principal.Principal{}
+	}
+
+	entry := buildAuditEntry(ctx, p, g.source, providerName, "graphql", meta)
+	ctx = withAuditEntry(ctx, &entry)
+
+	if err := g.check(meta, providerName, instance, "graphql"); err != nil {
+		entry.Allowed = false
+		entry.Error = err.Error()
+		g.logAudit(ctx, entry)
+		return nil, err
+	}
+
+	entry.Allowed = true
+	defer func() {
+		g.logAudit(ctx, entry)
+	}()
+
+	chainInstance := instance
+	if chainInstance == "" {
+		chainInstance = "default"
+	}
+	chainKey := providerName + "/" + chainInstance + "/graphql"
+	next := &InvocationMeta{
+		RequestID: meta.RequestID,
+		Depth:     meta.Depth + 1,
+		CallChain: append(append([]string(nil), meta.CallChain...), chainKey),
+	}
+	ctx = ContextWithMeta(ctx, next)
+
+	result, err := graphqlInvoker.InvokeGraphQL(ctx, p, providerName, instance, request)
 	if err != nil {
 		entry.Error = err.Error()
 		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {

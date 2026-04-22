@@ -25,7 +25,8 @@ type BoundProvider struct {
 }
 
 var (
-	_ core.Provider = (*MergedProvider)(nil)
+	_ core.Provider              = (*MergedProvider)(nil)
+	_ core.GraphQLSurfaceInvoker = (*MergedProvider)(nil)
 )
 
 func NewMergedWithConnections(name, displayName, desc, iconSVG string, providers ...BoundProvider) (*MergedProvider, error) {
@@ -94,6 +95,17 @@ func (m *MergedProvider) Execute(ctx context.Context, op string, params map[stri
 		return nil, fmt.Errorf("unknown operation %q", op)
 	}
 	return p.Execute(ctx, op, params, token)
+}
+
+func (m *MergedProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
+	for _, provider := range m.owned {
+		invoker, ok := provider.(core.GraphQLSurfaceInvoker)
+		if !ok {
+			continue
+		}
+		return invoker.InvokeGraphQL(ctx, request, token)
+	}
+	return nil, fmt.Errorf("graphql surface is not available")
 }
 
 func (m *MergedProvider) Close() error {

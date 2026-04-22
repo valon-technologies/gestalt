@@ -29,6 +29,7 @@ type Provider struct {
 var (
 	_ core.Provider               = (*Provider)(nil)
 	_ core.SessionCatalogProvider = (*Provider)(nil)
+	_ core.GraphQLSurfaceInvoker  = (*Provider)(nil)
 )
 
 // New creates a composite provider. If the API provider implements
@@ -75,6 +76,14 @@ func (p *Provider) Catalog() *catalog.Catalog { return p.buildCatalog() }
 
 func (p *Provider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	return p.api.Execute(ctx, operation, params, token)
+}
+
+func (p *Provider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
+	invoker, ok := p.api.(core.GraphQLSurfaceInvoker)
+	if !ok {
+		return nil, fmt.Errorf("graphql surface is not available")
+	}
+	return invoker.InvokeGraphQL(ctx, request, token)
 }
 
 func (p *Provider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
