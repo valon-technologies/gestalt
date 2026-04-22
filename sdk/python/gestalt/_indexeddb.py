@@ -7,6 +7,7 @@ import os
 import queue
 from dataclasses import dataclass, field
 from typing import Any, Iterator
+from urllib import parse as _urlparse
 
 import grpc
 from google.protobuf import struct_pb2 as _struct_pb2
@@ -85,10 +86,10 @@ class IndexedDB:
 
     def __init__(self, name: str | None = None) -> None:
         env_name = indexeddb_socket_env(name)
-        socket_path = os.environ.get(env_name, "")
-        if not socket_path:
+        target = os.environ.get(env_name, "")
+        if not target:
             raise RuntimeError(f"{env_name} is not set")
-        self._channel = grpc.insecure_channel(f"unix:{socket_path}")
+        self._channel = _indexeddb_channel(target)
         self._stub = pb_grpc.IndexedDBStub(self._channel)
 
     def close(self) -> None:
@@ -317,6 +318,31 @@ class Index:
             values=[_to_typed_value(v) for v in values],
             range=_kr_to_proto(key_range),
         )
+
+
+def _indexeddb_channel(raw_target: str) -> grpc.Channel:
+    target = raw_target.strip()
+    if not target:
+        raise RuntimeError("IndexedDB transport target is required")
+    if target.startswith("tcp://"):
+        address = target[len("tcp://") :].strip()
+        if not address:
+            raise RuntimeError(f"IndexedDB tcp target {raw_target!r} is missing host:port")
+        return grpc.insecure_channel(f"dns:///{address}")
+    if target.startswith("tls://"):
+        address = target[len("tls://") :].strip()
+        if not address:
+            raise RuntimeError(f"IndexedDB tls target {raw_target!r} is missing host:port")
+        return grpc.secure_channel(f"dns:///{address}", grpc.ssl_channel_credentials())
+    if target.startswith("unix://"):
+        socket_path = target[len("unix://") :].strip()
+        if not socket_path:
+            raise RuntimeError(f"IndexedDB unix target {raw_target!r} is missing a socket path")
+        return grpc.insecure_channel(f"unix:{socket_path}")
+    if "://" in target:
+        parsed = _urlparse.urlparse(target)
+        raise RuntimeError(f"unsupported IndexedDB target scheme {parsed.scheme!r}")
+    return grpc.insecure_channel(f"unix:{target}")
 
 
 class _RequestIterator:

@@ -322,19 +322,32 @@ impl IndexedDB {
     /// Connects to a named IndexedDB transport socket.
     pub async fn connect_named(name: &str) -> Result<Self, IndexedDBError> {
         let env_name = indexeddb_socket_env(name);
-        let socket_path = std::env::var(&env_name)
+        let target = std::env::var(&env_name)
             .map_err(|_| IndexedDBError::Env(format!("{env_name} is not set")))?;
-
-        let channel = Endpoint::try_from("http://[::]:50051")?
-            .connect_with_connector(service_fn(move |_: Uri| {
-                let path = socket_path.clone();
-                async move {
-                    tokio::net::UnixStream::connect(path)
-                        .await
-                        .map(TokioIo::new)
-                }
-            }))
-            .await?;
+        let channel = match parse_indexeddb_target(&target)? {
+            IndexedDBTarget::Unix(path) => {
+                Endpoint::try_from("http://[::]:50051")?
+                    .connect_with_connector(service_fn(move |_: Uri| {
+                        let path = path.clone();
+                        async move {
+                            tokio::net::UnixStream::connect(path)
+                                .await
+                                .map(TokioIo::new)
+                        }
+                    }))
+                    .await?
+            }
+            IndexedDBTarget::Tcp(address) => {
+                Endpoint::from_shared(format!("http://{address}"))?
+                    .connect()
+                    .await?
+            }
+            IndexedDBTarget::Tls(address) => {
+                Endpoint::from_shared(format!("https://{address}"))?
+                    .connect()
+                    .await?
+            }
+        };
 
         Ok(Self {
             client: IndexedDbClient::new(channel),
@@ -387,6 +400,55 @@ impl IndexedDB {
             store: name.to_string(),
         }
     }
+}
+
+enum IndexedDBTarget {
+    Unix(String),
+    Tcp(String),
+    Tls(String),
+}
+
+fn parse_indexeddb_target(raw_target: &str) -> Result<IndexedDBTarget, IndexedDBError> {
+    let target = raw_target.trim();
+    if target.is_empty() {
+        return Err(IndexedDBError::Env(
+            "IndexedDB transport target is required".to_string(),
+        ));
+    }
+    if let Some(address) = target.strip_prefix("tcp://") {
+        let address = address.trim();
+        if address.is_empty() {
+            return Err(IndexedDBError::Env(format!(
+                "IndexedDB tcp target {raw_target:?} is missing host:port"
+            )));
+        }
+        return Ok(IndexedDBTarget::Tcp(address.to_string()));
+    }
+    if let Some(address) = target.strip_prefix("tls://") {
+        let address = address.trim();
+        if address.is_empty() {
+            return Err(IndexedDBError::Env(format!(
+                "IndexedDB tls target {raw_target:?} is missing host:port"
+            )));
+        }
+        return Ok(IndexedDBTarget::Tls(address.to_string()));
+    }
+    if let Some(path) = target.strip_prefix("unix://") {
+        let path = path.trim();
+        if path.is_empty() {
+            return Err(IndexedDBError::Env(format!(
+                "IndexedDB unix target {raw_target:?} is missing a socket path"
+            )));
+        }
+        return Ok(IndexedDBTarget::Unix(path.to_string()));
+    }
+    if target.contains("://") {
+        let scheme = target.split("://").next().unwrap_or_default();
+        return Err(IndexedDBError::Env(format!(
+            "unsupported IndexedDB target scheme {scheme:?}"
+        )));
+    }
+    Ok(IndexedDBTarget::Unix(target.to_string()))
 }
 
 /// CRUD, range-query, and cursor access for one object store.

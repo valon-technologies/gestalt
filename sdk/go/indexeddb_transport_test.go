@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,7 +32,7 @@ func TestMain(m *testing.M) {
 	s3Bin, s3Sock, s3Cmd := buildAndStartHarness("s3transportd", "go-sdk-s3-test.sock")
 
 	os.Setenv(gestalt.EnvIndexedDBSocket, idbSock)
-	os.Setenv(gestalt.IndexedDBSocketEnv("test"), idbSock)
+	os.Setenv(gestalt.IndexedDBSocketEnv("test"), "unix://"+idbSock)
 	client, err := gestalt.IndexedDB()
 	if err != nil {
 		_ = idbCmd.Process.Kill()
@@ -112,6 +113,43 @@ func buildAndStartHarness(binaryName, socketName string) (string, string, *exec.
 	return bin, sock, cmd
 }
 
+func buildAndStartTCPHarness(binaryName string) (string, string, *exec.Cmd) {
+	harnessDir := filepath.Join("..", "..", "gestaltd", "internal", "testutil", "cmd", binaryName)
+	bin := filepath.Join(os.TempDir(), binaryName+"-tcp")
+	build := exec.Command("go", "build", "-o", bin, ".")
+	build.Dir = harnessDir
+	if out, err := build.CombinedOutput(); err != nil {
+		panic("build harness: " + string(out))
+	}
+
+	address := reserveTCPAddress()
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		panic("split tcp address: " + err.Error())
+	}
+	cmd := exec.Command(bin, "--tcp", net.JoinHostPort(host, port))
+	stdout, _ := cmd.StdoutPipe()
+	if err := cmd.Start(); err != nil {
+		panic("start tcp harness: " + err.Error())
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	if !scanner.Scan() || scanner.Text() != "READY" {
+		_ = cmd.Process.Kill()
+		panic("tcp harness did not print READY")
+	}
+	return bin, "tcp://" + address, cmd
+}
+
+func reserveTCPAddress() string {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		panic("reserve tcp address: " + err.Error())
+	}
+	defer func() { _ = lis.Close() }()
+	return lis.Addr().String()
+}
+
 func TestTransport_NamedSocketEnv(t *testing.T) {
 	client, err := gestalt.IndexedDB("test")
 	if err != nil {
@@ -129,6 +167,38 @@ func TestTransport_NamedSocketEnv(t *testing.T) {
 		t.Fatalf("Put: %v", err)
 	}
 	got, err := s.Get(ctx, "named")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got["value"] != "ok" {
+		t.Fatalf("value = %v, want ok", got["value"])
+	}
+}
+
+func TestTransport_TCPTargetEnv(t *testing.T) {
+	bin, target, cmd := buildAndStartTCPHarness("indexeddbtransportd")
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		_ = os.Remove(bin)
+	})
+
+	t.Setenv(gestalt.EnvIndexedDBSocket, target)
+	client, err := gestalt.IndexedDB()
+	if err != nil {
+		t.Fatalf("connect tcp indexeddb: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	ctx := context.Background()
+	store := "tcp_target_" + t.Name()
+	if err := client.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+	if err := client.ObjectStore(store).Put(ctx, gestalt.Record{"id": "tcp", "value": "ok"}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	got, err := client.ObjectStore(store).Get(ctx, "tcp")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}

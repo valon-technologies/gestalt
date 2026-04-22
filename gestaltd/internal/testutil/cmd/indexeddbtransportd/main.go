@@ -1,6 +1,6 @@
-// Command indexeddbtransportd runs a minimal IndexedDB gRPC server on a Unix
-// socket for SDK transport tests. It prints READY to stdout when listening and
-// serves until killed.
+// Command indexeddbtransportd runs a minimal IndexedDB gRPC server for SDK
+// transport tests. It prints READY to stdout when listening and serves until
+// killed.
 package main
 
 import (
@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/valon-technologies/gestalt/server/internal/testutil/indexeddbtransport"
@@ -15,13 +16,18 @@ import (
 
 func main() {
 	socket := flag.String("socket", "", "Unix socket path to listen on")
+	tcp := flag.String("tcp", "", "TCP host:port to listen on")
 	flag.Parse()
-	if *socket == "" {
-		fmt.Fprintln(os.Stderr, "usage: indexeddbtransportd --socket <path>")
+	target := *socket
+	if strings.TrimSpace(*tcp) != "" {
+		target = "tcp://" + strings.TrimSpace(*tcp)
+	}
+	if strings.TrimSpace(target) == "" {
+		fmt.Fprintln(os.Stderr, "usage: indexeddbtransportd --socket <path> | --tcp <host:port>")
 		os.Exit(1)
 	}
 
-	srv, err := indexeddbtransport.Start(*socket)
+	srv, err := indexeddbtransport.Start(target)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to start: %v\n", err)
 		os.Exit(1)

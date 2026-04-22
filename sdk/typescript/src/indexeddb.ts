@@ -16,6 +16,42 @@ export function indexedDBSocketEnv(name?: string): string {
   return `${ENV_INDEXEDDB_SOCKET}_${trimmed.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`;
 }
 
+function indexedDBTransportOptions(rawTarget: string): {
+  baseUrl: string;
+  nodeOptions?: { path: string };
+} {
+  const target = rawTarget.trim();
+  if (!target) {
+    throw new Error("IndexedDB transport target is required");
+  }
+  if (target.startsWith("tcp://")) {
+    const address = target.slice("tcp://".length).trim();
+    if (!address) {
+      throw new Error(`IndexedDB tcp target ${JSON.stringify(rawTarget)} is missing host:port`);
+    }
+    return { baseUrl: `http://${address}` };
+  }
+  if (target.startsWith("tls://")) {
+    const address = target.slice("tls://".length).trim();
+    if (!address) {
+      throw new Error(`IndexedDB tls target ${JSON.stringify(rawTarget)} is missing host:port`);
+    }
+    return { baseUrl: `https://${address}` };
+  }
+  if (target.startsWith("unix://")) {
+    const socketPath = target.slice("unix://".length).trim();
+    if (!socketPath) {
+      throw new Error(`IndexedDB unix target ${JSON.stringify(rawTarget)} is missing a socket path`);
+    }
+    return { baseUrl: "http://localhost", nodeOptions: { path: socketPath } };
+  }
+  if (target.includes("://")) {
+    const parsed = new URL(target);
+    throw new Error(`Unsupported IndexedDB target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`);
+  }
+  return { baseUrl: "http://localhost", nodeOptions: { path: target } };
+}
+
 class AsyncQueue<T> implements AsyncIterable<T> {
   private queue: T[] = [];
   private waiting: ((result: IteratorResult<T>) => void) | null = null;
@@ -447,16 +483,13 @@ export interface ObjectStoreSchema {
 export class IndexedDB {
   private client: Client<typeof IndexedDBService>;
 
-  constructor(name?: string) {
+ constructor(name?: string) {
     const envName = indexedDBSocketEnv(name);
-    const socketPath = process.env[envName];
-    if (!socketPath) {
+    const target = process.env[envName];
+    if (!target) {
       throw new Error(`${envName} is not set`);
     }
-    const transport = createGrpcTransport({
-      baseUrl: `http://localhost`,
-      nodeOptions: { path: socketPath },
-    });
+    const transport = createGrpcTransport(indexedDBTransportOptions(target));
     this.client = createClient(IndexedDBService, transport);
   }
 
