@@ -126,7 +126,7 @@ func (s *Server) readinessCheck(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	p := PrincipalFromContext(r.Context())
 	connected := map[string][]instanceInfo{}
-	if !isWorkloadPrincipal(p) {
+	if !principal.IsWorkloadPrincipal(p) {
 		var err error
 		connected, err = s.userConnectedIntegrations(r)
 		if err != nil {
@@ -163,15 +163,25 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
 			info.MountedPath = strings.TrimSpace(entry.MountPath)
 		}
-		if isWorkloadPrincipal(p) {
-			if binding, ok := s.workloadBinding(p, name); ok {
-				bindingConnected, err := s.workloadBindingConnected(r.Context(), binding, name)
-				if err != nil {
-					slog.ErrorContext(r.Context(), "checking workload integration status", "provider", name, "error", err)
-					writeError(w, http.StatusInternalServerError, "failed to check integration status")
-					return
+		if principal.IsWorkloadPrincipal(p) {
+			if s.authorizer != nil {
+				if binding, ok := s.authorizer.Binding(p, name); ok {
+					switch binding.Mode {
+					case core.ConnectionModeNone:
+						info.Connected = true
+					case core.ConnectionModeUser:
+						_, err := s.tokens.Token(r.Context(), binding.CredentialSubjectID, name, binding.Connection, binding.Instance)
+						switch {
+						case err == nil:
+							info.Connected = true
+						case errors.Is(err, core.ErrNotFound):
+						default:
+							slog.ErrorContext(r.Context(), "checking workload integration status", "provider", name, "error", err)
+							writeError(w, http.StatusInternalServerError, "failed to check integration status")
+							return
+						}
+					}
 				}
-				info.Connected = bindingConnected
 			}
 			info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
 			if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, prov, info) {

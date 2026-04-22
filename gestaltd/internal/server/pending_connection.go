@@ -257,7 +257,7 @@ func (s *Server) resolvePendingConnectionUserID(r *http.Request) (string, bool, 
 	if p == nil {
 		return "", false, nil
 	}
-	if isWorkloadPrincipal(p) {
+	if principal.IsWorkloadPrincipal(p) {
 		return "", true, errWorkloadForbidden
 	}
 	subjectID := strings.TrimSpace(p.SubjectID)
