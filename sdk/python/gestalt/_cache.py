@@ -6,6 +6,7 @@ import datetime as _dt
 import os
 from dataclasses import dataclass
 from typing import Any, Iterable
+from urllib import parse as _urlparse
 
 import grpc
 from google.protobuf import duration_pb2 as _duration_pb2
@@ -18,6 +19,9 @@ pb_grpc: Any = _pb_grpc
 duration_pb2: Any = _duration_pb2
 
 ENV_CACHE_SOCKET = "GESTALT_CACHE_SOCKET"
+_CACHE_SOCKET_TOKEN_SUFFIX = "_TOKEN"
+_CACHE_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
+ENV_CACHE_SOCKET_TOKEN = f"{ENV_CACHE_SOCKET}{_CACHE_SOCKET_TOKEN_SUFFIX}"
 
 
 def cache_socket_env(name: str | None = None) -> str:
@@ -30,6 +34,12 @@ def cache_socket_env(name: str | None = None) -> str:
         ch.upper() if ch.isascii() and ch.isalnum() else "_" for ch in trimmed
     )
     return f"{ENV_CACHE_SOCKET}_{normalized}"
+
+
+def cache_socket_token_env(name: str | None = None) -> str:
+    """Return the environment variable name for a cache relay token."""
+
+    return f"{cache_socket_env(name)}{_CACHE_SOCKET_TOKEN_SUFFIX}"
 
 
 @dataclass(frozen=True)
@@ -45,10 +55,11 @@ class Cache:
 
     def __init__(self, name: str | None = None) -> None:
         env_name = cache_socket_env(name)
-        socket_path = os.environ.get(env_name, "")
-        if not socket_path:
+        target = os.environ.get(env_name, "")
+        if not target:
             raise RuntimeError(f"{env_name} is not set")
-        self._channel = grpc.insecure_channel(f"unix:{socket_path}")
+        token = os.environ.get(cache_socket_token_env(name), "")
+        self._channel = _cache_channel(target, token=token)
         self._stub = pb_grpc.CacheStub(self._channel)
 
     def close(self) -> None:
@@ -145,6 +156,83 @@ def _duration_from_ttl(ttl: _dt.timedelta | None) -> Any:
     duration = duration_pb2.Duration()
     duration.FromTimedelta(ttl)
     return duration
+
+
+class _RelayTokenInterceptor(grpc.UnaryUnaryClientInterceptor):
+    def __init__(self, token: str) -> None:
+        self._token = token
+
+    def intercept_unary_unary(self, continuation: Any, client_call_details: Any, request: Any) -> Any:
+        metadata = list(client_call_details.metadata or [])
+        metadata.append((_CACHE_RELAY_TOKEN_HEADER, self._token))
+        details = _ClientCallDetails(
+            method=client_call_details.method,
+            timeout=client_call_details.timeout,
+            metadata=metadata,
+            credentials=client_call_details.credentials,
+            wait_for_ready=client_call_details.wait_for_ready,
+            compression=client_call_details.compression,
+        )
+        return continuation(details, request)
+
+
+class _ClientCallDetails(grpc.ClientCallDetails):
+    def __init__(
+        self,
+        *,
+        method: str,
+        timeout: float | None,
+        metadata: list[tuple[str, str]],
+        credentials: Any,
+        wait_for_ready: bool | None,
+        compression: Any,
+    ) -> None:
+        self.method = method
+        self.timeout = timeout
+        self.metadata = metadata
+        self.credentials = credentials
+        self.wait_for_ready = wait_for_ready
+        self.compression = compression
+
+
+def _cache_channel(target: str, *, token: str = "") -> Any:
+    scheme, address = _parse_cache_target(target)
+    if scheme == "unix":
+        channel = grpc.insecure_channel(f"unix:{address}")
+    elif scheme == "tcp":
+        channel = grpc.insecure_channel(address)
+    elif scheme == "tls":
+        channel = grpc.secure_channel(address, grpc.ssl_channel_credentials())
+    else:
+        raise RuntimeError(f"unsupported cache transport scheme {scheme!r}")
+    if token:
+        channel = grpc.intercept_channel(channel, _RelayTokenInterceptor(token))
+    return channel
+
+
+def _parse_cache_target(raw: str) -> tuple[str, str]:
+    target = raw.strip()
+    if not target:
+        raise RuntimeError("cache transport target is required")
+    if target.startswith("tcp://"):
+        address = target.removeprefix("tcp://").strip()
+        if not address:
+            raise RuntimeError(f"cache tcp target {raw!r} is missing host:port")
+        return "tcp", address
+    if target.startswith("tls://"):
+        address = target.removeprefix("tls://").strip()
+        if not address:
+            raise RuntimeError(f"cache tls target {raw!r} is missing host:port")
+        return "tls", address
+    if target.startswith("unix://"):
+        address = target.removeprefix("unix://").strip()
+        if not address:
+            raise RuntimeError(f"cache unix target {raw!r} is missing a socket path")
+        return "unix", address
+    if "://" in target:
+        parsed = _urlparse.urlparse(target)
+        raise RuntimeError(f"unsupported cache target scheme {parsed.scheme!r}")
+    return "unix", target
 
 
 def _grpc_call(method: Any, request: Any) -> Any:

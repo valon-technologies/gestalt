@@ -331,6 +331,15 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 					},
 				},
 				{
+					ID:     "cache_roundtrip",
+					Method: http.MethodPost,
+					Parameters: []catalog.CatalogParameter{
+						{Name: "binding", Type: "string"},
+						{Name: "key", Type: "string", Required: true},
+						{Name: "value", Type: "string", Required: true},
+					},
+				},
+				{
 					ID:     "invoke_plugin",
 					Method: http.MethodPost,
 					Parameters: []catalog.CatalogParameter{
@@ -359,6 +368,19 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 				value, _ := params["value"].(string)
 				binding, _ := params["binding"].(string)
 				record, err := fakeHostedIndexedDBRoundTrip(store, id, value, binding, env)
+				if err != nil {
+					return nil, err
+				}
+				body, err := json.Marshal(record)
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			case "cache_roundtrip":
+				key, _ := params["key"].(string)
+				value, _ := params["value"].(string)
+				binding, _ := params["binding"].(string)
+				record, err := fakeHostedCacheRoundTrip(key, value, binding, env)
 				if err != nil {
 					return nil, err
 				}
@@ -478,6 +500,60 @@ func fakeHostedIndexedDBRoundTrip(store, id, value, binding string, env map[stri
 		return nil, fmt.Errorf("decode record: %w", err)
 	}
 	return record, nil
+}
+
+func fakeHostedCacheRoundTrip(key, value, binding string, env map[string]string) (map[string]any, error) {
+	envName := providerhost.DefaultCacheSocketEnv
+	tokenEnvName := providerhost.CacheSocketTokenEnv("")
+	if strings.TrimSpace(binding) != "" {
+		envName = providerhost.CacheSocketEnv(binding)
+		tokenEnvName = providerhost.CacheSocketTokenEnv(binding)
+	}
+	target := strings.TrimSpace(env[envName])
+	if target == "" {
+		return nil, fmt.Errorf("missing cache relay target in %s", envName)
+	}
+	token := strings.TrimSpace(env[tokenEnvName])
+	if token == "" {
+		return nil, fmt.Errorf("missing cache relay token in %s", tokenEnvName)
+	}
+	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
+	if address == "" || address == target {
+		return nil, fmt.Errorf("unsupported cache relay target %q", target)
+	}
+
+	conn, err := grpc.NewClient(
+		address,
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true,
+			MinVersion:         tls.VersionTLS12,
+			NextProtos:         []string{"h2"},
+		})),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("connect cache relay: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+
+	client := proto.NewCacheClient(conn)
+	if _, err := client.Set(ctx, &proto.CacheSetRequest{
+		Key:   key,
+		Value: []byte(value),
+	}); err != nil {
+		return nil, fmt.Errorf("set cache key: %w", err)
+	}
+	resp, err := client.Get(ctx, &proto.CacheGetRequest{Key: key})
+	if err != nil {
+		return nil, fmt.Errorf("get cache key: %w", err)
+	}
+	return map[string]any{
+		"found": resp.GetFound(),
+		"value": string(resp.GetValue()),
+	}, nil
 }
 
 func fakeHostedInvokePlugin(targetPlugin, targetOperation, invocationToken string, env map[string]string) (invokePluginEnvelope, error) {
@@ -4457,17 +4533,14 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapability(t *testing
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				Runtime:              &config.PluginRuntimeConfig{},
-				Cache:                []string{"session"},
+				S3:                   []string{"main"},
 			},
 		},
 	}
 
 	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		CacheDefs: map[string]*config.ProviderEntry{
-			"session": {Config: mustNode(t, map[string]any{"namespace": "session"})},
-		},
-		CacheFactory: func(yaml.Node) (corecache.Cache, error) {
-			return coretesting.NewStubCache(), nil
+		S3: map[string]s3store.Client{
+			"main": &coretesting.StubS3{},
 		},
 		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	})
@@ -4713,6 +4786,253 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 	}
 	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
 		t.Fatalf("BindHostService relay target = %q, want tls relay target", got)
+	}
+}
+
+func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapability(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+				Cache:                []string{"session", "rate_limit"},
+			},
+		},
+	}
+
+	deps := Deps{
+		BaseURL:       "https://gestalt.example.test",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		CacheDefs: map[string]*config.ProviderEntry{
+			"session":    {Config: mustNode(t, map[string]any{"namespace": "session"})},
+			"rate_limit": {Config: mustNode(t, map[string]any{"namespace": "rate_limit"})},
+		},
+		CacheFactory: func(yaml.Node) (corecache.Cache, error) {
+			return coretesting.NewStubCache(), nil
+		},
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+	checkEnv := func(envName string) (string, bool) {
+		t.Helper()
+		result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": envName}, "")
+		if err != nil {
+			t.Fatalf("Execute read_env(%s): %v", envName, err)
+		}
+		var env struct {
+			Value string `json:"value"`
+			Found bool   `json:"found"`
+		}
+		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+			t.Fatalf("unmarshal env result for %s: %v", envName, err)
+		}
+		return env.Value, env.Found
+	}
+
+	if _, found := checkEnv(providerhost.DefaultCacheSocketEnv); found {
+		t.Fatalf("env %s should not be set with multiple cache bindings", providerhost.DefaultCacheSocketEnv)
+	}
+	for _, binding := range []string{"session", "rate_limit"} {
+		envName := providerhost.CacheSocketEnv(binding)
+		if got, found := checkEnv(envName); !found || got != "tls://gestalt.example.test:443" {
+			t.Fatalf("plugin cache env %s = (%q, %v), want (%q, true)", envName, got, found, "tls://gestalt.example.test:443")
+		}
+		tokenEnvName := providerhost.CacheSocketTokenEnv(binding)
+		if got, found := checkEnv(tokenEnvName); !found || got == "" {
+			t.Fatalf("plugin cache token env %s = (%q, %v), want non-empty token", tokenEnvName, got, found)
+		}
+	}
+
+	bindRequests := runtimeProvider.bindHostServiceRequests()
+	if len(bindRequests) != 2 {
+		t.Fatalf("BindHostService requests = %d, want 2", len(bindRequests))
+	}
+	for _, req := range bindRequests {
+		if got := req.Relay.DialTarget; got != "tls://gestalt.example.test:443" {
+			t.Fatalf("BindHostService(%s) relay target = %q, want %q", req.EnvVar, got, "tls://gestalt.example.test:443")
+		}
+	}
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	for _, binding := range []string{"session", "rate_limit"} {
+		if got := startRequests[0].Env[providerhost.CacheSocketTokenEnv(binding)]; got == "" {
+			t.Fatalf("StartPlugin env should include cache relay token %s", providerhost.CacheSocketTokenEnv(binding))
+		}
+	}
+	if !slices.Contains(startRequests[0].AllowedHosts, "gestalt.example.test") {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", startRequests[0].AllowedHosts)
+	}
+}
+
+func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	relaySrv.EnableHTTP2 = true
+	relaySrv.StartTLS()
+	testutil.CloseOnCleanup(t, relaySrv)
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:     "cache_roundtrip",
+				Method: http.MethodPost,
+				Parameters: []catalog.CatalogParameter{
+					{Name: "key", Type: "string", Required: true},
+					{Name: "value", Type: "string", Required: true},
+				},
+			},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
+
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {Driver: config.RuntimeProviderDriver("capture")},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+				Cache:                []string{"session"},
+			},
+		},
+	}
+
+	boundCache := coretesting.NewStubCache()
+	deps := Deps{
+		BaseURL:       relaySrv.URL,
+		EncryptionKey: secret,
+		CacheDefs: map[string]*config.ProviderEntry{
+			"session": {Config: mustNode(t, map[string]any{"namespace": "session"})},
+		},
+		CacheFactory: func(yaml.Node) (corecache.Cache, error) {
+			return boundCache, nil
+		},
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "cache_roundtrip", map[string]any{
+		"key":   "task-1",
+		"value": "ship-it",
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute cache_roundtrip: %v", err)
+	}
+
+	var record map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
+		t.Fatalf("unmarshal cache_roundtrip: %v", err)
+	}
+	if got := record["found"]; got != true {
+		t.Fatalf("cache_roundtrip found = %#v, want true", got)
+	}
+	if got := record["value"]; got != "ship-it" {
+		t.Fatalf("cache_roundtrip value = %#v, want %q", got, "ship-it")
+	}
+
+	gotValue, found, err := boundCache.Get(context.Background(), "echoext:task-1")
+	if err != nil {
+		t.Fatalf("bound cache Get: %v", err)
+	}
+	if !found {
+		t.Fatal("bound cache missing echoed value")
+	}
+	if got := string(gotValue); got != "ship-it" {
+		t.Fatalf("bound cache stored value = %q, want %q", got, "ship-it")
+	}
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env[providerhost.CacheSocketTokenEnv("")]; got == "" {
+		t.Fatal("StartPlugin env should include the cache relay token")
+	}
+	bindRequests := runtimeProvider.bindHostServiceRequests()
+	if len(bindRequests) != 2 {
+		t.Fatalf("BindHostService requests = %d, want 2", len(bindRequests))
+	}
+	for _, req := range bindRequests {
+		if got := req.Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
+			t.Fatalf("BindHostService(%s) relay target = %q, want tls relay target", req.EnvVar, got)
+		}
 	}
 }
 

@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import socket
 import subprocess
 import tempfile
 import unittest
 
-from gestalt import Cache, CacheEntry, cache_socket_env
+from gestalt import Cache, CacheEntry, cache_socket_env, cache_socket_token_env
 
 
 def _build_harness() -> str:
@@ -65,6 +66,32 @@ def tearDownModule() -> None:
         os.remove(_socket_path)
 
 
+def _reserve_tcp_address() -> str:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        host, port = sock.getsockname()
+    return f"{host}:{port}"
+
+
+def _start_tcp_harness(expect_token: str = "") -> tuple[subprocess.Popen[bytes], str]:
+    harness_bin = _build_harness()
+    address = _reserve_tcp_address()
+    args = [harness_bin, "--tcp", address]
+    if expect_token:
+        args.extend(["--expect-token", expect_token])
+    proc = subprocess.Popen(
+        args,
+        stdout=subprocess.PIPE,
+    )
+    assert proc.stdout is not None
+    line = proc.stdout.readline().decode().strip()
+    proc.stdout.close()
+    if line != "READY":
+        proc.kill()
+        raise RuntimeError(f"tcp harness did not print READY, got: {line!r}")
+    return proc, f"tcp://{address}"
+
+
 class CacheTransportTests(unittest.TestCase):
     def test_roundtrip_batch_delete_and_touch(self) -> None:
         client = Cache()
@@ -104,4 +131,58 @@ class CacheTransportTests(unittest.TestCase):
         client = Cache("café")
         client.set("unicode-key", b"unicode-value")
         self.assertEqual(client.get("unicode-key"), b"unicode-value")
+        client.close()
+
+
+class CacheTransportTCPTests(unittest.TestCase):
+    def test_tcp_target_roundtrip(self) -> None:
+        proc, target = _start_tcp_harness()
+        self.addCleanup(proc.wait)
+        self.addCleanup(proc.kill)
+
+        env_name = cache_socket_env()
+        previous_target = os.environ.get(env_name)
+
+        def restore_target() -> None:
+            if previous_target is None:
+                os.environ.pop(env_name, None)
+            else:
+                os.environ[env_name] = previous_target
+
+        os.environ[env_name] = target
+        self.addCleanup(restore_target)
+
+        client = Cache()
+        client.set("tcp-key", b"tcp-value")
+        self.assertEqual(client.get("tcp-key"), b"tcp-value")
+        client.close()
+
+    def test_tcp_target_token_roundtrip(self) -> None:
+        token = "relay-token-python"
+        proc, target = _start_tcp_harness(expect_token=token)
+        self.addCleanup(proc.wait)
+        self.addCleanup(proc.kill)
+
+        target_env = cache_socket_env()
+        token_env = cache_socket_token_env()
+        previous_target = os.environ.get(target_env)
+        previous_token = os.environ.get(token_env)
+
+        def restore_env() -> None:
+            if previous_target is None:
+                os.environ.pop(target_env, None)
+            else:
+                os.environ[target_env] = previous_target
+            if previous_token is None:
+                os.environ.pop(token_env, None)
+            else:
+                os.environ[token_env] = previous_token
+
+        os.environ[target_env] = target
+        os.environ[token_env] = token
+        self.addCleanup(restore_env)
+
+        client = Cache()
+        client.set("tcp-token-key", b"tcp-token-value")
+        self.assertEqual(client.get("tcp-token-key"), b"tcp-token-value")
         client.close()
