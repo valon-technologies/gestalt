@@ -28,7 +28,7 @@ Gestalt handles this so individual agents and applications don't have to. A sing
 - Credentials and connection data are encrypted at rest, on infrastructure you control. See [Security](/security).
 - A single YAML config declaratively defines which tools to expose, how users authenticate, and how credentials are managed. See [Configuration](/configuration).
 - The same operations are available over MCP, HTTP, CLI, and optional mounted UIs for cloud agents, local coding assistants, and human operators. See [HTTP API](/reference/http-api).
-- Authentication backends, datastores, secret managers, and the UI are replaceable provider packages. Use the first-party providers or write your own in Go, Python, Rust, or TypeScript. See [Built-in Providers](/reference/built-in-providers).
+- Authentication, authorization, cache, storage, runtime, object-store, secret-manager, workflow, and UI backends are replaceable provider packages. Use the first-party providers or write your own. See [Built-in Providers](/reference/built-in-providers).
 - Deploy on any infrastructure you control with Docker, Helm, or bare containers. See [Deploy](/deploy).
 
 ## What Gestalt is not
@@ -50,7 +50,7 @@ Gestalt does not replace your existing APIs. It sits between agents and upstream
     Schedules, runs, triggers, and the current workflow API surface.
   </Cards.Card>
   <Cards.Card title="Providers" href="/providers">
-    Plugins, authentication backends, datastores, and custom UIs as provider packages.
+    Plugins, runtime backends, authentication backends, datastores, and custom UIs as provider packages.
   </Cards.Card>
   <Cards.Card title="Security" href="/security">
     Trust boundaries, encryption, headers, and token handling.

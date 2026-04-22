@@ -220,4 +220,4 @@ plugins:
 
 ## Community and Custom Providers
 
-Third-party authentication providers, datastore providers, and plugins use the same provider package model as the first-party packages. Package your implementation with a provider manifest that includes the appropriate `kind` and `spec` block, publish a release with `provider-release.yaml`, and reference that metadata URL in config the same way you would reference any first-party provider.
+Third-party provider packages use the same model as the first-party ones, including authentication, authorization, cache, datastore, runtime, S3, secrets, workflow, UI, and plugin packages. Package your implementation with a provider manifest that includes the appropriate `kind` and `spec` block, publish a release with `provider-release.yaml`, and reference that metadata URL in config the same way you would reference any first-party provider.

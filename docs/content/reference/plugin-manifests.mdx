@@ -703,7 +703,7 @@ spec:
 
 ## Authoring Notes
 
-Manifest paths must stay inside the package. `kind`, `source`, and `version` are required. A manifest defines exactly one provider kind: `kind: plugin`, `kind: authentication`, `kind: indexeddb`, `kind: secrets`, or `kind: ui`.
+Manifest paths must stay inside the package. `kind`, `source`, and `version` are required. A manifest defines exactly one provider kind: `kind: plugin`, `kind: authentication`, `kind: authorization`, `kind: cache`, `kind: indexeddb`, `kind: runtime`, `kind: s3`, `kind: secrets`, `kind: ui`, or `kind: workflow`.
 
 `configSchemaPath` validates per-plugin config and may be written in JSON or YAML. Any connection may define `params` and `discovery`. OpenAPI and GraphQL may be declared together on one plugin, and MCP may be added alongside either or both.
 
@@ -714,8 +714,9 @@ TypeScript, Gestalt materializes the executable catalog automatically during
 local source-plugin execution and `provider release`. If the source plugin also
 defines hosted HTTP/security metadata in code, Gestalt merges that generated
 `securitySchemes` / `http` metadata into the effective manifest at the same
-time. Authentication and indexeddb source packages use the same release flow
-for Go, Rust, and TypeScript, but they do not generate catalogs. See
+time. Source component packages use the same release flow, but they do not
+generate catalogs. Runtime and authorization source components are currently
+Go-only. See
 [Plugins](/providers/plugins) for the end-to-end authoring flow.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
@@ -812,12 +813,14 @@ catalog automatically before packaging. Python source plugins load the module
 declared in `[tool.gestalt].provider` and materialize the executable catalog
 automatically. TypeScript source providers load the target declared in
 `package.json` under `gestalt.provider`. A string target such as
-`./provider.ts#plugin` defaults to a plugin provider; auth and indexeddb
-providers use an object with `kind` and `target`. If the source plugin defines
+`./provider.ts#plugin` defaults to a plugin provider; supported TypeScript
+source components use an object with `kind` and `target`, for example
+`{ "kind": "authentication", "target": "./auth.ts#provider" }`. If the source plugin defines
 hosted HTTP/security metadata in code, release merges the generated
 `securitySchemes` / `http` blocks into the packaged manifest at the same time.
-Authentication and indexeddb source packages support the same release flow for
-Go, Rust, and TypeScript, but they do not generate catalogs. Source packages
-build the host-platform artifact by default. Pass `--platform` for an explicit
+Source component packages support the same release flow, but they do not
+generate catalogs. Runtime and authorization source components are currently
+Go-only. Source packages build the host-platform artifact by default. Pass
+`--platform` for an explicit
 `os/arch[/libc]` target list, or `--platform all` in CI to build the full
 supported release matrix.

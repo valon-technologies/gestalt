@@ -12,7 +12,7 @@ the executable artifacts for packaged providers, and optional static assets.
 
 ## What can be released
 
-Gestalt uses the same release system for executable provider packages, authentication and datastore component packages, and packaged UI bundles. Every package is described by a provider manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`.
+Gestalt uses the same release system for executable plugin packages, executable component providers such as authentication, authorization, cache, indexeddb, runtime, S3, secrets, and workflow, and packaged UI bundles. Every package is described by a provider manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`.
 
 ## Source manifests vs release manifests
 
@@ -120,8 +120,8 @@ packaging.
     }
     ```
 
-    TypeScript authentication and datastore providers use `gestalt.provider` objects
-    such as `{ "kind": "authentication", "target": "./auth.ts#provider" }`.
+    Supported TypeScript source components use `gestalt.provider` objects such
+    as `{ "kind": "authentication", "target": "./auth.ts#provider" }`.
   </Tabs.Tab>
 </Tabs>
 
@@ -129,8 +129,8 @@ packaging.
 
 Source manifests may optionally define a `release.build` command. Gestalt runs
 it before source-manifest preparation, which lets UI packages generate
-static assets and lets provider/authentication/datastore packages generate support files
-such as config schemas before packaging.
+static assets and lets provider packages generate support files such as config
+schemas before packaging.
 
 ```yaml
 kind: ui
@@ -149,8 +149,8 @@ spec:
 
 ### Release manifest for an executable provider
 
-Released executable plugin providers add concrete `entrypoint` and
-`artifacts` entries:
+Released executable providers, including runtime providers, add concrete
+`entrypoint` and `artifacts` entries:
 
 ```yaml
 kind: plugin
@@ -194,11 +194,12 @@ Run this from the provider source directory. It produces release archives and wr
 
 Release tags are derived from the package path after the repository. For example, `source: github.com/acme/plugins/catalog/support-api` releases from the tag `plugins/catalog/support-api/v0.1.0`.
 
-For executable Go, Rust, Python, and TypeScript source providers,
+For executable source plugins in Go, Rust, Python, and TypeScript,
 `provider release` materializes the executable catalog automatically and builds
-the host-platform artifact by default. Go, Rust, and TypeScript auth/datastore
-source packages use the same release flow without catalog generation. Pass
-`--platform` with a comma-separated list such as
+the host-platform artifact by default. Source component providers use the same
+release flow without catalog generation. Runtime and authorization source
+components are currently Go-only. Pass `--platform` with a comma-separated list
+such as
 `--platform linux/amd64,darwin/arm64` to build explicit targets. Pass `--platform all` in CI release jobs to build the
 full supported platform matrix for source builds.
 
