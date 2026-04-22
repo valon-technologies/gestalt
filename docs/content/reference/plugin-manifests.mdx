@@ -4,9 +4,9 @@ import { Tabs } from "nextra/components";
 
 Gestalt provider packages and release archives are described by a manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`. YAML is the easiest format to author by hand.
 
-Providers are the umbrella concept in Gestalt. Authentication providers, cache
-providers, indexeddb providers, S3 providers, and plugins all use this
-manifest format. The `plugin` manifest kind is reserved for providers that
+Providers are the umbrella concept in Gestalt. Authentication, authorization,
+cache, indexeddb, runtime, S3, secrets, workflow, and plugin packages all use
+this manifest format. The `plugin` manifest kind is reserved for providers that
 expose callable operations.
 
 ## Manifest Kinds
@@ -15,13 +15,16 @@ Every manifest defines exactly one provider kind, set by the `kind` field:
 
 | Kind        | Purpose                                              |
 | ----------- | ---------------------------------------------------- |
-| `plugin`    | Plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
-| `auth`      | Platform authentication provider.                    |
-| `cache`     | Cache backend for plugin-bound cache bindings.       |
-| `indexeddb` | Persistence backend.                                 |
-| `s3`        | S3-compatible object store backend.                  |
-| `secrets`   | Secret manager for resolving structured secret refs. |
-| `ui`     | Static UI package served by `gestaltd`.              |
+| `plugin` | Plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
+| `authentication` | Platform authentication provider. |
+| `authorization` | Human authorization decision and control-plane provider. |
+| `cache` | Cache backend for plugin-bound cache bindings. |
+| `indexeddb` | Persistence backend. |
+| `runtime` | Hosted execution backend for executable plugins. |
+| `s3` | S3-compatible object store backend. |
+| `secrets` | Secret manager for resolving structured secret refs. |
+| `ui` | Static UI package served by `gestaltd`. |
+| `workflow` | Workflow run, schedule, and trigger backend. |
 
 The `kind` field is required. Kind-specific configuration goes under the `spec` block.
 
@@ -31,7 +34,7 @@ These fields appear at the top level of every manifest regardless of kind.
 
 | Field         | Type       | Required | Purpose                                                                                                                                                                                              |
 | ------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`        | string     | yes      | The provider kind (`plugin`, `auth`, `cache`, `indexeddb`, `s3`, `secrets`, `ui`).                                                                                                                |
+| `kind`        | string     | yes      | The provider kind (`plugin`, `authentication`, `authorization`, `cache`, `indexeddb`, `runtime`, `s3`, `secrets`, `ui`, `workflow`).                                                                                                                |
 | `source`      | string     | yes      | Canonical provider source identifier. Use `github.com/<org>/<repo>/<path>`. The final path segment is the provider package name; preceding segments are used for release tags and source resolution. |
 | `version`     | string     | yes      | Semver version. Pre-release suffixes like `-alpha.1` are allowed.                                                                                                                                    |
 | `displayName` | string     | no       | Human-readable label shown in the UI.                                                                                                                                                                |
@@ -55,6 +58,25 @@ entrypoint:
   artifactPath: artifacts/linux/amd64/plugin
   args: ["--verbose"]
 ```
+
+## Runtime Metadata
+
+Runtime providers use the same common manifest structure as other executable
+providers. Their kind-specific `spec` currently only uses
+`configSchemaPath`:
+
+```yaml
+kind: runtime
+source: github.com/acme/runtime/example
+version: 0.0.1
+entrypoint:
+  artifactPath: artifacts/linux/amd64/runtime
+spec:
+  configSchemaPath: ./schemas/config.schema.yaml
+```
+
+Operators then reference that package under top-level `runtime.providers`, not
+under `providers.*`.
 
 ## Plugin Metadata
 

@@ -16,7 +16,7 @@ const (
 
 var providerConfigureTimeout = 30 * time.Second
 
-type runtimeProviderMetadata struct {
+type RuntimeProviderMetadata struct {
 	Kind        proto.ProviderKind
 	Name        string
 	DisplayName string
@@ -25,7 +25,7 @@ type runtimeProviderMetadata struct {
 	Warnings    []string
 }
 
-func configureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.ProviderKind, name string, config map[string]any) (*runtimeProviderMetadata, error) {
+func ConfigureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.ProviderKind, name string, config map[string]any) (*RuntimeProviderMetadata, error) {
 	if client == nil {
 		return nil, fmt.Errorf("runtime client is required")
 	}
@@ -69,7 +69,7 @@ func configureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycl
 		return nil, fmt.Errorf("get configured provider identity: %w", err)
 	}
 
-	return &runtimeProviderMetadata{
+	return &RuntimeProviderMetadata{
 		Kind:        configuredMeta.GetKind(),
 		Name:        configuredMeta.GetName(),
 		DisplayName: configuredMeta.GetDisplayName(),

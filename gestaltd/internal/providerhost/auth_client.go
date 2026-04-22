@@ -94,7 +94,7 @@ func newRemoteAuthenticationProvider(ctx context.Context, runtimeClient proto.Pr
 }
 
 func (p *remoteAuthenticationProvider) configure(ctx context.Context, name string, config map[string]any) error {
-	meta, err := configureRuntimeProvider(ctx, p.runtime, proto.ProviderKind_PROVIDER_KIND_AUTHENTICATION, name, config)
+	meta, err := ConfigureRuntimeProvider(ctx, p.runtime, proto.ProviderKind_PROVIDER_KIND_AUTHENTICATION, name, config)
 	if err != nil {
 		return err
 	}

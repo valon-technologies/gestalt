@@ -11,6 +11,7 @@ deployment, start with [Providers](/providers).
 ## What belongs here
 
 - Implementing executable or declarative plugin providers
+- Implementing custom runtime providers for hosted executable-plugin execution
 - Building custom authentication, authorization, cache, IndexedDB, S3, secrets,
   workflow, and UI providers
 - Testing providers from local source with `source: ./manifest.yaml`
@@ -24,8 +25,10 @@ providers:
 - A provider package includes a manifest plus executable code or static assets.
 - `gestaltd` resolves the package from a local manifest path or a published
   `provider-release.yaml` metadata URL.
-- Executable providers start as child processes and connect back to the host
-  over gRPC on a temporary Unix socket.
+- Executable providers, including runtime providers themselves, start as child
+  processes and connect back to the host over gRPC on a temporary Unix socket.
+- Runtime providers may then launch hosted plugin processes in a separate
+  session or sandbox and bridge those plugins back to the host.
 - UI providers are static asset bundles served under configured public path
   prefixes.
 - Published packages are prepared with `gestaltd init` and referenced from
@@ -35,6 +38,7 @@ providers:
 
 - [Plugin](/custom-providers/plugins): custom tool providers, executable
   operations, declarative surfaces, and hybrid catalogs
+- [Runtime](/custom-providers/runtime): hosted runtime backends for executable plugins
 - [Authentication](/custom-providers/authentication): platform login providers and optional bearer
   token validation
 - [Authorization](/custom-providers/authorization): human authorization

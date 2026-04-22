@@ -4,6 +4,7 @@ export default {
   cache: "Cache",
   indexeddb: "IndexedDB",
   plugins: "Plugin",
+  runtime: "Runtime",
   s3: "S3",
   secrets: "Secret",
   ui: "UI",

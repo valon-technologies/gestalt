@@ -9,26 +9,24 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 )
 
-type pluginRuntimeFactory func(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (pluginruntime.Provider, error)
-
 type pluginRuntimeRegistry struct {
-	cfg       *config.Config
-	deps      Deps
-	factories map[config.RuntimeProviderDriver]pluginRuntimeFactory
+	cfg     *config.Config
+	deps    Deps
+	factory RuntimeFactory
 
 	mu        sync.Mutex
 	providers map[string]pluginruntime.Provider
 	closed    bool
 }
 
-func newPluginRuntimeRegistry(cfg *config.Config, factories map[config.RuntimeProviderDriver]pluginRuntimeFactory, deps Deps) *pluginRuntimeRegistry {
+func newPluginRuntimeRegistry(cfg *config.Config, factory RuntimeFactory, deps Deps) *pluginRuntimeRegistry {
 	if cfg == nil {
 		return nil
 	}
 	return &pluginRuntimeRegistry{
 		cfg:       cfg,
 		deps:      deps,
-		factories: factories,
+		factory:   factory,
 		providers: make(map[string]pluginruntime.Provider, len(cfg.Runtime.Providers)),
 	}
 }
@@ -56,13 +54,18 @@ func (r *pluginRuntimeRegistry) Resolve(ctx context.Context, pluginName string, 
 		r.mu.Unlock()
 		return effective, provider, nil
 	}
-	factory := r.factories[effective.Provider.Driver]
+	factory := r.factory
 	r.mu.Unlock()
-	if factory == nil {
-		return config.EffectivePluginRuntime{}, nil, fmt.Errorf("runtime provider %q driver %q is not registered", providerName, effective.Provider.Driver)
+	var provider pluginruntime.Provider
+	switch effective.Provider.Driver {
+	case config.RuntimeProviderDriverLocal:
+		provider = pluginruntime.NewLocalProvider()
+	default:
+		if factory == nil {
+			return config.EffectivePluginRuntime{}, nil, fmt.Errorf("runtime provider %q is not registered", providerName)
+		}
+		provider, err = factory(ctx, providerName, effective.Provider, r.deps)
 	}
-
-	provider, err := factory(ctx, providerName, effective.Provider, r.deps)
 	if err != nil {
 		return config.EffectivePluginRuntime{}, nil, fmt.Errorf("build runtime provider %q: %w", providerName, err)
 	}

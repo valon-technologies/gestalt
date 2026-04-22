@@ -89,9 +89,8 @@ type RuntimeProviderDriver string
 const RuntimeProviderDriverLocal RuntimeProviderDriver = "local"
 
 type RuntimeProviderEntry struct {
-	Driver  RuntimeProviderDriver `yaml:"driver,omitempty"`
-	Default bool                  `yaml:"default,omitempty"`
-	Config  yaml.Node             `yaml:"config,omitempty"`
+	ProviderEntry `yaml:",inline"`
+	Driver        RuntimeProviderDriver `yaml:"driver,omitempty"`
 }
 
 type HostProviderKind string
@@ -105,6 +104,7 @@ const (
 	HostProviderKindIndexedDB      HostProviderKind = "indexeddb"
 	HostProviderKindCache          HostProviderKind = "cache"
 	HostProviderKindWorkflow       HostProviderKind = "workflow"
+	HostProviderKindRuntime        HostProviderKind = "runtime"
 )
 
 type ServerProvidersConfig struct {

@@ -25,6 +25,7 @@ enum ProviderKind {
   PROVIDER_KIND_S3 = 7;
   PROVIDER_KIND_WORKFLOW = 8;
   PROVIDER_KIND_AUTHORIZATION = 9;
+  PROVIDER_KIND_RUNTIME = 10;
 }
 
 // ProviderIdentity describes a provider surface and the protocol versions it

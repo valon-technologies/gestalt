@@ -1,5 +1,6 @@
 export default {
   plugins: "Plugin",
+  runtime: "Runtime",
   authentication: "Authentication",
   authorization: "Authorization",
   cache: "Cache",

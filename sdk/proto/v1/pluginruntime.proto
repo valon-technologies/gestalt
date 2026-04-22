@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package gestalt.provider.v1;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+message PluginRuntimeCapabilities {
+  bool hosted_plugin_runtime = 1;
+  bool host_service_tunnels = 2;
+  bool provider_grpc_tunnel = 3;
+  bool hostname_proxy_egress = 4;
+  bool cidr_egress = 5;
+  bool host_path_execution = 6;
+  string execution_goos = 7;
+  string execution_goarch = 8;
+}
+
+message GetPluginRuntimeCapabilitiesResponse {
+  PluginRuntimeCapabilities capabilities = 1;
+}
+
+message PluginRuntimeSession {
+  string id = 1;
+  string state = 2;
+  map<string, string> metadata = 3;
+}
+
+message StartPluginRuntimeSessionRequest {
+  string plugin_name = 1;
+  string template = 2;
+  string image = 3;
+  map<string, string> metadata = 4;
+}
+
+message GetPluginRuntimeSessionRequest {
+  string session_id = 1;
+}
+
+message StopPluginRuntimeSessionRequest {
+  string session_id = 1;
+}
+
+message BindPluginRuntimeHostServiceRequest {
+  string session_id = 1;
+  string env_var = 2;
+  string host_socket_path = 3;
+}
+
+message PluginRuntimeHostServiceBinding {
+  string id = 1;
+  string session_id = 2;
+  string env_var = 3;
+  string socket_path = 4;
+}
+
+// StartHostedPluginRequest describes the plugin process to launch inside a
+// runtime session. The runtime backend owns allocation and injection of the
+// plugin's listener endpoint and returns a host-reachable dial target in the
+// HostedPlugin response.
+message StartHostedPluginRequest {
+  string session_id = 1;
+  string plugin_name = 2;
+  string command = 3;
+  repeated string args = 4;
+  map<string, string> env = 5;
+  string bundle_dir = 6;
+  repeated string allowed_hosts = 7;
+  string default_action = 8;
+  string host_binary = 9;
+}
+
+message HostedPlugin {
+  string id = 1;
+  string session_id = 2;
+  string plugin_name = 3;
+  string dial_target = 4;
+}
+
+service PluginRuntimeProvider {
+  rpc GetCapabilities(google.protobuf.Empty) returns (GetPluginRuntimeCapabilitiesResponse);
+  rpc StartSession(StartPluginRuntimeSessionRequest) returns (PluginRuntimeSession);
+  rpc GetSession(GetPluginRuntimeSessionRequest) returns (PluginRuntimeSession);
+  rpc StopSession(StopPluginRuntimeSessionRequest) returns (google.protobuf.Empty);
+  rpc BindHostService(BindPluginRuntimeHostServiceRequest) returns (PluginRuntimeHostServiceBinding);
+  rpc StartPlugin(StartHostedPluginRequest) returns (HostedPlugin);
+}

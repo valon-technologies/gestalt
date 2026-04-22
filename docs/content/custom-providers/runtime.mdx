@@ -1,0 +1,213 @@
+# Runtime
+
+This page covers building custom runtime providers. If you only need to choose
+or configure a runtime backend for a deployment, use
+[Providers > Runtime](/providers/runtime).
+
+Runtime providers are executable provider packages that manage hosted
+executable-plugin sessions. They run as normal provider processes from
+Gestalt's point of view, but instead of exposing plugin operations directly,
+they expose a control plane for starting and managing hosted plugins.
+
+## What a runtime provider does
+
+A runtime provider answers questions like:
+
+- Can this backend host plugins at all?
+- Does it support host-service tunnels?
+- Can it preserve Gestalt's hostname-based egress model?
+- How does Gestalt create a session in this backend?
+- How does Gestalt inject host-local sockets into that session?
+- How does Gestalt start the hosted plugin and dial it back?
+
+It does **not** replace the host-local authentication, authorization,
+IndexedDB, cache, S3, secrets, or workflow providers. Those remain on the
+`gestaltd` host.
+
+## Manifest
+
+A runtime provider manifest declares `kind: runtime`:
+
+```yaml
+kind: runtime
+source: github.com/your-org/runtime/example
+version: 0.0.1
+displayName: Example Runtime
+description: Hosted runtime backend for executable plugins.
+entrypoint:
+  artifactPath: ./bin/example-runtime
+spec:
+  configSchemaPath: ./schemas/config.schema.yaml
+```
+
+Like authentication, cache, IndexedDB, S3, secrets, and workflow providers,
+runtime providers use the common provider package model: manifest, executable
+entrypoint, optional config schema, and the normal `provider-release.yaml`
+packaging flow.
+
+## Deployment config
+
+Operators configure runtime providers under top-level `runtime.providers`, not
+under `plugins` or `providers.*`:
+
+```yaml
+runtime:
+  providers:
+    example:
+      source: ./runtime/example/manifest.yaml
+      default: true
+      config:
+        region: us-east-1
+        pool: default
+```
+
+Plugins then opt into that runtime with `plugins.<name>.runtime`.
+
+## Provider interface
+
+The runtime surface is intentionally small but lifecycle-oriented:
+
+| Method | Purpose |
+| --- | --- |
+| `GetCapabilities` | Advertise what this backend can actually do. |
+| `StartSession` | Create a hosted runtime session for a plugin. |
+| `GetSession` | Report session status so Gestalt can wait for readiness. |
+| `StopSession` | Tear a session down on shutdown or bootstrap failure. |
+| `BindHostService` | Bind a host-local socket into the runtime session. |
+| `StartPlugin` | Start the hosted plugin and return a host-reachable dial target. |
+
+In addition to the runtime-specific RPCs, the provider still implements the
+normal provider lifecycle surface, including `Configure`.
+
+## Go example
+
+```go
+package exampleruntime
+
+import (
+	"context"
+
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"google.golang.org/protobuf/types/known/emptypb"
+)
+
+type Provider struct {
+	proto.UnimplementedPluginRuntimeProviderServer
+}
+
+func (p *Provider) Configure(context.Context, string, map[string]any) error {
+	return nil
+}
+
+func (p *Provider) GetCapabilities(context.Context, *emptypb.Empty) (*proto.GetPluginRuntimeCapabilitiesResponse, error) {
+	return &proto.GetPluginRuntimeCapabilitiesResponse{
+		Capabilities: &proto.PluginRuntimeCapabilities{
+			HostedPluginRuntime: true,
+			HostServiceTunnels:  true,
+			ProviderGrpcTunnel:  true,
+		},
+	}, nil
+}
+
+func (p *Provider) StartSession(context.Context, *proto.StartPluginRuntimeSessionRequest) (*proto.PluginRuntimeSession, error) {
+	return &proto.PluginRuntimeSession{
+		Id:    "session-1",
+		State: "ready",
+	}, nil
+}
+
+func (p *Provider) GetSession(context.Context, *proto.GetPluginRuntimeSessionRequest) (*proto.PluginRuntimeSession, error) {
+	return &proto.PluginRuntimeSession{
+		Id:    "session-1",
+		State: "ready",
+	}, nil
+}
+
+func (p *Provider) StopSession(context.Context, *proto.StopPluginRuntimeSessionRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
+}
+
+func (p *Provider) BindHostService(context.Context, req *proto.BindPluginRuntimeHostServiceRequest) (*proto.PluginRuntimeHostServiceBinding, error) {
+	return &proto.PluginRuntimeHostServiceBinding{
+		Id:         "binding-1",
+		SessionId:  req.GetSessionId(),
+		EnvVar:     req.GetEnvVar(),
+		SocketPath: req.GetHostSocketPath(),
+	}, nil
+}
+
+func (p *Provider) StartPlugin(context.Context, req *proto.StartHostedPluginRequest) (*proto.HostedPlugin, error) {
+	return &proto.HostedPlugin{
+		Id:         "plugin-1",
+		SessionId:  req.GetSessionId(),
+		PluginName: req.GetPluginName(),
+		DialTarget: "unix:///tmp/example-runtime/plugin.sock",
+	}, nil
+}
+
+func main() {
+	if err := gestalt.ServePluginRuntimeProvider(context.Background(), &Provider{}); err != nil {
+		panic(err)
+	}
+}
+```
+
+## Capability guidelines
+
+Advertise capabilities conservatively.
+
+- Only set `host_service_tunnels` if your backend can actually expose
+  host-managed socket bindings inside the runtime session.
+- Only set `hostname_proxy_egress` if you can preserve Gestalt's
+  hostname-based `allowedHosts` model.
+- Do not treat `cidr_egress` as equivalent to `hostname_proxy_egress`.
+- Only set `host_path_execution` if the backend can execute directly from the
+  host paths Gestalt provides. Otherwise Gestalt will stage a runtime bundle.
+
+Gestalt validates these capabilities before it tries to launch a plugin. If
+they are wrong, operators will get either false rejections or late runtime
+failures.
+
+## Sessions and host services
+
+The critical design point is that `StartPlugin` is **not** the whole runtime
+API. Gestalt needs an explicit session lifecycle because it may need to:
+
+1. create the session
+2. wait until it is ready
+3. bind host-local services into it
+4. then start the plugin
+
+That is why `BindHostService` exists separately from `StartPlugin`.
+
+## Dial targets
+
+`StartPlugin` returns a host-reachable `dial_target`, not a guest-local socket
+path. Gestalt currently supports:
+
+- `unix://...`
+- `tcp://host:port`
+- `tls://host:port`
+
+If your backend starts the plugin behind a guest-local listener, the runtime
+provider is responsible for bridging that listener back into one of the
+host-reachable forms above.
+
+## Releasing
+
+Runtime providers use the same release flow as other executable providers:
+
+```sh
+gestaltd provider release --platform linux/amd64 --output ./dist
+```
+
+Then point `runtime.providers.<name>.source` at the resulting
+`provider-release.yaml`, or use a local manifest path during development.
+
+## What to read next
+
+- [Providers > Runtime](/providers/runtime): operator-facing runtime model
+- [Releasing](/custom-providers/releasing): packaging and published artifacts
+- [Config File](/reference/config-file#runtime): runtime config fields
+- [Provider Manifests](/reference/plugin-manifests): manifest schema

@@ -1,0 +1,160 @@
+# Runtime
+
+Runtime providers manage **where executable plugins run**.
+
+A runtime provider is not the plugin itself, and it is not a host provider like
+authentication, IndexedDB, or workflow. Instead, it is a control-plane backend
+that lets `gestaltd` create a plugin runtime session, bind host-local services
+into that session, start the plugin process there, and dial the plugin back
+over gRPC.
+
+## Scope
+
+Runtime providers only apply to executable plugins under `plugins.<name>`.
+They do **not** replace host-local infrastructure providers such as:
+
+- `providers.authentication`
+- `providers.authorization`
+- `providers.indexeddb`
+- `providers.cache`
+- `providers.s3`
+- `providers.secrets`
+- `providers.workflow`
+
+Those providers still live on the `gestaltd` host. A runtime provider only
+changes where the plugin process runs.
+
+## Mental model
+
+By default, executable plugins run on the same machine as `gestaltd`. A plugin
+only uses a runtime provider when it opts in with `plugins.<name>.runtime`.
+
+When a plugin does opt in, Gestalt follows this lifecycle:
+
+1. Select a runtime backend from `runtime.providers`
+2. Query its capabilities
+3. Start a runtime session
+4. Wait for the session to become ready
+5. Bind host-local services into that session
+6. Start the plugin process inside the session
+7. Dial the plugin back over gRPC and use it like any other plugin
+8. Stop the session on shutdown or bootstrap failure
+
+That is why the runtime interface is bigger than a single `StartPlugin` call:
+Gestalt needs an explicit lifecycle boundary, not just a fire-and-forget launch
+RPC.
+
+## Configuring a runtime provider
+
+Runtime providers are configured under top-level `runtime.providers`:
+
+```yaml
+runtime:
+  providers:
+    modal:
+      source:
+        path: ./vendor/gestalt-providers/runtime/modal/manifest.yaml
+      default: true
+      config:
+        app: gestalt-runtime
+        environment: main
+
+server:
+  runtime:
+    provider: modal
+
+plugins:
+  support:
+    source: ./plugins/support/manifest.yaml
+    runtime:
+      image: ghcr.io/example/support-plugin:2026-04-21
+      template: python-dev
+      metadata:
+        environment: production
+```
+
+Selection is two-step:
+
+- `runtime.providers` defines named backends
+- `plugins.<name>.runtime` opts a specific plugin into hosted execution
+
+`server.runtime.provider` is only a default selector for plugins that already
+set `plugins.<name>.runtime`.
+
+## Runtime capabilities
+
+Runtime backends are not interchangeable. Gestalt checks capabilities before it
+tries to use a backend for a plugin.
+
+| Capability | Meaning |
+| --- | --- |
+| `hosted_plugin_runtime` | The backend can host executable plugins at all. |
+| `host_service_tunnels` | The backend can inject host-local services such as IndexedDB, cache, S3, workflow-manager access, and plugin invocation sockets. |
+| `provider_grpc_tunnel` | The backend can return a host-reachable gRPC dial target for the hosted plugin. |
+| `hostname_proxy_egress` | The backend can preserve Gestalt's hostname-based `allowedHosts` model. |
+| `cidr_egress` | The backend supports network controls at CIDR or firewall granularity. This is not equivalent to hostname-based policy. |
+| `host_path_execution` | The backend can execute directly from host paths instead of requiring bundle staging. |
+| `execution_goos` / `execution_goarch` | The target execution platform the runtime reports to the host. |
+
+These flags matter because plugin requirements differ. For example:
+
+- a plugin that uses `indexeddb`, `cache`, `s3`, workflow-manager access when
+  workflows are configured, or nested `invokes` requires `host_service_tunnels`
+- a plugin that uses `allowedHosts` or a server-wide default-deny egress policy
+  requires `hostname_proxy_egress`
+
+Gestalt rejects incompatible runtime/plugin combinations instead of silently
+weakening the security model.
+
+## Host services and hosted plugins
+
+Plugins do not talk directly to host-local services over the network. Gestalt
+starts those host services locally, allocates their socket paths, and asks the
+runtime provider to bind them into the runtime session.
+
+For a hosted plugin, that usually means some combination of:
+
+- IndexedDB socket injection
+- cache socket injection
+- S3 socket injection
+- workflow-manager socket injection
+- plugin-invoker socket injection
+
+The runtime provider is also responsible for the plugin's own listener endpoint.
+`StartPlugin` must start the plugin, allocate or inject its provider listener,
+and return a **host-reachable** `dial_target`. Gestalt currently supports
+`unix://`, `tcp://`, and `tls://` dial targets.
+
+## Local vs hosted backends
+
+Today there are two main runtime choices:
+
+| Backend | Type | Notes |
+| --- | --- | --- |
+| `local` | Built-in driver | Runs the plugin on the same machine as `gestaltd`. Supports host-path execution and the existing host-local runtime behavior. |
+| `modal` | Installable `kind: runtime` provider | Runs the plugin in a hosted Linux sandbox. Requires `runtime.providers.<name>.config.app` and `plugins.<name>.runtime.image`. |
+
+The current Modal backend does **not** support host-service tunnels or
+Gestalt's hostname-based egress model, so Gestalt rejects plugins that need
+those features when `modal` is selected.
+
+## Bundle staging and host-path execution
+
+Some runtimes can execute directly from host paths. Others cannot.
+
+When a backend reports `host_path_execution`, Gestalt may launch the plugin
+directly from local paths, including synthesized source-provider execution.
+When it does not, Gestalt stages a runtime bundle first and asks the backend to
+start the plugin from that staged bundle instead.
+
+This is why `plugins.<name>.runtime.image`, `template`, and `metadata` are
+forwarded to the runtime backend: they are runtime-specific launch hints, not
+universal plugin semantics.
+
+## What to read next
+
+- [Configuration](/configuration): selecting a runtime backend
+- [Plugin](/providers/plugins): plugin-side runtime opt-in
+- [Config File](/reference/config-file#runtime): field-by-field config reference
+- [Security](/security): how runtimes affect the execution boundary
+- [Custom Providers > Runtime](/custom-providers/runtime): building your own runtime provider

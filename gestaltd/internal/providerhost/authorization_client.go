@@ -46,7 +46,7 @@ func NewExecutableAuthorizationProvider(ctx context.Context, cfg AuthorizationEx
 
 	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
 	authzClient := proto.NewAuthorizationProviderClient(proc.conn)
-	meta, err := configureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_AUTHORIZATION, cfg.Name, cfg.Config)
+	meta, err := ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_AUTHORIZATION, cfg.Name, cfg.Config)
 	if err != nil {
 		_ = proc.Close()
 		return nil, err

@@ -76,7 +76,7 @@ func TestConfigureRuntimeProviderRefreshesMetadataAfterConfigure(t *testing.T) {
 		},
 	}
 
-	meta, err := configureRuntimeProvider(
+	meta, err := ConfigureRuntimeProvider(
 		context.Background(),
 		client,
 		proto.ProviderKind_PROVIDER_KIND_AUTHENTICATION,

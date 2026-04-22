@@ -24,6 +24,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/mcpoauth"
@@ -662,30 +663,6 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			cleanup()
 		}
 	}()
-	if command == "" {
-		if entry.ResolvedManifestPath == "" {
-			return nil, fmt.Errorf("resolved manifest path is required for synthesized source provider execution")
-		}
-		rootDir := filepath.Dir(entry.ResolvedManifestPath)
-		var err error
-		command, args, cleanup, err = providerpkg.SourceProviderExecutionCommand(rootDir, runtime.GOOS, runtime.GOARCH)
-		if errors.Is(err, providerpkg.ErrNoSourceProviderPackage) {
-			return nil, fmt.Errorf("prepare synthesized source provider execution: no Go or Python provider source found")
-		}
-		if err != nil {
-			return nil, fmt.Errorf("prepare synthesized source provider execution: %w", err)
-		}
-		execEnv, err := providerpkg.SourceProviderExecutionEnv(rootDir, runtime.GOOS, runtime.GOARCH)
-		if err != nil {
-			return nil, fmt.Errorf("prepare synthesized source provider environment: %w", err)
-		}
-		if len(execEnv) > 0 {
-			if env == nil {
-				env = make(map[string]string, len(execEnv))
-			}
-			maps.Copy(env, execEnv)
-		}
-	}
 	runtimeConfig, runtimeProvider, runtimeOwned, err := effectivePluginRuntime(ctx, name, entry, deps)
 	if err != nil {
 		return nil, err
@@ -710,6 +687,54 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		}
 		return nil, err
 	}
+	if command == "" && runtimeCapabilities.HostPathExecution {
+		if entry.ResolvedManifestPath == "" {
+			if runtimeOwned {
+				_ = runtimeProvider.Close()
+			}
+			return nil, fmt.Errorf("resolved manifest path is required for synthesized source provider execution")
+		}
+		rootDir := filepath.Dir(entry.ResolvedManifestPath)
+		command, args, cleanup, err = providerpkg.SourceProviderExecutionCommand(rootDir, runtime.GOOS, runtime.GOARCH)
+		if errors.Is(err, providerpkg.ErrNoSourceProviderPackage) {
+			if runtimeOwned {
+				_ = runtimeProvider.Close()
+			}
+			return nil, fmt.Errorf("prepare synthesized source provider execution: no Go or Python provider source found")
+		}
+		if err != nil {
+			if runtimeOwned {
+				_ = runtimeProvider.Close()
+			}
+			return nil, fmt.Errorf("prepare synthesized source provider execution: %w", err)
+		}
+		execEnv, err := providerpkg.SourceProviderExecutionEnv(rootDir, runtime.GOOS, runtime.GOARCH)
+		if err != nil {
+			if runtimeOwned {
+				_ = runtimeProvider.Close()
+			}
+			return nil, fmt.Errorf("prepare synthesized source provider environment: %w", err)
+		}
+		if len(execEnv) > 0 {
+			if env == nil {
+				env = make(map[string]string, len(execEnv))
+			}
+			maps.Copy(env, execEnv)
+		}
+	}
+	if command == "" && !runtimeCapabilities.HostPathExecution {
+		args = nil
+	}
+	launch, err := preparePluginRuntimeLaunch(name, entry, command, args, cleanup, runtimeCapabilities)
+	if err != nil {
+		if runtimeOwned {
+			_ = runtimeProvider.Close()
+		}
+		return nil, err
+	}
+	command = launch.command
+	args = launch.args
+	cleanup = launch.cleanup
 	session, err := runtimeProvider.StartSession(ctx, buildPluginRuntimeStartSessionRequest(name, runtimeConfig))
 	if err != nil {
 		if runtimeOwned {
@@ -732,16 +757,25 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		return nil, fmt.Errorf("wait for plugin runtime session %q ready: %w", sessionID, err)
 	}
 
-	hostServices, invTokens, runtimeCleanup, err := buildPluginRuntimeHostServices(name, entry, deps)
+	hostServices, invTokens, runtimeCleanup, err := buildPluginRuntimeHostServices(name, entry, deps, runtimeCapabilities.HostServiceTunnels)
 	if err != nil {
 		return nil, err
 	}
 	cleanup = chainCleanup(cleanup, runtimeCleanup)
-	for _, hostService := range hostServices {
+	startedHostServices, err := providerhost.StartHostServices(hostServices)
+	if err != nil {
+		return nil, fmt.Errorf("start runtime host services: %w", err)
+	}
+	if startedHostServices != nil {
+		cleanup = chainCleanup(cleanup, func() {
+			_ = startedHostServices.Close()
+		})
+	}
+	for _, hostService := range startedHostServices.Bindings() {
 		if _, err := runtimeProvider.BindHostService(ctx, pluginruntime.BindHostServiceRequest{
-			SessionID: sessionID,
-			EnvVar:    hostService.EnvVar,
-			Register:  hostService.Register,
+			SessionID:      sessionID,
+			EnvVar:         hostService.EnvVar,
+			HostSocketPath: hostService.SocketPath,
 		}); err != nil {
 			return nil, fmt.Errorf("bind host service %q: %w", hostService.EnvVar, err)
 		}
@@ -753,20 +787,15 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		Command:       command,
 		Args:          args,
 		Env:           env,
+		BundleDir:     launch.bundleDir,
 		AllowedHosts:  entry.AllowedHosts,
-		DefaultAction: deps.Egress.DefaultAction,
+		DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
 		HostBinary:    entry.HostBinary,
-		Cleanup:       cleanup,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start hosted plugin: %w", err)
 	}
-	// The started plugin process now owns cleanup through the runtime session.
-	cleanup = nil
-	conn, err := runtimeProvider.DialPlugin(ctx, pluginruntime.DialPluginRequest{
-		SessionID: sessionID,
-		PluginID:  hostedPlugin.ID,
-	})
+	conn, err := pluginruntime.DialHostedPlugin(ctx, hostedPlugin.DialTarget)
 	if err != nil {
 		return nil, fmt.Errorf("dial hosted plugin: %w", err)
 	}
@@ -775,6 +804,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		runtime:      runtimeProvider,
 		sessionID:    sessionID,
 		closeRuntime: runtimeOwned,
+		cleanup:      cleanup,
 	})}
 	if invTokens != nil {
 		opts = append(opts,
@@ -831,8 +861,8 @@ func pluginRuntimeRequirementsForPlugin(name string, entry *config.ProviderEntry
 		return pluginRuntimeCapabilityRequirements{}, err
 	}
 	return pluginRuntimeCapabilityRequirements{
-		HostServiceTunnels:  effectiveIndexedDB.Enabled || len(entry.Cache) > 0 || len(entry.S3) > 0 || len(entry.Invokes) > 0,
-		HostnameProxyEgress: len(entry.AllowedHosts) > 0,
+		HostServiceTunnels:  effectiveIndexedDB.Enabled || len(entry.Cache) > 0 || len(entry.S3) > 0 || len(entry.Invokes) > 0 || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders()),
+		HostnameProxyEgress: len(entry.AllowedHosts) > 0 || deps.Egress.DefaultAction == egress.PolicyDeny,
 	}, nil
 }
 
@@ -886,6 +916,7 @@ type runtimeBackedPluginCloser struct {
 	runtime      pluginruntime.Provider
 	sessionID    string
 	closeRuntime bool
+	cleanup      func()
 }
 
 func (c *runtimeBackedPluginCloser) Close() error {
@@ -901,6 +932,9 @@ func (c *runtimeBackedPluginCloser) Close() error {
 	}
 	if c.closeRuntime && c.runtime != nil {
 		errs = append(errs, c.runtime.Close())
+	}
+	if c.cleanup != nil {
+		c.cleanup()
 	}
 	return errors.Join(errs...)
 }
@@ -946,7 +980,10 @@ func waitForPluginRuntimeSessionReady(ctx context.Context, runtimeProvider plugi
 	}
 }
 
-func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]providerhost.HostService, *providerhost.InvocationTokenManager, func(), error) {
+func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps, includeHostServices bool) ([]providerhost.HostService, *providerhost.InvocationTokenManager, func(), error) {
+	if !includeHostServices {
+		return nil, nil, nil, nil
+	}
 	var (
 		hostServices []providerhost.HostService
 		cleanup      func()

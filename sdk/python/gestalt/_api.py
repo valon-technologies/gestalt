@@ -6,7 +6,20 @@ from dataclasses import MISSING
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar
 
-from typing_extensions import dataclass_transform
+if TYPE_CHECKING:
+    from typing_extensions import dataclass_transform
+else:
+    try:
+        from typing import dataclass_transform
+    except ImportError:
+        try:
+            from typing_extensions import dataclass_transform
+        except ImportError:
+            def dataclass_transform(*args: Any, **kwargs: Any):
+                def decorator(cls: type[Any]) -> type[Any]:
+                    return cls
+
+                return decorator
 
 if TYPE_CHECKING:
     from ._invoker import PluginInvoker
