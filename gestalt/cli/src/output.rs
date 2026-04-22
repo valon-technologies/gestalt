@@ -6,6 +6,7 @@ use comfy_table::{
     modifiers::UTF8_ROUND_CORNERS,
     presets::{UTF8_BORDERS_ONLY, UTF8_FULL_CONDENSED},
 };
+use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Format {
@@ -13,8 +14,13 @@ pub enum Format {
     Table,
 }
 
-pub fn print_json(value: &serde_json::Value) {
-    let output = serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string());
+pub fn print_json<T>(value: &T)
+where
+    T: Serialize + ?Sized,
+{
+    let output = serde_json::to_string_pretty(value)
+        .or_else(|_| serde_json::to_string(value))
+        .unwrap_or_else(|_| "null".to_string());
     println!("{}", output);
 }
 
