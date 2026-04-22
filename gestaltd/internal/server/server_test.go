@@ -17891,6 +17891,228 @@ func TestManagedIdentityCRUDAndMemberships(t *testing.T) {
 	}
 }
 
+func TestCurrentUserExternalIdentityLinks(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	admin := seedUser(t, svc, "admin@example.test")
+	viewer := seedUser(t, svc, "viewer@example.test")
+	provider := newMemoryAuthorizationProvider("memory-authorization")
+	base, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{}, nil, nil)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	authz := mustProviderBackedAuthorizer(t, base, provider)
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "admin-session":
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				case "viewer-session":
+					return &core.UserIdentity{Email: "viewer@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("unknown session %q", token)
+				}
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.AuthorizationProvider = provider
+		cfg.StateSecret = secret
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	adminToken := mustEncodeExternalIdentityLinkToken(t, secret, principal.UserSubjectID(admin.ID), "slack_identity", "team:T123:user:U456")
+
+	var createResp struct {
+		ID               string `json:"id"`
+		ExternalIdentity struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		} `json:"externalIdentity"`
+	}
+	doJSONRequestAndDecode(
+		t,
+		http.MethodPost,
+		ts.URL+"/api/v1/users/me/external-identities",
+		"admin-session",
+		fmt.Sprintf(`{"linkToken":%q}`, adminToken),
+		http.StatusCreated,
+		&createResp,
+	)
+	if createResp.ExternalIdentity.Type != "slack_identity" || createResp.ExternalIdentity.ID != "team:T123:user:U456" {
+		t.Fatalf("create response = %+v, want slack_identity/team:T123:user:U456", createResp)
+	}
+	if createResp.ID == "" {
+		t.Fatalf("create response ID is empty: %+v", createResp)
+	}
+
+	resp, err := provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
+		Relation: "assume",
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeExternalIdentity, Id: createResp.ID},
+	})
+	if err != nil {
+		t.Fatalf("ReadRelationships after link: %v", err)
+	}
+	if len(resp.GetRelationships()) != 1 {
+		t.Fatalf("linked relationships = %+v, want one", resp.GetRelationships())
+	}
+	if got := resp.GetRelationships()[0].GetSubject().GetId(); got != principal.UserSubjectID(admin.ID) {
+		t.Fatalf("linked subject = %q, want %q", got, principal.UserSubjectID(admin.ID))
+	}
+	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
+		t.Fatalf("ReloadAuthorizationState after link: %v", err)
+	}
+	resp, err = provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
+		Relation: "assume",
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeExternalIdentity, Id: createResp.ID},
+	})
+	if err != nil {
+		t.Fatalf("ReadRelationships after reload: %v", err)
+	}
+	if len(resp.GetRelationships()) != 1 {
+		t.Fatalf("relationships after reload = %+v, want one", resp.GetRelationships())
+	}
+
+	var listResp []struct {
+		ID               string `json:"id"`
+		ExternalIdentity struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		} `json:"externalIdentity"`
+	}
+	doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/users/me/external-identities", "admin-session", "", http.StatusOK, &listResp)
+	if len(listResp) != 1 || listResp[0].ID != createResp.ID || listResp[0].ExternalIdentity.Type != "slack_identity" || listResp[0].ExternalIdentity.ID != "team:T123:user:U456" {
+		t.Fatalf("list response = %+v, want one slack identity", listResp)
+	}
+
+	doJSONRequestAndDecode(
+		t,
+		http.MethodPost,
+		ts.URL+"/api/v1/users/me/external-identities",
+		"admin-session",
+		fmt.Sprintf(`{"linkToken":%q}`, adminToken),
+		http.StatusOK,
+		&createResp,
+	)
+
+	conflictingRel := &core.Relationship{
+		Subject: &core.SubjectRef{
+			Type: "user",
+			Id:   "user:0000-conflict",
+		},
+		Relation: "assume",
+		Resource: &core.ResourceRef{
+			Type: authorization.ProviderResourceTypeExternalIdentity,
+			Id:   createResp.ID,
+		},
+	}
+	modelID, err := authz.ManagedModelID(context.Background())
+	if err != nil {
+		t.Fatalf("ManagedModelID after link: %v", err)
+	}
+	if err := provider.WriteRelationships(context.Background(), &core.WriteRelationshipsRequest{
+		Writes:  []*core.Relationship{conflictingRel},
+		ModelId: modelID,
+	}); err != nil {
+		t.Fatalf("WriteRelationships conflicting rel: %v", err)
+	}
+	doJSONRequestAndDecode(
+		t,
+		http.MethodPost,
+		ts.URL+"/api/v1/users/me/external-identities",
+		"admin-session",
+		fmt.Sprintf(`{"linkToken":%q}`, adminToken),
+		http.StatusOK,
+		&createResp,
+	)
+	if err := provider.WriteRelationships(context.Background(), &core.WriteRelationshipsRequest{
+		Deletes: []*core.RelationshipKey{{
+			Subject: &core.SubjectRef{
+				Type: conflictingRel.GetSubject().GetType(),
+				Id:   conflictingRel.GetSubject().GetId(),
+			},
+			Relation: conflictingRel.GetRelation(),
+			Resource: &core.ResourceRef{
+				Type: conflictingRel.GetResource().GetType(),
+				Id:   conflictingRel.GetResource().GetId(),
+			},
+		}},
+		ModelId: modelID,
+	}); err != nil {
+		t.Fatalf("DeleteRelationships conflicting rel: %v", err)
+	}
+
+	mismatchReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/users/me/external-identities", bytes.NewBufferString(fmt.Sprintf(`{"linkToken":%q}`, adminToken)))
+	mismatchReq.Header.Set("Content-Type", "application/json")
+	mismatchReq.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	mismatchResp, err := http.DefaultClient.Do(mismatchReq)
+	if err != nil {
+		t.Fatalf("viewer mismatch link request: %v", err)
+	}
+	defer func() { _ = mismatchResp.Body.Close() }()
+	if mismatchResp.StatusCode != http.StatusForbidden {
+		payload, _ := io.ReadAll(mismatchResp.Body)
+		t.Fatalf("viewer mismatch status = %d, want %d: %s", mismatchResp.StatusCode, http.StatusForbidden, strings.TrimSpace(string(payload)))
+	}
+
+	viewerToken := mustEncodeExternalIdentityLinkToken(t, secret, principal.UserSubjectID(viewer.ID), "slack_identity", "team:T123:user:U456")
+	conflictReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/users/me/external-identities", bytes.NewBufferString(fmt.Sprintf(`{"linkToken":%q}`, viewerToken)))
+	conflictReq.Header.Set("Content-Type", "application/json")
+	conflictReq.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	conflictResp, err := http.DefaultClient.Do(conflictReq)
+	if err != nil {
+		t.Fatalf("viewer link request: %v", err)
+	}
+	defer func() { _ = conflictResp.Body.Close() }()
+	if conflictResp.StatusCode != http.StatusConflict {
+		payload, _ := io.ReadAll(conflictResp.Body)
+		t.Fatalf("viewer link status = %d, want %d: %s", conflictResp.StatusCode, http.StatusConflict, strings.TrimSpace(string(payload)))
+	}
+
+	var viewerList []struct {
+		ID               string `json:"id"`
+		ExternalIdentity struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		} `json:"externalIdentity"`
+	}
+	doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/users/me/external-identities", "viewer-session", "", http.StatusOK, &viewerList)
+	if len(viewerList) != 0 {
+		t.Fatalf("viewer list = %+v, want empty", viewerList)
+	}
+
+	doJSONRequestAndDecode(
+		t,
+		http.MethodDelete,
+		ts.URL+"/api/v1/users/me/external-identities/"+url.PathEscape(createResp.ID),
+		"admin-session",
+		"",
+		http.StatusOK,
+		nil,
+	)
+
+	resp, err = provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
+		Relation: "assume",
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeExternalIdentity, Id: createResp.ID},
+	})
+	if err != nil {
+		t.Fatalf("ReadRelationships after unlink: %v", err)
+	}
+	if len(resp.GetRelationships()) != 0 {
+		t.Fatalf("relationships after unlink = %+v, want none", resp.GetRelationships())
+	}
+
+	doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/users/me/external-identities", "admin-session", "", http.StatusOK, &listResp)
+	if len(listResp) != 0 {
+		t.Fatalf("list after unlink = %+v, want empty", listResp)
+	}
+}
+
 func TestManagedIdentityCreateRecoversWhenMembershipCreateFails(t *testing.T) {
 	t.Parallel()
 
@@ -20209,4 +20431,39 @@ func doJSONRequestAndDecode(t *testing.T, method, url, sessionToken, body string
 	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
 		t.Fatalf("%s %s decode: %v", method, url, err)
 	}
+}
+
+func mustEncodeExternalIdentityLinkToken(t *testing.T, secret []byte, subjectID, identityType, identityID string) string {
+	t.Helper()
+
+	enc, err := corecrypto.NewAESGCM(secret)
+	if err != nil {
+		t.Fatalf("NewAESGCM: %v", err)
+	}
+	payload, err := json.Marshal(struct {
+		ExternalIdentity struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		} `json:"externalIdentity"`
+		SubjectID string `json:"subjectId"`
+		ExpiresAt int64  `json:"exp"`
+	}{
+		ExternalIdentity: struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		}{
+			Type: identityType,
+			ID:   identityID,
+		},
+		SubjectID: subjectID,
+		ExpiresAt: time.Now().Add(30 * time.Minute).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("Marshal link token: %v", err)
+	}
+	token, err := enc.EncryptURLSafe(string(payload))
+	if err != nil {
+		t.Fatalf("EncryptURLSafe: %v", err)
+	}
+	return token
 }

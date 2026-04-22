@@ -8,25 +8,31 @@ import (
 )
 
 const (
-	ProviderResourceTypePolicyStatic      = "policy_static"
-	ProviderResourceTypePluginStatic      = "plugin_static"
-	ProviderResourceTypePluginDynamic     = "plugin_dynamic"
-	ProviderResourceTypeAdminPolicyStatic = "admin_policy_static"
-	ProviderResourceTypeAdminDynamic      = "admin_dynamic"
-	ProviderResourceIDAdminDynamicGlobal  = "global"
+	ProviderResourceTypePolicyStatic       = "policy_static"
+	ProviderResourceTypePluginStatic       = "plugin_static"
+	ProviderResourceTypePluginDynamic      = "plugin_dynamic"
+	ProviderResourceTypeAdminPolicyStatic  = "admin_policy_static"
+	ProviderResourceTypeAdminDynamic       = "admin_dynamic"
+	ProviderResourceTypeExternalIdentity   = "external_identity"
+	ProviderResourceIDAdminDynamicGlobal   = "global"
+	ProviderExternalIdentityRelationAssume = "assume"
 
 	ProviderSubjectTypeSubject = "subject"
+	ProviderSubjectTypeUser    = "user"
 )
 
 const (
-	resourceTypePolicyStatic      = ProviderResourceTypePolicyStatic
-	resourceTypePluginStatic      = ProviderResourceTypePluginStatic
-	resourceTypePluginDynamic     = ProviderResourceTypePluginDynamic
-	resourceTypeAdminPolicyStatic = ProviderResourceTypeAdminPolicyStatic
-	resourceTypeAdminDynamic      = ProviderResourceTypeAdminDynamic
-	resourceIDAdminDynamicGlobal  = ProviderResourceIDAdminDynamicGlobal
+	resourceTypePolicyStatic       = ProviderResourceTypePolicyStatic
+	resourceTypePluginStatic       = ProviderResourceTypePluginStatic
+	resourceTypePluginDynamic      = ProviderResourceTypePluginDynamic
+	resourceTypeAdminPolicyStatic  = ProviderResourceTypeAdminPolicyStatic
+	resourceTypeAdminDynamic       = ProviderResourceTypeAdminDynamic
+	resourceTypeExternalIdentity   = ProviderResourceTypeExternalIdentity
+	resourceIDAdminDynamicGlobal   = ProviderResourceIDAdminDynamicGlobal
+	relationExternalIdentityAssume = ProviderExternalIdentityRelationAssume
 
 	subjectTypeSubject = ProviderSubjectTypeSubject
+	subjectTypeUser    = ProviderSubjectTypeUser
 )
 
 func IsManagedProviderRelationship(rel *core.Relationship) bool {
@@ -38,7 +44,8 @@ func IsManagedProviderRelationship(rel *core.Relationship) bool {
 		ProviderResourceTypePluginStatic,
 		ProviderResourceTypePluginDynamic,
 		ProviderResourceTypeAdminPolicyStatic,
-		ProviderResourceTypeAdminDynamic:
+		ProviderResourceTypeAdminDynamic,
+		ProviderResourceTypeExternalIdentity:
 		return true
 	default:
 		return false
@@ -84,6 +91,19 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 			resourceTypesForRoles(state.adminDynamicRoles, subjectTypeSubject),
 			state.adminDynamicRoles,
 		),
+	)
+	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
+		&core.AuthorizationModelResourceType{
+			Name: resourceTypeExternalIdentity,
+			Relations: []*core.AuthorizationModelRelation{{
+				Name:         relationExternalIdentityAssume,
+				SubjectTypes: []string{subjectTypeUser},
+			}},
+			Actions: []*core.AuthorizationModelAction{{
+				Name:      relationExternalIdentityAssume,
+				Relations: []string{relationExternalIdentityAssume},
+			}},
+		},
 	)
 
 	slices.SortFunc(model.ResourceTypes, func(left, right *core.AuthorizationModelResourceType) int {
