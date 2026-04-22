@@ -18,17 +18,15 @@ type TokenService struct {
 	store               indexeddb.ObjectStore
 	enc                 *corecrypto.AESGCMEncryptor
 	externalCredentials *ExternalCredentialService
-	users               *UserService
 }
 
 var errUnreadableStoredIntegrationToken = errors.New("unreadable stored integration token")
 
-func NewTokenService(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor, externalCredentials *ExternalCredentialService, users *UserService) *TokenService {
+func NewTokenService(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor, externalCredentials *ExternalCredentialService) *TokenService {
 	return &TokenService{
 		store:               ds.ObjectStore(StoreIntegrationTokens),
 		enc:                 enc,
 		externalCredentials: externalCredentials,
-		users:               users,
 	}
 }
 
@@ -148,11 +146,8 @@ func (s *TokenService) DeleteToken(ctx context.Context, id string) error {
 				return err
 			}
 		} else {
-			identityID, resolveErr := s.resolveIdentityID(ctx, subjectID)
-			if resolveErr == nil {
-				if err := s.externalCredentials.DeleteCredential(ctx, identityID, recString(rec, "integration"), recString(rec, "connection"), recString(rec, "instance")); err != nil && err != core.ErrNotFound {
-					return fmt.Errorf("delete canonical external credential: %w", err)
-				}
+			if err := s.externalCredentials.DeleteCredential(ctx, subjectID, recString(rec, "integration"), recString(rec, "connection"), recString(rec, "instance")); err != nil && err != core.ErrNotFound {
+				return fmt.Errorf("delete canonical external credential: %w", err)
 			}
 		}
 	}
@@ -297,45 +292,18 @@ func tokenRecordLess(a, b indexeddb.Record) bool {
 	return recString(a, "id") < recString(b, "id")
 }
 
-func (s *TokenService) resolveIdentityID(ctx context.Context, subjectID string) (string, error) {
-	subjectID = strings.TrimSpace(subjectID)
-	switch {
-	case subjectID == "":
-		return "", core.ErrNotFound
-	case subjectID == tokenIdentitySubjectID():
-		return tokenIdentityPrincipal(), nil
-	case tokenManagedIdentityIDFromSubjectID(subjectID) != "":
-		return tokenManagedIdentityIDFromSubjectID(subjectID), nil
-	}
-
-	userID := tokenUserIDFromSubjectID(subjectID)
-	if userID == "" {
-		return "", core.ErrNotFound
-	}
-	if s.users == nil {
-		return userID, nil
-	}
-	return s.users.CanonicalIdentityIDForUser(ctx, userID)
-}
-
 func (s *TokenService) syncExternalCredential(ctx context.Context, token *core.IntegrationToken, accessTokenEncrypted, refreshTokenEncrypted string) error {
 	if s.externalCredentials == nil || token == nil || token.SubjectID == "" || token.Integration == "" || token.Connection == "" {
 		return nil
 	}
-	identityID, resolveErr := s.resolveIdentityID(ctx, token.SubjectID)
-	if resolveErr != nil {
-		if errors.Is(resolveErr, core.ErrNotFound) {
-			return nil
-		}
-		return resolveErr
-	}
+	subjectID := strings.TrimSpace(token.SubjectID)
 	payloadEncrypted, err := encodeLegacyCredentialPayload(accessTokenEncrypted, refreshTokenEncrypted)
 	if err != nil {
 		return err
 	}
 	if _, err := s.externalCredentials.UpsertCredential(ctx, &core.ExternalCredential{
 		ID:                token.ID,
-		IdentityID:        identityID,
+		SubjectID:         subjectID,
 		Plugin:            token.Integration,
 		Connection:        token.Connection,
 		Instance:          token.Instance,
@@ -349,7 +317,7 @@ func (s *TokenService) syncExternalCredential(ctx context.Context, token *core.I
 		CreatedAt:         token.CreatedAt,
 		UpdatedAt:         token.UpdatedAt,
 	}); err != nil {
-		return fmt.Errorf("sync canonical external credential %q/%q/%q/%q: %w", identityID, token.Integration, token.Connection, token.Instance, err)
+		return fmt.Errorf("sync canonical external credential %q/%q/%q/%q: %w", subjectID, token.Integration, token.Connection, token.Instance, err)
 	}
 	return nil
 }
@@ -371,16 +339,10 @@ func (s *TokenService) syncExternalCredentialRecord(ctx context.Context, rec ind
 	if s.externalCredentials == nil {
 		return nil
 	}
-	identityID, resolveErr := s.resolveIdentityID(ctx, tokenRecordSubjectID(rec))
-	if resolveErr != nil {
-		if errors.Is(resolveErr, core.ErrNotFound) {
-			return nil
-		}
-		return resolveErr
-	}
+	subjectID := tokenRecordSubjectID(rec)
 	plugin := recString(rec, "integration")
 	connection := recString(rec, "connection")
-	if identityID == "" || plugin == "" || connection == "" {
+	if subjectID == "" || plugin == "" || connection == "" {
 		return nil
 	}
 	accessTokenEncrypted := recString(rec, "access_token_encrypted")
@@ -391,11 +353,11 @@ func (s *TokenService) syncExternalCredentialRecord(ctx context.Context, rec ind
 	}
 	token, err := s.recordToToken(rec)
 	if err != nil {
-		return fmt.Errorf("decode token for canonical external credential %q/%q/%q/%q: %w", identityID, plugin, connection, recString(rec, "instance"), err)
+		return fmt.Errorf("decode token for canonical external credential %q/%q/%q/%q: %w", subjectID, plugin, connection, recString(rec, "instance"), err)
 	}
 	if _, err := s.externalCredentials.UpsertCredential(ctx, &core.ExternalCredential{
 		ID:                recString(rec, "id"),
-		IdentityID:        identityID,
+		SubjectID:         subjectID,
 		Plugin:            plugin,
 		Connection:        connection,
 		Instance:          recString(rec, "instance"),
@@ -409,31 +371,7 @@ func (s *TokenService) syncExternalCredentialRecord(ctx context.Context, rec ind
 		CreatedAt:         recTime(rec, "created_at"),
 		UpdatedAt:         recTime(rec, "updated_at"),
 	}); err != nil {
-		return fmt.Errorf("sync canonical external credential record %q/%q/%q/%q: %w", identityID, plugin, connection, recString(rec, "instance"), err)
+		return fmt.Errorf("sync canonical external credential record %q/%q/%q/%q: %w", subjectID, plugin, connection, recString(rec, "instance"), err)
 	}
 	return nil
-}
-
-func tokenIdentityPrincipal() string {
-	return "__identity__"
-}
-
-func tokenIdentitySubjectID() string {
-	return "identity:" + tokenIdentityPrincipal()
-}
-
-func tokenManagedIdentityIDFromSubjectID(subjectID string) string {
-	const prefix = "managed_identity:"
-	if !strings.HasPrefix(subjectID, prefix) {
-		return ""
-	}
-	return strings.TrimPrefix(subjectID, prefix)
-}
-
-func tokenUserIDFromSubjectID(subjectID string) string {
-	const prefix = "user:"
-	if !strings.HasPrefix(subjectID, prefix) {
-		return ""
-	}
-	return strings.TrimPrefix(subjectID, prefix)
 }

@@ -252,7 +252,7 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	configPermissions := principal.CompilePermissions(workflowExecutionRefPermissionsForTarget(req.Target))
 	configPrincipal := principal.Canonicalize(&principal.Principal{
 		SubjectID:           "system:config",
-		CredentialSubjectID: principal.IdentitySubjectID(),
+		CredentialSubjectID: "system:config",
 		Scopes:              principal.PermissionPlugins(configPermissions),
 		TokenPermissions:    configPermissions,
 	})
@@ -266,8 +266,8 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	if gotPrincipal == nil || gotPrincipal.SubjectID != "system:config" {
 		t.Fatalf("principal = %#v", gotPrincipal)
 	}
-	if gotPrincipal.CredentialSubjectID != principal.IdentitySubjectID() {
-		t.Fatalf("credential subject = %q, want %q", gotPrincipal.CredentialSubjectID, principal.IdentitySubjectID())
+	if gotPrincipal.CredentialSubjectID != "system:config" {
+		t.Fatalf("credential subject = %q, want %q", gotPrincipal.CredentialSubjectID, "system:config")
 	}
 	if !principal.AllowsOperationPermission(gotPrincipal, "roadmap", "sync") {
 		t.Fatalf("principal operation permissions = %#v, want roadmap.sync", gotPrincipal.TokenPermissions)

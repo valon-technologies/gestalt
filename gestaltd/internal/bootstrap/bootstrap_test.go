@@ -3077,13 +3077,13 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.IdentitySubjectID(),
+			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
 			AccessToken: "workflow-bootstrap-token",
 		}); err != nil {
-			return nil, fmt.Errorf("store identity token: %w", err)
+			return nil, fmt.Errorf("store startup token: %w", err)
 		}
 		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreworkflow.Target{
 			PluginName: "roadmap",
@@ -3136,13 +3136,13 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.IdentitySubjectID(),
+			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
 			AccessToken: "workflow-validate-token",
 		}); err != nil {
-			return nil, fmt.Errorf("store identity token: %w", err)
+			return nil, fmt.Errorf("store startup token: %w", err)
 		}
 		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreworkflow.Target{
 			PluginName: "roadmap",
@@ -3201,13 +3201,13 @@ func TestBootstrapStartupWorkflowCallbackRequiresExecutionRef(t *testing.T) {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.IdentitySubjectID(),
+			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
 			AccessToken: "workflow-startup-token",
 		}); err != nil {
-			return nil, fmt.Errorf("store identity token: %w", err)
+			return nil, fmt.Errorf("store startup token: %w", err)
 		}
 		_, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
@@ -3362,13 +3362,13 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 					return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 				}
 				if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-					SubjectID:   principal.IdentitySubjectID(),
+					SubjectID:   "system:config",
 					Integration: "roadmap",
 					Connection:  config.PluginConnectionName,
 					Instance:    "default",
 					AccessToken: "workflow-validate-token",
 				}); err != nil {
-					return nil, fmt.Errorf("store identity token: %w", err)
+					return nil, fmt.Errorf("store startup token: %w", err)
 				}
 				executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreworkflow.Target{
 					PluginName: "roadmap",
@@ -3461,13 +3461,13 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 			connection = config.PluginConnectionName
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.IdentitySubjectID(),
+			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  connection,
 			Instance:    "default",
 			AccessToken: "workflow-validate-token",
 		}); err != nil {
-			return nil, fmt.Errorf("store identity token for connection %q: %w", connection, err)
+			return nil, fmt.Errorf("store startup token for connection %q: %w", connection, err)
 		}
 		req := coreworkflow.InvokeOperationRequest{
 			ProviderName: name,
@@ -3478,7 +3478,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 		}
 		configPrincipal := &principal.Principal{
 			SubjectID:           "system:config",
-			CredentialSubjectID: principal.IdentitySubjectID(),
+			CredentialSubjectID: "system:config",
 			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
 				Plugin:     "roadmap",
 				Operations: []string{"sync"},
@@ -4719,7 +4719,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		configPrincipal := &principal.Principal{
 			SubjectID:           "system:config",
-			CredentialSubjectID: principal.IdentitySubjectID(),
+			CredentialSubjectID: "system:config",
 			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
 				Plugin:     "roadmap",
 				Operations: []string{"sync"},

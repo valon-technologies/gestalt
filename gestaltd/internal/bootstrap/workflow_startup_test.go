@@ -17,7 +17,6 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -268,13 +267,13 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.IdentitySubjectID(),
+			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
 			AccessToken: "workflow-startup-token",
 		}); err != nil {
-			return nil, fmt.Errorf("store identity token: %w", err)
+			return nil, fmt.Errorf("store startup token: %w", err)
 		}
 		executionRef := storeStartupExecutionRef(t, deps, name, coreworkflow.Target{
 			PluginName: "roadmap",
@@ -331,13 +330,13 @@ func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
 		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
-			SubjectID:   principal.IdentitySubjectID(),
+			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
 			Instance:    "default",
 			AccessToken: "workflow-startup-token",
 		}); err != nil {
-			return nil, fmt.Errorf("store identity token: %w", err)
+			return nil, fmt.Errorf("store startup token: %w", err)
 		}
 		_, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{

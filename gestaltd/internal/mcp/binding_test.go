@@ -2955,7 +2955,7 @@ func TestNewServer_DirectCallerInvokerReceivesPrincipal(t *testing.T) {
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = "sample_perform"
 
-	result, err := tool.Handler(ctxWithIdentityPrincipal("identity@example.invalid", principal.IdentityPrincipal), req)
+	result, err := tool.Handler(ctxWithIdentityPrincipal("identity@example.invalid", "identity-user"), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

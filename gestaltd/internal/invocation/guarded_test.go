@@ -244,7 +244,7 @@ func TestGuardedInvoker_AuditLoggedOnPanic(t *testing.T) {
 	sink := &capturingSink{}
 	guarded := invocation.NewGuarded(funcInvoker{
 		invoke: func(ctx context.Context, _ *principal.Principal, _ string, _ string, _ string, _ map[string]any) (*core.OperationResult, error) {
-			invocation.SetCredentialAudit(ctx, core.ConnectionModeUser, principal.IdentitySubjectID(), "workspace", "team-a")
+			invocation.SetCredentialAudit(ctx, core.ConnectionModeUser, "system:config", "workspace", "team-a")
 			panic("boom")
 		},
 	}, nil, "test", sink, invocation.WithoutRateLimit())
@@ -267,8 +267,8 @@ func TestGuardedInvoker_AuditLoggedOnPanic(t *testing.T) {
 		if entry.CredentialMode != string(core.ConnectionModeUser) {
 			t.Fatalf("expected credential mode identity, got %q", entry.CredentialMode)
 		}
-		if entry.CredentialSubjectID != principal.IdentitySubjectID() {
-			t.Fatalf("expected credential subject %q, got %q", principal.IdentitySubjectID(), entry.CredentialSubjectID)
+		if entry.CredentialSubjectID != "system:config" {
+			t.Fatalf("expected credential subject %q, got %q", "system:config", entry.CredentialSubjectID)
 		}
 		if entry.CredentialConnection != "workspace" {
 			t.Fatalf("expected credential connection workspace, got %q", entry.CredentialConnection)

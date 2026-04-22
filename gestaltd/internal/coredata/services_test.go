@@ -315,6 +315,20 @@ func TestNew(t *testing.T) {
 			t.Fatalf("seed valid integration token: %v", err)
 		}
 		if err := db.ObjectStore(coredata.StoreIntegrationTokens).Add(ctx, indexeddb.Record{
+			"id":                      "startup-token",
+			"subject_id":              "system:config",
+			"integration":             "slack",
+			"connection":              "workspace",
+			"instance":                "default",
+			"access_token_encrypted":  accessEnc,
+			"refresh_token_encrypted": refreshEnc,
+			"scopes":                  "channels:read",
+			"created_at":              createdAt.Add(time.Minute),
+			"updated_at":              createdAt.Add(time.Minute),
+		}); err != nil {
+			t.Fatalf("seed startup integration token: %v", err)
+		}
+		if err := db.ObjectStore(coredata.StoreIntegrationTokens).Add(ctx, indexeddb.Record{
 			"id":                      "bad-token",
 			"subject_id":              principal.UserSubjectID("legacy-user"),
 			"integration":             "github",
@@ -333,14 +347,21 @@ func TestNew(t *testing.T) {
 			t.Fatalf("coredata.New: %v", err)
 		}
 
-		good, err := svc.ExternalCredentials.GetCredential(ctx, "legacy-user", "slack", "workspace", "")
+		good, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID("legacy-user"), "slack", "workspace", "")
 		if err != nil {
 			t.Fatalf("GetCredential valid token: %v", err)
 		}
-		if good.IdentityID != "legacy-user" {
-			t.Fatalf("valid credential identity_id = %q, want %q", good.IdentityID, "legacy-user")
+		if good.SubjectID != principal.UserSubjectID("legacy-user") {
+			t.Fatalf("valid credential subject_id = %q, want %q", good.SubjectID, principal.UserSubjectID("legacy-user"))
 		}
-		if _, err := svc.ExternalCredentials.GetCredential(ctx, "legacy-user", "github", "workspace", ""); !errors.Is(err, core.ErrNotFound) {
+		startup, err := svc.ExternalCredentials.GetCredential(ctx, "system:config", "slack", "workspace", "default")
+		if err != nil {
+			t.Fatalf("GetCredential startup token: %v", err)
+		}
+		if startup.SubjectID != "system:config" {
+			t.Fatalf("startup credential subject_id = %q, want %q", startup.SubjectID, "system:config")
+		}
+		if _, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID("legacy-user"), "github", "workspace", ""); !errors.Is(err, core.ErrNotFound) {
 			t.Fatalf("GetCredential invalid token err = %v, want ErrNotFound", err)
 		}
 	})
@@ -681,7 +702,7 @@ func TestTokenService(t *testing.T) {
 		if got.MetadataJSON != `{"key":"val"}` {
 			t.Errorf("MetadataJSON = %q, want %q", got.MetadataJSON, `{"key":"val"}`)
 		}
-		credential, err := svc.ExternalCredentials.GetCredential(ctx, user.ID, "test-svc", "default", "inst-1")
+		credential, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "test-svc", "default", "inst-1")
 		if err != nil {
 			t.Fatalf("GetCredential: %v", err)
 		}
@@ -803,7 +824,7 @@ func TestTokenService(t *testing.T) {
 		if err != core.ErrNotFound {
 			t.Fatalf("Token after delete = %v, want ErrNotFound", err)
 		}
-		if _, err := svc.ExternalCredentials.GetCredential(ctx, user.ID, "svc", "default", "i1"); err != core.ErrNotFound {
+		if _, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1"); err != core.ErrNotFound {
 			t.Fatalf("GetCredential after delete = %v, want ErrNotFound", err)
 		}
 	})
@@ -935,7 +956,7 @@ func TestTokenService(t *testing.T) {
 		if err := svc.Tokens.DeleteToken(ctx, newest.ID); err != nil {
 			t.Fatalf("DeleteToken newest: %v", err)
 		}
-		credential, err := svc.ExternalCredentials.GetCredential(ctx, user.ID, "svc", "default", "i1")
+		credential, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
 		if err != nil {
 			t.Fatalf("GetCredential after deleting newest duplicate: %v", err)
 		}
@@ -1022,7 +1043,7 @@ func TestTokenService(t *testing.T) {
 			t.Fatalf("reload services for startup backfill: %v", err)
 		}
 
-		credential, err := reloaded.ExternalCredentials.GetCredential(ctx, user.ID, "svc", "default", "i1")
+		credential, err := reloaded.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
 		if err != nil {
 			t.Fatalf("GetCredential after reload: %v", err)
 		}
@@ -1084,7 +1105,7 @@ func TestTokenService(t *testing.T) {
 					t.Fatalf("reload services for startup backfill: %v", err)
 				}
 
-				credential, err := reloaded.ExternalCredentials.GetCredential(ctx, user.ID, "svc", "default", "i1")
+				credential, err := reloaded.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
 				if err != nil {
 					t.Fatalf("GetCredential after reload: %v", err)
 				}
