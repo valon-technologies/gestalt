@@ -12,6 +12,10 @@ import (
 
 const DefaultAuthorizationSocketEnv = "GESTALT_AUTHORIZATION_SOCKET"
 
+func AuthorizationSocketTokenEnv() string {
+	return DefaultAuthorizationSocketEnv + "_TOKEN"
+}
+
 type authorizationProviderServer struct {
 	proto.UnimplementedAuthorizationProviderServer
 	provider core.AuthorizationProvider

@@ -1,7 +1,11 @@
 import { connect } from "node:net";
 
 import type { MessageInitShape } from "@bufbuild/protobuf";
-import { createClient, type Client } from "@connectrpc/connect";
+import {
+  createClient,
+  type Client,
+  type Interceptor,
+} from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
@@ -20,10 +24,14 @@ import {
 } from "../gen/v1/authorization_pb.ts";
 
 /**
- * Environment variable containing the Unix socket path for the read-only host
- * authorization client exposed to plugins.
+ * Environment variable containing the Unix socket path or relay target for the
+ * read-only host authorization client exposed to plugins.
  */
 export const ENV_AUTHORIZATION_SOCKET = "GESTALT_AUTHORIZATION_SOCKET";
+export const ENV_AUTHORIZATION_SOCKET_TOKEN =
+  `${ENV_AUTHORIZATION_SOCKET}_TOKEN`;
+const AUTHORIZATION_RELAY_TOKEN_HEADER =
+  "x-gestalt-host-service-relay-token";
 
 export type AuthorizationEvaluateInput = MessageInitShape<
   typeof AccessEvaluationRequestSchema
@@ -49,10 +57,12 @@ export type AuthorizationActionSearchMessage = ActionSearchResponse;
 export type AuthorizationReadRelationshipsMessage = ReadRelationshipsResponse;
 
 const sharedAuthorizationTransport: {
-  socketPath: string;
+  target: string;
+  token: string;
   client: AuthorizationClient | undefined;
 } = {
-  socketPath: "",
+  target: "",
+  token: "",
   client: undefined,
 };
 
@@ -62,13 +72,21 @@ const sharedAuthorizationTransport: {
 export class AuthorizationClient {
   private readonly client: Client<typeof AuthorizationProviderService>;
 
-  constructor(socketPath?: string) {
-    const resolvedSocketPath = resolveAuthorizationSocketPath(socketPath);
+  constructor(socketTarget?: string, relayToken = process.env[ENV_AUTHORIZATION_SOCKET_TOKEN]?.trim() ?? "") {
+    const resolvedTarget = resolveAuthorizationSocketTarget(socketTarget);
+    const transportOptions = authorizationTransportOptions(resolvedTarget);
     const transport = createGrpcTransport({
-      baseUrl: "http://localhost",
-      nodeOptions: {
-        createConnection: () => connect(resolvedSocketPath),
-      },
+      ...transportOptions,
+      ...(transportOptions.nodeOptions
+        ? {
+            nodeOptions: {
+              createConnection: () => connect(transportOptions.nodeOptions!.path),
+            },
+          }
+        : {}),
+      interceptors: relayToken
+        ? [authorizationRelayTokenInterceptor(relayToken)]
+        : [],
     });
     this.client = createClient(AuthorizationProviderService, transport);
   }
@@ -113,26 +131,78 @@ export class AuthorizationClient {
  * client inside authored providers.
  */
 export function Authorization(): AuthorizationClient {
-  const socketPath = resolveAuthorizationSocketPath();
+  const target = resolveAuthorizationSocketTarget();
+  const token = process.env[ENV_AUTHORIZATION_SOCKET_TOKEN]?.trim() ?? "";
   if (
     sharedAuthorizationTransport.client &&
-    sharedAuthorizationTransport.socketPath === socketPath
+    sharedAuthorizationTransport.target === target &&
+    sharedAuthorizationTransport.token === token
   ) {
     return sharedAuthorizationTransport.client;
   }
 
-  const client = new AuthorizationClient(socketPath);
-  sharedAuthorizationTransport.socketPath = socketPath;
+  const client = new AuthorizationClient(target, token);
+  sharedAuthorizationTransport.target = target;
+  sharedAuthorizationTransport.token = token;
   sharedAuthorizationTransport.client = client;
   return client;
 }
 
-function resolveAuthorizationSocketPath(socketPath = process.env[ENV_AUTHORIZATION_SOCKET]): string {
+function resolveAuthorizationSocketTarget(socketPath = process.env[ENV_AUTHORIZATION_SOCKET]): string {
   const trimmed = socketPath?.trim() ?? "";
   if (!trimmed) {
-    throw new Error(
-      `authorization: ${ENV_AUTHORIZATION_SOCKET} is not set`,
-    );
+    throw new Error(`authorization: ${ENV_AUTHORIZATION_SOCKET} is not set`);
   }
   return trimmed;
+}
+
+function authorizationTransportOptions(rawTarget: string): {
+  baseUrl: string;
+  nodeOptions?: { path: string };
+} {
+  const target = rawTarget.trim();
+  if (!target) {
+    throw new Error("authorization: transport target is required");
+  }
+  if (target.startsWith("tcp://")) {
+    const address = target.slice("tcp://".length).trim();
+    if (!address) {
+      throw new Error(
+        `authorization: tcp target ${JSON.stringify(rawTarget)} is missing host:port`,
+      );
+    }
+    return { baseUrl: `http://${address}` };
+  }
+  if (target.startsWith("tls://")) {
+    const address = target.slice("tls://".length).trim();
+    if (!address) {
+      throw new Error(
+        `authorization: tls target ${JSON.stringify(rawTarget)} is missing host:port`,
+      );
+    }
+    return { baseUrl: `https://${address}` };
+  }
+  if (target.startsWith("unix://")) {
+    const socketPath = target.slice("unix://".length).trim();
+    if (!socketPath) {
+      throw new Error(
+        `authorization: unix target ${JSON.stringify(rawTarget)} is missing a socket path`,
+      );
+    }
+    return { baseUrl: "http://localhost", nodeOptions: { path: socketPath } };
+  }
+  if (target.includes("://")) {
+    const parsed = new URL(target);
+    throw new Error(
+      `authorization: unsupported target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`,
+    );
+  }
+  return { baseUrl: "http://localhost", nodeOptions: { path: target } };
+}
+
+function authorizationRelayTokenInterceptor(token: string): Interceptor {
+  return (next) => async (req) => {
+    req.header.set(AUTHORIZATION_RELAY_TOKEN_HEADER, token);
+    return next(req);
+  };
 }

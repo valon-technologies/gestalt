@@ -119,10 +119,10 @@ afterAll(() => {
 
 describe("IndexedDB transport", () => {
   test("createObjectStore forwards declared columns", async () => {
-    const previousSocket = process.env.GESTALT_INDEXEDDB_SOCKET;
-    process.env.GESTALT_INDEXEDDB_SOCKET = "/tmp/fake-indexeddb.sock";
+    const envName = indexedDBSocketEnv("schema");
+    process.env[envName] = "/tmp/fake-indexeddb.sock";
     try {
-      const local = new IndexedDB();
+      const local = new IndexedDB("schema");
       const calls: any[] = [];
       (local as any).client = {
         createObjectStore: async (request: any) => {
@@ -155,11 +155,7 @@ describe("IndexedDB transport", () => {
         },
       });
     } finally {
-      if (previousSocket === undefined) {
-        delete process.env.GESTALT_INDEXEDDB_SOCKET;
-      } else {
-        process.env.GESTALT_INDEXEDDB_SOCKET = previousSocket;
-      }
+      delete process.env[envName];
     }
   });
 
@@ -210,9 +206,10 @@ describe("IndexedDB transport", () => {
 
   test("tcp target env selects the requested binding", async () => {
     const { proc: tcpProc, target } = await startTCPHarness();
-    process.env.GESTALT_INDEXEDDB_SOCKET = target;
+    const envName = indexedDBSocketEnv("tcp");
+    process.env[envName] = target;
     try {
-      const tcpDb = new IndexedDB();
+      const tcpDb = new IndexedDB("tcp");
       const store = "tcp_target_env";
       await tcpDb.createObjectStore(store);
       await tcpDb.objectStore(store).put({ id: "row-1", value: "tcp" });
@@ -220,18 +217,19 @@ describe("IndexedDB transport", () => {
       expect(got.value).toBe("tcp");
     } finally {
       tcpProc.kill();
-      delete process.env.GESTALT_INDEXEDDB_SOCKET;
-      process.env.GESTALT_INDEXEDDB_SOCKET = socketPath;
+      delete process.env[envName];
     }
   });
 
   test("tcp target token env selects the requested binding", async () => {
     const token = "relay-token-typescript";
     const { proc: tcpProc, target } = await startTCPHarness(token);
-    process.env.GESTALT_INDEXEDDB_SOCKET = target;
-    process.env[indexedDBSocketTokenEnv()] = token;
+    const envName = indexedDBSocketEnv("tcp-token");
+    const tokenEnvName = indexedDBSocketTokenEnv("tcp-token");
+    process.env[envName] = target;
+    process.env[tokenEnvName] = token;
     try {
-      const tcpDb = new IndexedDB();
+      const tcpDb = new IndexedDB("tcp-token");
       const store = "tcp_target_token_env";
       await tcpDb.createObjectStore(store);
       await tcpDb.objectStore(store).put({ id: "row-1", value: "token" });
@@ -239,9 +237,8 @@ describe("IndexedDB transport", () => {
       expect(got.value).toBe("token");
     } finally {
       tcpProc.kill();
-      delete process.env.GESTALT_INDEXEDDB_SOCKET;
-      delete process.env[indexedDBSocketTokenEnv()];
-      process.env.GESTALT_INDEXEDDB_SOCKET = socketPath;
+      delete process.env[envName];
+      delete process.env[tokenEnvName];
     }
   });
 
