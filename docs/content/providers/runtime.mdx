@@ -81,44 +81,59 @@ Selection is two-step:
 `server.runtime.provider` is only a default selector for plugins that already
 set `plugins.<name>.runtime`.
 
-## Runtime capabilities
+## Runtime profiles
 
-Runtime backends are not interchangeable. Gestalt checks capabilities before it
-tries to use a backend for a plugin.
+Runtime backends are not interchangeable, but most operators should not have to
+reason about a bag of low-level booleans to understand why a runtime is or is
+not compatible with a plugin. Gestalt therefore evaluates a runtime in terms of
+four higher-level questions.
+
+First, can the runtime host executable plugins at all. Second, how do hosted
+plugins reach Gestalt-owned services such as IndexedDB, cache, S3,
+workflow-manager access, authorization, and nested plugin invocation. Gestalt
+describes that as a host-service access mode of `none`, `relay`, or `direct`.
+Third, what kind of egress policy can the runtime preserve: no policy, CIDR or
+firewall style controls, or Gestalt's hostname-based `allowedHosts` model.
+Fourth, how does the plugin launch: directly from host paths or from a staged
+bundle, and on what execution target.
+
+The admin inspection API exposes both the runtime's raw capability flags and
+this derived profile. `GET /admin/api/v1/runtime/providers` returns an
+`advertised` profile, which is what the runtime says it can do, and an
+`effective` profile, which is what the current `gestaltd` deployment can
+actually guarantee once public relay and proxy prerequisites are considered.
+
+The raw capability flags still exist because runtime authors need precise
+contract boundaries. The most important ones are:
 
 | Capability | Meaning |
 | --- | --- |
 | `hosted_plugin_runtime` | The backend can host executable plugins at all. |
-| `host_service_tunnels` | The backend can inject host-local services such as IndexedDB, cache, S3, workflow-manager access, and plugin invocation sockets. |
+| `host_service_tunnels` | The backend can inject guest-local host-service sockets directly. When this is false, Gestalt may still provide relay-backed host services through its public relay path. |
 | `provider_grpc_tunnel` | The backend can return a host-reachable gRPC dial target for the hosted plugin. |
 | `hostname_proxy_egress` | The backend can preserve Gestalt's hostname-based `allowedHosts` model. |
-| `cidr_egress` | The backend supports network controls at CIDR or firewall granularity. This is not equivalent to hostname-based policy. |
+| `cidr_egress` | The backend supports CIDR or firewall style controls. This is useful, but it is not equivalent to hostname-based policy. |
 | `host_path_execution` | The backend can execute directly from host paths instead of requiring bundle staging. |
-| `execution_goos` / `execution_goarch` | The target execution platform the runtime reports to the host. |
+| `execution_goos` / `execution_goarch` | The execution platform the runtime reports to the host when bundle staging is required. |
 
-These flags matter because plugin requirements differ. For example:
-
-- a plugin that uses `indexeddb`, `cache`, `s3`, workflow-manager access when
-  workflows are configured, or nested `invokes` requires `host_service_tunnels`
-- a plugin that uses `allowedHosts` or a server-wide default-deny egress policy
-  requires `hostname_proxy_egress`
-
-Gestalt rejects incompatible runtime/plugin combinations instead of silently
-weakening the security model.
+Gestalt uses those raw flags to derive the higher-level profile, validate a
+plugin's actual needs, and reject incompatible runtime or plugin combinations
+before startup instead of silently weakening the security model.
 
 ## Host services and hosted plugins
 
-Plugins do not talk directly to host-local services over the network. Gestalt
-starts those host services locally, allocates their socket paths, and asks the
-runtime provider to bind them into the runtime session.
+Plugins do not talk directly to host-local services over the public network.
+`gestaltd` starts those services on the host and then gives the runtime one of
+two integration paths. A runtime with direct host-service access can bind
+guest-local sockets straight into the session. A runtime without that direct
+path can still use relay-backed bindings, in which case the hosted plugin talks
+back to `gestaltd` over a scoped public relay target and `gestaltd` forwards
+the request to the real host-local service.
 
-For a hosted plugin, that usually means some combination of:
-
-- IndexedDB socket injection
-- cache socket injection
-- S3 socket injection
-- workflow-manager socket injection
-- plugin-invoker socket injection
+That same split shows up in hostname-based egress. A runtime may preserve
+`allowedHosts` internally, or it may preserve it by routing hosted HTTP(S)
+traffic through Gestalt's public egress proxy. Either way, the contract is that
+the meaning of `allowedHosts` stays the same from the plugin's point of view.
 
 The runtime provider is also responsible for the plugin's own listener endpoint.
 `StartPlugin` must start the plugin, allocate or inject its provider listener,
@@ -132,11 +147,7 @@ Today there are two main runtime choices:
 | Backend | Type | Notes |
 | --- | --- | --- |
 | `local` | Built-in driver | Runs the plugin on the same machine as `gestaltd`. Supports host-path execution and the existing host-local runtime behavior. |
-| `modal` | Installable `kind: runtime` provider | Runs the plugin in a hosted Linux sandbox. Requires `runtime.providers.<name>.config.app` and `plugins.<name>.runtime.image`. |
-
-The current Modal backend does **not** support host-service tunnels or
-Gestalt's hostname-based egress model, so Gestalt rejects plugins that need
-those features when `modal` is selected.
+| `modal` | Installable `kind: runtime` provider | Runs the plugin in a hosted Linux sandbox. Requires `runtime.providers.<name>.config.app` and `plugins.<name>.runtime.image`. When the host is configured for the public relay and proxy path, Modal uses relay-backed host services and Gestalt's public hostname-egress proxy instead of generic direct host-service tunnels. |
 
 ## Bundle staging and host-path execution
 

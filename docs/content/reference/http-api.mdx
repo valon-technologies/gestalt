@@ -113,6 +113,8 @@ returns `412`.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/metrics` | Prometheus scrape endpoint for emitted metrics. Requires Gestalt authentication only when served on the public listener. The recommended production pattern is to move it to `server.management` and protect that listener at the network or proxy layer. |
+| `GET` | `/admin/api/v1/runtime/providers` | List configured runtime providers. When capability inspection succeeds, loaded providers include raw `capabilities` and a derived `profile` with `advertised` and `effective` runtime behavior. `sessionCount` is present when session inspection also succeeds, and `error` explains any current inspection failure. |
+| `GET` | `/admin/api/v1/runtime/providers/{provider}/sessions` | List active sessions for one runtime provider, including session `id`, lifecycle `state`, and the hosted `plugin` when known. |
 | `GET` | `/admin/api/v1/authorization/plugins` | List plugins that declare `authorizationPolicy`, including the bound policy name and mounted UI path when present. |
 | `GET` | `/admin/api/v1/authorization/plugins/{plugin}/members` | List merged static and dynamic human membership rows for one plugin. Rows include `source`, `effective`, `mutable`, and selector metadata. |
 | `PUT` | `/admin/api/v1/authorization/plugins/{plugin}/members` | Upsert one dynamic human membership row for a plugin by canonical user `subjectId` or by `email` alias and role. Rejects subjects who already have static authorization on that plugin. |

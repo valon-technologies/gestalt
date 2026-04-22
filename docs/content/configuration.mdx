@@ -246,11 +246,14 @@ The built-in runtime drivers are:
 - installable `kind: runtime` providers such as Modal for hosted execution
 
 The current Modal backend requires `runtime.providers.<name>.config.app` and
-`plugins.<name>.runtime.image`. It does not currently support host-service
-tunnels (`indexeddb`, `cache`, `s3`, workflow-manager access when workflows are
-configured, nested `invokes`) or Gestalt's
-hostname-based egress model, so Gestalt rejects Modal for plugins that require
-those capabilities.
+`plugins.<name>.runtime.image`. Modal does not expose generic direct
+host-service tunnels, but it can still satisfy plugins that need relay-backed
+host services or Gestalt's hostname-based egress model when the host is
+configured for the public relay and proxy path. In practice that means
+`server.baseURL` and `server.encryptionKey` must be set, and the runtime
+provider must advertise the matching capabilities. Without those prerequisites,
+Gestalt rejects Modal for plugins that require relay-backed host services or
+hostname-based egress.
 
 For the runtime-provider lifecycle and capability model, see
 [Providers > Runtime](/providers/runtime).

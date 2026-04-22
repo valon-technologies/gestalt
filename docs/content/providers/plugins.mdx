@@ -115,9 +115,13 @@ them to choose a sandbox template, container image, or lifecycle labels.
 A built-in `local` runtime is always available for same-machine execution. The
 first installable hosted runtime provider is `modal`. It requires
 `runtime.providers.<name>.config.app` and `plugins.<name>.runtime.image`.
-Gestalt only uses it for plain executable plugins today: Modal does not yet
-support host-service tunnels or Gestalt's hostname-based egress model, so
-plugins that use `indexeddb`, `cache`, `s3`, workflow-manager access when
+Gestalt only uses it for plain executable plugins today. Modal does not expose
+generic direct host-service tunnels, but it can still run plugins that need
+relay-backed host services or Gestalt's hostname-based egress model when the
+host is configured for the public relay and proxy path. In practice that means
+`server.baseURL` and `server.encryptionKey` must be set, and the runtime
+provider must advertise the matching capabilities. Without those prerequisites,
+plugins that need `indexeddb`, `cache`, `s3`, workflow-manager access when
 workflows are configured, nested `invokes`, `allowedHosts`, or
 `server.egress.defaultAction: deny` stay on `local`.
 

@@ -254,10 +254,13 @@ runtime:
 | `regions` | Optional region allowlist passed through to Modal. |
 
 When a plugin uses the Modal runtime provider, `plugins.<name>.runtime.image` is
-required. The current backend does not support host-service tunnels or
-Gestalt's hostname-based egress model, so Gestalt rejects Modal for plugins
-that need `indexeddb`, `cache`, `s3`, workflow-manager access when workflows
-are configured, nested `invokes`, `allowedHosts`, or a server-wide default-deny
+required. Modal does not expose generic direct host-service tunnels, but it can
+still run hosted plugins that need Gestalt-owned services or hostname-based
+egress when the host is configured for the public relay and proxy path. In
+practice that means `server.baseURL` and `server.encryptionKey` must be set, and
+the runtime provider must advertise the matching runtime capabilities. Without
+those prerequisites, Gestalt will reject Modal for plugins that need
+relay-backed host services, `allowedHosts`, or a server-wide default-deny
 egress policy.
 ## `providers.authentication`
 
