@@ -135,9 +135,10 @@ func (s *Server) mountMCPRoutes(r chi.Router) {
 	if s.mcpHandler == nil {
 		return
 	}
+	r.Get(mcpProtectedResourceMetadataPath, s.mcpProtectedResourceMetadata)
 	r.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
-		r.Handle("/mcp", s.mcpHandler)
+		r.Handle(mcpPath, s.mcpHandler)
 	})
 }
 

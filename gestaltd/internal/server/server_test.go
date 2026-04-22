@@ -15265,6 +15265,115 @@ func TestMCPEndpoint_RequiresAuth(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected 401 without auth, got %d", resp.StatusCode)
 	}
+	wantAuth := `Bearer resource_metadata="` + ts.URL + `/.well-known/oauth-protected-resource/mcp"`
+	if got := resp.Header.Get("WWW-Authenticate"); got != wantAuth {
+		t.Fatalf("WWW-Authenticate = %q, want %q", got, wantAuth)
+	}
+}
+
+func TestMCPProtectedResourceMetadata(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	mcpHandler := newMCPHandler(t, func() *registry.ProviderMap[core.Provider] {
+		reg := registry.New()
+		return &reg.Providers
+	}(), svc, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &stubAuthWithLoginURL{
+			StubAuthProvider: coretesting.StubAuthProvider{N: "oidc"},
+			loginURL:         "https://accounts.example.test/authorize?scope=openid+email+profile",
+		}
+		cfg.MCPHandler = mcpHandler
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/.well-known/oauth-protected-resource/mcp")
+	if err != nil {
+		t.Fatalf("GET protected resource metadata: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q, want %q", got, "application/json")
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode JSON: %v", err)
+	}
+
+	if got := body["resource"]; got != ts.URL+"/mcp" {
+		t.Fatalf("resource = %v, want %q", got, ts.URL+"/mcp")
+	}
+	authServers, _ := body["authorization_servers"].([]any)
+	if len(authServers) != 1 || authServers[0] != "https://accounts.example.test" {
+		t.Fatalf("authorization_servers = %v, want [https://accounts.example.test]", authServers)
+	}
+	scopes, _ := body["scopes_supported"].([]any)
+	if !reflect.DeepEqual(scopes, []any{"openid", "email", "profile"}) {
+		t.Fatalf("scopes_supported = %v, want [openid email profile]", scopes)
+	}
+	bearerMethods, _ := body["bearer_methods_supported"].([]any)
+	if !reflect.DeepEqual(bearerMethods, []any{"header"}) {
+		t.Fatalf("bearer_methods_supported = %v, want [header]", bearerMethods)
+	}
+}
+
+func TestMCPProtectedResourceMetadataRoute_PrecedesRootMountedUIFallback(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>root-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	handler, err := testutilUIHandler(dir)
+	if err != nil {
+		t.Fatalf("ui handler: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	mcpHandler := newMCPHandler(t, func() *registry.ProviderMap[core.Provider] {
+		reg := registry.New()
+		return &reg.Providers
+	}(), svc, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &stubAuthWithLoginURL{
+			StubAuthProvider: coretesting.StubAuthProvider{N: "oidc"},
+			loginURL:         "https://accounts.example.test/authorize",
+		}
+		cfg.MountedUIs = []server.MountedUI{{
+			Path:    "/",
+			Handler: handler,
+		}}
+		cfg.MCPHandler = mcpHandler
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/.well-known/oauth-protected-resource/mcp")
+	if err != nil {
+		t.Fatalf("GET protected resource metadata with root UI: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll metadata response: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q, want %q", got, "application/json")
+	}
+	if strings.Contains(string(body), "root-shell") {
+		t.Fatalf("body = %q, want JSON metadata instead of root UI shell", body)
+	}
 }
 
 func TestMCPEndpoint_DirectPassthrough(t *testing.T) {

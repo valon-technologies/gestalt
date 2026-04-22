@@ -198,15 +198,18 @@ func (s *Server) serveAuthenticated(w http.ResponseWriter, r *http.Request, next
 	switch {
 	case err == nil:
 		s.auditRequestEventWithAuthSource(r, authSource, auditProvider, "auth.authenticate", false, errors.New("missing authorization"))
+		s.maybeSetMCPResourceMetadataHeader(w, r)
 		writeError(w, http.StatusUnauthorized, "missing authorization")
 		return
 	case errors.Is(err, errInvalidAuthorizationHeader):
 		s.auditRequestEventWithAuthSource(r, authSource, auditProvider, "auth.authenticate", false, errInvalidAuthorizationHeader)
+		s.maybeSetMCPResourceMetadataHeader(w, r)
 		writeError(w, http.StatusUnauthorized, "invalid authorization header format")
 		return
 	case errors.Is(err, principal.ErrInvalidToken):
 		slog.InfoContext(r.Context(), "auth: invalid token", "remote_addr", r.RemoteAddr)
 		s.auditRequestEventWithAuthSource(r, authSource, auditProvider, "auth.authenticate", false, principal.ErrInvalidToken)
+		s.maybeSetMCPResourceMetadataHeader(w, r)
 		writeError(w, http.StatusUnauthorized, "invalid token")
 		return
 	default:
