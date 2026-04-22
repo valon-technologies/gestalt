@@ -3,6 +3,7 @@ package providerenv
 import "strings"
 
 const DefaultS3SocketEnv = "GESTALT_S3_SOCKET"
+const defaultS3SocketTokenSuffix = "_TOKEN"
 
 func S3SocketEnv(name string) string {
 	name = strings.TrimSpace(name)
@@ -23,4 +24,8 @@ func S3SocketEnv(name string) string {
 		}
 	}
 	return b.String()
+}
+
+func S3SocketTokenEnv(name string) string {
+	return S3SocketEnv(name) + defaultS3SocketTokenSuffix
 }

@@ -1,10 +1,13 @@
 package bootstrap
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"net"
 	"net/http"
@@ -388,12 +391,26 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 					},
 				},
 				{
+					ID:     "s3_roundtrip",
+					Method: http.MethodPost,
+					Parameters: []catalog.CatalogParameter{
+						{Name: "binding", Type: "string"},
+						{Name: "bucket", Type: "string", Required: true},
+						{Name: "key", Type: "string", Required: true},
+						{Name: "value", Type: "string", Required: true},
+					},
+				},
+				{
 					ID:     "invoke_plugin",
 					Method: http.MethodPost,
 					Parameters: []catalog.CatalogParameter{
 						{Name: "plugin", Type: "string", Required: true},
 						{Name: "operation", Type: "string", Required: true},
 					},
+				},
+				{
+					ID:     "workflow_manager_roundtrip",
+					Method: http.MethodPost,
 				},
 			},
 		},
@@ -437,6 +454,20 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 					return nil, err
 				}
 				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			case "s3_roundtrip":
+				bucket, _ := params["bucket"].(string)
+				key, _ := params["key"].(string)
+				value, _ := params["value"].(string)
+				binding, _ := params["binding"].(string)
+				record, err := fakeHostedS3RoundTrip(bucket, key, value, binding, env)
+				if err != nil {
+					return nil, err
+				}
+				body, err := json.Marshal(record)
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 			case "invoke_plugin":
 				targetPlugin, _ := params["plugin"].(string)
 				targetOperation, _ := params["operation"].(string)
@@ -450,6 +481,16 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 					}
 				}
 				body, err := json.Marshal(envelope)
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			case "workflow_manager_roundtrip":
+				record, err := fakeHostedWorkflowManagerRoundTrip(providerhost.InvocationTokenFromContext(ctx), env)
+				if err != nil {
+					return nil, err
+				}
+				body, err := json.Marshal(record)
 				if err != nil {
 					return nil, err
 				}
@@ -601,6 +642,189 @@ func fakeHostedCacheRoundTrip(key, value, binding string, env map[string]string)
 	return map[string]any{
 		"found": resp.GetFound(),
 		"value": string(resp.GetValue()),
+	}, nil
+}
+
+func fakeHostedS3RoundTrip(bucket, key, value, binding string, env map[string]string) (map[string]any, error) {
+	envName := providerhost.DefaultS3SocketEnv
+	tokenEnvName := providerhost.S3SocketTokenEnv("")
+	if strings.TrimSpace(binding) != "" {
+		envName = providerhost.S3SocketEnv(binding)
+		tokenEnvName = providerhost.S3SocketTokenEnv(binding)
+	}
+	target := strings.TrimSpace(env[envName])
+	if target == "" {
+		return nil, fmt.Errorf("missing s3 relay target in %s", envName)
+	}
+	token := strings.TrimSpace(env[tokenEnvName])
+	if token == "" {
+		return nil, fmt.Errorf("missing s3 relay token in %s", tokenEnvName)
+	}
+	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
+	if address == "" || address == target {
+		return nil, fmt.Errorf("unsupported s3 relay target %q", target)
+	}
+
+	conn, err := grpc.NewClient(
+		address,
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true,
+			MinVersion:         tls.VersionTLS12,
+			NextProtos:         []string{"h2"},
+		})),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("connect s3 relay: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+
+	client := proto.NewS3Client(conn)
+	writeStream, err := client.WriteObject(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("open s3 write stream: %w", err)
+	}
+	if err := writeStream.Send(&proto.WriteObjectRequest{
+		Msg: &proto.WriteObjectRequest_Open{
+			Open: &proto.WriteObjectOpen{
+				Ref:         &proto.S3ObjectRef{Bucket: bucket, Key: key},
+				ContentType: "text/plain",
+			},
+		},
+	}); err != nil {
+		return nil, fmt.Errorf("send s3 open frame: %w", err)
+	}
+	if err := writeStream.Send(&proto.WriteObjectRequest{
+		Msg: &proto.WriteObjectRequest_Data{Data: []byte(value)},
+	}); err != nil {
+		return nil, fmt.Errorf("send s3 data frame: %w", err)
+	}
+	writeResp, err := writeStream.CloseAndRecv()
+	if err != nil {
+		return nil, fmt.Errorf("close s3 write stream: %w", err)
+	}
+
+	headResp, err := client.HeadObject(ctx, &proto.HeadObjectRequest{
+		Ref: &proto.S3ObjectRef{Bucket: bucket, Key: key},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("head s3 object: %w", err)
+	}
+
+	readStream, err := client.ReadObject(ctx, &proto.ReadObjectRequest{
+		Ref: &proto.S3ObjectRef{Bucket: bucket, Key: key},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("open s3 read stream: %w", err)
+	}
+	first, err := readStream.Recv()
+	if err != nil {
+		return nil, fmt.Errorf("read s3 metadata frame: %w", err)
+	}
+	if first.GetMeta() == nil {
+		return nil, fmt.Errorf("s3 read stream did not start with metadata")
+	}
+	var body bytes.Buffer
+	for {
+		chunk, err := readStream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read s3 data frame: %w", err)
+		}
+		if data := chunk.GetData(); len(data) > 0 {
+			body.Write(data)
+		}
+	}
+
+	listResp, err := client.ListObjects(ctx, &proto.ListObjectsRequest{
+		Bucket: bucket,
+		Prefix: key,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list s3 objects: %w", err)
+	}
+	keys := make([]string, 0, len(listResp.GetObjects()))
+	for _, obj := range listResp.GetObjects() {
+		keys = append(keys, obj.GetRef().GetKey())
+	}
+
+	return map[string]any{
+		"body":  body.String(),
+		"key":   key,
+		"keys":  keys,
+		"type":  headResp.GetMeta().GetContentType(),
+		"size":  writeResp.GetMeta().GetSize(),
+		"found": len(keys) > 0,
+	}, nil
+}
+
+func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]string) (map[string]any, error) {
+	target := strings.TrimSpace(env[providerhost.DefaultWorkflowManagerSocketEnv])
+	if target == "" {
+		return nil, fmt.Errorf("missing workflow manager relay target in %s", providerhost.DefaultWorkflowManagerSocketEnv)
+	}
+	token := strings.TrimSpace(env[providerhost.WorkflowManagerSocketTokenEnv()])
+	if token == "" {
+		return nil, fmt.Errorf("missing workflow manager relay token in %s", providerhost.WorkflowManagerSocketTokenEnv())
+	}
+	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
+	if address == "" || address == target {
+		return nil, fmt.Errorf("unsupported workflow manager relay target %q", target)
+	}
+
+	conn, err := grpc.NewClient(
+		address,
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true,
+			MinVersion:         tls.VersionTLS12,
+			NextProtos:         []string{"h2"},
+		})),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("connect workflow manager relay: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+
+	client := proto.NewWorkflowManagerHostClient(conn)
+	created, err := client.CreateSchedule(ctx, &proto.WorkflowManagerCreateScheduleRequest{
+		InvocationToken: invocationToken,
+		ProviderName:    "managed",
+		Cron:            "*/5 * * * *",
+		Timezone:        "UTC",
+		Target: &proto.BoundWorkflowTarget{
+			PluginName: "roadmap",
+			Operation:  "sync",
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create workflow schedule: %w", err)
+	}
+	scheduleID := strings.TrimSpace(created.GetSchedule().GetId())
+	if scheduleID == "" {
+		return nil, fmt.Errorf("workflow manager create did not return a schedule id")
+	}
+	fetched, err := client.GetSchedule(ctx, &proto.WorkflowManagerGetScheduleRequest{
+		InvocationToken: invocationToken,
+		ScheduleId:      scheduleID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get workflow schedule: %w", err)
+	}
+
+	return map[string]any{
+		"provider_name": created.GetProviderName(),
+		"schedule_id":   scheduleID,
+		"cron":          fetched.GetSchedule().GetCron(),
+		"operation":     fetched.GetSchedule().GetTarget().GetOperation(),
 	}, nil
 }
 
@@ -4611,7 +4835,7 @@ func TestPluginRuntimeRewritesHostPathArgsForNonHostPathExecution(t *testing.T) 
 	}
 }
 
-func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapability(t *testing.T) {
+func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -4624,6 +4848,8 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapability(t *testing
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
 	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
 		return runtimeProvider, nil
@@ -4631,6 +4857,7 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapability(t *testing
 	cfg := &config.Config{
 		Server: config.ServerConfig{
 			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -4651,14 +4878,80 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapability(t *testing
 		},
 	}
 
-	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
+	deps := Deps{
+		BaseURL:       "https://gestalt.example.test",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 		S3: map[string]s3store.Client{
-			"main": &coretesting.StubS3{},
+			"main":    &coretesting.StubS3{},
+			"archive": &coretesting.StubS3{},
 		},
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
-	})
-	if err == nil || !strings.Contains(err.Error(), "host service tunnels") {
-		t.Fatalf("buildProvidersStrict error = %v, want missing host service tunnels", err)
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+	checkEnv := func(envName string) (string, bool) {
+		t.Helper()
+		result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": envName}, "")
+		if err != nil {
+			t.Fatalf("Execute read_env(%s): %v", envName, err)
+		}
+		var env struct {
+			Value string `json:"value"`
+			Found bool   `json:"found"`
+		}
+		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+			t.Fatalf("unmarshal env result for %s: %v", envName, err)
+		}
+		return env.Value, env.Found
+	}
+
+	if got, found := checkEnv(providerhost.DefaultS3SocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin s3 env %s = (%q, %v), want (%q, true)", providerhost.DefaultS3SocketEnv, got, found, "tls://gestalt.example.test:443")
+	}
+	for _, binding := range []string{"main"} {
+		envName := providerhost.S3SocketEnv(binding)
+		if got, found := checkEnv(envName); !found || got != "tls://gestalt.example.test:443" {
+			t.Fatalf("plugin s3 env %s = (%q, %v), want (%q, true)", envName, got, found, "tls://gestalt.example.test:443")
+		}
+		tokenEnvName := providerhost.S3SocketTokenEnv(binding)
+		if got, found := checkEnv(tokenEnvName); !found || got == "" {
+			t.Fatalf("plugin s3 token env %s = (%q, %v), want non-empty token", tokenEnvName, got, found)
+		}
+	}
+	if got, found := checkEnv(providerhost.S3SocketTokenEnv("")); !found || got == "" {
+		t.Fatalf("plugin s3 token env %s = (%q, %v), want non-empty token", providerhost.S3SocketTokenEnv(""), got, found)
+	}
+
+	bindRequests := runtimeProvider.bindHostServiceRequests()
+	if len(bindRequests) != 2 {
+		t.Fatalf("BindHostService requests = %d, want 2", len(bindRequests))
+	}
+	for _, req := range bindRequests {
+		if got := req.Relay.DialTarget; got != "tls://gestalt.example.test:443" {
+			t.Fatalf("BindHostService(%s) relay target = %q, want %q", req.EnvVar, got, "tls://gestalt.example.test:443")
+		}
+	}
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	for _, binding := range []string{"", "main"} {
+		if got := startRequests[0].Env[providerhost.S3SocketTokenEnv(binding)]; got == "" {
+			t.Fatalf("StartPlugin env should include s3 relay token %s", providerhost.S3SocketTokenEnv(binding))
+		}
+	}
+	if !slices.Contains(startRequests[0].AllowedHosts, "gestalt.example.test") {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", startRequests[0].AllowedHosts)
 	}
 }
 
@@ -5265,6 +5558,150 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 	}
 }
 
+func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	relaySrv.EnableHTTP2 = true
+	relaySrv.StartTLS()
+	testutil.CloseOnCleanup(t, relaySrv)
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:     "s3_roundtrip",
+				Method: http.MethodPost,
+				Parameters: []catalog.CatalogParameter{
+					{Name: "bucket", Type: "string", Required: true},
+					{Name: "key", Type: "string", Required: true},
+					{Name: "value", Type: "string", Required: true},
+				},
+			},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
+
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {Driver: config.RuntimeProviderDriver("capture")},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+				S3:                   []string{"main"},
+			},
+		},
+	}
+
+	boundS3 := &coretesting.StubS3{}
+	deps := Deps{
+		BaseURL:       relaySrv.URL,
+		EncryptionKey: secret,
+		S3: map[string]s3store.Client{
+			"main": boundS3,
+		},
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "s3_roundtrip", map[string]any{
+		"bucket": "assets",
+		"key":    "plans/q3.txt",
+		"value":  "ship-it",
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute s3_roundtrip: %v", err)
+	}
+
+	var body struct {
+		Body  string   `json:"body"`
+		Key   string   `json:"key"`
+		Keys  []string `json:"keys"`
+		Type  string   `json:"type"`
+		Size  int64    `json:"size"`
+		Found bool     `json:"found"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+		t.Fatalf("unmarshal s3_roundtrip: %v", err)
+	}
+	if body.Body != "ship-it" {
+		t.Fatalf("body = %q, want %q", body.Body, "ship-it")
+	}
+	if body.Key != "plans/q3.txt" {
+		t.Fatalf("key = %q, want %q", body.Key, "plans/q3.txt")
+	}
+	if !slices.Equal(body.Keys, []string{"plans/q3.txt"}) {
+		t.Fatalf("keys = %#v, want %#v", body.Keys, []string{"plans/q3.txt"})
+	}
+	if body.Type != "text/plain" {
+		t.Fatalf("content type = %q, want %q", body.Type, "text/plain")
+	}
+	if body.Size != int64(len("ship-it")) {
+		t.Fatalf("size = %d, want %d", body.Size, len("ship-it"))
+	}
+	if !body.Found {
+		t.Fatal("expected s3 list operation to find the written object")
+	}
+
+	if _, err := boundS3.HeadObject(context.Background(), s3store.ObjectRef{
+		Bucket: "assets",
+		Key:    testPluginS3NamespacePrefix("echoext") + "plans/q3.txt",
+	}); err != nil {
+		t.Fatalf("expected namespaced backing key: %v", err)
+	}
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env[providerhost.S3SocketTokenEnv("")]; got == "" {
+		t.Fatal("StartPlugin env should include the default s3 relay token")
+	}
+	if got := startRequests[0].Env[providerhost.S3SocketTokenEnv("main")]; got == "" {
+		t.Fatal("StartPlugin env should include the named s3 relay token")
+	}
+	bindRequests := runtimeProvider.bindHostServiceRequests()
+	if len(bindRequests) != 2 {
+		t.Fatalf("BindHostService requests = %d, want 2", len(bindRequests))
+	}
+	for _, req := range bindRequests {
+		if got := req.Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
+			t.Fatalf("BindHostService(%s) relay target = %q, want tls relay target", req.EnvVar, got)
+		}
+	}
+}
+
 func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *testing.T) {
 	t.Parallel()
 
@@ -5448,6 +5885,111 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	}
 }
 
+func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunnelCapability(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+			},
+		},
+	}
+
+	deps := Deps{
+		BaseURL:         "https://gestalt.example.test",
+		EncryptionKey:   []byte("0123456789abcdef0123456789abcdef"),
+		WorkflowManager: newStubWorkflowManager(),
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+	checkEnv := func(envName string) (string, bool) {
+		t.Helper()
+		result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": envName}, "")
+		if err != nil {
+			t.Fatalf("Execute read_env(%s): %v", envName, err)
+		}
+		var env struct {
+			Value string `json:"value"`
+			Found bool   `json:"found"`
+		}
+		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+			t.Fatalf("unmarshal env result for %s: %v", envName, err)
+		}
+		return env.Value, env.Found
+	}
+
+	if got, found := checkEnv(providerhost.DefaultWorkflowManagerSocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin workflow manager env %s = (%q, %v), want (%q, true)", providerhost.DefaultWorkflowManagerSocketEnv, got, found, "tls://gestalt.example.test:443")
+	}
+	if got, found := checkEnv(providerhost.WorkflowManagerSocketTokenEnv()); !found || got == "" {
+		t.Fatalf("plugin workflow manager token env %s = (%q, %v), want non-empty token", providerhost.WorkflowManagerSocketTokenEnv(), got, found)
+	}
+
+	bindRequests := runtimeProvider.bindHostServiceRequests()
+	if len(bindRequests) != 1 {
+		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
+	}
+	if bindRequests[0].EnvVar != providerhost.DefaultWorkflowManagerSocketEnv {
+		t.Fatalf("BindHostService env = %q, want %q", bindRequests[0].EnvVar, providerhost.DefaultWorkflowManagerSocketEnv)
+	}
+	if got := bindRequests[0].Relay.DialTarget; got != "tls://gestalt.example.test:443" {
+		t.Fatalf("BindHostService(%s) relay target = %q, want %q", bindRequests[0].EnvVar, got, "tls://gestalt.example.test:443")
+	}
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env[providerhost.WorkflowManagerSocketTokenEnv()]; got == "" {
+		t.Fatal("StartPlugin env should include the workflow manager relay token")
+	}
+	if !slices.Contains(startRequests[0].AllowedHosts, "gestalt.example.test") {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", startRequests[0].AllowedHosts)
+	}
+}
+
 func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T) {
 	t.Parallel()
 
@@ -5574,24 +6116,27 @@ func writeRuntimeRelayGRPCTrailersOnly(w http.ResponseWriter, code codes.Code, m
 	w.WriteHeader(http.StatusOK)
 }
 
-func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapabilityWithWorkflowProvider(t *testing.T) {
+func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t *testing.T) {
 	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	relaySrv.EnableHTTP2 = true
+	relaySrv.StartTLS()
+	testutil.CloseOnCleanup(t, relaySrv)
 
 	bin := buildEchoPluginBinary(t)
 	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
 		Name: "echoext",
 		Operations: []catalog.CatalogOperation{
-			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+			{ID: "workflow_manager_roundtrip", Method: http.MethodPost},
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := &staticCapabilityPluginRuntime{
-		inner: pluginruntime.NewLocalProvider(),
-		capabilities: pluginruntime.Capabilities{
-			HostedPluginRuntime: true,
-			ProviderGRPCTunnel:  true,
-		},
-	}
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
 		return runtimeProvider, nil
@@ -5618,17 +6163,87 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapabilityWithWorkflo
 		},
 	}
 
-	workflowRuntime := &workflowRuntime{
-		providers: map[string]coreworkflow.Provider{
-			"managed": nil,
-		},
+	manager := newStubWorkflowManager()
+	deps := Deps{
+		BaseURL:         relaySrv.URL,
+		EncryptionKey:   secret,
+		WorkflowManager: manager,
 	}
-	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
-		WorkflowRuntime:       workflowRuntime,
-		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{WorkflowRuntime: workflowRuntime}),
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "user:user-123",
+		UserID:    "user-123",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceSession,
+		Scopes:    []string{"echoext"},
 	})
-	if err == nil || !strings.Contains(err.Error(), "host service tunnels") {
-		t.Fatalf("buildProvidersStrict error = %v, want missing host service tunnels", err)
+
+	result, err := prov.Execute(ctx, "workflow_manager_roundtrip", nil, "")
+	if err != nil {
+		t.Fatalf("Execute workflow_manager_roundtrip: %v", err)
+	}
+
+	var body struct {
+		ProviderName string `json:"provider_name"`
+		ScheduleID   string `json:"schedule_id"`
+		Cron         string `json:"cron"`
+		Operation    string `json:"operation"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+		t.Fatalf("unmarshal workflow_manager_roundtrip: %v", err)
+	}
+	if body.ProviderName != "managed" {
+		t.Fatalf("provider_name = %q, want %q", body.ProviderName, "managed")
+	}
+	if body.ScheduleID == "" {
+		t.Fatal("workflow_manager_roundtrip should return a schedule id")
+	}
+	if body.Cron != "*/5 * * * *" {
+		t.Fatalf("cron = %q, want %q", body.Cron, "*/5 * * * *")
+	}
+	if body.Operation != "sync" {
+		t.Fatalf("operation = %q, want %q", body.Operation, "sync")
+	}
+
+	schedules, err := manager.ListSchedules(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("manager.ListSchedules: %v", err)
+	}
+	if len(schedules) != 1 {
+		t.Fatalf("manager schedules len = %d, want 1", len(schedules))
+	}
+	if got := schedules[0].Schedule.Target.Operation; got != "sync" {
+		t.Fatalf("stored target operation = %q, want %q", got, "sync")
+	}
+	if got := manager.Subjects(); !slices.Equal(got, []string{"user:user-123", "user:user-123"}) {
+		t.Fatalf("manager subjects = %v, want two user:user-123 entries", got)
+	}
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env[providerhost.WorkflowManagerSocketTokenEnv()]; got == "" {
+		t.Fatal("StartPlugin env should include the workflow manager relay token")
+	}
+	bindRequests := runtimeProvider.bindHostServiceRequests()
+	if len(bindRequests) != 1 {
+		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
+	}
+	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
+		t.Fatalf("BindHostService(%s) relay target = %q, want tls relay target", bindRequests[0].EnvVar, got)
 	}
 }
 

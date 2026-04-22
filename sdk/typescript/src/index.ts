@@ -107,6 +107,7 @@ export {
 } from "./invoker.ts";
 export {
   ENV_WORKFLOW_MANAGER_SOCKET,
+  ENV_WORKFLOW_MANAGER_SOCKET_TOKEN,
   WorkflowManager,
   type ManagedWorkflowEventTriggerMessage,
   type ManagedWorkflowScheduleMessage,
@@ -255,7 +256,10 @@ export {
   createS3Service,
   defineS3Provider,
   isS3Provider,
+  ENV_S3_SOCKET,
+  ENV_S3_SOCKET_TOKEN,
   s3SocketEnv,
+  s3SocketTokenEnv,
   type ByteRange,
   type CopyOptions,
   type ListOptions,

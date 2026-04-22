@@ -4,3 +4,7 @@ const (
 	DefaultWorkflowHostSocketEnv    = "GESTALT_WORKFLOW_HOST_SOCKET"
 	DefaultWorkflowManagerSocketEnv = "GESTALT_WORKFLOW_MANAGER_SOCKET"
 )
+
+func WorkflowManagerSocketTokenEnv() string {
+	return DefaultWorkflowManagerSocketEnv + "_TOKEN"
+}

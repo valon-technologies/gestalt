@@ -8,7 +8,8 @@ import json
 import os
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, BinaryIO, Iterable, Iterator
+from typing import Any, BinaryIO, Iterable, Iterator, Protocol, cast
+from urllib import parse as _urlparse
 
 import grpc
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
@@ -22,6 +23,9 @@ timestamp_pb2: Any = _timestamp_pb2
 
 #: Base environment variable for discovering S3 runtime sockets.
 ENV_S3_SOCKET = "GESTALT_S3_SOCKET"
+_S3_SOCKET_TOKEN_SUFFIX = "_TOKEN"
+_S3_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
+ENV_S3_SOCKET_TOKEN = f"{ENV_S3_SOCKET}{_S3_SOCKET_TOKEN_SUFFIX}"
 _WRITE_CHUNK_SIZE = 64 * 1024
 _UTC = _dt.timezone.utc
 BytesData = bytes
@@ -40,6 +44,12 @@ def s3_socket_env(name: str | None = None) -> str:
         for ch in trimmed
     )
     return f"{ENV_S3_SOCKET}_{normalized}"
+
+
+def s3_socket_token_env(name: str | None = None) -> str:
+    """Return the environment variable name for an S3 relay token."""
+
+    return f"{s3_socket_env(name)}{_S3_SOCKET_TOKEN_SUFFIX}"
 
 
 class S3NotFoundError(Exception):
@@ -266,15 +276,130 @@ class S3ReadStream:
         return bytes(msg.data)
 
 
+class _ClientCallDetails(grpc.ClientCallDetails):
+    def __init__(
+        self,
+        method: str,
+        timeout: float | None,
+        metadata: Any,
+        credentials: Any,
+        wait_for_ready: bool | None,
+        compression: Any,
+    ) -> None:
+        self.method = method
+        self.timeout = timeout
+        self.metadata = metadata
+        self.credentials = credentials
+        self.wait_for_ready = wait_for_ready
+        self.compression = compression
+
+
+class _ClientCallDetailsFields(Protocol):
+    method: str
+    timeout: float | None
+    metadata: Any
+    credentials: Any
+    wait_for_ready: bool | None
+    compression: Any
+
+
+class _RelayTokenInterceptor(
+    grpc.UnaryUnaryClientInterceptor,
+    grpc.UnaryStreamClientInterceptor,
+    grpc.StreamUnaryClientInterceptor,
+):
+    def __init__(self, token: str) -> None:
+        self._token = token
+
+    def _details(self, client_call_details: grpc.ClientCallDetails) -> grpc.ClientCallDetails:
+        details = cast(_ClientCallDetailsFields, client_call_details)
+        metadata = list(details.metadata or [])
+        metadata.append((_S3_RELAY_TOKEN_HEADER, self._token))
+        return _ClientCallDetails(
+            details.method,
+            details.timeout,
+            metadata,
+            details.credentials,
+            details.wait_for_ready,
+            details.compression,
+        )
+
+    def intercept_unary_unary(
+        self,
+        continuation: Any,
+        client_call_details: grpc.ClientCallDetails,
+        request: Any,
+    ) -> Any:
+        return continuation(self._details(client_call_details), request)
+
+    def intercept_unary_stream(
+        self,
+        continuation: Any,
+        client_call_details: grpc.ClientCallDetails,
+        request: Any,
+    ) -> Any:
+        return continuation(self._details(client_call_details), request)
+
+    def intercept_stream_unary(
+        self,
+        continuation: Any,
+        client_call_details: grpc.ClientCallDetails,
+        request_iterator: Any,
+    ) -> Any:
+        return continuation(self._details(client_call_details), request_iterator)
+
+
+def _s3_channel(target: str, *, token: str = "") -> Any:
+    scheme, address = _parse_s3_target(target)
+    if scheme == "unix":
+        channel = grpc.insecure_channel(f"unix:{address}")
+    elif scheme == "tcp":
+        channel = grpc.insecure_channel(address)
+    elif scheme == "tls":
+        channel = grpc.secure_channel(address, grpc.ssl_channel_credentials())
+    else:
+        raise RuntimeError(f"unsupported s3 transport scheme {scheme!r}")
+    token = token.strip()
+    if not token:
+        return channel
+    return grpc.intercept_channel(channel, _RelayTokenInterceptor(token))
+
+
+def _parse_s3_target(raw: str) -> tuple[str, str]:
+    target = raw.strip()
+    if not target:
+        raise RuntimeError("s3 transport target is required")
+    if target.startswith("tcp://"):
+        address = target.removeprefix("tcp://").strip()
+        if not address:
+            raise RuntimeError(f"s3 tcp target {raw!r} is missing host:port")
+        return "tcp", address
+    if target.startswith("tls://"):
+        address = target.removeprefix("tls://").strip()
+        if not address:
+            raise RuntimeError(f"s3 tls target {raw!r} is missing host:port")
+        return "tls", address
+    if target.startswith("unix://"):
+        address = target.removeprefix("unix://").strip()
+        if not address:
+            raise RuntimeError(f"s3 unix target {raw!r} is missing a socket path")
+        return "unix", address
+    if "://" in target:
+        parsed = _urlparse.urlparse(target)
+        raise RuntimeError(f"unsupported s3 target scheme {parsed.scheme!r}")
+    return "unix", target
+
+
 class S3:
     """Client for a host-provided Gestalt S3 runtime."""
 
     def __init__(self, name: str | None = None) -> None:
         env_name = s3_socket_env(name)
-        socket_path = os.environ.get(env_name, "")
-        if not socket_path:
+        target = os.environ.get(env_name, "")
+        if not target:
             raise RuntimeError(f"{env_name} is not set")
-        self._channel = grpc.insecure_channel(f"unix:{socket_path}")
+        token = os.environ.get(s3_socket_token_env(name), "")
+        self._channel = _s3_channel(target, token=token)
         self._stub = pb_grpc.S3Stub(self._channel)
 
     def close(self) -> None:
