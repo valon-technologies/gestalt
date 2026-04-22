@@ -138,6 +138,7 @@ func RunIntegrationTests(t *testing.T, newIntegration func(t *testing.T, mockURL
 		}
 		if result == nil {
 			t.Fatal("Execute returned nil")
+			return
 		}
 		if result.Status < 100 || result.Status >= 600 {
 			t.Errorf("result.Status: got %d, want valid HTTP status", result.Status)

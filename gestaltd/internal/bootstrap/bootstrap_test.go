@@ -1699,6 +1699,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	recorder := recorders["temporal"]
 	if recorder == nil {
 		t.Fatal("missing workflow recorder for temporal")
+		return
 	}
 	if len(recorder.upsertedSchedules) != 1 {
 		t.Fatalf("upserted schedules = %d, want 1", len(recorder.upsertedSchedules))
@@ -1768,6 +1769,7 @@ func TestValidateDoesNotApplyConfiguredWorkflowSchedules(t *testing.T) {
 	recorder := recorders["temporal"]
 	if recorder == nil {
 		t.Fatal("missing workflow recorder for temporal")
+		return
 	}
 	if len(recorder.upsertedSchedules) != 0 {
 		t.Fatalf("upserted schedules = %d, want 0", len(recorder.upsertedSchedules))
