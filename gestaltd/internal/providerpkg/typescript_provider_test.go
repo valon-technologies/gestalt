@@ -448,11 +448,16 @@ func TestPrepareSourceManifest_MergesGeneratedTypeScriptManifestMetadata(t *test
 				},
 			},
 			SecuritySchemes: map[string]*providermanifestv1.HTTPSecurityScheme{
-				"slack": {
-					Type: providermanifestv1.HTTPSecuritySchemeTypeSlackSignature,
+				"signed": {
+					Type: providermanifestv1.HTTPSecuritySchemeTypeHMAC,
 					Secret: &providermanifestv1.HTTPSecretRef{
-						Env: "SLACK_SIGNING_SECRET",
+						Env: "OLD_SIGNING_SECRET",
 					},
+					SignatureHeader: "X-Old-Signature",
+					SignaturePrefix: "v1=",
+					PayloadTemplate: "v1:{header:X-Old-Timestamp}:{raw_body}",
+					TimestampHeader: "X-Old-Timestamp",
+					MaxAgeSeconds:   30,
 				},
 			},
 		},
@@ -481,15 +486,30 @@ func TestPrepareSourceManifest_MergesGeneratedTypeScriptManifestMetadata(t *test
 		t.Fatalf("prepared manifest data = %q, want merged HTTP binding metadata", string(preparedData))
 	}
 
-	scheme := preparedManifest.Spec.SecuritySchemes["slack"]
+	scheme := preparedManifest.Spec.SecuritySchemes["signed"]
 	if scheme == nil {
-		t.Fatal(`manifest.Spec.SecuritySchemes["slack"] = nil, want generated scheme`)
+		t.Fatal(`manifest.Spec.SecuritySchemes["signed"] = nil, want generated scheme`)
 	}
-	if scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeSlackSignature {
-		t.Fatalf("scheme.Type = %q, want %q", scheme.Type, providermanifestv1.HTTPSecuritySchemeTypeSlackSignature)
+	if scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeHMAC {
+		t.Fatalf("scheme.Type = %q, want %q", scheme.Type, providermanifestv1.HTTPSecuritySchemeTypeHMAC)
 	}
-	if scheme.Secret == nil || scheme.Secret.Env != "SLACK_SIGNING_SECRET" {
-		t.Fatalf("scheme.Secret = %+v, want env-backed secret", scheme.Secret)
+	if scheme.Secret == nil || scheme.Secret.Env != "OLD_SIGNING_SECRET" {
+		t.Fatalf("scheme.Secret = %+v, want manifest override secret", scheme.Secret)
+	}
+	if scheme.SignatureHeader != "X-Old-Signature" {
+		t.Fatalf("scheme.SignatureHeader = %q, want %q", scheme.SignatureHeader, "X-Old-Signature")
+	}
+	if scheme.SignaturePrefix != "v1=" {
+		t.Fatalf("scheme.SignaturePrefix = %q, want %q", scheme.SignaturePrefix, "v1=")
+	}
+	if scheme.PayloadTemplate != "v1:{header:X-Old-Timestamp}:{raw_body}" {
+		t.Fatalf("scheme.PayloadTemplate = %q, want %q", scheme.PayloadTemplate, "v1:{header:X-Old-Timestamp}:{raw_body}")
+	}
+	if scheme.TimestampHeader != "X-Old-Timestamp" {
+		t.Fatalf("scheme.TimestampHeader = %q, want %q", scheme.TimestampHeader, "X-Old-Timestamp")
+	}
+	if scheme.MaxAgeSeconds != 30 {
+		t.Fatalf("scheme.MaxAgeSeconds = %d, want %d", scheme.MaxAgeSeconds, 30)
 	}
 
 	binding := preparedManifest.Spec.HTTP["command"]
@@ -502,8 +522,8 @@ func TestPrepareSourceManifest_MergesGeneratedTypeScriptManifestMetadata(t *test
 	if binding.Method != "POST" {
 		t.Fatalf("binding.Method = %q, want %q", binding.Method, "POST")
 	}
-	if binding.Security != "slack" {
-		t.Fatalf("binding.Security = %q, want %q", binding.Security, "slack")
+	if binding.Security != "signed" {
+		t.Fatalf("binding.Security = %q, want %q", binding.Security, "signed")
 	}
 	if binding.Target != "handle_command" {
 		t.Fatalf("binding.Target = %q, want %q", binding.Target, "handle_command")
@@ -817,15 +837,20 @@ EOF
     if [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
       cat > "$GESTALT_PLUGIN_WRITE_MANIFEST_METADATA" <<'EOF'
 securitySchemes:
-  slack:
-    type: slack_signature
+  signed:
+    type: hmac
     secret:
-      env: SLACK_SIGNING_SECRET
+      env: REQUEST_SIGNING_SECRET
+    signatureHeader: X-Request-Signature
+    signaturePrefix: v0=
+    payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+    timestampHeader: X-Request-Timestamp
+    maxAgeSeconds: 300
 http:
   command:
     path: /command
     method: POST
-    security: slack
+    security: signed
     target: handle_command
     requestBody:
       required: true

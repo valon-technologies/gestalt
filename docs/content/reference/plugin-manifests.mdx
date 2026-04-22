@@ -243,15 +243,20 @@ not replace the generic `/api/v1/{plugin}/{operation}` facade; use them when a
 plugin needs a stable custom path, form-encoded request bodies, hosted request
 verification, or an immediate host-managed acknowledgment response.
 
-`spec.http.<name>.path` is plugin-relative. For plugin `slack`, `path: /command`
-mounts at `/api/v1/slack/command`.
+`spec.http.<name>.path` is plugin-relative. For plugin `example`, `path: /command`
+mounts at `/api/v1/example/command`.
 
 #### `spec.securitySchemes`
 
 | Field | Type | Purpose |
 | --- | --- | --- |
-| `type` | string | One of `slack_signature`, `apiKey`, `http`, or `none`. |
+| `type` | string | One of `hmac`, `apiKey`, `http`, or `none`. |
 | `description` | string | Optional human-readable description. |
+| `signatureHeader` | string | Header carrying the transmitted HMAC digest for `type: hmac`. |
+| `signaturePrefix` | string | Optional static prefix prepended to the computed digest before comparison. |
+| `payloadTemplate` | string | Template used to build the signed payload for `type: hmac`. Supports `{raw_body}` and `{header:Header-Name}` placeholders. |
+| `timestampHeader` | string | Optional header carrying a Unix-seconds timestamp for freshness and replay checks. |
+| `maxAgeSeconds` | integer | Maximum accepted request age, in seconds, when `timestampHeader` is configured. |
 | `name` | string | Header or query parameter name for `apiKey`. |
 | `in` | string | `header` or `query` for `type: apiKey`. |
 | `scheme` | string | `basic` or `bearer` for `type: http`. |
@@ -273,15 +278,20 @@ Example:
 ```yaml
 spec:
   securitySchemes:
-    slack:
-      type: slack_signature
+    signed:
+      type: hmac
       secret:
-        env: SLACK_SIGNING_SECRET
+        env: REQUEST_SIGNING_SECRET
+      signatureHeader: X-Request-Signature
+      signaturePrefix: v0=
+      payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+      timestampHeader: X-Request-Timestamp
+      maxAgeSeconds: 300
   http:
     command:
       path: /command
       method: POST
-      security: slack
+      security: signed
       target: handle_command
       requestBody:
         required: true
@@ -290,8 +300,7 @@ spec:
       ack:
         status: 200
         body:
-          response_type: ephemeral
-          text: Working on it...
+          status: accepted
 ```
 
 Source plugins written in Go, Python, Rust, or TypeScript may generate these

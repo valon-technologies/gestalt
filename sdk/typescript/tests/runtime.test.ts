@@ -197,18 +197,23 @@ test("runtime main writes generated manifest metadata when requested", async () 
 
 export const plugin = definePlugin({
   securitySchemes: {
-    slack: {
-      type: "slack_signature",
+    signed: {
+      type: "hmac",
       secret: {
-        env: "SLACK_SIGNING_SECRET",
+        env: "REQUEST_SIGNING_SECRET",
       },
+      signatureHeader: "X-Request-Signature",
+      signaturePrefix: "v0=",
+      payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+      timestampHeader: "X-Request-Timestamp",
+      maxAgeSeconds: 300,
     },
   },
   http: {
     command: {
       path: "/command",
       method: "POST",
-      security: "slack",
+      security: "signed",
       target: "handle_command",
       requestBody: {
         required: true,
@@ -219,8 +224,7 @@ export const plugin = definePlugin({
       ack: {
         status: 200,
         body: {
-          response_type: "ephemeral",
-          text: "Working on it...",
+          status: "accepted",
         },
       },
     },
@@ -243,13 +247,14 @@ export const plugin = definePlugin({
     expect(code).toBe(0);
     const metadata = readFileSync(metadataPath, "utf8");
     expect(metadata).toContain("securitySchemes:");
-    expect(metadata).toContain("type: slack_signature");
-    expect(metadata).toContain("env: SLACK_SIGNING_SECRET");
+    expect(metadata).toContain("type: hmac");
+    expect(metadata).toContain("env: REQUEST_SIGNING_SECRET");
+    expect(metadata).toContain("signatureHeader: X-Request-Signature");
     expect(metadata).toContain("http:");
     expect(metadata).toContain("path: /command");
     expect(metadata).toContain("target: handle_command");
     expect(metadata).toContain("application/x-www-form-urlencoded");
-    expect(metadata).toContain("response_type: ephemeral");
+    expect(metadata).toContain("status: accepted");
   } finally {
     if (previousManifestMetadata === undefined) {
       delete process.env[ENV_WRITE_MANIFEST_METADATA];

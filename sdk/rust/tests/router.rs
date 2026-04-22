@@ -37,20 +37,25 @@ struct EchoOutput {
 fn http_manifest_router() -> gestalt::Result<gestalt::Router<TestProvider>> {
     gestalt::Router::new()
         .security_scheme(
-            "slack",
-            gestalt::HTTPSecurityScheme::slack_signature().secret_env("SLACK_SIGNING_SECRET"),
+            "signed",
+            gestalt::HTTPSecurityScheme::hmac()
+                .secret_env("REQUEST_SIGNING_SECRET")
+                .signature_header("X-Request-Signature")
+                .signature_prefix("v0=")
+                .payload_template("v0:{header:X-Request-Timestamp}:{raw_body}")
+                .timestamp_header("X-Request-Timestamp")
+                .max_age_seconds(300),
         )
         .http_binding(
             "command",
-            gestalt::HTTPBinding::new("/command", "post", "slack", "echo")
+            gestalt::HTTPBinding::new("/command", "post", "signed", "echo")
                 .request_body(
                     gestalt::HTTPRequestBody::new()
                         .required(true)
                         .content_type("application/x-www-form-urlencoded"),
                 )
                 .ack(gestalt::HTTPAck::new().status(200).body(json!({
-                    "response_type": "ephemeral",
-                    "text": "Working on it...",
+                    "status": "accepted",
                 }))),
         )
         .register(
@@ -127,12 +132,12 @@ fn router_includes_manifest_metadata() {
     let metadata = router.manifest_metadata();
 
     assert_eq!(
-        metadata.security_schemes["slack"].kind,
-        Some(gestalt::HTTPSecuritySchemeType::SlackSignature)
+        metadata.security_schemes["signed"].kind,
+        Some(gestalt::HTTPSecuritySchemeType::Hmac)
     );
     assert_eq!(metadata.http["command"].path, "/command");
     assert_eq!(metadata.http["command"].method, "POST");
-    assert_eq!(metadata.http["command"].security, "slack");
+    assert_eq!(metadata.http["command"].security, "signed");
     assert_eq!(metadata.http["command"].target, "echo");
     assert_eq!(
         metadata.http["command"]
@@ -168,8 +173,9 @@ async fn serve_provider_writes_catalog_and_manifest_metadata_when_requested() {
 
     let metadata = fs::read_to_string(&metadata_path).expect("read manifest metadata");
     assert!(metadata.contains("securitySchemes:"));
-    assert!(metadata.contains("type: slack_signature"));
-    assert!(metadata.contains("env: SLACK_SIGNING_SECRET"));
+    assert!(metadata.contains("type: hmac"));
+    assert!(metadata.contains("env: REQUEST_SIGNING_SECRET"));
+    assert!(metadata.contains("signatureHeader: X-Request-Signature"));
     assert!(metadata.contains("http:"));
     assert!(metadata.contains("path: /command"));
     assert!(metadata.contains("target: echo"));

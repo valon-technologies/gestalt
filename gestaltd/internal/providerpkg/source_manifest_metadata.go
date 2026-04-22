@@ -199,6 +199,21 @@ func mergeGeneratedHTTPSecurityScheme(base, override *providermanifestv1.HTTPSec
 	if override.Description != "" {
 		merged.Description = override.Description
 	}
+	if override.SignatureHeader != "" {
+		merged.SignatureHeader = override.SignatureHeader
+	}
+	if override.SignaturePrefix != "" {
+		merged.SignaturePrefix = override.SignaturePrefix
+	}
+	if override.PayloadTemplate != "" {
+		merged.PayloadTemplate = override.PayloadTemplate
+	}
+	if override.TimestampHeader != "" {
+		merged.TimestampHeader = override.TimestampHeader
+	}
+	if override.MaxAgeSeconds != 0 {
+		merged.MaxAgeSeconds = override.MaxAgeSeconds
+	}
 	if override.Name != "" {
 		merged.Name = override.Name
 	}

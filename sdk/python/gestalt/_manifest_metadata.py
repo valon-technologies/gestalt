@@ -18,6 +18,11 @@ HTTPSecurityScheme = TypedDict(
     {
         "type": str,
         "description": str,
+        "signatureHeader": str,
+        "signaturePrefix": str,
+        "payloadTemplate": str,
+        "timestampHeader": str,
+        "maxAgeSeconds": int,
         "name": str,
         "in": str,
         "scheme": str,

@@ -266,18 +266,23 @@ func TestRouterManifestMetadata(t *testing.T) {
 		),
 	).WithManifestMetadata(gestalt.ManifestMetadata{
 		SecuritySchemes: map[string]gestalt.HTTPSecurityScheme{
-			"slack": {
-				Type: gestalt.HTTPSecuritySchemeTypeSlackSignature,
+			"signed": {
+				Type: gestalt.HTTPSecuritySchemeTypeHMAC,
 				Secret: &gestalt.HTTPSecretRef{
-					Env: "SLACK_SIGNING_SECRET",
+					Env: "REQUEST_SIGNING_SECRET",
 				},
+				SignatureHeader: "X-Request-Signature",
+				SignaturePrefix: "v0=",
+				PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+				TimestampHeader: "X-Request-Timestamp",
+				MaxAgeSeconds:   300,
 			},
 		},
 		HTTP: map[string]gestalt.HTTPBinding{
 			"command": {
 				Path:     "/command",
 				Method:   http.MethodPost,
-				Security: "slack",
+				Security: "signed",
 				Target:   "echo",
 				RequestBody: &gestalt.HTTPRequestBody{
 					Required: true,
@@ -291,9 +296,9 @@ func TestRouterManifestMetadata(t *testing.T) {
 						"content-type": "application/json",
 					},
 					Body: map[string]any{
-						"response_type": "ephemeral",
+						"status": "accepted",
 						"attachments": []any{
-							map[string]any{"text": "Working on it"},
+							map[string]any{"text": "Queued"},
 						},
 					},
 				},
@@ -302,8 +307,8 @@ func TestRouterManifestMetadata(t *testing.T) {
 	})
 
 	metadata := router.ManifestMetadata()
-	if got := metadata.SecuritySchemes["slack"].Type; got != gestalt.HTTPSecuritySchemeTypeSlackSignature {
-		t.Fatalf("security scheme type = %q, want %q", got, gestalt.HTTPSecuritySchemeTypeSlackSignature)
+	if got := metadata.SecuritySchemes["signed"].Type; got != gestalt.HTTPSecuritySchemeTypeHMAC {
+		t.Fatalf("security scheme type = %q, want %q", got, gestalt.HTTPSecuritySchemeTypeHMAC)
 	}
 	binding, ok := metadata.HTTP["command"]
 	if !ok {
@@ -324,14 +329,14 @@ func TestRouterManifestMetadata(t *testing.T) {
 		t.Fatalf("binding attachments = %#v, want one attachment", body["attachments"])
 	}
 
-	metadata.SecuritySchemes["slack"] = gestalt.HTTPSecurityScheme{Type: gestalt.HTTPSecuritySchemeTypeNone}
+	metadata.SecuritySchemes["signed"] = gestalt.HTTPSecurityScheme{Type: gestalt.HTTPSecuritySchemeTypeNone}
 	binding.Ack.Headers["content-type"] = "text/plain"
-	body["response_type"] = "changed"
+	body["status"] = "changed"
 	attachments[0].(map[string]any)["text"] = "changed"
 
 	original := router.ManifestMetadata()
-	if got := original.SecuritySchemes["slack"].Type; got != gestalt.HTTPSecuritySchemeTypeSlackSignature {
-		t.Fatalf("original security scheme type = %q, want %q", got, gestalt.HTTPSecuritySchemeTypeSlackSignature)
+	if got := original.SecuritySchemes["signed"].Type; got != gestalt.HTTPSecuritySchemeTypeHMAC {
+		t.Fatalf("original security scheme type = %q, want %q", got, gestalt.HTTPSecuritySchemeTypeHMAC)
 	}
 	originalBinding := original.HTTP["command"]
 	if got := originalBinding.Ack.Headers["content-type"]; got != "application/json" {
@@ -341,14 +346,14 @@ func TestRouterManifestMetadata(t *testing.T) {
 	if !ok {
 		t.Fatalf("original ack body type = %T, want map[string]any", originalBinding.Ack.Body)
 	}
-	if got := originalBody["response_type"]; got != "ephemeral" {
-		t.Fatalf("original ack response_type = %#v, want %#v", got, "ephemeral")
+	if got := originalBody["status"]; got != "accepted" {
+		t.Fatalf("original ack status = %#v, want %#v", got, "accepted")
 	}
 	originalAttachments, ok := originalBody["attachments"].([]any)
 	if !ok || len(originalAttachments) != 1 {
 		t.Fatalf("original attachments = %#v, want one attachment", originalBody["attachments"])
 	}
-	if got := originalAttachments[0].(map[string]any)["text"]; got != "Working on it" {
-		t.Fatalf("original attachment text = %#v, want %#v", got, "Working on it")
+	if got := originalAttachments[0].(map[string]any)["text"]; got != "Queued" {
+		t.Fatalf("original attachment text = %#v, want %#v", got, "Queued")
 	}
 }

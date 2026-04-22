@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/httpbinding"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
@@ -175,9 +176,24 @@ func validateMountedHTTPSecurityScheme(pluginName, schemeName string, scheme *co
 		return fmt.Errorf("%s is required", path)
 	}
 	switch scheme.Type {
-	case providermanifestv1.HTTPSecuritySchemeTypeSlackSignature:
+	case providermanifestv1.HTTPSecuritySchemeTypeHMAC:
+		if strings.TrimSpace(scheme.SignatureHeader) == "" {
+			return fmt.Errorf("%s.signatureHeader is required", path)
+		}
+		if strings.TrimSpace(scheme.PayloadTemplate) == "" {
+			return fmt.Errorf("%s.payloadTemplate is required", path)
+		}
 		if scheme.Secret == nil {
 			return fmt.Errorf("%s.secret is required", path)
+		}
+		if strings.TrimSpace(scheme.TimestampHeader) == "" && scheme.MaxAgeSeconds != 0 {
+			return fmt.Errorf("%s.maxAgeSeconds requires %s.timestampHeader to be set", path, path)
+		}
+		if strings.TrimSpace(scheme.TimestampHeader) != "" && scheme.MaxAgeSeconds <= 0 {
+			return fmt.Errorf("%s.timestampHeader requires %s.maxAgeSeconds to be greater than zero", path, path)
+		}
+		if err := httpbinding.ValidatePayloadTemplate(scheme.PayloadTemplate, scheme.TimestampHeader); err != nil {
+			return fmt.Errorf("%s.payloadTemplate %s", path, err)
 		}
 	case providermanifestv1.HTTPSecuritySchemeTypeAPIKey:
 		if strings.TrimSpace(scheme.Name) == "" {

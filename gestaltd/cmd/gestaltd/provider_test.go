@@ -586,15 +586,20 @@ func TestRun_ProviderReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.
 		ExpectedCatalogWrite: true,
 		GeneratedCatalog:     rustReleasePluginName,
 		GeneratedManifestMetadata: `securitySchemes:
-  slack:
-    type: slack_signature
+  signed:
+    type: hmac
     secret:
-      env: SLACK_SIGNING_SECRET
+      env: REQUEST_SIGNING_SECRET
+    signatureHeader: X-Request-Signature
+    signaturePrefix: v0=
+    payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+    timestampHeader: X-Request-Timestamp
+    maxAgeSeconds: 300
 http:
   command:
     path: /command
     method: POST
-    security: slack
+    security: signed
     target: greet
     requestBody:
       required: true
@@ -603,8 +608,7 @@ http:
     ack:
       status: 200
       body:
-        response_type: ephemeral
-        text: Working on it...`,
+        status: accepted`,
 		DelegateBinary: pluginBin,
 		AllowedTargets: []string{hostTarget},
 	})
@@ -697,15 +701,20 @@ func TestRun_ProviderReleaseBuildsRustSourcePluginForExplicitLinuxTarget(t *test
 		ExpectedCatalogWrite: true,
 		GeneratedCatalog:     rustReleasePluginName,
 		GeneratedManifestMetadata: `securitySchemes:
-  slack:
-    type: slack_signature
+  signed:
+    type: hmac
     secret:
-      env: SLACK_SIGNING_SECRET
+      env: REQUEST_SIGNING_SECRET
+    signatureHeader: X-Request-Signature
+    signaturePrefix: v0=
+    payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+    timestampHeader: X-Request-Timestamp
+    maxAgeSeconds: 300
 http:
   command:
     path: /command
     method: POST
-    security: slack
+    security: signed
     target: greet
     requestBody:
       required: true
@@ -714,8 +723,7 @@ http:
     ack:
       status: 200
       body:
-        response_type: ephemeral
-        text: Working on it...`,
+        status: accepted`,
 		DelegateBinary: pluginBin,
 		AllowedTargets: []string{hostTarget, explicitTarget},
 	})
@@ -2219,16 +2227,21 @@ class GreetOutput(gestalt.Model):
 plugin = gestalt.Plugin(
     "python-release",
     securitySchemes={
-        "slack": {
-            "type": "slack_signature",
-            "secret": {"env": "SLACK_SIGNING_SECRET"},
+        "signed": {
+            "type": "hmac",
+            "secret": {"env": "REQUEST_SIGNING_SECRET"},
+            "signatureHeader": "X-Request-Signature",
+            "signaturePrefix": "v0=",
+            "payloadTemplate": "v0:{header:X-Request-Timestamp}:{raw_body}",
+            "timestampHeader": "X-Request-Timestamp",
+            "maxAgeSeconds": 300,
         }
     },
     http={
         "command": {
             "path": "/command",
             "method": "POST",
-            "security": "slack",
+            "security": "signed",
             "target": "greet",
             "requestBody": {
                 "required": True,
@@ -2239,8 +2252,7 @@ plugin = gestalt.Plugin(
             "ack": {
                 "status": 200,
                 "body": {
-                    "response_type": "ephemeral",
-                    "text": "Working on it...",
+                    "status": "accepted",
                 },
             },
         }
@@ -2507,15 +2519,20 @@ EOF
     if [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
       cat > "$GESTALT_PLUGIN_WRITE_MANIFEST_METADATA" <<'EOF'
 securitySchemes:
-  slack:
-    type: slack_signature
+  signed:
+    type: hmac
     secret:
-      env: SLACK_SIGNING_SECRET
+      env: REQUEST_SIGNING_SECRET
+    signatureHeader: X-Request-Signature
+    signaturePrefix: v0=
+    payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+    timestampHeader: X-Request-Timestamp
+    maxAgeSeconds: 300
 http:
   command:
     path: /command
     method: POST
-    security: slack
+    security: signed
     target: greet
     requestBody:
       required: true
@@ -2524,8 +2541,7 @@ http:
     ack:
       status: 200
       body:
-        response_type: ephemeral
-        text: Working on it...
+        status: accepted
 EOF
     fi
     exit 0
@@ -2678,15 +2694,20 @@ EOF
   if [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
     cat > "$GESTALT_PLUGIN_WRITE_MANIFEST_METADATA" <<'EOF'
 securitySchemes:
-  slack:
-    type: slack_signature
+  signed:
+    type: hmac
     secret:
-      env: SLACK_SIGNING_SECRET
+      env: REQUEST_SIGNING_SECRET
+    signatureHeader: X-Request-Signature
+    signaturePrefix: v0=
+    payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+    timestampHeader: X-Request-Timestamp
+    maxAgeSeconds: 300
 http:
   command:
     path: /command
     method: POST
-    security: slack
+    security: signed
     target: greet
     requestBody:
       required: true
@@ -2695,8 +2716,7 @@ http:
     ack:
       status: 200
       body:
-        response_type: ephemeral
-        text: Working on it...
+        status: accepted
 EOF
   fi
   exit 0
@@ -2850,15 +2870,30 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 		t.Fatalf("manifest = %+v, want populated spec", manifest)
 	}
 
-	scheme := manifest.Spec.SecuritySchemes["slack"]
+	scheme := manifest.Spec.SecuritySchemes["signed"]
 	if scheme == nil {
-		t.Fatal(`manifest.Spec.SecuritySchemes["slack"] = nil, want generated scheme`)
+		t.Fatal(`manifest.Spec.SecuritySchemes["signed"] = nil, want generated scheme`)
 	}
-	if scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeSlackSignature {
-		t.Fatalf("scheme.Type = %q, want %q", scheme.Type, providermanifestv1.HTTPSecuritySchemeTypeSlackSignature)
+	if scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeHMAC {
+		t.Fatalf("scheme.Type = %q, want %q", scheme.Type, providermanifestv1.HTTPSecuritySchemeTypeHMAC)
 	}
-	if scheme.Secret == nil || scheme.Secret.Env != "SLACK_SIGNING_SECRET" {
+	if scheme.Secret == nil || scheme.Secret.Env != "REQUEST_SIGNING_SECRET" {
 		t.Fatalf("scheme.Secret = %+v, want env-backed secret", scheme.Secret)
+	}
+	if scheme.SignatureHeader != "X-Request-Signature" {
+		t.Fatalf("scheme.SignatureHeader = %q, want %q", scheme.SignatureHeader, "X-Request-Signature")
+	}
+	if scheme.SignaturePrefix != "v0=" {
+		t.Fatalf("scheme.SignaturePrefix = %q, want %q", scheme.SignaturePrefix, "v0=")
+	}
+	if scheme.PayloadTemplate != "v0:{header:X-Request-Timestamp}:{raw_body}" {
+		t.Fatalf("scheme.PayloadTemplate = %q, want %q", scheme.PayloadTemplate, "v0:{header:X-Request-Timestamp}:{raw_body}")
+	}
+	if scheme.TimestampHeader != "X-Request-Timestamp" {
+		t.Fatalf("scheme.TimestampHeader = %q, want %q", scheme.TimestampHeader, "X-Request-Timestamp")
+	}
+	if scheme.MaxAgeSeconds != 300 {
+		t.Fatalf("scheme.MaxAgeSeconds = %d, want %d", scheme.MaxAgeSeconds, 300)
 	}
 
 	binding := manifest.Spec.HTTP["command"]
@@ -2871,8 +2906,8 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 	if binding.Method != http.MethodPost {
 		t.Fatalf("binding.Method = %q, want %q", binding.Method, http.MethodPost)
 	}
-	if binding.Security != "slack" {
-		t.Fatalf("binding.Security = %q, want %q", binding.Security, "slack")
+	if binding.Security != "signed" {
+		t.Fatalf("binding.Security = %q, want %q", binding.Security, "signed")
 	}
 	if binding.Target != target {
 		t.Fatalf("binding.Target = %q, want %q", binding.Target, target)
@@ -2893,8 +2928,8 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 	if !ok {
 		t.Fatalf("binding.Ack.Body type = %T, want map[string]any", binding.Ack.Body)
 	}
-	if got := body["response_type"]; got != "ephemeral" {
-		t.Fatalf("binding.Ack.Body[response_type] = %#v, want %#v", got, "ephemeral")
+	if got := body["status"]; got != "accepted" {
+		t.Fatalf("binding.Ack.Body[status] = %#v, want %#v", got, "accepted")
 	}
 }
 
@@ -3169,18 +3204,23 @@ func newTypeScriptSourceReleaseFixture(t *testing.T, dir string) string {
 
 export const provider = definePlugin({
   securitySchemes: {
-    slack: {
-      type: "slack_signature",
+    signed: {
+      type: "hmac",
       secret: {
-        env: "SLACK_SIGNING_SECRET",
+        env: "REQUEST_SIGNING_SECRET",
       },
+      signatureHeader: "X-Request-Signature",
+      signaturePrefix: "v0=",
+      payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+      timestampHeader: "X-Request-Timestamp",
+      maxAgeSeconds: 300,
     },
   },
   http: {
     command: {
       path: "/command",
       method: "POST",
-      security: "slack",
+      security: "signed",
       target: "greet",
       requestBody: {
         required: true,
@@ -3191,8 +3231,7 @@ export const provider = definePlugin({
       ack: {
         status: 200,
         body: {
-          response_type: "ephemeral",
-          text: "Working on it...",
+          status: "accepted",
         },
       },
     },
@@ -3271,7 +3310,7 @@ func injectGoManifestMetadata(t *testing.T, providerPath string) {
 		t.Fatalf("ReadFile(%s): %v", providerPath, err)
 	}
 	old := "\t)\n)"
-	new := "\t).WithManifestMetadata(gestalt.ManifestMetadata{\n\t\tSecuritySchemes: map[string]gestalt.HTTPSecurityScheme{\n\t\t\t\"slack\": {\n\t\t\t\tType: gestalt.HTTPSecuritySchemeTypeSlackSignature,\n\t\t\t\tSecret: &gestalt.HTTPSecretRef{Env: \"SLACK_SIGNING_SECRET\"},\n\t\t\t},\n\t\t},\n\t\tHTTP: map[string]gestalt.HTTPBinding{\n\t\t\t\"command\": {\n\t\t\t\tPath:     \"/command\",\n\t\t\t\tMethod:   http.MethodPost,\n\t\t\t\tSecurity: \"slack\",\n\t\t\t\tTarget:   \"echo\",\n\t\t\t\tRequestBody: &gestalt.HTTPRequestBody{\n\t\t\t\t\tRequired: true,\n\t\t\t\t\tContent: map[string]gestalt.HTTPMediaType{\n\t\t\t\t\t\t\"application/x-www-form-urlencoded\": {},\n\t\t\t\t\t},\n\t\t\t\t},\n\t\t\t\tAck: &gestalt.HTTPAck{\n\t\t\t\t\tStatus: 200,\n\t\t\t\t\tBody: map[string]any{\n\t\t\t\t\t\t\"response_type\": \"ephemeral\",\n\t\t\t\t\t\t\"text\":          \"Working on it...\",\n\t\t\t\t\t},\n\t\t\t\t},\n\t\t\t},\n\t\t},\n\t})\n)"
+	new := "\t).WithManifestMetadata(gestalt.ManifestMetadata{\n\t\tSecuritySchemes: map[string]gestalt.HTTPSecurityScheme{\n\t\t\t\"signed\": {\n\t\t\t\tType:            gestalt.HTTPSecuritySchemeTypeHMAC,\n\t\t\t\tSecret:          &gestalt.HTTPSecretRef{Env: \"REQUEST_SIGNING_SECRET\"},\n\t\t\t\tSignatureHeader: \"X-Request-Signature\",\n\t\t\t\tSignaturePrefix: \"v0=\",\n\t\t\t\tPayloadTemplate: \"v0:{header:X-Request-Timestamp}:{raw_body}\",\n\t\t\t\tTimestampHeader: \"X-Request-Timestamp\",\n\t\t\t\tMaxAgeSeconds:   300,\n\t\t\t},\n\t\t},\n\t\tHTTP: map[string]gestalt.HTTPBinding{\n\t\t\t\"command\": {\n\t\t\t\tPath:     \"/command\",\n\t\t\t\tMethod:   http.MethodPost,\n\t\t\t\tSecurity: \"signed\",\n\t\t\t\tTarget:   \"echo\",\n\t\t\t\tRequestBody: &gestalt.HTTPRequestBody{\n\t\t\t\t\tRequired: true,\n\t\t\t\t\tContent: map[string]gestalt.HTTPMediaType{\n\t\t\t\t\t\t\"application/x-www-form-urlencoded\": {},\n\t\t\t\t\t},\n\t\t\t\t},\n\t\t\t\tAck: &gestalt.HTTPAck{\n\t\t\t\t\tStatus: 200,\n\t\t\t\t\tBody: map[string]any{\n\t\t\t\t\t\t\"status\": \"accepted\",\n\t\t\t\t\t},\n\t\t\t\t},\n\t\t\t},\n\t\t},\n\t})\n)"
 	updated := strings.Replace(string(data), old, new, 1)
 	if updated == string(data) {
 		t.Fatalf("provider fixture %s missing router terminator %q", providerPath, old)

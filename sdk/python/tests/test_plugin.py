@@ -238,16 +238,21 @@ class PluginCatalogTests(unittest.TestCase):
         plugin = Plugin(
             "test-plugin",
             securitySchemes={
-                "slack": {
-                    "type": "slack_signature",
-                    "secret": {"env": "SLACK_SIGNING_SECRET"},
+                "signed": {
+                    "type": "hmac",
+                    "secret": {"env": "REQUEST_SIGNING_SECRET"},
+                    "signatureHeader": "X-Request-Signature",
+                    "signaturePrefix": "v0=",
+                    "payloadTemplate": "v0:{header:X-Request-Timestamp}:{raw_body}",
+                    "timestampHeader": "X-Request-Timestamp",
+                    "maxAgeSeconds": 300,
                 }
             },
             http={
                 "command": {
                     "path": "/command",
                     "method": "POST",
-                    "security": "slack",
+                    "security": "signed",
                     "target": "handle_command",
                     "requestBody": {
                         "required": True,
@@ -258,8 +263,7 @@ class PluginCatalogTests(unittest.TestCase):
                     "ack": {
                         "status": 200,
                         "body": {
-                            "response_type": "ephemeral",
-                            "text": "Working on it...",
+                            "status": "accepted",
                         },
                     },
                 }
@@ -268,22 +272,22 @@ class PluginCatalogTests(unittest.TestCase):
 
         self.assertTrue(plugin.supports_manifest_metadata())
         self.assertEqual(
-            plugin.securitySchemes["slack"]["secret"]["env"],
-            "SLACK_SIGNING_SECRET",
+            plugin.securitySchemes["signed"]["secret"]["env"],
+            "REQUEST_SIGNING_SECRET",
         )
         self.assertEqual(plugin.http["command"]["path"], "/command")
 
         metadata = plugin.static_manifest_metadata()
         self.assertEqual(
-            metadata["securitySchemes"]["slack"]["type"],
-            "slack_signature",
+            metadata["securitySchemes"]["signed"]["type"],
+            "hmac",
         )
         self.assertEqual(metadata["http"]["command"]["target"], "handle_command")
 
-        metadata["securitySchemes"]["slack"]["type"] = "none"
+        metadata["securitySchemes"]["signed"]["type"] = "none"
         self.assertEqual(
-            plugin.static_manifest_metadata()["securitySchemes"]["slack"]["type"],
-            "slack_signature",
+            plugin.static_manifest_metadata()["securitySchemes"]["signed"]["type"],
+            "hmac",
         )
 
 

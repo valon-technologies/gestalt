@@ -424,6 +424,21 @@ function cloneHTTPSecurityScheme(value: HTTPSecurityScheme): HTTPSecurityScheme 
   if (value.description !== undefined) {
     output.description = value.description;
   }
+  if (value.signatureHeader !== undefined) {
+    output.signatureHeader = value.signatureHeader;
+  }
+  if (value.signaturePrefix !== undefined) {
+    output.signaturePrefix = value.signaturePrefix;
+  }
+  if (value.payloadTemplate !== undefined) {
+    output.payloadTemplate = value.payloadTemplate;
+  }
+  if (value.timestampHeader !== undefined) {
+    output.timestampHeader = value.timestampHeader;
+  }
+  if (value.maxAgeSeconds !== undefined) {
+    output.maxAgeSeconds = value.maxAgeSeconds;
+  }
   if (value.name !== undefined) {
     output.name = value.name;
   }

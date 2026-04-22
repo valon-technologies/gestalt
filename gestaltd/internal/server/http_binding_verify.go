@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/internal/httpbinding"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -52,8 +53,8 @@ func (s *Server) verifyHTTPBindingRequest(r *http.Request, binding MountedHTTPBi
 		return nil, newHTTPBindingRequestError(http.StatusInternalServerError, "http binding security is not configured", nil)
 	}
 	switch binding.Security.Type {
-	case providermanifestv1.HTTPSecuritySchemeTypeSlackSignature:
-		return s.verifySlackSignatureRequest(r, binding, rawBody)
+	case providermanifestv1.HTTPSecuritySchemeTypeHMAC:
+		return s.verifyHTTPBindingHMACRequest(r, binding, rawBody)
 	case providermanifestv1.HTTPSecuritySchemeTypeAPIKey:
 		return verifyHTTPBindingAPIKey(r, binding)
 	case providermanifestv1.HTTPSecuritySchemeTypeHTTP:
@@ -71,40 +72,47 @@ func (s *Server) verifyHTTPBindingRequest(r *http.Request, binding MountedHTTPBi
 	}
 }
 
-func (s *Server) verifySlackSignatureRequest(r *http.Request, binding MountedHTTPBinding, rawBody []byte) (*verifiedHTTPBindingSender, error) {
+func (s *Server) verifyHTTPBindingHMACRequest(r *http.Request, binding MountedHTTPBinding, rawBody []byte) (*verifiedHTTPBindingSender, error) {
 	secret, err := resolveHTTPBindingSecret(binding.Security.Secret)
 	if err != nil {
 		return nil, newHTTPBindingRequestError(http.StatusInternalServerError, "http binding secret is not configured", err)
 	}
-	timestamp := strings.TrimSpace(r.Header.Get("X-Slack-Request-Timestamp"))
-	if timestamp == "" {
-		return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "missing Slack request timestamp", nil)
-	}
-	requestTime, err := parseUnixTimestamp(timestamp)
-	if err != nil {
-		return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "invalid Slack request timestamp", err)
-	}
-	now := time.Now()
-	if s != nil && s.now != nil {
-		now = s.now()
-	}
-	if delta := now.Sub(requestTime); delta > 5*time.Minute || delta < -5*time.Minute {
-		return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "stale Slack request timestamp", nil)
-	}
-	signature := strings.TrimSpace(r.Header.Get("X-Slack-Signature"))
+	signature := strings.TrimSpace(r.Header.Get(strings.TrimSpace(binding.Security.SignatureHeader)))
 	if signature == "" {
-		return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "missing Slack signature", nil)
+		return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "missing request signature", nil)
+	}
+	if strings.TrimSpace(binding.Security.TimestampHeader) != "" {
+		timestamp := strings.TrimSpace(r.Header.Get(strings.TrimSpace(binding.Security.TimestampHeader)))
+		if timestamp == "" {
+			return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "missing request timestamp", nil)
+		}
+		requestTime, err := parseUnixTimestamp(timestamp)
+		if err != nil {
+			return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "invalid request timestamp", err)
+		}
+		now := time.Now()
+		if s != nil && s.now != nil {
+			now = s.now()
+		}
+		maxAge := time.Duration(binding.Security.MaxAgeSeconds) * time.Second
+		if delta := now.Sub(requestTime); delta > maxAge || delta < -maxAge {
+			return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "stale request timestamp", nil)
+		}
+	}
+	payload, err := httpbinding.RenderPayloadTemplate(binding.Security.PayloadTemplate, r.Header, rawBody)
+	if err != nil {
+		return nil, newHTTPBindingRequestError(http.StatusInternalServerError, "invalid http binding payload template", err)
 	}
 	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte("v0:" + timestamp + ":" + string(rawBody)))
-	expected := "v0=" + fmt.Sprintf("%x", mac.Sum(nil))
+	_, _ = mac.Write([]byte(payload))
+	expected := strings.TrimSpace(binding.Security.SignaturePrefix) + fmt.Sprintf("%x", mac.Sum(nil))
 	if subtle.ConstantTimeCompare([]byte(expected), []byte(signature)) != 1 {
-		return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "invalid Slack signature", nil)
+		return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "invalid request signature", nil)
 	}
-	if binding.Ack != nil {
+	if binding.Ack != nil && strings.TrimSpace(binding.Security.TimestampHeader) != "" && binding.Security.MaxAgeSeconds > 0 {
 		replayKey := binding.PluginName + "\x00" + binding.Name + "\x00" + binding.SecurityName + "\x00sig:" + signature
-		if !s.httpBindingReplayStore.MarkIfNew(replayKey, 5*time.Minute) {
-			return nil, newHTTPBindingRequestError(http.StatusOK, "duplicate Slack delivery", nil)
+		if !s.httpBindingReplayStore.MarkIfNew(replayKey, time.Duration(binding.Security.MaxAgeSeconds)*time.Second) {
+			return nil, newHTTPBindingRequestError(http.StatusOK, "duplicate signed delivery", nil)
 		}
 	}
 	return &verifiedHTTPBindingSender{
