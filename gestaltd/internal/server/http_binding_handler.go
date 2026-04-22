@@ -52,6 +52,17 @@ func (s *Server) handleHTTPBinding(binding MountedHTTPBinding, w http.ResponseWr
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if suppressDuplicateHTTPBindingReplay(s, verified) {
+		if binding.Ack != nil {
+			if err := writeHTTPBindingAck(w, binding.Ack); err != nil {
+				slog.ErrorContext(r.Context(), "write http binding ack", "plugin", binding.PluginName, "binding", binding.Name, "error", err)
+				writeError(w, http.StatusInternalServerError, "failed to write http binding response")
+			}
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
+		return
+	}
 
 	if binding.Ack != nil {
 		if err := writeHTTPBindingAck(w, binding.Ack); err != nil {
@@ -116,4 +127,11 @@ func writeHTTPBindingAck(w http.ResponseWriter, ack *providermanifestv1.HTTPAck)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	return json.NewEncoder(w).Encode(ack.Body)
+}
+
+func suppressDuplicateHTTPBindingReplay(s *Server, verified *verifiedHTTPBindingSender) bool {
+	if s == nil || verified == nil || verified.ReplayKey == "" {
+		return false
+	}
+	return !s.httpBindingReplayStore.MarkIfNew(verified.ReplayKey, verified.ReplayTTL)
 }

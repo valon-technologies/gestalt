@@ -62,7 +62,11 @@ func parseHTTPBindingRequest(r *http.Request, binding MountedHTTPBinding, rawBod
 		if err != nil {
 			return nil, fmt.Errorf("invalid form body")
 		}
-		for key, value := range firstValueMap(values) {
+		formParams, err := decodedHTTPBindingFormParams(binding, values)
+		if err != nil {
+			return nil, err
+		}
+		for key, value := range formParams {
 			params[key] = value
 		}
 	default:
@@ -87,6 +91,30 @@ func httpBindingQueryParams(r *http.Request, binding MountedHTTPBinding) map[str
 		excludeKey = strings.TrimSpace(binding.Security.Name)
 	}
 	return firstValueMapExcept(r.URL.Query(), excludeKey)
+}
+
+func decodedHTTPBindingFormParams(binding MountedHTTPBinding, values url.Values) (map[string]any, error) {
+	params := firstValueMap(values)
+	if binding.Security == nil || binding.Security.Type != providermanifestv1.HTTPSecuritySchemeTypeSlackSignature {
+		return params, nil
+	}
+	payloadValue, found := params["payload"]
+	if !found {
+		return params, nil
+	}
+	payload, ok := payloadValue.(string)
+	if !ok || strings.TrimSpace(payload) == "" {
+		return nil, fmt.Errorf("invalid Slack payload form field")
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(payload), &decoded); err != nil {
+		return nil, fmt.Errorf("invalid Slack payload form field")
+	}
+	if len(decoded) == 0 {
+		return nil, fmt.Errorf("invalid Slack payload form field")
+	}
+	params["payload"] = decoded
+	return params, nil
 }
 
 func resolveHTTPBindingRequestContentType(requestBody *providermanifestv1.HTTPRequestBody, contentType string) (*providermanifestv1.HTTPMediaType, string, error) {

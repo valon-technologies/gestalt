@@ -15,9 +15,11 @@ import (
 )
 
 type verifiedHTTPBindingSender struct {
-	Scheme  string
-	Subject string
-	Claims  map[string]string
+	Scheme    string
+	Subject   string
+	Claims    map[string]string
+	ReplayKey string
+	ReplayTTL time.Duration
 }
 
 type httpBindingRequestError struct {
@@ -101,15 +103,15 @@ func (s *Server) verifySlackSignatureRequest(r *http.Request, binding MountedHTT
 	if subtle.ConstantTimeCompare([]byte(expected), []byte(signature)) != 1 {
 		return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "invalid Slack signature", nil)
 	}
+	var replayKey string
 	if binding.Ack != nil {
-		replayKey := binding.PluginName + "\x00" + binding.Name + "\x00" + binding.SecurityName + "\x00sig:" + signature
-		if !s.httpBindingReplayStore.MarkIfNew(replayKey, 5*time.Minute) {
-			return nil, newHTTPBindingRequestError(http.StatusOK, "duplicate Slack delivery", nil)
-		}
+		replayKey = binding.PluginName + "\x00" + binding.Name + "\x00" + binding.SecurityName + "\x00sig:" + signature
 	}
 	return &verifiedHTTPBindingSender{
-		Scheme:  binding.SecurityName,
-		Subject: binding.PluginName + "/" + binding.Name + "#" + binding.SecurityName,
+		Scheme:    binding.SecurityName,
+		Subject:   binding.PluginName + "/" + binding.Name + "#" + binding.SecurityName,
+		ReplayKey: replayKey,
+		ReplayTTL: 5 * time.Minute,
 		Claims: map[string]string{
 			"scheme": binding.SecurityName,
 		},

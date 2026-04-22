@@ -11768,6 +11768,321 @@ func TestHostedHTTPBinding_SlackSignatureAckDispatchesOperationAndRejectsReplay(
 	}
 }
 
+func TestHostedHTTPBinding_SlackSignatureSyncDecodesInteractivePayload(t *testing.T) {
+	t.Setenv("SLACK_SIGNING_SECRET", "super-secret")
+
+	invocations := make(chan map[string]any, 1)
+	provider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
+				if op != "handle_interaction" {
+					t.Fatalf("operation = %q, want %q", op, "handle_interaction")
+				}
+				invocations <- cloneAnyMapForTest(params)
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "handle_interaction", Method: http.MethodPost}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"slack": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"slack": {
+						Type:   providermanifestv1.HTTPSecuritySchemeTypeSlackSignature,
+						Secret: &providermanifestv1.HTTPSecretRef{Env: "SLACK_SIGNING_SECRET"},
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"interaction": {
+						Path:   "/interaction",
+						Method: http.MethodPost,
+						RequestBody: &providermanifestv1.HTTPRequestBody{
+							Required: true,
+							Content: map[string]*providermanifestv1.HTTPMediaType{
+								"application/x-www-form-urlencoded": {},
+							},
+						},
+						Security: "slack",
+						Target:   "handle_interaction",
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	payloadJSON, err := json.Marshal(map[string]any{
+		"type":         "block_actions",
+		"trigger_id":   "1337.abc",
+		"response_url": "https://hooks.example.test/response",
+		"actions": []map[string]any{{
+			"action_id": "approve",
+			"value":     "42",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Marshal(payload): %v", err)
+	}
+	body := url.Values{"payload": {string(payloadJSON)}}.Encode()
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+body)
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/slack/interaction?source=query", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Slack-Request-Timestamp", timestamp)
+	req.Header.Set("X-Slack-Signature", signature)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("interactive slack request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if got, want := result["ok"], true; got != want {
+		t.Fatalf("result[ok] = %#v, want %#v", got, want)
+	}
+
+	select {
+	case params := <-invocations:
+		if got, want := params["source"], "query"; got != want {
+			t.Fatalf("params[source] = %#v, want %q", got, want)
+		}
+		payload, ok := params["payload"].(map[string]any)
+		if !ok {
+			t.Fatalf("params[payload] = %#v, want object", params["payload"])
+		}
+		if got, want := payload["type"], "block_actions"; got != want {
+			t.Fatalf("payload[type] = %#v, want %q", got, want)
+		}
+		if got, want := payload["trigger_id"], "1337.abc"; got != want {
+			t.Fatalf("payload[trigger_id] = %#v, want %q", got, want)
+		}
+		if got, want := payload["response_url"], "https://hooks.example.test/response"; got != want {
+			t.Fatalf("payload[response_url] = %#v, want %q", got, want)
+		}
+		actions, ok := payload["actions"].([]any)
+		if !ok || len(actions) != 1 {
+			t.Fatalf("payload[actions] = %#v, want single-item array", payload["actions"])
+		}
+		action, ok := actions[0].(map[string]any)
+		if !ok {
+			t.Fatalf("payload action = %#v, want object", actions[0])
+		}
+		if got, want := action["action_id"], "approve"; got != want {
+			t.Fatalf("action[action_id] = %#v, want %q", got, want)
+		}
+		if got, want := action["value"], "42"; got != want {
+			t.Fatalf("action[value] = %#v, want %q", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for interactive hosted http binding invocation")
+	}
+}
+
+func TestHostedHTTPBinding_SlackSignatureRejectsInvalidInteractivePayload(t *testing.T) {
+	t.Setenv("SLACK_SIGNING_SECRET", "super-secret")
+
+	invocations := make(chan map[string]any, 1)
+	provider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
+				invocations <- cloneAnyMapForTest(params)
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "handle_interaction", Method: http.MethodPost}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"slack": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"slack": {
+						Type:   providermanifestv1.HTTPSecuritySchemeTypeSlackSignature,
+						Secret: &providermanifestv1.HTTPSecretRef{Env: "SLACK_SIGNING_SECRET"},
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"interaction": {
+						Path:   "/interaction",
+						Method: http.MethodPost,
+						RequestBody: &providermanifestv1.HTTPRequestBody{
+							Required: true,
+							Content: map[string]*providermanifestv1.HTTPMediaType{
+								"application/x-www-form-urlencoded": {},
+							},
+						},
+						Security: "slack",
+						Target:   "handle_interaction",
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	for _, tc := range []struct {
+		name    string
+		payload string
+	}{
+		{name: "malformed", payload: `{"type":"block_actions"`},
+		{name: "empty", payload: ""},
+		{name: "empty_object", payload: `{}`},
+		{name: "string", payload: `"hello"`},
+		{name: "array", payload: `[]`},
+		{name: "null", payload: `null`},
+	} {
+		body := url.Values{"payload": {tc.payload}}.Encode()
+		timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+		signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+body)
+
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/slack/interaction", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("%s NewRequest: %v", tc.name, err)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("X-Slack-Request-Timestamp", timestamp)
+		req.Header.Set("X-Slack-Signature", signature)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s invalid interactive slack request: %v", tc.name, err)
+		}
+		if resp.StatusCode != http.StatusBadRequest {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			t.Fatalf("%s status = %d, want %d: %s", tc.name, resp.StatusCode, http.StatusBadRequest, bodyBytes)
+		}
+		var result map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			_ = resp.Body.Close()
+			t.Fatalf("%s decode error response: %v", tc.name, err)
+		}
+		_ = resp.Body.Close()
+		if got, want := result["error"], "invalid Slack payload form field"; got != want {
+			t.Fatalf("%s result[error] = %#v, want %q", tc.name, got, want)
+		}
+
+		select {
+		case params := <-invocations:
+			t.Fatalf("%s unexpected invocation for invalid payload: %#v", tc.name, params)
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+}
+
+func TestHostedHTTPBinding_SlackSignatureAckInvalidInteractivePayloadDoesNotRecordReplay(t *testing.T) {
+	t.Setenv("SLACK_SIGNING_SECRET", "super-secret")
+
+	invocations := make(chan map[string]any, 1)
+	provider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
+				invocations <- cloneAnyMapForTest(params)
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "handle_interaction", Method: http.MethodPost}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"slack": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"slack": {
+						Type:   providermanifestv1.HTTPSecuritySchemeTypeSlackSignature,
+						Secret: &providermanifestv1.HTTPSecretRef{Env: "SLACK_SIGNING_SECRET"},
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"interaction": {
+						Path:   "/interaction",
+						Method: http.MethodPost,
+						RequestBody: &providermanifestv1.HTTPRequestBody{
+							Required: true,
+							Content: map[string]*providermanifestv1.HTTPMediaType{
+								"application/x-www-form-urlencoded": {},
+							},
+						},
+						Security: "slack",
+						Target:   "handle_interaction",
+						Ack: &providermanifestv1.HTTPAck{
+							Body: map[string]any{
+								"response_type": "ephemeral",
+								"text":          "Working on it...",
+							},
+						},
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := url.Values{"payload": {`{"type":"block_actions"`}}.Encode()
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+body)
+
+	makeRequest := func() *http.Request {
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/slack/interaction", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("X-Slack-Request-Timestamp", timestamp)
+		req.Header.Set("X-Slack-Signature", signature)
+		return req
+	}
+
+	for i := 0; i < 2; i++ {
+		resp, err := http.DefaultClient.Do(makeRequest())
+		if err != nil {
+			t.Fatalf("ack invalid interactive request %d: %v", i, err)
+		}
+		var result map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			_ = resp.Body.Close()
+			t.Fatalf("decode error response %d: %v", i, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("status %d = %d, want %d", i, resp.StatusCode, http.StatusBadRequest)
+		}
+		if got, want := result["error"], "invalid Slack payload form field"; got != want {
+			t.Fatalf("result[%d][error] = %#v, want %q", i, got, want)
+		}
+	}
+
+	select {
+	case params := <-invocations:
+		t.Fatalf("unexpected invocation for invalid ack payload: %#v", params)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
 func TestHostedHTTPBinding_MergesManifestAndConfigOverrides(t *testing.T) {
 	t.Setenv("SLACK_SIGNING_SECRET", "super-secret")
 
