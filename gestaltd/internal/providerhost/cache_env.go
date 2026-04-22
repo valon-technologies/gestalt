@@ -3,6 +3,7 @@ package providerhost
 import "strings"
 
 const DefaultCacheSocketEnv = "GESTALT_CACHE_SOCKET"
+const defaultCacheTokenEnvSuffix = "_TOKEN"
 
 func CacheSocketEnv(name string) string {
 	name = strings.TrimSpace(name)
@@ -23,4 +24,8 @@ func CacheSocketEnv(name string) string {
 		}
 	}
 	return b.String()
+}
+
+func CacheSocketTokenEnv(name string) string {
+	return CacheSocketEnv(name) + defaultCacheTokenEnvSuffix
 }

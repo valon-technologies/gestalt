@@ -39,7 +39,7 @@ pub use auth::{
 };
 pub use cache::{
     Cache, CacheEntry, CacheError, CacheProvider, CacheSetOptions, ENV_CACHE_SOCKET,
-    cache_socket_env,
+    ENV_CACHE_SOCKET_TOKEN, cache_socket_env, cache_socket_token_env,
 };
 pub use catalog::{Catalog, CatalogOperation};
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET, ENV_WRITE_MANIFEST_METADATA};

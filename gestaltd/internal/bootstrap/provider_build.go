@@ -955,7 +955,7 @@ func pluginRuntimeRequirementsForPlugin(name string, entry *config.ProviderEntry
 		return pluginRuntimeCapabilityRequirements{}, nil
 	}
 	return pluginRuntimeCapabilityRequirements{
-		HostServiceTunnels:  len(entry.Cache) > 0 || len(entry.S3) > 0 || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders()),
+		HostServiceTunnels:  len(entry.S3) > 0 || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders()),
 		HostnameProxyEgress: len(entry.AllowedHosts) > 0 || deps.Egress.DefaultAction == egress.PolicyDeny,
 	}, nil
 }
@@ -1100,6 +1100,14 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		hostServices = append(hostServices, services...)
 		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
+	if len(entry.Cache) > 0 {
+		services, cacheCleanup, err := buildPluginCacheHostServices(name, entry, deps)
+		if err != nil {
+			return fail(err)
+		}
+		hostServices = append(hostServices, services...)
+		cleanup = chainCleanup(cleanup, cacheCleanup)
+	}
 	needInvocationTokens := includeHostServices || len(entry.Invokes) > 0
 	if needInvocationTokens {
 		invTokens, err = providerhost.NewInvocationTokenManager(deps.EncryptionKey)
@@ -1112,14 +1120,6 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 			hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
 		}
 		return hostServices, invTokens, cleanup, nil
-	}
-	if len(entry.Cache) > 0 {
-		services, cacheCleanup, err := buildPluginCacheHostServices(name, entry, deps)
-		if err != nil {
-			return fail(err)
-		}
-		hostServices = append(hostServices, services...)
-		cleanup = chainCleanup(cleanup, cacheCleanup)
 	}
 	if len(entry.S3) > 0 {
 		services, err := buildPluginS3HostServices(name, entry, deps)
@@ -1147,6 +1147,10 @@ func buildPluginRuntimeHostServiceBinding(pluginName, sessionID string, hostServ
 			serviceKey = "indexeddb"
 			serviceLabel = "IndexedDB"
 			methodPrefix = "/" + proto.IndexedDB_ServiceDesc.ServiceName + "/"
+		case isCacheHostServiceEnv(hostService.EnvVar):
+			serviceKey = "cache"
+			serviceLabel = "cache"
+			methodPrefix = "/" + proto.Cache_ServiceDesc.ServiceName + "/"
 		case hostService.EnvVar == providerhost.DefaultPluginInvokerSocketEnv:
 			serviceKey = "plugin_invoker"
 			serviceLabel = "plugin invoker"
@@ -1235,6 +1239,11 @@ func pluginRuntimePublicRelayTarget(baseURL string) (string, string, error) {
 func isIndexedDBHostServiceEnv(envVar string) bool {
 	envVar = strings.TrimSpace(envVar)
 	return envVar == providerhost.DefaultIndexedDBSocketEnv || strings.HasPrefix(envVar, providerhost.DefaultIndexedDBSocketEnv+"_")
+}
+
+func isCacheHostServiceEnv(envVar string) bool {
+	envVar = strings.TrimSpace(envVar)
+	return envVar == providerhost.DefaultCacheSocketEnv || strings.HasPrefix(envVar, providerhost.DefaultCacheSocketEnv+"_")
 }
 
 func appendAllowedHost(allowedHosts []string, host string) []string {

@@ -3,7 +3,11 @@ use std::time::Duration;
 
 use hyper_util::rt::TokioIo;
 use tokio::net::UnixStream;
+use tonic::Request;
 use tonic::codegen::async_trait;
+use tonic::metadata::MetadataValue;
+use tonic::service::Interceptor;
+use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
 
@@ -11,8 +15,13 @@ use crate::api::RuntimeMetadata;
 use crate::error::Result;
 use crate::generated::v1::{self as pb, cache_client::CacheClient};
 
+type CacheTransport = InterceptedService<Channel, RelayTokenInterceptor>;
+
 /// Default Unix-socket environment variable used by [`Cache::connect`].
 pub const ENV_CACHE_SOCKET: &str = "GESTALT_CACHE_SOCKET";
+pub const ENV_CACHE_SOCKET_TOKEN: &str = "GESTALT_CACHE_SOCKET_TOKEN";
+pub const ENV_CACHE_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
+const CACHE_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// One cache entry written through [`Cache::set_many`].
@@ -122,7 +131,7 @@ pub trait CacheProvider: Send + Sync + 'static {
 
 /// Client for a running cache provider.
 pub struct Cache {
-    client: CacheClient<Channel>,
+    client: CacheClient<CacheTransport>,
 }
 
 impl Cache {
@@ -134,18 +143,37 @@ impl Cache {
     /// Connects to a named cache transport socket.
     pub async fn connect_named(name: &str) -> std::result::Result<Self, CacheError> {
         let env_name = cache_socket_env(name);
-        let socket_path = std::env::var(&env_name)
+        let target = std::env::var(&env_name)
             .map_err(|_| CacheError::Env(format!("{env_name} is not set")))?;
+        let relay_token =
+            std::env::var(cache_socket_token_env(name)).unwrap_or_else(|_| String::new());
 
-        let channel = Endpoint::try_from("http://[::]:50051")?
-            .connect_with_connector(service_fn(move |_: Uri| {
-                let path = socket_path.clone();
-                async move { UnixStream::connect(path).await.map(TokioIo::new) }
-            }))
-            .await?;
+        let channel = match parse_cache_target(&target)? {
+            CacheTarget::Unix(path) => {
+                Endpoint::try_from("http://[::]:50051")?
+                    .connect_with_connector(service_fn(move |_: Uri| {
+                        let path = path.clone();
+                        async move { UnixStream::connect(path).await.map(TokioIo::new) }
+                    }))
+                    .await?
+            }
+            CacheTarget::Tcp(address) => {
+                Endpoint::from_shared(format!("http://{address}"))?
+                    .connect()
+                    .await?
+            }
+            CacheTarget::Tls(address) => {
+                Endpoint::from_shared(format!("https://{address}"))?
+                    .connect()
+                    .await?
+            }
+        };
 
         Ok(Self {
-            client: CacheClient::new(channel),
+            client: CacheClient::with_interceptor(
+                channel,
+                relay_token_interceptor(relay_token.trim())?,
+            ),
         })
     }
 
@@ -286,6 +314,95 @@ pub fn cache_socket_env(name: &str) -> String {
         }
     }
     env
+}
+
+/// Returns the environment variable used for a named cache relay token.
+pub fn cache_socket_token_env(name: &str) -> String {
+    format!(
+        "{env}{}",
+        ENV_CACHE_SOCKET_TOKEN_SUFFIX,
+        env = cache_socket_env(name)
+    )
+}
+
+enum CacheTarget {
+    Unix(String),
+    Tcp(String),
+    Tls(String),
+}
+
+fn parse_cache_target(raw_target: &str) -> std::result::Result<CacheTarget, CacheError> {
+    let target = raw_target.trim();
+    if target.is_empty() {
+        return Err(CacheError::Env(
+            "cache: transport target is required".to_string(),
+        ));
+    }
+    if let Some(address) = target.strip_prefix("tcp://") {
+        let address = address.trim();
+        if address.is_empty() {
+            return Err(CacheError::Env(format!(
+                "cache: tcp target {raw_target:?} is missing host:port"
+            )));
+        }
+        return Ok(CacheTarget::Tcp(address.to_string()));
+    }
+    if let Some(address) = target.strip_prefix("tls://") {
+        let address = address.trim();
+        if address.is_empty() {
+            return Err(CacheError::Env(format!(
+                "cache: tls target {raw_target:?} is missing host:port"
+            )));
+        }
+        return Ok(CacheTarget::Tls(address.to_string()));
+    }
+    if let Some(path) = target.strip_prefix("unix://") {
+        let path = path.trim();
+        if path.is_empty() {
+            return Err(CacheError::Env(format!(
+                "cache: unix target {raw_target:?} is missing a socket path"
+            )));
+        }
+        return Ok(CacheTarget::Unix(path.to_string()));
+    }
+    if target.contains("://") {
+        let scheme = target.split("://").next().unwrap_or_default();
+        return Err(CacheError::Env(format!(
+            "cache: unsupported target scheme {scheme:?}"
+        )));
+    }
+    Ok(CacheTarget::Unix(target.to_string()))
+}
+
+fn relay_token_interceptor(token: &str) -> std::result::Result<RelayTokenInterceptor, CacheError> {
+    let header =
+        if token.trim().is_empty() {
+            None
+        } else {
+            Some(MetadataValue::try_from(token.to_string()).map_err(|err| {
+                CacheError::Env(format!("invalid cache relay token metadata: {err}"))
+            })?)
+        };
+    Ok(RelayTokenInterceptor { header })
+}
+
+#[derive(Clone)]
+struct RelayTokenInterceptor {
+    header: Option<MetadataValue<tonic::metadata::Ascii>>,
+}
+
+impl Interceptor for RelayTokenInterceptor {
+    fn call(
+        &mut self,
+        mut request: Request<()>,
+    ) -> std::result::Result<Request<()>, tonic::Status> {
+        if let Some(header) = self.header.clone() {
+            request
+                .metadata_mut()
+                .insert(CACHE_RELAY_TOKEN_HEADER, header);
+        }
+        Ok(request)
+    }
 }
 
 fn duration_to_proto(ttl: Option<Duration>) -> Option<prost_types::Duration> {

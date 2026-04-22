@@ -2,6 +2,7 @@ package gestalt_test
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -25,6 +26,64 @@ func TestTransportCacheNamedSocketEnv(t *testing.T) {
 	}
 	if !found || string(value) != "ok" {
 		t.Fatalf("Get = (%q, %v), want (%q, true)", value, found, "ok")
+	}
+}
+
+func TestTransportCacheTCPTargetEnv(t *testing.T) {
+	bin, target, cmd := buildAndStartTCPHarness("cachetransportd", "")
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		_ = os.Remove(bin)
+	})
+
+	t.Setenv(gestalt.EnvCacheSocket, target)
+	client, err := gestalt.Cache()
+	if err != nil {
+		t.Fatalf("connect tcp cache: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	ctx := context.Background()
+	if err := client.Set(ctx, "tcp", []byte("ok"), gestalt.CacheSetOptions{}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	value, found, err := client.Get(ctx, "tcp")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !found || string(value) != "ok" {
+		t.Fatalf("Get = (%q, %v), want (%q, true)", value, found, "ok")
+	}
+}
+
+func TestTransportCacheTCPTargetTokenEnv(t *testing.T) {
+	const token = "relay-token-go"
+	bin, target, cmd := buildAndStartTCPHarness("cachetransportd", token)
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		_ = os.Remove(bin)
+	})
+
+	t.Setenv(gestalt.EnvCacheSocket, target)
+	t.Setenv(gestalt.CacheSocketTokenEnv(""), token)
+	client, err := gestalt.Cache()
+	if err != nil {
+		t.Fatalf("connect tcp cache with token: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	ctx := context.Background()
+	if err := client.Set(ctx, "tcp-token", []byte("relay"), gestalt.CacheSetOptions{}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	value, found, err := client.Get(ctx, "tcp-token")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !found || string(value) != "relay" {
+		t.Fatalf("Get = (%q, %v), want (%q, true)", value, found, "relay")
 	}
 }
 
