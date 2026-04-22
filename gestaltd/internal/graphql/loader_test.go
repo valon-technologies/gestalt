@@ -184,6 +184,28 @@ func TestLoadDefinitionWithSelectionOverride(t *testing.T) {
 	}
 }
 
+func TestLoadDefinitionUsesIntrospectionTokenEnv(t *testing.T) {
+	t.Setenv(introspectionTokenEnv, "test-token")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+			t.Fatalf("Authorization header = %q, want %q", got, "Bearer test-token")
+		}
+		resp := map[string]any{
+			"data": map[string]any{
+				"__schema": newTestSchema(),
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	if _, err := LoadDefinition(t.Context(), "test", srv.URL, nil, nil); err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+}
+
 func TestLoadDefinitionEmptySchemaErrors(t *testing.T) {
 	t.Parallel()
 

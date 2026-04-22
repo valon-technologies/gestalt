@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
@@ -142,10 +144,13 @@ fragment TypeRef on __Type {
 
 var defaultClient = &http.Client{Timeout: 30 * time.Second}
 
+const introspectionTokenEnv = "GESTALT_GRAPHQL_INTROSPECTION_TOKEN"
+
 func introspect(ctx context.Context, endpoint string) (*Schema, error) {
 	result, err := apiexec.DoGraphQL(ctx, defaultClient, apiexec.GraphQLRequest{
 		URL:   endpoint,
 		Query: introspectionQuery,
+		Token: strings.TrimSpace(os.Getenv(introspectionTokenEnv)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("introspection query: %w", err)
