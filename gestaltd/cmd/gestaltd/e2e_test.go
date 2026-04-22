@@ -621,6 +621,96 @@ func setupPluginDirWithHostedHTTPBinding(t *testing.T, baseDir string) string {
 	return pluginDir
 }
 
+func setupPluginDirWithHTTPSubjectResolution(t *testing.T, baseDir string) string {
+	t.Helper()
+
+	pluginDir := setupPluginDir(t, baseDir)
+	providerPath := filepath.Join(pluginDir, "provider.go")
+	source, err := os.ReadFile(providerPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", providerPath, err)
+	}
+
+	const routerReplacement = `	).WithManifestMetadata(gestalt.ManifestMetadata{
+		SecuritySchemes: map[string]gestalt.HTTPSecurityScheme{
+			"public": {
+				Type: gestalt.HTTPSecuritySchemeTypeNone,
+			},
+		},
+		HTTP: map[string]gestalt.HTTPBinding{
+			"resolve_subject": {
+				Path:     "/resolve-subject",
+				Method:   http.MethodPost,
+				Security: "public",
+				Target:   "invoke_request_context",
+				RequestBody: &gestalt.HTTPRequestBody{
+					Required: true,
+					Content: map[string]gestalt.HTTPMediaType{
+						"application/x-www-form-urlencoded": {},
+					},
+				},
+			},
+		},
+	})
+)`
+	updated := strings.Replace(string(source), "\t)\n)", routerReplacement, 1)
+	if updated == string(source) {
+		t.Fatalf("failed to inject hosted HTTP subject metadata into %s", providerPath)
+	}
+
+	const resolverMethod = `
+func (p *Provider) ResolveHTTPSubject(ctx context.Context, req gestalt.HTTPSubjectRequest) (*gestalt.Subject, error) {
+	if req.Binding != "resolve_subject" {
+		return nil, nil
+	}
+
+	teamID, _ := req.Params["team_id"].(string)
+	userID, _ := req.Params["user_id"].(string)
+	if teamID == "" || userID == "" {
+		return nil, gestalt.Error(http.StatusBadRequest, "missing slack subject fields")
+	}
+
+	authz, err := gestalt.Authorization()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = authz.Close() }()
+
+	resp, err := authz.SearchSubjects(ctx, &gestalt.SubjectSearchRequest{
+		SubjectType: "user",
+		Resource: &gestalt.AuthorizationResource{
+			Type: "slack_identity",
+			Id:   fmt.Sprintf("team:%s:user:%s", teamID, userID),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(resp.GetSubjects()) == 0 {
+		return nil, gestalt.Error(http.StatusForbidden, "unmapped slack subject")
+	}
+
+	subject := resp.GetSubjects()[0]
+	return &gestalt.Subject{
+		ID:   subject.GetId(),
+		Kind: subject.GetType(),
+	}, nil
+}
+
+`
+	withResolver := strings.Replace(updated, "func (p *Provider) greet(", resolverMethod+"func (p *Provider) greet(", 1)
+	if withResolver == updated {
+		t.Fatalf("failed to inject ResolveHTTPSubject into %s", providerPath)
+	}
+	updated = withResolver
+
+	if err := os.WriteFile(providerPath, []byte(updated), 0o644); err != nil {
+		t.Fatalf("write %s: %v", providerPath, err)
+	}
+
+	return pluginDir
+}
+
 func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 	t.Helper()
 
@@ -661,6 +751,38 @@ func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 		Source:      "github.com/test/providers/auth/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Test Auth " + name,
+		Spec:        &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{
+			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
+	})
+	return providerDir
+}
+
+func setupAuthorizationProviderDir(t *testing.T, baseDir, name string) string {
+	t.Helper()
+
+	providerDir := filepath.Join(baseDir, "authorization", name)
+	if err := os.MkdirAll(providerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
+	}
+	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/authorization/"+name)), 0o644)
+	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
+	writeTestFile(t, providerDir, "authorization.go", []byte(httpSubjectAuthorizationProviderSource(name)), 0o644)
+	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "authorization-provider"))
+	artifactPath := filepath.Join(providerDir, filepath.FromSlash(artifactRel))
+	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactPath), err)
+	}
+	if _, err := providerpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, providermanifestv1.KindAuthorization, runtime.GOOS, runtime.GOARCH); err != nil {
+		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
+	}
+	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindAuthorization,
+		Source:      "github.com/test/providers/authorization/" + name,
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Test Authorization " + name,
 		Spec:        &providermanifestv1.Spec{},
 		Artifacts: []providermanifestv1.Artifact{
 			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
@@ -711,6 +833,101 @@ func authProviderSource(name string) string {
 	source = strings.Replace(source, `Name:        "generated-auth"`, fmt.Sprintf(`Name:        %q`, name), 1)
 	source = strings.Replace(source, `DisplayName: "Generated Auth"`, fmt.Sprintf(`DisplayName: %q`, displayName), 1)
 	return source
+}
+
+func httpSubjectAuthorizationProviderSource(name string) string {
+	displayName := name
+	if name != "" {
+		displayName = strings.ToUpper(name[:1]) + name[1:]
+	}
+	return fmt.Sprintf(`package authorization
+
+import (
+	"context"
+
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+type Provider struct{}
+
+func New() *Provider { return &Provider{} }
+
+func (p *Provider) Configure(context.Context, string, map[string]any) error { return nil }
+
+func (p *Provider) Metadata() gestalt.ProviderMetadata {
+	return gestalt.ProviderMetadata{
+		Kind:        gestalt.ProviderKindAuthorization,
+		Name:        %q,
+		DisplayName: %q,
+	}
+}
+
+func (p *Provider) Evaluate(_ context.Context, _ *gestalt.AccessEvaluationRequest) (*gestalt.AccessDecision, error) {
+	return &gestalt.AccessDecision{Allowed: true, ModelId: "model-v1"}, nil
+}
+
+func (p *Provider) EvaluateMany(_ context.Context, req *gestalt.AccessEvaluationsRequest) (*gestalt.AccessEvaluationsResponse, error) {
+	decisions := make([]*gestalt.AccessDecision, 0, len(req.GetRequests()))
+	for range req.GetRequests() {
+		decisions = append(decisions, &gestalt.AccessDecision{Allowed: true, ModelId: "model-v1"})
+	}
+	return &gestalt.AccessEvaluationsResponse{Decisions: decisions}, nil
+}
+
+func (p *Provider) SearchResources(_ context.Context, _ *gestalt.ResourceSearchRequest) (*gestalt.ResourceSearchResponse, error) {
+	return &gestalt.ResourceSearchResponse{ModelId: "model-v1"}, nil
+}
+
+func (p *Provider) SearchSubjects(_ context.Context, req *gestalt.SubjectSearchRequest) (*gestalt.SubjectSearchResponse, error) {
+	resource := req.GetResource()
+	if resource != nil && resource.GetType() == "slack_identity" && resource.GetId() == "team:T123:user:U456" {
+		return &gestalt.SubjectSearchResponse{
+			Subjects: []*gestalt.AuthorizationSubject{{
+				Type: "user",
+				Id:   "user:slack-user",
+			}},
+			ModelId: "model-v1",
+		}, nil
+	}
+	return &gestalt.SubjectSearchResponse{ModelId: "model-v1"}, nil
+}
+
+func (p *Provider) SearchActions(_ context.Context, _ *gestalt.ActionSearchRequest) (*gestalt.ActionSearchResponse, error) {
+	return &gestalt.ActionSearchResponse{
+		Actions: []*gestalt.AuthorizationAction{{Name: "invoke"}},
+		ModelId: "model-v1",
+	}, nil
+}
+
+func (p *Provider) GetMetadata(context.Context) (*gestalt.AuthorizationMetadata, error) {
+	return &gestalt.AuthorizationMetadata{
+		Capabilities:  []string{"evaluate", "relationships", "models"},
+		ActiveModelId: "model-v1",
+	}, nil
+}
+
+func (p *Provider) ReadRelationships(_ context.Context, _ *gestalt.ReadRelationshipsRequest) (*gestalt.ReadRelationshipsResponse, error) {
+	return &gestalt.ReadRelationshipsResponse{ModelId: "model-v1"}, nil
+}
+
+func (p *Provider) WriteRelationships(context.Context, *gestalt.WriteRelationshipsRequest) error { return nil }
+
+func (p *Provider) GetActiveModel(context.Context) (*gestalt.GetActiveModelResponse, error) {
+	return &gestalt.GetActiveModelResponse{
+		Model: &gestalt.AuthorizationModelRef{Id: "model-v1", Version: "v1"},
+	}, nil
+}
+
+func (p *Provider) ListModels(_ context.Context, _ *gestalt.ListModelsRequest) (*gestalt.ListModelsResponse, error) {
+	return &gestalt.ListModelsResponse{
+		Models: []*gestalt.AuthorizationModelRef{{Id: "model-v1", Version: "v1"}},
+	}, nil
+}
+
+func (p *Provider) WriteModel(context.Context, *gestalt.WriteModelRequest) (*gestalt.AuthorizationModelRef, error) {
+	return &gestalt.AuthorizationModelRef{Id: "model-v2", Version: "v2"}, nil
+}
+`, name, displayName)
 }
 
 func componentProviderManifestPath(t *testing.T, providerDir string) string {
@@ -1562,6 +1779,88 @@ func TestE2EServeMountsGeneratedHostedHTTPBindingsForLocalSourcePlugin(t *testin
 	}
 	if got, want := result["echo"], "hello"; got != want {
 		t.Fatalf("response echo = %#v, want %q", got, want)
+	}
+}
+
+func TestE2EHostedHTTPSubjectResolutionUsesAuthorizationAndInheritedInvocation(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping hosted HTTP subject resolution serve test in short mode")
+	}
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDirWithHTTPSubjectResolution(t, dir)
+	authorizationManifest := componentProviderManifestPath(t, setupAuthorizationProviderDir(t, dir, "local"))
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	pluginManifest := componentProviderManifestPath(t, pluginDir)
+
+	port, holder := reservePort(t)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	cfgPath := filepath.Join(dir, "config-subject-resolution.yaml")
+	cfg := fmt.Sprintf(`server:
+  public:
+    port: %d
+  encryptionKey: test-http-subject-resolution-key
+  providers:
+    indexeddb: sqlite
+    authorization: local
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: %s
+      config:
+        dsn: %q
+  authorization:
+    local:
+      source:
+        path: %s
+plugins:
+  example:
+    source:
+      path: %s
+    invokes:
+      - plugin: example
+        operation: request_context
+`, port, indexedDBManifest, "sqlite://"+filepath.Join(dir, "gestalt.db"), authorizationManifest, pluginManifest)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	_ = holder.Close()
+
+	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
+	startCommandAndWaitReady(t, cmd, baseURL)
+
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/example/resolve-subject", strings.NewReader("team_id=T123&user_id=U456"))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
+	if err != nil {
+		t.Fatalf("POST /api/v1/example/resolve-subject: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /api/v1/example/resolve-subject 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("decode subject resolution response: %v (body: %s)", err, body)
+	}
+	subject, _ := result["subject"].(map[string]any)
+	if got, want := subject["id"], "user:slack-user"; got != want {
+		t.Fatalf("response subject.id = %#v, want %q", got, want)
+	}
+	if got, want := subject["kind"], "user"; got != want {
+		t.Fatalf("response subject.kind = %#v, want %q", got, want)
+	}
+	if got, _ := result["invocation_token"].(string); got == "" {
+		t.Fatalf("response invocation_token = %q, want non-empty", got)
 	}
 }
 

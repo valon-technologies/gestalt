@@ -1128,6 +1128,9 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		}
 		hostServices = append(hostServices, services...)
 	}
+	if deps.AuthorizationProvider != nil && len(entry.EffectiveHTTPBindings()) > 0 {
+		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
+	}
 	hostServices = append(hostServices, buildPluginWorkflowManagerHostService(name, deps, invTokens))
 	if len(entry.Invokes) > 0 {
 		hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
@@ -1388,6 +1391,15 @@ func buildPluginWorkflowManagerHostService(pluginName string, deps Deps, tokens 
 		EnvVar: providerhost.DefaultWorkflowManagerSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterWorkflowManagerHostServer(srv, providerhost.NewWorkflowManagerServer(pluginName, manager, tokens))
+		},
+	}
+}
+
+func buildPluginAuthorizationHostService(provider core.AuthorizationProvider) providerhost.HostService {
+	return providerhost.HostService{
+		EnvVar: providerhost.DefaultAuthorizationSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterAuthorizationProviderServer(srv, providerhost.NewAuthorizationProviderServer(provider))
 		},
 	}
 }

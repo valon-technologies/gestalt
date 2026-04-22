@@ -56,12 +56,14 @@ func httpBindingContextValue(binding MountedHTTPBinding, verified *verifiedHTTPB
 	return map[string]any{"http": value}
 }
 
-func (s *Server) httpBindingOperationInvocation(ctx context.Context, binding MountedHTTPBinding, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest) (*core.OperationResult, error) {
+func (s *Server) httpBindingOperationInvocation(ctx context.Context, binding MountedHTTPBinding, p *principal.Principal, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest) (*core.OperationResult, error) {
 	params := map[string]any{}
 	if parsed != nil && parsed.Params != nil {
 		params = cloneAnyMap(parsed.Params)
 	}
-	p := s.httpBindingPrincipal(binding, verified)
+	if p == nil {
+		p = s.httpBindingPrincipal(binding, verified)
+	}
 	ctx = principal.WithPrincipal(ctx, p)
 	ctx = invocation.WithAccessContext(ctx, s.providerAccessContextWithContext(ctx, p, binding.PluginName))
 	ctx = invocation.WithWorkflowContext(ctx, httpBindingContextValue(binding, verified, parsed))
@@ -69,10 +71,10 @@ func (s *Server) httpBindingOperationInvocation(ctx context.Context, binding Mou
 	return s.invoker.Invoke(ctx, p, binding.PluginName, "", binding.Target, params)
 }
 
-func (s *Server) dispatchHTTPBindingAsync(binding MountedHTTPBinding, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest, requestMeta invocation.RequestMeta) {
+func (s *Server) dispatchHTTPBindingAsync(binding MountedHTTPBinding, p *principal.Principal, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest, requestMeta invocation.RequestMeta) {
 	go func() {
 		ctx := invocation.WithRequestMeta(context.Background(), requestMeta)
-		if _, err := s.httpBindingOperationInvocation(ctx, binding, verified, parsed); err != nil {
+		if _, err := s.httpBindingOperationInvocation(ctx, binding, p, verified, parsed); err != nil {
 			slog.Error("http binding async operation failed", "plugin", binding.PluginName, "binding", binding.Name, "operation", binding.Target, "error", err)
 		}
 	}()

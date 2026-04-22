@@ -113,6 +113,10 @@ type sessionCatalogStubProvider struct {
 	sessionCatalog *proto.Catalog
 }
 
+type panicHTTPSubjectProvider struct {
+	stubProvider
+}
+
 func (p *sessionCatalogStubProvider) CatalogForRequest(ctx context.Context, _ string) (*proto.Catalog, error) {
 	cat := protoutil.Clone(p.sessionCatalog).(*proto.Catalog)
 	if cat != nil {
@@ -122,6 +126,14 @@ func (p *sessionCatalogStubProvider) CatalogForRequest(ctx context.Context, _ st
 		cat.DisplayName = subject.ID + "|" + credential.Mode + "|" + access.Policy + "|" + access.Role
 	}
 	return cat, nil
+}
+
+func (p *panicHTTPSubjectProvider) testOp(ctx context.Context, input stubInput, req gestalt.Request) (gestalt.Response[stubOutput], error) {
+	return p.stubProvider.testOp(ctx, input, req)
+}
+
+func (p *panicHTTPSubjectProvider) ResolveHTTPSubject(_ context.Context, _ gestalt.HTTPSubjectRequest) (*gestalt.Subject, error) {
+	panic("boom")
 }
 
 func TestProviderServerGetMetadata(t *testing.T) {
@@ -345,6 +357,37 @@ func TestProviderServerExecute(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("internal http subject panic", func(t *testing.T) {
+		panicHTTPSubjectRouter := gestalt.MustRouter(
+			gestalt.Register(
+				gestalt.Operation[stubInput, stubOutput]{
+					ID:     "test_op",
+					Method: http.MethodPost,
+				},
+				(*panicHTTPSubjectProvider).testOp,
+			),
+		)
+		client := newIntegrationProviderClient(t, &panicHTTPSubjectProvider{}, panicHTTPSubjectRouter)
+		params, err := structpb.NewStruct(map[string]any{"binding": "command"})
+		if err != nil {
+			t.Fatalf("NewStruct: %v", err)
+		}
+
+		resp, err := client.Execute(context.Background(), &proto.ExecuteRequest{
+			Operation: proto.InternalResolveHTTPSubjectOperation,
+			Params:    params,
+		})
+		if err != nil {
+			t.Fatalf("Execute: %v", err)
+		}
+		if resp.GetStatus() != http.StatusInternalServerError {
+			t.Fatalf("Status = %d, want %d", resp.GetStatus(), http.StatusInternalServerError)
+		}
+		if resp.GetBody() != `{"error":"internal error"}` {
+			t.Fatalf("Body = %q, want %q", resp.GetBody(), `{"error":"internal error"}`)
+		}
+	})
 }
 
 func TestProviderServerStartProvider(t *testing.T) {

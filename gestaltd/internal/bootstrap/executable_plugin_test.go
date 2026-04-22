@@ -90,6 +90,54 @@ type nestedInvokeHarness struct {
 	services *coredata.Services
 }
 
+type hostedHTTPAuthorizationProvider struct{}
+
+func (p *hostedHTTPAuthorizationProvider) Name() string { return "authz" }
+
+func (p *hostedHTTPAuthorizationProvider) Evaluate(context.Context, *core.AccessEvaluationRequest) (*core.AccessDecision, error) {
+	return &core.AccessDecision{}, nil
+}
+
+func (p *hostedHTTPAuthorizationProvider) EvaluateMany(context.Context, *core.AccessEvaluationsRequest) (*core.AccessEvaluationsResponse, error) {
+	return &core.AccessEvaluationsResponse{}, nil
+}
+
+func (p *hostedHTTPAuthorizationProvider) SearchResources(context.Context, *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
+	return &core.ResourceSearchResponse{}, nil
+}
+
+func (p *hostedHTTPAuthorizationProvider) SearchSubjects(context.Context, *core.SubjectSearchRequest) (*core.SubjectSearchResponse, error) {
+	return &core.SubjectSearchResponse{}, nil
+}
+
+func (p *hostedHTTPAuthorizationProvider) SearchActions(context.Context, *core.ActionSearchRequest) (*core.ActionSearchResponse, error) {
+	return &core.ActionSearchResponse{}, nil
+}
+
+func (p *hostedHTTPAuthorizationProvider) GetMetadata(context.Context) (*core.AuthorizationMetadata, error) {
+	return &core.AuthorizationMetadata{}, nil
+}
+
+func (p *hostedHTTPAuthorizationProvider) ReadRelationships(context.Context, *core.ReadRelationshipsRequest) (*core.ReadRelationshipsResponse, error) {
+	return &core.ReadRelationshipsResponse{}, nil
+}
+
+func (p *hostedHTTPAuthorizationProvider) WriteRelationships(context.Context, *core.WriteRelationshipsRequest) error {
+	return nil
+}
+
+func (p *hostedHTTPAuthorizationProvider) GetActiveModel(context.Context) (*core.GetActiveModelResponse, error) {
+	return &core.GetActiveModelResponse{}, nil
+}
+
+func (p *hostedHTTPAuthorizationProvider) ListModels(context.Context, *core.ListModelsRequest) (*core.ListModelsResponse, error) {
+	return &core.ListModelsResponse{}, nil
+}
+
+func (p *hostedHTTPAuthorizationProvider) WriteModel(context.Context, *core.WriteModelRequest) (*core.AuthorizationModelRef, error) {
+	return &core.AuthorizationModelRef{}, nil
+}
+
 type capturingPluginRuntime struct {
 	provider *pluginruntime.LocalProvider
 
@@ -2620,6 +2668,77 @@ func TestPluginWorkflowManagerExposeHostSocketEnv(t *testing.T) {
 	}
 }
 
+func TestPluginHostedHTTPBindingsExposeAuthorizationSocketEnv(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echo",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Hosted HTTP subject resolution env")
+	manifest.Spec.SecuritySchemes = map[string]*providermanifestv1.HTTPSecurityScheme{
+		"public": {
+			Type: providermanifestv1.HTTPSecuritySchemeTypeNone,
+		},
+	}
+	manifest.Spec.HTTP = map[string]*providermanifestv1.HTTPBinding{
+		"command": {
+			Path:     "/command",
+			Method:   http.MethodPost,
+			Security: "public",
+			Target:   "read_env",
+			RequestBody: &providermanifestv1.HTTPRequestBody{
+				Content: map[string]*providermanifestv1.HTTPMediaType{
+					"application/x-www-form-urlencoded": {},
+				},
+			},
+		},
+	}
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echo": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+		AuthorizationProvider: &hostedHTTPAuthorizationProvider{},
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echo")
+	if err != nil {
+		t.Fatalf("providers.Get(echo): %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": providerhost.DefaultAuthorizationSocketEnv}, "")
+	if err != nil {
+		t.Fatalf("Execute read_env: %v", err)
+	}
+
+	var env struct {
+		Value string `json:"value"`
+		Found bool   `json:"found"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if !env.Found || env.Value == "" {
+		t.Fatalf("authorization env %q should be set for executable plugins with hosted HTTP bindings", providerhost.DefaultAuthorizationSocketEnv)
+	}
+}
+
 func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 	t.Parallel()
 
@@ -4503,14 +4622,8 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapability(t *testing
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	runtimeProvider := &staticCapabilityPluginRuntime{
-		inner: pluginruntime.NewLocalProvider(),
-		capabilities: pluginruntime.Capabilities{
-			HostedPluginRuntime: true,
-			ProviderGRPCTunnel:  true,
-			HostnameProxyEgress: true,
-		},
-	}
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
 		return runtimeProvider, nil
@@ -4546,6 +4659,122 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapability(t *testing
 	})
 	if err == nil || !strings.Contains(err.Error(), "host service tunnels") {
 		t.Fatalf("buildProvidersStrict error = %v, want missing host service tunnels", err)
+	}
+}
+
+func TestPluginRuntimeHostedHTTPDoesNotRequireHostServiceTunnelCapabilityForAuthorizationLookup(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Hosted HTTP auth lookup env")
+	manifest.Spec.SecuritySchemes = map[string]*providermanifestv1.HTTPSecurityScheme{
+		"public": {
+			Type: providermanifestv1.HTTPSecuritySchemeTypeNone,
+		},
+	}
+	manifest.Spec.HTTP = map[string]*providermanifestv1.HTTPBinding{
+		"command": {
+			Path:     "/command",
+			Method:   http.MethodPost,
+			Security: "public",
+			Target:   "read_env",
+			RequestBody: &providermanifestv1.HTTPRequestBody{
+				Content: map[string]*providermanifestv1.HTTPMediaType{
+					"application/x-www-form-urlencoded": {},
+				},
+			},
+		},
+	}
+	artifactPath := filepath.Join(manifestRoot, filepath.Base(bin))
+	artifactBytes, err := os.ReadFile(bin)
+	if err != nil {
+		t.Fatalf("os.ReadFile(bin): %v", err)
+	}
+	if err := os.WriteFile(artifactPath, artifactBytes, 0o755); err != nil {
+		t.Fatalf("os.WriteFile(artifact): %v", err)
+	}
+	digest, err := providerpkg.FileSHA256(artifactPath)
+	if err != nil {
+		t.Fatalf("providerpkg.FileSHA256(artifact): %v", err)
+	}
+	manifest.Artifacts = []providermanifestv1.Artifact{{
+		OS:     runtime.GOOS,
+		Arch:   runtime.GOARCH,
+		Path:   filepath.Base(artifactPath),
+		SHA256: digest,
+	}}
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(artifactPath)}
+	manifestData, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("providerpkg.EncodeManifestFormat(manifest): %v", err)
+	}
+	manifestPath := filepath.Join(manifestRoot, "manifest.yaml")
+	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
+		t.Fatalf("os.WriteFile(manifest): %v", err)
+	}
+
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: manifestPath,
+				Runtime:              &config.PluginRuntimeConfig{},
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
+		AuthorizationProvider: &hostedHTTPAuthorizationProvider{},
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get(echoext): %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": providerhost.DefaultAuthorizationSocketEnv}, "")
+	if err != nil {
+		t.Fatalf("Execute read_env: %v", err)
+	}
+
+	var env struct {
+		Value string `json:"value"`
+		Found bool   `json:"found"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if env.Found || env.Value != "" {
+		t.Fatalf("authorization env %q should not be set when the runtime lacks host service tunnels", providerhost.DefaultAuthorizationSocketEnv)
 	}
 }
 

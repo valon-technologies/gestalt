@@ -46,6 +46,10 @@ func (r Request) WorkflowManager() (*WorkflowManagerClient, error) {
 	return WorkflowManager(r.invocationToken)
 }
 
+func (r Request) Authorization() (*AuthorizationClient, error) {
+	return Authorization()
+}
+
 // Response is the typed handler result marshaled into the provider response body.
 // A zero Status defaults to 200.
 type Response[T any] struct {

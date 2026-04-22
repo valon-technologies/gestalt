@@ -2,8 +2,11 @@ package gestalt
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc/codes"
@@ -79,6 +82,9 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = WithConnectionParams(ctx, req.GetConnectionParams())
 	}
+	if req.GetOperation() == proto.InternalResolveHTTPSubjectOperation {
+		return s.resolveHTTPSubject(ctx, req.GetParams().AsMap()), nil
+	}
 	result, err := s.executeFn(ctx, req.GetOperation(), req.GetParams().AsMap(), req.GetToken())
 	if err != nil {
 		return operationResultProto(operationResultFromError(err)), nil
@@ -87,6 +93,72 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 		return operationResultProto(operationResult(http.StatusInternalServerError, nilResultMessage)), nil
 	}
 	return operationResultProto(result), nil
+}
+
+type httpSubjectExecuteRequest struct {
+	Binding         string              `json:"binding"`
+	Method          string              `json:"method"`
+	Path            string              `json:"path"`
+	ContentType     string              `json:"content_type"`
+	Headers         map[string][]string `json:"headers"`
+	Query           map[string][]string `json:"query"`
+	Params          map[string]any      `json:"params"`
+	RawBodyBase64   string              `json:"raw_body_base64"`
+	SecurityScheme  string              `json:"security_scheme"`
+	VerifiedSubject string              `json:"verified_subject"`
+	VerifiedClaims  map[string]string   `json:"verified_claims"`
+}
+
+func (s *ProviderServer) resolveHTTPSubject(ctx context.Context, rawParams map[string]any) *proto.OperationResult {
+	return operationResultProto(protectedOperationResult(proto.InternalResolveHTTPSubjectOperation, func() (*OperationResult, error) {
+		resolver, ok := s.provider.(HTTPSubjectResolver)
+		if !ok {
+			return operationResult(http.StatusNotFound, unknownOperationMessage), nil
+		}
+
+		var payload httpSubjectExecuteRequest
+		if err := decodeParams(rawParams, &payload); err != nil {
+			return nil, newOperationError(http.StatusBadRequest, "decode http subject request", err)
+		}
+
+		var rawBody []byte
+		if payload.RawBodyBase64 != "" {
+			decoded, err := base64.StdEncoding.DecodeString(payload.RawBodyBase64)
+			if err != nil {
+				return nil, newOperationError(http.StatusBadRequest, "decode http subject raw body", err)
+			}
+			rawBody = decoded
+		}
+
+		subject, err := resolver.ResolveHTTPSubject(ctx, HTTPSubjectRequest{
+			Binding:         payload.Binding,
+			Method:          payload.Method,
+			Path:            payload.Path,
+			ContentType:     payload.ContentType,
+			Headers:         http.Header(payload.Headers),
+			Query:           url.Values(payload.Query),
+			Params:          payload.Params,
+			RawBody:         rawBody,
+			SecurityScheme:  payload.SecurityScheme,
+			VerifiedSubject: payload.VerifiedSubject,
+			VerifiedClaims:  payload.VerifiedClaims,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if subject == nil {
+			return &OperationResult{Status: http.StatusNoContent}, nil
+		}
+
+		body, err := json.Marshal(subject)
+		if err != nil {
+			return nil, newOperationError(http.StatusInternalServerError, "marshal http subject response", err)
+		}
+		return &OperationResult{
+			Status: http.StatusOK,
+			Body:   string(body),
+		}, nil
+	}))
 }
 
 func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSessionCatalogRequest) (*proto.GetSessionCatalogResponse, error) {
