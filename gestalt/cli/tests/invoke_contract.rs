@@ -314,6 +314,54 @@ fn test_invoke_with_connection_and_instance() {
 }
 
 #[test]
+fn test_invoke_retries_without_catalog_when_preflight_masks_surface_error() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/sample_svc/operations?_connection=session-conn&_instance=default",
+        StatusCode::PRECONDITION_FAILED
+    )
+    .with_body(r#"{"error":"no token stored for integration \"sample_svc\"; connect via OAuth first","code":"not_connected","integration":"sample_svc"}"#)
+    .create();
+
+    let _invoke_mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/sample_svc/api_get_resource",
+        StatusCode::BAD_REQUEST
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"_connection":"session-conn","_instance":"default"}"#.to_string(),
+    ))
+    .with_body(
+        r#"{"error":"operation \"api_get_resource\" on integration \"sample_svc\" uses connection \"api-conn\"; omit the connection override or use that connection instead of \"session-conn\""}"#,
+    )
+    .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "plugins",
+            "invoke",
+            "--connection",
+            "session-conn",
+            "--instance",
+            "default",
+            "sample_svc",
+            "api_get_resource",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "operation \"api_get_resource\" on integration \"sample_svc\" uses connection \"api-conn\"",
+        ))
+        .stderr(predicate::str::contains("plugin \"sample_svc\" is not connected").not());
+}
+
+#[test]
 fn test_cli_lists_operations_with_connection_and_instance() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();

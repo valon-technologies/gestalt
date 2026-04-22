@@ -25,7 +25,16 @@ pub fn run(
 ) -> Result<()> {
     let query = segments.join(".");
     let cat =
-        load_catalog_for_invoke(client, plugin, &query, options.connection, options.instance)?;
+        match load_catalog_for_invoke(client, plugin, &query, options.connection, options.instance)
+        {
+            Ok(cat) => cat,
+            Err(err) => {
+                if should_retry_without_catalog(&err, &query) {
+                    return execute(client, None, plugin, &query, params, options, format);
+                }
+                return Err(err);
+            }
+        };
 
     match cat.resolve(&query)? {
         ResolvedOperation::All(ops) => {
@@ -33,7 +42,7 @@ pub fn run(
             display_operations(ops, format)
         }
         ResolvedOperation::Exact(_) => {
-            execute(client, &cat, plugin, &query, params, options, format)
+            execute(client, Some(&cat), plugin, &query, params, options, format)
         }
         ResolvedOperation::Prefix(matches) => {
             let n = matches.len();
@@ -56,14 +65,30 @@ pub fn invoke(
     options: InvokeOptions<'_>,
     format: Format,
 ) -> Result<()> {
-    let cat = load_catalog_for_invoke(
+    let cat = match load_catalog_for_invoke(
         client,
         plugin,
         operation,
         options.connection,
         options.instance,
-    )?;
-    execute(client, &cat, plugin, operation, params, options, format)
+    ) {
+        Ok(cat) => Some(cat),
+        Err(err) => {
+            if should_retry_without_catalog(&err, operation) {
+                return execute(client, None, plugin, operation, params, options, format);
+            }
+            return Err(err);
+        }
+    };
+    execute(
+        client,
+        cat.as_ref(),
+        plugin,
+        operation,
+        params,
+        options,
+        format,
+    )
 }
 
 pub fn list_operations(client: &ApiClient, plugin: &str, format: Format) -> Result<()> {
@@ -73,14 +98,14 @@ pub fn list_operations(client: &ApiClient, plugin: &str, format: Format) -> Resu
 
 fn execute(
     client: &ApiClient,
-    cat: &OperationsCatalog,
+    cat: Option<&OperationsCatalog>,
     plugin: &str,
     operation: &str,
     params: &[ParamEntry],
     options: InvokeOptions<'_>,
     format: Format,
 ) -> Result<()> {
-    let mut param_map = params::assemble_params(params, Some(cat), operation)?;
+    let mut param_map = params::assemble_params(params, cat, operation)?;
 
     if let Some(file_path) = options.input_file {
         let file_map = params::load_input_file(file_path)?;
@@ -120,6 +145,10 @@ fn execute(
     }
 
     Ok(())
+}
+
+fn should_retry_without_catalog(err: &anyhow::Error, operation: &str) -> bool {
+    !operation.is_empty() && connect_error_kind(err).is_some()
 }
 
 fn display_operations<'a>(
@@ -219,20 +248,25 @@ enum ConnectErrorKind {
 }
 
 fn connect_error_kind(err: &anyhow::Error) -> Option<ConnectErrorKind> {
-    if let Some(api_error) = err.downcast_ref::<ApiError>() {
-        match api_error.code() {
-            Some("not_connected") => return Some(ConnectErrorKind::NotConnected),
-            Some("reconnect_required") => return Some(ConnectErrorKind::ReconnectRequired),
-            _ => {}
+    for cause in err.chain() {
+        if let Some(api_error) = cause.downcast_ref::<ApiError>() {
+            match api_error.code() {
+                Some("not_connected") => return Some(ConnectErrorKind::NotConnected),
+                Some("reconnect_required") => return Some(ConnectErrorKind::ReconnectRequired),
+                _ => {}
+            }
         }
-    }
 
-    let message = err.to_string();
-    if message.contains("no token stored for integration") {
-        return Some(ConnectErrorKind::NotConnected);
-    }
-    if message.contains("expired or was revoked") {
-        return Some(ConnectErrorKind::ReconnectRequired);
+        let message = cause.to_string();
+        if message.contains("no token stored for integration") {
+            return Some(ConnectErrorKind::NotConnected);
+        }
+        if message.contains("is not connected. Connect it first with `") {
+            return Some(ConnectErrorKind::NotConnected);
+        }
+        if message.contains("expired or was revoked") {
+            return Some(ConnectErrorKind::ReconnectRequired);
+        }
     }
     None
 }

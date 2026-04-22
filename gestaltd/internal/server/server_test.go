@@ -9252,6 +9252,160 @@ func TestExecuteOperation_WrappedProvidersPreserveOperationConnectionRouting(t *
 	}
 }
 
+func TestExecuteOperation_RejectsExplicitConnectionForStaticOperation(t *testing.T) {
+	t.Parallel()
+
+	var called bool
+	apiBackend := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "sample-api",
+			ConnMode: core.ConnectionModeUser,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				called = true
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{
+			{Name: "api_get_resource", Description: "Get resource", Method: http.MethodGet},
+		},
+	}
+	apiProv, err := composite.NewMergedWithConnections(
+		"sample-api",
+		"Sample API",
+		"",
+		"",
+		composite.BoundProvider{Provider: apiBackend, Connection: "api-conn"},
+	)
+	if err != nil {
+		t.Fatalf("NewMergedWithConnections: %v", err)
+	}
+	prov := composite.New("sample-svc", apiProv, &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "sample-mcp", ConnMode: core.ConnectionModeUser},
+		},
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-svc/api_get_resource?_connection="+config.PluginConnectionAlias, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
+	}
+
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if !strings.Contains(body["error"], `uses connection "api-conn"`) {
+		t.Fatalf("expected connection mismatch message, got %q", body["error"])
+	}
+	if !strings.Contains(body["error"], `"`+config.PluginConnectionAlias+`"`) {
+		t.Fatalf("expected requested connection in error, got %q", body["error"])
+	}
+	if strings.Contains(body["error"], `"`+config.PluginConnectionName+`"`) {
+		t.Fatalf("expected error to preserve caller input, got %q", body["error"])
+	}
+	if called {
+		t.Fatal("expected provider execution to be skipped")
+	}
+}
+
+func TestExecuteOperation_AllowsExplicitConnectionAliasForStaticOperation(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	user, err := svc.Users.FindOrCreateUser(context.Background(), "alias@test.local")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser: %v", err)
+	}
+	seedToken(t, svc, &core.IntegrationToken{
+		ID:          "sample-svc-plugin-default",
+		SubjectID:   principal.UserSubjectID(user.ID),
+		Integration: "sample-svc",
+		Connection:  config.PluginConnectionName,
+		Instance:    "default",
+		AccessToken: "plugin-token",
+	})
+
+	apiBackend := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "sample-api",
+			ConnMode: core.ConnectionModeUser,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+				return &core.OperationResult{
+					Status: http.StatusOK,
+					Body:   fmt.Sprintf(`{"token":%q}`, token),
+				}, nil
+			},
+		},
+		ops: []core.Operation{
+			{Name: "api_get_resource", Description: "Get resource", Method: http.MethodGet},
+		},
+	}
+	apiProv, err := composite.NewMergedWithConnections(
+		"sample-api",
+		"Sample API",
+		"",
+		"",
+		composite.BoundProvider{Provider: apiBackend, Connection: config.PluginConnectionName},
+	)
+	if err != nil {
+		t.Fatalf("NewMergedWithConnections: %v", err)
+	}
+	prov := composite.New("sample-svc", apiProv, &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "sample-mcp", ConnMode: core.ConnectionModeNone},
+		},
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "user-token" {
+					return nil, fmt.Errorf("bad token")
+				}
+				return &core.UserIdentity{Email: "alias@test.local"}, nil
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-svc/api_get_resource?_connection="+config.PluginConnectionAlias, nil)
+	req.Header.Set("Authorization", "Bearer user-token")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if body["token"] != "plugin-token" {
+		t.Fatalf("token = %q, want plugin-token", body["token"])
+	}
+}
+
 func TestExecuteOperation_UnknownIntegration(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {
