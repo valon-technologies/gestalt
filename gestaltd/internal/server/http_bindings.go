@@ -171,59 +171,7 @@ func providerOperationIDs(providers *registry.ProviderMap[core.Provider], plugin
 }
 
 func validateMountedHTTPSecurityScheme(pluginName, schemeName string, scheme *config.HTTPSecurityScheme) error {
-	path := fmt.Sprintf("http security scheme %s.%s", pluginName, schemeName)
-	if scheme == nil {
-		return fmt.Errorf("%s is required", path)
-	}
-	switch scheme.Type {
-	case providermanifestv1.HTTPSecuritySchemeTypeHMAC:
-		if strings.TrimSpace(scheme.SignatureHeader) == "" {
-			return fmt.Errorf("%s.signatureHeader is required", path)
-		}
-		if strings.TrimSpace(scheme.PayloadTemplate) == "" {
-			return fmt.Errorf("%s.payloadTemplate is required", path)
-		}
-		if scheme.Secret == nil {
-			return fmt.Errorf("%s.secret is required", path)
-		}
-		if strings.TrimSpace(scheme.TimestampHeader) == "" && scheme.MaxAgeSeconds != 0 {
-			return fmt.Errorf("%s.maxAgeSeconds requires %s.timestampHeader to be set", path, path)
-		}
-		if strings.TrimSpace(scheme.TimestampHeader) != "" && scheme.MaxAgeSeconds <= 0 {
-			return fmt.Errorf("%s.timestampHeader requires %s.maxAgeSeconds to be greater than zero", path, path)
-		}
-		if err := httpbinding.ValidatePayloadTemplate(scheme.PayloadTemplate, scheme.TimestampHeader); err != nil {
-			return fmt.Errorf("%s.payloadTemplate %s", path, err)
-		}
-	case providermanifestv1.HTTPSecuritySchemeTypeAPIKey:
-		if strings.TrimSpace(scheme.Name) == "" {
-			return fmt.Errorf("%s.name is required", path)
-		}
-		switch scheme.In {
-		case providermanifestv1.HTTPInHeader, providermanifestv1.HTTPInQuery:
-		default:
-			return fmt.Errorf("%s.in %q is not supported", path, scheme.In)
-		}
-		if scheme.Secret == nil {
-			return fmt.Errorf("%s.secret is required", path)
-		}
-	case providermanifestv1.HTTPSecuritySchemeTypeHTTP:
-		switch scheme.Scheme {
-		case providermanifestv1.HTTPAuthSchemeBasic, providermanifestv1.HTTPAuthSchemeBearer:
-		default:
-			return fmt.Errorf("%s.scheme %q is not supported", path, scheme.Scheme)
-		}
-		if scheme.Secret == nil {
-			return fmt.Errorf("%s.secret is required", path)
-		}
-	case providermanifestv1.HTTPSecuritySchemeTypeNone:
-	default:
-		return fmt.Errorf("%s.type %q is not supported", path, scheme.Type)
-	}
-	if scheme.Secret != nil && strings.TrimSpace(scheme.Secret.Env) == "" && strings.TrimSpace(scheme.Secret.Secret) == "" {
-		return fmt.Errorf("%s.secret must set env or secret", path)
-	}
-	return nil
+	return httpbinding.ValidateHTTPSecurityScheme(fmt.Sprintf("http security scheme %s.%s", pluginName, schemeName), scheme)
 }
 
 func validateMountedHTTPBinding(pluginName, bindingName string, binding *config.HTTPBinding, schemes map[string]*config.HTTPSecurityScheme) error {
