@@ -133,7 +133,6 @@ func (r *agentRuntime) DeleteTrackedRun(ctx context.Context, runID string) error
 	}
 	return runMetadata.Delete(ctx, runID)
 }
-
 func (r *agentRuntime) ResolveProvider(name string) (coreagent.Provider, error) {
 	if r == nil {
 		return nil, fmt.Errorf("agent runtime is not configured")

@@ -123,16 +123,17 @@ type ManagedRun struct {
 }
 
 type ManagerRunRequest struct {
-	IdempotencyKey  string
-	ProviderName    string
-	Model           string
-	Messages        []Message
-	ToolRefs        []ToolRef
-	ToolSource      ToolSourceMode
-	ResponseSchema  map[string]any
-	SessionRef      string
-	Metadata        map[string]any
-	ProviderOptions map[string]any
+	CallerPluginName string
+	IdempotencyKey   string
+	ProviderName     string
+	Model            string
+	Messages         []Message
+	ToolRefs         []ToolRef
+	ToolSource       ToolSourceMode
+	ResponseSchema   map[string]any
+	SessionRef       string
+	Metadata         map[string]any
+	ProviderOptions  map[string]any
 }
 
 type ManagerGetRunRequest struct {

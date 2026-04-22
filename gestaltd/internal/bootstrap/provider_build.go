@@ -19,6 +19,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -1126,8 +1127,9 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		hostServices = append(hostServices, services...)
 	}
 	includeWorkflowManager := deps.WorkflowManager != nil || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders())
+	includeAgentManager := deps.AgentManager != nil || deps.AgentRuntime != nil
 	needInvocationTokens := includeHostServices || len(entry.Invokes) > 0
-	if includeWorkflowManager {
+	if includeWorkflowManager || includeAgentManager {
 		needInvocationTokens = true
 	}
 	if needInvocationTokens {
@@ -1138,6 +1140,9 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 	}
 	if includeWorkflowManager {
 		hostServices = append(hostServices, buildPluginWorkflowManagerHostService(name, deps, invTokens))
+	}
+	if includeAgentManager {
+		hostServices = append(hostServices, buildPluginAgentManagerHostService(name, deps, invTokens))
 	}
 	if deps.AuthorizationProvider != nil && len(entry.EffectiveHTTPBindings()) > 0 {
 		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
@@ -1481,6 +1486,19 @@ func buildPluginWorkflowManagerHostService(pluginName string, deps Deps, tokens 
 	}
 }
 
+func buildPluginAgentManagerHostService(pluginName string, deps Deps, tokens *providerhost.InvocationTokenManager) providerhost.HostService {
+	manager := deps.AgentManager
+	if manager == nil {
+		manager = unavailableAgentManager{}
+	}
+	return providerhost.HostService{
+		EnvVar: providerhost.DefaultAgentManagerSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterAgentManagerHostServer(srv, providerhost.NewAgentManagerServer(pluginName, manager, tokens))
+		},
+	}
+}
+
 func buildPluginAuthorizationHostService(provider core.AuthorizationProvider) providerhost.HostService {
 	return providerhost.HostService{
 		EnvVar: providerhost.DefaultAuthorizationSocketEnv,
@@ -1585,6 +1603,24 @@ func (unavailableWorkflowManager) CancelRun(context.Context, *principal.Principa
 
 func (unavailableWorkflowManager) PublishEvent(context.Context, *principal.Principal, coreworkflow.Event) (coreworkflow.Event, error) {
 	return coreworkflow.Event{}, fmt.Errorf("workflow manager is not available")
+}
+
+type unavailableAgentManager struct{}
+
+func (unavailableAgentManager) Run(context.Context, *principal.Principal, coreagent.ManagerRunRequest) (*coreagent.ManagedRun, error) {
+	return nil, fmt.Errorf("agent manager is not available")
+}
+
+func (unavailableAgentManager) GetRun(context.Context, *principal.Principal, string) (*coreagent.ManagedRun, error) {
+	return nil, fmt.Errorf("agent manager is not available")
+}
+
+func (unavailableAgentManager) ListRuns(context.Context, *principal.Principal) ([]*coreagent.ManagedRun, error) {
+	return nil, fmt.Errorf("agent manager is not available")
+}
+
+func (unavailableAgentManager) CancelRun(context.Context, *principal.Principal, string, string) (*coreagent.ManagedRun, error) {
+	return nil, fmt.Errorf("agent manager is not available")
 }
 
 func buildPluginScopedIndexedDB(pluginName string, effective config.EffectivePluginIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {

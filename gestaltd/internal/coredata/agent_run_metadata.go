@@ -261,6 +261,9 @@ func marshalJSON(value any) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if string(raw) == "null" {
+		return "", nil
+	}
 	return string(raw), nil
 }
 
