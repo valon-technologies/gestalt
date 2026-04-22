@@ -2,13 +2,12 @@ package providerhost
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
-	"fmt"
-	"net/http"
+	"strings"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var _ core.HTTPSubjectResolver = (*remoteProviderBase)(nil)
@@ -18,87 +17,90 @@ func (p *remoteProviderBase) ResolveHTTPSubject(ctx context.Context, req *core.H
 		return nil, nil
 	}
 
-	params, err := structFromMap(map[string]any{
-		"binding":          req.Binding,
-		"method":           req.Method,
-		"path":             req.Path,
-		"content_type":     req.ContentType,
-		"headers":          mapStringSlices(req.Headers),
-		"query":            mapStringSlices(req.Query),
-		"params":           req.Params,
-		"raw_body_base64":  base64.StdEncoding.EncodeToString(req.RawBody),
-		"security_scheme":  req.SecurityScheme,
-		"verified_subject": req.VerifiedSubject,
-		"verified_claims":  req.VerifiedClaims,
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	reqCtx, err := requestContextProto(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := p.client.Execute(ctx, &proto.ExecuteRequest{
-		Operation: proto.InternalResolveHTTPSubjectOperation,
-		Params:    params,
-		Context:   reqCtx,
-	})
+	httpReq, err := httpSubjectRequestProto(req)
 	if err != nil {
 		return nil, err
 	}
 
-	switch status := int(resp.GetStatus()); {
-	case status == http.StatusNotFound && isUnknownOperationBody(resp.GetBody()):
-		return nil, nil
-	case status == http.StatusNoContent:
-		return nil, nil
-	case status != http.StatusOK:
+	resp, err := p.client.ResolveHTTPSubject(ctx, &proto.ResolveHTTPSubjectRequest{
+		Request: httpReq,
+		Context: reqCtx,
+	})
+	if err != nil {
+		if st, ok := status.FromError(err); ok && st.Code() == codes.Unimplemented {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if resp.GetRejectStatus() > 0 {
 		return nil, &core.HTTPSubjectResolveError{
-			Status:  status,
-			Message: operationErrorMessage(resp.GetBody()),
+			Status:  int(resp.GetRejectStatus()),
+			Message: resp.GetRejectMessage(),
 		}
 	}
 
-	var subject core.HTTPResolvedSubject
-	if err := json.Unmarshal([]byte(resp.GetBody()), &subject); err != nil {
-		return nil, fmt.Errorf("decode resolved http subject: %w", err)
-	}
-	if subject.ID == "" {
+	subject := resp.GetSubject()
+	if strings.TrimSpace(subject.GetId()) == "" {
 		return nil, nil
 	}
-	return &subject, nil
+	return &core.HTTPResolvedSubject{
+		ID:          strings.TrimSpace(subject.GetId()),
+		Kind:        strings.TrimSpace(subject.GetKind()),
+		DisplayName: strings.TrimSpace(subject.GetDisplayName()),
+		AuthSource:  strings.TrimSpace(subject.GetAuthSource()),
+	}, nil
 }
 
-func mapStringSlices[V ~map[string][]string](values V) map[string]any {
+func httpSubjectRequestProto(req *core.HTTPSubjectResolveRequest) (*proto.HTTPSubjectRequest, error) {
+	if req == nil {
+		return nil, nil
+	}
+
+	params, err := structFromMap(req.Params)
+	if err != nil {
+		return nil, err
+	}
+
+	return &proto.HTTPSubjectRequest{
+		Binding:         req.Binding,
+		Method:          req.Method,
+		Path:            req.Path,
+		ContentType:     req.ContentType,
+		Headers:         mapStringSlices(req.Headers),
+		Query:           mapStringSlices(req.Query),
+		Params:          params,
+		RawBody:         append([]byte(nil), req.RawBody...),
+		SecurityScheme:  req.SecurityScheme,
+		VerifiedSubject: req.VerifiedSubject,
+		VerifiedClaims:  cloneStringMap(req.VerifiedClaims),
+	}, nil
+}
+
+func mapStringSlices[V ~map[string][]string](values V) map[string]*proto.StringList {
 	if len(values) == 0 {
 		return nil
 	}
-	out := make(map[string]any, len(values))
+	out := make(map[string]*proto.StringList, len(values))
 	for key, item := range values {
 		copied := make([]string, len(item))
 		copy(copied, item)
-		out[key] = copied
+		out[key] = &proto.StringList{Values: copied}
 	}
 	return out
 }
 
-func isUnknownOperationBody(body string) bool {
-	var payload map[string]string
-	if err := json.Unmarshal([]byte(body), &payload); err != nil {
-		return false
+func cloneStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
 	}
-	return payload["error"] == "unknown operation"
-}
-
-func operationErrorMessage(body string) string {
-	var payload map[string]string
-	if err := json.Unmarshal([]byte(body), &payload); err != nil {
-		return body
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		out[key] = value
 	}
-	if msg := payload["error"]; msg != "" {
-		return msg
-	}
-	return body
+	return out
 }

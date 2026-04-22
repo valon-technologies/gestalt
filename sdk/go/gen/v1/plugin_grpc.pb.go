@@ -20,11 +20,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	IntegrationProvider_GetMetadata_FullMethodName       = "/gestalt.provider.v1.IntegrationProvider/GetMetadata"
-	IntegrationProvider_StartProvider_FullMethodName     = "/gestalt.provider.v1.IntegrationProvider/StartProvider"
-	IntegrationProvider_Execute_FullMethodName           = "/gestalt.provider.v1.IntegrationProvider/Execute"
-	IntegrationProvider_GetSessionCatalog_FullMethodName = "/gestalt.provider.v1.IntegrationProvider/GetSessionCatalog"
-	IntegrationProvider_PostConnect_FullMethodName       = "/gestalt.provider.v1.IntegrationProvider/PostConnect"
+	IntegrationProvider_GetMetadata_FullMethodName        = "/gestalt.provider.v1.IntegrationProvider/GetMetadata"
+	IntegrationProvider_StartProvider_FullMethodName      = "/gestalt.provider.v1.IntegrationProvider/StartProvider"
+	IntegrationProvider_Execute_FullMethodName            = "/gestalt.provider.v1.IntegrationProvider/Execute"
+	IntegrationProvider_ResolveHTTPSubject_FullMethodName = "/gestalt.provider.v1.IntegrationProvider/ResolveHTTPSubject"
+	IntegrationProvider_GetSessionCatalog_FullMethodName  = "/gestalt.provider.v1.IntegrationProvider/GetSessionCatalog"
+	IntegrationProvider_PostConnect_FullMethodName        = "/gestalt.provider.v1.IntegrationProvider/PostConnect"
 )
 
 // IntegrationProviderClient is the client API for IntegrationProvider service.
@@ -36,6 +37,7 @@ type IntegrationProviderClient interface {
 	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProviderMetadata, error)
 	StartProvider(ctx context.Context, in *StartProviderRequest, opts ...grpc.CallOption) (*StartProviderResponse, error)
 	Execute(ctx context.Context, in *ExecuteRequest, opts ...grpc.CallOption) (*OperationResult, error)
+	ResolveHTTPSubject(ctx context.Context, in *ResolveHTTPSubjectRequest, opts ...grpc.CallOption) (*ResolveHTTPSubjectResponse, error)
 	GetSessionCatalog(ctx context.Context, in *GetSessionCatalogRequest, opts ...grpc.CallOption) (*GetSessionCatalogResponse, error)
 	PostConnect(ctx context.Context, in *PostConnectRequest, opts ...grpc.CallOption) (*PostConnectResponse, error)
 }
@@ -78,6 +80,16 @@ func (c *integrationProviderClient) Execute(ctx context.Context, in *ExecuteRequ
 	return out, nil
 }
 
+func (c *integrationProviderClient) ResolveHTTPSubject(ctx context.Context, in *ResolveHTTPSubjectRequest, opts ...grpc.CallOption) (*ResolveHTTPSubjectResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveHTTPSubjectResponse)
+	err := c.cc.Invoke(ctx, IntegrationProvider_ResolveHTTPSubject_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *integrationProviderClient) GetSessionCatalog(ctx context.Context, in *GetSessionCatalogRequest, opts ...grpc.CallOption) (*GetSessionCatalogResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSessionCatalogResponse)
@@ -107,6 +119,7 @@ type IntegrationProviderServer interface {
 	GetMetadata(context.Context, *emptypb.Empty) (*ProviderMetadata, error)
 	StartProvider(context.Context, *StartProviderRequest) (*StartProviderResponse, error)
 	Execute(context.Context, *ExecuteRequest) (*OperationResult, error)
+	ResolveHTTPSubject(context.Context, *ResolveHTTPSubjectRequest) (*ResolveHTTPSubjectResponse, error)
 	GetSessionCatalog(context.Context, *GetSessionCatalogRequest) (*GetSessionCatalogResponse, error)
 	PostConnect(context.Context, *PostConnectRequest) (*PostConnectResponse, error)
 	mustEmbedUnimplementedIntegrationProviderServer()
@@ -127,6 +140,9 @@ func (UnimplementedIntegrationProviderServer) StartProvider(context.Context, *St
 }
 func (UnimplementedIntegrationProviderServer) Execute(context.Context, *ExecuteRequest) (*OperationResult, error) {
 	return nil, status.Error(codes.Unimplemented, "method Execute not implemented")
+}
+func (UnimplementedIntegrationProviderServer) ResolveHTTPSubject(context.Context, *ResolveHTTPSubjectRequest) (*ResolveHTTPSubjectResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveHTTPSubject not implemented")
 }
 func (UnimplementedIntegrationProviderServer) GetSessionCatalog(context.Context, *GetSessionCatalogRequest) (*GetSessionCatalogResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSessionCatalog not implemented")
@@ -209,6 +225,24 @@ func _IntegrationProvider_Execute_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IntegrationProvider_ResolveHTTPSubject_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveHTTPSubjectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IntegrationProviderServer).ResolveHTTPSubject(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IntegrationProvider_ResolveHTTPSubject_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IntegrationProviderServer).ResolveHTTPSubject(ctx, req.(*ResolveHTTPSubjectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _IntegrationProvider_GetSessionCatalog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetSessionCatalogRequest)
 	if err := dec(in); err != nil {
@@ -263,6 +297,10 @@ var IntegrationProvider_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Execute",
 			Handler:    _IntegrationProvider_Execute_Handler,
+		},
+		{
+			MethodName: "ResolveHTTPSubject",
+			Handler:    _IntegrationProvider_ResolveHTTPSubject_Handler,
 		},
 		{
 			MethodName: "GetSessionCatalog",

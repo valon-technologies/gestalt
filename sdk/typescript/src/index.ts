@@ -29,6 +29,22 @@
  * ```
  */
 export {
+  Authorization,
+  AuthorizationClient,
+  ENV_AUTHORIZATION_SOCKET,
+  type AuthorizationActionSearchMessage,
+  type AuthorizationDecisionMessage,
+  type AuthorizationEvaluateInput,
+  type AuthorizationMetadataMessage,
+  type AuthorizationReadRelationshipsInput,
+  type AuthorizationReadRelationshipsMessage,
+  type AuthorizationResourceSearchMessage,
+  type AuthorizationSearchActionsInput,
+  type AuthorizationSearchResourcesInput,
+  type AuthorizationSearchSubjectsInput,
+  type AuthorizationSubjectSearchMessage,
+} from "./authorization.ts";
+export {
   connectionParam,
   ok,
   response,
@@ -42,6 +58,13 @@ export {
   type Response,
   type Subject,
 } from "./api.ts";
+export {
+  type HTTPSubjectRequest,
+  type HTTPSubjectResolutionContext,
+  HTTPSubjectResolutionError,
+  type HTTPSubjectResolver,
+  httpSubjectError,
+} from "./http-subject.ts";
 export {
   catalogToJson,
   catalogToYaml,

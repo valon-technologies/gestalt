@@ -168,6 +168,11 @@ message SubjectContext {
   string auth_source = 4;
 }
 
+// StringList is a helper map value for repeated HTTP header and query values.
+message StringList {
+  repeated string values = 1;
+}
+
 // CredentialContext describes the resolved credential used for an operation.
 message CredentialContext {
   string mode = 1;
@@ -189,6 +194,40 @@ message RequestContext {
   CredentialContext credential = 2;
   AccessContext access = 3;
   google.protobuf.Struct workflow = 4;
+}
+
+// HTTPSubjectRequest carries one verified hosted HTTP request into an optional
+// plugin-local subject resolution hook.
+message HTTPSubjectRequest {
+  string binding = 1;
+  string method = 2;
+  string path = 3;
+  string content_type = 4;
+  map<string, StringList> headers = 5;
+  map<string, StringList> query = 6;
+  google.protobuf.Struct params = 7;
+  bytes raw_body = 8;
+  string security_scheme = 9;
+  string verified_subject = 10;
+  map<string, string> verified_claims = 11;
+}
+
+// ResolveHTTPSubjectRequest asks a provider to map a verified hosted HTTP
+// request to a concrete Gestalt subject before normal operation authorization
+// and dispatch.
+message ResolveHTTPSubjectRequest {
+  HTTPSubjectRequest request = 1;
+  RequestContext context = 2;
+}
+
+// ResolveHTTPSubjectResponse returns the concrete Gestalt subject a hosted HTTP
+// request should execute as. An unset subject means "fall back to the binding
+// subject". When reject_status is set, the host should reject the inbound
+// request with the provided status and message.
+message ResolveHTTPSubjectResponse {
+  SubjectContext subject = 1;
+  int32 reject_status = 2;
+  string reject_message = 3;
 }
 
 // ExecuteRequest invokes one executable operation.
@@ -247,6 +286,7 @@ service IntegrationProvider {
   rpc GetMetadata(google.protobuf.Empty) returns (ProviderMetadata);
   rpc StartProvider(StartProviderRequest) returns (StartProviderResponse);
   rpc Execute(ExecuteRequest) returns (OperationResult);
+  rpc ResolveHTTPSubject(ResolveHTTPSubjectRequest) returns (ResolveHTTPSubjectResponse);
   rpc GetSessionCatalog(GetSessionCatalogRequest) returns (GetSessionCatalogResponse);
   rpc PostConnect(PostConnectRequest) returns (PostConnectResponse);
 }

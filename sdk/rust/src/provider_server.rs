@@ -12,7 +12,8 @@ use crate::generated::v1::integration_provider_server::IntegrationProvider;
 use crate::generated::v1::{
     ExecuteRequest, GetSessionCatalogRequest, GetSessionCatalogResponse,
     OperationResult as ProtoOperationResult, PostConnectRequest, PostConnectResponse,
-    ProviderMetadata, StartProviderRequest, StartProviderResponse,
+    ProviderMetadata, ResolveHttpSubjectRequest, ResolveHttpSubjectResponse, StartProviderRequest,
+    StartProviderResponse,
 };
 use crate::rpc_status::{require_protocol_version, rpc_status};
 use crate::{Provider, Router};
@@ -153,6 +154,13 @@ where
             .map_err(|error| rpc_status("session catalog", error))?;
 
         Ok(GrpcResponse::new(GetSessionCatalogResponse { catalog }))
+    }
+
+    async fn resolve_http_subject(
+        &self,
+        _request: GrpcRequest<ResolveHttpSubjectRequest>,
+    ) -> std::result::Result<GrpcResponse<ResolveHttpSubjectResponse>, Status> {
+        Ok(GrpcResponse::new(ResolveHttpSubjectResponse::default()))
     }
 
     async fn post_connect(

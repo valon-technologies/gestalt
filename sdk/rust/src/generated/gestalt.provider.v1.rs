@@ -782,6 +782,12 @@ pub struct SubjectContext {
     #[prost(string, tag = "4")]
     pub auth_source: ::prost::alloc::string::String,
 }
+/// StringList is a helper map value for repeated HTTP header and query values.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct StringList {
+    #[prost(string, repeated, tag = "1")]
+    pub values: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
 /// CredentialContext describes the resolved credential used for an operation.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CredentialContext {
@@ -814,6 +820,59 @@ pub struct RequestContext {
     pub access: ::core::option::Option<AccessContext>,
     #[prost(message, optional, tag = "4")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+}
+/// HTTPSubjectRequest carries one verified hosted HTTP request into an optional
+/// plugin-local subject resolution hook.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HttpSubjectRequest {
+    #[prost(string, tag = "1")]
+    pub binding: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub method: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub path: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub content_type: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, message", tag = "5")]
+    pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, StringList>,
+    #[prost(btree_map = "string, message", tag = "6")]
+    pub query: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, StringList>,
+    #[prost(message, optional, tag = "7")]
+    pub params: ::core::option::Option<::prost_types::Struct>,
+    #[prost(bytes = "vec", tag = "8")]
+    pub raw_body: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag = "9")]
+    pub security_scheme: ::prost::alloc::string::String,
+    #[prost(string, tag = "10")]
+    pub verified_subject: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, string", tag = "11")]
+    pub verified_claims: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+}
+/// ResolveHTTPSubjectRequest asks a provider to map a verified hosted HTTP
+/// request to a concrete Gestalt subject before normal operation authorization
+/// and dispatch.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ResolveHttpSubjectRequest {
+    #[prost(message, optional, tag = "1")]
+    pub request: ::core::option::Option<HttpSubjectRequest>,
+    #[prost(message, optional, tag = "2")]
+    pub context: ::core::option::Option<RequestContext>,
+}
+/// ResolveHTTPSubjectResponse returns the concrete Gestalt subject a hosted HTTP
+/// request should execute as. An unset subject means "fall back to the binding
+/// subject". When reject_status is set, the host should reject the inbound
+/// request with the provided status and message.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ResolveHttpSubjectResponse {
+    #[prost(message, optional, tag = "1")]
+    pub subject: ::core::option::Option<SubjectContext>,
+    #[prost(int32, tag = "2")]
+    pub reject_status: i32,
+    #[prost(string, tag = "3")]
+    pub reject_message: ::prost::alloc::string::String,
 }
 /// ExecuteRequest invokes one executable operation.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1070,6 +1129,25 @@ pub mod integration_provider_client {
             ));
             self.inner.unary(req, path, codec).await
         }
+        pub async fn resolve_http_subject(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ResolveHttpSubjectRequest>,
+        ) -> std::result::Result<tonic::Response<super::ResolveHttpSubjectResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.IntegrationProvider/ResolveHTTPSubject",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IntegrationProvider",
+                "ResolveHTTPSubject",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
         pub async fn get_session_catalog(
             &mut self,
             request: impl tonic::IntoRequest<super::GetSessionCatalogRequest>,
@@ -1135,6 +1213,10 @@ pub mod integration_provider_server {
             &self,
             request: tonic::Request<super::ExecuteRequest>,
         ) -> std::result::Result<tonic::Response<super::OperationResult>, tonic::Status>;
+        async fn resolve_http_subject(
+            &self,
+            request: tonic::Request<super::ResolveHttpSubjectRequest>,
+        ) -> std::result::Result<tonic::Response<super::ResolveHttpSubjectResponse>, tonic::Status>;
         async fn get_session_catalog(
             &self,
             request: tonic::Request<super::GetSessionCatalogRequest>,
@@ -1320,6 +1402,49 @@ pub mod integration_provider_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = ExecuteSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.IntegrationProvider/ResolveHTTPSubject" => {
+                    #[allow(non_camel_case_types)]
+                    struct ResolveHTTPSubjectSvc<T: IntegrationProvider>(pub Arc<T>);
+                    impl<T: IntegrationProvider>
+                        tonic::server::UnaryService<super::ResolveHttpSubjectRequest>
+                        for ResolveHTTPSubjectSvc<T>
+                    {
+                        type Response = super::ResolveHttpSubjectResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ResolveHttpSubjectRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as IntegrationProvider>::resolve_http_subject(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ResolveHTTPSubjectSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

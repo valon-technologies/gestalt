@@ -27,8 +27,11 @@ import {
   CredentialContextSchema,
   ExecuteRequestSchema,
   GetSessionCatalogRequestSchema,
+  HTTPSubjectRequestSchema,
   RequestContextSchema,
+  ResolveHTTPSubjectRequestSchema,
   StartProviderRequestSchema,
+  StringListSchema,
   SubjectContextSchema,
 } from "../gen/v1/plugin_pb.ts";
 import {
@@ -60,6 +63,7 @@ import {
   parseRuntimeArgs,
 } from "../src/runtime.ts";
 import {
+  httpSubjectError,
   PresignMethod,
   S3,
   WorkflowRunStatus,
@@ -601,6 +605,199 @@ test("integration provider service exposes metadata, configure, execute, and ses
   ]);
   expect(sessionCatalog.catalog?.operations[0].title).toBe(
     "Session Hello ops user:user-123 identity viewer",
+  );
+});
+
+test("integration provider service resolves hosted HTTP subjects through the plugin hook", async () => {
+  let seenRequest:
+    | import("../src/index.ts").HTTPSubjectRequest
+    | undefined;
+  let seenContext:
+    | import("../src/index.ts").HTTPSubjectResolutionContext
+    | undefined;
+
+  const plugin = definePlugin({
+    resolveHTTPSubject(request, context) {
+      seenRequest = request;
+      seenContext = context;
+      if (request.binding !== "command") {
+        return null;
+      }
+      return {
+        id: "user:user-456",
+        kind: "user",
+        displayName: "Slack User",
+        authSource: "slack",
+      };
+    },
+    operations: [
+      {
+        id: "noop",
+        handler() {
+          return { ok: true };
+        },
+      },
+    ],
+  });
+  const service = createProviderService(plugin);
+
+  const resolved = await (service.resolveHTTPSubject as any)(
+    create(ResolveHTTPSubjectRequestSchema, {
+      request: create(HTTPSubjectRequestSchema, {
+        binding: "command",
+        method: "POST",
+        path: "/api/v1/agent/command",
+        contentType: "application/x-www-form-urlencoded",
+        headers: {
+          "x-slack-signature": create(StringListSchema, {
+            values: ["v0=abc123"],
+          }),
+        },
+        query: {
+          trace: create(StringListSchema, {
+            values: ["a", "b"],
+          }),
+        },
+        params: {
+          team_id: "T123",
+          user_id: "U456",
+        },
+        rawBody: new Uint8Array([112, 97, 121, 108, 111, 97, 100]),
+        securityScheme: "slack",
+        verifiedSubject: "slack:T123:U456",
+        verifiedClaims: {
+          team_id: "T123",
+        },
+      }),
+      context: create(RequestContextSchema, {
+        subject: create(SubjectContextSchema, {
+          id: "system:http_binding:agent:command",
+          kind: "workload",
+          authSource: "http_binding",
+        }),
+        credential: create(CredentialContextSchema, {
+          mode: "none",
+        }),
+        access: create(AccessContextSchema, {
+          policy: "hosted_http",
+          role: "binding",
+        }),
+        workflow: {
+          http: {
+            binding: "command",
+          },
+        },
+      }),
+    }),
+  );
+  expect(resolved.subject).toMatchObject({
+    id: "user:user-456",
+    kind: "user",
+    displayName: "Slack User",
+    authSource: "slack",
+  });
+  expect(seenRequest).toEqual({
+    binding: "command",
+    method: "POST",
+    path: "/api/v1/agent/command",
+    contentType: "application/x-www-form-urlencoded",
+    headers: {
+      "x-slack-signature": ["v0=abc123"],
+    },
+    query: {
+      trace: ["a", "b"],
+    },
+    params: {
+      team_id: "T123",
+      user_id: "U456",
+    },
+    rawBody: new Uint8Array([112, 97, 121, 108, 111, 97, 100]),
+    securityScheme: "slack",
+    verifiedSubject: "slack:T123:U456",
+    verifiedClaims: {
+      team_id: "T123",
+    },
+  });
+  expect(seenContext).toEqual({
+    subject: {
+      id: "system:http_binding:agent:command",
+      kind: "workload",
+      displayName: "",
+      authSource: "http_binding",
+    },
+    credential: {
+      mode: "none",
+      subjectId: "",
+      connection: "",
+      instance: "",
+    },
+    access: {
+      policy: "hosted_http",
+      role: "binding",
+    },
+    workflow: {
+      http: {
+        binding: "command",
+      },
+    },
+  });
+
+  const fallback = await (service.resolveHTTPSubject as any)(
+    create(ResolveHTTPSubjectRequestSchema, {
+      request: create(HTTPSubjectRequestSchema, {
+        binding: "events",
+      }),
+    }),
+  );
+  expect(fallback.subject).toBeUndefined();
+
+  const rejected = await (createProviderService(
+    definePlugin({
+      resolveHTTPSubject() {
+        throw httpSubjectError(403, "unmapped slack subject");
+      },
+      operations: [
+        {
+          id: "noop",
+          handler() {
+            return { ok: true };
+          },
+        },
+      ],
+    }),
+  ).resolveHTTPSubject as any)(
+    create(ResolveHTTPSubjectRequestSchema, {
+      request: create(HTTPSubjectRequestSchema, {
+        binding: "command",
+      }),
+    }),
+  );
+  expect(rejected.rejectStatus).toBe(403);
+  expect(rejected.rejectMessage).toBe("unmapped slack subject");
+
+  await expectConnectCode(
+    (createProviderService(
+      definePlugin({
+        resolveHTTPSubject() {
+          throw new Error("boom");
+        },
+        operations: [
+          {
+            id: "noop",
+            handler() {
+              return { ok: true };
+            },
+          },
+        ],
+      }),
+    ).resolveHTTPSubject as any)(
+      create(ResolveHTTPSubjectRequestSchema, {
+        request: create(HTTPSubjectRequestSchema, {
+          binding: "command",
+        }),
+      }),
+    ),
+    Code.Unknown,
   );
 });
 

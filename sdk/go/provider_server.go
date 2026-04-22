@@ -2,8 +2,7 @@ package gestalt
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -82,9 +81,6 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = WithConnectionParams(ctx, req.GetConnectionParams())
 	}
-	if req.GetOperation() == proto.InternalResolveHTTPSubjectOperation {
-		return s.resolveHTTPSubject(ctx, req.GetParams().AsMap()), nil
-	}
 	result, err := s.executeFn(ctx, req.GetOperation(), req.GetParams().AsMap(), req.GetToken())
 	if err != nil {
 		return operationResultProto(operationResultFromError(err)), nil
@@ -95,70 +91,98 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 	return operationResultProto(result), nil
 }
 
-type httpSubjectExecuteRequest struct {
-	Binding         string              `json:"binding"`
-	Method          string              `json:"method"`
-	Path            string              `json:"path"`
-	ContentType     string              `json:"content_type"`
-	Headers         map[string][]string `json:"headers"`
-	Query           map[string][]string `json:"query"`
-	Params          map[string]any      `json:"params"`
-	RawBodyBase64   string              `json:"raw_body_base64"`
-	SecurityScheme  string              `json:"security_scheme"`
-	VerifiedSubject string              `json:"verified_subject"`
-	VerifiedClaims  map[string]string   `json:"verified_claims"`
+func (s *ProviderServer) ResolveHTTPSubject(ctx context.Context, req *proto.ResolveHTTPSubjectRequest) (resp *proto.ResolveHTTPSubjectResponse, err error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	ctx = withRequestContext(ctx, req.GetContext())
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			_ = recoveredOperationResult("ResolveHTTPSubject", recovered)
+			err = status.Error(codes.Internal, internalErrorMessage)
+		}
+	}()
+
+	resolver, ok := s.provider.(HTTPSubjectResolver)
+	if !ok {
+		return &proto.ResolveHTTPSubjectResponse{}, nil
+	}
+
+	subject, err := resolver.ResolveHTTPSubject(ctx, httpSubjectRequestFromProto(req.GetRequest()))
+	if err != nil {
+		var opErr *operationError
+		if errors.As(err, &opErr) {
+			return &proto.ResolveHTTPSubjectResponse{
+				RejectStatus:  int32(opErr.status),
+				RejectMessage: opErr.message,
+			}, nil
+		}
+		return nil, providerRPCError("resolve http subject", err)
+	}
+	if subject == nil {
+		return &proto.ResolveHTTPSubjectResponse{}, nil
+	}
+
+	return &proto.ResolveHTTPSubjectResponse{
+		Subject: &proto.SubjectContext{
+			Id:          subject.ID,
+			Kind:        subject.Kind,
+			DisplayName: subject.DisplayName,
+			AuthSource:  subject.AuthSource,
+		},
+	}, nil
 }
 
-func (s *ProviderServer) resolveHTTPSubject(ctx context.Context, rawParams map[string]any) *proto.OperationResult {
-	return operationResultProto(protectedOperationResult(proto.InternalResolveHTTPSubjectOperation, func() (*OperationResult, error) {
-		resolver, ok := s.provider.(HTTPSubjectResolver)
-		if !ok {
-			return operationResult(http.StatusNotFound, unknownOperationMessage), nil
-		}
+func httpSubjectRequestFromProto(req *proto.HTTPSubjectRequest) HTTPSubjectRequest {
+	if req == nil {
+		return HTTPSubjectRequest{}
+	}
+	return HTTPSubjectRequest{
+		Binding:         req.GetBinding(),
+		Method:          req.GetMethod(),
+		Path:            req.GetPath(),
+		ContentType:     req.GetContentType(),
+		Headers:         httpHeaderFromProto(req.GetHeaders()),
+		Query:           urlValuesFromProto(req.GetQuery()),
+		Params:          req.GetParams().AsMap(),
+		RawBody:         append([]byte(nil), req.GetRawBody()...),
+		SecurityScheme:  req.GetSecurityScheme(),
+		VerifiedSubject: req.GetVerifiedSubject(),
+		VerifiedClaims:  cloneVerifiedClaims(req.GetVerifiedClaims()),
+	}
+}
 
-		var payload httpSubjectExecuteRequest
-		if err := decodeParams(rawParams, &payload); err != nil {
-			return nil, newOperationError(http.StatusBadRequest, "decode http subject request", err)
-		}
+func httpHeaderFromProto(values map[string]*proto.StringList) http.Header {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(http.Header, len(values))
+	for key, value := range values {
+		out[key] = append([]string(nil), value.GetValues()...)
+	}
+	return out
+}
 
-		var rawBody []byte
-		if payload.RawBodyBase64 != "" {
-			decoded, err := base64.StdEncoding.DecodeString(payload.RawBodyBase64)
-			if err != nil {
-				return nil, newOperationError(http.StatusBadRequest, "decode http subject raw body", err)
-			}
-			rawBody = decoded
-		}
+func urlValuesFromProto(values map[string]*proto.StringList) url.Values {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(url.Values, len(values))
+	for key, value := range values {
+		out[key] = append([]string(nil), value.GetValues()...)
+	}
+	return out
+}
 
-		subject, err := resolver.ResolveHTTPSubject(ctx, HTTPSubjectRequest{
-			Binding:         payload.Binding,
-			Method:          payload.Method,
-			Path:            payload.Path,
-			ContentType:     payload.ContentType,
-			Headers:         http.Header(payload.Headers),
-			Query:           url.Values(payload.Query),
-			Params:          payload.Params,
-			RawBody:         rawBody,
-			SecurityScheme:  payload.SecurityScheme,
-			VerifiedSubject: payload.VerifiedSubject,
-			VerifiedClaims:  payload.VerifiedClaims,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if subject == nil {
-			return &OperationResult{Status: http.StatusNoContent}, nil
-		}
-
-		body, err := json.Marshal(subject)
-		if err != nil {
-			return nil, newOperationError(http.StatusInternalServerError, "marshal http subject response", err)
-		}
-		return &OperationResult{
-			Status: http.StatusOK,
-			Body:   string(body),
-		}, nil
-	}))
+func cloneVerifiedClaims(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
 }
 
 func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSessionCatalogRequest) (*proto.GetSessionCatalogResponse, error) {
