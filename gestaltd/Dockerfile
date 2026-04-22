@@ -11,11 +11,13 @@ COPY gestaltd/go.mod gestaltd/go.sum gestaltd/
 COPY sdk/go/go.mod sdk/go/go.sum sdk/go/
 RUN cd gestaltd && go mod download
 COPY . .
+ARG GESTALT_VERSION
 ARG TARGETARCH
 ARG TARGETVARIANT
 RUN mkdir -p /out && \
     cd gestaltd && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} GOARM=${TARGETVARIANT#v} go build -o /out/gestaltd ./cmd/gestaltd
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} GOARM=${TARGETVARIANT#v} \
+    go build -ldflags "-X main.version=${GESTALT_VERSION}" -o /out/gestaltd ./cmd/gestaltd
 
 # --- Static (default) ---
 FROM scratch AS static

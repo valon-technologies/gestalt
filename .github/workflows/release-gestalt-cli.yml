@@ -13,7 +13,35 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  verify-version:
+    name: Verify Release Version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Verify Cargo version matches tag
+        working-directory: gestalt
+        run: |
+          expected="${GITHUB_REF_NAME#gestalt/v}"
+          actual="$(
+            cargo metadata --format-version 1 --no-deps | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+for package in data["packages"]:
+    if package["name"] == "gestalt":
+        print(package["version"])
+        break
+else:
+    raise SystemExit("gestalt package not found in cargo metadata")
+'
+          )"
+          if [ "$actual" != "$expected" ]; then
+            echo "gestalt Cargo version $actual does not match release tag $expected" >&2
+            exit 1
+          fi
+
   build:
+    needs: verify-version
     uses: ./.github/workflows/rust-build-matrix.yml
     with:
       working-directory: gestalt
