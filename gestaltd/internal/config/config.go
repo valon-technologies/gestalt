@@ -948,6 +948,7 @@ type EgressConfig struct {
 }
 
 type AuthorizationConfig struct {
+	Callers   map[string]WorkloadDef    `yaml:"callers,omitempty"`
 	Workloads map[string]WorkloadDef    `yaml:"workloads,omitempty"`
 	Policies  map[string]HumanPolicyDef `yaml:"policies,omitempty"`
 }
@@ -1586,6 +1587,7 @@ func loadMergedConfigRoot(paths []string, lookup func(string) (string, bool), mo
 	if merged == nil {
 		return yaml.Node{}, nil
 	}
+	merged = normalizeAuthorizationAliases(merged)
 
 	data, err := yaml.Marshal(merged)
 	if err != nil {
@@ -1800,6 +1802,29 @@ func mergeConfigValues(base, overlay any) any {
 	}
 
 	return cloneConfigValue(overlay)
+}
+
+func normalizeAuthorizationAliases(value any) any {
+	root, ok := value.(map[string]any)
+	if !ok {
+		return value
+	}
+	authorization, ok := root["authorization"].(map[string]any)
+	if !ok {
+		return value
+	}
+	callers, ok := authorization["callers"]
+	if !ok {
+		return value
+	}
+	workloads := mergeConfigValues(authorization["workloads"], callers)
+	if workloads == nil {
+		delete(authorization, "workloads")
+	} else {
+		authorization["workloads"] = workloads
+	}
+	delete(authorization, "callers")
+	return value
 }
 
 func cloneConfigValue(value any) any {

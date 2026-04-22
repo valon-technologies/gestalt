@@ -99,6 +99,203 @@ plugins:
 	}
 }
 
+func TestLoadAuthorizationCallersAlias(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+authorization:
+  callers:
+    triage-bot:
+      displayName: Triage Bot
+      token: gst_wld_triage-bot-token
+      providers:
+        github:
+          connection: default
+          allow:
+            - list_issues
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	workload, ok := cfg.Authorization.Workloads["triage-bot"]
+	if !ok {
+		t.Fatalf("Authorization.Workloads missing callers alias entry: %#v", cfg.Authorization.Workloads)
+	}
+	if workload.DisplayName != "Triage Bot" {
+		t.Fatalf("Authorization.Workloads[triage-bot].DisplayName = %q, want %q", workload.DisplayName, "Triage Bot")
+	}
+}
+
+func TestLoadAuthorizationCallersAliasPrefersCallersOverWorkloads(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+authorization:
+  callers:
+    triage-bot:
+      token: gst_wld_triage-bot-token
+      providers:
+        github:
+          connection: default
+          allow:
+            - list_issues
+  workloads:
+    triage-bot:
+      token: gst_wld_triage-bot-token-2
+      providers:
+        github:
+          connection: default
+          allow:
+            - get_issue
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	workload, ok := cfg.Authorization.Workloads["triage-bot"]
+	if !ok {
+		t.Fatalf("Authorization.Workloads missing merged caller entry: %#v", cfg.Authorization.Workloads)
+	}
+	if workload.Token != "gst_wld_triage-bot-token" {
+		t.Fatalf("Authorization.Workloads[triage-bot].Token = %q, want callers alias to win", workload.Token)
+	}
+	if got := workload.Providers["github"].Allow; len(got) != 1 || got[0] != "list_issues" {
+		t.Fatalf("Authorization.Workloads[triage-bot].Providers[github].Allow = %#v, want callers alias value", got)
+	}
+}
+
+func TestLoadAuthorizationCallersAliasMergesPartialCallerOverride(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+authorization:
+  callers:
+    triage-bot:
+      displayName: Triage Bot
+      providers:
+        github:
+          connection: alternate
+  workloads:
+    triage-bot:
+      token: gst_wld_triage-bot-token
+      providers:
+        github:
+          connection: default
+          allow:
+            - list_issues
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	workload, ok := cfg.Authorization.Workloads["triage-bot"]
+	if !ok {
+		t.Fatalf("Authorization.Workloads missing merged caller entry: %#v", cfg.Authorization.Workloads)
+	}
+	if workload.DisplayName != "Triage Bot" {
+		t.Fatalf("Authorization.Workloads[triage-bot].DisplayName = %q, want %q", workload.DisplayName, "Triage Bot")
+	}
+	if workload.Token != "gst_wld_triage-bot-token" {
+		t.Fatalf("Authorization.Workloads[triage-bot].Token = %q, want inherited workload token", workload.Token)
+	}
+	provider, ok := workload.Providers["github"]
+	if !ok {
+		t.Fatalf("Authorization.Workloads[triage-bot].Providers missing github entry: %#v", workload.Providers)
+	}
+	if provider.Connection != "alternate" {
+		t.Fatalf("Authorization.Workloads[triage-bot].Providers[github].Connection = %q, want %q", provider.Connection, "alternate")
+	}
+	if got := provider.Allow; len(got) != 1 || got[0] != "list_issues" {
+		t.Fatalf("Authorization.Workloads[triage-bot].Providers[github].Allow = %#v, want inherited workload allowlist", got)
+	}
+}
+
+func TestLoadAuthorizationCallersAliasHonorsNullDeletesAcrossMixedKeys(t *testing.T) {
+	t.Parallel()
+
+	basePath := mustWriteConfigFile(t, `
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+authorization:
+  workloads:
+    triage-bot:
+      displayName: Legacy Bot
+      token: gst_wld_triage-bot-token
+      providers:
+        github:
+          connection: default
+          allow:
+            - list_issues
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+`)
+	overridePath := mustWriteConfigFile(t, `
+authorization:
+  callers:
+    triage-bot:
+      displayName: null
+      providers:
+        github: null
+`)
+
+	cfg, err := LoadPaths([]string{basePath, overridePath})
+	if err != nil {
+		t.Fatalf("LoadPaths: %v", err)
+	}
+
+	workload, ok := cfg.Authorization.Workloads["triage-bot"]
+	if !ok {
+		t.Fatalf("Authorization.Workloads missing merged caller entry: %#v", cfg.Authorization.Workloads)
+	}
+	if workload.DisplayName != "" {
+		t.Fatalf("Authorization.Workloads[triage-bot].DisplayName = %q, want empty after null delete", workload.DisplayName)
+	}
+	if workload.Token != "gst_wld_triage-bot-token" {
+		t.Fatalf("Authorization.Workloads[triage-bot].Token = %q, want inherited workload token", workload.Token)
+	}
+	if workload.Providers != nil {
+		t.Fatalf("Authorization.Workloads[triage-bot].Providers = %#v, want nil after null delete", workload.Providers)
+	}
+}
+
 func TestLoadConfigParsesPluginMCPFlag(t *testing.T) {
 	t.Parallel()
 

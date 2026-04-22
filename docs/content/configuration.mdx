@@ -4,15 +4,15 @@ Gestalt is configured from one or more YAML files. This page covers the key conc
 
 ## Config file structure
 
-A Gestalt config has six top-level keys: `server` for host settings and host-provider selection, `authorization` for shared human/workload access policy, `providers` for named host-scoped providers and UIs, `runtime` for named plugin runtime backends, `workflows` for config-managed schedules and event triggers, and `plugins` for executable integrations and optional plugin-backed UI mounts.
+A Gestalt config has six top-level keys: `server` for host settings and host-provider selection, `authorization` for shared human/configured-caller access policy, `providers` for named host-scoped providers and UIs, `runtime` for named plugin runtime backends, `workflows` for config-managed schedules and event triggers, and `plugins` for executable integrations and optional plugin-backed UI mounts.
 
 ```yaml
 authorization:
   # shared human access policies
   policies: ...
 
-  # workload bearer-token policy
-  workloads: ...
+  # configured caller bearer-token policy
+  callers: ...
 
 plugins:
   <name>: ...               # each is a ProviderEntry
@@ -305,7 +305,7 @@ plugins:
 | Mode | Behavior |
 | --- | --- |
 | `none` | No upstream credential needed. |
-| `user` | Credentials are stored for the calling subject (for example `user:<id>`, `workload:<id>`, or a managed identity subject). |
+| `user` | Credentials are stored for the calling subject (for example `user:<id>`, the current configured-caller runtime subject `workload:<id>`, or a managed identity subject). |
 
 ### Authentication Types
 
