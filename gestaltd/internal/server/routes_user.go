@@ -27,6 +27,7 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Post("/{triggerID}/pause", s.pauseGlobalWorkflowEventTrigger)
 			r.Post("/{triggerID}/resume", s.resumeGlobalWorkflowEventTrigger)
 		})
+		r.Post("/workflow/events", s.publishWorkflowEvent)
 		r.Route("/workflow/runs", func(r chi.Router) {
 			r.Get("/", s.listGlobalWorkflowRuns)
 			r.Get("/{runID}", s.getGlobalWorkflowRun)

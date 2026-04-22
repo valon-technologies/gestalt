@@ -394,6 +394,10 @@ func (m *stubWorkflowManager) CancelRun(context.Context, *principal.Principal, s
 	return nil, core.ErrNotFound
 }
 
+func (m *stubWorkflowManager) PublishEvent(context.Context, *principal.Principal, coreworkflow.Event) (coreworkflow.Event, error) {
+	return coreworkflow.Event{}, fmt.Errorf("event publishing is not implemented in this test stub")
+}
+
 func (m *stubWorkflowManager) Subjects() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()

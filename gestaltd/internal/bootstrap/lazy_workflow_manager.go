@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 )
@@ -158,6 +159,14 @@ func (l *lazyWorkflowManager) CancelRun(ctx context.Context, p *principal.Princi
 		return nil, err
 	}
 	return target.CancelRun(ctx, p, runID, reason)
+}
+
+func (l *lazyWorkflowManager) PublishEvent(ctx context.Context, p *principal.Principal, event coreworkflow.Event) (coreworkflow.Event, error) {
+	target, err := l.current()
+	if err != nil {
+		return coreworkflow.Event{}, err
+	}
+	return target.PublishEvent(ctx, p, event)
 }
 
 func (l *lazyWorkflowManager) current() (workflowmanager.Service, error) {

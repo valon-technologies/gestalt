@@ -3,8 +3,8 @@ use gestalt::api::{self, ApiClient};
 use gestalt::cli::{
     AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs, IdentityCommands,
     IdentityGrantCommands, IdentityMemberCommands, IdentityTokenCommands, InvokeArgs,
-    PluginCommands, TokenCommands, WorkflowCommands, WorkflowRunCommands, WorkflowScheduleCommands,
-    WorkflowTriggerCommands,
+    PluginCommands, TokenCommands, WorkflowCommands, WorkflowEventCommands, WorkflowRunCommands,
+    WorkflowScheduleCommands, WorkflowTriggerCommands,
 };
 use gestalt::commands;
 use gestalt::output;
@@ -193,6 +193,11 @@ fn run() -> anyhow::Result<()> {
                     }
                     WorkflowRunCommands::Cancel { id, reason } => {
                         commands::workflows::cancel_run(&client, &id, reason.as_deref(), format)
+                    }
+                },
+                WorkflowCommands::Events { command } => match command {
+                    WorkflowEventCommands::Publish(args) => {
+                        commands::workflows::publish_event(&client, &args, format)
                     }
                 },
             }

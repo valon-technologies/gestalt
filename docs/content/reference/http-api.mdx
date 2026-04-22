@@ -51,19 +51,17 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | `DELETE` | `/api/v1/workflow/schedules/{scheduleID}` | Delete one workflow schedule. |
 | `POST` | `/api/v1/workflow/schedules/{scheduleID}/pause` | Pause one workflow schedule. |
 | `POST` | `/api/v1/workflow/schedules/{scheduleID}/resume` | Resume one workflow schedule. |
-| `GET` | `/api/v1/workflow/event-triggers` | List user-owned workflow event triggers. |
-| `POST` | `/api/v1/workflow/event-triggers` | Create a user-owned workflow event trigger. |
-| `GET` | `/api/v1/workflow/event-triggers/{triggerID}` | Inspect one workflow event trigger. |
-| `PUT` | `/api/v1/workflow/event-triggers/{triggerID}` | Update one workflow event trigger. |
-| `DELETE` | `/api/v1/workflow/event-triggers/{triggerID}` | Delete one workflow event trigger. |
-| `POST` | `/api/v1/workflow/event-triggers/{triggerID}/pause` | Pause one workflow event trigger. |
-| `POST` | `/api/v1/workflow/event-triggers/{triggerID}/resume` | Resume one workflow event trigger. |
+| `GET` | `/api/v1/workflow/event-triggers` | List user-owned workflow triggers. |
+| `POST` | `/api/v1/workflow/event-triggers` | Create a user-owned workflow trigger. |
+| `GET` | `/api/v1/workflow/event-triggers/{triggerID}` | Inspect one workflow trigger. |
+| `PUT` | `/api/v1/workflow/event-triggers/{triggerID}` | Update one workflow trigger. |
+| `DELETE` | `/api/v1/workflow/event-triggers/{triggerID}` | Delete one workflow trigger. |
+| `POST` | `/api/v1/workflow/event-triggers/{triggerID}/pause` | Pause one workflow trigger. |
+| `POST` | `/api/v1/workflow/event-triggers/{triggerID}/resume` | Resume one workflow trigger. |
+| `POST` | `/api/v1/workflow/events` | Publish one workflow event. Gestalt normalizes the event and fans it out across the configured workflow providers. |
 | `GET` | `/api/v1/workflow/runs` | List workflow runs. Supports optional `plugin` and `status` query filters. |
 | `GET` | `/api/v1/workflow/runs/{runID}` | Inspect one workflow run. |
 | `POST` | `/api/v1/workflow/runs/{runID}/cancel` | Cancel one workflow run. The request body may include an optional `reason`. |
-
-Gestalt still does not expose a generic public event-publish endpoint such as
-`/api/v1/workflow/events`.
 
 ### API Tokens
 
@@ -170,7 +168,7 @@ curl -X POST http://localhost:8080/api/v1/workflow/schedules \
     }
   }'
 
-# Create a workflow event trigger
+# Create a workflow trigger
 curl -X POST http://localhost:8080/api/v1/workflow/event-triggers \
   -H 'Authorization: Bearer gst_api_...' \
   -H 'Content-Type: application/json' \
@@ -187,6 +185,23 @@ curl -X POST http://localhost:8080/api/v1/workflow/event-triggers \
         "channel": "C123",
         "text": "Roadmap item updated"
       }
+    }
+  }'
+
+# Publish a workflow event
+curl -X POST http://localhost:8080/api/v1/workflow/events \
+  -H 'Authorization: Bearer gst_api_...' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "type": "roadmap.item.updated",
+    "source": "roadmap",
+    "subject": "item",
+    "dataContentType": "application/json",
+    "data": {
+      "id": "item-1"
+    },
+    "extensions": {
+      "traceId": "trace-1"
     }
   }'
 

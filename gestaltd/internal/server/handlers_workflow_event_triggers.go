@@ -81,7 +81,7 @@ func (s *Server) createGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		return
 	}
 	if strings.TrimSpace(req.Match.Type) == "" {
-		writeError(w, http.StatusBadRequest, "workflow event trigger match.type is required")
+		writeError(w, http.StatusBadRequest, "workflow trigger match.type is required")
 		return
 	}
 	managed, err := s.workflowSchedules.CreateEventTrigger(r.Context(), p, workflowmanager.EventTriggerUpsert{
@@ -128,7 +128,7 @@ func (s *Server) updateGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		return
 	}
 	if strings.TrimSpace(req.Match.Type) == "" {
-		writeError(w, http.StatusBadRequest, "workflow event trigger match.type is required")
+		writeError(w, http.StatusBadRequest, "workflow trigger match.type is required")
 		return
 	}
 	managed, err := s.workflowSchedules.UpdateEventTrigger(r.Context(), p, triggerID, workflowmanager.EventTriggerUpsert{
@@ -257,17 +257,17 @@ func (s *Server) writeWorkflowEventTriggerManagerError(w http.ResponseWriter, r 
 func (s *Server) writeWorkflowEventTriggerProviderError(ctx context.Context, w http.ResponseWriter, pluginName, triggerID string, err error) {
 	switch {
 	case errors.Is(err, core.ErrNotFound):
-		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow event trigger %q not found", triggerID))
+		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow trigger %q not found", triggerID))
 	default:
-		slog.ErrorContext(ctx, "workflow event trigger provider error",
+		slog.ErrorContext(ctx, "workflow trigger provider error",
 			"plugin", pluginName,
 			"trigger_id", triggerID,
 			"error", err,
 		)
 		if strings.TrimSpace(pluginName) == "" {
-			writeError(w, http.StatusInternalServerError, "workflow event trigger request failed")
+			writeError(w, http.StatusInternalServerError, "workflow trigger request failed")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("workflow event trigger request failed for integration %q", pluginName))
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("workflow trigger request failed for integration %q", pluginName))
 	}
 }

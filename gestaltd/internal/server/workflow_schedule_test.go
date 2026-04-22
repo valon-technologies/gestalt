@@ -61,10 +61,29 @@ func (s *stubWorkflowControl) ResolveProvider(name string) (coreworkflow.Provide
 	return s.provider, nil
 }
 
+func (s *stubWorkflowControl) ProviderNames() []string {
+	if s.providers != nil {
+		names := make([]string, 0, len(s.providers))
+		for name := range s.providers {
+			names = append(names, name)
+		}
+		slices.Sort(names)
+		return names
+	}
+	if strings.TrimSpace(s.defaultProviderName) != "" {
+		return []string{strings.TrimSpace(s.defaultProviderName)}
+	}
+	if s.provider != nil {
+		return []string{"default"}
+	}
+	return nil
+}
+
 type memoryWorkflowProvider struct {
 	schedules            map[string]*coreworkflow.Schedule
 	triggers             map[string]*coreworkflow.EventTrigger
 	runs                 map[string]*coreworkflow.Run
+	publishEventReqs     []coreworkflow.PublishEventRequest
 	upsertReqs           []coreworkflow.UpsertScheduleRequest
 	upsertTriggerReqs    []coreworkflow.UpsertEventTriggerRequest
 	deleteReqs           []coreworkflow.DeleteScheduleRequest
@@ -83,6 +102,7 @@ type memoryWorkflowProvider struct {
 	getRunErr            error
 	listRunsErr          error
 	cancelRunErr         error
+	publishEventErr      error
 }
 
 func newMemoryWorkflowProvider() *memoryWorkflowProvider {
@@ -310,7 +330,12 @@ func (p *memoryWorkflowProvider) ResumeEventTrigger(_ context.Context, req corew
 	return cloneWorkflowEventTrigger(trigger), nil
 }
 
-func (p *memoryWorkflowProvider) PublishEvent(context.Context, coreworkflow.PublishEventRequest) error {
+func (p *memoryWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) error {
+	if p.publishEventErr != nil {
+		return p.publishEventErr
+	}
+	req.Event = cloneWorkflowEvent(req.Event)
+	p.publishEventReqs = append(p.publishEventReqs, req)
 	return nil
 }
 
@@ -392,6 +417,17 @@ func cloneWorkflowEventTrigger(trigger *coreworkflow.EventTrigger) *coreworkflow
 		cloned.UpdatedAt = &value
 	}
 	return &cloned
+}
+
+func cloneWorkflowEvent(event coreworkflow.Event) coreworkflow.Event {
+	cloned := event
+	cloned.Data = cloneMap(event.Data)
+	cloned.Extensions = cloneMap(event.Extensions)
+	if event.Time != nil {
+		value := *event.Time
+		cloned.Time = &value
+	}
+	return cloned
 }
 
 func cloneMap(src map[string]any) map[string]any {
@@ -2153,5 +2189,173 @@ func TestWorkflowEventTriggerCreateRequiresMatchType(t *testing.T) {
 	}
 	if len(provider.upsertTriggerReqs) != 0 {
 		t.Fatalf("upsert trigger requests = %d, want 0", len(provider.upsertTriggerReqs))
+	}
+}
+
+func TestWorkflowEventPublishFansOutAcrossProvidersAndPlugins(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	basicProvider := newMemoryWorkflowProvider()
+	advancedProvider := newMemoryWorkflowProvider()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{
+				Name:       "roadmap",
+				Operations: []catalog.CatalogOperation{{ID: "sync", Method: http.MethodPost}},
+			},
+		}, &coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{
+				Name:       "slack",
+				Operations: []catalog.CatalogOperation{{ID: "chat.postMessage", Method: http.MethodPost}},
+			},
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			providers: map[string]coreworkflow.Provider{
+				"basic":    basicProvider,
+				"advanced": advancedProvider,
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(
+		http.MethodPost,
+		ts.URL+"/api/v1/workflow/events",
+		bytes.NewBufferString(`{"type":"roadmap.item.updated","source":"roadmap","subject":"item","data":{"id":"item-1"},"extensions":{"traceId":"trace-1"}}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("publish request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 202, got %d: %s", resp.StatusCode, body)
+	}
+
+	var body struct {
+		Status string `json:"status"`
+		Event  struct {
+			ID          string         `json:"id"`
+			Type        string         `json:"type"`
+			Source      string         `json:"source"`
+			Subject     string         `json:"subject"`
+			SpecVersion string         `json:"specVersion"`
+			Time        *time.Time     `json:"time"`
+			Data        map[string]any `json:"data"`
+			Extensions  map[string]any `json:"extensions"`
+		} `json:"event"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode publish response: %v", err)
+	}
+	if body.Status != "published" {
+		t.Fatalf("publish response status = %q, want published", body.Status)
+	}
+	if body.Event.ID == "" || body.Event.SpecVersion != "1.0" || body.Event.Time == nil {
+		t.Fatalf("published event = %#v", body.Event)
+	}
+	if body.Event.Type != "roadmap.item.updated" || body.Event.Source != "roadmap" || body.Event.Subject != "item" {
+		t.Fatalf("published event = %#v", body.Event)
+	}
+	if got := body.Event.Data["id"]; got != "item-1" {
+		t.Fatalf("published event data = %#v", body.Event.Data)
+	}
+	if got := body.Event.Extensions["traceId"]; got != "trace-1" {
+		t.Fatalf("published event extensions = %#v", body.Event.Extensions)
+	}
+
+	for name, provider := range map[string]*memoryWorkflowProvider{
+		"basic":    basicProvider,
+		"advanced": advancedProvider,
+	} {
+		if len(provider.publishEventReqs) != 2 {
+			t.Fatalf("%s publish requests = %d, want 2", name, len(provider.publishEventReqs))
+		}
+		gotPlugins := []string{
+			provider.publishEventReqs[0].PluginName,
+			provider.publishEventReqs[1].PluginName,
+		}
+		slices.Sort(gotPlugins)
+		if !slices.Equal(gotPlugins, []string{"roadmap", "slack"}) {
+			t.Fatalf("%s publish plugins = %#v", name, gotPlugins)
+		}
+		for _, publishReq := range provider.publishEventReqs {
+			if publishReq.Event.ID != body.Event.ID || publishReq.Event.SpecVersion != "1.0" || publishReq.Event.Time == nil || !publishReq.Event.Time.Equal(*body.Event.Time) {
+				t.Fatalf("%s publish event = %#v, response = %#v", name, publishReq.Event, body.Event)
+			}
+		}
+	}
+}
+
+func TestWorkflowEventPublishRequiresType(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryWorkflowProvider()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{
+				Name:       "roadmap",
+				Operations: []catalog.CatalogOperation{{ID: "sync", Method: http.MethodPost}},
+			},
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			provider:            provider,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(
+		http.MethodPost,
+		ts.URL+"/api/v1/workflow/events",
+		bytes.NewBufferString(`{"source":"roadmap","data":{"id":"item-1"}}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("publish request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
+	}
+	if len(provider.publishEventReqs) != 0 {
+		t.Fatalf("publish event requests = %d, want 0", len(provider.publishEventReqs))
 	}
 }
