@@ -48,24 +48,26 @@ export type AuthorizationSubjectSearchMessage = SubjectSearchResponse;
 export type AuthorizationActionSearchMessage = ActionSearchResponse;
 export type AuthorizationReadRelationshipsMessage = ReadRelationshipsResponse;
 
+const sharedAuthorizationTransport: {
+  socketPath: string;
+  client: AuthorizationClient | undefined;
+} = {
+  socketPath: "",
+  client: undefined,
+};
+
 /**
  * Read-only client for the host-configured authorization provider.
  */
 export class AuthorizationClient {
   private readonly client: Client<typeof AuthorizationProviderService>;
 
-  constructor() {
-    const socketPath = process.env[ENV_AUTHORIZATION_SOCKET];
-    if (!socketPath) {
-      throw new Error(
-        `authorization: ${ENV_AUTHORIZATION_SOCKET} is not set`,
-      );
-    }
-
+  constructor(socketPath?: string) {
+    const resolvedSocketPath = resolveAuthorizationSocketPath(socketPath);
     const transport = createGrpcTransport({
       baseUrl: "http://localhost",
       nodeOptions: {
-        createConnection: () => connect(socketPath),
+        createConnection: () => connect(resolvedSocketPath),
       },
     });
     this.client = createClient(AuthorizationProviderService, transport);
@@ -111,5 +113,26 @@ export class AuthorizationClient {
  * client inside authored providers.
  */
 export function Authorization(): AuthorizationClient {
-  return new AuthorizationClient();
+  const socketPath = resolveAuthorizationSocketPath();
+  if (
+    sharedAuthorizationTransport.client &&
+    sharedAuthorizationTransport.socketPath === socketPath
+  ) {
+    return sharedAuthorizationTransport.client;
+  }
+
+  const client = new AuthorizationClient(socketPath);
+  sharedAuthorizationTransport.socketPath = socketPath;
+  sharedAuthorizationTransport.client = client;
+  return client;
+}
+
+function resolveAuthorizationSocketPath(socketPath = process.env[ENV_AUTHORIZATION_SOCKET]): string {
+  const trimmed = socketPath?.trim() ?? "";
+  if (!trimmed) {
+    throw new Error(
+      `authorization: ${ENV_AUTHORIZATION_SOCKET} is not set`,
+    );
+  }
+  return trimmed;
 }

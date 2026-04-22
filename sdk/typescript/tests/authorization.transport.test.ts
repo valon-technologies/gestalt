@@ -16,8 +16,28 @@ import {
   SubjectSchema,
   SubjectSearchResponseSchema,
 } from "../gen/v1/authorization_pb.ts";
-import { Authorization, ENV_AUTHORIZATION_SOCKET } from "../src/index.ts";
+import {
+  Authorization,
+  AuthorizationClient,
+  ENV_AUTHORIZATION_SOCKET,
+} from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
+
+test("Authorization() and AuthorizationClient fail fast when the host socket is unset", () => {
+  const previousSocket = process.env[ENV_AUTHORIZATION_SOCKET];
+  delete process.env[ENV_AUTHORIZATION_SOCKET];
+
+  try {
+    expect(() => Authorization()).toThrow(ENV_AUTHORIZATION_SOCKET);
+    expect(() => new AuthorizationClient()).toThrow(ENV_AUTHORIZATION_SOCKET);
+  } finally {
+    if (previousSocket === undefined) {
+      delete process.env[ENV_AUTHORIZATION_SOCKET];
+    } else {
+      process.env[ENV_AUTHORIZATION_SOCKET] = previousSocket;
+    }
+  }
+});
 
 test("Authorization() forwards read-only authorization requests to the host socket", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-authorization-"));
@@ -30,6 +50,7 @@ test("Authorization() forwards read-only authorization requests to the host sock
     subjectType: string;
     pageSize: number;
   }> = [];
+  let sessionCount = 0;
 
   const handler = connectNodeAdapter({
     grpc: true,
@@ -71,6 +92,9 @@ test("Authorization() forwards read-only authorization requests to the host sock
     },
   });
   const server = createServer(handler);
+  server.on("session", () => {
+    sessionCount += 1;
+  });
 
   try {
     await new Promise<void>((resolve, reject) => {
@@ -83,15 +107,14 @@ test("Authorization() forwards read-only authorization requests to the host sock
 
     process.env[ENV_AUTHORIZATION_SOCKET] = socketPath;
 
-    const client = Authorization();
-    const metadata = await client.getMetadata();
+    const metadata = await Authorization().getMetadata();
     expect(metadata.capabilities).toEqual([
       "search_subjects",
       "read_relationships",
     ]);
     expect(metadata.activeModelId).toBe("authz-model-1");
 
-    const response = await client.searchSubjects({
+    const response = await Authorization().searchSubjects({
       resource: create(ResourceSchema, {
         type: "slack_identity",
         id: "team:T123:user:U456",
@@ -117,6 +140,7 @@ test("Authorization() forwards read-only authorization requests to the host sock
         pageSize: 1,
       },
     ]);
+    expect(sessionCount).toBe(1);
   } finally {
     server.close();
     if (previousSocket === undefined) {

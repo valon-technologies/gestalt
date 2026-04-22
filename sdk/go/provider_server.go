@@ -98,6 +98,7 @@ func (s *ProviderServer) ResolveHTTPSubject(ctx context.Context, req *proto.Reso
 	ctx = withRequestContext(ctx, req.GetContext())
 	defer func() {
 		if recovered := recover(); recovered != nil {
+			_ = recoveredOperationResult("ResolveHTTPSubject", recovered)
 			err = status.Error(codes.Internal, internalErrorMessage)
 		}
 	}()

@@ -3,7 +3,9 @@ package gestalt_test
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 
@@ -378,13 +380,34 @@ func TestProviderServerExecute(t *testing.T) {
 		)
 		client := newIntegrationProviderClient(t, &panicHTTPSubjectProvider{}, panicHTTPSubjectRouter)
 
-		_, err := client.ResolveHTTPSubject(context.Background(), &proto.ResolveHTTPSubjectRequest{
+		reader, writer, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("os.Pipe: %v", err)
+		}
+		defer func() { _ = reader.Close() }()
+
+		oldStderr := os.Stderr
+		os.Stderr = writer
+		defer func() {
+			os.Stderr = oldStderr
+		}()
+
+		_, err = client.ResolveHTTPSubject(context.Background(), &proto.ResolveHTTPSubjectRequest{
 			Request: &proto.HTTPSubjectRequest{
 				Binding: "command",
 			},
 		})
+		os.Stderr = oldStderr
+		_ = writer.Close()
+		output, readErr := io.ReadAll(reader)
+		if readErr != nil {
+			t.Fatalf("io.ReadAll: %v", readErr)
+		}
 		if status.Code(err) != codes.Internal {
 			t.Fatalf("ResolveHTTPSubject code = %v, want %v (err=%v)", status.Code(err), codes.Internal, err)
+		}
+		if !strings.Contains(string(output), `panic in Gestalt operation "ResolveHTTPSubject": boom`) {
+			t.Fatalf("stderr = %q, want panic log", string(output))
 		}
 	})
 
