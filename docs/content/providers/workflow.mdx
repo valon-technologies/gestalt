@@ -4,9 +4,9 @@ import { Callout, Tabs } from 'nextra/components'
 
 Gestalt workflows let you invoke a plugin operation later instead of right now.
 Today that primarily means cron-based schedules, triggers, workflow run
-history, and run cancelation. The workflow model is global. A workflow target
-is always explicit: `plugin`, `operation`, and optional `connection`,
-`instance`, and `input`.
+history, event publishing, and run cancelation. The workflow model is global.
+A workflow target is always explicit: `plugin`, `operation`, and optional
+`connection`, `instance`, and `input`.
 
 <Callout type="info">
   The public workflow surface now covers schedules, triggers, event publishing,
@@ -28,6 +28,10 @@ There are two ownership modes. Config-managed workflows live in YAML under
 top-level `workflows:` and execute as the system config actor. User-owned
 schedules and triggers are created through the global API or CLI and
 execute as the subject that created them.
+
+Each schedule or trigger points at exactly one target operation. If you want a
+larger flow, the usual pattern is to let one step publish an event and then let
+later triggers match that event and start the next steps.
 
 ## How workflow providers work
 
@@ -339,7 +343,8 @@ When you publish an event, Gestalt normalizes the event ID, spec version, and
 timestamp if you omit them, then fans that event out across the configured
 workflow providers. Triggers match on the event payload itself. In practice,
 that means `type` is required, while `source` and `subject` remain optional
-exact-match fields.
+exact-match fields. This is also the main handoff mechanism for multi-step
+workflows.
 
 <Tabs items={['CLI', 'HTTP']}>
   <Tabs.Tab>
@@ -373,6 +378,66 @@ exact-match fields.
     ```
   </Tabs.Tab>
 </Tabs>
+
+## Composing larger workflows
+
+Gestalt does not currently let you declare a graph of named steps inside one
+workflow object. A schedule or trigger always invokes one target. The way to
+build something that feels like a DAG is to compose small targets with workflow
+events.
+
+One common pattern is to use a schedule to start the first step, then have that
+operation publish a completion event. Other triggers listen for that event and
+start the next steps.
+
+```yaml
+workflows:
+  schedules:
+    nightly_sync:
+      provider: local
+      plugin: roadmap
+      operation: sync
+      cron: "0 3 * * *"
+      timezone: UTC
+      input:
+        mode: incremental
+
+  eventTriggers:
+    notify_sync_completed:
+      provider: local
+      match:
+        type: roadmap.sync.completed
+        source: roadmap
+      plugin: slack
+      operation: chat.postMessage
+      connection: alerts
+      input:
+        channel: C123456
+        text: "Nightly roadmap sync completed."
+
+    refresh_search_index:
+      provider: local
+      match:
+        type: roadmap.sync.completed
+        source: roadmap
+      plugin: search
+      operation: reindex
+      connection: default
+      input:
+        scope: roadmap
+```
+
+In that example, `nightly_sync` only starts the first step. The
+`roadmap.sync` operation is responsible for publishing
+`roadmap.sync.completed` when it finishes successfully. Once that event exists,
+both triggers match it and the flow fans out into Slack notification and search
+reindexing.
+
+You can publish that handoff event from outside Gestalt through
+`POST /api/v1/workflow/events`, or from plugin code through the plugin-facing
+workflow manager `PublishEvent` call. External publishing is useful when some
+other system already knows the step finished. Plugin-side publishing is useful
+when the operation itself owns the next handoff.
 
 ## Inspecting and canceling workflow runs
 

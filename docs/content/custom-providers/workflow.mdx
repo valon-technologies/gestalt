@@ -10,6 +10,12 @@ Workflow providers back global workflow runs, schedules, and triggers.
 Gestalt uses them to persist workflow state and to call back into target plugin
 operations through the workflow host socket.
 
+This runtime is not a declarative DAG planner. Gestalt does not hand a workflow
+provider a graph of named steps. A provider stores schedules, triggers, runs,
+and events, then asks Gestalt to invoke one explicit target operation at a
+time. Larger flows are composed above this layer by publishing events and
+attaching more triggers to those events.
+
 ## Manifest
 
 A workflow provider manifest declares `kind: workflow`:
