@@ -210,6 +210,9 @@ func (plan StaticConnectionPlan) fallbackConnection() string {
 	if plan.defaultConnection != "" {
 		return plan.defaultConnection
 	}
+	if _, ok := plan.namedConnections["default"]; ok {
+		return "default"
+	}
 	if len(plan.namedConnections) == 0 {
 		return PluginConnectionName
 	}
@@ -227,6 +230,9 @@ func (plan StaticConnectionPlan) resolveSurfaceConnectionName(raw string) string
 	}
 	if plan.defaultConnection != "" {
 		return plan.defaultConnection
+	}
+	if _, ok := plan.namedConnections["default"]; ok {
+		return "default"
 	}
 	if len(plan.namedConnections) == 1 {
 		for name := range plan.namedConnections {
