@@ -104,6 +104,7 @@ type HostedPluginConn interface {
 
 type Provider interface {
 	Capabilities(ctx context.Context) (Capabilities, error)
+	ListSessions(ctx context.Context) ([]Session, error)
 	StartSession(ctx context.Context, req StartSessionRequest) (*Session, error)
 	GetSession(ctx context.Context, req GetSessionRequest) (*Session, error)
 	StopSession(ctx context.Context, req StopSessionRequest) error

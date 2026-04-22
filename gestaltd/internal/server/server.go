@@ -93,6 +93,7 @@ type Server struct {
 	managedIdentityMu      sync.Mutex
 	providers              *registry.ProviderMap[core.Provider]
 	workflow               bootstrap.WorkflowControl
+	pluginRuntimes         bootstrap.RuntimeInspector
 	resolver               *principal.Resolver
 	authResolvers          map[string]*principal.Resolver
 	invoker                invocation.Invoker
@@ -139,6 +140,7 @@ type Config struct {
 	Services              *coredata.Services
 	Providers             *registry.ProviderMap[core.Provider]
 	Workflow              bootstrap.WorkflowControl
+	PluginRuntimes        bootstrap.RuntimeInspector
 	Invoker               invocation.Invoker
 	DefaultConnection     map[string]string
 	CatalogConnection     map[string]string
@@ -278,6 +280,7 @@ func New(cfg Config) (*Server, error) {
 		authorizationProvider:  cfg.AuthorizationProvider,
 		providers:              cfg.Providers,
 		workflow:               cfg.Workflow,
+		pluginRuntimes:         cfg.PluginRuntimes,
 		resolver:               resolver,
 		authResolvers:          authResolvers,
 		invoker:                cfg.Invoker,

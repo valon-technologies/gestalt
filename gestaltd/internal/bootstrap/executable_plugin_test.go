@@ -107,6 +107,10 @@ func (r *capturingPluginRuntime) StartSession(ctx context.Context, req pluginrun
 	return r.provider.StartSession(ctx, req)
 }
 
+func (r *capturingPluginRuntime) ListSessions(ctx context.Context) ([]pluginruntime.Session, error) {
+	return r.provider.ListSessions(ctx)
+}
+
 func (r *capturingPluginRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
 	return r.provider.GetSession(ctx, req)
 }
@@ -170,6 +174,10 @@ func (r *capturingBundlePluginRuntime) Capabilities(context.Context) (pluginrunt
 
 func (r *capturingBundlePluginRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
 	return r.provider.StartSession(ctx, req)
+}
+
+func (r *capturingBundlePluginRuntime) ListSessions(ctx context.Context) ([]pluginruntime.Session, error) {
+	return r.provider.ListSessions(ctx)
 }
 
 func (r *capturingBundlePluginRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
@@ -262,6 +270,10 @@ func (r *slowStopPluginRuntime) StartSession(ctx context.Context, req pluginrunt
 	return r.inner.StartSession(ctx, req)
 }
 
+func (r *slowStopPluginRuntime) ListSessions(ctx context.Context) ([]pluginruntime.Session, error) {
+	return r.inner.ListSessions(ctx)
+}
+
 func (r *slowStopPluginRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
 	return r.inner.GetSession(ctx, req)
 }
@@ -304,6 +316,10 @@ func (r *staticCapabilityPluginRuntime) Capabilities(context.Context) (pluginrun
 
 func (r *staticCapabilityPluginRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
 	return r.inner.StartSession(ctx, req)
+}
+
+func (r *staticCapabilityPluginRuntime) ListSessions(ctx context.Context) ([]pluginruntime.Session, error) {
+	return r.inner.ListSessions(ctx)
 }
 
 func (r *staticCapabilityPluginRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {

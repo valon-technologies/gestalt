@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -47,6 +48,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
+	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
@@ -123,6 +125,34 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 type stubResolver struct {
 	token string
 	err   error
+}
+
+type staticRuntimeInspector struct {
+	snapshots []bootstrap.RuntimeProviderSnapshot
+	err       error
+}
+
+func (s *staticRuntimeInspector) SnapshotPluginRuntimes(context.Context) ([]bootstrap.RuntimeProviderSnapshot, error) {
+	if s == nil {
+		return nil, nil
+	}
+	if s.err != nil {
+		return nil, s.err
+	}
+	out := make([]bootstrap.RuntimeProviderSnapshot, 0, len(s.snapshots))
+	for _, snapshot := range s.snapshots {
+		cloned := snapshot
+		cloned.Sessions = make([]pluginruntime.Session, 0, len(snapshot.Sessions))
+		for _, session := range snapshot.Sessions {
+			cloned.Sessions = append(cloned.Sessions, pluginruntime.Session{
+				ID:       session.ID,
+				State:    session.State,
+				Metadata: maps.Clone(session.Metadata),
+			})
+		}
+		out = append(out, cloned)
+	}
+	return out, nil
 }
 
 func (s *stubResolver) ResolveToken(ctx context.Context, _ *principal.Principal, _ string, _ string, _ string) (context.Context, string, error) {
@@ -2406,6 +2436,193 @@ func TestAdminAPI_RoutesMountedWithoutAdminUI(t *testing.T) {
 	}
 	if len(plugins) != 1 || plugins[0]["name"] != "sample_plugin" {
 		t.Fatalf("plugins = %+v, want sample_plugin", plugins)
+	}
+}
+
+func TestAdminAPI_RuntimeProviders(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.PluginRuntimes = &staticRuntimeInspector{
+			snapshots: []bootstrap.RuntimeProviderSnapshot{
+				{
+					Name:    "local",
+					Driver:  config.RuntimeProviderDriverLocal,
+					Default: true,
+				},
+				{
+					Name:   "modal",
+					Driver: config.RuntimeProviderDriver("modal"),
+					Loaded: true,
+					Capabilities: pluginruntime.Capabilities{
+						HostedPluginRuntime: true,
+						ProviderGRPCTunnel:  true,
+						CIDREgress:          true,
+					},
+					Sessions: []pluginruntime.Session{{
+						ID:    "session-1",
+						State: pluginruntime.SessionStateRunning,
+						Metadata: map[string]string{
+							"plugin": "support",
+							"owner":  "support-platform",
+						},
+					}},
+				},
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/admin/api/v1/runtime/providers")
+	if err != nil {
+		t.Fatalf("GET runtime providers: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("runtime providers status = %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	var providers []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&providers); err != nil {
+		t.Fatalf("decoding runtime providers: %v", err)
+	}
+	if len(providers) != 2 {
+		t.Fatalf("runtime providers len = %d, want 2", len(providers))
+	}
+	if got := providers[0]["name"]; got != "local" {
+		t.Fatalf("runtime providers[0].name = %v, want local", got)
+	}
+	if got := providers[0]["loaded"]; got != false {
+		t.Fatalf("runtime providers[0].loaded = %v, want false", got)
+	}
+	if got := providers[0]["default"]; got != true {
+		t.Fatalf("runtime providers[0].default = %v, want true", got)
+	}
+	if _, ok := providers[0]["sessionCount"]; ok {
+		t.Fatalf("runtime providers[0].sessionCount unexpectedly present: %#v", providers[0]["sessionCount"])
+	}
+	if got := providers[1]["name"]; got != "modal" {
+		t.Fatalf("runtime providers[1].name = %v, want modal", got)
+	}
+	if got := providers[1]["loaded"]; got != true {
+		t.Fatalf("runtime providers[1].loaded = %v, want true", got)
+	}
+	if got := providers[1]["sessionCount"]; got != float64(1) {
+		t.Fatalf("runtime providers[1].sessionCount = %v, want 1", got)
+	}
+	caps, ok := providers[1]["capabilities"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime providers[1].capabilities = %#v, want object", providers[1]["capabilities"])
+	}
+	if caps["hostedPluginRuntime"] != true || caps["providerGRPCTunnel"] != true || caps["cidrEgress"] != true {
+		t.Fatalf("runtime providers[1].capabilities = %#v", caps)
+	}
+}
+
+func TestAdminAPI_RuntimeProviderSessions(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.PluginRuntimes = &staticRuntimeInspector{
+			snapshots: []bootstrap.RuntimeProviderSnapshot{{
+				Name:   "modal",
+				Driver: config.RuntimeProviderDriver("modal"),
+				Loaded: true,
+				Sessions: []pluginruntime.Session{{
+					ID:    "session-1",
+					State: pluginruntime.SessionStateRunning,
+					Metadata: map[string]string{
+						"plugin": "support",
+						"owner":  "support-platform",
+					},
+				}},
+			}},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/admin/api/v1/runtime/providers/modal/sessions")
+	if err != nil {
+		t.Fatalf("GET runtime provider sessions: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("runtime provider sessions status = %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	var sessions []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&sessions); err != nil {
+		t.Fatalf("decoding runtime provider sessions: %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("runtime provider sessions len = %d, want 1", len(sessions))
+	}
+	if got := sessions[0]["id"]; got != "session-1" {
+		t.Fatalf("runtime provider sessions[0].id = %v, want session-1", got)
+	}
+	if got := sessions[0]["state"]; got != string(pluginruntime.SessionStateRunning) {
+		t.Fatalf("runtime provider sessions[0].state = %v, want %q", got, pluginruntime.SessionStateRunning)
+	}
+	if got := sessions[0]["plugin"]; got != "support" {
+		t.Fatalf("runtime provider sessions[0].plugin = %v, want support", got)
+	}
+	if _, ok := sessions[0]["metadata"]; ok {
+		t.Fatalf("runtime provider sessions[0].metadata unexpectedly present: %#v", sessions[0]["metadata"])
+	}
+}
+
+func TestAdminAPI_RuntimeProviderInspectionError(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.PluginRuntimes = &staticRuntimeInspector{
+			snapshots: []bootstrap.RuntimeProviderSnapshot{{
+				Name:   "modal",
+				Driver: config.RuntimeProviderDriver("modal"),
+				Loaded: true,
+				Error:  "capabilities: boom",
+			}},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	providersResp, err := http.Get(ts.URL + "/admin/api/v1/runtime/providers")
+	if err != nil {
+		t.Fatalf("GET runtime providers with inspection error: %v", err)
+	}
+	defer func() { _ = providersResp.Body.Close() }()
+	if providersResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(providersResp.Body)
+		t.Fatalf("runtime providers status = %d, want 200: %s", providersResp.StatusCode, body)
+	}
+
+	var providers []map[string]any
+	if err := json.NewDecoder(providersResp.Body).Decode(&providers); err != nil {
+		t.Fatalf("decoding runtime providers: %v", err)
+	}
+	if len(providers) != 1 {
+		t.Fatalf("runtime providers len = %d, want 1", len(providers))
+	}
+	if got := providers[0]["error"]; got != "capabilities: boom" {
+		t.Fatalf("runtime providers[0].error = %v, want capabilities: boom", got)
+	}
+	if _, ok := providers[0]["capabilities"]; ok {
+		t.Fatalf("runtime providers[0].capabilities unexpectedly present: %#v", providers[0]["capabilities"])
+	}
+	if _, ok := providers[0]["sessionCount"]; ok {
+		t.Fatalf("runtime providers[0].sessionCount unexpectedly present: %#v", providers[0]["sessionCount"])
+	}
+
+	sessionsResp, err := http.Get(ts.URL + "/admin/api/v1/runtime/providers/modal/sessions")
+	if err != nil {
+		t.Fatalf("GET runtime provider sessions with inspection error: %v", err)
+	}
+	defer func() { _ = sessionsResp.Body.Close() }()
+	if sessionsResp.StatusCode != http.StatusServiceUnavailable {
+		body, _ := io.ReadAll(sessionsResp.Body)
+		t.Fatalf("runtime provider sessions status = %d, want 503: %s", sessionsResp.StatusCode, body)
 	}
 }
 

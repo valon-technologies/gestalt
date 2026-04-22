@@ -202,6 +202,7 @@ type Result struct {
 	AuditSink             core.AuditSink
 	SecretManager         core.SecretManager
 	Telemetry             core.TelemetryProvider
+	PluginRuntimes        RuntimeInspector
 
 	pluginRuntimeRegistry *pluginRuntimeRegistry
 	auditClose            func(context.Context) error
@@ -771,6 +772,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		AuditSink:             audit,
 		SecretManager:         prepared.SecretManager,
 		Telemetry:             prepared.Telemetry,
+		PluginRuntimes:        prepared.pluginRuntimeRegistry,
 		pluginRuntimeRegistry: prepared.pluginRuntimeRegistry,
 		auditClose:            auditClose,
 	}, nil

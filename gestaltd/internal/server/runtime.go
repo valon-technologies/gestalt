@@ -68,6 +68,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		Services:             result.Services,
 		Providers:            result.Providers,
 		Workflow:             result.WorkflowControl,
+		PluginRuntimes:       result.PluginRuntimes,
 		Invoker:              httpInvoker,
 		DefaultConnection:    connMaps.DefaultConnection,
 		// HTTP routes expose REST-visible operations, so unqualified session-catalog
