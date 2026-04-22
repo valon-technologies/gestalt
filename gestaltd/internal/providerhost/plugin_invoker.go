@@ -16,8 +16,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const DefaultPluginInvokerSocketEnv = proto.EnvPluginInvokerSocket
-
 type PluginInvokerServer struct {
 	proto.UnimplementedPluginInvokerServer
 

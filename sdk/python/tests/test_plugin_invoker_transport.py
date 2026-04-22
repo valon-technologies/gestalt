@@ -11,7 +11,12 @@ from typing import Any
 import grpc
 from google.protobuf import json_format
 
-from gestalt import ENV_PLUGIN_INVOKER_SOCKET, PluginInvoker, Request
+from gestalt import (
+    ENV_PLUGIN_INVOKER_SOCKET,
+    ENV_PLUGIN_INVOKER_SOCKET_TOKEN,
+    PluginInvoker,
+    Request,
+)
 from gestalt.gen.v1 import plugin_pb2 as _plugin_pb2
 from gestalt.gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
 
@@ -23,6 +28,7 @@ _socket_path: str = ""
 _previous_socket_env: str | None = None
 _exchange_requests: list[dict[str, Any]] = []
 _graphql_requests: list[dict[str, Any]] = []
+_relay_tokens: list[str] = []
 
 
 class _PluginInvokerServicer(plugin_pb2_grpc.PluginInvokerServicer):
@@ -47,6 +53,11 @@ class _PluginInvokerServicer(plugin_pb2_grpc.PluginInvokerServicer):
         )
 
     def Invoke(self, request, context):
+        _relay_tokens.extend(
+            value
+            for key, value in context.invocation_metadata()
+            if key == "x-gestalt-host-service-relay-token"
+        )
         if request.operation == "plain_text":
             return plugin_pb2.OperationResult(
                 status=200,
@@ -146,6 +157,7 @@ class PluginInvokerTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _exchange_requests.clear()
         _graphql_requests.clear()
+        _relay_tokens.clear()
 
     def test_request_helper_roundtrip(self) -> None:
         request = Request(invocation_token="invoke-123")
@@ -293,3 +305,33 @@ class PluginInvokerTransportTests(unittest.TestCase):
             RuntimeError, "plugin invoker: invocation token is not available"
         ):
             PluginInvoker("   ")
+
+    def test_tcp_target_token_env_is_forwarded(self) -> None:
+        tcp_server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+        plugin_pb2_grpc.add_PluginInvokerServicer_to_server(
+            _PluginInvokerServicer(),
+            tcp_server,
+        )
+        port = tcp_server.add_insecure_port("127.0.0.1:0")
+        tcp_server.start()
+        previous_socket = os.environ.get(ENV_PLUGIN_INVOKER_SOCKET)
+        previous_token = os.environ.get(ENV_PLUGIN_INVOKER_SOCKET_TOKEN)
+        os.environ[ENV_PLUGIN_INVOKER_SOCKET] = f"tcp://127.0.0.1:{port}"
+        os.environ[ENV_PLUGIN_INVOKER_SOCKET_TOKEN] = "relay-token-python"
+        try:
+            with PluginInvoker("invoke-tcp") as client:
+                response = client.invoke("github", "plain_text")
+
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.body, "plain response")
+            self.assertEqual(_relay_tokens, ["relay-token-python"])
+        finally:
+            if previous_socket is None:
+                os.environ.pop(ENV_PLUGIN_INVOKER_SOCKET, None)
+            else:
+                os.environ[ENV_PLUGIN_INVOKER_SOCKET] = previous_socket
+            if previous_token is None:
+                os.environ.pop(ENV_PLUGIN_INVOKER_SOCKET_TOKEN, None)
+            else:
+                os.environ[ENV_PLUGIN_INVOKER_SOCKET_TOKEN] = previous_token
+            tcp_server.stop(grace=0).wait()

@@ -948,14 +948,14 @@ type pluginRuntimeCapabilityRequirements struct {
 	HostnameProxyEgress bool
 }
 
-const pluginRuntimeIndexedDBRelayTokenTTL = 30 * 24 * time.Hour
+const pluginRuntimeHostServiceRelayTokenTTL = 30 * 24 * time.Hour
 
 func pluginRuntimeRequirementsForPlugin(name string, entry *config.ProviderEntry, deps Deps) (pluginRuntimeCapabilityRequirements, error) {
 	if entry == nil {
 		return pluginRuntimeCapabilityRequirements{}, nil
 	}
 	return pluginRuntimeCapabilityRequirements{
-		HostServiceTunnels:  len(entry.Cache) > 0 || len(entry.S3) > 0 || len(entry.Invokes) > 0 || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders()),
+		HostServiceTunnels:  len(entry.Cache) > 0 || len(entry.S3) > 0 || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders()),
 		HostnameProxyEgress: len(entry.AllowedHosts) > 0 || deps.Egress.DefaultAction == egress.PolicyDeny,
 	}, nil
 }
@@ -1100,8 +1100,18 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		hostServices = append(hostServices, services...)
 		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
+	needInvocationTokens := includeHostServices || len(entry.Invokes) > 0
+	if needInvocationTokens {
+		invTokens, err = providerhost.NewInvocationTokenManager(deps.EncryptionKey)
+		if err != nil {
+			return fail(err)
+		}
+	}
 	if !includeHostServices {
-		return hostServices, nil, cleanup, nil
+		if len(entry.Invokes) > 0 {
+			hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
+		}
+		return hostServices, invTokens, cleanup, nil
 	}
 	if len(entry.Cache) > 0 {
 		services, cacheCleanup, err := buildPluginCacheHostServices(name, entry, deps)
@@ -1118,10 +1128,6 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		}
 		hostServices = append(hostServices, services...)
 	}
-	invTokens, err = providerhost.NewInvocationTokenManager(deps.EncryptionKey)
-	if err != nil {
-		return fail(err)
-	}
 	hostServices = append(hostServices, buildPluginWorkflowManagerHostService(name, deps, invTokens))
 	if len(entry.Invokes) > 0 {
 		hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
@@ -1130,24 +1136,36 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 }
 
 func buildPluginRuntimeHostServiceBinding(pluginName, sessionID string, hostService providerhost.StartedHostService, deps Deps, allowUnixRelay bool) (pluginruntime.BindHostServiceRequest, map[string]string, string, error) {
-	if isIndexedDBHostServiceEnv(hostService.EnvVar) && !allowUnixRelay {
-		relay, relayEnv, relayHost, ok, err := buildPluginRuntimeIndexedDBRelay(pluginName, sessionID, hostService, deps)
+	if !allowUnixRelay {
+		var (
+			serviceKey   string
+			serviceLabel string
+			methodPrefix string
+		)
+		switch {
+		case isIndexedDBHostServiceEnv(hostService.EnvVar):
+			serviceKey = "indexeddb"
+			serviceLabel = "IndexedDB"
+			methodPrefix = "/" + proto.IndexedDB_ServiceDesc.ServiceName + "/"
+		case hostService.EnvVar == providerhost.DefaultPluginInvokerSocketEnv:
+			serviceKey = "plugin_invoker"
+			serviceLabel = "plugin invoker"
+			methodPrefix = "/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/"
+		default:
+			return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("host service %q requires host service tunnels", hostService.EnvVar)
+		}
+		relay, relayEnv, relayHost, ok, err := buildPluginRuntimePublicHostServiceRelay(pluginName, sessionID, hostService, deps, serviceKey, serviceLabel, methodPrefix)
 		if err != nil {
 			return pluginruntime.BindHostServiceRequest{}, nil, "", err
 		}
-		if ok {
-			return pluginruntime.BindHostServiceRequest{
-				SessionID: sessionID,
-				EnvVar:    hostService.EnvVar,
-				Relay:     relay,
-			}, relayEnv, relayHost, nil
+		if !ok {
+			return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("plugin %q requires server.baseURL and server.encryptionKey to relay %s without host service tunnels", pluginName, serviceLabel)
 		}
-		if !allowUnixRelay {
-			return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("plugin %q requires server.baseURL and server.encryptionKey to relay IndexedDB without host service tunnels", pluginName)
-		}
-	}
-	if !allowUnixRelay {
-		return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("host service %q requires host service tunnels", hostService.EnvVar)
+		return pluginruntime.BindHostServiceRequest{
+			SessionID: sessionID,
+			EnvVar:    hostService.EnvVar,
+			Relay:     relay,
+		}, relayEnv, relayHost, nil
 	}
 	return pluginruntime.BindHostServiceRequest{
 		SessionID:      sessionID,
@@ -1159,7 +1177,7 @@ func buildPluginRuntimeHostServiceBinding(pluginName, sessionID string, hostServ
 	}, nil, "", nil
 }
 
-func buildPluginRuntimeIndexedDBRelay(pluginName, sessionID string, hostService providerhost.StartedHostService, deps Deps) (pluginruntime.HostServiceRelay, map[string]string, string, bool, error) {
+func buildPluginRuntimePublicHostServiceRelay(pluginName, sessionID string, hostService providerhost.StartedHostService, deps Deps, serviceKey, serviceLabel, methodPrefix string) (pluginruntime.HostServiceRelay, map[string]string, string, bool, error) {
 	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
 		return pluginruntime.HostServiceRelay{}, nil, "", false, nil
 	}
@@ -1174,13 +1192,13 @@ func buildPluginRuntimeIndexedDBRelay(pluginName, sessionID string, hostService 
 	token, err := tokenManager.MintToken(providerhost.HostServiceRelayTokenRequest{
 		PluginName:   pluginName,
 		SessionID:    sessionID,
-		Service:      "indexeddb",
+		Service:      serviceKey,
 		SocketPath:   hostService.SocketPath,
-		MethodPrefix: "/" + proto.IndexedDB_ServiceDesc.ServiceName + "/",
-		TTL:          pluginRuntimeIndexedDBRelayTokenTTL,
+		MethodPrefix: methodPrefix,
+		TTL:          pluginRuntimeHostServiceRelayTokenTTL,
 	})
 	if err != nil {
-		return pluginruntime.HostServiceRelay{}, nil, "", false, fmt.Errorf("mint indexeddb host service relay token: %w", err)
+		return pluginruntime.HostServiceRelay{}, nil, "", false, fmt.Errorf("mint %s host service relay token: %w", serviceLabel, err)
 	}
 	return pluginruntime.HostServiceRelay{
 			DialTarget: dialTarget,

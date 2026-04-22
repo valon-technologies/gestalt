@@ -3,6 +3,10 @@ use std::time::Duration;
 use hyper_util::rt::TokioIo;
 use serde::Serialize;
 use tokio::net::UnixStream;
+use tonic::Request;
+use tonic::metadata::MetadataValue;
+use tonic::service::Interceptor;
+use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
 
@@ -11,7 +15,11 @@ use crate::generated::v1::{
     self as pb, plugin_invoker_client::PluginInvokerClient as ProtoPluginInvokerClient,
 };
 
+type PluginInvokerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
+
 pub const ENV_PLUGIN_INVOKER_SOCKET: &str = "GESTALT_PLUGIN_INVOKER_SOCKET";
+pub const ENV_PLUGIN_INVOKER_SOCKET_TOKEN: &str = "GESTALT_PLUGIN_INVOKER_SOCKET_TOKEN";
+const PLUGIN_INVOKER_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
 pub enum PluginInvokerError {
@@ -44,7 +52,7 @@ pub struct InvokeOptions {
 }
 
 pub struct PluginInvoker {
-    client: ProtoPluginInvokerClient<Channel>,
+    client: ProtoPluginInvokerClient<PluginInvokerTransport>,
     invocation_token: String,
 }
 
@@ -60,16 +68,34 @@ impl PluginInvoker {
         let socket_path = std::env::var(ENV_PLUGIN_INVOKER_SOCKET).map_err(|_| {
             PluginInvokerError::Env(format!("{ENV_PLUGIN_INVOKER_SOCKET} is not set"))
         })?;
+        let relay_token = std::env::var(ENV_PLUGIN_INVOKER_SOCKET_TOKEN).unwrap_or_default();
 
-        let channel = Endpoint::try_from("http://[::]:50051")?
-            .connect_with_connector(service_fn(move |_: Uri| {
-                let path = socket_path.clone();
-                async move { UnixStream::connect(path).await.map(TokioIo::new) }
-            }))
-            .await?;
+        let channel = match parse_plugin_invoker_target(&socket_path)? {
+            PluginInvokerTarget::Unix(path) => {
+                Endpoint::try_from("http://[::]:50051")?
+                    .connect_with_connector(service_fn(move |_: Uri| {
+                        let path = path.clone();
+                        async move { UnixStream::connect(path).await.map(TokioIo::new) }
+                    }))
+                    .await?
+            }
+            PluginInvokerTarget::Tcp(address) => {
+                Endpoint::from_shared(format!("http://{address}"))?
+                    .connect()
+                    .await?
+            }
+            PluginInvokerTarget::Tls(address) => {
+                Endpoint::from_shared(format!("https://{address}"))?
+                    .connect()
+                    .await?
+            }
+        };
 
         Ok(Self {
-            client: ProtoPluginInvokerClient::new(channel),
+            client: ProtoPluginInvokerClient::with_interceptor(
+                channel,
+                relay_token_interceptor(relay_token.trim())?,
+            ),
             invocation_token,
         })
     }
@@ -193,6 +219,57 @@ impl PluginInvoker {
     }
 }
 
+enum PluginInvokerTarget {
+    Unix(String),
+    Tcp(String),
+    Tls(String),
+}
+
+fn parse_plugin_invoker_target(
+    raw_target: &str,
+) -> Result<PluginInvokerTarget, PluginInvokerError> {
+    let target = raw_target.trim();
+    if target.is_empty() {
+        return Err(PluginInvokerError::Env(
+            "plugin invoker: transport target is required".to_string(),
+        ));
+    }
+    if let Some(address) = target.strip_prefix("tcp://") {
+        let address = address.trim();
+        if address.is_empty() {
+            return Err(PluginInvokerError::Env(format!(
+                "plugin invoker: tcp target {raw_target:?} is missing host:port"
+            )));
+        }
+        return Ok(PluginInvokerTarget::Tcp(address.to_string()));
+    }
+    if let Some(address) = target.strip_prefix("tls://") {
+        let address = address.trim();
+        if address.is_empty() {
+            return Err(PluginInvokerError::Env(format!(
+                "plugin invoker: tls target {raw_target:?} is missing host:port"
+            )));
+        }
+        return Ok(PluginInvokerTarget::Tls(address.to_string()));
+    }
+    if let Some(path) = target.strip_prefix("unix://") {
+        let path = path.trim();
+        if path.is_empty() {
+            return Err(PluginInvokerError::Env(format!(
+                "plugin invoker: unix target {raw_target:?} is missing a socket path"
+            )));
+        }
+        return Ok(PluginInvokerTarget::Unix(path.to_string()));
+    }
+    if target.contains("://") {
+        let scheme = target.split("://").next().unwrap_or_default();
+        return Err(PluginInvokerError::Env(format!(
+            "plugin invoker: unsupported target scheme {scheme:?}"
+        )));
+    }
+    Ok(PluginInvokerTarget::Unix(target.to_string()))
+}
+
 fn encode_invocation_grants(grants: &[InvocationGrant]) -> Vec<pb::PluginInvocationGrant> {
     grants
         .iter()
@@ -237,6 +314,35 @@ fn duration_to_ttl_seconds(ttl: Duration) -> std::result::Result<i64, PluginInvo
             "plugin invoker: exchange token ttl exceeds supported range".to_string(),
         )
     })
+}
+
+fn relay_token_interceptor(token: &str) -> Result<RelayTokenInterceptor, PluginInvokerError> {
+    let header = if token.trim().is_empty() {
+        None
+    } else {
+        Some(MetadataValue::try_from(token.to_string()).map_err(|err| {
+            PluginInvokerError::Env(format!(
+                "invalid plugin invoker relay token metadata: {err}"
+            ))
+        })?)
+    };
+    Ok(RelayTokenInterceptor { header })
+}
+
+#[derive(Clone)]
+struct RelayTokenInterceptor {
+    header: Option<MetadataValue<tonic::metadata::Ascii>>,
+}
+
+impl Interceptor for RelayTokenInterceptor {
+    fn call(&mut self, mut request: Request<()>) -> Result<Request<()>, tonic::Status> {
+        if let Some(header) = self.header.clone() {
+            request
+                .metadata_mut()
+                .insert(PLUGIN_INVOKER_RELAY_TOKEN_HEADER, header);
+        }
+        Ok(request)
+    }
 }
 
 fn json_to_struct(

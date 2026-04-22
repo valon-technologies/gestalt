@@ -49,7 +49,8 @@ pub use indexeddb::{
     indexeddb_socket_token_env,
 };
 pub use invoker::{
-    ENV_PLUGIN_INVOKER_SOCKET, InvocationGrant, InvokeOptions, PluginInvoker, PluginInvokerError,
+    ENV_PLUGIN_INVOKER_SOCKET, ENV_PLUGIN_INVOKER_SOCKET_TOKEN, InvocationGrant, InvokeOptions,
+    PluginInvoker, PluginInvokerError,
 };
 pub use manifest_metadata::{
     HTTPAck, HTTPAuthScheme, HTTPBinding, HTTPIn, HTTPMediaType, HTTPRequestBody, HTTPSecretRef,
