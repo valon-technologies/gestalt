@@ -25,6 +25,9 @@ func buildToolMap(cfg Config, provName string, cat *catalog.Catalog) map[string]
 		}
 
 		name := toolName(cfg.ToolPrefixes, provName, op.ID)
+		if cfg.ToolTargets != nil {
+			cfg.ToolTargets.Store(name, provName, op.ID)
+		}
 
 		var tool mcpgo.Tool
 		if len(op.InputSchema) > 0 {
@@ -78,7 +81,21 @@ func providerNameForTool(prefixes map[string]string, providers []string, tool st
 }
 
 func toolName(prefixes map[string]string, provider, operation string) string {
-	return prefixes[provider] + provider + toolNameSep + operation
+	raw := prefixes[provider] + provider + toolNameSep + operation
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r
+		case r >= '0' && r <= '9':
+			return r
+		case r == '_' || r == '-' || r == ':':
+			return r
+		default:
+			return '_'
+		}
+	}, raw)
 }
 
 func mapAnnotations(a catalog.OperationAnnotations) mcpgo.ToolAnnotation {
