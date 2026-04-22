@@ -54,6 +54,24 @@ func (p *fakeProvider) Execute(ctx context.Context, op string, params map[string
 
 func (p *fakeProvider) Close() error { p.closed = true; return nil }
 
+type fakeSessionProvider struct {
+	*fakeProvider
+	sessionCat *catalog.Catalog
+	sessionErr error
+}
+
+func (p *fakeSessionProvider) SupportsSessionCatalog() bool { return true }
+
+func (p *fakeSessionProvider) CatalogForRequest(_ context.Context, _ string) (*catalog.Catalog, error) {
+	if p.sessionErr != nil {
+		return nil, p.sessionErr
+	}
+	if p.sessionCat == nil {
+		return nil, nil
+	}
+	return p.sessionCat.Clone(), nil
+}
+
 func TestNewMergedRejectsOperationCollision(t *testing.T) {
 	t.Parallel()
 
@@ -156,4 +174,63 @@ func TestMergedCatalogIncludesConstructorMetadata(t *testing.T) {
 	if cat.IconSVG != "<svg/>" {
 		t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, "<svg/>")
 	}
+}
+
+func TestMergedSessionCatalogRoutesDynamicOperation(t *testing.T) {
+	t.Parallel()
+
+	dynamicHit := false
+	merged, err := composite.NewMergedWithConnections("test", "Test", "desc", "",
+		composite.BoundProvider{Provider: &fakeProvider{name: "rest", ops: []core.Operation{{Name: "status"}}}},
+		composite.BoundProvider{Provider: &fakeSessionProvider{
+			fakeProvider: &fakeProvider{
+				name: "graphql",
+				execFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					dynamicHit = true
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"operation":"` + op + `"}`}, nil
+				},
+			},
+			sessionCat: &catalog.Catalog{
+				Name: "test",
+				Operations: []catalog.CatalogOperation{{
+					ID:        "viewer",
+					Transport: "graphql",
+					Query:     "query Viewer { viewer { id } }",
+				}},
+			},
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !core.SupportsSessionCatalog(merged) {
+		t.Fatal("expected merged provider to support session catalogs")
+	}
+
+	sessionCat, err := merged.CatalogForRequest(context.Background(), "token-123")
+	if err != nil {
+		t.Fatalf("CatalogForRequest: %v", err)
+	}
+	if _, ok := catalogOperation(sessionCat, "viewer"); !ok {
+		t.Fatalf("session catalog operations = %#v, want viewer", sessionCat.Operations)
+	}
+
+	if _, err := merged.Execute(context.Background(), "viewer", nil, "token-123"); err != nil {
+		t.Fatalf("Execute(viewer): %v", err)
+	}
+	if !dynamicHit {
+		t.Fatal("expected dynamic session-backed provider to execute viewer")
+	}
+}
+
+func catalogOperation(cat *catalog.Catalog, id string) (catalog.CatalogOperation, bool) {
+	if cat == nil {
+		return catalog.CatalogOperation{}, false
+	}
+	for i := range cat.Operations {
+		if cat.Operations[i].ID == id {
+			return cat.Operations[i], true
+		}
+	}
+	return catalog.CatalogOperation{}, false
 }

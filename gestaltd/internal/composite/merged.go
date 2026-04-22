@@ -27,8 +27,9 @@ type BoundProvider struct {
 }
 
 var (
-	_ core.Provider              = (*MergedProvider)(nil)
-	_ core.GraphQLSurfaceInvoker = (*MergedProvider)(nil)
+	_ core.Provider               = (*MergedProvider)(nil)
+	_ core.GraphQLSurfaceInvoker  = (*MergedProvider)(nil)
+	_ core.SessionCatalogProvider = (*MergedProvider)(nil)
 )
 
 func NewMergedWithConnections(name, displayName, desc, iconSVG string, providers ...BoundProvider) (*MergedProvider, error) {
@@ -132,7 +133,14 @@ func (m *MergedProvider) Catalog() *catalog.Catalog { return m.catalog.Clone() }
 func (m *MergedProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
 	p, ok := m.route[op]
 	if !ok {
-		return nil, fmt.Errorf("unknown operation %q", op)
+		sessionProvider, err := m.sessionProviderForOperation(ctx, op, token)
+		if err != nil {
+			return nil, err
+		}
+		if sessionProvider == nil {
+			return nil, fmt.Errorf("unknown operation %q", op)
+		}
+		return sessionProvider.Execute(ctx, op, params, token)
 	}
 	return p.Execute(ctx, op, params, token)
 }
@@ -146,6 +154,89 @@ func (m *MergedProvider) InvokeGraphQL(ctx context.Context, request core.GraphQL
 		return invoker.InvokeGraphQL(ctx, request, token)
 	}
 	return nil, fmt.Errorf("graphql surface is not available")
+}
+
+func (m *MergedProvider) SupportsSessionCatalog() bool {
+	for _, provider := range m.owned {
+		if core.SupportsSessionCatalog(provider) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *MergedProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
+	if !m.SupportsSessionCatalog() {
+		return nil, core.WrapSessionCatalogUnsupported(fmt.Errorf("provider %q does not support session catalogs", m.Name()))
+	}
+
+	merged := m.catalog.Clone()
+	merged.Operations = nil
+	seen := make(map[string]string)
+	for _, provider := range m.owned {
+		if !core.SupportsSessionCatalog(provider) {
+			continue
+		}
+		cat, _, err := core.CatalogForRequest(ctx, provider, token)
+		if err != nil {
+			return nil, err
+		}
+		if cat == nil {
+			continue
+		}
+		for i := range cat.Operations {
+			op := cat.Operations[i]
+			if op.Transport == "" {
+				op.Transport = catalog.TransportREST
+			}
+			if owner, exists := seen[op.ID]; exists {
+				return nil, fmt.Errorf("operation %q provided by both %q and %q", op.ID, owner, provider.Name())
+			}
+			seen[op.ID] = provider.Name()
+			merged.Operations = append(merged.Operations, op)
+		}
+	}
+	integration.CompileSchemas(merged)
+	return merged, nil
+}
+
+func (m *MergedProvider) sessionProviderForOperation(ctx context.Context, operation, token string) (core.Provider, error) {
+	var (
+		match    core.Provider
+		firstErr error
+	)
+	for _, provider := range m.owned {
+		if !core.SupportsSessionCatalog(provider) {
+			continue
+		}
+		cat, _, err := core.CatalogForRequest(ctx, provider, token)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if cat == nil {
+			continue
+		}
+		for i := range cat.Operations {
+			if cat.Operations[i].ID != operation {
+				continue
+			}
+			if match != nil {
+				return nil, fmt.Errorf("operation %q provided by both %q and %q", operation, match.Name(), provider.Name())
+			}
+			match = provider
+			break
+		}
+	}
+	if match != nil {
+		return match, nil
+	}
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return nil, nil
 }
 
 func (m *MergedProvider) Close() error {

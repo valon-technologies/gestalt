@@ -2,7 +2,6 @@ package graphql
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -150,16 +149,7 @@ func introspect(ctx context.Context, endpoint string) (*Schema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("introspection query: %w", err)
 	}
-
-	var resp struct {
-		Schema Schema `json:"__schema"`
-	}
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
-		return nil, fmt.Errorf("parsing introspection response: %w", err)
-	}
-
-	resp.Schema.buildIndex()
-	return &resp.Schema, nil
+	return SchemaFromResult(result)
 }
 
 func (ref TypeRef) namedType() string {

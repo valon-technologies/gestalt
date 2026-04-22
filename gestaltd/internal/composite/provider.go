@@ -87,11 +87,19 @@ func (p *Provider) InvokeGraphQL(ctx context.Context, request core.GraphQLReques
 }
 
 func (p *Provider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	cat, err := p.mcp.CatalogForRequest(ctx, token)
-	if err != nil || cat == nil {
-		return cat, err
+	var apiCat *catalog.Catalog
+	if core.SupportsSessionCatalog(p.api) {
+		var err error
+		apiCat, _, err = core.CatalogForRequest(ctx, p.api, token)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return tagMCPCatalog(cat), nil
+	mcpCat, err := p.mcp.CatalogForRequest(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	return p.buildCatalogFromSources(apiCat, mcpCat), nil
 }
 
 func (p *Provider) ConnectionForOperation(operation string) string {
@@ -151,9 +159,10 @@ func (p *oauthProvider) RefreshToken(ctx context.Context, refreshToken string) (
 }
 
 func (p *Provider) buildCatalog() *catalog.Catalog {
-	mcpCat := p.mcp.Catalog()
+	return p.buildCatalogFromSources(p.api.Catalog(), p.mcp.Catalog())
+}
 
-	apiCat := p.api.Catalog()
+func (p *Provider) buildCatalogFromSources(apiCat, mcpCat *catalog.Catalog) *catalog.Catalog {
 	if mcpCat == nil && apiCat == nil {
 		return nil
 	}

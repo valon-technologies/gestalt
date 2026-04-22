@@ -2914,8 +2914,9 @@ func TestPluginInvokesGraphQLSurface(t *testing.T) {
 	}
 
 	var (
-		mu       sync.Mutex
-		captured []capturedGraphQLRequest
+		mu                 sync.Mutex
+		captured           []capturedGraphQLRequest
+		introspectionCalls atomic.Int32
 	)
 	schema := pluginInvokeGraphQLSchema()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2929,6 +2930,7 @@ func TestPluginInvokesGraphQLSurface(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(payload.Query, "__schema") {
+			introspectionCalls.Add(1)
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"data": map[string]any{
 					"__schema": schema,
@@ -3029,6 +3031,9 @@ func TestPluginInvokesGraphQLSurface(t *testing.T) {
 	}
 	if variables["team"] != "eng" {
 		t.Fatalf("body.echo.variables.team = %#v, want %q", variables["team"], "eng")
+	}
+	if got := introspectionCalls.Load(); got != 0 {
+		t.Fatalf("introspection calls = %d, want 0", got)
 	}
 
 	mu.Lock()
