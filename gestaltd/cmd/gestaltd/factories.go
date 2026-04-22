@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	agentprovider "github.com/valon-technologies/gestalt/server/internal/drivers/agent/provider"
 	authprovider "github.com/valon-technologies/gestalt/server/internal/drivers/auth/provider"
 	authorizationprovider "github.com/valon-technologies/gestalt/server/internal/drivers/authorization/provider"
 	cacheprovider "github.com/valon-technologies/gestalt/server/internal/drivers/cache/provider"
@@ -123,6 +124,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	factories.Cache = cacheprovider.Factory
 	factories.S3 = s3provider.Factory
 	factories.Workflow = workflowprovider.Factory
+	factories.Agent = agentprovider.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
 	factories.Secrets["provider"] = secretsprovider.Factory

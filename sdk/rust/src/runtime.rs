@@ -23,6 +23,8 @@ use crate::env::{
 };
 use crate::error::{Error, Result};
 #[cfg(unix)]
+use crate::generated::v1::agent_provider_server::AgentProviderServer as AgentRpcServer;
+#[cfg(unix)]
 use crate::generated::v1::authentication_provider_server::AuthenticationProviderServer;
 #[cfg(unix)]
 use crate::generated::v1::cache_server::CacheServer;
@@ -39,13 +41,13 @@ use crate::generated::v1::workflow_provider_server::WorkflowProviderServer as Wo
 use crate::manifest_metadata::write_manifest_metadata;
 use crate::provider_server::ProviderServer;
 use crate::{
-    AuthenticationProvider, CacheProvider, Provider, Router, S3Provider, SecretsProvider,
-    WorkflowProvider,
+    AgentProvider, AuthenticationProvider, CacheProvider, Provider, Router, S3Provider,
+    SecretsProvider, WorkflowProvider,
 };
 #[cfg(unix)]
 use crate::{
-    auth_server::AuthenticationServer, cache_server::CacheRpcServer, runtime_server::RuntimeServer,
-    secrets_server::SecretsServer, workflow::WorkflowServer,
+    agent::AgentServer, auth_server::AuthenticationServer, cache_server::CacheRpcServer,
+    runtime_server::RuntimeServer, secrets_server::SecretsServer, workflow::WorkflowServer,
 };
 
 fn build_runtime_and_block_on<F, Fut>(f: F) -> Result<()>
@@ -88,6 +90,11 @@ pub fn run_s3_provider<P: S3Provider>(provider: Arc<P>) -> Result<()> {
 /// Runs a workflow provider on the Unix socket exposed by `gestaltd`.
 pub fn run_workflow_provider<P: WorkflowProvider>(provider: Arc<P>) -> Result<()> {
     build_runtime_and_block_on(|| serve_workflow_provider(provider))
+}
+
+/// Runs an agent provider on the Unix socket exposed by `gestaltd`.
+pub fn run_agent_provider<P: AgentProvider>(provider: Arc<P>) -> Result<()> {
+    build_runtime_and_block_on(|| serve_agent_provider(provider))
 }
 
 /// Writes the router's derived catalog to path.
@@ -282,6 +289,26 @@ where
     .await
 }
 
+#[cfg(unix)]
+pub async fn serve_agent_provider<P>(provider: Arc<P>) -> Result<()>
+where
+    P: AgentProvider,
+{
+    serve_unix_provider(
+        provider,
+        move |incoming, provider| {
+            Server::builder()
+                .add_service(ProviderLifecycleServer::new(RuntimeServer::for_agent(
+                    Arc::clone(&provider),
+                )))
+                .add_service(AgentRpcServer::new(AgentServer::new(Arc::clone(&provider))))
+                .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
+        },
+        |provider| async move { provider.close().await },
+    )
+    .await
+}
+
 #[cfg(not(unix))]
 pub async fn serve_provider<P>(_provider: Arc<P>, router: Router<P>) -> Result<()>
 where
@@ -329,6 +356,16 @@ where
 pub async fn serve_workflow_provider<P>(_provider: Arc<P>) -> Result<()>
 where
     P: WorkflowProvider,
+{
+    Err(Error::internal(
+        "unix sockets are unsupported on this platform",
+    ))
+}
+
+#[cfg(not(unix))]
+pub async fn serve_agent_provider<P>(_provider: Arc<P>) -> Result<()>
+where
+    P: AgentProvider,
 {
     Err(Error::internal(
         "unix sockets are unsupported on this platform",

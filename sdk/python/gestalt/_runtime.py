@@ -22,6 +22,7 @@ from ._plugin import Plugin, _module_plugin
 
 if TYPE_CHECKING:
     from ._providers import (
+        AgentProvider,
         AuthenticationProvider,
         CacheProvider,
         Closer,
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
 else:
     try:
         from ._providers import (
+            AgentProvider,
             AuthenticationProvider,
             CacheProvider,
             Closer,
@@ -63,6 +65,7 @@ else:
             AUTHENTICATION = "authentication"
             CACHE = "cache"
             S3 = "s3"
+            AGENT = "agent"
             WORKFLOW = "workflow"
             SECRETS = "secrets"
             TELEMETRY = "telemetry"
@@ -134,6 +137,9 @@ else:
         class S3Provider(PluginProvider):
             pass
 
+        class AgentProvider(PluginProvider):
+            pass
+
         class SecretsProvider(PluginProvider):
             def get_secret(self, name: str) -> str:
                 raise NotImplementedError
@@ -188,6 +194,7 @@ cache_pb2_grpc: Any = cast(Any, None)
 s3_pb2_grpc: Any = cast(Any, None)
 secrets_pb2: Any = cast(Any, None)
 secrets_pb2_grpc: Any = cast(Any, None)
+agent_pb2_grpc: Any = cast(Any, None)
 workflow_pb2: Any = cast(Any, None)
 workflow_pb2_grpc: Any = cast(Any, None)
 
@@ -218,6 +225,7 @@ def _ensure_grpc_runtime() -> None:
     global s3_pb2_grpc
     global secrets_pb2
     global secrets_pb2_grpc
+    global agent_pb2_grpc
     global workflow_pb2
     global workflow_pb2_grpc
 
@@ -229,6 +237,7 @@ def _ensure_grpc_runtime() -> None:
     from google.protobuf import empty_pb2 as _empty_pb2
     from google.protobuf import json_format as _json_format
 
+    from .gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
     from .gen.v1 import authentication_pb2 as _authentication_pb2
     from .gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
     from .gen.v1 import cache_pb2 as _cache_pb2
@@ -258,6 +267,7 @@ def _ensure_grpc_runtime() -> None:
     s3_pb2_grpc = _s3_pb2_grpc
     secrets_pb2 = _secrets_pb2
     secrets_pb2_grpc = _secrets_pb2_grpc
+    agent_pb2_grpc = _agent_pb2_grpc
     workflow_pb2 = _workflow_pb2
     workflow_pb2_grpc = _workflow_pb2_grpc
 
@@ -410,13 +420,15 @@ def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginPr
         return _cache_runtime_plugin(target)
     if resolved_kind == ProviderKind.S3 and isinstance(target, S3Provider):
         return _s3_runtime_plugin(target)
+    if resolved_kind == ProviderKind.AGENT and isinstance(target, AgentProvider):
+        return _agent_runtime_plugin(target)
     if resolved_kind == ProviderKind.WORKFLOW and isinstance(target, WorkflowProvider):
         return _workflow_runtime_plugin(target)
     if resolved_kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
         return _secrets_runtime_plugin(target)
     if isinstance(target, PluginProvider):
         raise RuntimeError(
-            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is authentication, cache, s3, workflow, or secrets"
+            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is authentication, cache, s3, agent, workflow, or secrets"
         )
     raise RuntimeError(f"{args.target} did not resolve to a supported gestalt target")
 
@@ -502,6 +514,8 @@ def _servable_target(
         return _cache_runtime_plugin(target)
     if kind == ProviderKind.S3 and isinstance(target, S3Provider):
         return _s3_runtime_plugin(target)
+    if kind == ProviderKind.AGENT and isinstance(target, AgentProvider):
+        return _agent_runtime_plugin(target)
     if kind == ProviderKind.WORKFLOW and isinstance(target, WorkflowProvider):
         return _workflow_runtime_plugin(target)
     if kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
@@ -546,6 +560,23 @@ def _register_s3_services(server: Any, provider: PluginProvider) -> None:
         server,
     )
     s3_pb2_grpc.add_S3Servicer_to_server(provider, server)
+
+
+def _agent_runtime_plugin(provider: AgentProvider) -> PluginProviderAdapter:
+    return PluginProviderAdapter(
+        kind=ProviderKind.AGENT,
+        provider=provider,
+        register_services=_register_agent_services,
+    )
+
+
+def _register_agent_services(server: Any, provider: PluginProvider) -> None:
+    _ensure_grpc_runtime()
+    runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
+        _runtime_servicer(provider=provider, kind=ProviderKind.AGENT),
+        server,
+    )
+    agent_pb2_grpc.add_AgentProviderServicer_to_server(provider, server)
 
 
 def _workflow_runtime_plugin(provider: WorkflowProvider) -> PluginProviderAdapter:
@@ -975,6 +1006,7 @@ def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
         ProviderKind.AUTHENTICATION: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTHENTICATION,
         ProviderKind.CACHE: runtime_pb2.ProviderKind.PROVIDER_KIND_CACHE,
         ProviderKind.S3: runtime_pb2.ProviderKind.PROVIDER_KIND_S3,
+        ProviderKind.AGENT: runtime_pb2.ProviderKind.PROVIDER_KIND_AGENT,
         ProviderKind.WORKFLOW: runtime_pb2.ProviderKind.PROVIDER_KIND_WORKFLOW,
         ProviderKind.SECRETS: runtime_pb2.ProviderKind.PROVIDER_KIND_SECRETS,
         ProviderKind.TELEMETRY: runtime_pb2.ProviderKind.PROVIDER_KIND_TELEMETRY,

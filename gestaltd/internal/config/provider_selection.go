@@ -26,6 +26,8 @@ func (s ServerProvidersConfig) Selection(kind HostProviderKind) string {
 		return ""
 	case HostProviderKindWorkflow:
 		return ""
+	case HostProviderKindAgent:
+		return ""
 	default:
 		return ""
 	}
@@ -52,6 +54,8 @@ func (c *Config) HostProviderEntries(kind HostProviderKind) map[string]*Provider
 		return c.Providers.Cache
 	case HostProviderKindWorkflow:
 		return c.Providers.Workflow
+	case HostProviderKindAgent:
+		return c.Providers.Agent
 	default:
 		return nil
 	}
@@ -87,6 +91,10 @@ func (c *Config) SelectedIndexedDBProvider() (string, *ProviderEntry, error) {
 
 func (c *Config) SelectedWorkflowProvider() (string, *ProviderEntry, error) {
 	return ResolveSelectedHostProvider(HostProviderKindWorkflow, "", c.HostProviderEntries(HostProviderKindWorkflow))
+}
+
+func (c *Config) SelectedAgentProvider() (string, *ProviderEntry, error) {
+	return ResolveSelectedHostProvider(HostProviderKindAgent, "", c.HostProviderEntries(HostProviderKindAgent))
 }
 
 func (c *Config) SelectedRuntimeProvider() (string, *RuntimeProviderEntry, error) {
@@ -142,6 +150,21 @@ func (c *Config) EffectiveWorkflowProvider(providerName string) (string, *Provid
 		return providerName, entry, nil
 	}
 	return c.SelectedWorkflowProvider()
+}
+
+func (c *Config) EffectiveAgentProvider(providerName string) (string, *ProviderEntry, error) {
+	if c == nil {
+		return "", nil, nil
+	}
+	providerName = strings.TrimSpace(providerName)
+	if providerName != "" {
+		entry, ok := c.Providers.Agent[providerName]
+		if !ok || entry == nil {
+			return "", nil, fmt.Errorf("config validation: providers.agent references unknown agent %q", providerName)
+		}
+		return providerName, entry, nil
+	}
+	return c.SelectedAgentProvider()
 }
 
 func (c *Config) EffectiveWorkflowIndexedDB(name string, entry *ProviderEntry) (EffectiveWorkflowIndexedDB, error) {

@@ -7,12 +7,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -22,6 +24,7 @@ import (
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
@@ -42,6 +45,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	gproto "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 	"gopkg.in/yaml.v3"
 )
 
@@ -563,6 +567,84 @@ func (s *stubWorkflowProvider) PublishEvent(context.Context, coreworkflow.Publis
 func (s *stubWorkflowProvider) Ping(context.Context) error { return nil }
 func (s *stubWorkflowProvider) Close() error               { return nil }
 
+type stubAgentProvider struct {
+	mu             sync.Mutex
+	cancelRequests []coreagent.CancelRunRequest
+}
+
+func (s *stubAgentProvider) StartRun(_ context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
+	runID := strings.TrimSpace(req.RunID)
+	if runID == "" {
+		runID = "run-1"
+	}
+	return &coreagent.Run{ID: runID}, nil
+}
+func (s *stubAgentProvider) GetRun(_ context.Context, req coreagent.GetRunRequest) (*coreagent.Run, error) {
+	runID := strings.TrimSpace(req.RunID)
+	if runID == "" {
+		runID = "run-1"
+	}
+	return &coreagent.Run{ID: runID}, nil
+}
+func (s *stubAgentProvider) ListRuns(context.Context, coreagent.ListRunsRequest) ([]*coreagent.Run, error) {
+	return []*coreagent.Run{{ID: "run-1"}}, nil
+}
+func (s *stubAgentProvider) CancelRun(_ context.Context, req coreagent.CancelRunRequest) (*coreagent.Run, error) {
+	s.mu.Lock()
+	s.cancelRequests = append(s.cancelRequests, req)
+	s.mu.Unlock()
+	runID := strings.TrimSpace(req.RunID)
+	if runID == "" {
+		runID = "run-1"
+	}
+	return &coreagent.Run{ID: runID, Status: coreagent.RunStatusCanceled}, nil
+}
+func (s *stubAgentProvider) Ping(context.Context) error { return nil }
+func (s *stubAgentProvider) Close() error               { return nil }
+
+func (s *stubAgentProvider) CancelRequests() []coreagent.CancelRunRequest {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]coreagent.CancelRunRequest(nil), s.cancelRequests...)
+}
+
+type generatedIDAgentProvider struct {
+	mu             sync.Mutex
+	startRequests  []coreagent.StartRunRequest
+	cancelRequests []coreagent.CancelRunRequest
+}
+
+func (p *generatedIDAgentProvider) StartRun(_ context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.startRequests = append(p.startRequests, req)
+	return &coreagent.Run{ID: "generated-run-1", Status: coreagent.RunStatusRunning}, nil
+}
+
+func (p *generatedIDAgentProvider) GetRun(context.Context, coreagent.GetRunRequest) (*coreagent.Run, error) {
+	return nil, core.ErrNotFound
+}
+
+func (p *generatedIDAgentProvider) ListRuns(context.Context, coreagent.ListRunsRequest) ([]*coreagent.Run, error) {
+	return nil, nil
+}
+
+func (p *generatedIDAgentProvider) CancelRun(_ context.Context, req coreagent.CancelRunRequest) (*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cancelRequests = append(p.cancelRequests, req)
+	return &coreagent.Run{ID: req.RunID, Status: coreagent.RunStatusCanceled}, nil
+}
+
+func (p *generatedIDAgentProvider) Ping(context.Context) error { return nil }
+func (p *generatedIDAgentProvider) Close() error               { return nil }
+
+func (p *generatedIDAgentProvider) CancelRequests() []coreagent.CancelRunRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]coreagent.CancelRunRequest(nil), p.cancelRequests...)
+}
+
 type recordingWorkflowProvider struct {
 	upsertedSchedules          []coreworkflow.UpsertScheduleRequest
 	listedSchedules            []*coreworkflow.Schedule
@@ -837,6 +919,41 @@ func invokeWorkflowHostCallback(t *testing.T, hostServices []providerhost.HostSe
 	t.Cleanup(func() { _ = conn.Close() })
 
 	return proto.NewWorkflowHostClient(conn).InvokeOperation(context.Background(), req)
+}
+
+func invokeAgentHostCallback(t *testing.T, hostServices []providerhost.HostService, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {
+	t.Helper()
+
+	if len(hostServices) != 1 {
+		t.Fatalf("agent host services = %d, want 1", len(hostServices))
+	}
+	if hostServices[0].Register == nil {
+		t.Fatal("agent host register func is nil")
+	}
+
+	lis := bufconn.Listen(1024 * 1024)
+	srv := grpc.NewServer()
+	hostServices[0].Register(srv)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(func() {
+		srv.Stop()
+		_ = lis.Close()
+	})
+
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.NewClient: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	return proto.NewAgentHostClient(conn).ExecuteTool(context.Background(), req)
 }
 
 func withIndexedDBHostClient(t *testing.T, hostService providerhost.HostService, fn func(proto.IndexedDBClient)) {
@@ -1371,6 +1488,73 @@ func TestBootstrapPassesConfiguredWorkflowResourceNamesToProviders(t *testing.T)
 		if got := hostSockets[name]; got != providerhost.DefaultWorkflowHostSocketEnv {
 			t.Fatalf("workflow host env for %q = %q, want %q", name, got, providerhost.DefaultWorkflowHostSocketEnv)
 		}
+	}
+}
+
+func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"cleanup": {Source: config.ProviderSource{Path: "stub"}},
+		"reviewer": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	factories := validFactories()
+	seen := make(map[string]struct{}, len(cfg.Providers.Agent))
+	hostSockets := make(map[string]string, len(cfg.Providers.Agent))
+	factories.Agent = func(_ context.Context, name string, node yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		var runtime struct {
+			Name string `yaml:"name"`
+		}
+		if err := node.Decode(&runtime); err != nil {
+			return nil, err
+		}
+		seen[runtime.Name] = struct{}{}
+		if len(hostServices) != 1 {
+			return nil, fmt.Errorf("agent host services = %d, want 1", len(hostServices))
+		}
+		hostSockets[name] = hostServices[0].EnvVar
+		return &stubAgentProvider{}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(seen) != 2 {
+		t.Fatalf("seen agent runtime names = %v, want 2 entries", seen)
+	}
+	for _, name := range []string{"cleanup", "reviewer"} {
+		if _, ok := seen[name]; !ok {
+			t.Fatalf("missing agent runtime name %q in %v", name, seen)
+		}
+		if got := hostSockets[name]; got != providerhost.DefaultAgentHostSocketEnv {
+			t.Fatalf("agent host env for %q = %q, want %q", name, got, providerhost.DefaultAgentHostSocketEnv)
+		}
+	}
+	if got := result.AgentControl.ProviderNames(); !reflect.DeepEqual(got, []string{"cleanup", "reviewer"}) {
+		t.Fatalf("agent provider names = %#v, want %#v", got, []string{"cleanup", "reviewer"})
+	}
+	selectedName, provider, err := result.AgentControl.ResolveProviderSelection("")
+	if err != nil {
+		t.Fatalf("ResolveProviderSelection: %v", err)
+	}
+	if selectedName != "reviewer" {
+		t.Fatalf("selected agent provider = %q, want %q", selectedName, "reviewer")
+	}
+	run, err := provider.StartRun(context.Background(), coreagent.StartRunRequest{})
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+	if run == nil || run.ID != "run-1" {
+		t.Fatalf("run = %#v, want ID run-1", run)
 	}
 }
 
@@ -3234,6 +3418,286 @@ func TestBootstrapStartupWorkflowCallbackRequiresExecutionRef(t *testing.T) {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 	defer func() { _ = result.Close(context.Background()) }()
+}
+
+func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
+	t.Parallel()
+
+	var requestPath atomic.Value
+	var requestBody atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		requestPath.Store(r.URL.Path)
+		requestBody.Store(string(body))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	cfg := validConfig()
+	cfg.Plugins = map[string]*config.ProviderEntry{
+		"roadmap": {
+			ConnectionMode: providermanifestv1.ConnectionModeNone,
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL: srv.URL,
+							Operations: []providermanifestv1.ProviderOperation{
+								{Name: "sync", Method: http.MethodPost, Path: "/sync"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"reviewer": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	var capturedHostServices []providerhost.HostService
+	providerImpl := &stubAgentProvider{}
+	factories := validFactories()
+	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+		if name != "reviewer" {
+			return nil, fmt.Errorf("agent name = %q, want %q", name, "reviewer")
+		}
+		capturedHostServices = append([]providerhost.HostService(nil), hostServices...)
+		return providerImpl, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	_, provider, err := result.AgentControl.ResolveProviderSelection("")
+	if err != nil {
+		t.Fatalf("ResolveProviderSelection: %v", err)
+	}
+	startCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "system:config"})
+	tool := coreagent.Tool{
+		ID: "roadmap.sync",
+		Target: coreagent.ToolTarget{
+			PluginName: "roadmap",
+			Operation:  "sync",
+		},
+	}
+	if _, err := provider.StartRun(startCtx, coreagent.StartRunRequest{
+		RunID:        "agent-run-1",
+		ProviderName: "reviewer",
+		CreatedBy:    coreagent.Actor{SubjectID: "system:config"},
+		Tools:        []coreagent.Tool{tool},
+	}); err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+	args, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
+	if err != nil {
+		t.Fatalf("structpb.NewStruct: %v", err)
+	}
+	resp, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
+		RunId:      "agent-run-1",
+		ToolCallId: "tool-call-1",
+		ToolId:     tool.ID,
+		Arguments:  args,
+	})
+	if err != nil {
+		t.Fatalf("invoke agent host callback: %v", err)
+	}
+	if resp.GetStatus() != http.StatusAccepted || resp.GetBody() != `{"ok":true}` {
+		t.Fatalf("agent host callback response = %#v", resp)
+	}
+
+	if got, _ := requestPath.Load().(string); got != "/sync" {
+		t.Fatalf("request path = %q, want %q", got, "/sync")
+	}
+	if got, _ := requestBody.Load().(string); !strings.Contains(got, `"taskId":"task-123"`) {
+		t.Fatalf("request body = %q, want taskId payload", got)
+	}
+
+	if _, err := provider.CancelRun(startCtx, coreagent.CancelRunRequest{RunID: "agent-run-1"}); err != nil {
+		t.Fatalf("CancelRun: %v", err)
+	}
+	cancelRequests := providerImpl.CancelRequests()
+	if len(cancelRequests) != 1 {
+		t.Fatalf("CancelRun requests = %d, want 1", len(cancelRequests))
+	}
+	if cancelRequests[0].RunID != "agent-run-1" {
+		t.Fatalf("CancelRun run_id = %q, want %q", cancelRequests[0].RunID, "agent-run-1")
+	}
+	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
+		RunId:      "agent-run-1",
+		ToolCallId: "tool-call-2",
+		ToolId:     tool.ID,
+		Arguments:  args,
+	}); status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("invoke agent host callback after cancel status = %s, want %s", status.Code(err), codes.PermissionDenied)
+	}
+}
+
+func TestBootstrapAgentProviderAssignedRunIDCancelsOnTrackingFailure(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"reviewer": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	providerImpl := &generatedIDAgentProvider{}
+	factories := validFactories()
+	factories.Agent = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+		if name != "reviewer" {
+			return nil, fmt.Errorf("agent name = %q, want %q", name, "reviewer")
+		}
+		return providerImpl, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	_, provider, err := result.AgentControl.ResolveProviderSelection("")
+	if err != nil {
+		t.Fatalf("ResolveProviderSelection: %v", err)
+	}
+
+	_, err = provider.StartRun(context.Background(), coreagent.StartRunRequest{
+		ProviderName: "reviewer",
+		Tools: []coreagent.Tool{{
+			ID: "roadmap.sync",
+			Target: coreagent.ToolTarget{
+				PluginName: "roadmap",
+				Operation:  "sync",
+			},
+		}},
+	})
+	if err == nil {
+		t.Fatal("StartRun error = nil, want tracking failure for provider-assigned run id")
+	}
+	if !strings.Contains(err.Error(), "agent execution principal is required") {
+		t.Fatalf("StartRun error = %v, want missing principal failure", err)
+	}
+
+	cancelRequests := providerImpl.CancelRequests()
+	if len(cancelRequests) != 1 {
+		t.Fatalf("CancelRun requests = %d, want 1", len(cancelRequests))
+	}
+	if cancelRequests[0].RunID != "generated-run-1" {
+		t.Fatalf("CancelRun run_id = %q, want %q", cancelRequests[0].RunID, "generated-run-1")
+	}
+	if cancelRequests[0].Reason != "agent run tracking failed" {
+		t.Fatalf("CancelRun reason = %q, want %q", cancelRequests[0].Reason, "agent run tracking failed")
+	}
+}
+
+func TestBootstrapAgentProviderRejectsMismatchedRequestedRunID(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Plugins = map[string]*config.ProviderEntry{
+		"roadmap": {
+			ConnectionMode: providermanifestv1.ConnectionModeNone,
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL: "http://example.invalid",
+							Operations: []providermanifestv1.ProviderOperation{
+								{Name: "sync", Method: http.MethodPost, Path: "/sync"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"reviewer": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	providerImpl := &generatedIDAgentProvider{}
+	var capturedHostServices []providerhost.HostService
+	factories := validFactories()
+	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+		if name != "reviewer" {
+			return nil, fmt.Errorf("agent name = %q, want %q", name, "reviewer")
+		}
+		capturedHostServices = append([]providerhost.HostService(nil), hostServices...)
+		return providerImpl, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	_, provider, err := result.AgentControl.ResolveProviderSelection("")
+	if err != nil {
+		t.Fatalf("ResolveProviderSelection: %v", err)
+	}
+
+	startCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "system:config"})
+	tool := coreagent.Tool{
+		ID: "roadmap.sync",
+		Target: coreagent.ToolTarget{
+			PluginName: "roadmap",
+			Operation:  "sync",
+		},
+	}
+	_, err = provider.StartRun(startCtx, coreagent.StartRunRequest{
+		RunID:        "agent-run-1",
+		ProviderName: "reviewer",
+		CreatedBy:    coreagent.Actor{SubjectID: "system:config"},
+		Tools:        []coreagent.Tool{tool},
+	})
+	if err == nil {
+		t.Fatal("StartRun error = nil, want mismatched run id failure")
+	}
+	if !strings.Contains(err.Error(), `returned run id "generated-run-1" for requested run id "agent-run-1"`) {
+		t.Fatalf("StartRun error = %v, want mismatched run id failure", err)
+	}
+
+	cancelRequests := providerImpl.CancelRequests()
+	if len(cancelRequests) != 1 {
+		t.Fatalf("CancelRun requests = %d, want 1", len(cancelRequests))
+	}
+	if cancelRequests[0].RunID != "generated-run-1" {
+		t.Fatalf("CancelRun run_id = %q, want %q", cancelRequests[0].RunID, "generated-run-1")
+	}
+	if cancelRequests[0].Reason != "agent provider returned mismatched run id" {
+		t.Fatalf("CancelRun reason = %q, want %q", cancelRequests[0].Reason, "agent provider returned mismatched run id")
+	}
+
+	args, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
+	if err != nil {
+		t.Fatalf("structpb.NewStruct: %v", err)
+	}
+	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
+		RunId:      "agent-run-1",
+		ToolCallId: "tool-call-1",
+		ToolId:     tool.ID,
+		Arguments:  args,
+	}); status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("invoke agent host callback after mismatch status = %s, want %s", status.Code(err), codes.PermissionDenied)
+	}
 }
 
 func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedPlugin(t *testing.T) {

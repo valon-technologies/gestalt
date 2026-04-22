@@ -13,6 +13,9 @@ import {
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
 import {
+  AgentProvider as AgentProviderService,
+} from "../gen/v1/agent_pb.ts";
+import {
   AuthenticationProvider as AuthenticationProviderService,
   AuthSessionSettingsSchema,
   AuthenticatedUserSchema,
@@ -63,6 +66,11 @@ import {
 import { S3 as S3Service } from "../gen/v1/s3_pb.ts";
 import { WorkflowProvider as WorkflowProviderService } from "../gen/v1/workflow_pb.ts";
 import { errorMessage, type Request } from "./api.ts";
+import {
+  AgentProvider,
+  createAgentProviderService,
+  isAgentProvider,
+} from "./agent.ts";
 import {
   AuthenticationProvider,
   isAuthenticationProvider,
@@ -127,6 +135,7 @@ export const CURRENT_PROTOCOL_VERSION = 3;
  * Command-line usage for the runtime entrypoint.
  */
 export const USAGE = "usage: bun run runtime.ts ROOT PROVIDER_TARGET";
+export { createAgentProviderService } from "./agent.ts";
 export { createWorkflowProviderService } from "./workflow.ts";
 
 /**
@@ -146,6 +155,7 @@ export type LoadedProvider =
   | CacheProvider
   | SecretsProvider
   | S3Provider
+  | AgentProvider
   | WorkflowProvider;
 
 type ProviderRuntimeEntry = {
@@ -203,6 +213,16 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
     protoKind: ProtoProviderKind.S3,
     registerService(router, provider) {
       router.service(S3Service, createS3Service(provider as S3Provider));
+    },
+  },
+  agent: {
+    isProvider: isAgentProvider as (value: unknown) => value is LoadedProvider,
+    protoKind: ProtoProviderKind.AGENT,
+    registerService(router, provider) {
+      router.service(
+        AgentProviderService,
+        createAgentProviderService(provider as AgentProvider),
+      );
     },
   },
   workflow: {

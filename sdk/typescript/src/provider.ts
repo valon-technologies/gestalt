@@ -10,6 +10,7 @@ export type ProviderKind =
   | "secrets"
   | "s3"
   | "workflow"
+  | "agent"
   | "telemetry";
 
 /**

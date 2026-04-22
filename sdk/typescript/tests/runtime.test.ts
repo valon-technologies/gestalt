@@ -8,6 +8,11 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { expect, test } from "bun:test";
 
 import {
+  CancelAgentProviderRunRequestSchema,
+  ListAgentProviderRunsRequestSchema,
+  StartAgentProviderRunRequestSchema,
+} from "../gen/v1/agent_pb.ts";
+import {
   BeginLoginRequestSchema,
   CompleteLoginRequestSchema,
   ValidateExternalTokenRequestSchema,
@@ -50,6 +55,7 @@ import {
 } from "../gen/v1/workflow_pb.ts";
 import {
   CURRENT_PROTOCOL_VERSION,
+  createAgentProviderService,
   createCacheService,
   ENV_WRITE_CATALOG,
   ENV_WRITE_MANIFEST_METADATA,
@@ -63,6 +69,7 @@ import {
   parseRuntimeArgs,
 } from "../src/runtime.ts";
 import {
+  AgentRunStatus,
   httpSubjectError,
   PresignMethod,
   S3,
@@ -1363,6 +1370,76 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
     create(EmptySchema, {}),
   );
   expect(refreshedMetadata.warnings).toEqual(["published-events:1"]);
+});
+
+test("agent provider target resolves and serves runtime metadata plus agent operations", async () => {
+  const provider = await loadProviderFromTarget(
+    fixturePath("agent-provider"),
+  );
+  const runtime = createRuntimeService(provider);
+  const agent = createAgentProviderService(provider as any);
+
+  await (runtime.configureProvider as any)(
+    create(ConfigureProviderRequestSchema, {
+      name: "fixture-agent",
+      config: {},
+      protocolVersion: CURRENT_PROTOCOL_VERSION,
+    }),
+  );
+
+  const metadata = await (runtime.getProviderIdentity as any)(
+    create(EmptySchema, {}),
+  );
+  expect(metadata.kind).toBe(ProtoProviderKind.AGENT);
+  expect(metadata.displayName).toBe("Fixture Agent");
+
+  const run = await (agent.startRun as any)(
+    create(StartAgentProviderRunRequestSchema, {
+      runId: "run-123",
+      idempotencyKey: "req-1",
+      providerName: "fixture-agent",
+      model: "gpt-test",
+      messages: [
+        {
+          role: "user",
+          text: "Summarize deployment status",
+        },
+      ],
+      createdBy: {
+        subjectId: "user:user-123",
+        subjectKind: "user",
+        displayName: "Ada",
+        authSource: "api_token",
+      },
+      sessionRef: "session-123",
+      executionRef: "exec-123",
+    }),
+  );
+  expect(run.id).toBe("run-123");
+  expect(run.providerName).toBe("fixture-agent");
+  expect(run.model).toBe("gpt-test");
+  expect(run.status).toBe(AgentRunStatus.PENDING);
+  expect(run.outputText).toBe("echo:Summarize deployment status");
+  expect(run.createdBy?.subjectId).toBe("user:user-123");
+
+  const listed = await (agent.listRuns as any)(
+    create(ListAgentProviderRunsRequestSchema, {}),
+  );
+  expect(listed.runs.map((entry: any) => entry.id)).toEqual(["run-123"]);
+
+  const canceled = await (agent.cancelRun as any)(
+    create(CancelAgentProviderRunRequestSchema, {
+      runId: "run-123",
+      reason: "user requested cancellation",
+    }),
+  );
+  expect(canceled.status).toBe(AgentRunStatus.CANCELED);
+  expect(canceled.statusMessage).toBe("user requested cancellation");
+
+  const refreshedMetadata = await (runtime.getProviderIdentity as any)(
+    create(EmptySchema, {}),
+  );
+  expect(refreshedMetadata.warnings).toEqual(["canceled-runs:1"]);
 });
 
 test("integration provider request context includes workflow metadata", async () => {

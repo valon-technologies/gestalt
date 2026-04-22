@@ -67,6 +67,12 @@ impl Request {
     ) -> std::result::Result<crate::WorkflowManager, crate::WorkflowManagerError> {
         crate::WorkflowManager::connect(self.invocation_token()).await
     }
+
+    pub async fn agent_manager(
+        &self,
+    ) -> std::result::Result<crate::AgentManager, crate::AgentManagerError> {
+        crate::AgentManager::connect(self.invocation_token()).await
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

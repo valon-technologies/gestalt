@@ -3,6 +3,7 @@ use std::sync::Arc;
 use tonic::codegen::async_trait;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
+use crate::agent::AgentProvider;
 use crate::api::RuntimeMetadata;
 use crate::auth::AuthenticationProvider;
 use crate::cache::CacheProvider;
@@ -55,6 +56,10 @@ struct WorkflowRuntime<P> {
     provider: Arc<P>,
 }
 
+struct AgentRuntime<P> {
+    provider: Arc<P>,
+}
+
 macro_rules! impl_runtime_hooks {
     ($wrapper:ident, $trait_bound:path) => {
         #[async_trait]
@@ -91,6 +96,7 @@ impl_runtime_hooks!(CacheRuntime, CacheProvider);
 impl_runtime_hooks!(SecretsRuntime, SecretsProvider);
 impl_runtime_hooks!(S3Runtime, S3Provider);
 impl_runtime_hooks!(WorkflowRuntime, WorkflowProvider);
+impl_runtime_hooks!(AgentRuntime, AgentProvider);
 
 #[derive(Clone)]
 pub struct RuntimeServer {
@@ -164,6 +170,16 @@ impl RuntimeServer {
         Self {
             kind: ProviderKind::Workflow,
             provider: Arc::new(WorkflowRuntime { provider }),
+        }
+    }
+
+    pub fn for_agent<P>(provider: Arc<P>) -> Self
+    where
+        P: AgentProvider,
+    {
+        Self {
+            kind: ProviderKind::Agent,
+            provider: Arc::new(AgentRuntime { provider }),
         }
     }
 }

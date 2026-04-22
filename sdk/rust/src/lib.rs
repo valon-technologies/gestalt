@@ -1,6 +1,8 @@
 #![warn(rustdoc::broken_intra_doc_links)]
 #![doc = include_str!("../README.md")]
 
+mod agent;
+mod agent_manager;
 mod api;
 mod auth;
 mod auth_server;
@@ -32,6 +34,10 @@ pub mod proto {
     pub use crate::generated::v1;
 }
 
+pub use agent::{AgentHost, AgentHostError, AgentProvider, ENV_AGENT_HOST_SOCKET};
+pub use agent_manager::{
+    AgentManager, AgentManagerError, ENV_AGENT_MANAGER_SOCKET, ENV_AGENT_MANAGER_SOCKET_TOKEN,
+};
 pub use api::{Access, Credential, Provider, Request, Response, RuntimeMetadata, Subject, ok};
 pub use auth::{
     AuthenticatedUser, AuthenticationProvider, BeginLoginRequest, BeginLoginResponse,
@@ -170,6 +176,16 @@ macro_rules! export_workflow_provider {
         pub fn __gestalt_serve_workflow(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime::run_workflow_provider(provider)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! export_agent_provider {
+    (constructor = $constructor:path $(,)?) => {
+        pub fn __gestalt_serve_agent(_name: &str) -> $crate::Result<()> {
+            let provider = std::sync::Arc::new($constructor());
+            $crate::runtime::run_agent_provider(provider)
         }
     };
 }

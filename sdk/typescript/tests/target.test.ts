@@ -54,6 +54,11 @@ test("provider target parsing supports plugin defaults and kind prefixes", () =>
     modulePath: "./cache.ts",
     exportName: "provider",
   });
+  expect(parseProviderTarget("agent:./agent.ts#provider")).toEqual({
+    kind: "agent",
+    modulePath: "./agent.ts",
+    exportName: "provider",
+  });
   expect(() => parseProviderTarget("integration:./provider.ts#plugin")).toThrow(
     'unsupported provider kind "integration"',
   );
@@ -122,5 +127,18 @@ test("package config reads provider targets", () => {
   });
   expect(formatProviderTarget(readPackageProviderTarget(workflowRoot))).toBe(
     "workflow:./workflow.ts#provider",
+  );
+
+  const agentRoot = fixturePath("agent-provider");
+  expect(readPackageConfig(agentRoot)).toEqual({
+    name: "@fixtures/agent-provider",
+    providerTarget: {
+      kind: "agent",
+      modulePath: "./agent.ts",
+      exportName: "provider",
+    },
+  });
+  expect(formatProviderTarget(readPackageProviderTarget(agentRoot))).toBe(
+    "agent:./agent.ts#provider",
   );
 });

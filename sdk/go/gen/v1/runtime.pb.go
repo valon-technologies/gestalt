@@ -37,6 +37,7 @@ const (
 	ProviderKind_PROVIDER_KIND_WORKFLOW       ProviderKind = 8
 	ProviderKind_PROVIDER_KIND_AUTHORIZATION  ProviderKind = 9
 	ProviderKind_PROVIDER_KIND_RUNTIME        ProviderKind = 10
+	ProviderKind_PROVIDER_KIND_AGENT          ProviderKind = 11
 )
 
 // Enum value maps for ProviderKind.
@@ -53,6 +54,7 @@ var (
 		8:  "PROVIDER_KIND_WORKFLOW",
 		9:  "PROVIDER_KIND_AUTHORIZATION",
 		10: "PROVIDER_KIND_RUNTIME",
+		11: "PROVIDER_KIND_AGENT",
 	}
 	ProviderKind_value = map[string]int32{
 		"PROVIDER_KIND_UNSPECIFIED":    0,
@@ -66,6 +68,7 @@ var (
 		"PROVIDER_KIND_WORKFLOW":       8,
 		"PROVIDER_KIND_AUTHORIZATION":  9,
 		"PROVIDER_KIND_RUNTIME":        10,
+		"PROVIDER_KIND_AGENT":          11,
 	}
 )
 
@@ -382,7 +385,7 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion\"E\n" +
 	"\x13HealthCheckResponse\x12\x14\n" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage*\xca\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage*\xe3\x02\n" +
 	"\fProviderKind\x12\x1d\n" +
 	"\x19PROVIDER_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19PROVIDER_KIND_INTEGRATION\x10\x01\x12 \n" +
@@ -395,7 +398,8 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x16PROVIDER_KIND_WORKFLOW\x10\b\x12\x1f\n" +
 	"\x1bPROVIDER_KIND_AUTHORIZATION\x10\t\x12\x19\n" +
 	"\x15PROVIDER_KIND_RUNTIME\x10\n" +
-	"2\xae\x02\n" +
+	"\x12\x17\n" +
+	"\x13PROVIDER_KIND_AGENT\x10\v2\xae\x02\n" +
 	"\x11ProviderLifecycle\x12T\n" +
 	"\x13GetProviderIdentity\x12\x16.google.protobuf.Empty\x1a%.gestalt.provider.v1.ProviderIdentity\x12r\n" +
 	"\x11ConfigureProvider\x12-.gestalt.provider.v1.ConfigureProviderRequest\x1a..gestalt.provider.v1.ConfigureProviderResponse\x12O\n" +

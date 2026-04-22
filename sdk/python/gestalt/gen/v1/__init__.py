@@ -3,6 +3,8 @@
 from importlib import import_module
 
 __all__ = [
+    "agent_pb2",
+    "agent_pb2_grpc",
     "authentication_pb2",
     "authentication_pb2_grpc",
     "cache_pb2",

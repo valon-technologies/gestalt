@@ -1178,6 +1178,10 @@ func buildPluginRuntimeHostServiceBinding(pluginName, sessionID string, hostServ
 			serviceKey = "workflow_manager"
 			serviceLabel = "workflow manager"
 			methodPrefix = "/" + proto.WorkflowManagerHost_ServiceDesc.ServiceName + "/"
+		case hostService.EnvVar == providerhost.DefaultAgentManagerSocketEnv:
+			serviceKey = "agent_manager"
+			serviceLabel = "agent manager"
+			methodPrefix = "/" + proto.AgentManagerHost_ServiceDesc.ServiceName + "/"
 		case hostService.EnvVar == providerhost.DefaultAuthorizationSocketEnv:
 			serviceKey = "authorization"
 			serviceLabel = "authorization"
