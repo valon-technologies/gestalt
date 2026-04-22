@@ -204,10 +204,10 @@
         "type"
       ],
       "properties": {
-        "type": {
-          "type": "string",
-          "enum": [
-            "slack_signature",
+          "type": {
+            "type": "string",
+            "enum": [
+            "hmac",
             "apiKey",
             "http",
             "none"
@@ -215,6 +215,25 @@
         },
         "description": {
           "type": "string"
+        },
+        "signatureHeader": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signaturePrefix": {
+          "type": "string"
+        },
+        "payloadTemplate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timestampHeader": {
+          "type": "string",
+          "minLength": 1
+        },
+        "maxAgeSeconds": {
+          "type": "integer",
+          "minimum": 1
         },
         "name": {
           "type": "string",

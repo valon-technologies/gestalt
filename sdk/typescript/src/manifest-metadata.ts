@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import YAML from "yaml";
 
 export type HTTPSecuritySchemeType =
-  | "slack_signature"
+  | "hmac"
   | "apiKey"
   | "http"
   | "none";
@@ -20,6 +20,11 @@ export interface HTTPSecretRef {
 export interface HTTPSecurityScheme {
   type?: HTTPSecuritySchemeType;
   description?: string;
+  signatureHeader?: string;
+  signaturePrefix?: string;
+  payloadTemplate?: string;
+  timestampHeader?: string;
+  maxAgeSeconds?: number;
   name?: string;
   in?: HTTPIn;
   scheme?: HTTPAuthScheme;

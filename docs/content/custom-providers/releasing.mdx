@@ -218,15 +218,20 @@ been authored declaratively:
 ```yaml
 spec:
   securitySchemes:
-    slack:
-      type: slack_signature
+    signed:
+      type: hmac
       secret:
-        env: SLACK_SIGNING_SECRET
+        env: REQUEST_SIGNING_SECRET
+      signatureHeader: X-Request-Signature
+      signaturePrefix: v0=
+      payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+      timestampHeader: X-Request-Timestamp
+      maxAgeSeconds: 300
   http:
     command:
       path: /command
       method: POST
-      security: slack
+      security: signed
       target: handle_command
       requestBody:
         required: true
@@ -235,8 +240,7 @@ spec:
       ack:
         status: 200
         body:
-          response_type: ephemeral
-          text: Working on it...
+          status: accepted
 ```
 
 For non-host Python targets, point Gestalt at a matching interpreter with

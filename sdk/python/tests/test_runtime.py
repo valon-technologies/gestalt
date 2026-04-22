@@ -227,16 +227,21 @@ class MainEntrypointTests(unittest.TestCase):
         plugin = Plugin(
             "test-plugin",
             securitySchemes={
-                "slack": {
-                    "type": "slack_signature",
-                    "secret": {"env": "SLACK_SIGNING_SECRET"},
+                "signed": {
+                    "type": "hmac",
+                    "secret": {"env": "REQUEST_SIGNING_SECRET"},
+                    "signatureHeader": "X-Request-Signature",
+                    "signaturePrefix": "v0=",
+                    "payloadTemplate": "v0:{header:X-Request-Timestamp}:{raw_body}",
+                    "timestampHeader": "X-Request-Timestamp",
+                    "maxAgeSeconds": 300,
                 }
             },
             http={
                 "command": {
                     "path": "/command",
                     "method": "POST",
-                    "security": "slack",
+                    "security": "signed",
                     "target": "noop",
                     "requestBody": {
                         "required": True,
@@ -247,8 +252,7 @@ class MainEntrypointTests(unittest.TestCase):
                     "ack": {
                         "status": 200,
                         "body": {
-                            "response_type": "ephemeral",
-                            "text": "Working on it...",
+                            "status": "accepted",
                         },
                     },
                 }
@@ -280,13 +284,14 @@ class MainEntrypointTests(unittest.TestCase):
             self.assertTrue(metadata_path.exists())
             metadata = metadata_path.read_text(encoding="utf-8")
             self.assertIn("securitySchemes:", metadata)
-            self.assertIn("type: slack_signature", metadata)
-            self.assertIn("env: SLACK_SIGNING_SECRET", metadata)
+            self.assertIn("type: hmac", metadata)
+            self.assertIn("env: REQUEST_SIGNING_SECRET", metadata)
+            self.assertIn("signatureHeader: X-Request-Signature", metadata)
             self.assertIn("http:", metadata)
             self.assertIn("path: /command", metadata)
             self.assertIn("target: noop", metadata)
             self.assertIn("application/x-www-form-urlencoded", metadata)
-            self.assertIn("response_type: ephemeral", metadata)
+            self.assertIn("status: accepted", metadata)
 
     def test_returns_usage_error_for_bad_args(self) -> None:
         result = _runtime.main(["/only-one-arg"])

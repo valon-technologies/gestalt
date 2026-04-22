@@ -107,10 +107,10 @@ type RouteAuthRef struct {
 type HTTPSecuritySchemeType string
 
 const (
-	HTTPSecuritySchemeTypeSlackSignature HTTPSecuritySchemeType = "slack_signature"
-	HTTPSecuritySchemeTypeAPIKey         HTTPSecuritySchemeType = "apiKey"
-	HTTPSecuritySchemeTypeHTTP           HTTPSecuritySchemeType = "http"
-	HTTPSecuritySchemeTypeNone           HTTPSecuritySchemeType = "none"
+	HTTPSecuritySchemeTypeHMAC   HTTPSecuritySchemeType = "hmac"
+	HTTPSecuritySchemeTypeAPIKey HTTPSecuritySchemeType = "apiKey"
+	HTTPSecuritySchemeTypeHTTP   HTTPSecuritySchemeType = "http"
+	HTTPSecuritySchemeTypeNone   HTTPSecuritySchemeType = "none"
 )
 
 type HTTPIn string
@@ -151,12 +151,17 @@ type HTTPAck struct {
 }
 
 type HTTPSecurityScheme struct {
-	Type        HTTPSecuritySchemeType `json:"type,omitempty" yaml:"type,omitempty"`
-	Description string                 `json:"description,omitempty" yaml:"description,omitempty"`
-	Name        string                 `json:"name,omitempty" yaml:"name,omitempty"`
-	In          HTTPIn                 `json:"in,omitempty" yaml:"in,omitempty"`
-	Scheme      HTTPAuthScheme         `json:"scheme,omitempty" yaml:"scheme,omitempty"`
-	Secret      *HTTPSecretRef         `json:"secret,omitempty" yaml:"secret,omitempty"`
+	Type            HTTPSecuritySchemeType `json:"type,omitempty" yaml:"type,omitempty"`
+	Description     string                 `json:"description,omitempty" yaml:"description,omitempty"`
+	SignatureHeader string                 `json:"signatureHeader,omitempty" yaml:"signatureHeader,omitempty"`
+	SignaturePrefix string                 `json:"signaturePrefix,omitempty" yaml:"signaturePrefix,omitempty"`
+	PayloadTemplate string                 `json:"payloadTemplate,omitempty" yaml:"payloadTemplate,omitempty"`
+	TimestampHeader string                 `json:"timestampHeader,omitempty" yaml:"timestampHeader,omitempty"`
+	MaxAgeSeconds   int                    `json:"maxAgeSeconds,omitempty" yaml:"maxAgeSeconds,omitempty"`
+	Name            string                 `json:"name,omitempty" yaml:"name,omitempty"`
+	In              HTTPIn                 `json:"in,omitempty" yaml:"in,omitempty"`
+	Scheme          HTTPAuthScheme         `json:"scheme,omitempty" yaml:"scheme,omitempty"`
+	Secret          *HTTPSecretRef         `json:"secret,omitempty" yaml:"secret,omitempty"`
 }
 
 type HTTPSecretRef struct {

@@ -298,15 +298,20 @@ func TestPrepareSourceManifest_MergesGeneratedRustManifestMetadata(t *testing.T)
 		ExpectedCatalogWrite: true,
 		GeneratedCatalog:     "provider-rust",
 		GeneratedManifestMetadata: `securitySchemes:
-  slack:
-    type: slack_signature
+  signed:
+    type: hmac
     secret:
-      env: SLACK_SIGNING_SECRET
+      env: REQUEST_SIGNING_SECRET
+    signatureHeader: X-Request-Signature
+    signaturePrefix: v0=
+    payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+    timestampHeader: X-Request-Timestamp
+    maxAgeSeconds: 300
 http:
   command:
     path: /command
     method: POST
-    security: slack
+    security: signed
     target: handle_command
     requestBody:
       required: true
@@ -315,8 +320,7 @@ http:
     ack:
       status: 200
       body:
-        response_type: ephemeral
-        text: Working on it...`,
+        status: accepted`,
 	})
 	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
@@ -335,14 +339,14 @@ http:
 		t.Fatalf("prepared manifest data = %q, want merged HTTP binding metadata", string(preparedData))
 	}
 
-	scheme := preparedManifest.Spec.SecuritySchemes["slack"]
+	scheme := preparedManifest.Spec.SecuritySchemes["signed"]
 	if scheme == nil {
-		t.Fatal(`manifest.Spec.SecuritySchemes["slack"] = nil, want generated scheme`)
+		t.Fatal(`manifest.Spec.SecuritySchemes["signed"] = nil, want generated scheme`)
 	}
-	if scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeSlackSignature {
-		t.Fatalf("scheme.Type = %q, want %q", scheme.Type, providermanifestv1.HTTPSecuritySchemeTypeSlackSignature)
+	if scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeHMAC {
+		t.Fatalf("scheme.Type = %q, want %q", scheme.Type, providermanifestv1.HTTPSecuritySchemeTypeHMAC)
 	}
-	if scheme.Secret == nil || scheme.Secret.Env != "SLACK_SIGNING_SECRET" {
+	if scheme.Secret == nil || scheme.Secret.Env != "REQUEST_SIGNING_SECRET" {
 		t.Fatalf("scheme.Secret = %+v, want env-backed secret", scheme.Secret)
 	}
 
@@ -356,8 +360,8 @@ http:
 	if binding.Method != "POST" {
 		t.Fatalf("binding.Method = %q, want %q", binding.Method, "POST")
 	}
-	if binding.Security != "slack" {
-		t.Fatalf("binding.Security = %q, want %q", binding.Security, "slack")
+	if binding.Security != "signed" {
+		t.Fatalf("binding.Security = %q, want %q", binding.Security, "signed")
 	}
 	if binding.Target != "handle_command" {
 		t.Fatalf("binding.Target = %q, want %q", binding.Target, "handle_command")

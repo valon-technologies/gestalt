@@ -52,8 +52,8 @@ impl PluginManifestMetadata {
 /// Supported manifest HTTP security scheme kinds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum HTTPSecuritySchemeType {
-    #[serde(rename = "slack_signature")]
-    SlackSignature,
+    #[serde(rename = "hmac")]
+    Hmac,
     #[serde(rename = "apiKey")]
     ApiKey,
     #[serde(rename = "http")]
@@ -119,6 +119,16 @@ pub struct HTTPSecurityScheme {
     pub kind: Option<HTTPSecuritySchemeType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(rename = "signatureHeader", skip_serializing_if = "Option::is_none")]
+    pub signature_header: Option<String>,
+    #[serde(rename = "signaturePrefix", skip_serializing_if = "Option::is_none")]
+    pub signature_prefix: Option<String>,
+    #[serde(rename = "payloadTemplate", skip_serializing_if = "Option::is_none")]
+    pub payload_template: Option<String>,
+    #[serde(rename = "timestampHeader", skip_serializing_if = "Option::is_none")]
+    pub timestamp_header: Option<String>,
+    #[serde(rename = "maxAgeSeconds", skip_serializing_if = "Option::is_none")]
+    pub max_age_seconds: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(rename = "in", skip_serializing_if = "Option::is_none")]
@@ -135,9 +145,9 @@ impl HTTPSecurityScheme {
         Self::default()
     }
 
-    /// Creates a Slack request-signing scheme.
-    pub fn slack_signature() -> Self {
-        Self::new().kind(HTTPSecuritySchemeType::SlackSignature)
+    /// Creates an HMAC request-signing scheme.
+    pub fn hmac() -> Self {
+        Self::new().kind(HTTPSecuritySchemeType::Hmac)
     }
 
     /// Creates an API key scheme.
@@ -171,6 +181,50 @@ impl HTTPSecurityScheme {
         let description = description.into().trim().to_owned();
         if !description.is_empty() {
             self.description = Some(description);
+        }
+        self
+    }
+
+    /// Sets the header carrying the transmitted request signature.
+    pub fn signature_header(mut self, header: impl Into<String>) -> Self {
+        let header = header.into().trim().to_owned();
+        if !header.is_empty() {
+            self.signature_header = Some(header);
+        }
+        self
+    }
+
+    /// Sets the static prefix prepended to the computed signature.
+    pub fn signature_prefix(mut self, prefix: impl Into<String>) -> Self {
+        let prefix = prefix.into();
+        if !prefix.is_empty() {
+            self.signature_prefix = Some(prefix);
+        }
+        self
+    }
+
+    /// Sets the template used to build the signed payload.
+    pub fn payload_template(mut self, template: impl Into<String>) -> Self {
+        let template = template.into().trim().to_owned();
+        if !template.is_empty() {
+            self.payload_template = Some(template);
+        }
+        self
+    }
+
+    /// Sets the header carrying the request timestamp.
+    pub fn timestamp_header(mut self, header: impl Into<String>) -> Self {
+        let header = header.into().trim().to_owned();
+        if !header.is_empty() {
+            self.timestamp_header = Some(header);
+        }
+        self
+    }
+
+    /// Sets the maximum accepted request age in seconds.
+    pub fn max_age_seconds(mut self, seconds: u64) -> Self {
+        if seconds > 0 {
+            self.max_age_seconds = Some(seconds);
         }
         self
     }

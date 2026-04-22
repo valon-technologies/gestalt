@@ -128,19 +128,24 @@ func TestLoadConfigParsesPluginHTTPSecuritySchemesAndBindings(t *testing.T) {
 server:
   encryptionKey: server-key
 plugins:
-  slack:
+  signed:
     source:
       path: /tmp/manifest.yaml
     securitySchemes:
-      slack:
-        type: slack_signature
+      signed:
+        type: hmac
         secret:
-          env: SLACK_SIGNING_SECRET
+          env: REQUEST_SIGNING_SECRET
+        signatureHeader: X-Request-Signature
+        signaturePrefix: v0=
+        payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+        timestampHeader: X-Request-Timestamp
+        maxAgeSeconds: 300
     http:
       command:
         path: /command
         method: POST
-        security: slack
+        security: signed
         requestBody:
           required: true
           content:
@@ -148,20 +153,32 @@ plugins:
         target: handle_command
         ack:
           body:
-            response_type: ephemeral
-            text: Working on it...
+            status: accepted
 `)
 
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	entry := cfg.Plugins["slack"]
+	entry := cfg.Plugins["signed"]
 	if entry == nil {
-		t.Fatal("Plugins[slack] = nil")
+		t.Fatal("Plugins[signed] = nil")
 	}
-	if entry.SecuritySchemes["slack"] == nil || entry.SecuritySchemes["slack"].Type != providermanifestv1.HTTPSecuritySchemeTypeSlackSignature {
-		t.Fatalf("SecuritySchemes[slack] = %#v", entry.SecuritySchemes["slack"])
+	scheme := entry.SecuritySchemes["signed"]
+	if scheme == nil || scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeHMAC {
+		t.Fatalf("SecuritySchemes[signed] = %#v", entry.SecuritySchemes["signed"])
+	}
+	if got, want := scheme.SignatureHeader, "X-Request-Signature"; got != want {
+		t.Fatalf("SecuritySchemes[signed].SignatureHeader = %q, want %q", got, want)
+	}
+	if got, want := scheme.PayloadTemplate, "v0:{header:X-Request-Timestamp}:{raw_body}"; got != want {
+		t.Fatalf("SecuritySchemes[signed].PayloadTemplate = %q, want %q", got, want)
+	}
+	if got, want := scheme.TimestampHeader, "X-Request-Timestamp"; got != want {
+		t.Fatalf("SecuritySchemes[signed].TimestampHeader = %q, want %q", got, want)
+	}
+	if got, want := scheme.MaxAgeSeconds, 300; got != want {
+		t.Fatalf("SecuritySchemes[signed].MaxAgeSeconds = %d, want %d", got, want)
 	}
 	if entry.HTTP["command"] == nil {
 		t.Fatal("HTTP[command] = nil")
@@ -177,6 +194,62 @@ plugins:
 	}
 }
 
+func TestProviderEntryEffectiveHTTPSecuritySchemes_MergesHMACFields(t *testing.T) {
+	t.Parallel()
+
+	entry := &ProviderEntry{
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				SecuritySchemes: map[string]*providermanifestv1.HTTPSecurityScheme{
+					"signed": {
+						Type:            providermanifestv1.HTTPSecuritySchemeTypeHMAC,
+						SignatureHeader: "X-Old-Signature",
+						SignaturePrefix: "v1=",
+						PayloadTemplate: "{raw_body}",
+						TimestampHeader: "X-Old-Timestamp",
+						MaxAgeSeconds:   30,
+						Secret:          &providermanifestv1.HTTPSecretRef{Env: "OLD_SIGNING_SECRET"},
+					},
+				},
+			},
+		},
+		SecuritySchemes: map[string]*HTTPSecurityScheme{
+			"signed": {
+				SignatureHeader: "X-Request-Signature",
+				SignaturePrefix: "v0=",
+				PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+				TimestampHeader: "X-Request-Timestamp",
+				MaxAgeSeconds:   300,
+				Secret:          &providermanifestv1.HTTPSecretRef{Env: "REQUEST_SIGNING_SECRET"},
+			},
+		},
+	}
+
+	effective := entry.EffectiveHTTPSecuritySchemes()
+	scheme := effective["signed"]
+	if scheme == nil {
+		t.Fatal("EffectiveHTTPSecuritySchemes()[signed] = nil")
+	}
+	if got, want := scheme.SignatureHeader, "X-Request-Signature"; got != want {
+		t.Fatalf("SignatureHeader = %q, want %q", got, want)
+	}
+	if got, want := scheme.SignaturePrefix, "v0="; got != want {
+		t.Fatalf("SignaturePrefix = %q, want %q", got, want)
+	}
+	if got, want := scheme.PayloadTemplate, "v0:{header:X-Request-Timestamp}:{raw_body}"; got != want {
+		t.Fatalf("PayloadTemplate = %q, want %q", got, want)
+	}
+	if got, want := scheme.TimestampHeader, "X-Request-Timestamp"; got != want {
+		t.Fatalf("TimestampHeader = %q, want %q", got, want)
+	}
+	if got, want := scheme.MaxAgeSeconds, 300; got != want {
+		t.Fatalf("MaxAgeSeconds = %d, want %d", got, want)
+	}
+	if scheme.Secret == nil || scheme.Secret.Env != "REQUEST_SIGNING_SECRET" {
+		t.Fatalf("Secret = %#v, want REQUEST_SIGNING_SECRET", scheme.Secret)
+	}
+}
+
 func TestProviderEntryEffectiveHTTPBindings_ClonesAckBody(t *testing.T) {
 	t.Parallel()
 
@@ -187,7 +260,7 @@ func TestProviderEntryEffectiveHTTPBindings_ClonesAckBody(t *testing.T) {
 					"command": {
 						Path:     "/command",
 						Method:   "POST",
-						Security: "slack",
+						Security: "signed",
 						Target:   "handle_command",
 						Ack: &providermanifestv1.HTTPAck{
 							Headers: map[string]string{"Content-Type": "application/json"},

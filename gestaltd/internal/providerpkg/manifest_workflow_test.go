@@ -502,19 +502,24 @@ func TestManifestWorkflow_AcceptsHostedHTTPBindingsAndSecuritySchemes(t *testing
 	dir := t.TempDir()
 	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
 kind: plugin
-source: github.com/acme/plugins/slack
+source: github.com/acme/plugins/signed
 version: 1.0.0
 spec:
   securitySchemes:
-    slack:
-      type: slack_signature
+    signed:
+      type: hmac
       secret:
-        env: SLACK_SIGNING_SECRET
+        env: REQUEST_SIGNING_SECRET
+      signatureHeader: X-Request-Signature
+      signaturePrefix: v0=
+      payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+      timestampHeader: X-Request-Timestamp
+      maxAgeSeconds: 300
   http:
     command:
       path: /command
       method: POST
-      security: slack
+      security: signed
       requestBody:
         required: true
         content:
@@ -522,8 +527,7 @@ spec:
       target: handle_command
       ack:
         body:
-          response_type: ephemeral
-          text: Working on it...
+          status: accepted
 `))
 
 	_, manifest, err := ReadSourceManifestFile(manifestPath)
@@ -533,8 +537,8 @@ spec:
 	if manifest.Spec == nil {
 		t.Fatal("expected plugin metadata")
 	}
-	if manifest.Spec.SecuritySchemes["slack"] == nil || manifest.Spec.SecuritySchemes["slack"].Type != providermanifestv1.HTTPSecuritySchemeTypeSlackSignature {
-		t.Fatalf("unexpected security scheme: %#v", manifest.Spec.SecuritySchemes["slack"])
+	if manifest.Spec.SecuritySchemes["signed"] == nil || manifest.Spec.SecuritySchemes["signed"].Type != providermanifestv1.HTTPSecuritySchemeTypeHMAC {
+		t.Fatalf("unexpected security scheme: %#v", manifest.Spec.SecuritySchemes["signed"])
 	}
 	if manifest.Spec.HTTP["command"] == nil {
 		t.Fatal("expected http binding")
@@ -617,6 +621,66 @@ spec:
 	}
 	if !strings.Contains(err.Error(), `provider.http.command.requestBody.content "application/json" is duplicated after normalization`) {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestManifestWorkflow_RejectsInvalidHMACPayloadTemplates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		payloadTemplate string
+		want            string
+	}{
+		{
+			name:            "missing timestamp placeholder",
+			payloadTemplate: "{raw_body}",
+			want:            `provider.securitySchemes.signed.payloadTemplate must include a header placeholder for "X-Request-Timestamp"`,
+		},
+		{
+			name:            "unsupported placeholder",
+			payloadTemplate: "v0:{query:id}:{raw_body}",
+			want:            `provider.securitySchemes.signed.payloadTemplate placeholder "query:id" is not supported`,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: plugin
+source: github.com/acme/plugins/bad-http-template
+version: 1.0.0
+spec:
+  securitySchemes:
+    signed:
+      type: hmac
+      secret:
+        env: REQUEST_SIGNING_SECRET
+      signatureHeader: X-Request-Signature
+      signaturePrefix: v0=
+      payloadTemplate: "`+tt.payloadTemplate+`"
+      timestampHeader: X-Request-Timestamp
+      maxAgeSeconds: 300
+  http:
+    command:
+      path: /command
+      method: POST
+      security: signed
+      target: handle_command
+`))
+
+			_, _, err := ReadSourceManifestFile(manifestPath)
+			if err == nil {
+				t.Fatal("expected invalid manifest")
+			}
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want substring %q", err, tt.want)
+			}
+		})
 	}
 }
 

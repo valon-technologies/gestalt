@@ -100,18 +100,23 @@ func TestServeProviderWritesStaticArtifacts(t *testing.T) {
 
 		router := stubRouter.WithManifestMetadata(gestalt.ManifestMetadata{
 			SecuritySchemes: map[string]gestalt.HTTPSecurityScheme{
-				"slack": {
-					Type: gestalt.HTTPSecuritySchemeTypeSlackSignature,
+				"signed": {
+					Type: gestalt.HTTPSecuritySchemeTypeHMAC,
 					Secret: &gestalt.HTTPSecretRef{
-						Env: "SLACK_SIGNING_SECRET",
+						Env: "REQUEST_SIGNING_SECRET",
 					},
+					SignatureHeader: "X-Request-Signature",
+					SignaturePrefix: "v0=",
+					PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+					TimestampHeader: "X-Request-Timestamp",
+					MaxAgeSeconds:   300,
 				},
 			},
 			HTTP: map[string]gestalt.HTTPBinding{
 				"command": {
 					Path:     "/command",
 					Method:   "POST",
-					Security: "slack",
+					Security: "signed",
 					Target:   "test_op",
 					RequestBody: &gestalt.HTTPRequestBody{
 						Required: true,
@@ -122,8 +127,7 @@ func TestServeProviderWritesStaticArtifacts(t *testing.T) {
 					Ack: &gestalt.HTTPAck{
 						Status: 200,
 						Body: map[string]any{
-							"response_type": "ephemeral",
-							"text":          "Working on it...",
+							"status": "accepted",
 						},
 					},
 				},
@@ -156,13 +160,14 @@ func TestServeProviderWritesStaticArtifacts(t *testing.T) {
 		metadataYAML := string(metadataData)
 		for _, want := range []string{
 			"securitySchemes:",
-			"type: slack_signature",
-			"env: SLACK_SIGNING_SECRET",
+			"type: hmac",
+			"env: REQUEST_SIGNING_SECRET",
+			"signatureHeader: X-Request-Signature",
 			"http:",
 			"path: /command",
 			"target: test_op",
 			"application/x-www-form-urlencoded",
-			"response_type: ephemeral",
+			"status: accepted",
 		} {
 			if !strings.Contains(metadataYAML, want) {
 				t.Fatalf("manifest metadata YAML missing %q:\n%s", want, metadataYAML)

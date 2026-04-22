@@ -11619,8 +11619,8 @@ func TestExecuteOperation_POST(t *testing.T) {
 	}
 }
 
-func TestHostedHTTPBinding_SlackSignatureAckDispatchesOperationAndRejectsReplay(t *testing.T) {
-	t.Setenv("SLACK_SIGNING_SECRET", "super-secret")
+func TestHostedHTTPBinding_HMACAckDispatchesOperationAndRejectsReplay(t *testing.T) {
+	t.Setenv("REQUEST_SIGNING_SECRET", "super-secret")
 
 	type bindingInvocation struct {
 		Params   map[string]any
@@ -11630,7 +11630,7 @@ func TestHostedHTTPBinding_SlackSignatureAckDispatchesOperationAndRejectsReplay(
 	invocations := make(chan bindingInvocation, 1)
 	provider := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
-			N:        "slack",
+			N:        "signed",
 			ConnMode: core.ConnectionModeNone,
 			ExecuteFn: func(ctx context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
 				if op != "handle_command" {
@@ -11649,13 +11649,18 @@ func TestHostedHTTPBinding_SlackSignatureAckDispatchesOperationAndRejectsReplay(
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, provider)
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"slack": {
+			"signed": {
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
-					"slack": {
-						Type: providermanifestv1.HTTPSecuritySchemeTypeSlackSignature,
+					"signed": {
+						Type: providermanifestv1.HTTPSecuritySchemeTypeHMAC,
 						Secret: &providermanifestv1.HTTPSecretRef{
-							Env: "SLACK_SIGNING_SECRET",
+							Env: "REQUEST_SIGNING_SECRET",
 						},
+						SignatureHeader: "X-Request-Signature",
+						SignaturePrefix: "v0=",
+						PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+						TimestampHeader: "X-Request-Timestamp",
+						MaxAgeSeconds:   300,
 					},
 				},
 				HTTP: map[string]*config.HTTPBinding{
@@ -11668,12 +11673,11 @@ func TestHostedHTTPBinding_SlackSignatureAckDispatchesOperationAndRejectsReplay(
 								"application/x-www-form-urlencoded": {},
 							},
 						},
-						Security: "slack",
+						Security: "signed",
 						Target:   "handle_command",
 						Ack: &providermanifestv1.HTTPAck{
 							Body: map[string]any{
-								"response_type": "ephemeral",
-								"text":          "Working on it...",
+								"status": "accepted",
 							},
 						},
 					},
@@ -11684,18 +11688,18 @@ func TestHostedHTTPBinding_SlackSignatureAckDispatchesOperationAndRejectsReplay(
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := "text=hello&response_url=https%3A%2F%2Fhooks.example.test%2Fresponse"
+	body := "text=hello&callback_url=https%3A%2F%2Fhooks.example.test%2Fresponse"
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+body)
 
 	makeRequest := func() *http.Request {
-		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/slack/command?source=query", strings.NewReader(body))
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/signed/command?source=query", strings.NewReader(body))
 		if err != nil {
 			t.Fatalf("NewRequest: %v", err)
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.Header.Set("X-Slack-Request-Timestamp", timestamp)
-		req.Header.Set("X-Slack-Signature", signature)
+		req.Header.Set("X-Request-Timestamp", timestamp)
+		req.Header.Set("X-Request-Signature", signature)
 		return req
 	}
 
@@ -11711,11 +11715,8 @@ func TestHostedHTTPBinding_SlackSignatureAckDispatchesOperationAndRejectsReplay(
 	if err := json.NewDecoder(resp.Body).Decode(&ack); err != nil {
 		t.Fatalf("decode ack: %v", err)
 	}
-	if got, want := ack["response_type"], "ephemeral"; got != want {
-		t.Fatalf("response_type = %#v, want %q", got, want)
-	}
-	if got, want := ack["text"], "Working on it..."; got != want {
-		t.Fatalf("text = %#v, want %q", got, want)
+	if got, want := ack["status"], "accepted"; got != want {
+		t.Fatalf("status = %#v, want %q", got, want)
 	}
 
 	select {
@@ -11723,8 +11724,8 @@ func TestHostedHTTPBinding_SlackSignatureAckDispatchesOperationAndRejectsReplay(
 		if got, want := invocation.Params["text"], "hello"; got != want {
 			t.Fatalf("params[text] = %#v, want %q", got, want)
 		}
-		if got, want := invocation.Params["response_url"], "https://hooks.example.test/response"; got != want {
-			t.Fatalf("params[response_url] = %#v, want %q", got, want)
+		if got, want := invocation.Params["callback_url"], "https://hooks.example.test/response"; got != want {
+			t.Fatalf("params[callback_url] = %#v, want %q", got, want)
 		}
 		if got, want := invocation.Params["source"], "query"; got != want {
 			t.Fatalf("params[source] = %#v, want %q", got, want)
@@ -11736,10 +11737,10 @@ func TestHostedHTTPBinding_SlackSignatureAckDispatchesOperationAndRejectsReplay(
 		if got, want := httpCtx["name"], "command"; got != want {
 			t.Fatalf("http context name = %#v, want %q", got, want)
 		}
-		if got, want := httpCtx["path"], "/api/v1/slack/command"; got != want {
+		if got, want := httpCtx["path"], "/api/v1/signed/command"; got != want {
 			t.Fatalf("http context path = %#v, want %q", got, want)
 		}
-		if got, want := httpCtx["security"], "slack"; got != want {
+		if got, want := httpCtx["security"], "signed"; got != want {
 			t.Fatalf("http context security = %#v, want %q", got, want)
 		}
 	case <-time.After(2 * time.Second):
@@ -11758,8 +11759,8 @@ func TestHostedHTTPBinding_SlackSignatureAckDispatchesOperationAndRejectsReplay(
 	if err := json.NewDecoder(resp.Body).Decode(&duplicateAck); err != nil {
 		t.Fatalf("decode duplicate ack: %v", err)
 	}
-	if got, want := duplicateAck["response_type"], "ephemeral"; got != want {
-		t.Fatalf("duplicate response_type = %#v, want %q", got, want)
+	if got, want := duplicateAck["status"], "accepted"; got != want {
+		t.Fatalf("duplicate status = %#v, want %q", got, want)
 	}
 	select {
 	case invocation := <-invocations:
@@ -11769,12 +11770,12 @@ func TestHostedHTTPBinding_SlackSignatureAckDispatchesOperationAndRejectsReplay(
 }
 
 func TestHostedHTTPBinding_MergesManifestAndConfigOverrides(t *testing.T) {
-	t.Setenv("SLACK_SIGNING_SECRET", "super-secret")
+	t.Setenv("REQUEST_SIGNING_SECRET", "super-secret")
 
 	invocations := make(chan map[string]any, 1)
 	provider := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
-			N:        "slack",
+			N:        "signed",
 			ConnMode: core.ConnectionModeNone,
 			ExecuteFn: func(_ context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
 				if op != "handle_command" {
@@ -11790,11 +11791,18 @@ func TestHostedHTTPBinding_MergesManifestAndConfigOverrides(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, provider)
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"slack": {
+			"signed": {
 				ResolvedManifest: &providermanifestv1.Manifest{
 					Spec: &providermanifestv1.Spec{
 						SecuritySchemes: map[string]*providermanifestv1.HTTPSecurityScheme{
-							"slack": {Type: providermanifestv1.HTTPSecuritySchemeTypeSlackSignature},
+							"signed": {
+								Type:            providermanifestv1.HTTPSecuritySchemeTypeHMAC,
+								SignatureHeader: "X-Request-Signature",
+								SignaturePrefix: "v0=",
+								PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+								TimestampHeader: "X-Request-Timestamp",
+								MaxAgeSeconds:   300,
+							},
 						},
 						HTTP: map[string]*providermanifestv1.HTTPBinding{
 							"command": {
@@ -11806,23 +11814,22 @@ func TestHostedHTTPBinding_MergesManifestAndConfigOverrides(t *testing.T) {
 										"application/x-www-form-urlencoded": {},
 									},
 								},
-								Security: "slack",
+								Security: "signed",
 								Target:   "handle_command",
 							},
 						},
 					},
 				},
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
-					"slack": {
-						Secret: &providermanifestv1.HTTPSecretRef{Env: "SLACK_SIGNING_SECRET"},
+					"signed": {
+						Secret: &providermanifestv1.HTTPSecretRef{Env: "REQUEST_SIGNING_SECRET"},
 					},
 				},
 				HTTP: map[string]*config.HTTPBinding{
 					"command": {
 						Ack: &providermanifestv1.HTTPAck{
 							Body: map[string]any{
-								"response_type": "ephemeral",
-								"text":          "Merged from config",
+								"status": "queued",
 							},
 						},
 					},
@@ -11837,13 +11844,13 @@ func TestHostedHTTPBinding_MergesManifestAndConfigOverrides(t *testing.T) {
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+body)
 
-	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/slack/command", strings.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/signed/command", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("NewRequest: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("X-Slack-Request-Timestamp", timestamp)
-	req.Header.Set("X-Slack-Signature", signature)
+	req.Header.Set("X-Request-Timestamp", timestamp)
+	req.Header.Set("X-Request-Signature", signature)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -11857,8 +11864,8 @@ func TestHostedHTTPBinding_MergesManifestAndConfigOverrides(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&ack); err != nil {
 		t.Fatalf("decode ack: %v", err)
 	}
-	if got, want := ack["text"], "Merged from config"; got != want {
-		t.Fatalf("ack text = %#v, want %q", got, want)
+	if got, want := ack["status"], "queued"; got != want {
+		t.Fatalf("ack status = %#v, want %q", got, want)
 	}
 
 	select {
@@ -11871,13 +11878,13 @@ func TestHostedHTTPBinding_MergesManifestAndConfigOverrides(t *testing.T) {
 	}
 }
 
-func TestHostedHTTPBinding_SlackSignatureSyncRetriesReinvokeOperation(t *testing.T) {
-	t.Setenv("SLACK_SIGNING_SECRET", "super-secret")
+func TestHostedHTTPBinding_HMACSyncRetriesReinvokeOperation(t *testing.T) {
+	t.Setenv("REQUEST_SIGNING_SECRET", "super-secret")
 
 	invocations := make(chan map[string]any, 2)
 	provider := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
-			N:        "slack",
+			N:        "signed",
 			ConnMode: core.ConnectionModeNone,
 			ExecuteFn: func(_ context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
 				if op != "handle_command" {
@@ -11893,11 +11900,16 @@ func TestHostedHTTPBinding_SlackSignatureSyncRetriesReinvokeOperation(t *testing
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, provider)
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"slack": {
+			"signed": {
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
-					"slack": {
-						Type:   providermanifestv1.HTTPSecuritySchemeTypeSlackSignature,
-						Secret: &providermanifestv1.HTTPSecretRef{Env: "SLACK_SIGNING_SECRET"},
+					"signed": {
+						Type:            providermanifestv1.HTTPSecuritySchemeTypeHMAC,
+						Secret:          &providermanifestv1.HTTPSecretRef{Env: "REQUEST_SIGNING_SECRET"},
+						SignatureHeader: "X-Request-Signature",
+						SignaturePrefix: "v0=",
+						PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+						TimestampHeader: "X-Request-Timestamp",
+						MaxAgeSeconds:   300,
 					},
 				},
 				HTTP: map[string]*config.HTTPBinding{
@@ -11910,7 +11922,7 @@ func TestHostedHTTPBinding_SlackSignatureSyncRetriesReinvokeOperation(t *testing
 								"application/x-www-form-urlencoded": {},
 							},
 						},
-						Security: "slack",
+						Security: "signed",
 						Target:   "handle_command",
 					},
 				},
@@ -11925,20 +11937,20 @@ func TestHostedHTTPBinding_SlackSignatureSyncRetriesReinvokeOperation(t *testing
 	signature := httpBindingTestSignature("super-secret", "v0:"+timestamp+":"+body)
 
 	makeRequest := func() *http.Request {
-		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/slack/command", strings.NewReader(body))
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/signed/command", strings.NewReader(body))
 		if err != nil {
 			t.Fatalf("NewRequest: %v", err)
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.Header.Set("X-Slack-Request-Timestamp", timestamp)
-		req.Header.Set("X-Slack-Signature", signature)
+		req.Header.Set("X-Request-Timestamp", timestamp)
+		req.Header.Set("X-Request-Signature", signature)
 		return req
 	}
 
 	for i := 0; i < 2; i++ {
 		resp, err := http.DefaultClient.Do(makeRequest())
 		if err != nil {
-			t.Fatalf("sync slack request %d: %v", i, err)
+			t.Fatalf("sync hmac request %d: %v", i, err)
 		}
 		var result map[string]any
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
