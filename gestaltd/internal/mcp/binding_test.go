@@ -417,6 +417,50 @@ func TestNewServer_ToolNameConvention(t *testing.T) {
 	}
 }
 
+func TestNewServer_SanitizesInvalidToolNamesAndRoutesOriginalOperation(t *testing.T) {
+	t.Parallel()
+
+	var invokedOp string
+
+	prov := newCatalogBackedProvider(
+		coretesting.StubIntegration{
+			N: "github",
+			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				invokedOp = op
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		[]core.Operation{{Name: "github_actions/cancel-workflow-run.v1", Method: http.MethodPost}},
+	)
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds, userID := stubServicesWithToken(t, "github")
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+	})
+
+	session := newTestSessionWithTools()
+	tools := listToolsForSession(t, srv, ctxWithPrincipal(userID), session)
+	if len(tools.Tools) != 1 {
+		t.Fatalf("expected 1 tool, got %d", len(tools.Tools))
+	}
+	if got := tools.Tools[0].Name; got != "github_github_actions_cancel-workflow-run_v1" {
+		t.Fatalf("sanitized tool name = %q", got)
+	}
+
+	result := callToolForSession(t, srv, ctxWithPrincipal(userID), session, "github_github_actions_cancel-workflow-run_v1", nil)
+	if result.IsError {
+		t.Fatalf("expected tool call to succeed, got error result: %v", result.Content)
+	}
+	if invokedOp != "github_actions/cancel-workflow-run.v1" {
+		t.Fatalf("invoked operation = %q", invokedOp)
+	}
+}
+
 func TestNewServer_ToolCallRoutesThrough(t *testing.T) {
 	t.Parallel()
 

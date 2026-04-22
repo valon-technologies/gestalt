@@ -27,6 +27,10 @@ func allowOperation(ctx context.Context, cfg Config, p *principal.Principal, pro
 }
 
 func toolTarget(cfg Config, providers []string, name string) (provider, operation string, ok bool) {
+	if ref, ok := cfg.ToolTargets.Lookup(name); ok {
+		return ref.provider, ref.operation, true
+	}
+
 	provider = providerNameForTool(cfg.ToolPrefixes, providers, name)
 	if provider == "" {
 		return "", "", false
