@@ -252,3 +252,103 @@ func TestRouterCatalogName(t *testing.T) {
 		t.Fatalf("original catalog name = %q, want %q", router.Catalog().GetName(), "original-name")
 	}
 }
+
+func TestRouterManifestMetadata(t *testing.T) {
+	t.Parallel()
+
+	router := gestalt.MustRouter(
+		gestalt.Register(
+			gestalt.Operation[execInput, execOutput]{
+				ID:     "echo",
+				Method: http.MethodPost,
+			},
+			(*execProvider).echo,
+		),
+	).WithManifestMetadata(gestalt.ManifestMetadata{
+		SecuritySchemes: map[string]gestalt.HTTPSecurityScheme{
+			"slack": {
+				Type: gestalt.HTTPSecuritySchemeTypeSlackSignature,
+				Secret: &gestalt.HTTPSecretRef{
+					Env: "SLACK_SIGNING_SECRET",
+				},
+			},
+		},
+		HTTP: map[string]gestalt.HTTPBinding{
+			"command": {
+				Path:     "/command",
+				Method:   http.MethodPost,
+				Security: "slack",
+				Target:   "echo",
+				RequestBody: &gestalt.HTTPRequestBody{
+					Required: true,
+					Content: map[string]gestalt.HTTPMediaType{
+						"application/x-www-form-urlencoded": {},
+					},
+				},
+				Ack: &gestalt.HTTPAck{
+					Status: 200,
+					Headers: map[string]string{
+						"content-type": "application/json",
+					},
+					Body: map[string]any{
+						"response_type": "ephemeral",
+						"attachments": []any{
+							map[string]any{"text": "Working on it"},
+						},
+					},
+				},
+			},
+		},
+	})
+
+	metadata := router.ManifestMetadata()
+	if got := metadata.SecuritySchemes["slack"].Type; got != gestalt.HTTPSecuritySchemeTypeSlackSignature {
+		t.Fatalf("security scheme type = %q, want %q", got, gestalt.HTTPSecuritySchemeTypeSlackSignature)
+	}
+	binding, ok := metadata.HTTP["command"]
+	if !ok {
+		t.Fatal("manifest metadata missing command binding")
+	}
+	if binding.Target != "echo" {
+		t.Fatalf("binding target = %q, want %q", binding.Target, "echo")
+	}
+	if binding.Ack == nil {
+		t.Fatal("binding ack is nil")
+	}
+	body, ok := binding.Ack.Body.(map[string]any)
+	if !ok {
+		t.Fatalf("binding ack body type = %T, want map[string]any", binding.Ack.Body)
+	}
+	attachments, ok := body["attachments"].([]any)
+	if !ok || len(attachments) != 1 {
+		t.Fatalf("binding attachments = %#v, want one attachment", body["attachments"])
+	}
+
+	metadata.SecuritySchemes["slack"] = gestalt.HTTPSecurityScheme{Type: gestalt.HTTPSecuritySchemeTypeNone}
+	binding.Ack.Headers["content-type"] = "text/plain"
+	body["response_type"] = "changed"
+	attachments[0].(map[string]any)["text"] = "changed"
+
+	original := router.ManifestMetadata()
+	if got := original.SecuritySchemes["slack"].Type; got != gestalt.HTTPSecuritySchemeTypeSlackSignature {
+		t.Fatalf("original security scheme type = %q, want %q", got, gestalt.HTTPSecuritySchemeTypeSlackSignature)
+	}
+	originalBinding := original.HTTP["command"]
+	if got := originalBinding.Ack.Headers["content-type"]; got != "application/json" {
+		t.Fatalf("original ack header = %q, want %q", got, "application/json")
+	}
+	originalBody, ok := originalBinding.Ack.Body.(map[string]any)
+	if !ok {
+		t.Fatalf("original ack body type = %T, want map[string]any", originalBinding.Ack.Body)
+	}
+	if got := originalBody["response_type"]; got != "ephemeral" {
+		t.Fatalf("original ack response_type = %#v, want %#v", got, "ephemeral")
+	}
+	originalAttachments, ok := originalBody["attachments"].([]any)
+	if !ok || len(originalAttachments) != 1 {
+		t.Fatalf("original attachments = %#v, want one attachment", originalBody["attachments"])
+	}
+	if got := originalAttachments[0].(map[string]any)["text"]; got != "Working on it" {
+		t.Fatalf("original attachment text = %#v, want %#v", got, "Working on it")
+	}
+}

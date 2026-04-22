@@ -1,7 +1,9 @@
 package providerpkg
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -235,6 +237,111 @@ provider = "provider"
 	}
 }
 
+func TestPrepareSourceManifest_MergesGeneratedPythonManifestMetadata(t *testing.T) {
+	root := t.TempDir()
+	manifestPath := mustWritePythonSourceManifest(t, root, "python-release")
+	mustWriteFile(t, filepath.Join(root, pythonProjectFile), []byte(`[tool.gestalt]
+provider = "provider:plugin"
+`), 0o644)
+	mustWriteFile(t, filepath.Join(root, "provider.py"), []byte(`from gestalt import Plugin
+
+plugin = Plugin(
+    "python-release",
+    securitySchemes={
+        "slack": {
+            "type": "slack_signature",
+            "secret": {"env": "SLACK_SIGNING_SECRET"},
+        }
+    },
+    http={
+        "command": {
+            "path": "/command",
+            "method": "POST",
+            "security": "slack",
+            "target": "handle_command",
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/x-www-form-urlencoded": {},
+                },
+            },
+            "ack": {
+                "status": 200,
+                "body": {
+                    "response_type": "ephemeral",
+                    "text": "Working on it...",
+                },
+            },
+        }
+    },
+)
+
+@plugin.operation(id="handle_command")
+def handle_command() -> dict[str, str]:
+    return {"status": "ok"}
+`), 0o644)
+
+	pythonPath, err := pythonTestRuntimePath()
+	if err != nil {
+		t.Skipf("python runtime unavailable: %v", err)
+	}
+	t.Setenv("GESTALT_PYTHON", mustWritePythonWithoutGRPCWrapper(t, root, pythonPath))
+
+	preparedData, preparedManifest, err := PrepareSourceManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("PrepareSourceManifest: %v", err)
+	}
+	if preparedManifest == nil || preparedManifest.Spec == nil {
+		t.Fatalf("prepared manifest = %+v, want provider metadata", preparedManifest)
+	}
+	if !containsString(string(preparedData), "securitySchemes:") {
+		t.Fatalf("prepared manifest data = %q, want merged security scheme metadata", string(preparedData))
+	}
+	if !containsString(string(preparedData), "path: /command") {
+		t.Fatalf("prepared manifest data = %q, want merged HTTP binding metadata", string(preparedData))
+	}
+
+	scheme := preparedManifest.Spec.SecuritySchemes["slack"]
+	if scheme == nil {
+		t.Fatal(`manifest.Spec.SecuritySchemes["slack"] = nil, want generated scheme`)
+	}
+	if scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeSlackSignature {
+		t.Fatalf("scheme.Type = %q, want %q", scheme.Type, providermanifestv1.HTTPSecuritySchemeTypeSlackSignature)
+	}
+	if scheme.Secret == nil || scheme.Secret.Env != "SLACK_SIGNING_SECRET" {
+		t.Fatalf("scheme.Secret = %+v, want env-backed secret", scheme.Secret)
+	}
+
+	binding := preparedManifest.Spec.HTTP["command"]
+	if binding == nil {
+		t.Fatal(`manifest.Spec.HTTP["command"] = nil, want generated binding`)
+	}
+	if binding.Path != "/command" {
+		t.Fatalf("binding.Path = %q, want %q", binding.Path, "/command")
+	}
+	if binding.Method != "POST" {
+		t.Fatalf("binding.Method = %q, want %q", binding.Method, "POST")
+	}
+	if binding.Security != "slack" {
+		t.Fatalf("binding.Security = %q, want %q", binding.Security, "slack")
+	}
+	if binding.Target != "handle_command" {
+		t.Fatalf("binding.Target = %q, want %q", binding.Target, "handle_command")
+	}
+	if binding.RequestBody == nil {
+		t.Fatal("binding.RequestBody = nil, want request body metadata")
+	}
+	if _, ok := binding.RequestBody.Content["application/x-www-form-urlencoded"]; !ok {
+		t.Fatalf("binding.RequestBody.Content = %#v, want form content type", binding.RequestBody.Content)
+	}
+	if binding.Ack == nil {
+		t.Fatal("binding.Ack = nil, want ack metadata")
+	}
+	if binding.Ack.Status != 200 {
+		t.Fatalf("binding.Ack.Status = %d, want %d", binding.Ack.Status, 200)
+	}
+}
+
 func pythonTestOtherPlatform() (string, string) {
 	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
 		return "darwin", "arm64"
@@ -242,11 +349,58 @@ func pythonTestOtherPlatform() (string, string) {
 	return "linux", "amd64"
 }
 
+func pythonTestRuntimePath() (string, error) {
+	if value := os.Getenv("GESTALT_PYTHON"); value != "" {
+		if resolved, err := exec.LookPath(value); err == nil {
+			return resolved, nil
+		}
+		if info, err := os.Stat(value); err == nil && !info.IsDir() {
+			return value, nil
+		}
+	}
+	for _, candidate := range []string{"python3", "python"} {
+		if resolved, err := exec.LookPath(candidate); err == nil {
+			return resolved, nil
+		}
+	}
+	return "", exec.ErrNotFound
+}
+
 func pythonTestInterpreterPath(root, goos, suffix string) string {
 	if goos == "windows" {
 		return filepath.Join(root, suffix, "Scripts", "python.exe")
 	}
 	return filepath.Join(root, suffix, "bin", "python")
+}
+
+func mustWritePythonWithoutGRPCWrapper(t *testing.T, root, pythonPath string) string {
+	t.Helper()
+
+	path := filepath.Join(root, "python-no-grpc")
+	script := fmt.Sprintf(`#!%s
+import importlib.abc
+import runpy
+import sys
+
+class _BlockGRPC(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "grpc" or fullname.startswith("grpc."):
+            error = ModuleNotFoundError("No module named 'grpc'")
+            error.name = "grpc"
+            raise error
+        return None
+
+sys.meta_path.insert(0, _BlockGRPC())
+
+if len(sys.argv) < 3 or sys.argv[1] != "-m":
+    raise SystemExit("unsupported invocation")
+
+module_name = sys.argv[2]
+sys.argv = [sys.argv[0], *sys.argv[3:]]
+runpy.run_module(module_name, run_name="__main__")
+`, pythonPath)
+	mustWriteFile(t, path, []byte(script), 0o755)
+	return path
 }
 
 func mustWritePythonInterpreter(t *testing.T, path string) {
@@ -258,6 +412,30 @@ func mustWritePythonInterpreter(t *testing.T, path string) {
 	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("WriteFile(%s): %v", path, err)
 	}
+}
+
+func mustWritePythonSourceManifest(t *testing.T, root, pluginName string) string {
+	t.Helper()
+
+	data, err := EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindPlugin,
+		Source:  "github.com/testowner/plugins/" + pluginName,
+		Version: "0.0.1",
+		Spec: &providermanifestv1.Spec{
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+				},
+			},
+		},
+	}, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+
+	path := filepath.Join(root, "manifest.yaml")
+	mustWriteFile(t, path, data, 0o644)
+	return path
 }
 
 func containsString(haystack, needle string) bool {

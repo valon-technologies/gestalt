@@ -15,6 +15,7 @@ import (
 )
 
 const envWriteCatalog = "GESTALT_PLUGIN_WRITE_CATALOG"
+const envWriteManifestMetadata = "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA"
 
 type providerCloserContextKey struct{}
 
@@ -27,22 +28,52 @@ func ServeProvider[P any, PP interface {
 	*P
 	Provider
 }](ctx context.Context, provider PP, router *Router[P]) error {
-	if catalogPath := os.Getenv(envWriteCatalog); catalogPath != "" {
-		cat := router.Catalog()
-		if cat == nil {
-			cat = &proto.Catalog{}
-		}
-		if dir := filepath.Dir(catalogPath); dir != "." && dir != "" {
-			if err := os.MkdirAll(dir, 0o755); err != nil {
-				return fmt.Errorf("create catalog directory %q: %w", dir, err)
+	catalogPath := os.Getenv(envWriteCatalog)
+	manifestMetadataPath := os.Getenv(envWriteManifestMetadata)
+	if catalogPath != "" || manifestMetadataPath != "" {
+		if catalogPath != "" {
+			cat := router.Catalog()
+			if cat == nil {
+				cat = &proto.Catalog{}
+			}
+			if err := ensureOutputDir("catalog", catalogPath); err != nil {
+				return err
+			}
+			if err := writeCatalogYAML(cat, catalogPath); err != nil {
+				return err
 			}
 		}
-		return writeCatalogYAML(cat, catalogPath)
+		if manifestMetadataPath != "" {
+			var metadata ManifestMetadata
+			if router != nil {
+				metadata = router.ManifestMetadata()
+			}
+			if hasManifestMetadata(metadata) {
+				if err := ensureOutputDir("manifest metadata", manifestMetadataPath); err != nil {
+					return err
+				}
+				if err := writeManifestMetadataYAML(metadata, manifestMetadataPath); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	}
 	ctx = withProviderCloser(ctx, provider)
 	return serveProvider(ctx, func(srv *grpc.Server) {
 		proto.RegisterIntegrationProviderServer(srv, NewProviderServer(provider, router))
 	})
+}
+
+func ensureOutputDir(label, path string) error {
+	dir := filepath.Dir(path)
+	if dir == "." || dir == "" {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create %s directory %q: %w", label, dir, err)
+	}
+	return nil
 }
 
 func withProviderCloser(ctx context.Context, provider any) context.Context {

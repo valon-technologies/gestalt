@@ -6,19 +6,44 @@ these helpers document the handwritten provider interfaces that wrap those
 messages.
 """
 
+from __future__ import annotations
+
 import datetime as dt
 from enum import Enum
-from typing import Any, Callable
+from importlib import import_module
+from typing import TYPE_CHECKING, Any, Callable
 
-from ._cache import CacheEntry
 from .gen.v1 import authentication_pb2 as _authentication_pb2
-from .gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
-from .gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
+
+if TYPE_CHECKING:
+    from ._cache import CacheEntry
+
+_s3_pb2_grpc: Any | None
+_workflow_pb2_grpc: Any | None
+
+try:
+    _s3_pb2_grpc = import_module(".gen.v1.s3_pb2_grpc", __package__)
+    _workflow_pb2_grpc = import_module(".gen.v1.workflow_pb2_grpc", __package__)
+except ModuleNotFoundError as exc:
+    if exc.name != "grpc":
+        raise
+    _s3_pb2_grpc = None
+    _workflow_pb2_grpc = None
 
 AuthenticatedUser: Any = _authentication_pb2.AuthenticatedUser  # ty: ignore[unresolved-attribute]
 BeginLoginRequest: Any = _authentication_pb2.BeginLoginRequest  # ty: ignore[unresolved-attribute]
 BeginLoginResponse: Any = _authentication_pb2.BeginLoginResponse  # ty: ignore[unresolved-attribute]
 CompleteLoginRequest: Any = _authentication_pb2.CompleteLoginRequest  # ty: ignore[unresolved-attribute]
+
+if _s3_pb2_grpc is None:
+    _S3ServicerBase = object
+else:
+    _S3ServicerBase = _s3_pb2_grpc.S3Servicer
+
+if _workflow_pb2_grpc is None:
+    _WorkflowProviderServicerBase = object
+else:
+    _WorkflowProviderServicerBase = _workflow_pb2_grpc.WorkflowProviderServicer
 
 
 class ProviderKind(str, Enum):
@@ -238,7 +263,7 @@ class CacheProvider(PluginProvider):
         _runtime.serve(self, runtime_kind=ProviderKind.CACHE)
 
 
-class S3Provider(PluginProvider, _s3_pb2_grpc.S3Servicer):
+class S3Provider(PluginProvider, _S3ServicerBase):
     """Base class for S3-compatible object store runtimes."""
 
     def serve(self) -> None:
@@ -249,7 +274,7 @@ class S3Provider(PluginProvider, _s3_pb2_grpc.S3Servicer):
         _runtime.serve(self, runtime_kind=ProviderKind.S3)
 
 
-class WorkflowProvider(PluginProvider, _workflow_pb2_grpc.WorkflowProviderServicer):
+class WorkflowProvider(PluginProvider, _WorkflowProviderServicerBase):
     def serve(self) -> None:
         from . import _runtime
 
