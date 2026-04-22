@@ -175,7 +175,7 @@ Surfaces load operation catalogs from external specifications. They are configur
 | `baseUrl`    | string              | Base URL for declarative REST operations.                                         |
 | `operations` | ProviderOperation[] | Declarative REST operations. Presence of this field makes the plugin declarative. |
 
-The `rest`/`openapi`/`graphql` surface types are mutually exclusive (use `surfaces.openapi` or `surfaces.graphql`, not both), but `surfaces.mcp` may be combined with any of them.
+`surfaces.rest` is the declarative REST form. `surfaces.openapi`, `surfaces.graphql`, and `surfaces.mcp` are passthrough surfaces. You may combine `openapi` and `graphql` on the same plugin, and `mcp` may be added alongside any of them.
 
 ### Authentication Types
 
@@ -672,7 +672,7 @@ spec:
 
 Manifest paths must stay inside the package. `kind`, `source`, and `version` are required. A manifest defines exactly one provider kind: `kind: plugin`, `kind: authentication`, `kind: indexeddb`, `kind: secrets`, or `kind: ui`.
 
-`configSchemaPath` validates per-plugin config and may be written in JSON or YAML. Any connection may define `params` and `discovery`. The OpenAPI/GraphQL surface types are mutually exclusive, but MCP may be added alongside either.
+`configSchemaPath` validates per-plugin config and may be written in JSON or YAML. Any connection may define `params` and `discovery`. OpenAPI and GraphQL may be declared together on one plugin, and MCP may be added alongside either or both.
 
 A connection using `mcp_oauth` auth requires the plugin to declare an MCP surface (via `spec.surfaces.mcp` or an equivalent). Manifests that set `auth.type: mcp_oauth` without an MCP surface fail validation.
 

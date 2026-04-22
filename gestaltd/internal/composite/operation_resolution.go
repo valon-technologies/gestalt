@@ -10,7 +10,7 @@ import (
 // for request execution. Composite session catalogs only describe the MCP
 // surface, so static REST ops should not trigger MCP session initialization.
 func (p *Provider) ResolveStaticOperationForRequest(_ context.Context, operation string) (catalog.CatalogOperation, bool) {
-	return taggedCatalogOperation(p.api.Catalog(), operation, catalog.TransportREST)
+	return taggedCatalogOperation(p.api.Catalog(), operation, "")
 }
 
 func taggedCatalogOperation(cat *catalog.Catalog, operation, transport string) (catalog.CatalogOperation, bool) {
@@ -22,7 +22,11 @@ func taggedCatalogOperation(cat *catalog.Catalog, operation, transport string) (
 			continue
 		}
 		op := cat.Operations[i]
-		op.Transport = transport
+		if transport != "" {
+			op.Transport = transport
+		} else if op.Transport == "" {
+			op.Transport = catalog.TransportREST
+		}
 		return op, true
 	}
 	return catalog.CatalogOperation{}, false

@@ -60,10 +60,7 @@ func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *
 	}
 
 	specAuthForConnection := func(connectionName string) *provider.Definition {
-		if authFallback == nil || authFallback.definition == nil || authFallback.connectionName != connectionName {
-			return nil
-		}
-		return authFallback.definition
+		return authFallback.definitionFor(connectionName)
 	}
 
 	handlers := make(map[string]OAuthHandler)

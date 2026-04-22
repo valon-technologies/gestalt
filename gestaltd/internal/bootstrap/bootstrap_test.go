@@ -3739,22 +3739,110 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects plugin configured with both openapi and graphql api surfaces", func(t *testing.T) {
+	t.Run("accepts plugin configured with both openapi and graphql api surfaces", func(t *testing.T) {
 		t.Parallel()
 
-		srv := startBootstrapGraphQLIntrospectionServer(t)
+		schema := map[string]any{
+			"queryType": map[string]any{"name": "Query"},
+			"types": []any{
+				map[string]any{
+					"kind": "OBJECT",
+					"name": "Query",
+					"fields": []any{
+						map[string]any{
+							"name": "viewer",
+							"args": []any{
+								map[string]any{
+									"name": "team",
+									"type": map[string]any{"kind": "SCALAR", "name": "String"},
+								},
+							},
+							"type": map[string]any{"kind": "OBJECT", "name": "Viewer"},
+						},
+					},
+				},
+				map[string]any{
+					"kind": "OBJECT",
+					"name": "Viewer",
+					"fields": []any{
+						map[string]any{"name": "id", "type": map[string]any{"kind": "SCALAR", "name": "ID"}},
+						map[string]any{"name": "name", "type": map[string]any{"kind": "SCALAR", "name": "String"}},
+					},
+				},
+				map[string]any{"kind": "SCALAR", "name": "String"},
+				map[string]any{"kind": "SCALAR", "name": "ID"},
+			},
+		}
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/openapi.json":
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"openapi": "3.1.0",
+					"info": map[string]any{
+						"title":   "Linear API",
+						"version": "1.0.0",
+					},
+					"paths": map[string]any{
+						"/status": map[string]any{
+							"get": map[string]any{
+								"operationId": "status",
+								"responses": map[string]any{
+									"200": map[string]any{"description": "ok"},
+								},
+							},
+						},
+					},
+				})
+			case "/status":
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"ok":true}`))
+			case "/graphql":
+				var payload struct {
+					Query string `json:"query"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				if strings.Contains(payload.Query, "__schema") {
+					_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"__schema": schema}})
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"data": map[string]any{
+						"viewer": map[string]any{
+							"id":   "user-123",
+							"name": "Platform",
+						},
+					},
+				})
+			default:
+				http.NotFound(w, r)
+			}
+		}))
+		t.Cleanup(srv.Close)
+
 		cfg := validConfig()
 		cfg.Plugins = map[string]*config.ProviderEntry{
 			"linear": {
 				ResolvedManifest: &providermanifestv1.Manifest{
 					Spec: &providermanifestv1.Spec{
+						DefaultConnection: "rest",
+						Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+							"rest":    {Mode: providermanifestv1.ConnectionModeNone},
+							"graphql": {Mode: providermanifestv1.ConnectionModeNone},
+						},
 						Surfaces: &providermanifestv1.ProviderSurfaces{
 							OpenAPI: &providermanifestv1.OpenAPISurface{
-								Document: "https://example.invalid/openapi.json",
-								BaseURL:  "https://example.invalid/api",
+								Document:   srv.URL + "/openapi.json",
+								BaseURL:    srv.URL,
+								Connection: "rest",
 							},
 							GraphQL: &providermanifestv1.GraphQLSurface{
-								URL: srv.URL,
+								URL:        srv.URL + "/graphql",
+								Connection: "graphql",
 							},
 						},
 					},
@@ -3762,9 +3850,8 @@ func TestValidate(t *testing.T) {
 			},
 		}
 
-		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
-		if err == nil || !strings.Contains(err.Error(), `openapi and graphql surfaces cannot both be configured for the same plugin`) {
-			t.Fatalf("Validate error = %v, want mixed api surface rejection", err)
+		if _, err := bootstrap.Validate(context.Background(), cfg, validFactories()); err != nil {
+			t.Fatalf("Validate: %v", err)
 		}
 	})
 
@@ -3853,6 +3940,168 @@ func TestValidate(t *testing.T) {
 			t.Fatalf("Validate: %v", err)
 		}
 	})
+}
+
+func TestBootstrapAllowsPluginConfiguredWithBothOpenAPIAndGraphQLAPISurfaces(t *testing.T) {
+	t.Parallel()
+
+	schema := map[string]any{
+		"queryType": map[string]any{"name": "Query"},
+		"types": []any{
+			map[string]any{
+				"kind": "OBJECT",
+				"name": "Query",
+				"fields": []any{
+					map[string]any{
+						"name": "viewer",
+						"args": []any{
+							map[string]any{
+								"name": "team",
+								"type": map[string]any{"kind": "SCALAR", "name": "String"},
+							},
+						},
+						"type": map[string]any{"kind": "OBJECT", "name": "Viewer"},
+					},
+				},
+			},
+			map[string]any{
+				"kind": "OBJECT",
+				"name": "Viewer",
+				"fields": []any{
+					map[string]any{"name": "id", "type": map[string]any{"kind": "SCALAR", "name": "ID"}},
+					map[string]any{"name": "name", "type": map[string]any{"kind": "SCALAR", "name": "String"}},
+				},
+			},
+			map[string]any{"kind": "SCALAR", "name": "String"},
+			map[string]any{"kind": "SCALAR", "name": "ID"},
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/openapi.json":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"openapi": "3.1.0",
+				"info": map[string]any{
+					"title":   "Linear API",
+					"version": "1.0.0",
+				},
+				"paths": map[string]any{
+					"/status": map[string]any{
+						"get": map[string]any{
+							"operationId": "status",
+							"responses": map[string]any{
+								"200": map[string]any{"description": "ok"},
+							},
+						},
+					},
+				},
+			})
+		case "/status":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		case "/graphql":
+			var payload struct {
+				Query string `json:"query"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			if strings.Contains(payload.Query, "__schema") {
+				_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"__schema": schema}})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{
+					"viewer": map[string]any{
+						"id":   "user-123",
+						"name": "Platform",
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := validConfig()
+	cfg.Plugins = map[string]*config.ProviderEntry{
+		"linear": {
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					DefaultConnection: "rest",
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"rest":    {Mode: providermanifestv1.ConnectionModeNone},
+						"graphql": {Mode: providermanifestv1.ConnectionModeNone},
+					},
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						OpenAPI: &providermanifestv1.OpenAPISurface{
+							Document:   srv.URL + "/openapi.json",
+							BaseURL:    srv.URL,
+							Connection: "rest",
+						},
+						GraphQL: &providermanifestv1.GraphQLSurface{
+							URL:        srv.URL + "/graphql",
+							Connection: "graphql",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if _, err := bootstrap.Validate(context.Background(), cfg, validFactories()); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	t.Cleanup(func() { _ = result.Close(context.Background()) })
+	<-result.ProvidersReady
+
+	prov, err := result.Providers.Get("linear")
+	if err != nil {
+		t.Fatalf("Providers.Get(linear): %v", err)
+	}
+
+	if got := prov.ConnectionForOperation("status"); got != "rest" {
+		t.Fatalf("ConnectionForOperation(status) = %q, want %q", got, "rest")
+	}
+	if got := prov.ConnectionForOperation("viewer"); got != "graphql" {
+		t.Fatalf("ConnectionForOperation(viewer) = %q, want %q", got, "graphql")
+	}
+
+	cat := prov.Catalog()
+	if cat == nil {
+		t.Fatal("Catalog() = nil, want mixed API catalog")
+	}
+	if got, ok := invocation.CatalogOperationTransport(cat, "status"); !ok || got != catalog.TransportREST {
+		t.Fatalf("status transport = %q, ok=%v, want %q", got, ok, catalog.TransportREST)
+	}
+	if got, ok := invocation.CatalogOperationTransport(cat, "viewer"); !ok || got != "graphql" {
+		t.Fatalf("viewer transport = %q, ok=%v, want %q", got, ok, "graphql")
+	}
+
+	statusResult, err := prov.Execute(context.Background(), "status", nil, "")
+	if err != nil {
+		t.Fatalf("Execute(status): %v", err)
+	}
+	if statusResult.Status != http.StatusOK || !strings.Contains(statusResult.Body, `"ok":true`) {
+		t.Fatalf("status result = %+v, want 200 with ok body", statusResult)
+	}
+
+	viewerResult, err := prov.Execute(context.Background(), "viewer", map[string]any{"team": "platform"}, "")
+	if err != nil {
+		t.Fatalf("Execute(viewer): %v", err)
+	}
+	if viewerResult.Status != http.StatusOK || !strings.Contains(viewerResult.Body, `"Platform"`) {
+		t.Fatalf("viewer result = %+v, want 200 with graphql body", viewerResult)
+	}
 }
 
 func TestBootstrapNoIntegrations(t *testing.T) {

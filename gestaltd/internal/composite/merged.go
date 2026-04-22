@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -64,8 +66,11 @@ func NewMergedWithConnections(name, displayName, desc, iconSVG string, providers
 			}
 			m.route[op.ID] = p
 			m.catalog.Operations = append(m.catalog.Operations, *op)
-			if bound.Connection != "" {
+			switch {
+			case bound.Connection != "":
 				m.opConn[op.ID] = bound.Connection
+			case p.ConnectionForOperation(op.ID) != "":
+				m.opConn[op.ID] = p.ConnectionForOperation(op.ID)
 			}
 		}
 	}
@@ -77,12 +82,47 @@ func (m *MergedProvider) Name() string                        { return m.catalog
 func (m *MergedProvider) DisplayName() string                 { return m.catalog.DisplayName }
 func (m *MergedProvider) Description() string                 { return m.catalog.Description }
 func (m *MergedProvider) ConnectionMode() core.ConnectionMode { return m.connMode }
-func (m *MergedProvider) AuthTypes() []string                 { return nil }
-func (m *MergedProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+
+func (m *MergedProvider) AuthTypes() []string {
+	for _, provider := range m.owned {
+		if authTypes := provider.AuthTypes(); len(authTypes) > 0 {
+			return slices.Clone(authTypes)
+		}
+	}
 	return nil
 }
-func (m *MergedProvider) CredentialFields() []core.CredentialFieldDef { return nil }
-func (m *MergedProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
+
+func (m *MergedProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	for _, provider := range m.owned {
+		if defs := provider.ConnectionParamDefs(); len(defs) > 0 {
+			return maps.Clone(defs)
+		}
+	}
+	return nil
+}
+
+func (m *MergedProvider) CredentialFields() []core.CredentialFieldDef {
+	for _, provider := range m.owned {
+		if fields := provider.CredentialFields(); len(fields) > 0 {
+			return slices.Clone(fields)
+		}
+	}
+	return nil
+}
+
+func (m *MergedProvider) DiscoveryConfig() *core.DiscoveryConfig {
+	for _, provider := range m.owned {
+		if cfg := provider.DiscoveryConfig(); cfg != nil {
+			value := *cfg
+			if len(value.Metadata) > 0 {
+				value.Metadata = maps.Clone(value.Metadata)
+			}
+			return &value
+		}
+	}
+	return nil
+}
+
 func (m *MergedProvider) ConnectionForOperation(op string) string {
 	return m.opConn[op]
 }
