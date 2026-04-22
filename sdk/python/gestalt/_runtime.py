@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Final, cast
 from ._api import Access, Credential, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
+from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
 from ._operations import INTERNAL_ERROR_MESSAGE
 from ._plugin import ConnectedToken, Plugin, _module_plugin
 
@@ -198,6 +199,8 @@ secrets_pb2_grpc: Any = cast(Any, None)
 agent_pb2_grpc: Any = cast(Any, None)
 workflow_pb2: Any = cast(Any, None)
 workflow_pb2_grpc: Any = cast(Any, None)
+authorization_pb2: Any = cast(Any, None)
+authorization_pb2_grpc: Any = cast(Any, None)
 
 ENV_PROVIDER_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
 ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
@@ -214,6 +217,8 @@ def _ensure_grpc_runtime() -> None:
     global json_format
     global authentication_pb2
     global authentication_pb2_grpc
+    global authorization_pb2
+    global authorization_pb2_grpc
     global cache_pb2
     global cache_pb2_grpc
     global duration_pb2
@@ -241,6 +246,8 @@ def _ensure_grpc_runtime() -> None:
     from .gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
     from .gen.v1 import authentication_pb2 as _authentication_pb2
     from .gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
+    from .gen.v1 import authorization_pb2 as _authorization_pb2
+    from .gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
     from .gen.v1 import cache_pb2 as _cache_pb2
     from .gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
     from .gen.v1 import plugin_pb2 as _plugin_pb2
@@ -263,6 +270,8 @@ def _ensure_grpc_runtime() -> None:
     runtime_pb2_grpc = _runtime_pb2_grpc
     authentication_pb2 = _authentication_pb2
     authentication_pb2_grpc = _authentication_pb2_grpc
+    authorization_pb2 = _authorization_pb2
+    authorization_pb2_grpc = _authorization_pb2_grpc
     cache_pb2 = _cache_pb2
     cache_pb2_grpc = _cache_pb2_grpc
     s3_pb2_grpc = _s3_pb2_grpc
@@ -682,6 +691,39 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
                 return plugin_pb2.OperationResult(status=status, body=body)
             return plugin_pb2.OperationResult(status=result.status, body=result.body)
 
+        def ResolveHTTPSubject(self, request: Any, context: Any) -> Any:
+            if not plugin.supports_http_subject():
+                return plugin_pb2.ResolveHTTPSubjectResponse()
+
+            try:
+                subject = plugin.resolve_http_subject(
+                    _http_subject_request(request.request),
+                    _plugin_request(request),
+                )
+            except HTTPSubjectResolutionError as error:
+                return plugin_pb2.ResolveHTTPSubjectResponse(
+                    reject_status=error.status,
+                    reject_message=error.message,
+                )
+            except Exception as error:
+                traceback.print_exception(error)
+                return context.abort(
+                    grpc.StatusCode.UNKNOWN,
+                    f"resolve http subject: {error}",
+                )
+
+            if subject is None:
+                return plugin_pb2.ResolveHTTPSubjectResponse()
+
+            return plugin_pb2.ResolveHTTPSubjectResponse(
+                subject=plugin_pb2.SubjectContext(
+                    id=subject.id,
+                    kind=subject.kind,
+                    display_name=subject.display_name,
+                    auth_source=subject.auth_source,
+                )
+            )
+
         def GetSessionCatalog(self, request: Any, context: Any) -> Any:
             if not plugin.supports_session_catalog():
                 return context.abort(
@@ -929,6 +971,28 @@ def _plugin_request(request: Any) -> Request:
     )
 
 
+def _http_subject_request(request: Any) -> HTTPSubjectRequest:
+    if request is None:
+        return HTTPSubjectRequest()
+    return HTTPSubjectRequest(
+        binding=getattr(request, "binding", ""),
+        method=getattr(request, "method", ""),
+        path=getattr(request, "path", ""),
+        content_type=getattr(request, "content_type", ""),
+        headers=_string_lists_from_proto_map(getattr(request, "headers", {})),
+        query=_string_lists_from_proto_map(getattr(request, "query", {})),
+        params=_message_to_dict(
+            field_name="params",
+            message=getattr(request, "params", None),
+            request=request,
+        ),
+        raw_body=bytes(getattr(request, "raw_body", b"")),
+        security_scheme=getattr(request, "security_scheme", ""),
+        verified_subject=getattr(request, "verified_subject", ""),
+        verified_claims=dict(getattr(request, "verified_claims", {})),
+    )
+
+
 def _subject_from_proto(request_context: Any) -> Subject:
     if request_context is None:
         return Subject()
@@ -984,6 +1048,13 @@ def _workflow_from_proto(request_context: Any) -> dict[str, Any]:
             preserving_proto_field_name=True,
         ),
     )
+
+
+def _string_lists_from_proto_map(values: Any) -> dict[str, list[str]]:
+    return {
+        str(key): list(getattr(value, "values", ()))
+        for key, value in dict(values or {}).items()
+    }
 
 
 def _message_to_dict(

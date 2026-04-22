@@ -94,6 +94,101 @@ Then import the authored surface as:
 from gestalt import Model, Plugin
 ```
 
+## Hosted HTTP Subject Resolution
+
+Executable Python plugins can resolve the concrete Gestalt subject for a
+verified hosted HTTP request before the target operation is authorized and
+executed.
+
+```python
+import gestalt
+
+plugin = gestalt.Plugin(
+    "slack-agent",
+    securitySchemes={
+        "slack": {
+            "type": "hmac",
+            "secret": {"env": "SLACK_SIGNING_SECRET"},
+            "signatureHeader": "X-Slack-Signature",
+            "signaturePrefix": "v0=",
+            "payloadTemplate": "v0:{header:X-Slack-Request-Timestamp}:{raw_body}",
+            "timestampHeader": "X-Slack-Request-Timestamp",
+            "maxAgeSeconds": 300,
+        }
+    },
+    http={
+        "command": {
+            "path": "/command",
+            "method": "POST",
+            "security": "slack",
+            "target": "handleSlackCommand",
+            "requestBody": {
+                "required": True,
+                "content": {"application/x-www-form-urlencoded": {}},
+            },
+            "ack": {"status": 200, "body": {"text": "Working on it..."}},
+        }
+    },
+)
+
+
+@plugin.http_subject
+def resolve_http_subject(
+    request: gestalt.HTTPSubjectRequest,
+    context: gestalt.Request,
+) -> gestalt.Subject | None:
+    if request.binding != "command":
+        return None
+
+    matches = context.authorization().search_subjects(
+        {
+            "resource": {
+                "type": "slack_identity",
+                "id": f"team:{request.params['team_id']}:user:{request.params['user_id']}",
+            },
+            "action": {"name": "assume"},
+            "subject_type": "user",
+            "page_size": 2,
+        }
+    )
+    if len(matches.subjects) != 1:
+        raise gestalt.http_subject_error(403, "unmapped Slack subject")
+
+    subject = matches.subjects[0]
+    return gestalt.Subject(
+        id=subject.id,
+        kind=subject.type,
+        auth_source="slack",
+    )
+```
+
+The hook receives a verified `HTTPSubjectRequest` plus a request-scoped
+`gestalt.Request` context. Returning `None` falls back to the binding subject.
+Raise `gestalt.http_subject_error(status, message)` to reject the inbound
+request explicitly.
+
+## Authorization Client
+
+Python plugins can query the host authorization provider through the shared
+read-only transport:
+
+```python
+import gestalt
+
+authz = gestalt.Authorization()
+matches = authz.search_subjects(
+    {
+        "resource": {"type": "slack_identity", "id": "team:T123:user:U456"},
+        "action": {"name": "assume"},
+        "subject_type": "user",
+    }
+)
+```
+
+`gestalt.Request.authorization()` is a convenience wrapper around the same
+client and is useful inside operation handlers and `@plugin.http_subject`
+hooks.
+
 ## Local SDK Checks
 
 From `sdk/python`, install the SDK plus its dev tooling and run the checks used
