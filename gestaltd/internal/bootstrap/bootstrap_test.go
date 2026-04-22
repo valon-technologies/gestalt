@@ -1919,6 +1919,7 @@ func TestBootstrapIgnoresUserSchedulesThatOnlyShareCfgPrefix(t *testing.T) {
 	recorder := recorders["temporal"]
 	if recorder == nil {
 		t.Fatal("missing workflow recorder for temporal")
+		return
 	}
 	if len(recorder.deletedSchedules) != 0 {
 		t.Fatalf("deleted schedules = %d, want 0", len(recorder.deletedSchedules))
@@ -2528,6 +2529,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	recorder := recorders["temporal"]
 	if recorder == nil {
 		t.Fatal("missing workflow recorder for temporal")
+		return
 	}
 	if len(recorder.upsertedEventTriggers) != 1 {
 		t.Fatalf("upserted event triggers = %d, want 1", len(recorder.upsertedEventTriggers))
@@ -2595,6 +2597,7 @@ func TestValidateDoesNotApplyConfiguredWorkflowEventTriggers(t *testing.T) {
 	recorder := recorders["temporal"]
 	if recorder == nil {
 		t.Fatal("missing workflow recorder for temporal")
+		return
 	}
 	if len(recorder.upsertedEventTriggers) != 0 {
 		t.Fatalf("upserted event triggers = %d, want 0", len(recorder.upsertedEventTriggers))
