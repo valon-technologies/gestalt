@@ -659,7 +659,7 @@ func (s *Server) putManagedIdentityGrant(w http.ResponseWriter, r *http.Request)
 	}
 
 	p := managedIdentityGrantValidationPrincipal(PrincipalFromContext(r.Context()), actor.SubjectID)
-	if !s.managedIdentityGrantPluginVisible(r.Context(), plugin, p) {
+	if _, err := s.providers.Get(plugin); err != nil || !s.allowProviderContext(r.Context(), p, plugin) {
 		auditErr = errors.New("plugin not found")
 		writeError(w, http.StatusNotFound, "plugin not found")
 		return
@@ -683,7 +683,7 @@ func (s *Server) putManagedIdentityGrant(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	if !s.managedIdentityGrantPluginVisible(r.Context(), plugin, p) {
+	if _, err := s.providers.Get(plugin); err != nil || !s.allowProviderContext(r.Context(), p, plugin) {
 		auditErr = errors.New("plugin not found")
 		writeError(w, http.StatusNotFound, "plugin not found")
 		return
@@ -1039,13 +1039,6 @@ func (s *Server) recoverManagedIdentityCreateMembership(ctx context.Context, ide
 			return nil, fmt.Errorf("failed to create identity membership and roll back identity: %w", errors.Join(createErr, restoreErr, deleteErr))
 		}
 	}
-}
-
-func (s *Server) managedIdentityGrantPluginVisible(ctx context.Context, plugin string, p *principal.Principal) bool {
-	if _, err := s.providers.Get(plugin); err != nil {
-		return false
-	}
-	return s.allowProviderContext(ctx, p, plugin)
 }
 
 func (s *Server) managedIdentityGrantCatalog(ctx context.Context, plugin string, p *principal.Principal) (*catalog.Catalog, error) {
