@@ -46,7 +46,7 @@ Start the server:
 gestaltd
 ```
 
-When no config file exists, `gestaltd` generates `~/.gestaltd/config.yaml`, starts with SQLite storage via the first-party [RelationalDB](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/relationaldb) provider, enables a default HTTPBin plugin, and listens on `http://localhost:8080`.
+When no config file exists, `gestaltd` generates `~/.gestaltd/config.yaml`, starts with SQLite storage via the first-party [RelationalDB](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/relationaldb) provider, mounts the default UI at `/`, enables a default HTTPBin plugin, and listens on `http://localhost:8080`.
 
 In a second terminal, connect the CLI to the server:
 
