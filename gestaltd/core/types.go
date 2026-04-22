@@ -176,23 +176,6 @@ type APITokenAccess struct {
 	UpdatedAt           time.Time
 }
 
-type ExternalCredential struct {
-	ID                string
-	SubjectID         string
-	Plugin            string
-	Connection        string
-	Instance          string
-	AuthType          string
-	PayloadEncrypted  string
-	Scopes            string
-	ExpiresAt         *time.Time
-	LastRefreshedAt   *time.Time
-	RefreshErrorCount int
-	MetadataJSON      string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-}
-
 type UserIdentity struct {
 	Email       string
 	DisplayName string

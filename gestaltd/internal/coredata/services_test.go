@@ -2,7 +2,6 @@ package coredata_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -281,88 +280,6 @@ func TestNew(t *testing.T) {
 		}
 		if count != 1 {
 			t.Fatalf("identities count = %d, want 1", count)
-		}
-	})
-
-	t.Run("skips_unreadable_legacy_integration_tokens_during_canonical_backfill", func(t *testing.T) {
-		t.Parallel()
-
-		db := &coretesting.StubIndexedDB{}
-		ctx := context.Background()
-		createdAt := time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC)
-		seedLegacyUserRecord(t, &coredata.Services{DB: db}, "legacy-user", "user@example.com", createdAt)
-
-		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
-		if err != nil {
-			t.Fatalf("NewAESGCM: %v", err)
-		}
-		accessEnc, refreshEnc, err := enc.EncryptTokenPair("plaintext-access", "")
-		if err != nil {
-			t.Fatalf("EncryptTokenPair: %v", err)
-		}
-		if err := db.ObjectStore(coredata.StoreIntegrationTokens).Add(ctx, indexeddb.Record{
-			"id":                      "good-token",
-			"subject_id":              principal.UserSubjectID("legacy-user"),
-			"integration":             "slack",
-			"connection":              "workspace",
-			"instance":                "",
-			"access_token_encrypted":  accessEnc,
-			"refresh_token_encrypted": refreshEnc,
-			"scopes":                  "channels:read",
-			"created_at":              createdAt,
-			"updated_at":              createdAt,
-		}); err != nil {
-			t.Fatalf("seed valid integration token: %v", err)
-		}
-		if err := db.ObjectStore(coredata.StoreIntegrationTokens).Add(ctx, indexeddb.Record{
-			"id":                      "startup-token",
-			"subject_id":              "system:config",
-			"integration":             "slack",
-			"connection":              "workspace",
-			"instance":                "default",
-			"access_token_encrypted":  accessEnc,
-			"refresh_token_encrypted": refreshEnc,
-			"scopes":                  "channels:read",
-			"created_at":              createdAt.Add(time.Minute),
-			"updated_at":              createdAt.Add(time.Minute),
-		}); err != nil {
-			t.Fatalf("seed startup integration token: %v", err)
-		}
-		if err := db.ObjectStore(coredata.StoreIntegrationTokens).Add(ctx, indexeddb.Record{
-			"id":                      "bad-token",
-			"subject_id":              principal.UserSubjectID("legacy-user"),
-			"integration":             "github",
-			"connection":              "workspace",
-			"instance":                "",
-			"access_token_encrypted":  "not-valid-ciphertext",
-			"refresh_token_encrypted": "",
-			"created_at":              createdAt,
-			"updated_at":              createdAt,
-		}); err != nil {
-			t.Fatalf("seed invalid integration token: %v", err)
-		}
-
-		svc, err := coredata.New(db, enc)
-		if err != nil {
-			t.Fatalf("coredata.New: %v", err)
-		}
-
-		good, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID("legacy-user"), "slack", "workspace", "")
-		if err != nil {
-			t.Fatalf("GetCredential valid token: %v", err)
-		}
-		if good.SubjectID != principal.UserSubjectID("legacy-user") {
-			t.Fatalf("valid credential subject_id = %q, want %q", good.SubjectID, principal.UserSubjectID("legacy-user"))
-		}
-		startup, err := svc.ExternalCredentials.GetCredential(ctx, "system:config", "slack", "workspace", "default")
-		if err != nil {
-			t.Fatalf("GetCredential startup token: %v", err)
-		}
-		if startup.SubjectID != "system:config" {
-			t.Fatalf("startup credential subject_id = %q, want %q", startup.SubjectID, "system:config")
-		}
-		if _, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID("legacy-user"), "github", "workspace", ""); !errors.Is(err, core.ErrNotFound) {
-			t.Fatalf("GetCredential invalid token err = %v, want ErrNotFound", err)
 		}
 	})
 
@@ -702,16 +619,6 @@ func TestTokenService(t *testing.T) {
 		if got.MetadataJSON != `{"key":"val"}` {
 			t.Errorf("MetadataJSON = %q, want %q", got.MetadataJSON, `{"key":"val"}`)
 		}
-		credential, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "test-svc", "default", "inst-1")
-		if err != nil {
-			t.Fatalf("GetCredential: %v", err)
-		}
-		if credential.AuthType != "oauth2" {
-			t.Errorf("AuthType = %q, want %q", credential.AuthType, "oauth2")
-		}
-		if credential.MetadataJSON != `{"key":"val"}` {
-			t.Errorf("MetadataJSON = %q, want %q", credential.MetadataJSON, `{"key":"val"}`)
-		}
 	})
 
 	t.Run("Token_not_found", func(t *testing.T) {
@@ -823,9 +730,6 @@ func TestTokenService(t *testing.T) {
 		_, err := svc.Tokens.Token(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
 		if err != core.ErrNotFound {
 			t.Fatalf("Token after delete = %v, want ErrNotFound", err)
-		}
-		if _, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1"); err != core.ErrNotFound {
-			t.Fatalf("GetCredential after delete = %v, want ErrNotFound", err)
 		}
 	})
 
@@ -956,163 +860,18 @@ func TestTokenService(t *testing.T) {
 		if err := svc.Tokens.DeleteToken(ctx, newest.ID); err != nil {
 			t.Fatalf("DeleteToken newest: %v", err)
 		}
-		credential, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
+		fallback, err := svc.Tokens.Token(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
 		if err != nil {
-			t.Fatalf("GetCredential after deleting newest duplicate: %v", err)
+			t.Fatalf("Token after deleting newest duplicate: %v", err)
 		}
-		var payload map[string]string
-		if err := json.Unmarshal([]byte(credential.PayloadEncrypted), &payload); err != nil {
-			t.Fatalf("Unmarshal credential payload: %v", err)
+		if fallback.ID != "tok-legacy-duplicate" {
+			t.Fatalf("fallback ID = %q, want %q", fallback.ID, "tok-legacy-duplicate")
 		}
-		wantAccess, _ := duplicate["access_token_encrypted"].(string)
-		wantRefresh, _ := duplicate["refresh_token_encrypted"].(string)
-		if payload["access_token_encrypted"] != wantAccess {
-			t.Fatalf("access_token_encrypted = %q, want %q", payload["access_token_encrypted"], wantAccess)
+		if fallback.AccessToken != "legacy" {
+			t.Fatalf("fallback AccessToken = %q, want %q", fallback.AccessToken, "legacy")
 		}
-		if payload["refresh_token_encrypted"] != wantRefresh {
-			t.Fatalf("refresh_token_encrypted = %q, want %q", payload["refresh_token_encrypted"], wantRefresh)
-		}
-	})
-
-	t.Run("startup_backfill_uses_deduped_legacy_winner_for_external_credentials", func(t *testing.T) {
-		t.Parallel()
-
-		svc, db := newTestServicesWithDB(t)
-		ctx := context.Background()
-		user := mustCreateUser(t, svc, "startup-dupes@test.com")
-
-		newest := &core.IntegrationToken{
-			ID:           "tok-startup-primary",
-			SubjectID:    principal.UserSubjectID(user.ID),
-			Integration:  "svc",
-			Connection:   "default",
-			Instance:     "i1",
-			AccessToken:  "newest",
-			RefreshToken: "refresh-newest",
-		}
-		if err := svc.Tokens.StoreToken(ctx, newest); err != nil {
-			t.Fatalf("StoreToken newest: %v", err)
-		}
-		legacySource := &core.IntegrationToken{
-			ID:           "tok-startup-legacy",
-			SubjectID:    principal.UserSubjectID(user.ID),
-			Integration:  "svc",
-			Connection:   "default",
-			Instance:     "legacy-source",
-			AccessToken:  "legacy",
-			RefreshToken: "refresh-legacy",
-		}
-		if err := svc.Tokens.StoreToken(ctx, legacySource); err != nil {
-			t.Fatalf("StoreToken legacy source: %v", err)
-		}
-
-		store := db.ObjectStore(coredata.StoreIntegrationTokens)
-		primaryRaw, err := store.Get(ctx, newest.ID)
-		if err != nil {
-			t.Fatalf("Get primary raw: %v", err)
-		}
-		legacyRaw, err := store.Get(ctx, legacySource.ID)
-		if err != nil {
-			t.Fatalf("Get legacy raw: %v", err)
-		}
-		if err := store.Delete(ctx, legacySource.ID); err != nil {
-			t.Fatalf("Delete legacy source: %v", err)
-		}
-
-		duplicate := indexeddb.Record{}
-		for k, v := range legacyRaw {
-			duplicate[k] = v
-		}
-		duplicate["id"] = "tok-startup-duplicate"
-		duplicate["subject_id"] = principal.UserSubjectID(user.ID)
-		duplicate["integration"] = "svc"
-		duplicate["connection"] = "default"
-		duplicate["instance"] = "i1"
-		duplicate["created_at"] = recOrNow(primaryRaw, "created_at").Add(-time.Minute)
-		duplicate["updated_at"] = recOrNow(primaryRaw, "updated_at").Add(-time.Minute)
-		if err := store.Put(ctx, duplicate); err != nil {
-			t.Fatalf("Put duplicate raw token: %v", err)
-		}
-
-		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
-		if err != nil {
-			t.Fatalf("NewAESGCM: %v", err)
-		}
-		reloaded, err := coredata.New(db, enc)
-		if err != nil {
-			t.Fatalf("reload services for startup backfill: %v", err)
-		}
-
-		credential, err := reloaded.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
-		if err != nil {
-			t.Fatalf("GetCredential after reload: %v", err)
-		}
-		var payload map[string]string
-		if err := json.Unmarshal([]byte(credential.PayloadEncrypted), &payload); err != nil {
-			t.Fatalf("Unmarshal credential payload: %v", err)
-		}
-		wantAccess, _ := primaryRaw["access_token_encrypted"].(string)
-		wantRefresh, _ := primaryRaw["refresh_token_encrypted"].(string)
-		if payload["access_token_encrypted"] != wantAccess {
-			t.Fatalf("access_token_encrypted after reload = %q, want %q", payload["access_token_encrypted"], wantAccess)
-		}
-		if payload["refresh_token_encrypted"] != wantRefresh {
-			t.Fatalf("refresh_token_encrypted after reload = %q, want %q", payload["refresh_token_encrypted"], wantRefresh)
-		}
-	})
-
-	t.Run("startup_backfill_preserves_external_credential_auth_type", func(t *testing.T) {
-		t.Parallel()
-
-		tests := []struct {
-			name         string
-			accessToken  string
-			refreshToken string
-			wantAuthType string
-		}{
-			{name: "oauth2", accessToken: "access", refreshToken: "refresh", wantAuthType: "oauth2"},
-			{name: "bearer", accessToken: "access", wantAuthType: "bearer"},
-			{name: "manual", wantAuthType: "manual"},
-		}
-
-		for _, tc := range tests {
-			tc := tc
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
-				svc, db := newTestServicesWithDB(t)
-				ctx := context.Background()
-				user := mustCreateUser(t, svc, tc.name+"@test.com")
-
-				token := &core.IntegrationToken{
-					ID:           "tok-" + tc.name,
-					SubjectID:    principal.UserSubjectID(user.ID),
-					Integration:  "svc",
-					Connection:   "default",
-					Instance:     "i1",
-					AccessToken:  tc.accessToken,
-					RefreshToken: tc.refreshToken,
-				}
-				if err := svc.Tokens.StoreToken(ctx, token); err != nil {
-					t.Fatalf("StoreToken: %v", err)
-				}
-
-				enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
-				if err != nil {
-					t.Fatalf("NewAESGCM: %v", err)
-				}
-				reloaded, err := coredata.New(db, enc)
-				if err != nil {
-					t.Fatalf("reload services for startup backfill: %v", err)
-				}
-
-				credential, err := reloaded.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
-				if err != nil {
-					t.Fatalf("GetCredential after reload: %v", err)
-				}
-				if credential.AuthType != tc.wantAuthType {
-					t.Fatalf("AuthType after reload = %q, want %q", credential.AuthType, tc.wantAuthType)
-				}
-			})
+		if fallback.RefreshToken != "refresh-legacy" {
+			t.Fatalf("fallback RefreshToken = %q, want %q", fallback.RefreshToken, "refresh-legacy")
 		}
 	})
 

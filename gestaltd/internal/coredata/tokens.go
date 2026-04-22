@@ -15,18 +15,16 @@ import (
 )
 
 type TokenService struct {
-	store               indexeddb.ObjectStore
-	enc                 *corecrypto.AESGCMEncryptor
-	externalCredentials *ExternalCredentialService
+	store indexeddb.ObjectStore
+	enc   *corecrypto.AESGCMEncryptor
 }
 
 var errUnreadableStoredIntegrationToken = errors.New("unreadable stored integration token")
 
-func NewTokenService(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor, externalCredentials *ExternalCredentialService) *TokenService {
+func NewTokenService(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) *TokenService {
 	return &TokenService{
-		store:               ds.ObjectStore(StoreIntegrationTokens),
-		enc:                 enc,
-		externalCredentials: externalCredentials,
+		store: ds.ObjectStore(StoreIntegrationTokens),
+		enc:   enc,
 	}
 }
 
@@ -82,9 +80,6 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 	if err := s.deleteDuplicateLookupRecords(ctx, token.ID, token.SubjectID, token.Integration, token.Connection, token.Instance); err != nil {
 		return err
 	}
-	if err := s.syncExternalCredential(ctx, token, accessEnc, refreshEnc); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -124,7 +119,7 @@ func (s *TokenService) DeleteToken(ctx context.Context, id string) error {
 	if id == "" {
 		return s.store.Delete(ctx, id)
 	}
-	rec, err := s.store.Get(ctx, id)
+	_, err := s.store.Get(ctx, id)
 	if err != nil {
 		if err == indexeddb.ErrNotFound {
 			return nil
@@ -133,23 +128,6 @@ func (s *TokenService) DeleteToken(ctx context.Context, id string) error {
 	}
 	if err := s.store.Delete(ctx, id); err != nil {
 		return err
-	}
-	if s.externalCredentials != nil {
-		subjectID := tokenRecordSubjectID(rec)
-		remaining, err := s.store.Index("by_lookup").GetAll(ctx, nil, subjectID, recString(rec, "integration"), recString(rec, "connection"), recString(rec, "instance"))
-		if err != nil {
-			return fmt.Errorf("list remaining duplicate tokens: %w", err)
-		}
-		remaining = dedupeTokenRecords(remaining)
-		if len(remaining) > 0 {
-			if err := s.syncExternalCredentialRecord(ctx, remaining[0]); err != nil {
-				return err
-			}
-		} else {
-			if err := s.externalCredentials.DeleteCredential(ctx, subjectID, recString(rec, "integration"), recString(rec, "connection"), recString(rec, "instance")); err != nil && err != core.ErrNotFound {
-				return fmt.Errorf("delete canonical external credential: %w", err)
-			}
-		}
 	}
 	return nil
 }
@@ -222,25 +200,6 @@ func (s *TokenService) deleteDuplicateLookupRecords(ctx context.Context, keepID,
 	return nil
 }
 
-func (s *TokenService) BackfillCanonicalCredentials(ctx context.Context) error {
-	if s.externalCredentials == nil {
-		return nil
-	}
-	recs, err := s.store.GetAll(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("list integration tokens for canonical backfill: %w", err)
-	}
-	for _, rec := range dedupeTokenRecords(recs) {
-		if err := s.syncExternalCredentialRecord(ctx, rec); err != nil {
-			if errors.Is(err, errUnreadableStoredIntegrationToken) {
-				continue
-			}
-			return err
-		}
-	}
-	return nil
-}
-
 func dedupeTokenRecords(recs []indexeddb.Record) []indexeddb.Record {
 	if len(recs) <= 1 {
 		return recs
@@ -290,64 +249,4 @@ func tokenRecordLess(a, b indexeddb.Record) bool {
 	}
 
 	return recString(a, "id") < recString(b, "id")
-}
-
-func (s *TokenService) syncExternalCredential(ctx context.Context, token *core.IntegrationToken, accessTokenEncrypted, refreshTokenEncrypted string) error {
-	if s.externalCredentials == nil || token == nil || token.SubjectID == "" || token.Integration == "" || token.Connection == "" {
-		return nil
-	}
-	subjectID := strings.TrimSpace(token.SubjectID)
-	payloadEncrypted, err := encodeLegacyCredentialPayload(accessTokenEncrypted, refreshTokenEncrypted)
-	if err != nil {
-		return err
-	}
-	if _, err := s.externalCredentials.UpsertCredential(ctx, &core.ExternalCredential{
-		ID:                token.ID,
-		SubjectID:         subjectID,
-		Plugin:            token.Integration,
-		Connection:        token.Connection,
-		Instance:          token.Instance,
-		AuthType:          externalCredentialAuthType(token),
-		PayloadEncrypted:  payloadEncrypted,
-		Scopes:            token.Scopes,
-		ExpiresAt:         token.ExpiresAt,
-		LastRefreshedAt:   token.LastRefreshedAt,
-		RefreshErrorCount: token.RefreshErrorCount,
-		MetadataJSON:      token.MetadataJSON,
-		CreatedAt:         token.CreatedAt,
-		UpdatedAt:         token.UpdatedAt,
-	}); err != nil {
-		return fmt.Errorf("sync canonical external credential %q/%q/%q/%q: %w", subjectID, token.Integration, token.Connection, token.Instance, err)
-	}
-	return nil
-}
-
-func externalCredentialAuthType(token *core.IntegrationToken) string {
-	if token == nil {
-		return ""
-	}
-	if token.RefreshToken != "" {
-		return "oauth2"
-	}
-	if token.AccessToken != "" {
-		return "bearer"
-	}
-	return "manual"
-}
-
-func (s *TokenService) syncExternalCredentialRecord(ctx context.Context, rec indexeddb.Record) error {
-	if s.externalCredentials == nil {
-		return nil
-	}
-	token, err := s.recordToToken(rec)
-	if err != nil {
-		return fmt.Errorf("decode token for canonical external credential %q/%q/%q/%q: %w", tokenRecordSubjectID(rec), recString(rec, "integration"), recString(rec, "connection"), recString(rec, "instance"), err)
-	}
-	if token.SubjectID == "" || token.Integration == "" || token.Connection == "" {
-		return nil
-	}
-	if err := s.syncExternalCredential(ctx, token, recString(rec, "access_token_encrypted"), recString(rec, "refresh_token_encrypted")); err != nil {
-		return fmt.Errorf("sync canonical external credential record %q/%q/%q/%q: %w", token.SubjectID, token.Integration, token.Connection, token.Instance, err)
-	}
-	return nil
 }

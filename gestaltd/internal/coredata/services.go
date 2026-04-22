@@ -22,7 +22,6 @@ type Services struct {
 	WorkspaceRoles           *WorkspaceRoleService
 	IdentityPluginAccess     *IdentityPluginAccessService
 	APITokenAccess           *APITokenAccessService
-	ExternalCredentials      *ExternalCredentialService
 	WorkflowExecutionRefs    *WorkflowExecutionRefService
 	DB                       indexeddb.IndexedDB
 }
@@ -68,9 +67,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := ds.CreateObjectStore(ctx, StoreAPITokenAccess, APITokenAccessSchema); err != nil {
 		return nil, fmt.Errorf("create api_token_access store: %w", err)
 	}
-	if err := ds.CreateObjectStore(ctx, StoreExternalCredentials, ExternalCredentialsSchema); err != nil {
-		return nil, fmt.Errorf("create external_credentials store: %w", err)
-	}
 	if err := ds.CreateObjectStore(ctx, StoreWorkflowExecutionRefs, WorkflowExecutionRefsSchema); err != nil {
 		return nil, fmt.Errorf("create workflow_execution_refs store: %w", err)
 	}
@@ -82,7 +78,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	workspaceRoles := NewWorkspaceRoleService(ds)
 	identityPluginAccess := NewIdentityPluginAccessService(ds)
 	apiTokenAccess := NewAPITokenAccessService(ds)
-	externalCredentials := NewExternalCredentialService(ds)
 	workflowExecutionRefs := NewWorkflowExecutionRefService(ds)
 
 	users := NewUserService(ds, identities, authBindings)
@@ -93,9 +88,9 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	identityMemberships := NewManagedIdentityMembershipService(ds, identityManagementGrants, users)
 	identityGrants := NewManagedIdentityGrantService(ds, identityPluginAccess)
 	apiTokens := NewAPITokenService(ds, apiTokenAccess, users)
-	tokens := NewTokenService(ds, enc, externalCredentials)
+	tokens := NewTokenService(ds, enc)
 
-	if err := rebuildCanonicalIdentityGraph(ctx, identities, authBindings, identityManagementGrants, workspaceRoles, identityPluginAccess, apiTokenAccess, externalCredentials); err != nil {
+	if err := rebuildCanonicalIdentityGraph(ctx, identities, authBindings, identityManagementGrants, workspaceRoles, identityPluginAccess, apiTokenAccess); err != nil {
 		return nil, err
 	}
 	if err := users.BackfillCanonicalIdentities(ctx); err != nil {
@@ -113,10 +108,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := apiTokens.BackfillTokenAccess(ctx); err != nil {
 		return nil, fmt.Errorf("backfill canonical api token access: %w", err)
 	}
-	if err := tokens.BackfillCanonicalCredentials(ctx); err != nil {
-		return nil, fmt.Errorf("backfill canonical external credentials: %w", err)
-	}
-
 	return &Services{
 		Users:                    users,
 		Tokens:                   tokens,
@@ -131,13 +122,12 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 		WorkspaceRoles:           workspaceRoles,
 		IdentityPluginAccess:     identityPluginAccess,
 		APITokenAccess:           apiTokenAccess,
-		ExternalCredentials:      externalCredentials,
 		WorkflowExecutionRefs:    workflowExecutionRefs,
 		DB:                       ds,
 	}, nil
 }
 
-func rebuildCanonicalIdentityGraph(ctx context.Context, identities *IdentityService, authBindings *IdentityAuthBindingService, managementGrants *IdentityManagementGrantService, workspaceRoles *WorkspaceRoleService, pluginAccess *IdentityPluginAccessService, apiTokenAccess *APITokenAccessService, externalCredentials *ExternalCredentialService) error {
+func rebuildCanonicalIdentityGraph(ctx context.Context, identities *IdentityService, authBindings *IdentityAuthBindingService, managementGrants *IdentityManagementGrantService, workspaceRoles *WorkspaceRoleService, pluginAccess *IdentityPluginAccessService, apiTokenAccess *APITokenAccessService) error {
 	for _, store := range []indexeddb.ObjectStore{
 		identities.store,
 		authBindings.store,
@@ -145,7 +135,6 @@ func rebuildCanonicalIdentityGraph(ctx context.Context, identities *IdentityServ
 		workspaceRoles.store,
 		pluginAccess.store,
 		apiTokenAccess.store,
-		externalCredentials.store,
 	} {
 		if err := store.Clear(ctx); err != nil {
 			return fmt.Errorf("clear canonical identity graph store: %w", err)
