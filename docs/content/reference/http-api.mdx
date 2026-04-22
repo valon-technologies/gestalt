@@ -87,9 +87,9 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | `GET` | `/api/v1/identities/{identityID}/grants` | List plugin grants for one managed identity. |
 | `PUT` | `/api/v1/identities/{identityID}/grants/{plugin}` | Upsert plugin grant operations for one managed identity. |
 | `DELETE` | `/api/v1/identities/{identityID}/grants/{plugin}` | Remove one plugin grant from a managed identity. |
-| `GET` | `/api/v1/identities/{identityID}/tokens` | List API tokens owned by one managed identity. |
-| `POST` | `/api/v1/identities/{identityID}/tokens` | Create an API token for one managed identity. |
-| `DELETE` | `/api/v1/identities/{identityID}/tokens/{id}` | Revoke one API token owned by a managed identity. |
+| `GET` | `/api/v1/identities/{identityID}/tokens` | List API tokens owned by one managed identity. Requires `viewer` membership or higher. |
+| `POST` | `/api/v1/identities/{identityID}/tokens` | Create an API token for one managed identity. Requires `viewer` membership or higher. |
+| `DELETE` | `/api/v1/identities/{identityID}/tokens/{id}` | Revoke one API token owned by a managed identity. Requires `editor` membership or higher. |
 
 ### Operator Surfaces
 

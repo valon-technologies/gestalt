@@ -130,6 +130,7 @@ gestalt tokens create --name automation
 | `gestalt identities tokens list\|create\|revoke ID ...` | Manage identity-owned API tokens. Repeat `--permission plugin` or `--permission plugin:op1,op2`. |
 
 Token permissions cannot exceed the identity's own grants. For grants, omitting `--operation` means plugin-wide access.
+Members with the `viewer` role can list and create identity-owned API tokens. Revoking identity-owned tokens requires `editor` or `admin` membership.
 
 ### Examples
 

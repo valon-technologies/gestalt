@@ -342,12 +342,12 @@ impl IdentityPermissionArg {
 
 #[derive(Subcommand)]
 pub enum IdentityTokenCommands {
-    /// List API tokens for an identity
+    /// List API tokens for an identity (`viewer` or higher)
     List {
         /// Identity ID
         identity: String,
     },
-    /// Create an API token for an identity
+    /// Create an API token for an identity (`viewer` or higher)
     Create {
         /// Identity ID
         identity: String,
@@ -358,7 +358,7 @@ pub enum IdentityTokenCommands {
         #[arg(long = "permission", required = true, value_parser = IdentityPermissionArg::parse)]
         permissions: Vec<IdentityPermissionArg>,
     },
-    /// Revoke an API token owned by an identity
+    /// Revoke an API token owned by an identity (`editor` or higher)
     Revoke {
         /// Identity ID
         identity: String,
