@@ -197,6 +197,60 @@ func TestSelectionSetCyclePrevention(t *testing.T) {
 	}
 }
 
+func TestSelectionSetSkipsNestedFieldsWithArgs(t *testing.T) {
+	t.Parallel()
+
+	schema := &Schema{
+		Types: []FullType{
+			{Kind: "OBJECT", Name: "Membership", Fields: []Field{
+				{Name: "owner", Type: TypeRef{Kind: "SCALAR", Name: strPtr("Boolean")}},
+			}},
+			{Kind: "OBJECT", Name: "Team", Fields: []Field{
+				{Name: "id", Type: TypeRef{Kind: "SCALAR", Name: strPtr("ID")}},
+				{
+					Name: "membership",
+					Args: []InputValue{
+						{Name: "userId", Type: TypeRef{Kind: "NON_NULL", OfType: &TypeRef{Kind: "SCALAR", Name: strPtr("String")}}},
+					},
+					Type: TypeRef{Kind: "OBJECT", Name: strPtr("Membership")},
+				},
+				{
+					Name: "formattedName",
+					Args: []InputValue{
+						{Name: "style", Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")}},
+					},
+					Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")},
+				},
+			}},
+			{Kind: "OBJECT", Name: "Issue", Fields: []Field{
+				{Name: "id", Type: TypeRef{Kind: "SCALAR", Name: strPtr("ID")}},
+				{Name: "team", Type: TypeRef{Kind: "OBJECT", Name: strPtr("Team")}},
+			}},
+		},
+	}
+	schema.buildIndex()
+
+	field := Field{
+		Name: "issue",
+		Args: []InputValue{
+			{Name: "id", Type: TypeRef{Kind: "NON_NULL", OfType: &TypeRef{Kind: "SCALAR", Name: strPtr("String")}}},
+		},
+		Type: TypeRef{Kind: "OBJECT", Name: strPtr("Issue")},
+	}
+
+	query := generateQuery(schema, field, false, "")
+
+	if !strings.Contains(query, "team { id }") {
+		t.Errorf("should keep nested fields that do not require arguments: %s", query)
+	}
+	if strings.Contains(query, "membership") {
+		t.Errorf("should skip nested object fields with arguments: %s", query)
+	}
+	if strings.Contains(query, "formattedName") {
+		t.Errorf("should skip nested scalar fields with arguments: %s", query)
+	}
+}
+
 func TestFormatTypeRef(t *testing.T) {
 	t.Parallel()
 
