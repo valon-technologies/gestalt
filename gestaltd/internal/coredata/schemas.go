@@ -16,7 +16,6 @@ const (
 	StoreWorkspaceRoles             = "workspace_roles"
 	StoreIdentityPluginAccess       = "identity_plugin_access"
 	StoreAPITokenAccess             = "api_token_access"
-	StoreExternalCredentials        = "external_credentials"
 	StoreWorkflowExecutionRefs      = "workflow_execution_refs"
 )
 
@@ -240,31 +239,6 @@ var APITokenAccessSchema = indexeddb.ObjectStoreSchema{
 		{Name: "invoke_all_operations", Type: indexeddb.TypeBool, NotNull: true},
 		{Name: "operations_json", Type: indexeddb.TypeString},
 		{Name: "expires_at", Type: indexeddb.TypeTime},
-		{Name: "created_at", Type: indexeddb.TypeTime},
-		{Name: "updated_at", Type: indexeddb.TypeTime},
-	},
-}
-
-var ExternalCredentialsSchema = indexeddb.ObjectStoreSchema{
-	Indexes: []indexeddb.IndexSchema{
-		{Name: "by_subject", KeyPath: []string{"subject_id"}},
-		{Name: "by_subject_plugin", KeyPath: []string{"subject_id", "plugin"}},
-		{Name: "by_subject_connection", KeyPath: []string{"subject_id", "plugin", "connection"}},
-		{Name: "by_lookup", KeyPath: []string{"subject_id", "plugin", "connection", "instance"}, Unique: true},
-	},
-	Columns: []indexeddb.ColumnDef{
-		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-		{Name: "subject_id", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "plugin", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "connection", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "instance", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "auth_type", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "payload_encrypted", Type: indexeddb.TypeString},
-		{Name: "scopes", Type: indexeddb.TypeString},
-		{Name: "expires_at", Type: indexeddb.TypeTime},
-		{Name: "last_refreshed_at", Type: indexeddb.TypeTime},
-		{Name: "refresh_error_count", Type: indexeddb.TypeInt},
-		{Name: "metadata_json", Type: indexeddb.TypeString},
 		{Name: "created_at", Type: indexeddb.TypeTime},
 		{Name: "updated_at", Type: indexeddb.TypeTime},
 	},
