@@ -117,6 +117,10 @@ type panicHTTPSubjectProvider struct {
 	stubProvider
 }
 
+type rejectHTTPSubjectProvider struct {
+	stubProvider
+}
+
 func (p *sessionCatalogStubProvider) CatalogForRequest(ctx context.Context, _ string) (*proto.Catalog, error) {
 	cat := protoutil.Clone(p.sessionCatalog).(*proto.Catalog)
 	if cat != nil {
@@ -134,6 +138,10 @@ func (p *panicHTTPSubjectProvider) testOp(ctx context.Context, input stubInput, 
 
 func (p *panicHTTPSubjectProvider) ResolveHTTPSubject(_ context.Context, _ gestalt.HTTPSubjectRequest) (*gestalt.Subject, error) {
 	panic("boom")
+}
+
+func (p *rejectHTTPSubjectProvider) ResolveHTTPSubject(_ context.Context, _ gestalt.HTTPSubjectRequest) (*gestalt.Subject, error) {
+	return nil, gestalt.Error(http.StatusForbidden, "unmapped slack subject")
 }
 
 func TestProviderServerGetMetadata(t *testing.T) {
@@ -358,7 +366,7 @@ func TestProviderServerExecute(t *testing.T) {
 		})
 	}
 
-	t.Run("internal http subject panic", func(t *testing.T) {
+	t.Run("http subject panic", func(t *testing.T) {
 		panicHTTPSubjectRouter := gestalt.MustRouter(
 			gestalt.Register(
 				gestalt.Operation[stubInput, stubOutput]{
@@ -369,23 +377,42 @@ func TestProviderServerExecute(t *testing.T) {
 			),
 		)
 		client := newIntegrationProviderClient(t, &panicHTTPSubjectProvider{}, panicHTTPSubjectRouter)
-		params, err := structpb.NewStruct(map[string]any{"binding": "command"})
-		if err != nil {
-			t.Fatalf("NewStruct: %v", err)
-		}
 
-		resp, err := client.Execute(context.Background(), &proto.ExecuteRequest{
-			Operation: proto.InternalResolveHTTPSubjectOperation,
-			Params:    params,
+		_, err := client.ResolveHTTPSubject(context.Background(), &proto.ResolveHTTPSubjectRequest{
+			Request: &proto.HTTPSubjectRequest{
+				Binding: "command",
+			},
+		})
+		if status.Code(err) != codes.Internal {
+			t.Fatalf("ResolveHTTPSubject code = %v, want %v (err=%v)", status.Code(err), codes.Internal, err)
+		}
+	})
+
+	t.Run("http subject rejection", func(t *testing.T) {
+		rejectHTTPSubjectRouter := gestalt.MustRouter(
+			gestalt.Register(
+				gestalt.Operation[stubInput, stubOutput]{
+					ID:     "test_op",
+					Method: http.MethodPost,
+				},
+				(*rejectHTTPSubjectProvider).testOp,
+			),
+		)
+		client := newIntegrationProviderClient(t, &rejectHTTPSubjectProvider{}, rejectHTTPSubjectRouter)
+
+		resp, err := client.ResolveHTTPSubject(context.Background(), &proto.ResolveHTTPSubjectRequest{
+			Request: &proto.HTTPSubjectRequest{
+				Binding: "command",
+			},
 		})
 		if err != nil {
-			t.Fatalf("Execute: %v", err)
+			t.Fatalf("ResolveHTTPSubject: %v", err)
 		}
-		if resp.GetStatus() != http.StatusInternalServerError {
-			t.Fatalf("Status = %d, want %d", resp.GetStatus(), http.StatusInternalServerError)
+		if resp.GetRejectStatus() != http.StatusForbidden {
+			t.Fatalf("RejectStatus = %d, want %d", resp.GetRejectStatus(), http.StatusForbidden)
 		}
-		if resp.GetBody() != `{"error":"internal error"}` {
-			t.Fatalf("Body = %q, want %q", resp.GetBody(), `{"error":"internal error"}`)
+		if resp.GetRejectMessage() != "unmapped slack subject" {
+			t.Fatalf("RejectMessage = %q, want %q", resp.GetRejectMessage(), "unmapped slack subject")
 		}
 	})
 }

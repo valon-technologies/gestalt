@@ -40,9 +40,12 @@ import {
   CatalogSchema as ProtoCatalogSchema,
   ConnectionMode as ProviderConnectionMode,
   GetSessionCatalogResponseSchema,
+  ResolveHTTPSubjectResponseSchema,
   OperationResultSchema,
   ProviderMetadataSchema,
+  type HTTPSubjectRequest as ProtoHTTPSubjectRequest,
   type RequestContext as ProtoRequestContext,
+  type ResolveHTTPSubjectRequest as ProtoResolveHTTPSubjectRequest,
   IntegrationProvider as IntegrationProviderService,
   StartProviderResponseSchema,
   type ExecuteRequest,
@@ -68,6 +71,11 @@ import {
 import { CacheProvider, isCacheProvider } from "./cache.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
 import { catalogToYaml, type Catalog } from "./catalog.ts";
+import {
+  HTTPSubjectResolutionError,
+  type HTTPSubjectRequest,
+  type HTTPSubjectResolutionContext,
+} from "./http-subject.ts";
 import {
   PluginProvider,
   connectionModeToProtoValue,
@@ -519,6 +527,36 @@ export function createProviderService(
         ),
       );
     },
+    async resolveHTTPSubject(request: ProtoResolveHTTPSubjectRequest) {
+      let subject;
+      try {
+        subject = await provider.resolveHTTPSubject(
+          providerHTTPSubjectRequest(request.request),
+          providerHTTPSubjectResolutionContext(request.context),
+        );
+      } catch (error) {
+        if (error instanceof HTTPSubjectResolutionError) {
+          return create(ResolveHTTPSubjectResponseSchema, {
+            rejectStatus: error.status,
+            rejectMessage: error.message,
+          });
+        }
+        throw new ConnectError(
+          `resolve http subject: ${errorMessage(error)}`,
+          Code.Unknown,
+        );
+      }
+      return create(ResolveHTTPSubjectResponseSchema, subject
+        ? {
+            subject: {
+              id: subject.id,
+              kind: subject.kind,
+              displayName: subject.displayName,
+              authSource: subject.authSource,
+            },
+          }
+        : {});
+    },
     async getSessionCatalog(request: GetSessionCatalogRequest) {
       let catalog: Catalog | Record<string, unknown> | null | undefined;
       try {
@@ -750,6 +788,48 @@ function providerRequest(
     },
     invocationToken,
   };
+}
+
+function providerHTTPSubjectRequest(
+  request?: ProtoHTTPSubjectRequest,
+): HTTPSubjectRequest {
+  return {
+    binding: request?.binding ?? "",
+    method: request?.method ?? "",
+    path: request?.path ?? "",
+    contentType: request?.contentType ?? "",
+    headers: providerStringLists(request?.headers),
+    query: providerStringLists(request?.query),
+    params: objectFromUnknown(request?.params),
+    rawBody: new Uint8Array(request?.rawBody ?? new Uint8Array()),
+    securityScheme: request?.securityScheme ?? "",
+    verifiedSubject: request?.verifiedSubject ?? "",
+    verifiedClaims: {
+      ...(request?.verifiedClaims ?? {}),
+    },
+  };
+}
+
+function providerHTTPSubjectResolutionContext(
+  requestContext?: ProtoRequestContext,
+): HTTPSubjectResolutionContext {
+  const request = providerRequest("", {}, requestContext);
+  return {
+    subject: request.subject,
+    credential: request.credential,
+    access: request.access,
+    workflow: request.workflow,
+  };
+}
+
+function providerStringLists(
+  input: Record<string, { values?: string[] }> | undefined,
+): Record<string, string[]> {
+  const output: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(input ?? {})) {
+    output[key] = [...(value.values ?? [])];
+  }
+  return output;
 }
 
 function providerRuntimeEntry(

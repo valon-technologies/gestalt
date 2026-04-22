@@ -23,7 +23,15 @@ import {
   type Request,
   responseBrand,
   type Response,
+  type Subject,
 } from "./api.ts";
+import {
+  cloneHTTPSubjectRequest,
+  cloneHTTPSubjectResolutionContext,
+  type HTTPSubjectRequest,
+  type HTTPSubjectResolutionContext,
+  type HTTPSubjectResolver,
+} from "./http-subject.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 import type { Schema } from "./schema.ts";
 
@@ -93,6 +101,7 @@ export interface PluginDefinitionOptions extends RuntimeProviderOptions {
   connectionParams?: Record<string, ConnectionParamDefinition>;
   securitySchemes?: Record<string, HTTPSecurityScheme>;
   http?: Record<string, HTTPBinding>;
+  resolveHTTPSubject?: HTTPSubjectResolver;
   iconSvg?: string;
   operations: Array<OperationDefinition<any, any>>;
   sessionCatalog?: SessionCatalogHandler;
@@ -149,6 +158,7 @@ export class PluginProvider extends RuntimeProvider {
   readonly http: Record<string, HTTPBinding>;
 
   private readonly sessionCatalogHandler: SessionCatalogHandler | undefined;
+  private readonly httpSubjectResolver: HTTPSubjectResolver | undefined;
   private readonly operations = new Map<string, OperationDefinition<any, any>>();
 
   constructor(options: PluginDefinitionOptions) {
@@ -159,6 +169,7 @@ export class PluginProvider extends RuntimeProvider {
     this.connectionParams = normalizeConnectionParams(options.connectionParams);
     this.securitySchemes = normalizeHTTPSecuritySchemes(options.securitySchemes);
     this.http = normalizeHTTPBindings(options.http);
+    this.httpSubjectResolver = options.resolveHTTPSubject;
     this.sessionCatalogHandler = options.sessionCatalog;
 
     for (const rawEntry of options.operations) {
@@ -187,6 +198,20 @@ export class PluginProvider extends RuntimeProvider {
     request: Request,
   ): Promise<SessionCatalog | null | undefined> {
     return await this.sessionCatalogHandler?.(request);
+  }
+
+  /**
+   * Resolves the concrete Gestalt subject for a verified hosted HTTP request,
+   * if the plugin opts into subject resolution.
+   */
+  async resolveHTTPSubject(
+    request: HTTPSubjectRequest,
+    context: HTTPSubjectResolutionContext,
+  ): Promise<Subject | null | undefined> {
+    return await this.httpSubjectResolver?.(
+      cloneHTTPSubjectRequest(request),
+      cloneHTTPSubjectResolutionContext(context),
+    );
   }
 
   /**
