@@ -2868,17 +2868,20 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 
 	if manifest == nil || manifest.Spec == nil {
 		t.Fatalf("manifest = %+v, want populated spec", manifest)
+		return
 	}
 
 	scheme := manifest.Spec.SecuritySchemes["signed"]
 	if scheme == nil {
 		t.Fatal(`manifest.Spec.SecuritySchemes["signed"] = nil, want generated scheme`)
+		return
 	}
 	if scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeHMAC {
 		t.Fatalf("scheme.Type = %q, want %q", scheme.Type, providermanifestv1.HTTPSecuritySchemeTypeHMAC)
 	}
 	if scheme.Secret == nil || scheme.Secret.Env != "REQUEST_SIGNING_SECRET" {
 		t.Fatalf("scheme.Secret = %+v, want env-backed secret", scheme.Secret)
+		return
 	}
 	if scheme.SignatureHeader != "X-Request-Signature" {
 		t.Fatalf("scheme.SignatureHeader = %q, want %q", scheme.SignatureHeader, "X-Request-Signature")
@@ -2899,6 +2902,7 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 	binding := manifest.Spec.HTTP["command"]
 	if binding == nil {
 		t.Fatal(`manifest.Spec.HTTP["command"] = nil, want generated HTTP binding`)
+		return
 	}
 	if binding.Path != "/command" {
 		t.Fatalf("binding.Path = %q, want %q", binding.Path, "/command")
