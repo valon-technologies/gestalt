@@ -69,6 +69,7 @@ _LAZY_EXPORTS = {
     "ENV_PLUGIN_INVOKER_SOCKET": ("._invoker", "ENV_PLUGIN_INVOKER_SOCKET"),
     "ENV_PLUGIN_INVOKER_SOCKET_TOKEN": ("._invoker", "ENV_PLUGIN_INVOKER_SOCKET_TOKEN"),
     "ENV_S3_SOCKET": ("._s3", "ENV_S3_SOCKET"),
+    "ENV_S3_SOCKET_TOKEN": ("._s3", "ENV_S3_SOCKET_TOKEN"),
     "ENV_WORKFLOW_HOST_SOCKET": ("._workflow", "ENV_WORKFLOW_HOST_SOCKET"),
     "ExternalTokenValidator": ("._providers", "ExternalTokenValidator"),
     "HealthChecker": ("._providers", "HealthChecker"),
@@ -115,6 +116,7 @@ _LAZY_EXPORTS = {
     "indexeddb_socket_token_env": ("._indexeddb", "indexeddb_socket_token_env"),
     "operation": ("._plugin", "operation"),
     "s3_socket_env": ("._s3", "s3_socket_env"),
+    "s3_socket_token_env": ("._s3", "s3_socket_token_env"),
     "session_catalog": ("._plugin", "session_catalog"),
 }
 
@@ -152,6 +154,7 @@ __all__ = [
     "Cursor",
     "Error",
     "ENV_S3_SOCKET",
+    "ENV_S3_SOCKET_TOKEN",
     "ENV_PLUGIN_INVOKER_SOCKET",
     "ENV_PLUGIN_INVOKER_SOCKET_TOKEN",
     "ENV_WORKFLOW_HOST_SOCKET",
@@ -215,5 +218,6 @@ __all__ = [
     "indexeddb_socket_token_env",
     "operation",
     "s3_socket_env",
+    "s3_socket_token_env",
     "session_catalog",
 ]

@@ -1,7 +1,9 @@
-import { connect } from "node:net";
-
 import type { MessageInitShape } from "@bufbuild/protobuf";
-import { createClient, type Client } from "@connectrpc/connect";
+import {
+  createClient,
+  type Client,
+  type Interceptor,
+} from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
@@ -26,6 +28,9 @@ import {
 import type { Request } from "./api.ts";
 
 export const ENV_WORKFLOW_MANAGER_SOCKET = "GESTALT_WORKFLOW_MANAGER_SOCKET";
+export const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN = `${ENV_WORKFLOW_MANAGER_SOCKET}_TOKEN`;
+const WORKFLOW_MANAGER_RELAY_TOKEN_HEADER =
+  "x-gestalt-host-service-relay-token";
 
 export type ManagedWorkflowScheduleMessage = ManagedWorkflowSchedule;
 export type ManagedWorkflowEventTriggerMessage = ManagedWorkflowEventTrigger;
@@ -79,18 +84,20 @@ export class WorkflowManager {
   constructor(requestOrToken: Request | string) {
     this.invocationToken = normalizeInvocationToken(requestOrToken);
 
-    const socketPath = process.env[ENV_WORKFLOW_MANAGER_SOCKET];
-    if (!socketPath) {
+    const target = process.env[ENV_WORKFLOW_MANAGER_SOCKET];
+    if (!target) {
       throw new Error(
         `workflow manager: ${ENV_WORKFLOW_MANAGER_SOCKET} is not set`,
       );
     }
+    const relayToken =
+      process.env[ENV_WORKFLOW_MANAGER_SOCKET_TOKEN]?.trim() ?? "";
 
     const transport = createGrpcTransport({
-      baseUrl: "http://localhost",
-      nodeOptions: {
-        createConnection: () => connect(socketPath),
-      },
+      ...workflowManagerTransportOptions(target),
+      interceptors: relayToken
+        ? [workflowManagerRelayTokenInterceptor(relayToken)]
+        : [],
     });
     this.client = createClient(WorkflowManagerHostService, transport);
   }
@@ -223,4 +230,55 @@ function normalizeInvocationToken(requestOrToken: Request | string): string {
     throw new Error("workflow manager: invocation token is not available");
   }
   return trimmed;
+}
+
+function workflowManagerTransportOptions(rawTarget: string): {
+  baseUrl: string;
+  nodeOptions?: { path: string };
+} {
+  const target = rawTarget.trim();
+  if (!target) {
+    throw new Error("workflow manager: transport target is required");
+  }
+  if (target.startsWith("tcp://")) {
+    const address = target.slice("tcp://".length).trim();
+    if (!address) {
+      throw new Error(
+        `workflow manager: tcp target ${JSON.stringify(rawTarget)} is missing host:port`,
+      );
+    }
+    return { baseUrl: `http://${address}` };
+  }
+  if (target.startsWith("tls://")) {
+    const address = target.slice("tls://".length).trim();
+    if (!address) {
+      throw new Error(
+        `workflow manager: tls target ${JSON.stringify(rawTarget)} is missing host:port`,
+      );
+    }
+    return { baseUrl: `https://${address}` };
+  }
+  if (target.startsWith("unix://")) {
+    const socketPath = target.slice("unix://".length).trim();
+    if (!socketPath) {
+      throw new Error(
+        `workflow manager: unix target ${JSON.stringify(rawTarget)} is missing a socket path`,
+      );
+    }
+    return { baseUrl: "http://localhost", nodeOptions: { path: socketPath } };
+  }
+  if (target.includes("://")) {
+    const parsed = new URL(target);
+    throw new Error(
+      `workflow manager: unsupported target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`,
+    );
+  }
+  return { baseUrl: "http://localhost", nodeOptions: { path: target } };
+}
+
+function workflowManagerRelayTokenInterceptor(token: string): Interceptor {
+  return (next) => async (req) => {
+    req.header.set(WORKFLOW_MANAGER_RELAY_TOKEN_HEADER, token);
+    return next(req);
+  };
 }

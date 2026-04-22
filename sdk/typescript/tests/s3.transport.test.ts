@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, type Subprocess } from "bun";
@@ -11,22 +12,24 @@ import {
   S3NotFoundError,
   S3PreconditionFailedError,
   s3SocketEnv,
+  s3SocketTokenEnv,
 } from "../src/index.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 const GESTALTD_DIR = join(REPO_ROOT, "gestaltd");
 
 let tmpDir: string;
+let harnessBinPath: string;
 let socketPath: string;
 let proc: Subprocess;
 
 beforeAll(async () => {
   tmpDir = mkdtempSync(join(tmpdir(), "s3-transport-test-"));
-  const binPath = join(tmpDir, "s3transportd");
+  harnessBinPath = join(tmpDir, "s3transportd");
   socketPath = join(tmpDir, "s3.sock");
 
   const build = spawn(
-    ["go", "build", "-o", binPath, "./internal/testutil/cmd/s3transportd/"],
+    ["go", "build", "-o", harnessBinPath, "./internal/testutil/cmd/s3transportd/"],
     { cwd: GESTALTD_DIR, stdout: "pipe", stderr: "pipe" },
   );
   const buildExit = await build.exited;
@@ -35,7 +38,7 @@ beforeAll(async () => {
     throw new Error(`go build failed (exit ${buildExit}): ${stderr}`);
   }
 
-  proc = spawn([binPath, "--socket", socketPath], {
+  proc = spawn([harnessBinPath, "--socket", socketPath], {
     stdout: "pipe",
     stderr: "inherit",
   });
@@ -56,10 +59,58 @@ beforeAll(async () => {
   process.env[s3SocketEnv("named")] = socketPath;
 }, 60_000);
 
+async function reserveTCPAddress(): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close();
+        reject(new Error("failed to reserve tcp address"));
+        return;
+      }
+      const result = `${address.address}:${address.port}`;
+      server.close((err) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(result);
+      });
+    });
+  });
+}
+
+async function startTCPHarness(expectToken?: string): Promise<{ proc: Subprocess; target: string }> {
+  const address = await reserveTCPAddress();
+  const args = [harnessBinPath, "--tcp", address];
+  if (expectToken) {
+    args.push("--expect-token", expectToken);
+  }
+  const tcpProc = spawn(args, {
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  const stdout = tcpProc.stdout;
+  if (!stdout || typeof stdout === "number") {
+    throw new Error("expected tcp harness stdout to be piped");
+  }
+  const reader = stdout.getReader();
+  const { value } = await reader.read();
+  const line = new TextDecoder().decode(value).trim();
+  if (!line.includes("READY")) {
+    throw new Error(`expected READY from tcp harness, got: ${line}`);
+  }
+  reader.releaseLock();
+  return { proc: tcpProc, target: `tcp://${address}` };
+}
+
 afterAll(() => {
   proc?.kill();
   delete process.env.GESTALT_S3_SOCKET;
   delete process.env[s3SocketEnv("named")];
+  delete process.env[s3SocketTokenEnv()];
   if (tmpDir) {
     rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -77,6 +128,37 @@ describe("S3 transport", () => {
     });
 
     expect(await object.text()).toBe("named binding");
+  });
+
+  test("tcp target env selects the requested binding", async () => {
+    const { proc: tcpProc, target } = await startTCPHarness();
+    process.env.GESTALT_S3_SOCKET = target;
+    try {
+      const object = new S3().object("tcp-bucket", "hello.txt");
+      await object.writeString("tcp binding");
+      expect(await object.text()).toBe("tcp binding");
+    } finally {
+      tcpProc.kill();
+      delete process.env.GESTALT_S3_SOCKET;
+      process.env.GESTALT_S3_SOCKET = socketPath;
+    }
+  });
+
+  test("tcp target token env selects the requested binding", async () => {
+    const token = "relay-token-typescript";
+    const { proc: tcpProc, target } = await startTCPHarness(token);
+    process.env.GESTALT_S3_SOCKET = target;
+    process.env[s3SocketTokenEnv()] = token;
+    try {
+      const object = new S3().object("tcp-token-bucket", "hello.txt");
+      await object.writeString("token binding");
+      expect(await object.text()).toBe("token binding");
+    } finally {
+      tcpProc.kill();
+      delete process.env.GESTALT_S3_SOCKET;
+      delete process.env[s3SocketTokenEnv()];
+      process.env.GESTALT_S3_SOCKET = socketPath;
+    }
   });
 
   test("write, stat, read, and json round-trip", async () => {

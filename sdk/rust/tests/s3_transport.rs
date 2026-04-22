@@ -3,12 +3,13 @@ mod helpers;
 
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader};
+use std::net::TcpListener;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use gestalt::s3::{
-    ByteRange, ENV_S3_SOCKET, ListOptions, PresignMethod, PresignOptions, ReadOptions, S3, S3Error,
-    WriteOptions, s3_socket_env,
+    ByteRange, ENV_S3_SOCKET, ENV_S3_SOCKET_TOKEN, ListOptions, PresignMethod, PresignOptions,
+    ReadOptions, S3, S3Error, WriteOptions, s3_socket_env, s3_socket_token_env,
 };
 
 struct Harness {
@@ -67,6 +68,62 @@ async fn start_harness(socket_name: &str, env_name: &str) -> Harness {
     );
 
     let env_guard = helpers::EnvGuard::set(env_name.to_string(), socket.as_os_str());
+    Harness {
+        child,
+        _env_guard: env_guard,
+    }
+}
+
+async fn start_tcp_harness(expect_token: Option<&str>, env_name: &str) -> Harness {
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+
+    let tmp = std::env::temp_dir();
+    let binary = tmp.join("s3transportd");
+
+    let build = Command::new("go")
+        .arg("build")
+        .arg("-o")
+        .arg(&binary)
+        .arg("./internal/testutil/cmd/s3transportd/")
+        .current_dir(repo_root.join("gestaltd"))
+        .output()
+        .expect("go build");
+    assert!(
+        build.status.success(),
+        "go build failed: {}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind tcp listener");
+    let address = listener.local_addr().expect("tcp local addr");
+    drop(listener);
+
+    let mut command = Command::new(&binary);
+    command.arg("--tcp").arg(address.to_string());
+    if let Some(token) = expect_token {
+        command.arg("--expect-token").arg(token);
+    }
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("spawn tcp harness");
+
+    let stdout = child.stdout.take().unwrap();
+    let mut reader = BufReader::new(stdout);
+    let mut line = String::new();
+    reader.read_line(&mut line).expect("read READY");
+    assert!(
+        line.trim() == "READY",
+        "expected READY, got: {:?}",
+        line.trim()
+    );
+
+    let env_guard = helpers::EnvGuard::set(env_name.to_string(), format!("tcp://{address}"));
     Harness {
         child,
         _env_guard: env_guard,
@@ -165,6 +222,61 @@ async fn named_socket_json_and_preconditions() {
         Err(S3Error::PreconditionFailed) => {}
         other => panic!("expected PreconditionFailed, got: {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn tcp_target_round_trip() {
+    let _lock = helpers::env_lock().lock().await;
+    let _harness = start_tcp_harness(None, ENV_S3_SOCKET).await;
+
+    let s3 = S3::connect().await.expect("connect");
+    let mut object = s3.object("bucket", "docs/tcp.txt");
+    object
+        .write_string("tcp", None)
+        .await
+        .expect("write tcp target");
+
+    assert_eq!(object.text(None).await.expect("read tcp target"), "tcp");
+}
+
+#[tokio::test]
+async fn tcp_target_with_token_round_trip() {
+    let _lock = helpers::env_lock().lock().await;
+    let _harness = start_tcp_harness(Some("relay-token-rust"), ENV_S3_SOCKET).await;
+    let _token_env = helpers::EnvGuard::set(ENV_S3_SOCKET_TOKEN, "relay-token-rust");
+
+    let s3 = S3::connect().await.expect("connect");
+    let mut object = s3.object("bucket", "docs/tcp-token.txt");
+    object
+        .write_string("tcp-token", None)
+        .await
+        .expect("write tcp token target");
+
+    assert_eq!(
+        object.text(None).await.expect("read tcp token target"),
+        "tcp-token"
+    );
+}
+
+#[tokio::test]
+async fn named_tcp_target_uses_named_token_env() {
+    let _lock = helpers::env_lock().lock().await;
+    let env_name = s3_socket_env("reports");
+    let _harness = start_tcp_harness(Some("named-relay-token-rust"), &env_name).await;
+    let _token_env =
+        helpers::EnvGuard::set(s3_socket_token_env("reports"), "named-relay-token-rust");
+
+    let s3 = S3::connect_named("reports").await.expect("connect");
+    let mut object = s3.object("bucket", "reports/named-tcp.txt");
+    object
+        .write_string("named-tcp", None)
+        .await
+        .expect("write named tcp target");
+
+    assert_eq!(
+        object.text(None).await.expect("read named tcp target"),
+        "named-tcp"
+    );
 }
 
 #[tokio::test]

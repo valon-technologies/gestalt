@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +30,66 @@ func TestS3Transport_NamedSocketEnv(t *testing.T) {
 	}
 	if got != "ok" {
 		t.Fatalf("Text = %q, want ok", got)
+	}
+}
+
+func TestS3Transport_TCPTargetEnv(t *testing.T) {
+	bin, target, cmd := buildAndStartTCPHarness("s3transportd", "")
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		_ = os.Remove(bin)
+	})
+
+	t.Setenv(gestalt.EnvS3Socket, target)
+	client, err := gestalt.S3()
+	if err != nil {
+		t.Fatalf("connect tcp s3: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	ctx := context.Background()
+	obj := client.Object("tcp", "checks/ok.txt")
+	if _, err := obj.WriteString(ctx, "ok", nil); err != nil {
+		t.Fatalf("WriteString: %v", err)
+	}
+	got, err := obj.Text(ctx, nil)
+	if err != nil {
+		t.Fatalf("Text: %v", err)
+	}
+	if got != "ok" {
+		t.Fatalf("Text = %q, want ok", got)
+	}
+}
+
+func TestS3Transport_TCPTargetTokenEnv(t *testing.T) {
+	const token = "relay-token-go"
+	bin, target, cmd := buildAndStartTCPHarness("s3transportd", token)
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		_ = os.Remove(bin)
+	})
+
+	t.Setenv(gestalt.EnvS3Socket, target)
+	t.Setenv(gestalt.S3SocketTokenEnv(""), token)
+	client, err := gestalt.S3()
+	if err != nil {
+		t.Fatalf("connect tcp s3 with token: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	ctx := context.Background()
+	obj := client.Object("tcp-token", "checks/token.txt")
+	if _, err := obj.WriteString(ctx, "relay", nil); err != nil {
+		t.Fatalf("WriteString: %v", err)
+	}
+	got, err := obj.Text(ctx, nil)
+	if err != nil {
+		t.Fatalf("Text: %v", err)
+	}
+	if got != "relay" {
+		t.Fatalf("Text = %q, want relay", got)
 	}
 }
 

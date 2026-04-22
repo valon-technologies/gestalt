@@ -59,11 +59,16 @@ pub use manifest_metadata::{
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
-pub use s3::{S3, S3Error, S3Provider};
+pub use s3::{
+    ENV_S3_SOCKET, ENV_S3_SOCKET_TOKEN, S3, S3Error, S3Provider, s3_socket_env, s3_socket_token_env,
+};
 pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
 pub use workflow::{ENV_WORKFLOW_HOST_SOCKET, WorkflowHost, WorkflowHostError, WorkflowProvider};
-pub use workflow_manager::{ENV_WORKFLOW_MANAGER_SOCKET, WorkflowManager, WorkflowManagerError};
+pub use workflow_manager::{
+    ENV_WORKFLOW_MANAGER_SOCKET, ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, WorkflowManager,
+    WorkflowManagerError,
+};
 
 #[doc(hidden)]
 pub trait IntoRouterResult<P> {

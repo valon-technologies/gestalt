@@ -6,6 +6,9 @@ use hyper_util::rt::TokioIo;
 use serde::de::DeserializeOwned;
 use tokio_stream::iter;
 use tonic::codegen::async_trait;
+use tonic::metadata::MetadataValue;
+use tonic::service::Interceptor;
+use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
 
@@ -14,9 +17,13 @@ use crate::error::Result as ProviderResult;
 use crate::generated::v1::{self as pb, s3_client::S3Client as ProtoS3Client};
 
 type ClientResult<T> = std::result::Result<T, S3Error>;
+type S3Transport = InterceptedService<Channel, RelayTokenInterceptor>;
 
 /// Default Unix-socket environment variable used by [`S3::connect`].
 pub const ENV_S3_SOCKET: &str = "GESTALT_S3_SOCKET";
+pub const ENV_S3_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
+pub const ENV_S3_SOCKET_TOKEN: &str = "GESTALT_S3_SOCKET_TOKEN";
+const S3_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 const WRITE_CHUNK_SIZE: usize = 64 * 1024;
 
 #[derive(Debug, thiserror::Error)]
@@ -241,7 +248,7 @@ where
 
 /// Client for a running S3 provider.
 pub struct S3 {
-    client: ProtoS3Client<Channel>,
+    client: ProtoS3Client<S3Transport>,
 }
 
 impl S3 {
@@ -253,22 +260,40 @@ impl S3 {
     /// Connects to a named S3 transport socket.
     pub async fn connect_named(name: &str) -> ClientResult<Self> {
         let env_name = s3_socket_env(name);
-        let socket_path =
+        let target =
             std::env::var(&env_name).map_err(|_| S3Error::Env(format!("{env_name} is not set")))?;
+        let token = std::env::var(s3_socket_token_env(name)).unwrap_or_default();
 
-        let channel = Endpoint::try_from("http://[::]:50051")?
-            .connect_with_connector(service_fn(move |_: Uri| {
-                let path = socket_path.clone();
-                async move {
-                    tokio::net::UnixStream::connect(path)
-                        .await
-                        .map(TokioIo::new)
-                }
-            }))
-            .await?;
+        let channel = match parse_s3_target(&target)? {
+            S3Target::Unix(path) => {
+                Endpoint::try_from("http://[::]:50051")?
+                    .connect_with_connector(service_fn(move |_: Uri| {
+                        let path = path.clone();
+                        async move {
+                            tokio::net::UnixStream::connect(path)
+                                .await
+                                .map(TokioIo::new)
+                        }
+                    }))
+                    .await?
+            }
+            S3Target::Tcp(address) => {
+                Endpoint::from_shared(format!("http://{address}"))?
+                    .connect()
+                    .await?
+            }
+            S3Target::Tls(address) => {
+                Endpoint::from_shared(format!("https://{address}"))?
+                    .connect()
+                    .await?
+            }
+        };
 
         Ok(Self {
-            client: ProtoS3Client::new(channel),
+            client: ProtoS3Client::with_interceptor(
+                channel,
+                relay_token_interceptor(token.trim())?,
+            ),
         })
     }
 
@@ -528,7 +553,7 @@ impl S3 {
 
 /// Convenience wrapper around repeated operations on one object key.
 pub struct Object {
-    client: ProtoS3Client<Channel>,
+    client: ProtoS3Client<S3Transport>,
     reference: ObjectRef,
 }
 
@@ -755,6 +780,90 @@ pub fn s3_socket_env(name: &str) -> String {
         }
     }
     env
+}
+
+/// Returns the environment variable used for a named S3 relay token.
+pub fn s3_socket_token_env(name: &str) -> String {
+    if name.trim().is_empty() {
+        return ENV_S3_SOCKET_TOKEN.to_string();
+    }
+    format!("{}{}", s3_socket_env(name), ENV_S3_SOCKET_TOKEN_SUFFIX)
+}
+
+enum S3Target {
+    Unix(String),
+    Tcp(String),
+    Tls(String),
+}
+
+fn parse_s3_target(raw_target: &str) -> Result<S3Target, S3Error> {
+    let target = raw_target.trim();
+    if target.is_empty() {
+        return Err(S3Error::Env("S3 transport target is required".to_string()));
+    }
+    if let Some(address) = target.strip_prefix("tcp://") {
+        let address = address.trim();
+        if address.is_empty() {
+            return Err(S3Error::Env(format!(
+                "S3 tcp target {raw_target:?} is missing host:port"
+            )));
+        }
+        return Ok(S3Target::Tcp(address.to_string()));
+    }
+    if let Some(address) = target.strip_prefix("tls://") {
+        let address = address.trim();
+        if address.is_empty() {
+            return Err(S3Error::Env(format!(
+                "S3 tls target {raw_target:?} is missing host:port"
+            )));
+        }
+        return Ok(S3Target::Tls(address.to_string()));
+    }
+    if let Some(path) = target.strip_prefix("unix://") {
+        let path = path.trim();
+        if path.is_empty() {
+            return Err(S3Error::Env(format!(
+                "S3 unix target {raw_target:?} is missing a socket path"
+            )));
+        }
+        return Ok(S3Target::Unix(path.to_string()));
+    }
+    if target.contains("://") {
+        let scheme = target.split("://").next().unwrap_or_default();
+        return Err(S3Error::Env(format!(
+            "unsupported S3 target scheme {scheme:?}"
+        )));
+    }
+    Ok(S3Target::Unix(target.to_string()))
+}
+
+fn relay_token_interceptor(token: &str) -> Result<RelayTokenInterceptor, S3Error> {
+    let header = if token.trim().is_empty() {
+        None
+    } else {
+        Some(
+            MetadataValue::try_from(token.to_string())
+                .map_err(|err| S3Error::Env(format!("invalid S3 relay token metadata: {err}")))?,
+        )
+    };
+    Ok(RelayTokenInterceptor { header })
+}
+
+#[derive(Clone)]
+struct RelayTokenInterceptor {
+    header: Option<MetadataValue<tonic::metadata::Ascii>>,
+}
+
+impl Interceptor for RelayTokenInterceptor {
+    fn call(
+        &mut self,
+        mut request: tonic::Request<()>,
+    ) -> std::result::Result<tonic::Request<()>, tonic::Status> {
+        if let Some(header) = self.header.clone() {
+            request.metadata_mut().insert(S3_RELAY_TOKEN_HEADER, header);
+        }
+        Ok(request)
+    }
 }
 
 fn map_status(err: tonic::Status) -> S3Error {

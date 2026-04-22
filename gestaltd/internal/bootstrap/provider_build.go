@@ -944,7 +944,6 @@ func effectivePluginRuntime(ctx context.Context, name string, entry *config.Prov
 }
 
 type pluginRuntimeCapabilityRequirements struct {
-	HostServiceTunnels  bool
 	HostnameProxyEgress bool
 }
 
@@ -955,7 +954,6 @@ func pluginRuntimeRequirementsForPlugin(name string, entry *config.ProviderEntry
 		return pluginRuntimeCapabilityRequirements{}, nil
 	}
 	return pluginRuntimeCapabilityRequirements{
-		HostServiceTunnels:  len(entry.S3) > 0 || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders()),
 		HostnameProxyEgress: len(entry.AllowedHosts) > 0 || deps.Egress.DefaultAction == egress.PolicyDeny,
 	}, nil
 }
@@ -974,9 +972,6 @@ func validatePluginRuntimeCapabilities(label string, caps pluginruntime.Capabili
 	}
 	if !caps.ProviderGRPCTunnel {
 		missing = append(missing, "provider gRPC tunneling")
-	}
-	if req.HostServiceTunnels && !caps.HostServiceTunnels {
-		missing = append(missing, "host service tunnels")
 	}
 	if req.HostnameProxyEgress && !caps.HostnameProxyEgress {
 		missing = append(missing, "hostname-based egress controls")
@@ -1108,19 +1103,6 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		hostServices = append(hostServices, services...)
 		cleanup = chainCleanup(cleanup, cacheCleanup)
 	}
-	needInvocationTokens := includeHostServices || len(entry.Invokes) > 0
-	if needInvocationTokens {
-		invTokens, err = providerhost.NewInvocationTokenManager(deps.EncryptionKey)
-		if err != nil {
-			return fail(err)
-		}
-	}
-	if !includeHostServices {
-		if len(entry.Invokes) > 0 {
-			hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
-		}
-		return hostServices, invTokens, cleanup, nil
-	}
 	if len(entry.S3) > 0 {
 		services, err := buildPluginS3HostServices(name, entry, deps)
 		if err != nil {
@@ -1128,10 +1110,29 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		}
 		hostServices = append(hostServices, services...)
 	}
+	includeWorkflowManager := deps.WorkflowManager != nil || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders())
+	needInvocationTokens := includeHostServices || len(entry.Invokes) > 0
+	if includeWorkflowManager {
+		needInvocationTokens = true
+	}
+	if needInvocationTokens {
+		invTokens, err = providerhost.NewInvocationTokenManager(deps.EncryptionKey)
+		if err != nil {
+			return fail(err)
+		}
+	}
+	if includeWorkflowManager {
+		hostServices = append(hostServices, buildPluginWorkflowManagerHostService(name, deps, invTokens))
+	}
+	if !includeHostServices {
+		if len(entry.Invokes) > 0 {
+			hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
+		}
+		return hostServices, invTokens, cleanup, nil
+	}
 	if deps.AuthorizationProvider != nil && len(entry.EffectiveHTTPBindings()) > 0 {
 		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
 	}
-	hostServices = append(hostServices, buildPluginWorkflowManagerHostService(name, deps, invTokens))
 	if len(entry.Invokes) > 0 {
 		hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
 	}
@@ -1154,6 +1155,14 @@ func buildPluginRuntimeHostServiceBinding(pluginName, sessionID string, hostServ
 			serviceKey = "cache"
 			serviceLabel = "cache"
 			methodPrefix = "/" + proto.Cache_ServiceDesc.ServiceName + "/"
+		case isS3HostServiceEnv(hostService.EnvVar):
+			serviceKey = "s3"
+			serviceLabel = "S3"
+			methodPrefix = "/" + proto.S3_ServiceDesc.ServiceName + "/"
+		case hostService.EnvVar == providerhost.DefaultWorkflowManagerSocketEnv:
+			serviceKey = "workflow_manager"
+			serviceLabel = "workflow manager"
+			methodPrefix = "/" + proto.WorkflowManagerHost_ServiceDesc.ServiceName + "/"
 		case hostService.EnvVar == providerhost.DefaultPluginInvokerSocketEnv:
 			serviceKey = "plugin_invoker"
 			serviceLabel = "plugin invoker"
@@ -1247,6 +1256,11 @@ func isIndexedDBHostServiceEnv(envVar string) bool {
 func isCacheHostServiceEnv(envVar string) bool {
 	envVar = strings.TrimSpace(envVar)
 	return envVar == providerhost.DefaultCacheSocketEnv || strings.HasPrefix(envVar, providerhost.DefaultCacheSocketEnv+"_")
+}
+
+func isS3HostServiceEnv(envVar string) bool {
+	envVar = strings.TrimSpace(envVar)
+	return envVar == providerhost.DefaultS3SocketEnv || strings.HasPrefix(envVar, providerhost.DefaultS3SocketEnv+"_")
 }
 
 func appendAllowedHost(allowedHosts []string, host string) []string {

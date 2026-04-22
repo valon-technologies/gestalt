@@ -1,3 +1,5 @@
+import { connect } from "node:net";
+
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import {
@@ -5,6 +7,7 @@ import {
   ConnectError,
   createClient,
   type Client,
+  type Interceptor,
   type ServiceImpl,
 } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
@@ -22,7 +25,10 @@ import {
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 
-const ENV_S3_SOCKET = "GESTALT_S3_SOCKET";
+export const ENV_S3_SOCKET = "GESTALT_S3_SOCKET";
+const S3_SOCKET_TOKEN_SUFFIX = "_TOKEN";
+const S3_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
+export const ENV_S3_SOCKET_TOKEN = `${ENV_S3_SOCKET}${S3_SOCKET_TOKEN_SUFFIX}`;
 const WRITE_CHUNK_SIZE = 64 * 1024;
 const textEncoder = new TextEncoder();
 
@@ -33,6 +39,13 @@ export function s3SocketEnv(name?: string): string {
   const trimmed = name?.trim() ?? "";
   if (!trimmed) return ENV_S3_SOCKET;
   return `${ENV_S3_SOCKET}_${trimmed.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`;
+}
+
+/**
+ * Returns the environment variable name used to discover an S3 relay token.
+ */
+export function s3SocketTokenEnv(name?: string): string {
+  return `${s3SocketEnv(name)}${S3_SOCKET_TOKEN_SUFFIX}`;
 }
 
 /**
@@ -496,15 +509,30 @@ export class S3 {
 
   constructor(name?: string) {
     const envName = s3SocketEnv(name);
-    const socketPath = process.env[envName];
-    if (!socketPath) {
+    const target = process.env[envName];
+    if (!target) {
       throw new Error(`${envName} is not set`);
     }
+    const relayToken = process.env[s3SocketTokenEnv(name)]?.trim() ?? "";
+    const transportOptions = s3TransportOptions(target);
+    const interceptors: Interceptor[] = relayToken
+      ? [
+          (next) => async (req) => {
+            req.header.set(S3_RELAY_TOKEN_HEADER, relayToken);
+            return await next(req);
+          },
+        ]
+      : [];
     const transport = createGrpcTransport({
-      baseUrl: unixSocketBaseUrl(socketPath),
-      nodeOptions: {
-        path: socketPath,
-      },
+      ...transportOptions,
+      ...(transportOptions.nodeOptions
+        ? {
+            nodeOptions: {
+              createConnection: () => connect(transportOptions.nodeOptions!.path),
+            },
+          }
+        : {}),
+      interceptors,
     });
     this.client = createClient(S3Service, transport);
   }
@@ -745,6 +773,48 @@ function unixSocketBaseUrl(socketPath: string): string {
     hash = Math.imul(hash, 0x01000193);
   }
   return `http://unix-${(hash >>> 0).toString(16)}.local`;
+}
+
+function s3TransportOptions(rawTarget: string): {
+  baseUrl: string;
+  nodeOptions?: { path: string };
+} {
+  const target = rawTarget.trim();
+  if (!target) {
+    throw new Error("s3 transport target is required");
+  }
+  if (target.startsWith("tcp://")) {
+    const address = target.slice("tcp://".length).trim();
+    if (!address) {
+      throw new Error(`s3 tcp target ${JSON.stringify(rawTarget)} is missing host:port`);
+    }
+    return { baseUrl: `http://${address}` };
+  }
+  if (target.startsWith("tls://")) {
+    const address = target.slice("tls://".length).trim();
+    if (!address) {
+      throw new Error(`s3 tls target ${JSON.stringify(rawTarget)} is missing host:port`);
+    }
+    return { baseUrl: `https://${address}` };
+  }
+  if (target.startsWith("unix://")) {
+    const socketPath = target.slice("unix://".length).trim();
+    if (!socketPath) {
+      throw new Error(`s3 unix target ${JSON.stringify(rawTarget)} is missing a socket path`);
+    }
+    return {
+      baseUrl: unixSocketBaseUrl(socketPath),
+      nodeOptions: { path: socketPath },
+    };
+  }
+  if (target.includes("://")) {
+    const parsed = new URL(target);
+    throw new Error(`Unsupported s3 target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`);
+  }
+  return {
+    baseUrl: unixSocketBaseUrl(target),
+    nodeOptions: { path: target },
+  };
 }
 
 async function invokeS3Provider<T>(label: string, fn: () => Promise<T>): Promise<T> {

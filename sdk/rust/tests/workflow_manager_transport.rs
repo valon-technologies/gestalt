@@ -18,9 +18,11 @@ use gestalt::proto::v1::{
     WorkflowManagerResumeScheduleRequest, WorkflowManagerUpdateEventTriggerRequest,
     WorkflowManagerUpdateScheduleRequest,
 };
-use gestalt::{ENV_WORKFLOW_MANAGER_SOCKET, Request, WorkflowManager};
-use tokio::net::UnixListener;
-use tokio_stream::wrappers::UnixListenerStream;
+use gestalt::{
+    ENV_WORKFLOW_MANAGER_SOCKET, ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, Request, WorkflowManager,
+};
+use tokio::net::{TcpListener, UnixListener};
+use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::codegen::async_trait;
 use tonic::transport::Server;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
@@ -37,6 +39,7 @@ struct SeenRequest {
 #[derive(Clone, Default)]
 struct TestWorkflowManagerServer {
     seen: Arc<Mutex<Vec<SeenRequest>>>,
+    relay_tokens: Arc<Mutex<Vec<String>>>,
 }
 
 #[async_trait]
@@ -45,6 +48,12 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         &self,
         request: GrpcRequest<WorkflowManagerCreateScheduleRequest>,
     ) -> std::result::Result<GrpcResponse<ManagedWorkflowSchedule>, Status> {
+        if let Some(token) = request.metadata().get("x-gestalt-host-service-relay-token") {
+            self.relay_tokens
+                .lock()
+                .expect("lock relay tokens")
+                .push(token.to_str().expect("relay token ascii").to_string());
+        }
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "create".to_string(),
@@ -337,6 +346,53 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         }
         Ok(GrpcResponse::new(event))
     }
+}
+
+#[tokio::test]
+async fn workflow_manager_connects_over_tcp_and_sends_relay_token() {
+    let _env_lock = helpers::env_lock().lock().await;
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind tcp listener");
+    let address = listener.local_addr().expect("local addr");
+    let _socket_guard =
+        helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET, format!("tcp://{address}"));
+    let _token_guard =
+        helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, "relay-token-rust");
+
+    let server = TestWorkflowManagerServer::default();
+    let serve_server = server.clone();
+    let serve_task = tokio::spawn(async move {
+        serve_workflow_manager_tcp(serve_server, listener)
+            .await
+            .expect("serve workflow manager");
+    });
+
+    let mut manager = WorkflowManager::connect("token-123")
+        .await
+        .expect("connect workflow manager");
+    let created = manager
+        .create_schedule(WorkflowManagerCreateScheduleRequest {
+            provider_name: "managed".to_string(),
+            cron: "*/5 * * * *".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("create schedule");
+
+    assert_eq!(created.provider_name, "managed");
+    assert_eq!(created.schedule.expect("created schedule").id, "sched-1");
+
+    let relay_tokens = server
+        .relay_tokens
+        .lock()
+        .expect("lock relay tokens")
+        .clone();
+    assert_eq!(relay_tokens, vec!["relay-token-rust".to_string()]);
+
+    serve_task.abort();
+    let _ = serve_task.await;
 }
 
 #[tokio::test]
@@ -672,5 +728,15 @@ async fn serve_workflow_manager(
     Server::builder()
         .add_service(WorkflowManagerHostServer::new(server))
         .serve_with_incoming(UnixListenerStream::new(listener))
+        .await
+}
+
+async fn serve_workflow_manager_tcp(
+    server: TestWorkflowManagerServer,
+    listener: TcpListener,
+) -> std::result::Result<(), tonic::transport::Error> {
+    Server::builder()
+        .add_service(WorkflowManagerHostServer::new(server))
+        .serve_with_incoming(TcpListenerStream::new(listener))
         .await
 }

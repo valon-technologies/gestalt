@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime as dt
 import io
 import os
+import socket
 import subprocess
 import tempfile
 import unittest
@@ -22,6 +23,7 @@ from gestalt import (
     S3PreconditionFailedError,
     WriteOptions,
     s3_socket_env,
+    s3_socket_token_env,
 )
 
 
@@ -77,6 +79,32 @@ def tearDownModule() -> None:
         os.remove(_socket_path)
 
 
+def _reserve_tcp_address() -> str:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        host, port = sock.getsockname()
+    return f"{host}:{port}"
+
+
+def _start_tcp_harness(expect_token: str = "") -> tuple[subprocess.Popen[bytes], str]:
+    harness_bin = _build_harness()
+    address = _reserve_tcp_address()
+    args = [harness_bin, "--tcp", address]
+    if expect_token:
+        args.extend(["--expect-token", expect_token])
+    proc = subprocess.Popen(
+        args,
+        stdout=subprocess.PIPE,
+    )
+    assert proc.stdout is not None
+    line = proc.stdout.readline().decode().strip()
+    proc.stdout.close()
+    if line != "READY":
+        proc.kill()
+        raise RuntimeError(f"tcp harness did not print READY, got: {line!r}")
+    return proc, f"tcp://{address}"
+
+
 def _client() -> S3:
     return S3()
 
@@ -91,6 +119,62 @@ class TestNamedSocketEnv(unittest.TestCase):
 
     def test_named_socket_env_matches_host_ascii_normalization(self) -> None:
         self.assertEqual(s3_socket_env("sø3"), "GESTALT_S3_SOCKET_S_3")
+
+
+class TestTCPTargetEnv(unittest.TestCase):
+    def test_tcp_target_roundtrip(self) -> None:
+        proc, target = _start_tcp_harness()
+        self.addCleanup(proc.wait)
+        self.addCleanup(proc.kill)
+
+        env_name = s3_socket_env()
+        previous_target = os.environ.get(env_name)
+
+        def restore_target() -> None:
+            if previous_target is None:
+                os.environ.pop(env_name, None)
+            else:
+                os.environ[env_name] = previous_target
+
+        os.environ[env_name] = target
+        self.addCleanup(restore_target)
+
+        client = _client()
+        obj = client.object("docs", "tcp.txt")
+        obj.write_text("tcp")
+        self.assertEqual(obj.text(), "tcp")
+        client.close()
+
+    def test_tcp_target_token_roundtrip(self) -> None:
+        token = "relay-token-python"
+        proc, target = _start_tcp_harness(expect_token=token)
+        self.addCleanup(proc.wait)
+        self.addCleanup(proc.kill)
+
+        target_env = s3_socket_env()
+        token_env = s3_socket_token_env()
+        previous_target = os.environ.get(target_env)
+        previous_token = os.environ.get(token_env)
+
+        def restore_env() -> None:
+            if previous_target is None:
+                os.environ.pop(target_env, None)
+            else:
+                os.environ[target_env] = previous_target
+            if previous_token is None:
+                os.environ.pop(token_env, None)
+            else:
+                os.environ[token_env] = previous_token
+
+        os.environ[target_env] = target
+        os.environ[token_env] = token
+        self.addCleanup(restore_env)
+
+        client = _client()
+        obj = client.object("docs", "tcp-token.txt")
+        obj.write_text("token")
+        self.assertEqual(obj.text(), "token")
+        client.close()
 
 
 class TestWriteReadRoundTrip(unittest.TestCase):
