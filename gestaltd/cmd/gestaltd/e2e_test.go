@@ -578,6 +578,49 @@ func setupPluginDir(t *testing.T, baseDir string) string {
 	return setupPluginDirWithVersion(t, baseDir, "0.0.1-alpha.1")
 }
 
+func setupPluginDirWithHostedHTTPBinding(t *testing.T, baseDir string) string {
+	t.Helper()
+
+	pluginDir := setupPluginDir(t, baseDir)
+	providerPath := filepath.Join(pluginDir, "provider.go")
+	source, err := os.ReadFile(providerPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", providerPath, err)
+	}
+
+	const replacement = `	).WithManifestMetadata(gestalt.ManifestMetadata{
+		SecuritySchemes: map[string]gestalt.HTTPSecurityScheme{
+			"public": {
+				Type: gestalt.HTTPSecuritySchemeTypeNone,
+			},
+		},
+		HTTP: map[string]gestalt.HTTPBinding{
+			"echo_form": {
+				Path:     "/echo-form",
+				Method:   http.MethodPost,
+				Security: "public",
+				Target:   "echo",
+				RequestBody: &gestalt.HTTPRequestBody{
+					Required: true,
+					Content: map[string]gestalt.HTTPMediaType{
+						"application/x-www-form-urlencoded": {},
+					},
+				},
+			},
+		},
+	})
+)`
+	updated := strings.Replace(string(source), "\t)\n)", replacement, 1)
+	if updated == string(source) {
+		t.Fatalf("failed to inject hosted HTTP metadata into %s", providerPath)
+	}
+	if err := os.WriteFile(providerPath, []byte(updated), 0o644); err != nil {
+		t.Fatalf("write %s: %v", providerPath, err)
+	}
+
+	return pluginDir
+}
+
 func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 	t.Helper()
 
@@ -1477,6 +1520,48 @@ plugins:
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestE2EServeMountsGeneratedHostedHTTPBindingsForLocalSourcePlugin(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping hosted HTTP binding serve test in short mode")
+	}
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDirWithHostedHTTPBinding(t, dir)
+	port, holder := reservePort(t)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
+	_ = holder.Close()
+
+	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
+	startCommandAndWaitReady(t, cmd, baseURL)
+
+	req, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/example/echo-form", strings.NewReader("message=hello"))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
+	if err != nil {
+		t.Fatalf("POST /api/v1/example/echo-form: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /api/v1/example/echo-form 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("decode hosted HTTP response: %v (body: %s)", err, body)
+	}
+	if got, want := result["echo"], "hello"; got != want {
+		t.Fatalf("response echo = %#v, want %q", got, want)
 	}
 }
 

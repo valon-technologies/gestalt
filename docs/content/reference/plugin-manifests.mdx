@@ -66,6 +66,8 @@ The `spec` block for a `kind: plugin` manifest describes a plugin. It supports d
 | --- | --- | --- |
 | `configSchemaPath` | string | Path to a JSON/YAML schema that validates `plugins.<name>.config` in the server config. |
 | `auth` | RouteAuthRef | Optional plugin route-auth reference. Use `auth.provider` to bind the plugin’s mounted routes to a named request-auth provider. Legacy manifests may also use `spec.auth` for upstream connection auth when no `connections` map is defined. |
+| `securitySchemes` | map[string]HTTPSecurityScheme | Named hosted HTTP security schemes referenced by `spec.http.<name>.security`. |
+| `http` | map[string]HTTPBinding | Optional hosted HTTP bindings layered on top of operations. Each binding mounts under the plugin prefix and targets an operation ID. |
 | `mcp` | bool | When true, the plugin exposes its operations as MCP tools. |
 | `headers` | map[string]string | Static headers injected into every outbound request. |
 | `surfaces` | Surfaces | Spec-loaded and declarative REST surfaces. See [Surfaces](#surfaces). |
@@ -211,6 +213,69 @@ spec:
                 credentialFieldRef:
                   name: api_key
 ```
+
+### Hosted HTTP Bindings
+
+Hosted HTTP bindings are optional routes layered on top of operations. They do
+not replace the generic `/api/v1/{plugin}/{operation}` facade; use them when a
+plugin needs a stable custom path, form-encoded request bodies, hosted request
+verification, or an immediate host-managed acknowledgment response.
+
+`spec.http.<name>.path` is plugin-relative. For plugin `slack`, `path: /command`
+mounts at `/api/v1/slack/command`.
+
+#### `spec.securitySchemes`
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `type` | string | One of `slack_signature`, `apiKey`, `http`, or `none`. |
+| `description` | string | Optional human-readable description. |
+| `name` | string | Header or query parameter name for `apiKey`. |
+| `in` | string | `header` or `query` for `type: apiKey`. |
+| `scheme` | string | `basic` or `bearer` for `type: http`. |
+| `secret` | HTTPSecretRef | Secret reference for the scheme. |
+
+#### `spec.http.<name>`
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `path` | string | Plugin-relative route path. |
+| `method` | string | HTTP method for the hosted route. |
+| `security` | string | Name of a scheme from `spec.securitySchemes`. |
+| `target` | string | Canonical operation ID to invoke. |
+| `requestBody` | HTTPRequestBody | Allowed request content types. |
+| `ack` | HTTPAck | Immediate host-managed response. Omit it for synchronous request/response handlers. |
+
+Example:
+
+```yaml
+spec:
+  securitySchemes:
+    slack:
+      type: slack_signature
+      secret:
+        env: SLACK_SIGNING_SECRET
+  http:
+    command:
+      path: /command
+      method: POST
+      security: slack
+      target: handle_command
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded: {}
+      ack:
+        status: 200
+        body:
+          response_type: ephemeral
+          text: Working on it...
+```
+
+Source plugins written in Go, Python, Rust, or TypeScript may generate these
+blocks from code. Gestalt merges generated `securitySchemes` / `http` metadata
+into the effective manifest during local source execution and
+`gestaltd provider release`.
 
 ### Pagination
 
@@ -613,10 +678,12 @@ A connection using `mcp_oauth` auth requires the plugin to declare an MCP surfac
 
 When an executable plugin defines helper operations in Go, Rust, Python, or
 TypeScript, Gestalt materializes the executable catalog automatically during
-local source-plugin execution and `provider release`. Authentication and indexeddb
-source packages use the same release flow for Go, Rust, and TypeScript, but
-they do not generate catalogs. See [Plugins](/providers/plugins)
-for the end-to-end authoring flow.
+local source-plugin execution and `provider release`. If the source plugin also
+defines hosted HTTP/security metadata in code, Gestalt merges that generated
+`securitySchemes` / `http` metadata into the effective manifest at the same
+time. Authentication and indexeddb source packages use the same release flow
+for Go, Rust, and TypeScript, but they do not generate catalogs. See
+[Plugins](/providers/plugins) for the end-to-end authoring flow.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -713,8 +780,11 @@ declared in `[tool.gestalt].provider` and materialize the executable catalog
 automatically. TypeScript source providers load the target declared in
 `package.json` under `gestalt.provider`. A string target such as
 `./provider.ts#plugin` defaults to a plugin provider; auth and indexeddb
-providers use an object with `kind` and `target`. Authentication and indexeddb source
-packages support the same release flow for Go, Rust, and TypeScript, but they
-do not generate catalogs. Source packages build the host-platform artifact by
-default. Pass `--platform` for an explicit `os/arch[/libc]` target list, or
-`--platform all` in CI to build the full supported release matrix.
+providers use an object with `kind` and `target`. If the source plugin defines
+hosted HTTP/security metadata in code, release merges the generated
+`securitySchemes` / `http` blocks into the packaged manifest at the same time.
+Authentication and indexeddb source packages support the same release flow for
+Go, Rust, and TypeScript, but they do not generate catalogs. Source packages
+build the host-platform artifact by default. Pass `--platform` for an explicit
+`os/arch[/libc]` target list, or `--platform all` in CI to build the full
+supported release matrix.

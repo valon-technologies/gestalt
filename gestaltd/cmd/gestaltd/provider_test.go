@@ -302,6 +302,7 @@ func TestRun_ProviderReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testin
 	archiveName := expectedPythonArchiveName(testVersion, runtime.GOOS, runtime.GOARCH)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
+	assertReleasedManifestHasHostedHTTPMetadata(t, manifest, "greet")
 
 	binaryName := releaseBinaryName("python-release", runtime.GOOS)
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
@@ -377,6 +378,7 @@ func TestRun_ProviderReleaseBuildsTypeScriptSourcePluginForCurrentPlatform(t *te
 	archiveName := platformArchiveNameForTest(typeScriptReleasePluginName, testVersion, runtime.GOOS, runtime.GOARCH)
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
+	assertReleasedManifestHasHostedHTTPMetadata(t, manifest, "greet")
 
 	binaryName := releaseBinaryName(typeScriptReleasePluginName, runtime.GOOS)
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
@@ -408,9 +410,11 @@ func TestRun_ProviderReleaseDefaultsSourcePluginToHostPlatform(t *testing.T) {
 		)
 
 		archiveName := "gestalt-plugin-release-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
-		assertReleaseDefaultsToHostPlatform(t, readReleasedManifest(t, outputDir, archiveName), func(t *testing.T, artifact providermanifestv1.Artifact) {
+		manifest := readReleasedManifest(t, outputDir, archiveName)
+		assertReleaseDefaultsToHostPlatform(t, manifest, func(t *testing.T, artifact providermanifestv1.Artifact) {
 			assertExpectedGoArtifactPlatform(t, artifact, runtime.GOOS, runtime.GOARCH, "")
 		})
+		assertReleasedManifestHasHostedHTTPMetadata(t, manifest, "echo")
 	})
 
 	t.Run("python", func(t *testing.T) {
@@ -581,8 +585,28 @@ func TestRun_ProviderReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.
 		ExpectedServeExport:  "__gestalt_serve",
 		ExpectedCatalogWrite: true,
 		GeneratedCatalog:     rustReleasePluginName,
-		DelegateBinary:       pluginBin,
-		AllowedTargets:       []string{hostTarget},
+		GeneratedManifestMetadata: `securitySchemes:
+  slack:
+    type: slack_signature
+    secret:
+      env: SLACK_SIGNING_SECRET
+http:
+  command:
+    path: /command
+    method: POST
+    security: slack
+    target: greet
+    requestBody:
+      required: true
+      content:
+        application/x-www-form-urlencoded: {}
+    ack:
+      status: 200
+      body:
+        response_type: ephemeral
+        text: Working on it...`,
+		DelegateBinary: pluginBin,
+		AllowedTargets: []string{hostTarget},
 	})
 	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
@@ -599,6 +623,7 @@ func TestRun_ProviderReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.
 	archiveName := expectedRustArchiveName(testVersion, runtime.GOOS, runtime.GOARCH, "")
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
+	assertReleasedManifestHasHostedHTTPMetadata(t, manifest, "greet")
 	binaryName := releaseBinaryName(rustReleasePluginName, runtime.GOOS)
 
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
@@ -671,8 +696,28 @@ func TestRun_ProviderReleaseBuildsRustSourcePluginForExplicitLinuxTarget(t *test
 		ExpectedServeExport:  "__gestalt_serve",
 		ExpectedCatalogWrite: true,
 		GeneratedCatalog:     rustReleasePluginName,
-		DelegateBinary:       pluginBin,
-		AllowedTargets:       []string{hostTarget, explicitTarget},
+		GeneratedManifestMetadata: `securitySchemes:
+  slack:
+    type: slack_signature
+    secret:
+      env: SLACK_SIGNING_SECRET
+http:
+  command:
+    path: /command
+    method: POST
+    security: slack
+    target: greet
+    requestBody:
+      required: true
+      content:
+        application/x-www-form-urlencoded: {}
+    ack:
+      status: 200
+      body:
+        response_type: ephemeral
+        text: Working on it...`,
+		DelegateBinary: pluginBin,
+		AllowedTargets: []string{hostTarget, explicitTarget},
 	})
 	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
@@ -2171,12 +2216,44 @@ class GreetOutput(gestalt.Model):
     message: str
 
 
-@gestalt.operation(method="GET", read_only=True)
+plugin = gestalt.Plugin(
+    "python-release",
+    securitySchemes={
+        "slack": {
+            "type": "slack_signature",
+            "secret": {"env": "SLACK_SIGNING_SECRET"},
+        }
+    },
+    http={
+        "command": {
+            "path": "/command",
+            "method": "POST",
+            "security": "slack",
+            "target": "greet",
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/x-www-form-urlencoded": {},
+                },
+            },
+            "ack": {
+                "status": 200,
+                "body": {
+                    "response_type": "ephemeral",
+                    "text": "Working on it...",
+                },
+            },
+        }
+    },
+)
+
+
+@plugin.operation(method="GET", read_only=True)
 def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
     return GreetOutput(message=f"Hello, {input.name}!")
 
 
-@gestalt.session_catalog
+@plugin.session_catalog
 def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
     return gestalt.Catalog(
         name="python-release-session",
@@ -2415,16 +2492,42 @@ case "$entry_base" in
       echo "unexpected runtime target: $target" >&2
       exit 1
     fi
-    if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
-      echo "missing GESTALT_PLUGIN_WRITE_CATALOG" >&2
+    if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ] && [ -z "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
+      echo "missing catalog or manifest metadata export path" >&2
       exit 1
     fi
-    cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
+    if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
+      cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
 name: ` + typeScriptReleasePluginName + `
 operations:
   - id: greet
     method: GET
 EOF
+    fi
+    if [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
+      cat > "$GESTALT_PLUGIN_WRITE_MANIFEST_METADATA" <<'EOF'
+securitySchemes:
+  slack:
+    type: slack_signature
+    secret:
+      env: SLACK_SIGNING_SECRET
+http:
+  command:
+    path: /command
+    method: POST
+    security: slack
+    target: greet
+    requestBody:
+      required: true
+      content:
+        application/x-www-form-urlencoded: {}
+    ack:
+      status: 200
+      body:
+        response_type: ephemeral
+        text: Working on it...
+EOF
+    fi
     exit 0
     ;;
   gestalt-ts-build|build.ts)
@@ -2560,16 +2663,42 @@ if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._runtime" ]; then
     echo "unexpected runtime kind: $runtime_kind" >&2
     exit 1
   fi
-  if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
-    echo "missing GESTALT_PLUGIN_WRITE_CATALOG" >&2
+  if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ] && [ -z "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
+    echo "missing catalog or manifest metadata export path" >&2
     exit 1
   fi
-  cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
+  if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
+    cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
 name: python-release
 operations:
   - id: greet
     method: GET
 EOF
+  fi
+  if [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
+    cat > "$GESTALT_PLUGIN_WRITE_MANIFEST_METADATA" <<'EOF'
+securitySchemes:
+  slack:
+    type: slack_signature
+    secret:
+      env: SLACK_SIGNING_SECRET
+http:
+  command:
+    path: /command
+    method: POST
+    security: slack
+    target: greet
+    requestBody:
+      required: true
+      content:
+        application/x-www-form-urlencoded: {}
+    ack:
+      status: 200
+      body:
+        response_type: ephemeral
+        text: Working on it...
+EOF
+  fi
   exit 0
 fi
 
@@ -2712,6 +2841,61 @@ func assertReleaseDefaultsToHostPlatform(t *testing.T, manifest *providermanifes
 		t.Fatalf("artifacts = %+v, want exactly one host-platform artifact", manifest.Artifacts)
 	}
 	assertPlatform(t, manifest.Artifacts[0])
+}
+
+func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *providermanifestv1.Manifest, target string) {
+	t.Helper()
+
+	if manifest == nil || manifest.Spec == nil {
+		t.Fatalf("manifest = %+v, want populated spec", manifest)
+	}
+
+	scheme := manifest.Spec.SecuritySchemes["slack"]
+	if scheme == nil {
+		t.Fatal(`manifest.Spec.SecuritySchemes["slack"] = nil, want generated scheme`)
+	}
+	if scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeSlackSignature {
+		t.Fatalf("scheme.Type = %q, want %q", scheme.Type, providermanifestv1.HTTPSecuritySchemeTypeSlackSignature)
+	}
+	if scheme.Secret == nil || scheme.Secret.Env != "SLACK_SIGNING_SECRET" {
+		t.Fatalf("scheme.Secret = %+v, want env-backed secret", scheme.Secret)
+	}
+
+	binding := manifest.Spec.HTTP["command"]
+	if binding == nil {
+		t.Fatal(`manifest.Spec.HTTP["command"] = nil, want generated HTTP binding`)
+	}
+	if binding.Path != "/command" {
+		t.Fatalf("binding.Path = %q, want %q", binding.Path, "/command")
+	}
+	if binding.Method != http.MethodPost {
+		t.Fatalf("binding.Method = %q, want %q", binding.Method, http.MethodPost)
+	}
+	if binding.Security != "slack" {
+		t.Fatalf("binding.Security = %q, want %q", binding.Security, "slack")
+	}
+	if binding.Target != target {
+		t.Fatalf("binding.Target = %q, want %q", binding.Target, target)
+	}
+	if binding.RequestBody == nil {
+		t.Fatal("binding.RequestBody = nil, want form request body metadata")
+	}
+	if _, ok := binding.RequestBody.Content["application/x-www-form-urlencoded"]; !ok {
+		t.Fatalf("binding.RequestBody.Content = %#v, want form content type", binding.RequestBody.Content)
+	}
+	if binding.Ack == nil {
+		t.Fatal("binding.Ack = nil, want hosted HTTP ack metadata")
+	}
+	if binding.Ack.Status != http.StatusOK {
+		t.Fatalf("binding.Ack.Status = %d, want %d", binding.Ack.Status, http.StatusOK)
+	}
+	body, ok := binding.Ack.Body.(map[string]any)
+	if !ok {
+		t.Fatalf("binding.Ack.Body type = %T, want map[string]any", binding.Ack.Body)
+	}
+	if got := body["response_type"]; got != "ephemeral" {
+		t.Fatalf("binding.Ack.Body[response_type] = %#v, want %#v", got, "ephemeral")
+	}
 }
 
 func assertReleasePlatforms(
@@ -2932,12 +3116,7 @@ func newGoSourceReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
 	pluginDir := filepath.Join(dir, releaseTestPluginName)
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(pluginDir): %v", err)
-	}
-	writeTestFile(t, pluginDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, releaseTestModule)), 0o644)
-	writeTestFile(t, pluginDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
-	writeStaticCatalogProviderMain(t, pluginDir)
+	testutil.CopyExampleProviderPlugin(t, pluginDir)
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindPlugin,
 		Source:      releaseTestSource,
@@ -2951,6 +3130,7 @@ func newGoSourceReleaseFixture(t *testing.T, dir string) string {
 			},
 		},
 	})
+	injectGoManifestMetadata(t, filepath.Join(pluginDir, "provider.go"))
 	return pluginDir
 }
 
@@ -2985,7 +3165,52 @@ func newTypeScriptSourceReleaseFixture(t *testing.T, dir string) string {
   }
 }
 `), 0o644)
-	writeTestFile(t, pluginDir, "provider.ts", []byte("export const provider = {};\n"), 0o644)
+	writeTestFile(t, pluginDir, "provider.ts", []byte(`import { definePlugin } from "@valon-technologies/gestalt";
+
+export const provider = definePlugin({
+  securitySchemes: {
+    slack: {
+      type: "slack_signature",
+      secret: {
+        env: "SLACK_SIGNING_SECRET",
+      },
+    },
+  },
+  http: {
+    command: {
+      path: "/command",
+      method: "POST",
+      security: "slack",
+      target: "greet",
+      requestBody: {
+        required: true,
+        content: {
+          "application/x-www-form-urlencoded": {},
+        },
+      },
+      ack: {
+        status: 200,
+        body: {
+          response_type: "ephemeral",
+          text: "Working on it...",
+        },
+      },
+    },
+  },
+  operations: [
+    {
+      id: "greet",
+      method: "GET",
+      readOnly: true,
+      handler(input: { name?: string }) {
+        return {
+          message: "Hello, " + (input.name || "World") + "!",
+        };
+      },
+    },
+  ],
+});
+`), 0o644)
 	return pluginDir
 }
 
@@ -3036,6 +3261,24 @@ func writeStaticCatalogProviderMain(t *testing.T, dir string) {
 func writeStaticCatalogProviderMainAt(t *testing.T, dir, rel string) {
 	t.Helper()
 	writeTestFile(t, dir, rel, []byte(testutil.GeneratedProviderPackageSource()), 0644)
+}
+
+func injectGoManifestMetadata(t *testing.T, providerPath string) {
+	t.Helper()
+
+	data, err := os.ReadFile(providerPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", providerPath, err)
+	}
+	old := "\t)\n)"
+	new := "\t).WithManifestMetadata(gestalt.ManifestMetadata{\n\t\tSecuritySchemes: map[string]gestalt.HTTPSecurityScheme{\n\t\t\t\"slack\": {\n\t\t\t\tType: gestalt.HTTPSecuritySchemeTypeSlackSignature,\n\t\t\t\tSecret: &gestalt.HTTPSecretRef{Env: \"SLACK_SIGNING_SECRET\"},\n\t\t\t},\n\t\t},\n\t\tHTTP: map[string]gestalt.HTTPBinding{\n\t\t\t\"command\": {\n\t\t\t\tPath:     \"/command\",\n\t\t\t\tMethod:   http.MethodPost,\n\t\t\t\tSecurity: \"slack\",\n\t\t\t\tTarget:   \"echo\",\n\t\t\t\tRequestBody: &gestalt.HTTPRequestBody{\n\t\t\t\t\tRequired: true,\n\t\t\t\t\tContent: map[string]gestalt.HTTPMediaType{\n\t\t\t\t\t\t\"application/x-www-form-urlencoded\": {},\n\t\t\t\t\t},\n\t\t\t\t},\n\t\t\t\tAck: &gestalt.HTTPAck{\n\t\t\t\t\tStatus: 200,\n\t\t\t\t\tBody: map[string]any{\n\t\t\t\t\t\t\"response_type\": \"ephemeral\",\n\t\t\t\t\t\t\"text\":          \"Working on it...\",\n\t\t\t\t\t},\n\t\t\t\t},\n\t\t\t},\n\t\t},\n\t})\n)"
+	updated := strings.Replace(string(data), old, new, 1)
+	if updated == string(data) {
+		t.Fatalf("provider fixture %s missing router terminator %q", providerPath, old)
+	}
+	if err := os.WriteFile(providerPath, []byte(updated), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", providerPath, err)
+	}
 }
 
 func rustProviderFixturePath(t *testing.T) string {
@@ -3105,12 +3348,13 @@ func copyFixtureTree(t *testing.T, src, dst string) {
 }
 
 type fakeRustCargoConfig struct {
-	ExpectedPluginName   string
-	ExpectedServeExport  string
-	ExpectedCatalogWrite bool
-	GeneratedCatalog     string
-	DelegateBinary       string
-	AllowedTargets       []string
+	ExpectedPluginName        string
+	ExpectedServeExport       string
+	ExpectedCatalogWrite      bool
+	GeneratedCatalog          string
+	GeneratedManifestMetadata string
+	DelegateBinary            string
+	AllowedTargets            []string
 }
 
 func writeFakeRustReleaseCargo(t *testing.T, path string, cfg fakeRustCargoConfig) {
@@ -3186,13 +3430,26 @@ mkdir -p "$(dirname "$binary")"
 cat > "$binary" <<'EOF'
 #!/bin/sh
 set -eu
-if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
+if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ] || [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
+  if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
   cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'YAML'
 name: ` + cfg.GeneratedCatalog + `
 operations:
   - id: greet
     method: GET
 YAML
+  fi
+` + func() string {
+		if strings.TrimSpace(cfg.GeneratedManifestMetadata) == "" {
+			return ""
+		}
+		return `  if [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
+  cat > "$GESTALT_PLUGIN_WRITE_MANIFEST_METADATA" <<'YAML'
+` + cfg.GeneratedManifestMetadata + `
+YAML
+  fi
+`
+	}() + `
   exit 0
 fi
 exec ` + shellSingleQuoted(cfg.DelegateBinary) + ` "$@"

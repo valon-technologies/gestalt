@@ -4,16 +4,12 @@ The handwritten helpers in this module build and serialize catalog documents
 around the generated ``Catalog`` protobuf messages exported by :mod:`gestalt`.
 """
 
-import dataclasses
 import pathlib
 from collections.abc import Mapping
-from dataclasses import MISSING
 from typing import (
     Any,
     Iterable,
     Protocol,
-    get_origin,
-    get_type_hints,
     runtime_checkable,
 )
 
@@ -21,8 +17,9 @@ import yaml
 from google.protobuf import json_format
 from google.protobuf import struct_pb2 as _struct_pb2
 
-from ._api import FIELD_DESCRIPTION_KEY, FIELD_REQUIRED_KEY, Request
-from ._operations import OperationDefinition, is_optional_type, strip_optional
+from ._api import Request
+from ._catalog_helpers import catalog_parameters
+from ._operations import OperationDefinition
 from .gen.v1 import plugin_pb2 as _plugin_pb2
 
 plugin_pb2: Any = _plugin_pb2
@@ -118,44 +115,19 @@ def _catalog_operation(operation: OperationDefinition) -> CatalogOperation:
 
 
 def _catalog_parameters(input_type: Any) -> list[CatalogParameter]:
-    if input_type is None:
-        return []
-
-    input_type = strip_optional(input_type)
-    origin = get_origin(input_type)
-    if origin is not None:
-        input_type = origin
-
-    if not dataclasses.is_dataclass(input_type):
-        return []
-
-    type_hints = get_type_hints(input_type)
     parameters: list[CatalogParameter] = []
-    for field_definition in dataclasses.fields(input_type):
-        annotation = type_hints.get(field_definition.name, field_definition.type)
+    for parameter in catalog_parameters(input_type):
         param = CatalogParameter(
-            name=field_definition.name,
-            type=_catalog_type(annotation),
+            name=parameter.name,
+            type=parameter.type,
         )
-
-        description = str(
-            field_definition.metadata.get(FIELD_DESCRIPTION_KEY, "")
-        ).strip()
-        required = field_definition.metadata.get(FIELD_REQUIRED_KEY)
-        if required is None:
-            required = (
-                field_definition.default is MISSING
-                and field_definition.default_factory is MISSING
-                and not is_optional_type(annotation)
-            )
-
-        param.description = description
-        param.required = bool(required)
-        if field_definition.default is not MISSING:
+        param.description = parameter.description
+        param.required = parameter.required
+        if parameter.has_default:
             param.default.CopyFrom(
-                struct_pb2.Value(string_value=str(field_definition.default))
-                if isinstance(field_definition.default, str)
-                else _to_proto_value(field_definition.default)
+                struct_pb2.Value(string_value=str(parameter.default))
+                if isinstance(parameter.default, str)
+                else _to_proto_value(parameter.default)
             )
         parameters.append(param)
 
@@ -172,29 +144,6 @@ def _to_proto_value(value: Any) -> struct_pb2.Value:  # ty: ignore[unresolved-at
     if isinstance(value, str):
         return struct_pb2.Value(string_value=value)
     return struct_pb2.Value(string_value=str(value))
-
-
-def _catalog_type(annotation: Any) -> str:
-    actual_type = strip_optional(annotation)
-    origin = get_origin(actual_type)
-    if origin in (list, tuple, set):
-        return "array"
-    if origin is dict:
-        return "object"
-
-    if actual_type is str:
-        return "string"
-    if actual_type is bool:
-        return "boolean"
-    if actual_type is int:
-        return "integer"
-    if actual_type is float:
-        return "number"
-    if dataclasses.is_dataclass(actual_type):
-        return "object"
-    if actual_type in (dict, list, tuple, set):
-        return "object" if actual_type is dict else "array"
-    return "object"
 
 
 def _catalog_from_mapping(data: Mapping[str, Any]) -> Catalog:

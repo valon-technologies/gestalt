@@ -382,15 +382,19 @@ import importlib.abc
 import runpy
 import sys
 
-class _BlockGRPC(importlib.abc.MetaPathFinder):
+class _BlockRuntimeDeps(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         if fullname == "grpc" or fullname.startswith("grpc."):
             error = ModuleNotFoundError("No module named 'grpc'")
             error.name = "grpc"
             raise error
+        if fullname == "google" or fullname.startswith("google."):
+            error = ModuleNotFoundError("No module named 'google'")
+            error.name = "google"
+            raise error
         return None
 
-sys.meta_path.insert(0, _BlockGRPC())
+sys.meta_path.insert(0, _BlockRuntimeDeps())
 
 if len(sys.argv) < 3 or sys.argv[1] != "-m":
     raise SystemExit("unsupported invocation")
