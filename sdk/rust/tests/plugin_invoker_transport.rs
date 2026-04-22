@@ -12,10 +12,13 @@ use gestalt::proto::v1::{
     ExchangeInvocationTokenRequest, ExchangeInvocationTokenResponse, OperationResult,
     PluginInvocationGrant, PluginInvokeGraphQlRequest, PluginInvokeRequest,
 };
-use gestalt::{ENV_PLUGIN_INVOKER_SOCKET, InvocationGrant, InvokeOptions, PluginInvoker, Request};
+use gestalt::{
+    ENV_PLUGIN_INVOKER_SOCKET, ENV_PLUGIN_INVOKER_SOCKET_TOKEN, InvocationGrant, InvokeOptions,
+    PluginInvoker, Request,
+};
 use prost_types::Struct;
-use tokio::net::UnixListener;
-use tokio_stream::wrappers::UnixListenerStream;
+use tokio::net::{TcpListener, UnixListener};
+use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::codegen::async_trait;
 use tonic::transport::Server;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
@@ -52,6 +55,7 @@ struct TestPluginInvokerServer {
     seen_invokes: Arc<Mutex<Vec<SeenRequest>>>,
     seen_graphql_invokes: Arc<Mutex<Vec<SeenGraphQlRequest>>>,
     seen_exchanges: Arc<Mutex<Vec<SeenExchangeRequest>>>,
+    seen_relay_tokens: Arc<Mutex<Vec<String>>>,
 }
 
 #[async_trait]
@@ -79,7 +83,18 @@ impl ProtoPluginInvoker for TestPluginInvokerServer {
         &self,
         request: GrpcRequest<PluginInvokeRequest>,
     ) -> std::result::Result<GrpcResponse<OperationResult>, Status> {
+        let relay_tokens = request
+            .metadata()
+            .get_all("x-gestalt-host-service-relay-token")
+            .iter()
+            .filter_map(|value| value.to_str().ok())
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
         let request = request.into_inner();
+        self.seen_relay_tokens
+            .lock()
+            .expect("lock seen relay tokens")
+            .extend(relay_tokens);
         self.seen_invokes
             .lock()
             .expect("lock seen invokes")
@@ -248,6 +263,47 @@ async fn request_invoker_uses_embedded_invocation_token() {
     assert_eq!(seen[0].operation, "search_issues");
     assert_eq!(seen[0].connection, "");
     assert_eq!(seen[0].instance, "");
+
+    serve_task.abort();
+    let _ = serve_task.await;
+}
+
+#[tokio::test]
+async fn plugin_invoker_connects_over_tcp_and_forwards_relay_token() {
+    let _env_lock = helpers::env_lock().lock().await;
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind tcp listener");
+    let address = listener.local_addr().expect("local addr");
+    let _socket_guard =
+        helpers::EnvGuard::set(ENV_PLUGIN_INVOKER_SOCKET, format!("tcp://{address}"));
+    let _token_guard = helpers::EnvGuard::set(ENV_PLUGIN_INVOKER_SOCKET_TOKEN, "relay-token-rust");
+
+    let server = TestPluginInvokerServer::default();
+    let serve_server = server.clone();
+    let serve_task = tokio::spawn(async move {
+        Server::builder()
+            .add_service(PluginInvokerServer::new(serve_server))
+            .serve_with_incoming(TcpListenerStream::new(listener))
+            .await
+            .expect("serve plugin invoker over tcp");
+    });
+
+    let mut invoker = PluginInvoker::connect("tcp-token-123")
+        .await
+        .expect("connect invoker");
+    let response = invoker
+        .invoke("github", "plain_text", serde_json::json!({}), None)
+        .await
+        .expect("invoke nested operation");
+
+    assert_eq!(response.status, 207);
+    let seen_tokens = server
+        .seen_relay_tokens
+        .lock()
+        .expect("lock seen relay tokens")
+        .clone();
+    assert_eq!(seen_tokens, vec!["relay-token-rust".to_string()]);
 
     serve_task.abort();
     let _ = serve_task.await;

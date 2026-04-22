@@ -1,5 +1,6 @@
 import { mkdtempSync } from "node:fs";
 import { createServer } from "node:http2";
+import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,6 +16,7 @@ import {
 } from "../gen/v1/plugin_pb.ts";
 import {
   ENV_PLUGIN_INVOKER_SOCKET,
+  ENV_PLUGIN_INVOKER_SOCKET_TOKEN,
   PluginInvoker,
   request,
 } from "../src/index.ts";
@@ -312,6 +314,103 @@ test("PluginInvoker prioritizes invocation-token validation over socket configur
       delete process.env[ENV_PLUGIN_INVOKER_SOCKET];
     } else {
       process.env[ENV_PLUGIN_INVOKER_SOCKET] = previousSocket;
+    }
+  }
+});
+
+async function reserveTCPAddress(): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const server = createNetServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close();
+        reject(new Error("failed to reserve tcp address"));
+        return;
+      }
+      const result = `${address.address}:${address.port}`;
+      server.close((err) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(result);
+      });
+    });
+  });
+}
+
+test("PluginInvoker honors tcp target env and relay token env", async () => {
+  const previousSocket = process.env[ENV_PLUGIN_INVOKER_SOCKET];
+  const previousToken = process.env[ENV_PLUGIN_INVOKER_SOCKET_TOKEN];
+  const seenTokens: string[] = [];
+  const address = await reserveTCPAddress();
+
+  const handler = connectNodeAdapter({
+    grpc: true,
+    grpcWeb: false,
+    connect: false,
+    routes(router) {
+      router.service(PluginInvokerService, {
+        async invoke(input) {
+          return create(OperationResultSchema, {
+            status: 204,
+            body: JSON.stringify({
+              invocationToken: input.invocationToken,
+              plugin: input.plugin,
+              operation: input.operation,
+            }),
+          });
+        },
+      } satisfies Partial<ServiceImpl<typeof PluginInvokerService>>);
+    },
+  });
+  const server = createServer((req, res) => {
+    const tokenHeader = req.headers["x-gestalt-host-service-relay-token"];
+    if (typeof tokenHeader === "string") {
+      seenTokens.push(tokenHeader);
+    }
+    handler(req, res);
+  });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(Number(address.split(":").at(-1)), "127.0.0.1", () => {
+        server.off("error", reject);
+        resolve();
+      });
+    });
+
+    process.env[ENV_PLUGIN_INVOKER_SOCKET] = `tcp://${address}`;
+    process.env[ENV_PLUGIN_INVOKER_SOCKET_TOKEN] = "relay-token-typescript";
+
+    const invoker = new PluginInvoker("invoke-token");
+    const response = await invoker.invoke("github", "get_issue");
+
+    expect(response.status).toBe(204);
+    expect(JSON.parse(response.body)).toEqual({
+      invocationToken: "invoke-token",
+      plugin: "github",
+      operation: "get_issue",
+    });
+    expect(seenTokens).toEqual(["relay-token-typescript"]);
+  } finally {
+    if (previousSocket === undefined) {
+      delete process.env[ENV_PLUGIN_INVOKER_SOCKET];
+    } else {
+      process.env[ENV_PLUGIN_INVOKER_SOCKET] = previousSocket;
+    }
+    if (previousToken === undefined) {
+      delete process.env[ENV_PLUGIN_INVOKER_SOCKET_TOKEN];
+    } else {
+      process.env[ENV_PLUGIN_INVOKER_SOCKET_TOKEN] = previousToken;
+    }
+    if (server.listening) {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
     }
   }
 });

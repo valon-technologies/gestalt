@@ -330,9 +330,17 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 						{Name: "value", Type: "string", Required: true},
 					},
 				},
+				{
+					ID:     "invoke_plugin",
+					Method: http.MethodPost,
+					Parameters: []catalog.CatalogParameter{
+						{Name: "plugin", Type: "string", Required: true},
+						{Name: "operation", Type: "string", Required: true},
+					},
+				},
 			},
 		},
-		ExecuteFn: func(_ context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
+		ExecuteFn: func(ctx context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
 			switch operation {
 			case "read_env":
 				name, _ := params["name"].(string)
@@ -355,6 +363,23 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 					return nil, err
 				}
 				body, err := json.Marshal(record)
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			case "invoke_plugin":
+				targetPlugin, _ := params["plugin"].(string)
+				targetOperation, _ := params["operation"].(string)
+				envelope, err := fakeHostedInvokePlugin(targetPlugin, targetOperation, providerhost.InvocationTokenFromContext(ctx), env)
+				if err != nil {
+					envelope = invokePluginEnvelope{
+						OK:              false,
+						TargetPlugin:    targetPlugin,
+						TargetOperation: targetOperation,
+						Error:           err.Error(),
+					}
+				}
+				body, err := json.Marshal(envelope)
 				if err != nil {
 					return nil, err
 				}
@@ -453,6 +478,59 @@ func fakeHostedIndexedDBRoundTrip(store, id, value, binding string, env map[stri
 		return nil, fmt.Errorf("decode record: %w", err)
 	}
 	return record, nil
+}
+
+func fakeHostedInvokePlugin(targetPlugin, targetOperation, invocationToken string, env map[string]string) (invokePluginEnvelope, error) {
+	envelope := invokePluginEnvelope{
+		OK:              false,
+		TargetPlugin:    targetPlugin,
+		TargetOperation: targetOperation,
+	}
+	target := strings.TrimSpace(env[providerhost.DefaultPluginInvokerSocketEnv])
+	if target == "" {
+		return envelope, fmt.Errorf("missing plugin invoker relay target in %s", providerhost.DefaultPluginInvokerSocketEnv)
+	}
+	token := strings.TrimSpace(env[providerhost.PluginInvokerSocketTokenEnv()])
+	if token == "" {
+		return envelope, fmt.Errorf("missing plugin invoker relay token in %s", providerhost.PluginInvokerSocketTokenEnv())
+	}
+	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
+	if address == "" || address == target {
+		return envelope, fmt.Errorf("unsupported plugin invoker relay target %q", target)
+	}
+
+	conn, err := grpc.NewClient(
+		address,
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true,
+			MinVersion:         tls.VersionTLS12,
+			NextProtos:         []string{"h2"},
+		})),
+	)
+	if err != nil {
+		return envelope, fmt.Errorf("connect plugin invoker relay: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+
+	resp, err := proto.NewPluginInvokerClient(conn).Invoke(ctx, &proto.PluginInvokeRequest{
+		InvocationToken: invocationToken,
+		Plugin:          targetPlugin,
+		Operation:       targetOperation,
+	})
+	if err != nil {
+		return envelope, err
+	}
+
+	envelope.OK = true
+	envelope.Status = int(resp.GetStatus())
+	if err := json.Unmarshal([]byte(resp.GetBody()), &envelope.Body); err != nil {
+		return envelope, fmt.Errorf("decode nested invoke body: %w", err)
+	}
+	return envelope, nil
 }
 
 func (r *capturingBundlePluginRuntime) startPluginRequestsCopy() []pluginruntime.StartPluginRequest {
@@ -4379,14 +4457,18 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceTunnelCapability(t *testing
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				Runtime:              &config.PluginRuntimeConfig{},
-				Invokes: []config.PluginInvocationDependency{
-					{Plugin: "other", Operation: "read"},
-				},
+				Cache:                []string{"session"},
 			},
 		},
 	}
 
 	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
+		CacheDefs: map[string]*config.ProviderEntry{
+			"session": {Config: mustNode(t, map[string]any{"namespace": "session"})},
+		},
+		CacheFactory: func(yaml.Node) (corecache.Cache, error) {
+			return coretesting.NewStubCache(), nil
+		},
 		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	})
 	if err == nil || !strings.Contains(err.Error(), "host service tunnels") {
@@ -4628,6 +4710,189 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 	bindRequests := runtimeProvider.bindHostServiceRequests()
 	if len(bindRequests) != 1 {
 		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
+	}
+	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
+		t.Fatalf("BindHostService relay target = %q, want tls relay target", got)
+	}
+}
+
+func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	relaySrv.EnableHTTP2 = true
+	relaySrv.StartTLS()
+	testutil.CloseOnCleanup(t, relaySrv)
+
+	callerBin := buildEchoPluginBinary(t)
+	callerRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "caller",
+		Operations: []catalog.CatalogOperation{
+			{ID: "invoke_plugin", Method: http.MethodPost},
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	exampleBin := buildExampleProviderBinary(t)
+	exampleRoot := exampleProviderRoot(t)
+	callerManifest := newExecutableManifest("Caller", "Invokes another plugin")
+	callerManifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
+		"default": {
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+		},
+	}
+	exampleManifest := newExecutableManifest("Example Provider", "Reports request context")
+	exampleManifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
+		"default": {
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+		},
+	}
+
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
+
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+
+	bridge := newLazyInvoker()
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {Driver: config.RuntimeProviderDriver("capture")},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"caller": {
+				Command:              callerBin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     callerManifest,
+				ResolvedManifestPath: filepath.Join(callerRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+				Invokes: []config.PluginInvocationDependency{
+					{Plugin: "example", Operation: "request_context"},
+				},
+			},
+			"example": {
+				Command:              exampleBin,
+				ResolvedManifest:     exampleManifest,
+				ResolvedManifestPath: filepath.Join(exampleRoot, "manifest.yaml"),
+				Invokes: []config.PluginInvocationDependency{
+					{Plugin: "example", Operation: "request_context"},
+				},
+				Config: mustNode(t, map[string]any{
+					"greeting": "Hello from relay invoke",
+				}),
+			},
+		},
+	}
+
+	deps := Deps{
+		BaseURL:       relaySrv.URL,
+		EncryptionKey: secret,
+		PluginInvoker: bridge,
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	enc, err := corecrypto.NewAESGCM(corecrypto.DeriveKey("plugin-invokes-test-key"))
+	if err != nil {
+		t.Fatalf("NewAESGCM: %v", err)
+	}
+	services, err := coredata.New(&coretesting.StubIndexedDB{}, enc)
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	t.Cleanup(func() { _ = services.Close() })
+
+	broker := invocation.NewBroker(providers, services.Users, services.Tokens)
+	guarded := invocation.NewGuarded(broker, nil, "plugin", nil, invocation.WithoutRateLimit())
+	bridge.SetTarget(guarded)
+	harness := &nestedInvokeHarness{
+		invoker:  invocation.NewGuarded(broker, nil, "test", nil, invocation.WithoutRateLimit()),
+		services: services,
+	}
+
+	ctx := context.Background()
+	user := newNestedInvokeUser(t, harness, ctx, "nested-runtime-relay@test.com")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "default")
+
+	result, err := harness.invoker.Invoke(
+		invocation.WithConnection(context.Background(), "work"),
+		&principal.Principal{
+			UserID:      user.ID,
+			Kind:        principal.KindUser,
+			Source:      principal.SourceSession,
+			DisplayName: "Runtime Relay",
+			Scopes:      []string{"caller", "example"},
+		},
+		"caller",
+		"default",
+		"invoke_plugin",
+		map[string]any{
+			"plugin":    "example",
+			"operation": "request_context",
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+
+	var got invokePluginEnvelope
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if !got.OK {
+		t.Fatalf("invoke_plugin returned error envelope: %+v", got)
+	}
+	if got.TargetPlugin != "example" || got.TargetOperation != "request_context" {
+		t.Fatalf("unexpected target: %+v", got)
+	}
+	if got.Status != http.StatusOK {
+		t.Fatalf("nested status = %d, want %d", got.Status, http.StatusOK)
+	}
+	if got.Body.Credential.Connection != "work" {
+		t.Fatalf("nested credential.connection = %q, want %q", got.Body.Credential.Connection, "work")
+	}
+	if got.Body.Credential.Instance != "default" {
+		t.Fatalf("nested credential.instance = %q, want %q", got.Body.Credential.Instance, "default")
+	}
+
+	relayURL, err := url.Parse(relaySrv.URL)
+	if err != nil {
+		t.Fatalf("url.Parse(relay URL): %v", err)
+	}
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env[providerhost.PluginInvokerSocketTokenEnv()]; got == "" {
+		t.Fatal("StartPlugin env should include the plugin invoker relay token")
+	}
+	if !slices.Contains(startRequests[0].AllowedHosts, relayURL.Hostname()) {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host %q", startRequests[0].AllowedHosts, relayURL.Hostname())
+	}
+	bindRequests := runtimeProvider.bindHostServiceRequests()
+	if len(bindRequests) != 1 {
+		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
+	}
+	if bindRequests[0].EnvVar != providerhost.DefaultPluginInvokerSocketEnv {
+		t.Fatalf("BindHostService env = %q, want %q", bindRequests[0].EnvVar, providerhost.DefaultPluginInvokerSocketEnv)
 	}
 	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "tls://") {
 		t.Fatalf("BindHostService relay target = %q, want tls relay target", got)

@@ -1,13 +1,13 @@
-import { connect } from "node:net";
-
 import type { JsonObject, JsonValue } from "@bufbuild/protobuf";
-import { createClient, type Client } from "@connectrpc/connect";
+import { createClient, type Client, type Interceptor } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import { PluginInvoker as PluginInvokerService } from "../gen/v1/plugin_pb.ts";
 import type { OperationResult, Request } from "./api.ts";
 
 export const ENV_PLUGIN_INVOKER_SOCKET = "GESTALT_PLUGIN_INVOKER_SOCKET";
+export const ENV_PLUGIN_INVOKER_SOCKET_TOKEN = `${ENV_PLUGIN_INVOKER_SOCKET}_TOKEN`;
+const PLUGIN_INVOKER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
 export interface PluginInvokeOptions {
   connection?: string;
@@ -38,12 +38,11 @@ export class PluginInvoker {
     if (!socketPath) {
       throw new Error(`plugin invoker: ${ENV_PLUGIN_INVOKER_SOCKET} is not set`);
     }
+    const relayToken = process.env[ENV_PLUGIN_INVOKER_SOCKET_TOKEN]?.trim() ?? "";
 
     const transport = createGrpcTransport({
-      baseUrl: "http://localhost",
-      nodeOptions: {
-        createConnection: () => connect(socketPath),
-      },
+      ...pluginInvokerTransportOptions(socketPath),
+      interceptors: relayToken ? [pluginInvokerRelayTokenInterceptor(relayToken)] : [],
     });
     this.client = createClient(PluginInvokerService, transport);
   }
@@ -116,6 +115,49 @@ export class PluginInvoker {
     });
     return response.invocationToken;
   }
+}
+
+function pluginInvokerTransportOptions(rawTarget: string): {
+  baseUrl: string;
+  nodeOptions?: { path: string };
+} {
+  const target = rawTarget.trim();
+  if (!target) {
+    throw new Error("plugin invoker: transport target is required");
+  }
+  if (target.startsWith("tcp://")) {
+    const address = target.slice("tcp://".length).trim();
+    if (!address) {
+      throw new Error(`plugin invoker: tcp target ${JSON.stringify(rawTarget)} is missing host:port`);
+    }
+    return { baseUrl: `http://${address}` };
+  }
+  if (target.startsWith("tls://")) {
+    const address = target.slice("tls://".length).trim();
+    if (!address) {
+      throw new Error(`plugin invoker: tls target ${JSON.stringify(rawTarget)} is missing host:port`);
+    }
+    return { baseUrl: `https://${address}` };
+  }
+  if (target.startsWith("unix://")) {
+    const socketPath = target.slice("unix://".length).trim();
+    if (!socketPath) {
+      throw new Error(`plugin invoker: unix target ${JSON.stringify(rawTarget)} is missing a socket path`);
+    }
+    return { baseUrl: "http://localhost", nodeOptions: { path: socketPath } };
+  }
+  if (target.includes("://")) {
+    const parsed = new URL(target);
+    throw new Error(`plugin invoker: unsupported target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`);
+  }
+  return { baseUrl: "http://localhost", nodeOptions: { path: target } };
+}
+
+function pluginInvokerRelayTokenInterceptor(token: string): Interceptor {
+  return (next) => async (req) => {
+    req.header.set(PLUGIN_INVOKER_RELAY_TOKEN_HEADER, token);
+    return next(req);
+  };
 }
 
 function normalizeInvocationToken(requestOrToken: Request | string): string {
