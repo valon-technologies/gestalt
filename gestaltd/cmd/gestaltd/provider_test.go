@@ -2868,6 +2868,7 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 
 	if manifest == nil || manifest.Spec == nil {
 		t.Fatalf("manifest = %+v, want populated spec", manifest)
+		return
 	}
 
 	scheme := manifest.Spec.SecuritySchemes["signed"]
@@ -2880,6 +2881,7 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 	}
 	if scheme.Secret == nil || scheme.Secret.Env != "REQUEST_SIGNING_SECRET" {
 		t.Fatalf("scheme.Secret = %+v, want env-backed secret", scheme.Secret)
+		return
 	}
 	if scheme.SignatureHeader != "X-Request-Signature" {
 		t.Fatalf("scheme.SignatureHeader = %q, want %q", scheme.SignatureHeader, "X-Request-Signature")
