@@ -56,7 +56,7 @@ func resolveCredentialBinding(authz authorization.RuntimeAuthorizer, p *principa
 		Instance:            strings.TrimSpace(binding.Instance),
 	}
 
-	if enforceRequested && authz.IsWorkload(p) {
+	if enforceRequested && principal.IsWorkloadPrincipal(p) {
 		if connection != "" && connection != resolved.Connection {
 			return CredentialBindingResolution{}, bindingSelectorOverrideError()
 		}

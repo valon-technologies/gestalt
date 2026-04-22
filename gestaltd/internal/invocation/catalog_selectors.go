@@ -90,5 +90,5 @@ func (cfg CatalogSelectorConfig) WorkloadBindingSelectors(p *principal.Principal
 }
 
 func (cfg CatalogSelectorConfig) isWorkload(p *principal.Principal) bool {
-	return cfg.Authorizer != nil && cfg.Authorizer.IsWorkload(p)
+	return cfg.Authorizer != nil && principal.IsWorkloadPrincipal(p)
 }

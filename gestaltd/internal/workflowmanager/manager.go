@@ -737,7 +737,7 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 	if instance != "" && !config.SafeInstanceValue(instance) {
 		return coreworkflow.Target{}, fmt.Errorf("instance name contains invalid characters")
 	}
-	if m.authorizer != nil && m.authorizer.IsWorkload(p) && (connection != "" || instance != "") {
+	if m.authorizer != nil && principal.IsWorkloadPrincipal(p) && (connection != "" || instance != "") {
 		return coreworkflow.Target{}, fmt.Errorf("%w: workloads may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
 	}
 
