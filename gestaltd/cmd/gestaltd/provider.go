@@ -475,7 +475,7 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 		return nil, fmt.Errorf("manifest is required")
 	}
 
-	runtime, err := releaseRuntimeMetadata(manifest)
+	runtime, err := releaseRuntimeMetadata(manifest, archives)
 	if err != nil {
 		return nil, err
 	}
@@ -511,7 +511,7 @@ func providerReleaseArtifactTarget(manifest *providermanifestv1.Manifest, archiv
 	return providerpkg.PlatformString(archive.Platform.GOOS, archive.Platform.GOARCH)
 }
 
-func releaseRuntimeMetadata(manifest *providermanifestv1.Manifest) (string, error) {
+func releaseRuntimeMetadata(manifest *providermanifestv1.Manifest, archives []releaseArchive) (string, error) {
 	kind, err := providerpkg.ManifestKind(manifest)
 	if err != nil {
 		return "", err
@@ -519,6 +519,9 @@ func releaseRuntimeMetadata(manifest *providermanifestv1.Manifest) (string, erro
 
 	switch kind {
 	case providermanifestv1.KindPlugin:
+		if releaseIncludesBuiltPluginArtifact(archives) {
+			return providerReleaseRuntimeKindExecutable, nil
+		}
 		if manifest.IsDeclarativeOnlyProvider() {
 			return providerReleaseRuntimeKindDeclarative, nil
 		}
@@ -528,6 +531,15 @@ func releaseRuntimeMetadata(manifest *providermanifestv1.Manifest) (string, erro
 	default:
 		return providerReleaseRuntimeKindExecutable, nil
 	}
+}
+
+func releaseIncludesBuiltPluginArtifact(archives []releaseArchive) bool {
+	for _, archive := range archives {
+		if archive.Platform != nil {
+			return true
+		}
+	}
+	return false
 }
 func validateReleaseOutputDir(manifest *providermanifestv1.Manifest, sourceDir, outputDir string) error {
 	if manifest == nil || manifest.Spec == nil || manifest.Spec.AssetRoot == "" {
