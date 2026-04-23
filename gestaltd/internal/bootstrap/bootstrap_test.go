@@ -2030,6 +2030,101 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 	}
 }
 
+func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.IndexedDB["agent_state"] = &config.ProviderEntry{Source: config.ProviderSource{Path: "stub"}}
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"simple": {
+			Source: config.ProviderSource{Path: "stub"},
+			IndexedDB: &config.PluginIndexedDBConfig{
+				Provider:     "agent_state",
+				DB:           "agent_simple",
+				ObjectStores: []string{"runs"},
+			},
+		},
+	}
+
+	factories := validFactories()
+	var (
+		boundDB      *trackedIndexedDB
+		hostServices []providerhost.HostService
+	)
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) {
+		boundDB = &trackedIndexedDB{StubIndexedDB: &coretesting.StubIndexedDB{}}
+		return boundDB, nil
+	}
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, services []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		hostServices = append([]providerhost.HostService(nil), services...)
+		return &stubAgentProvider{}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(hostServices) != 2 {
+		t.Fatalf("agent host services = %d, want 2", len(hostServices))
+	}
+	if hostServices[0].EnvVar != providerhost.DefaultAgentHostSocketEnv {
+		t.Fatalf("agent host env = %q, want %q", hostServices[0].EnvVar, providerhost.DefaultAgentHostSocketEnv)
+	}
+	if hostServices[1].EnvVar != providerhost.DefaultIndexedDBSocketEnv {
+		t.Fatalf("agent indexeddb env = %q, want %q", hostServices[1].EnvVar, providerhost.DefaultIndexedDBSocketEnv)
+	}
+
+	withIndexedDBHostClient(t, hostServices[1], func(client proto.IndexedDBClient) {
+		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
+			Name:   "runs",
+			Schema: &proto.ObjectStoreSchema{},
+		}); err != nil {
+			t.Fatalf("CreateObjectStore(runs): %v", err)
+		}
+		record, err := gestalt.RecordToProto(gestalt.Record{"id": "run-1", "status": "running"})
+		if err != nil {
+			t.Fatalf("RecordToProto: %v", err)
+		}
+		if _, err := client.Put(context.Background(), &proto.RecordRequest{
+			Store:  "runs",
+			Record: record,
+		}); err != nil {
+			t.Fatalf("Put(runs): %v", err)
+		}
+		resp, err := client.Get(context.Background(), &proto.ObjectStoreRequest{
+			Store: "runs",
+			Id:    "run-1",
+		})
+		if err != nil {
+			t.Fatalf("Get(runs): %v", err)
+		}
+		got, err := gestalt.RecordFromProto(resp.GetRecord())
+		if err != nil {
+			t.Fatalf("RecordFromProto: %v", err)
+		}
+		if got["status"] != "running" {
+			t.Fatalf("status = %#v, want %q", got["status"], "running")
+		}
+
+		if _, err := client.CreateObjectStore(context.Background(), &proto.CreateObjectStoreRequest{
+			Name:   "sessions",
+			Schema: &proto.ObjectStoreSchema{},
+		}); err == nil {
+			t.Fatal("CreateObjectStore(sessions) succeeded, want allowlist failure")
+		}
+	})
+
+	if _, err := boundDB.ObjectStore("agent_simple_runs").Get(context.Background(), "run-1"); err != nil {
+		t.Fatalf("prefixed backing store should contain run: %v", err)
+	}
+	if _, err := boundDB.ObjectStore("runs").Get(context.Background(), "run-1"); err == nil {
+		t.Fatal("unprefixed backing store should remain empty")
+	}
+}
+
 func TestBootstrapPassesIndexedDBHostSocketsToAuthorizationProviders(t *testing.T) {
 	t.Parallel()
 

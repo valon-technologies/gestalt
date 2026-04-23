@@ -120,6 +120,14 @@ type EffectiveWorkflowIndexedDB struct {
 	ObjectStores []string
 }
 
+type EffectiveAgentIndexedDB struct {
+	Enabled      bool
+	ProviderName string
+	Provider     *ProviderEntry
+	DB           string
+	ObjectStores []string
+}
+
 type EffectivePluginRuntime struct {
 	Enabled      bool
 	ProviderName string
@@ -169,6 +177,10 @@ func (c *Config) EffectiveAgentProvider(providerName string) (string, *ProviderE
 
 func (c *Config) EffectiveWorkflowIndexedDB(name string, entry *ProviderEntry) (EffectiveWorkflowIndexedDB, error) {
 	return ResolveEffectiveWorkflowIndexedDB(name, entry, c.Providers.IndexedDB)
+}
+
+func (c *Config) EffectiveAgentIndexedDB(name string, entry *ProviderEntry) (EffectiveAgentIndexedDB, error) {
+	return ResolveEffectiveAgentIndexedDB(name, entry, c.Providers.IndexedDB)
 }
 
 func (c *Config) EffectivePluginRuntime(pluginName string, entry *ProviderEntry) (EffectivePluginRuntime, error) {
@@ -243,6 +255,35 @@ func ResolveEffectiveWorkflowIndexedDB(name string, entry *ProviderEntry, entrie
 	}
 
 	return EffectiveWorkflowIndexedDB{
+		Enabled:      true,
+		ProviderName: providerName,
+		Provider:     provider,
+		DB:           dbName,
+		ObjectStores: slices.Clone(entry.IndexedDB.ObjectStores),
+	}, nil
+}
+
+func ResolveEffectiveAgentIndexedDB(name string, entry *ProviderEntry, entries map[string]*ProviderEntry) (EffectiveAgentIndexedDB, error) {
+	if entry == nil || entry.IndexedDB == nil {
+		return EffectiveAgentIndexedDB{}, nil
+	}
+
+	providerName := strings.TrimSpace(entry.IndexedDB.Provider)
+	if providerName == "" {
+		return EffectiveAgentIndexedDB{}, fmt.Errorf("config validation: providers.agent.%s.indexeddb.provider is required", name)
+	}
+
+	provider, ok := entries[providerName]
+	if !ok || provider == nil {
+		return EffectiveAgentIndexedDB{}, fmt.Errorf("config validation: providers.agent.%s.indexeddb.provider references unknown indexeddb %q", name, providerName)
+	}
+
+	dbName := strings.TrimSpace(entry.IndexedDB.DB)
+	if dbName == "" {
+		dbName = name
+	}
+
+	return EffectiveAgentIndexedDB{
 		Enabled:      true,
 		ProviderName: providerName,
 		Provider:     provider,

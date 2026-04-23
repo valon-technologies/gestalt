@@ -1436,6 +1436,29 @@ func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveW
 	}, nil
 }
 
+func buildAgentIndexedDBHostServices(name string, effective config.EffectiveAgentIndexedDB, deps Deps) ([]providerhost.HostService, func(), error) {
+	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
+		return nil, nil, fmt.Errorf("indexeddb host services are not available")
+	}
+
+	ds, err := buildAgentScopedIndexedDB(name, effective, deps)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	hostServices := []providerhost.HostService{{
+		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, name, providerhost.IndexedDBServerOptions{
+				AllowedStores: effective.ObjectStores,
+			}))
+		},
+	}}
+	return hostServices, func() {
+		_ = closeIndexedDBs(ds)
+	}, nil
+}
+
 func buildPluginWorkflowManagerHostService(pluginName string, deps Deps, tokens *providerhost.InvocationTokenManager) providerhost.HostService {
 	manager := deps.WorkflowManager
 	if manager == nil {
@@ -1602,6 +1625,15 @@ func buildPluginScopedIndexedDB(pluginName string, effective config.EffectivePlu
 }
 
 func buildWorkflowScopedIndexedDB(name string, effective config.EffectiveWorkflowIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {
+	return buildScopedIndexedDB(scopedIndexedDBBuildOptions{
+		MetricsName:   name,
+		ProviderName:  effective.ProviderName,
+		DB:            effective.DB,
+		AllowedStores: effective.ObjectStores,
+	}, deps)
+}
+
+func buildAgentScopedIndexedDB(name string, effective config.EffectiveAgentIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {
 	return buildScopedIndexedDB(scopedIndexedDBBuildOptions{
 		MetricsName:   name,
 		ProviderName:  effective.ProviderName,

@@ -554,6 +554,12 @@ providers:
     openai:
       source: ./providers/agent/openai/manifest.yaml
       default: true
+      indexeddb:
+        provider: default
+        db: agent_openai
+        objectStores:
+          - runs
+          - run_idempotency
       config:
         model: gpt-5.4
         apiKey:
@@ -574,9 +580,9 @@ providers:
 Agent providers receive neutral run requests with `messages`, optional tools,
 optional structured-output schema, and optional `sessionRef`. The same
 provider pool is used by the global agent runs API/CLI and by plugins that use
-the host agent manager surface. In V1 there is no standardized storage binding
-for agent providers, so provider-owned persistence should be declared in the
-provider's own `config`.
+the host agent manager surface. Providers that need durable state can opt into
+a host IndexedDB binding with `indexeddb` and use the SDK IndexedDB helper
+against `GESTALT_INDEXEDDB_SOCKET`.
 
 See [Agent](/providers/agent) for the provider model and
 [Custom Providers > Agent](/custom-providers/agent) if you need to implement

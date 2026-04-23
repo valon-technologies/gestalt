@@ -38,6 +38,12 @@ providers:
     openai:
       source: ./providers/agent/openai/manifest.yaml
       default: true
+      indexeddb:
+        provider: default
+        db: agent_openai
+        objectStores:
+          - runs
+          - run_idempotency
       config:
         model: gpt-5.4
         baseURL: https://api.openai.com/v1
@@ -58,6 +64,11 @@ providers:
 
 If exactly one agent provider is configured, or one is marked `default: true`,
 then run requests may omit `provider`.
+
+If an agent provider needs durable state, configure `indexeddb` on that
+provider entry. Gestalt exposes the selected store to the provider process as
+the standard SDK `GESTALT_INDEXEDDB_SOCKET`; the provider still owns its run
+record schema and object-store names.
 
 ## Request shape
 
@@ -84,10 +95,6 @@ The neutral agent run shape is intentionally small:
   "sessionRef": "session-123"
 }
 ```
-
-In V1 there is no standardized host IndexedDB or general storage binding for
-agent providers. If a backend needs durable state, define that in the
-provider's own `config` schema.
 
 ## First-party agent providers
 
