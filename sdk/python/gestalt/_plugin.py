@@ -16,8 +16,9 @@ from typing import TYPE_CHECKING, Any, Final
 
 import yaml
 
-from ._api import Request
+from ._api import Request, Subject
 from ._catalog_helpers import catalog_parameters
+from ._http_subject import HTTPSubjectRequest, clone_http_subject_request
 from ._manifest_metadata import (
     HTTPBinding,
     HTTPSecurityScheme,
@@ -100,6 +101,7 @@ class Plugin:
         self._configure_handler: Any = None
         self._session_catalog_handler: tuple[Any, bool] | None = None
         self._post_connect_handler: tuple[Any, bool] | None = None
+        self._http_subject_handler: tuple[Any, bool] | None = None
         self._security_schemes = copy.deepcopy(
             dict(
                 security_schemes
@@ -158,6 +160,12 @@ class Plugin:
         """Register a connect-time metadata hook."""
 
         self._post_connect_handler = (func, _inspect_post_connect_handler(func))
+        return func
+
+    def http_subject(self, func: Any) -> Any:
+        """Register a hosted HTTP subject-resolution hook."""
+
+        self._http_subject_handler = (func, _inspect_http_subject_handler(func))
         return func
 
     def operation(
@@ -281,6 +289,11 @@ class Plugin:
 
         return self._resolve_post_connect_handler() is not None
 
+    def supports_http_subject(self) -> bool:
+        """Report whether the plugin exposes a hosted HTTP subject hook."""
+
+        return self._resolve_http_subject_handler() is not None
+
     def catalog_for_request(self, request: Request) -> Catalog | dict[str, Any] | None:
         """Return a per-request catalog if the plugin defines one."""
 
@@ -304,6 +317,24 @@ class Plugin:
         if takes_token:
             return run_sync(handler(token))
         return run_sync(handler())
+
+    def resolve_http_subject(
+        self,
+        request: HTTPSubjectRequest,
+        context: Request,
+    ) -> Subject | None:
+        """Resolve an incoming hosted HTTP request to a Gestalt subject."""
+
+        definition = self._resolve_http_subject_handler()
+        if definition is None:
+            return None
+
+        handler, takes_context = definition
+        copied_request = clone_http_subject_request(request)
+        copied_context = copy.deepcopy(context)
+        if takes_context:
+            return run_sync(handler(copied_request, copied_context))
+        return run_sync(handler(copied_request))
 
     def serve(self) -> None:
         """Start the integration runtime for this plugin."""
@@ -351,6 +382,7 @@ class Plugin:
     def _resolve_post_connect_handler(self) -> tuple[Any, bool] | None:
         if self._post_connect_handler is not None:
             return self._post_connect_handler
+
         if not self._module_name:
             return None
 
@@ -359,12 +391,36 @@ class Plugin:
             return None
 
         post_connect = getattr(module, "post_connect", None)
-        if callable(post_connect) and getattr(post_connect, "__module__", None) == module.__name__:
+        if (
+            callable(post_connect)
+            and getattr(post_connect, "__module__", None) == module.__name__
+        ):
             self._post_connect_handler = (
                 post_connect,
                 _inspect_post_connect_handler(post_connect),
             )
         return self._post_connect_handler
+
+    def _resolve_http_subject_handler(self) -> tuple[Any, bool] | None:
+        if self._http_subject_handler is not None:
+            return self._http_subject_handler
+        if not self._module_name:
+            return None
+
+        module = sys.modules.get(self._module_name)
+        if module is None:
+            return None
+
+        http_subject = getattr(module, "resolve_http_subject", None)
+        if (
+            callable(http_subject)
+            and getattr(http_subject, "__module__", None) == module.__name__
+        ):
+            self._http_subject_handler = (
+                http_subject,
+                _inspect_http_subject_handler(http_subject),
+            )
+        return self._http_subject_handler
 
 
 class _ModulePluginRegistry:
@@ -470,6 +526,18 @@ def post_connect(func: Any | None = None, /) -> Any:
     return decorator(func)
 
 
+def http_subject(func: Any | None = None, /) -> Any:
+    """Register a hosted HTTP subject hook on the implicit module plugin."""
+
+    def decorator(handler: Any) -> Any:
+        plugin = _MODULE_PLUGINS.for_function(handler)
+        return plugin.http_subject(handler)
+
+    if func is None:
+        return decorator
+    return decorator(func)
+
+
 def _module_plugin(module: types.ModuleType) -> "Plugin":
     return _MODULE_PLUGINS.for_module(module)
 
@@ -522,6 +590,33 @@ def _inspect_post_connect_handler(func: Any) -> bool:
     return True
 
 
+def _inspect_http_subject_handler(func: Any) -> bool:
+    signature = inspect.signature(func)
+    parameters = list(signature.parameters.values())
+    type_hints = inspect.get_annotations(func, eval_str=True)
+
+    if len(parameters) not in (1, 2):
+        raise TypeError(
+            "http subject handlers must declare request and optional context parameters"
+        )
+
+    request_annotation = type_hints.get(parameters[0].name, parameters[0].annotation)
+    if request_annotation not in (inspect.Signature.empty, HTTPSubjectRequest):
+        raise TypeError(
+            "http subject handler request parameter must be annotated as "
+            "gestalt.HTTPSubjectRequest"
+        )
+
+    if len(parameters) == 1:
+        return False
+
+    context_annotation = type_hints.get(parameters[1].name, parameters[1].annotation)
+    if context_annotation not in (inspect.Signature.empty, Request):
+        raise TypeError(
+            "http subject handler context parameter must be annotated as "
+            "gestalt.Request"
+        )
+    return True
 def _catalog_operation_dict(operation: OperationDefinition) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "id": operation.id,
