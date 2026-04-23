@@ -66,11 +66,11 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 }
 
 func (p *executableProvider) Support(ctx context.Context) (Support, error) {
-	resp, err := p.runtime.GetCapabilities(ctx, &emptypb.Empty{})
+	resp, err := p.runtime.GetSupport(ctx, &emptypb.Empty{})
 	if err != nil {
 		return Support{}, fmt.Errorf("get runtime support: %w", err)
 	}
-	return supportFromProtoResponse(resp), nil
+	return supportFromProto(resp), nil
 }
 
 func (p *executableProvider) StartSession(ctx context.Context, req StartSessionRequest) (*Session, error) {
@@ -214,13 +214,6 @@ func (p *executableProvider) Close() error {
 	p.sessions = nil
 	p.mu.Unlock()
 	return p.proc.Close()
-}
-
-func supportFromProtoResponse(src *proto.GetPluginRuntimeCapabilitiesResponse) Support {
-	if src == nil {
-		return Support{}
-	}
-	return supportFromProto(src.GetSupport())
 }
 
 func supportFromProto(src *proto.PluginRuntimeSupport) Support {

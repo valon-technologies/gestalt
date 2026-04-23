@@ -67,7 +67,7 @@ The runtime surface is intentionally small but lifecycle-oriented:
 
 | Method | Purpose |
 | --- | --- |
-| `GetCapabilities` | Advertise grouped runtime support for this backend. |
+| `GetSupport` | Advertise grouped runtime support for this backend. |
 | `StartSession` | Create a hosted runtime session for a plugin. |
 | `GetSession` | Report session status so Gestalt can wait for readiness. |
 | `StopSession` | Tear a session down on shutdown or bootstrap failure. |
@@ -98,17 +98,15 @@ func (p *Provider) Configure(context.Context, string, map[string]any) error {
 	return nil
 }
 
-func (p *Provider) GetCapabilities(context.Context, *emptypb.Empty) (*proto.GetPluginRuntimeCapabilitiesResponse, error) {
-	return &proto.GetPluginRuntimeCapabilitiesResponse{
-		Support: &proto.PluginRuntimeSupport{
-			CanHostPlugins:   true,
-			HostServiceAccess: proto.PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT,
-			EgressMode:        proto.PluginRuntimeEgressMode_PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME,
-			LaunchMode:        proto.PluginRuntimeLaunchMode_PLUGIN_RUNTIME_LAUNCH_MODE_BUNDLE,
-			ExecutionTarget: &proto.PluginRuntimeExecutionTarget{
-				Goos:   "linux",
-				Goarch: "amd64",
-			},
+func (p *Provider) GetSupport(context.Context, *emptypb.Empty) (*proto.PluginRuntimeSupport, error) {
+	return &proto.PluginRuntimeSupport{
+		CanHostPlugins:    true,
+		HostServiceAccess: proto.PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT,
+		EgressMode:        proto.PluginRuntimeEgressMode_PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME,
+		LaunchMode:        proto.PluginRuntimeLaunchMode_PLUGIN_RUNTIME_LAUNCH_MODE_BUNDLE,
+		ExecutionTarget: &proto.PluginRuntimeExecutionTarget{
+			Goos:   "linux",
+			Goarch: "amd64",
 		},
 	}, nil
 }
