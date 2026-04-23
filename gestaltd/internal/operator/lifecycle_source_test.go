@@ -919,6 +919,174 @@ func TestSourceWorkflowMetadataURLInitAndLockedLoad(t *testing.T) {
 	}
 }
 
+func TestSourceExternalCredentialsMetadataURLInitAndLockedLoad(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	packageSource := "github.com/acme/tools/external-credentials-runner"
+	version := "1.4.2"
+	archivePath := buildExecutableArchive(t, dir, "external-credentials-src", packageSource, version, providermanifestv1.KindExternalCredentials, "external-credentials-runner", "metadata-external-credentials-binary")
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read external credentials archive: %v", err)
+	}
+	archiveSHA := sha256.Sum256(archiveData)
+
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	handlerErrs := make(chan error, 4)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+
+	metadataPath := "/providers/external-credentials/provider-release.yaml"
+	archivePathURL := "/providers/external-credentials/external-credentials-runner.tar.gz"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case metadataPath:
+			metadataCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
+				return
+			}
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       packageSource,
+				Kind:          providermanifestv1.KindExternalCredentials,
+				Version:       version,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   filepath.Base(archivePathURL),
+						SHA256: hex.EncodeToString(archiveSHA[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case archivePathURL:
+			archiveCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("archive authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad archive authorization", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(archiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	configYAML := "apiVersion: " + config.APIVersionV3 + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"  externalCredentials:",
+		"    runner:",
+		"      source:",
+		"        url: " + srv.URL + metadataPath,
+		"        auth:",
+		"          token: test-token",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"    externalCredentials: runner",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle()
+	lock, err := lc.InitAtPath(configPath)
+	if err == nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+
+	entry, ok := lock.ExternalCredentials["runner"]
+	if !ok {
+		t.Fatal(`lock.ExternalCredentials["runner"] not found`)
+	}
+	if entry.Package != packageSource {
+		t.Fatalf("entry.Package = %q, want %q", entry.Package, packageSource)
+	}
+	if entry.Kind != providermanifestv1.KindExternalCredentials {
+		t.Fatalf("entry.Kind = %q, want %q", entry.Kind, providermanifestv1.KindExternalCredentials)
+	}
+	if entry.Runtime != providerReleaseRuntimeExecutable {
+		t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerReleaseRuntimeExecutable)
+	}
+	if entry.Version != version {
+		t.Fatalf("entry.Version = %q, want %q", entry.Version, version)
+	}
+	if got := metadataCount.Load(); got != 1 {
+		t.Fatalf("metadata request count = %d, want 1", got)
+	}
+	if got := archiveCount.Load(); got != 1 {
+		t.Fatalf("archive request count = %d, want 1", got)
+	}
+
+	externalCredentialsRoot := filepath.Join(artifactsDir, filepath.FromSlash(PreparedExternalCredentialsDir), "runner")
+	if err := os.RemoveAll(externalCredentialsRoot); err != nil {
+		t.Fatalf("RemoveAll external credentials root: %v", err)
+	}
+
+	metadataBefore := metadataCount.Load()
+	archiveBefore := archiveCount.Load()
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err == nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := metadataCount.Load(); got != metadataBefore {
+		t.Fatalf("metadata request count during locked load = %d, want %d", got, metadataBefore)
+	}
+	if got := archiveCount.Load() - archiveBefore; got != 1 {
+		t.Fatalf("archive request count during locked load = %d, want 1", got)
+	}
+	externalCredentials := cfg.Providers.ExternalCredentials["runner"]
+	if externalCredentials == nil || externalCredentials.ResolvedManifest == nil {
+		t.Fatalf("external credentials resolved manifest = %+v", externalCredentials)
+	}
+	if got := externalCredentials.ResolvedManifest.Kind; got != providermanifestv1.KindExternalCredentials {
+		t.Fatalf("external credentials manifest kind = %q, want %q", got, providermanifestv1.KindExternalCredentials)
+	}
+	if got := externalCredentials.Command; got != resolveLockPath(artifactsDir, entry.Executable) {
+		t.Fatalf("external credentials command = %q, want %q", got, resolveLockPath(artifactsDir, entry.Executable))
+	}
+}
+
 func TestSourceUIMetadataURLInitAndLockedLoad(t *testing.T) {
 	t.Parallel()
 

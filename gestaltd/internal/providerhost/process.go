@@ -380,7 +380,7 @@ func (p *providerProcess) Close() error {
 			}
 		}
 		for _, hostSrv := range p.hostSrvs {
-			hostSrv.Stop()
+			stopGRPCServer(hostSrv, hostServiceShutdownTimeout)
 		}
 		for _, hostLis := range p.hostLiss {
 			if err := hostLis.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
@@ -449,7 +449,7 @@ func cleanupStartupHostServices(proc *providerProcess) {
 		return
 	}
 	for _, hostSrv := range proc.hostSrvs {
-		hostSrv.Stop()
+		stopGRPCServer(hostSrv, hostServiceShutdownTimeout)
 	}
 	for _, hostLis := range proc.hostLiss {
 		if hostLis == nil {

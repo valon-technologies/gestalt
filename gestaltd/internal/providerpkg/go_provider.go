@@ -200,6 +200,12 @@ func detectSourceComponent(root, kind, goos, goarch string) (sourceKind string, 
 		}
 		return "", "", ErrNoSourceComponentPackage
 	}
+	if kind == providermanifestv1.KindExternalCredentials {
+		if goToolUnavailable != nil {
+			return "", "", goToolUnavailable
+		}
+		return "", "", ErrNoSourceComponentPackage
+	}
 
 	if _, err := detectRustPackage(root); err == nil {
 		return sourceProviderKindRust, "", nil
@@ -492,7 +498,7 @@ func slugPluginName(value string) string {
 func validateSourceComponentKind(kind string) error {
 	kind = providermanifestv1.NormalizeKind(kind)
 	switch kind {
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 		return nil
 	default:
 		return fmt.Errorf("unsupported source component kind %q", kind)
@@ -506,6 +512,8 @@ func componentServeCall(kind string) (string, error) {
 		return "gestalt.ServeAuthenticationProvider(ctx, providerpkg.New())", nil
 	case providermanifestv1.KindAuthorization:
 		return "gestalt.ServeAuthorizationProvider(ctx, providerpkg.New())", nil
+	case providermanifestv1.KindExternalCredentials:
+		return "gestalt.ServeExternalCredentialProvider(ctx, providerpkg.New())", nil
 	case providermanifestv1.KindIndexedDB:
 		return "gestalt.ServeIndexedDBProvider(ctx, providerpkg.New())", nil
 	case providermanifestv1.KindCache:

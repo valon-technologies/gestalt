@@ -428,6 +428,193 @@ func (p *Provider) PublishEvent(context.Context, *proto.PublishWorkflowProviderE
 `
 }
 
+func GeneratedExternalCredentialPackageSource() string {
+	return `package externalcredential
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"sort"
+	"sync"
+
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+type Provider struct {
+	mu          sync.Mutex
+	credentials map[string]*gestalt.ExternalCredential
+	lookupByID  map[string]string
+}
+
+func New() *Provider {
+	return &Provider{
+		credentials: map[string]*gestalt.ExternalCredential{},
+		lookupByID:  map[string]string{},
+	}
+}
+
+func (p *Provider) Configure(context.Context, string, map[string]any) error { return nil }
+
+func (p *Provider) Metadata() gestalt.ProviderMetadata {
+	return gestalt.ProviderMetadata{
+		Kind:        gestalt.ProviderKindExternalCredential,
+		Name:        "generated-external-credentials",
+		DisplayName: "Generated External Credentials",
+	}
+}
+
+func (p *Provider) UpsertCredential(ctx context.Context, req *gestalt.UpsertExternalCredentialRequest) (*gestalt.ExternalCredential, error) {
+	if client, ok, err := externalCredentialHostClient(); err != nil {
+		return nil, err
+	} else if ok {
+		defer func() { _ = client.Close() }()
+		return client.UpsertCredential(ctx, req)
+	}
+	if req == nil || req.GetCredential() == nil {
+		return nil, fmt.Errorf("credential is required")
+	}
+
+	value := cloneExternalCredential(req.GetCredential())
+	key := externalCredentialLookupKey(value.GetSubjectId(), value.GetIntegration(), value.GetConnection(), value.GetInstance())
+	now := timestamppb.Now()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if existing := p.credentials[key]; existing != nil {
+		value.Id = existing.GetId()
+		if value.GetCreatedAt() == nil {
+			value.CreatedAt = existing.GetCreatedAt()
+		}
+	} else {
+		if value.GetId() == "" {
+			value.Id = "cred-" + value.GetIntegration() + "-" + value.GetConnection() + "-" + value.GetInstance()
+		}
+		if value.GetCreatedAt() == nil {
+			value.CreatedAt = now
+		}
+	}
+	if value.GetUpdatedAt() == nil {
+		value.UpdatedAt = now
+	}
+
+	p.credentials[key] = cloneExternalCredential(value)
+	p.lookupByID[value.GetId()] = key
+	return cloneExternalCredential(value), nil
+}
+
+func (p *Provider) GetCredential(ctx context.Context, req *gestalt.GetExternalCredentialRequest) (*gestalt.ExternalCredential, error) {
+	if client, ok, err := externalCredentialHostClient(); err != nil {
+		return nil, err
+	} else if ok {
+		defer func() { _ = client.Close() }()
+		return client.GetCredential(ctx, req)
+	}
+	if req == nil || req.GetLookup() == nil {
+		return nil, fmt.Errorf("lookup is required")
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	value, ok := p.credentials[externalCredentialLookupKey(
+		req.GetLookup().GetSubjectId(),
+		req.GetLookup().GetIntegration(),
+		req.GetLookup().GetConnection(),
+		req.GetLookup().GetInstance(),
+	)]
+	if !ok {
+		return nil, gestalt.ErrExternalCredentialNotFound
+	}
+	return cloneExternalCredential(value), nil
+}
+
+func (p *Provider) ListCredentials(ctx context.Context, req *gestalt.ListExternalCredentialsRequest) (*gestalt.ListExternalCredentialsResponse, error) {
+	if client, ok, err := externalCredentialHostClient(); err != nil {
+		return nil, err
+	} else if ok {
+		defer func() { _ = client.Close() }()
+		return client.ListCredentials(ctx, req)
+	}
+	if req == nil {
+		return nil, fmt.Errorf("request is required")
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	credentials := make([]*gestalt.ExternalCredential, 0, len(p.credentials))
+	for _, value := range p.credentials {
+		if req.GetSubjectId() != "" && value.GetSubjectId() != req.GetSubjectId() {
+			continue
+		}
+		if req.GetIntegration() != "" && value.GetIntegration() != req.GetIntegration() {
+			continue
+		}
+		if req.GetConnection() != "" && value.GetConnection() != req.GetConnection() {
+			continue
+		}
+		if req.GetInstance() != "" && value.GetInstance() != req.GetInstance() {
+			continue
+		}
+		credentials = append(credentials, cloneExternalCredential(value))
+	}
+	sort.Slice(credentials, func(i, j int) bool {
+		return credentials[i].GetId() < credentials[j].GetId()
+	})
+	return &gestalt.ListExternalCredentialsResponse{Credentials: credentials}, nil
+}
+
+func (p *Provider) DeleteCredential(ctx context.Context, req *gestalt.DeleteExternalCredentialRequest) error {
+	if client, ok, err := externalCredentialHostClient(); err != nil {
+		return err
+	} else if ok {
+		defer func() { _ = client.Close() }()
+		return client.DeleteCredential(ctx, req)
+	}
+	if req == nil || req.GetId() == "" {
+		return fmt.Errorf("credential id is required")
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	key, ok := p.lookupByID[req.GetId()]
+	if !ok {
+		return gestalt.ErrExternalCredentialNotFound
+	}
+	delete(p.lookupByID, req.GetId())
+	delete(p.credentials, key)
+	return nil
+}
+
+func cloneExternalCredential(src *gestalt.ExternalCredential) *gestalt.ExternalCredential {
+	if src == nil {
+		return nil
+	}
+	value := *src
+	return &value
+}
+
+func externalCredentialLookupKey(subjectID, integration, connection, instance string) string {
+	return subjectID + "\x00" + integration + "\x00" + connection + "\x00" + instance
+}
+
+func externalCredentialHostClient() (*gestalt.ExternalCredentialClient, bool, error) {
+	if os.Getenv(gestalt.EnvExternalCredentialSocket) == "" {
+		return nil, false, nil
+	}
+	client, err := gestalt.ExternalCredentials()
+	if err != nil {
+		return nil, false, err
+	}
+	return client, true, nil
+}
+`
+}
+
 func GeneratedCachePackageSource() string {
 	return `package cache
 

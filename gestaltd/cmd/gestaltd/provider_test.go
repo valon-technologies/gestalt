@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -16,14 +17,19 @@ import (
 	"testing"
 	"time"
 
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/session"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1203,6 +1209,136 @@ func TestRun_ProviderReleaseBuildsGoSourceWorkflowPlugin(t *testing.T) {
 	}
 	if workflowArtifact.Path != archiveName || workflowArtifact.SHA256 != workflowDigest {
 		t.Fatalf("release metadata workflow artifact = %+v, want path %q sha %q", workflowArtifact, archiveName, workflowDigest)
+	}
+}
+
+func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T) {
+	t.Parallel()
+
+	const externalCredentialReleasePluginName = "external-credentials-release"
+	const externalCredentialReleaseSource = "github.com/testowner/providers/external-credentials-release"
+	const externalCredentialReleaseSchemaPath = "external-credentials.schema.json"
+
+	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
+		pluginName: externalCredentialReleasePluginName,
+		schemaPath: externalCredentialReleaseSchemaPath,
+		sourceFile: "external_credentials.go",
+		sourceCode: testutil.GeneratedExternalCredentialPackageSource(),
+		manifest: &providermanifestv1.Manifest{
+			Kind:   providermanifestv1.KindExternalCredentials,
+			Source: externalCredentialReleaseSource, Version: "0.0.1", DisplayName: "External Credentials Release",
+			Spec: &providermanifestv1.Spec{ConfigSchemaPath: externalCredentialReleaseSchemaPath},
+		},
+	})
+	outputDir := t.TempDir()
+	const testVersion = "0.0.21-test"
+
+	runProviderReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := platformArchiveNameForTest(externalCredentialReleasePluginName, testVersion, runtime.GOOS, runtime.GOARCH)
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	binaryName := releaseBinaryName(externalCredentialReleasePluginName, runtime.GOOS)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	assertExpectedGoArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
+	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != binaryName {
+		t.Fatalf("external credentials entrypoint = %+v, want artifact path %q", manifest.Entrypoint, binaryName)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, externalCredentialReleaseSchemaPath)); err != nil {
+		t.Fatalf("expected %s in archive: %v", externalCredentialReleaseSchemaPath, err)
+	}
+
+	enc, err := corecrypto.NewAESGCM([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	if err != nil {
+		t.Fatalf("NewAESGCM: %v", err)
+	}
+	services, err := coredata.New(&coretesting.StubIndexedDB{}, enc)
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+
+	provider, err := providerhost.NewExecutableExternalCredentialProvider(context.Background(), providerhost.ExternalCredentialsExecConfig{
+		Command: filepath.Join(extractDir, binaryName),
+		Name:    externalCredentialReleasePluginName,
+		HostServices: []providerhost.HostService{{
+			Name:   "external-credentials",
+			EnvVar: providerhost.DefaultExternalCredentialSocketEnv,
+			Register: func(srv *grpc.Server) {
+				proto.RegisterExternalCredentialProviderServer(srv, providerhost.NewExternalCredentialProviderServer(services.Tokens))
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableExternalCredentialProvider: %v", err)
+	}
+	defer func() {
+		if closer, ok := provider.(interface{ Close() error }); ok {
+			_ = closer.Close()
+		}
+	}()
+
+	credential := &core.ExternalCredential{
+		SubjectID:    "user:user-123",
+		Integration:  "slack",
+		Connection:   "default",
+		Instance:     "workspace-1",
+		AccessToken:  "xoxb-123",
+		RefreshToken: "refresh-123",
+		Scopes:       "channels:read chat:write",
+	}
+	if err := provider.PutCredential(context.Background(), credential); err != nil {
+		t.Fatalf("PutCredential: %v", err)
+	}
+	if credential.ID == "" {
+		t.Fatal("PutCredential returned empty credential id")
+	}
+	if credential.CreatedAt.IsZero() || credential.UpdatedAt.IsZero() {
+		t.Fatalf("credential timestamps = created_at:%v updated_at:%v", credential.CreatedAt, credential.UpdatedAt)
+	}
+	raw, err := services.DB.ObjectStore(coredata.StoreIntegrationTokens).Get(context.Background(), credential.ID)
+	if err != nil {
+		t.Fatalf("stored credential raw Get: %v", err)
+	}
+	if got, _ := raw["access_token_encrypted"].(string); got == "" {
+		t.Fatalf("access_token_encrypted = %q, want non-empty ciphertext", got)
+	}
+	if got, _ := raw["refresh_token_encrypted"].(string); got == "" {
+		t.Fatalf("refresh_token_encrypted = %q, want non-empty ciphertext", got)
+	}
+	if _, ok := raw["access_token"]; ok {
+		t.Fatalf("raw record should not store plaintext access_token: %+v", raw)
+	}
+
+	got, err := provider.GetCredential(context.Background(), credential.SubjectID, credential.Integration, credential.Connection, credential.Instance)
+	if err != nil {
+		t.Fatalf("GetCredential: %v", err)
+	}
+	if got.AccessToken != credential.AccessToken || got.RefreshToken != credential.RefreshToken {
+		t.Fatalf("credential tokens = access:%q refresh:%q", got.AccessToken, got.RefreshToken)
+	}
+
+	listed, err := provider.ListCredentialsForConnection(context.Background(), credential.SubjectID, credential.Integration, credential.Connection)
+	if err != nil {
+		t.Fatalf("ListCredentialsForConnection: %v", err)
+	}
+	if len(listed) != 1 || listed[0].ID != credential.ID {
+		t.Fatalf("listed credentials = %+v", listed)
+	}
+
+	if err := provider.DeleteCredential(context.Background(), credential.ID); err != nil {
+		t.Fatalf("DeleteCredential: %v", err)
+	}
+
+	_, err = provider.GetCredential(context.Background(), credential.SubjectID, credential.Integration, credential.Connection, credential.Instance)
+	if !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("GetCredential after delete error = %v, want core.ErrNotFound", err)
 	}
 }
 

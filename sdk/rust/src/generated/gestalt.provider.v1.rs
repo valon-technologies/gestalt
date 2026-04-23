@@ -3625,6 +3625,7 @@ pub enum ProviderKind {
     Authorization = 9,
     Runtime = 10,
     Agent = 11,
+    ExternalCredential = 12,
 }
 impl ProviderKind {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3645,6 +3646,7 @@ impl ProviderKind {
             Self::Authorization => "PROVIDER_KIND_AUTHORIZATION",
             Self::Runtime => "PROVIDER_KIND_RUNTIME",
             Self::Agent => "PROVIDER_KIND_AGENT",
+            Self::ExternalCredential => "PROVIDER_KIND_EXTERNAL_CREDENTIAL",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3662,6 +3664,7 @@ impl ProviderKind {
             "PROVIDER_KIND_AUTHORIZATION" => Some(Self::Authorization),
             "PROVIDER_KIND_RUNTIME" => Some(Self::Runtime),
             "PROVIDER_KIND_AGENT" => Some(Self::Agent),
+            "PROVIDER_KIND_EXTERNAL_CREDENTIAL" => Some(Self::ExternalCredential),
             _ => None,
         }
     }

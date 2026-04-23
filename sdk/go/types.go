@@ -35,6 +35,8 @@ const (
 	ProviderKindWorkflow ProviderKind = "workflow"
 	// ProviderKindAgent serves the agent run surface.
 	ProviderKindAgent ProviderKind = "agent"
+	// ProviderKindExternalCredential serves the external-credential surface.
+	ProviderKindExternalCredential ProviderKind = "external_credential"
 	// ProviderKindRuntime serves hosted executable-plugin runtime management.
 	ProviderKindRuntime ProviderKind = "runtime"
 )
