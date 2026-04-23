@@ -2887,13 +2887,36 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 					Default: true,
 				},
 				{
-					Name:   "modal",
-					Driver: config.RuntimeProviderDriver("modal"),
-					Loaded: true,
+					Name:               "modal",
+					Driver:             config.RuntimeProviderDriver("modal"),
+					Loaded:             true,
+					CapabilitiesLoaded: true,
 					Capabilities: pluginruntime.Capabilities{
 						HostedPluginRuntime: true,
 						ProviderGRPCTunnel:  true,
 						CIDREgress:          true,
+						ExecutionGOOS:       "linux",
+						ExecutionGOARCH:     "amd64",
+					},
+					AdvertisedProfile: bootstrap.RuntimeProfile{
+						HostedExecution: true,
+						HostServiceMode: bootstrap.RuntimeHostServiceModeNone,
+						EgressMode:      bootstrap.RuntimeEgressModeCIDR,
+						LaunchMode:      bootstrap.RuntimeLaunchModeBundle,
+						ExecutionTarget: bootstrap.RuntimeExecutionTarget{
+							GOOS:   "linux",
+							GOARCH: "amd64",
+						},
+					},
+					EffectiveProfile: bootstrap.RuntimeProfile{
+						HostedExecution: true,
+						HostServiceMode: bootstrap.RuntimeHostServiceModeRelay,
+						EgressMode:      bootstrap.RuntimeEgressModeCIDR,
+						LaunchMode:      bootstrap.RuntimeLaunchModeBundle,
+						ExecutionTarget: bootstrap.RuntimeExecutionTarget{
+							GOOS:   "linux",
+							GOARCH: "amd64",
+						},
 					},
 					Sessions: []pluginruntime.Session{{
 						ID:    "session-1",
@@ -2953,6 +2976,28 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 	}
 	if caps["hostedPluginRuntime"] != true || caps["providerGRPCTunnel"] != true || caps["cidrEgress"] != true {
 		t.Fatalf("runtime providers[1].capabilities = %#v", caps)
+	}
+	profile, ok := providers[1]["profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime providers[1].profile = %#v, want object", providers[1]["profile"])
+	}
+	advertised, ok := profile["advertised"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime providers[1].profile.advertised = %#v, want object", profile["advertised"])
+	}
+	effective, ok := profile["effective"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime providers[1].profile.effective = %#v, want object", profile["effective"])
+	}
+	if advertised["hostedExecution"] != true || advertised["hostServiceAccess"] != "none" || advertised["egressMode"] != "cidr" || advertised["launchMode"] != "bundle" {
+		t.Fatalf("runtime providers[1].profile.advertised = %#v", advertised)
+	}
+	if effective["hostedExecution"] != true || effective["hostServiceAccess"] != "relay" || effective["egressMode"] != "cidr" || effective["launchMode"] != "bundle" {
+		t.Fatalf("runtime providers[1].profile.effective = %#v", effective)
+	}
+	executionTarget, ok := effective["executionTarget"].(map[string]any)
+	if !ok || executionTarget["goos"] != "linux" || executionTarget["goarch"] != "amd64" {
+		t.Fatalf("runtime providers[1].profile.effective.executionTarget = %#v", effective["executionTarget"])
 	}
 }
 
@@ -3044,6 +3089,9 @@ func TestAdminAPI_RuntimeProviderInspectionError(t *testing.T) {
 	if got := providers[0]["error"]; got != "capabilities: boom" {
 		t.Fatalf("runtime providers[0].error = %v, want capabilities: boom", got)
 	}
+	if _, ok := providers[0]["profile"]; ok {
+		t.Fatalf("runtime providers[0].profile unexpectedly present: %#v", providers[0]["profile"])
+	}
 	if _, ok := providers[0]["capabilities"]; ok {
 		t.Fatalf("runtime providers[0].capabilities unexpectedly present: %#v", providers[0]["capabilities"])
 	}
@@ -3059,6 +3107,78 @@ func TestAdminAPI_RuntimeProviderInspectionError(t *testing.T) {
 	if sessionsResp.StatusCode != http.StatusServiceUnavailable {
 		body, _ := io.ReadAll(sessionsResp.Body)
 		t.Fatalf("runtime provider sessions status = %d, want 503: %s", sessionsResp.StatusCode, body)
+	}
+}
+
+func TestAdminAPI_RuntimeProviderSessionInspectionErrorKeepsProfile(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.PluginRuntimes = &staticRuntimeInspector{
+			snapshots: []bootstrap.RuntimeProviderSnapshot{{
+				Name:               "modal",
+				Driver:             config.RuntimeProviderDriver("modal"),
+				Loaded:             true,
+				CapabilitiesLoaded: true,
+				Capabilities: pluginruntime.Capabilities{
+					HostedPluginRuntime: true,
+					ProviderGRPCTunnel:  true,
+					CIDREgress:          true,
+				},
+				AdvertisedProfile: bootstrap.RuntimeProfile{
+					HostedExecution: true,
+					HostServiceMode: bootstrap.RuntimeHostServiceModeNone,
+					EgressMode:      bootstrap.RuntimeEgressModeCIDR,
+					LaunchMode:      bootstrap.RuntimeLaunchModeBundle,
+				},
+				EffectiveProfile: bootstrap.RuntimeProfile{
+					HostedExecution: true,
+					HostServiceMode: bootstrap.RuntimeHostServiceModeRelay,
+					EgressMode:      bootstrap.RuntimeEgressModeCIDR,
+					LaunchMode:      bootstrap.RuntimeLaunchModeBundle,
+				},
+				Error: "list sessions: boom",
+			}},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/admin/api/v1/runtime/providers")
+	if err != nil {
+		t.Fatalf("GET runtime providers with session inspection error: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("runtime providers status = %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	var providers []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&providers); err != nil {
+		t.Fatalf("decoding runtime providers: %v", err)
+	}
+	if len(providers) != 1 {
+		t.Fatalf("runtime providers len = %d, want 1", len(providers))
+	}
+	if got := providers[0]["error"]; got != "list sessions: boom" {
+		t.Fatalf("runtime providers[0].error = %v, want list sessions: boom", got)
+	}
+	if _, ok := providers[0]["sessionCount"]; ok {
+		t.Fatalf("runtime providers[0].sessionCount unexpectedly present: %#v", providers[0]["sessionCount"])
+	}
+	if _, ok := providers[0]["capabilities"].(map[string]any); !ok {
+		t.Fatalf("runtime providers[0].capabilities = %#v, want object", providers[0]["capabilities"])
+	}
+	profile, ok := providers[0]["profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime providers[0].profile = %#v, want object", providers[0]["profile"])
+	}
+	effective, ok := profile["effective"].(map[string]any)
+	if !ok {
+		t.Fatalf("runtime providers[0].profile.effective = %#v, want object", profile["effective"])
+	}
+	if effective["hostServiceAccess"] != "relay" {
+		t.Fatalf("runtime providers[0].profile.effective = %#v, want relay host-service access", effective)
 	}
 }
 

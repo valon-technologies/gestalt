@@ -14,13 +14,16 @@ type RuntimeInspector interface {
 }
 
 type RuntimeProviderSnapshot struct {
-	Name         string
-	Driver       config.RuntimeProviderDriver
-	Default      bool
-	Loaded       bool
-	Capabilities pluginruntime.Capabilities
-	Sessions     []pluginruntime.Session
-	Error        string
+	Name               string
+	Driver             config.RuntimeProviderDriver
+	Default            bool
+	Loaded             bool
+	CapabilitiesLoaded bool
+	Capabilities       pluginruntime.Capabilities
+	AdvertisedProfile  RuntimeProfile
+	EffectiveProfile   RuntimeProfile
+	Sessions           []pluginruntime.Session
+	Error              string
 }
 
 func (r *pluginRuntimeRegistry) SnapshotPluginRuntimes(ctx context.Context) ([]RuntimeProviderSnapshot, error) {
@@ -78,6 +81,9 @@ func (r *pluginRuntimeRegistry) SnapshotPluginRuntimes(ctx context.Context) ([]R
 				continue
 			}
 			snapshot.Capabilities = caps
+			snapshot.CapabilitiesLoaded = true
+			snapshot.AdvertisedProfile = runtimeAdvertisedProfile(caps)
+			snapshot.EffectiveProfile = runtimeEffectiveProfile(snapshot.AdvertisedProfile, caps, r.deps)
 			sessions, err := item.provider.ListSessions(ctx)
 			if err != nil {
 				snapshot.Error = fmt.Sprintf("list sessions: %v", err)

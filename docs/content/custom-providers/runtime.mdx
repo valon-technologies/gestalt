@@ -11,18 +11,16 @@ they expose a control plane for starting and managing hosted plugins.
 
 ## What a runtime provider does
 
-A runtime provider answers questions like:
-
-- Can this backend host plugins at all?
-- Does it support host-service tunnels?
-- Can it preserve Gestalt's hostname-based egress model?
-- How does Gestalt create a session in this backend?
-- How does Gestalt inject host-local sockets into that session?
-- How does Gestalt start the hosted plugin and dial it back?
+A runtime provider answers a small set of control-plane questions for
+`gestaltd`. Can this backend host executable plugins at all. How does Gestalt
+create and observe a runtime session there. How does a hosted plugin reach
+Gestalt-owned services. How is hostname-based egress preserved. How does the
+host dial the hosted plugin back once it starts.
 
 It does **not** replace the host-local authentication, authorization,
 IndexedDB, cache, S3, secrets, or workflow providers. Those remain on the
-`gestaltd` host.
+`gestaltd` host. A runtime provider only changes where the plugin process runs
+and how the host reaches it.
 
 ## Manifest
 
@@ -155,31 +153,43 @@ func main() {
 
 ## Capability guidelines
 
-Advertise capabilities conservatively.
+Advertise capabilities conservatively. The host still receives the raw runtime
+capability flags, but it derives a higher-level runtime profile from them. That
+profile is what operators see in admin inspection, and it is what bootstrap
+uses to decide whether a hosted plugin can start safely on a given backend.
 
-- Only set `host_service_tunnels` if your backend can actually expose
-  host-managed socket bindings inside the runtime session.
-- Only set `hostname_proxy_egress` if you can preserve Gestalt's
-  hostname-based `allowedHosts` model.
-- Do not treat `cidr_egress` as equivalent to `hostname_proxy_egress`.
-- Only set `host_path_execution` if the backend can execute directly from the
-  host paths Gestalt provides. Otherwise Gestalt will stage a runtime bundle.
+In practice that means `host_service_tunnels` should only be true when your
+backend can really expose direct guest-local host-service sockets. If that flag
+is false, Gestalt may still derive an effective relay-backed host-service mode
+when `server.baseURL` and `server.encryptionKey` allow the public relay path.
 
-Gestalt validates these capabilities before it tries to launch a plugin. If
-they are wrong, operators will get either false rejections or late runtime
-failures.
+Likewise, `hostname_proxy_egress` is not just a firewall hint. It means the
+runtime can preserve Gestalt's hostname-based `allowedHosts` semantics. That
+preservation may happen inside the backend itself, or it may happen by routing
+hosted HTTP(S) traffic through Gestalt's public egress proxy. `cidr_egress`
+remains useful metadata, but it is not equivalent to hostname-based policy.
+
+`host_path_execution` should only be true when the backend can execute directly
+from the host paths Gestalt provides. Otherwise Gestalt will derive a bundle
+launch mode and stage a runtime bundle first. When bundle launch is required,
+`execution_goos` and `execution_goarch` must accurately describe the target
+platform so the host can choose or stage the right artifact.
+
+If these capabilities are wrong, operators will see either false compatibility
+rejections or late runtime failures. The safest rule is to advertise the
+smallest truthful surface and let Gestalt derive the rest.
 
 ## Sessions and host services
 
 The critical design point is that `StartPlugin` is **not** the whole runtime
-API. Gestalt needs an explicit session lifecycle because it may need to:
+API. Gestalt needs an explicit session lifecycle because it may need to create
+the session, wait until it is ready, bind host-local services into it, and only
+then start the plugin.
 
-1. create the session
-2. wait until it is ready
-3. bind host-local services into it
-4. then start the plugin
-
-That is why `BindHostService` exists separately from `StartPlugin`.
+That is why `BindHostService` exists separately from `StartPlugin`. A binding
+may be direct, using a guest-local socket path, or relay-backed, in which case
+the provider receives a public dial target and the hosted plugin talks back to
+`gestaltd` through the host-service relay.
 
 ## Dial targets
 
