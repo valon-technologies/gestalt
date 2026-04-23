@@ -91,18 +91,14 @@ type HostServiceRelay struct {
 type BindHostServiceRequest struct {
 	SessionID string
 	EnvVar    string
-	// Deprecated: use Relay instead.
-	HostSocketPath string
-	Relay          HostServiceRelay
+	Relay     HostServiceRelay
 }
 
 type HostServiceBinding struct {
 	ID        string
 	SessionID string
 	EnvVar    string
-	// Deprecated: use Relay instead.
-	SocketPath string
-	Relay      HostServiceRelay
+	Relay     HostServiceRelay
 }
 
 // StartPluginRequest describes the plugin process to launch inside a runtime

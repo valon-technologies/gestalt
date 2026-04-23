@@ -162,25 +162,19 @@ func (p *executableProvider) StopSession(ctx context.Context, req StopSessionReq
 
 func (p *executableProvider) BindHostService(ctx context.Context, req BindHostServiceRequest) (*HostServiceBinding, error) {
 	resp, err := p.runtime.BindHostService(ctx, &proto.BindPluginRuntimeHostServiceRequest{
-		SessionId:      req.SessionID,
-		EnvVar:         req.EnvVar,
-		HostSocketPath: req.HostSocketPath,
-		Relay:          hostServiceRelayToProto(req.Relay),
+		SessionId: req.SessionID,
+		EnvVar:    req.EnvVar,
+		Relay:     hostServiceRelayToProto(req.Relay),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bind runtime host service: %w", err)
 	}
 	relay := hostServiceRelayFromProto(resp.GetRelay())
-	socketPath := ""
-	if strings.HasPrefix(relay.DialTarget, "unix://") {
-		socketPath = strings.TrimPrefix(relay.DialTarget, "unix://")
-	}
 	return &HostServiceBinding{
-		ID:         resp.GetId(),
-		SessionID:  resp.GetSessionId(),
-		EnvVar:     resp.GetEnvVar(),
-		SocketPath: socketPath,
-		Relay:      relay,
+		ID:        resp.GetId(),
+		SessionID: resp.GetSessionId(),
+		EnvVar:    resp.GetEnvVar(),
+		Relay:     relay,
 	}, nil
 }
 
@@ -226,11 +220,7 @@ func supportFromProtoResponse(src *proto.GetPluginRuntimeCapabilitiesResponse) S
 	if src == nil {
 		return Support{}
 	}
-	if support := supportFromProto(src.GetSupport()); support != (Support{}) {
-		return support
-	}
-	//nolint:staticcheck // older runtime providers still populate the legacy field during the compatibility window
-	return supportFromLegacyCapabilities(src.Capabilities)
+	return supportFromProto(src.GetSupport())
 }
 
 func supportFromProto(src *proto.PluginRuntimeSupport) Support {
@@ -243,37 +233,6 @@ func supportFromProto(src *proto.PluginRuntimeSupport) Support {
 		EgressMode:        egressModeFromProto(src.GetEgressMode()),
 		LaunchMode:        launchModeFromProto(src.GetLaunchMode()),
 		ExecutionTarget:   executionTargetFromProto(src.GetExecutionTarget()),
-	}
-}
-
-func supportFromLegacyCapabilities(src *proto.PluginRuntimeCapabilities) Support {
-	if src == nil {
-		return Support{}
-	}
-	hostServiceAccess := HostServiceAccessNone
-	if src.GetHostServiceTunnels() {
-		hostServiceAccess = HostServiceAccessDirect
-	}
-	egressMode := EgressModeNone
-	switch {
-	case src.GetHostnameProxyEgress():
-		egressMode = EgressModeHostname
-	case src.GetCidrEgress():
-		egressMode = EgressModeCIDR
-	}
-	launchMode := LaunchModeBundle
-	if src.GetHostPathExecution() {
-		launchMode = LaunchModeHostPath
-	}
-	return Support{
-		CanHostPlugins:    src.GetHostedPluginRuntime() && src.GetProviderGrpcTunnel(),
-		HostServiceAccess: hostServiceAccess,
-		EgressMode:        egressMode,
-		LaunchMode:        launchMode,
-		ExecutionTarget: ExecutionTarget{
-			GOOS:   strings.TrimSpace(src.GetExecutionGoos()),
-			GOARCH: strings.TrimSpace(src.GetExecutionGoarch()),
-		},
 	}
 }
 

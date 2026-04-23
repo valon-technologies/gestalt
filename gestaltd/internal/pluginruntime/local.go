@@ -35,11 +35,10 @@ type localSession struct {
 }
 
 type localBinding struct {
-	id         string
-	envVar     string
-	envTarget  string
-	socketPath string
-	relay      HostServiceRelay
+	id        string
+	envVar    string
+	envTarget string
+	relay     HostServiceRelay
 }
 
 type localPlugin struct {
@@ -194,7 +193,7 @@ func (p *LocalProvider) BindHostService(_ context.Context, req BindHostServiceRe
 		return nil, fmt.Errorf("host service env var is required")
 	}
 
-	relay, envTarget, socketPath, err := normalizeHostServiceBinding(req)
+	relay, envTarget, err := normalizeHostServiceBinding(req)
 	if err != nil {
 		return nil, err
 	}
@@ -206,19 +205,17 @@ func (p *LocalProvider) BindHostService(_ context.Context, req BindHostServiceRe
 		return nil, err
 	}
 	binding := localBinding{
-		id:         p.newID("binding"),
-		envVar:     req.EnvVar,
-		envTarget:  envTarget,
-		socketPath: socketPath,
-		relay:      relay,
+		id:        p.newID("binding"),
+		envVar:    req.EnvVar,
+		envTarget: envTarget,
+		relay:     relay,
 	}
 	session.bindings = append(session.bindings, binding)
 	return &HostServiceBinding{
-		ID:         binding.id,
-		SessionID:  session.id,
-		EnvVar:     binding.envVar,
-		SocketPath: binding.socketPath,
-		Relay:      binding.relay,
+		ID:        binding.id,
+		SessionID: session.id,
+		EnvVar:    binding.envVar,
+		Relay:     binding.relay,
 	}, nil
 }
 
@@ -363,23 +360,20 @@ func cloneStringMap(values map[string]string) map[string]string {
 	return out
 }
 
-func normalizeHostServiceBinding(req BindHostServiceRequest) (HostServiceRelay, string, string, error) {
+func normalizeHostServiceBinding(req BindHostServiceRequest) (HostServiceRelay, string, error) {
 	if relay := req.Relay; relay.DialTarget != "" {
 		network, address, err := dialTarget(relay.DialTarget)
 		if err != nil {
-			return HostServiceRelay{}, "", "", fmt.Errorf("host service relay: %w", err)
+			return HostServiceRelay{}, "", fmt.Errorf("host service relay: %w", err)
 		}
 		switch network {
 		case "unix":
-			return relay, address, address, nil
+			return relay, address, nil
 		case "tcp", "tls":
-			return relay, relay.DialTarget, "", nil
+			return relay, relay.DialTarget, nil
 		default:
-			return HostServiceRelay{}, "", "", fmt.Errorf("host service relay network %q is not supported", network)
+			return HostServiceRelay{}, "", fmt.Errorf("host service relay network %q is not supported", network)
 		}
 	}
-	if req.HostSocketPath == "" {
-		return HostServiceRelay{}, "", "", fmt.Errorf("host service relay is required")
-	}
-	return HostServiceRelay{DialTarget: "unix://" + req.HostSocketPath}, req.HostSocketPath, req.HostSocketPath, nil
+	return HostServiceRelay{}, "", fmt.Errorf("host service relay is required")
 }

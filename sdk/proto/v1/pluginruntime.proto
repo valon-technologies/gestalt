@@ -6,17 +6,6 @@ import "google/protobuf/empty.proto";
 
 option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 
-message PluginRuntimeCapabilities {
-  bool hosted_plugin_runtime = 1;
-  bool host_service_tunnels = 2;
-  bool provider_grpc_tunnel = 3;
-  bool hostname_proxy_egress = 4;
-  bool cidr_egress = 5;
-  bool host_path_execution = 6;
-  string execution_goos = 7;
-  string execution_goarch = 8;
-}
-
 enum PluginRuntimeHostServiceAccess {
   PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_UNSPECIFIED = 0;
   PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_NONE = 1;
@@ -50,7 +39,7 @@ message PluginRuntimeSupport {
 }
 
 message GetPluginRuntimeCapabilitiesResponse {
-  PluginRuntimeCapabilities capabilities = 1 [deprecated = true];
+  reserved 1;
   PluginRuntimeSupport support = 2;
 }
 
@@ -80,17 +69,17 @@ message PluginRuntimeHostServiceRelay {
 }
 
 message BindPluginRuntimeHostServiceRequest {
+  reserved 3;
   string session_id = 1;
   string env_var = 2;
-  string host_socket_path = 3 [deprecated = true];
   PluginRuntimeHostServiceRelay relay = 4;
 }
 
 message PluginRuntimeHostServiceBinding {
+  reserved 4;
   string id = 1;
   string session_id = 2;
   string env_var = 3;
-  string socket_path = 4 [deprecated = true];
   PluginRuntimeHostServiceRelay relay = 5;
 }
 
