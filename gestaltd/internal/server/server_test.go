@@ -18512,6 +18512,118 @@ func TestServerAllowsProviderNamedIdentities(t *testing.T) {
 	}
 }
 
+func TestLegacyManagedIdentityListCompatibility(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	admin := seedUser(t, svc, "admin@example.test")
+	ctx := context.Background()
+	if _, err := svc.Identities.UpsertIdentity(ctx, &core.Identity{
+		ID:           "service-account-identity",
+		Status:       "active",
+		DisplayName:  "Service Account Identity",
+		MetadataJSON: `{"label":"service_account"}`,
+	}); err != nil {
+		t.Fatalf("UpsertIdentity: %v", err)
+	}
+	if _, err := svc.IdentityManagementGrants.UpsertGrant(ctx, &core.IdentityManagementGrant{
+		ManagerIdentityID: admin.ID,
+		TargetIdentityID:  "service-account-identity",
+		Role:              core.IdentityManagementRoleEditor,
+	}); err != nil {
+		t.Fatalf("UpsertGrant: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "admin-session" {
+					return nil, fmt.Errorf("unknown session %q", token)
+				}
+				return &core.UserIdentity{Email: "admin@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	var got []struct {
+		ID          string    `json:"id"`
+		DisplayName string    `json:"displayName"`
+		Role        string    `json:"role"`
+		CreatedAt   time.Time `json:"createdAt"`
+		UpdatedAt   time.Time `json:"updatedAt"`
+	}
+	doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities", "admin-session", "", http.StatusOK, &got)
+	if len(got) != 1 {
+		t.Fatalf("len(identities) = %d, want 1: %#v", len(got), got)
+	}
+	if got[0].ID != "service-account-identity" || got[0].DisplayName != "Service Account Identity" || got[0].Role != core.IdentityManagementRoleEditor {
+		t.Fatalf("identity = %#v", got[0])
+	}
+}
+
+func TestLegacyManagedIdentityMutationsReturnJSONGone(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	seedUser(t, svc, "admin@example.test")
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "admin-session" {
+					return nil, fmt.Errorf("unknown session %q", token)
+				}
+				return &core.UserIdentity{Email: "admin@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodPost, path: "/api/v1/identities", body: `{"displayName":"Legacy"}`},
+		{method: http.MethodGet, path: "/api/v1/identities/legacy-id/members"},
+		{method: http.MethodPost, path: "/api/v1/identities/legacy-id/tokens", body: `{}`},
+		{method: http.MethodPost, path: "/api/v1/identities/legacy-id/auth/start-oauth", body: `{}`},
+	} {
+		req, _ := http.NewRequest(tc.method, ts.URL+tc.path, bytes.NewBufferString(tc.body))
+		if tc.body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", tc.method, tc.path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusGone {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("%s %s status = %d, want %d: %s", tc.method, tc.path, resp.StatusCode, http.StatusGone, body)
+		}
+		if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+			t.Fatalf("%s %s Content-Type = %q, want application/json", tc.method, tc.path, ct)
+		}
+		var payload struct {
+			Error string `json:"error"`
+			Code  string `json:"code"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			t.Fatalf("%s %s decode: %v", tc.method, tc.path, err)
+		}
+		if payload.Code != "managed_identities_removed" || !strings.Contains(payload.Error, "managed identities have been removed") {
+			t.Fatalf("%s %s payload = %#v", tc.method, tc.path, payload)
+		}
+	}
+}
+
 func doJSONRequestAndDecode(t *testing.T, method, url, sessionToken, body string, wantStatus int, dst any) {
 	t.Helper()
 

@@ -75,6 +75,18 @@ func (s *IdentityManagementGrantService) GetGrant(ctx context.Context, managerId
 	return recordToIdentityManagementGrant(rec), nil
 }
 
+func (s *IdentityManagementGrantService) ListByManager(ctx context.Context, managerIdentityID string) ([]*core.IdentityManagementGrant, error) {
+	recs, err := s.store.Index("by_manager").GetAll(ctx, nil, strings.TrimSpace(managerIdentityID))
+	if err != nil {
+		return nil, fmt.Errorf("list identity management grants: %w", err)
+	}
+	out := make([]*core.IdentityManagementGrant, 0, len(recs))
+	for _, rec := range recs {
+		out = append(out, recordToIdentityManagementGrant(rec))
+	}
+	return out, nil
+}
+
 func (s *IdentityManagementGrantService) ListByTarget(ctx context.Context, targetIdentityID string) ([]*core.IdentityManagementGrant, error) {
 	recs, err := s.store.Index("by_target").GetAll(ctx, nil, strings.TrimSpace(targetIdentityID))
 	if err != nil {
