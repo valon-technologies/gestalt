@@ -168,6 +168,45 @@ class DurationConversionTests(unittest.TestCase):
         )
 
 
+class OptionalProviderImportErrorTests(unittest.TestCase):
+    def test_allows_optional_dependency_roots(self) -> None:
+        self.assertTrue(
+            _runtime._is_optional_provider_import_error(
+                ModuleNotFoundError("No module named 'grpc'", name="grpc")
+            )
+        )
+        self.assertTrue(
+            _runtime._is_optional_provider_import_error(
+                ModuleNotFoundError("No module named 'google'", name="google")
+            )
+        )
+
+    def test_allows_optional_dependency_submodules(self) -> None:
+        self.assertTrue(
+            _runtime._is_optional_provider_import_error(
+                ModuleNotFoundError(
+                    "No module named 'google.protobuf'",
+                    name="google.protobuf",
+                )
+            )
+        )
+        self.assertTrue(
+            _runtime._is_optional_provider_import_error(
+                ModuleNotFoundError(
+                    "No module named 'grpc.aio'",
+                    name="grpc.aio",
+                )
+            )
+        )
+
+    def test_rejects_unrelated_missing_dependencies(self) -> None:
+        self.assertFalse(
+            _runtime._is_optional_provider_import_error(
+                ModuleNotFoundError("No module named 'redis'", name="redis")
+            )
+        )
+
+
 class ManifestNameTests(unittest.TestCase):
     def test_display_name_variants(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

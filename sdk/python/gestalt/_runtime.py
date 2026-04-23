@@ -21,6 +21,15 @@ from ._catalog import catalog_to_proto
 from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
 from ._operations import INTERNAL_ERROR_MESSAGE
 from ._plugin import ConnectedToken, Plugin, _module_plugin
+from ._serialization import json_body
+
+
+def _is_optional_provider_import_error(exc: ModuleNotFoundError) -> bool:
+    missing_module = exc.name or ""
+    return missing_module in {"google", "grpc"} or missing_module.startswith(
+        ("google.", "grpc.")
+    )
+
 
 if TYPE_CHECKING:
     from ._providers import (
@@ -62,7 +71,7 @@ else:
             WorkflowProvider,
         )
     except ModuleNotFoundError as exc:
-        if exc.name not in {"google", "grpc"}:
+        if not _is_optional_provider_import_error(exc):
             raise
 
         class ProviderKind(str, Enum):
@@ -175,9 +184,6 @@ else:
         class WarningsProvider:
             def warnings(self) -> list[str]:
                 raise NotImplementedError
-
-
-from ._serialization import json_body
 
 json_format: Any = cast(Any, None)
 try:
