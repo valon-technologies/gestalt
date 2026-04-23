@@ -1145,7 +1145,7 @@ func setupDefaultLocalProvidersDir(t *testing.T, baseDir string) string {
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(indexedDBBinDest)},
 	})
 
-	rootUIDir := filepath.Join(providersDir, "web", "default")
+	rootUIDir := filepath.Join(providersDir, "ui", "default")
 	rootDistDir := filepath.Join(rootUIDir, "dist")
 	if err := os.MkdirAll(rootDistDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", rootDistDir, err)
