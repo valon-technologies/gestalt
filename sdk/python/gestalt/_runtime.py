@@ -11,180 +11,36 @@ import sys
 import traceback
 from concurrent import futures
 from dataclasses import dataclass
-from enum import Enum
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import Any, Final, cast
 
 from ._api import Access, Credential, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
 from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
 from ._operations import INTERNAL_ERROR_MESSAGE
-from ._optional_imports import is_optional_provider_import_error
 from ._plugin import ConnectedToken, Plugin, _module_plugin
+from ._providers import (
+    AgentProvider,
+    AuthenticationProvider,
+    CacheProvider,
+    Closer,
+    ExternalTokenValidator,
+    HealthChecker,
+    MetadataProvider,
+    PluginProvider,
+    PluginProviderAdapter,
+    ProviderKind,
+    ProviderMetadata,
+    S3Provider,
+    SecretsProvider,
+    SessionTTLProvider,
+    WarningsProvider,
+    WorkflowProvider,
+)
 from ._serialization import json_body
 
-if TYPE_CHECKING:
-    from ._providers import (
-        AgentProvider,
-        AuthenticationProvider,
-        CacheProvider,
-        Closer,
-        ExternalTokenValidator,
-        HealthChecker,
-        MetadataProvider,
-        PluginProvider,
-        PluginProviderAdapter,
-        ProviderKind,
-        ProviderMetadata,
-        S3Provider,
-        SecretsProvider,
-        SessionTTLProvider,
-        WarningsProvider,
-        WorkflowProvider,
-    )
-else:
-    try:
-        from ._providers import (
-            AgentProvider,
-            AuthenticationProvider,
-            CacheProvider,
-            Closer,
-            ExternalTokenValidator,
-            HealthChecker,
-            MetadataProvider,
-            PluginProvider,
-            PluginProviderAdapter,
-            ProviderKind,
-            ProviderMetadata,
-            S3Provider,
-            SecretsProvider,
-            SessionTTLProvider,
-            WarningsProvider,
-            WorkflowProvider,
-        )
-    except ModuleNotFoundError as exc:
-        if not is_optional_provider_import_error(exc):
-            raise
-
-        class ProviderKind(str, Enum):
-            INTEGRATION = "integration"
-            AUTHENTICATION = "authentication"
-            CACHE = "cache"
-            S3 = "s3"
-            AGENT = "agent"
-            WORKFLOW = "workflow"
-            SECRETS = "secrets"
-            TELEMETRY = "telemetry"
-
-        class PluginProvider:
-            def configure(self, name: str, config: dict[str, Any]) -> None:
-                pass
-
-        class PluginProviderAdapter:
-            def __init__(
-                self,
-                *,
-                kind: ProviderKind,
-                provider: PluginProvider,
-                register_services: Any,
-            ) -> None:
-                self.kind = kind
-                self.provider = provider
-                self.register_services = register_services
-
-        class ProviderMetadata:
-            def __init__(
-                self,
-                kind: ProviderKind | str,
-                name: str = "",
-                display_name: str = "",
-                description: str = "",
-                version: str = "",
-            ) -> None:
-                self.kind = kind
-                self.name = name
-                self.display_name = display_name
-                self.description = description
-                self.version = version
-
-        class AuthenticationProvider(PluginProvider):
-            def begin_login(self, request: Any) -> Any:
-                raise NotImplementedError
-
-            def complete_login(self, request: Any) -> Any:
-                raise NotImplementedError
-
-        class CacheProvider(PluginProvider):
-            def get(self, key: str) -> bytes | None:
-                raise NotImplementedError
-
-            def get_many(self, keys: list[str]) -> dict[str, bytes]:
-                raise NotImplementedError
-
-            def set(
-                self, key: str, value: bytes, ttl: dt.timedelta | None = None
-            ) -> None:
-                raise NotImplementedError
-
-            def set_many(
-                self, entries: list[Any], ttl: dt.timedelta | None = None
-            ) -> None:
-                raise NotImplementedError
-
-            def delete(self, key: str) -> bool:
-                raise NotImplementedError
-
-            def delete_many(self, keys: list[str]) -> int:
-                raise NotImplementedError
-
-            def touch(self, key: str, ttl: dt.timedelta) -> bool:
-                raise NotImplementedError
-
-        class S3Provider(PluginProvider):
-            pass
-
-        class AgentProvider(PluginProvider):
-            pass
-
-        class SecretsProvider(PluginProvider):
-            def get_secret(self, name: str) -> str:
-                raise NotImplementedError
-
-        class WorkflowProvider(PluginProvider):
-            pass
-
-        class Closer:
-            def close(self) -> None:
-                raise NotImplementedError
-
-        class ExternalTokenValidator:
-            def validate_external_token(self, token: str) -> Any:
-                raise NotImplementedError
-
-        class HealthChecker:
-            def health_check(self) -> None:
-                raise NotImplementedError
-
-        class MetadataProvider:
-            def metadata(self) -> ProviderMetadata:
-                raise NotImplementedError
-
-        class SessionTTLProvider:
-            def session_ttl(self) -> dt.timedelta:
-                raise NotImplementedError
-
-        class WarningsProvider:
-            def warnings(self) -> list[str]:
-                raise NotImplementedError
-
 json_format: Any = cast(Any, None)
-try:
-    from google.protobuf import json_format as _json_format
-except ModuleNotFoundError:
-    pass
-else:
-    json_format = _json_format
 
 grpc: Any = cast(Any, None)
 empty_pb2: Any = cast(Any, None)
@@ -565,7 +421,22 @@ def _register_s3_services(server: Any, provider: PluginProvider) -> None:
         _runtime_servicer(provider=provider, kind=ProviderKind.S3),
         server,
     )
-    s3_pb2_grpc.add_S3Servicer_to_server(provider, server)
+    s3_pb2_grpc.add_S3Servicer_to_server(
+        _service_wrapper(
+            provider,
+            s3_pb2_grpc.S3Servicer,
+            (
+                "HeadObject",
+                "ReadObject",
+                "WriteObject",
+                "DeleteObject",
+                "ListObjects",
+                "CopyObject",
+                "PresignObject",
+            ),
+        ),
+        server,
+    )
 
 
 def _agent_runtime_plugin(provider: AgentProvider) -> PluginProviderAdapter:
@@ -582,7 +453,14 @@ def _register_agent_services(server: Any, provider: PluginProvider) -> None:
         _runtime_servicer(provider=provider, kind=ProviderKind.AGENT),
         server,
     )
-    agent_pb2_grpc.add_AgentProviderServicer_to_server(provider, server)
+    agent_pb2_grpc.add_AgentProviderServicer_to_server(
+        _service_wrapper(
+            provider,
+            agent_pb2_grpc.AgentProviderServicer,
+            ("StartRun", "GetRun", "ListRuns", "CancelRun"),
+        ),
+        server,
+    )
 
 
 def _workflow_runtime_plugin(provider: WorkflowProvider) -> PluginProviderAdapter:
@@ -599,7 +477,32 @@ def _register_workflow_services(server: Any, provider: PluginProvider) -> None:
         _runtime_servicer(provider=provider, kind=ProviderKind.WORKFLOW),
         server,
     )
-    workflow_pb2_grpc.add_WorkflowProviderServicer_to_server(provider, server)
+    workflow_pb2_grpc.add_WorkflowProviderServicer_to_server(
+        _service_wrapper(
+            provider,
+            workflow_pb2_grpc.WorkflowProviderServicer,
+            (
+                "StartRun",
+                "GetRun",
+                "ListRuns",
+                "CancelRun",
+                "UpsertSchedule",
+                "GetSchedule",
+                "ListSchedules",
+                "DeleteSchedule",
+                "PauseSchedule",
+                "ResumeSchedule",
+                "UpsertEventTrigger",
+                "GetEventTrigger",
+                "ListEventTriggers",
+                "DeleteEventTrigger",
+                "PauseEventTrigger",
+                "ResumeEventTrigger",
+                "PublishEvent",
+            ),
+        ),
+        server,
+    )
 
 
 def _secrets_runtime_plugin(provider: SecretsProvider) -> PluginProviderAdapter:
@@ -640,6 +543,37 @@ def _register_cache_services(server: Any, provider: PluginProvider) -> None:
         _cache_servicer(provider=provider),
         server,
     )
+
+
+def _service_wrapper(
+    provider: PluginProvider,
+    base_cls: type[Any],
+    method_names: tuple[str, ...],
+) -> Any:
+    methods: dict[str, Any] = {"__slots__": ("_provider",)}
+
+    def __init__(self, inner: PluginProvider) -> None:
+        self._provider = inner
+
+    methods["__init__"] = __init__
+
+    for method_name in method_names:
+        base_method = getattr(base_cls, method_name)
+
+        def _delegated(self, *args: Any, _method_name: str = method_name, _base_method: Any = base_method) -> Any:
+            handler = getattr(self._provider, _method_name, None)
+            if handler is None:
+                return _base_method(self, *args)
+            return handler(*args)
+
+        methods[method_name] = _delegated
+
+    wrapped_cls = type(
+        f"Wrapped{base_cls.__name__}",
+        (base_cls,),
+        methods,
+    )
+    return wrapped_cls(provider)
 
 
 def _provider_servicer(*, plugin: Plugin) -> Any:

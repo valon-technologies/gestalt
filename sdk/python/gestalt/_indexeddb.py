@@ -9,26 +9,12 @@ from dataclasses import dataclass, field
 from typing import Any, Iterator, Protocol, cast
 from urllib import parse as _urlparse
 
-from ._optional_imports import is_optional_provider_import_error
+import grpc as _grpc
+from google.protobuf import struct_pb2 as _struct_pb2
+from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
-try:
-    import grpc as _grpc
-    from google.protobuf import struct_pb2 as _struct_pb2
-    from google.protobuf import timestamp_pb2 as _timestamp_pb2
-
-    from .gen.v1 import datastore_pb2 as _pb
-    from .gen.v1 import datastore_pb2_grpc as _pb_grpc
-except ModuleNotFoundError as exc:
-    if not is_optional_provider_import_error(exc):
-        raise
-    _IMPORT_ERROR: ModuleNotFoundError | None = exc
-    _grpc: Any = None
-    _pb: Any = None
-    _pb_grpc: Any = None
-    _struct_pb2: Any = None
-    _timestamp_pb2: Any = None
-else:
-    _IMPORT_ERROR = None
+from .gen.v1 import datastore_pb2 as _pb
+from .gen.v1 import datastore_pb2_grpc as _pb_grpc
 
 grpc: Any = cast(Any, _grpc)
 pb: Any = cast(Any, _pb)
@@ -64,13 +50,6 @@ def indexeddb_socket_token_env(name: str | None = None) -> str:
     """Return the environment variable name for an IndexedDB relay token."""
 
     return f"{indexeddb_socket_env(name)}{_INDEXEDDB_SOCKET_TOKEN_SUFFIX}"
-
-
-def _ensure_indexeddb_runtime() -> None:
-    if _IMPORT_ERROR is not None:
-        raise RuntimeError(
-            "IndexedDB requires grpcio and protobuf runtime dependencies"
-        ) from _IMPORT_ERROR
 
 
 class NotFoundError(Exception):
@@ -115,7 +94,6 @@ class IndexedDB:
     """Client for a host-provided IndexedDB-compatible store."""
 
     def __init__(self, name: str | None = None) -> None:
-        _ensure_indexeddb_runtime()
         env_name = indexeddb_socket_env(name)
         target = os.environ.get(env_name, "")
         if not target:
