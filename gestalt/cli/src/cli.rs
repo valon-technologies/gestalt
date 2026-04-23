@@ -351,6 +351,19 @@ pub enum AgentRunCommands {
         #[arg(long)]
         reason: Option<String>,
     },
+    /// Inspect or stream agent run events
+    Events {
+        #[command(subcommand)]
+        command: AgentRunEventCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AgentRunEventCommands {
+    /// List stored events for an agent run
+    List(AgentRunEventListArgs),
+    /// Stream events for an agent run as server-sent events
+    Stream(AgentRunEventStreamArgs),
 }
 
 #[derive(Subcommand)]
@@ -460,6 +473,34 @@ pub struct AgentRunCreateArgs {
     /// Load the JSON request body from a file (use "-" for stdin)
     #[arg(long = "request-file")]
     pub request_file: Option<String>,
+}
+
+#[derive(Args)]
+pub struct AgentRunEventListArgs {
+    /// Run ID
+    pub id: String,
+
+    /// Return events after this event sequence number
+    #[arg(long)]
+    pub after: Option<u64>,
+
+    /// Maximum number of events to return
+    #[arg(long)]
+    pub limit: Option<u32>,
+}
+
+#[derive(Args)]
+pub struct AgentRunEventStreamArgs {
+    /// Run ID
+    pub id: String,
+
+    /// Stream events after this event sequence number
+    #[arg(long)]
+    pub after: Option<u64>,
+
+    /// Maximum number of events to fetch per server poll
+    #[arg(long)]
+    pub limit: Option<u32>,
 }
 
 #[derive(Args)]

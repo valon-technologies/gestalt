@@ -1,8 +1,11 @@
 use anyhow::{Context, Result};
 use serde_json::{Map, Value, json};
+use std::io;
 
 use crate::api::ApiClient;
-use crate::cli::{AgentRunCreateArgs, AgentToolArg};
+use crate::cli::{
+    AgentRunCreateArgs, AgentRunEventListArgs, AgentRunEventStreamArgs, AgentToolArg,
+};
 use crate::output::{self, Format};
 use crate::params;
 
@@ -52,6 +55,27 @@ pub fn cancel_run(
         .post(&format!("{RUNS_PATH}/{id}/cancel"), &body)
         .with_context(|| format!("failed to cancel agent run {id}"))?;
     print_run(&resp, format);
+    Ok(())
+}
+
+pub fn list_run_events(
+    client: &ApiClient,
+    args: &AgentRunEventListArgs,
+    format: Format,
+) -> Result<()> {
+    let resp = client
+        .get(&run_events_path(&args.id, false, args.after, args.limit))
+        .with_context(|| format!("failed to list events for agent run {}", args.id))?;
+    print_run_events(&resp, format);
+    Ok(())
+}
+
+pub fn stream_run_events(client: &ApiClient, args: &AgentRunEventStreamArgs) -> Result<()> {
+    let mut resp = client
+        .get_stream(&run_events_path(&args.id, true, args.after, args.limit))
+        .with_context(|| format!("failed to stream events for agent run {}", args.id))?;
+    let mut stdout = io::stdout().lock();
+    io::copy(&mut resp, &mut stdout).context("failed to read agent run event stream")?;
     Ok(())
 }
 
@@ -128,6 +152,24 @@ fn runs_path(provider: Option<&str>, status: Option<&str>) -> String {
     }
 }
 
+fn run_events_path(id: &str, stream: bool, after: Option<u64>, limit: Option<u32>) -> String {
+    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+    if let Some(after) = after {
+        serializer.append_pair("after", &after.to_string());
+    }
+    if let Some(limit) = limit {
+        serializer.append_pair("limit", &limit.to_string());
+    }
+    let suffix = if stream { "/events/stream" } else { "/events" };
+    let query = serializer.finish();
+    let path = format!("{RUNS_PATH}/{id}{suffix}");
+    if query.is_empty() {
+        path
+    } else {
+        format!("{path}?{query}")
+    }
+}
+
 fn print_run(value: &Value, format: Format) {
     match format {
         Format::Json => output::print_json(value),
@@ -149,8 +191,31 @@ fn print_runs(value: &Value, format: Format) {
     }
 }
 
+fn print_run_events(value: &Value, format: Format) {
+    match format {
+        Format::Json => output::print_json(value),
+        Format::Table => {
+            let items = value.as_array().cloned().unwrap_or_default();
+            let rows: Vec<Vec<String>> = items.iter().map(run_event_row).collect();
+            output::print_table(&event_headers(), &rows);
+        }
+    }
+}
+
 fn run_headers() -> [&'static str; 6] {
     ["ID", "Provider", "Model", "Status", "Session", "Created"]
+}
+
+fn event_headers() -> [&'static str; 7] {
+    [
+        "Seq",
+        "Type",
+        "Source",
+        "Visibility",
+        "Run",
+        "Created",
+        "Data",
+    ]
 }
 
 fn run_row(value: &Value) -> Vec<String> {
@@ -161,5 +226,20 @@ fn run_row(value: &Value) -> Vec<String> {
         value["status"].as_str().unwrap_or("-").to_string(),
         value["sessionRef"].as_str().unwrap_or("-").to_string(),
         value["createdAt"].as_str().unwrap_or("-").to_string(),
+    ]
+}
+
+fn run_event_row(value: &Value) -> Vec<String> {
+    vec![
+        value["seq"]
+            .as_i64()
+            .map(|seq| seq.to_string())
+            .unwrap_or_else(|| "-".to_string()),
+        value["type"].as_str().unwrap_or("-").to_string(),
+        value["source"].as_str().unwrap_or("-").to_string(),
+        value["visibility"].as_str().unwrap_or("-").to_string(),
+        value["runId"].as_str().unwrap_or("-").to_string(),
+        value["createdAt"].as_str().unwrap_or("-").to_string(),
+        serde_json::to_string(&value["data"]).unwrap_or_else(|_| "-".to_string()),
     ]
 }

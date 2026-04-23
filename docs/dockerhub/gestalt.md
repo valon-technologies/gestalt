@@ -77,7 +77,7 @@ jobs:
 | `plugin disconnect NAME` | Disconnect a plugin |
 | `plugin invoke NAME OP` | Execute a plugin operation |
 | `workflow ...` | Manage workflow schedules, triggers, events, and runs |
-| `agent runs ...` | Create, list, inspect, and cancel agent runs |
+| `agent runs ...` | Create, list, inspect, cancel, and stream agent runs |
 | `tokens create/list/revoke` | Manage API tokens |
 
 Use `--format json` or `--format table` to control output format. See the
