@@ -8,7 +8,6 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-	gproto "google.golang.org/protobuf/proto"
 )
 
 const EnvAgentManagerSocket = proto.EnvAgentManagerSocket
@@ -51,49 +50,37 @@ func (c *AgentManagerClient) Close() error {
 }
 
 func (c *AgentManagerClient) Run(ctx context.Context, req *proto.AgentManagerRunRequest) (*proto.ManagedAgentRun, error) {
-	if c == nil || c.client == nil {
-		return nil, fmt.Errorf("agent manager: client is not initialized")
-	}
-	value := &proto.AgentManagerRunRequest{}
-	if req != nil {
-		value = gproto.Clone(req).(*proto.AgentManagerRunRequest)
-	}
-	value.InvocationToken = c.invocationToken
-	return c.client.Run(ctx, value)
+	return managerUnary(ctx, "agent manager", c != nil && c.client != nil, req, &proto.AgentManagerRunRequest{}, c.invocationToken,
+		func(value *proto.AgentManagerRunRequest, token string) { value.InvocationToken = token },
+		func(ctx context.Context, value *proto.AgentManagerRunRequest) (*proto.ManagedAgentRun, error) {
+			return c.client.Run(ctx, value)
+		},
+	)
 }
 
 func (c *AgentManagerClient) GetRun(ctx context.Context, req *proto.AgentManagerGetRunRequest) (*proto.ManagedAgentRun, error) {
-	if c == nil || c.client == nil {
-		return nil, fmt.Errorf("agent manager: client is not initialized")
-	}
-	value := &proto.AgentManagerGetRunRequest{}
-	if req != nil {
-		value = gproto.Clone(req).(*proto.AgentManagerGetRunRequest)
-	}
-	value.InvocationToken = c.invocationToken
-	return c.client.GetRun(ctx, value)
+	return managerUnary(ctx, "agent manager", c != nil && c.client != nil, req, &proto.AgentManagerGetRunRequest{}, c.invocationToken,
+		func(value *proto.AgentManagerGetRunRequest, token string) { value.InvocationToken = token },
+		func(ctx context.Context, value *proto.AgentManagerGetRunRequest) (*proto.ManagedAgentRun, error) {
+			return c.client.GetRun(ctx, value)
+		},
+	)
 }
 
 func (c *AgentManagerClient) ListRuns(ctx context.Context, req *proto.AgentManagerListRunsRequest) (*proto.AgentManagerListRunsResponse, error) {
-	if c == nil || c.client == nil {
-		return nil, fmt.Errorf("agent manager: client is not initialized")
-	}
-	value := &proto.AgentManagerListRunsRequest{}
-	if req != nil {
-		value = gproto.Clone(req).(*proto.AgentManagerListRunsRequest)
-	}
-	value.InvocationToken = c.invocationToken
-	return c.client.ListRuns(ctx, value)
+	return managerUnary(ctx, "agent manager", c != nil && c.client != nil, req, &proto.AgentManagerListRunsRequest{}, c.invocationToken,
+		func(value *proto.AgentManagerListRunsRequest, token string) { value.InvocationToken = token },
+		func(ctx context.Context, value *proto.AgentManagerListRunsRequest) (*proto.AgentManagerListRunsResponse, error) {
+			return c.client.ListRuns(ctx, value)
+		},
+	)
 }
 
 func (c *AgentManagerClient) CancelRun(ctx context.Context, req *proto.AgentManagerCancelRunRequest) (*proto.ManagedAgentRun, error) {
-	if c == nil || c.client == nil {
-		return nil, fmt.Errorf("agent manager: client is not initialized")
-	}
-	value := &proto.AgentManagerCancelRunRequest{}
-	if req != nil {
-		value = gproto.Clone(req).(*proto.AgentManagerCancelRunRequest)
-	}
-	value.InvocationToken = c.invocationToken
-	return c.client.CancelRun(ctx, value)
+	return managerUnary(ctx, "agent manager", c != nil && c.client != nil, req, &proto.AgentManagerCancelRunRequest{}, c.invocationToken,
+		func(value *proto.AgentManagerCancelRunRequest, token string) { value.InvocationToken = token },
+		func(ctx context.Context, value *proto.AgentManagerCancelRunRequest) (*proto.ManagedAgentRun, error) {
+			return c.client.CancelRun(ctx, value)
+		},
+	)
 }
