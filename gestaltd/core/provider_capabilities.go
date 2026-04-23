@@ -9,6 +9,7 @@ import (
 
 var ErrSessionCatalogUnavailable = errors.New("session catalog unavailable")
 var ErrSessionCatalogUnsupported = errors.New("session catalog unsupported")
+var ErrPostConnectUnsupported = errors.New("post connect unsupported")
 
 type sessionCatalogUnavailableError struct {
 	cause       error
@@ -77,4 +78,27 @@ func CatalogForRequest(ctx context.Context, prov Provider, token string) (*catal
 	}
 	cat, err := scp.CatalogForRequest(ctx, token)
 	return cat, true, wrapSessionCatalogUnavailable(err)
+}
+
+func SupportsPostConnect(prov Provider) bool {
+	if aware, ok := prov.(interface{ SupportsPostConnect() bool }); ok {
+		return aware.SupportsPostConnect()
+	}
+	_, ok := prov.(PostConnectCapable)
+	return ok
+}
+
+func PostConnect(ctx context.Context, prov Provider, token *IntegrationToken) (map[string]string, bool, error) {
+	pcp, ok := prov.(PostConnectCapable)
+	if !ok {
+		return nil, false, nil
+	}
+	metadata, err := pcp.PostConnect(ctx, token)
+	if err != nil {
+		if errors.Is(err, ErrPostConnectUnsupported) {
+			return nil, true, nil
+		}
+		return nil, true, err
+	}
+	return metadata, true, nil
 }

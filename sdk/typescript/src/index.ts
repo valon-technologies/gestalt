@@ -167,6 +167,7 @@ export {
   type SecretsProviderOptions,
 } from "./secrets.ts";
 export {
+  type ConnectedToken,
   PluginProvider,
   connectionModeToProtoValue,
   connectionParamToProto,
@@ -177,6 +178,7 @@ export {
   type ConnectionParamDefinition,
   type OperationDefinition,
   type OperationOptions,
+  type PostConnectHandler,
   type PluginDefinitionOptions,
   type SessionCatalog,
   type SessionCatalogHandler,

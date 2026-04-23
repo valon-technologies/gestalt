@@ -43,10 +43,12 @@ import {
   CatalogSchema as ProtoCatalogSchema,
   ConnectionMode as ProviderConnectionMode,
   GetSessionCatalogResponseSchema,
+  PostConnectResponseSchema,
   ResolveHTTPSubjectResponseSchema,
   OperationResultSchema,
   ProviderMetadataSchema,
   type HTTPSubjectRequest as ProtoHTTPSubjectRequest,
+  type IntegrationToken as ProtoIntegrationToken,
   type RequestContext as ProtoRequestContext,
   type ResolveHTTPSubjectRequest as ProtoResolveHTTPSubjectRequest,
   IntegrationProvider as IntegrationProviderService,
@@ -85,6 +87,7 @@ import {
   type HTTPSubjectResolutionContext,
 } from "./http-subject.ts";
 import {
+  type ConnectedToken,
   PluginProvider,
   connectionModeToProtoValue,
   connectionParamToProto,
@@ -510,7 +513,7 @@ export function createProviderService(
         ),
         staticCatalog: catalogToProto(provider.staticCatalog()),
         supportsSessionCatalog: provider.supportsSessionCatalog(),
-        supportsPostConnect: false,
+        supportsPostConnect: provider.supportsPostConnect(),
         minProtocolVersion: CURRENT_PROTOCOL_VERSION,
         maxProtocolVersion: CURRENT_PROTOCOL_VERSION,
       });
@@ -603,11 +606,29 @@ export function createProviderService(
         catalog: catalogToProto(catalog),
       });
     },
-    async postConnect() {
-      throw new ConnectError(
-        "provider does not support post connect",
-        Code.Unimplemented,
-      );
+    async postConnect(request) {
+      if (!provider.supportsPostConnect()) {
+        throw new ConnectError(
+          "provider does not support post connect",
+          Code.Unimplemented,
+        );
+      }
+      let metadata: Record<string, string> | null | undefined;
+      try {
+        metadata = await provider.postConnectMetadata(
+          providerConnectedToken(request.token),
+        );
+      } catch (error) {
+        throw new ConnectError(
+          `post connect: ${errorMessage(error)}`,
+          Code.Unknown,
+        );
+      }
+      return create(PostConnectResponseSchema, {
+        metadata: {
+          ...(metadata ?? {}),
+        },
+      });
     },
   };
 }
@@ -842,6 +863,29 @@ function providerHTTPSubjectResolutionContext(
   };
 }
 
+function providerConnectedToken(
+  token?: ProtoIntegrationToken,
+): ConnectedToken {
+  const metadataJson = token?.metadataJson ?? "";
+  return {
+    id: token?.id ?? "",
+    subjectId: token?.userId ?? "",
+    integration: token?.integration ?? "",
+    connection: token?.connection ?? "",
+    instance: token?.instance ?? "",
+    accessToken: token?.accessToken ?? "",
+    refreshToken: token?.refreshToken ?? "",
+    scopes: token?.scopes ?? "",
+    expiresAt: timestampToDate(token?.expiresAt),
+    lastRefreshedAt: timestampToDate(token?.lastRefreshedAt),
+    refreshErrorCount: token?.refreshErrorCount ?? 0,
+    metadataJson,
+    metadata: stringRecordFromJSON(metadataJson),
+    createdAt: timestampToDate(token?.createdAt),
+    updatedAt: timestampToDate(token?.updatedAt),
+  };
+}
+
 function providerStringLists(
   input: Record<string, { values?: string[] }> | undefined,
 ): Record<string, string[]> {
@@ -948,6 +992,45 @@ function normalizeBigInt(value: number | bigint): bigint {
     return 0n;
   }
   return BigInt(Math.max(0, Math.trunc(value)));
+}
+
+function timestampToDate(
+  value: { seconds: bigint; nanos: number } | undefined,
+): Date | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const seconds = Number(value.seconds ?? 0n);
+  const nanos = Number(value.nanos ?? 0);
+  if (!Number.isFinite(seconds) || !Number.isFinite(nanos)) {
+    return undefined;
+  }
+  const millis = (seconds * 1000) + Math.trunc(nanos / 1_000_000);
+  if (!Number.isFinite(millis)) {
+    return undefined;
+  }
+  return new Date(millis);
+}
+
+function stringRecordFromJSON(value: string): Record<string, string> {
+  if (!value.trim()) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return {};
+    }
+    const output: Record<string, string> = {};
+    for (const [key, entry] of Object.entries(parsed)) {
+      if (typeof entry === "string") {
+        output[key] = entry;
+      }
+    }
+    return output;
+  } catch {
+    return {};
+  }
 }
 
 function cloneUint8Array(value: Uint8Array | undefined): Uint8Array {

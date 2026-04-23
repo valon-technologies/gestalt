@@ -18,6 +18,7 @@ from gestalt import (
     CacheProvider,
     Catalog,
     CatalogOperation,
+    ConnectedToken,
     ExternalTokenValidator,
     HealthChecker,
     MetadataProvider,
@@ -341,6 +342,17 @@ class MainEntrypointTests(unittest.TestCase):
             cat.operations[0].allowed_roles.extend(["viewer", "admin"])
             return cat
 
+        @plugin.post_connect
+        def dynamic_post_connect(token: ConnectedToken) -> dict[str, str]:
+            return {
+                "subject": token.subject_id,
+                "connection": token.connection,
+                "instance": token.instance,
+                "metadata_team": (token.metadata or {}).get("team_id", ""),
+                "created_tz": token.created_at.tzname() if token.created_at else "",
+                "updated_tz": token.updated_at.tzname() if token.updated_at else "",
+            }
+
         execute_workflow = struct_pb2.Struct()
         execute_workflow.update(
             {
@@ -434,8 +446,33 @@ class MainEntrypointTests(unittest.TestCase):
             ),
             mock.Mock(),
         )
+        post_connect_response = servicer.PostConnect(
+            plugin_pb2.PostConnectRequest(
+                token=plugin_pb2.IntegrationToken(
+                    user_id="user:user-123",
+                    connection="workspace",
+                    instance="default",
+                    metadata_json='{"team_id":"T123"}',
+                    created_at=_ts(1_700_000_000),
+                    updated_at=_ts(1_700_000_100),
+                )
+            ),
+            mock.Mock(),
+        )
+        empty_timestamp_response = servicer.PostConnect(
+            plugin_pb2.PostConnectRequest(
+                token=plugin_pb2.IntegrationToken(
+                    user_id="user:user-123",
+                    connection="workspace",
+                    instance="default",
+                    metadata_json='{"team_id":"T123"}',
+                )
+            ),
+            mock.Mock(),
+        )
 
         self.assertTrue(metadata.supports_session_catalog)
+        self.assertTrue(metadata.supports_post_connect)
         self.assertEqual(
             metadata.min_protocol_version,
             _runtime.CURRENT_PROTOCOL_VERSION,
@@ -497,6 +534,28 @@ class MainEntrypointTests(unittest.TestCase):
         self.assertEqual(catalog.operations[0].id, "private_search")
         self.assertEqual(catalog.operations[0].method, "POST")
         self.assertEqual(list(catalog.operations[0].allowed_roles), ["viewer", "admin"])
+        self.assertEqual(
+            dict(post_connect_response.metadata),
+            {
+                "subject": "user:user-123",
+                "connection": "workspace",
+                "instance": "default",
+                "metadata_team": "T123",
+                "created_tz": "UTC",
+                "updated_tz": "UTC",
+            },
+        )
+        self.assertEqual(
+            dict(empty_timestamp_response.metadata),
+            {
+                "subject": "user:user-123",
+                "connection": "workspace",
+                "instance": "default",
+                "metadata_team": "T123",
+                "created_tz": "",
+                "updated_tz": "",
+            },
+        )
 
     def test_provider_servicer_sanitizes_unhandled_execute_exceptions(self) -> None:
         plugin = Plugin("source-name")
@@ -524,6 +583,18 @@ class MainEntrypointTests(unittest.TestCase):
         context.abort.assert_called_once_with(
             grpc.StatusCode.UNIMPLEMENTED,
             "provider does not support session catalogs",
+        )
+
+    def test_provider_servicer_rejects_missing_post_connect_support(self) -> None:
+        plugin = Plugin("source-name")
+        servicer = _runtime._provider_servicer(plugin=plugin)
+        context = mock.Mock()
+
+        servicer.PostConnect(plugin_pb2.PostConnectRequest(), context)
+
+        context.abort.assert_called_once_with(
+            grpc.StatusCode.UNIMPLEMENTED,
+            "provider does not support post connect",
         )
 
 

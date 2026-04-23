@@ -96,6 +96,17 @@ func (p *roundTripProvider) CatalogForRequest(ctx context.Context, token string)
 	}, nil
 }
 
+func (p *roundTripProvider) PostConnect(_ context.Context, token *core.IntegrationToken) (map[string]string, error) {
+	if token == nil {
+		return nil, fmt.Errorf("token is required")
+	}
+	return map[string]string{
+		"subject":    token.SubjectID,
+		"connection": token.Connection,
+		"instance":   token.Instance,
+	}, nil
+}
+
 type manualOnlySDKProvider struct{}
 
 func (p *manualOnlySDKProvider) Configure(_ context.Context, _ string, _ map[string]any) error {
@@ -174,6 +185,9 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 
 	if _, ok := prov.(core.SessionCatalogProvider); !ok {
 		t.Fatal("expected remote provider to implement SessionCatalogProvider")
+	}
+	if _, ok := prov.(core.PostConnectCapable); !ok {
+		t.Fatal("expected remote provider to implement PostConnectCapable")
 	}
 	if got := prov.AuthTypes(); len(got) != 1 || got[0] != "manual" {
 		t.Fatalf("unexpected auth types: %#v", got)
@@ -256,6 +270,23 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			}
 			if got := sessionCat.Operations[0].AllowedRoles; len(got) != 1 || got[0] != "viewer" {
 				t.Fatalf("unexpected session catalog allowedRoles: %#v", got)
+			}
+
+			pcp := prov.(core.PostConnectCapable)
+			metadata, err := pcp.PostConnect(ctx, &core.IntegrationToken{
+				SubjectID:  principal.EffectiveCredentialSubjectID(tc.principal),
+				Connection: "workspace",
+				Instance:   "default",
+			})
+			if err != nil {
+				t.Fatalf("PostConnect: %v", err)
+			}
+			if !reflect.DeepEqual(metadata, map[string]string{
+				"subject":    principal.EffectiveCredentialSubjectID(tc.principal),
+				"connection": "workspace",
+				"instance":   "default",
+			}) {
+				t.Fatalf("unexpected post connect metadata: %+v", metadata)
 			}
 		})
 	}

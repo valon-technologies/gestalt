@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -70,6 +71,16 @@ var sessionCatalogStubRouter = gestalt.MustRouter(
 	),
 )
 
+var postConnectStubRouter = gestalt.MustRouter(
+	gestalt.Register(
+		gestalt.Operation[stubInput, stubOutput]{
+			ID:     "test_op",
+			Method: http.MethodPost,
+		},
+		(*postConnectStubProvider).testOp,
+	),
+)
+
 func (p *stubProvider) Configure(_ context.Context, _ string, _ map[string]any) error {
 	return nil
 }
@@ -115,6 +126,11 @@ type sessionCatalogStubProvider struct {
 	sessionCatalog *proto.Catalog
 }
 
+type postConnectStubProvider struct {
+	stubProvider
+	metadata map[string]string
+}
+
 type panicHTTPSubjectProvider struct {
 	stubProvider
 }
@@ -132,6 +148,21 @@ func (p *sessionCatalogStubProvider) CatalogForRequest(ctx context.Context, _ st
 		cat.DisplayName = subject.ID + "|" + credential.Mode + "|" + access.Policy + "|" + access.Role
 	}
 	return cat, nil
+}
+
+func (p *postConnectStubProvider) PostConnect(_ context.Context, token *gestalt.ConnectedToken) (map[string]string, error) {
+	if token == nil {
+		return nil, errors.New("token is required")
+	}
+	metadata := map[string]string{
+		"subject":    token.SubjectID,
+		"connection": token.Connection,
+		"instance":   token.Instance,
+	}
+	for key, value := range p.metadata {
+		metadata[key] = value
+	}
+	return metadata, nil
 }
 
 func (p *panicHTTPSubjectProvider) testOp(ctx context.Context, input stubInput, req gestalt.Request) (gestalt.Response[stubOutput], error) {
@@ -158,6 +189,9 @@ func TestProviderServerGetMetadata(t *testing.T) {
 		if meta.GetSupportsSessionCatalog() {
 			t.Fatal("SupportsSessionCatalog = true, want false")
 		}
+		if meta.GetSupportsPostConnect() {
+			t.Fatal("SupportsPostConnect = true, want false")
+		}
 		if meta.GetMinProtocolVersion() != proto.CurrentProtocolVersion {
 			t.Fatalf("MinProtocolVersion = %d, want %d", meta.GetMinProtocolVersion(), proto.CurrentProtocolVersion)
 		}
@@ -182,11 +216,73 @@ func TestProviderServerGetMetadata(t *testing.T) {
 		if !meta.GetSupportsSessionCatalog() {
 			t.Fatal("SupportsSessionCatalog = false, want true")
 		}
+		if meta.GetSupportsPostConnect() {
+			t.Fatal("SupportsPostConnect = true, want false")
+		}
 		if meta.GetMinProtocolVersion() != proto.CurrentProtocolVersion {
 			t.Fatalf("MinProtocolVersion = %d, want %d", meta.GetMinProtocolVersion(), proto.CurrentProtocolVersion)
 		}
 		if meta.GetMaxProtocolVersion() != proto.CurrentProtocolVersion {
 			t.Fatalf("MaxProtocolVersion = %d, want %d", meta.GetMaxProtocolVersion(), proto.CurrentProtocolVersion)
+		}
+	})
+
+	t.Run("post connect provider", func(t *testing.T) {
+		client := newIntegrationProviderClient(t, &postConnectStubProvider{}, postConnectStubRouter)
+		meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
+		if err != nil {
+			t.Fatalf("GetMetadata: %v", err)
+		}
+		if meta.GetSupportsSessionCatalog() {
+			t.Fatal("SupportsSessionCatalog = true, want false")
+		}
+		if !meta.GetSupportsPostConnect() {
+			t.Fatal("SupportsPostConnect = false, want true")
+		}
+		if meta.GetMinProtocolVersion() != proto.CurrentProtocolVersion {
+			t.Fatalf("MinProtocolVersion = %d, want %d", meta.GetMinProtocolVersion(), proto.CurrentProtocolVersion)
+		}
+		if meta.GetMaxProtocolVersion() != proto.CurrentProtocolVersion {
+			t.Fatalf("MaxProtocolVersion = %d, want %d", meta.GetMaxProtocolVersion(), proto.CurrentProtocolVersion)
+		}
+	})
+}
+
+func TestProviderServerPostConnect(t *testing.T) {
+	t.Parallel()
+
+	t.Run("supported", func(t *testing.T) {
+		client := newIntegrationProviderClient(t, &postConnectStubProvider{
+			metadata: map[string]string{"kind": "slack_identity"},
+		}, postConnectStubRouter)
+		resp, err := client.PostConnect(context.Background(), &proto.PostConnectRequest{
+			Token: &proto.IntegrationToken{
+				UserId:     "user:user-123",
+				Connection: "workspace",
+				Instance:   "default",
+			},
+		})
+		if err != nil {
+			t.Fatalf("PostConnect: %v", err)
+		}
+		if !reflect.DeepEqual(resp.GetMetadata(), map[string]string{
+			"subject":    "user:user-123",
+			"connection": "workspace",
+			"instance":   "default",
+			"kind":       "slack_identity",
+		}) {
+			t.Fatalf("metadata = %#v", resp.GetMetadata())
+		}
+	})
+
+	t.Run("unsupported", func(t *testing.T) {
+		client := newIntegrationProviderClient(t, &stubProvider{}, stubRouter)
+		_, err := client.PostConnect(context.Background(), &proto.PostConnectRequest{})
+		if err == nil {
+			t.Fatal("PostConnect should return error for unsupported provider")
+		}
+		if status.Code(err) != codes.Unimplemented {
+			t.Fatalf("PostConnect code = %v, want %v", status.Code(err), codes.Unimplemented)
 		}
 	})
 }

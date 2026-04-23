@@ -344,6 +344,7 @@ type ProviderConnectionParam struct {
 	Required    bool   `json:"required,omitempty" yaml:"required,omitempty"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 	From        string `json:"from,omitempty" yaml:"from,omitempty"`
+	Field       string `json:"field,omitempty" yaml:"field,omitempty"`
 }
 
 type ManifestPaginationConfig struct {

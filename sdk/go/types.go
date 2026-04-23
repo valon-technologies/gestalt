@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"context"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 )
@@ -83,6 +84,32 @@ type WarningsProvider interface {
 // additional operations from the current request context.
 type SessionCatalogProvider interface {
 	CatalogForRequest(ctx context.Context, token string) (*proto.Catalog, error)
+}
+
+// ConnectedToken is the normalized connection payload passed into post-connect
+// hooks after the host completes the credential exchange.
+type ConnectedToken struct {
+	ID                string
+	SubjectID         string
+	Integration       string
+	Connection        string
+	Instance          string
+	AccessToken       string
+	RefreshToken      string
+	Scopes            string
+	ExpiresAt         *time.Time
+	LastRefreshedAt   *time.Time
+	RefreshErrorCount int
+	MetadataJSON      string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+// PostConnectCapable is implemented by integration providers that derive
+// additional connection metadata after the host finishes the OAuth/manual
+// credential exchange.
+type PostConnectCapable interface {
+	PostConnect(ctx context.Context, token *ConnectedToken) (map[string]string, error)
 }
 
 // Subject identifies the caller that initiated an operation.

@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/discovery"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
@@ -196,7 +198,7 @@ func buildConnectionMetadata(prov core.Provider, userParams map[string]string, t
 				if field == "" {
 					field = name
 				}
-				val, ok := tokenResp.Extra[field]
+				val, ok := apiexec.ExtractJSONPath(tokenResp.Extra, field)
 				if !ok {
 					if def.Required {
 						return "", fmt.Errorf("token response missing required field %q for connection param %q", field, name)
@@ -262,6 +264,13 @@ type discoveryCandidateInfo struct {
 
 func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (*core.IntegrationToken, error) {
 	now := s.now().UTC().Truncate(time.Second)
+	previous, err := s.tokens.Token(ctx, tm.SubjectID, tm.Integration, tm.Connection, tm.Instance)
+	if err != nil && !errors.Is(err, core.ErrNotFound) {
+		return nil, err
+	}
+	if errors.Is(err, core.ErrNotFound) {
+		previous = nil
+	}
 	tok := &core.IntegrationToken{
 		ID:              uuid.NewString(),
 		SubjectID:       tm.SubjectID,
@@ -279,16 +288,71 @@ func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (
 	if err := s.tokens.StoreToken(ctx, tok); err != nil {
 		return nil, err
 	}
+	if err := s.syncStoredTokenAuthorization(ctx, tok); err != nil {
+		if rollbackErr := s.rollbackStoredToken(ctx, previous, tok.ID); rollbackErr != nil {
+			return nil, fmt.Errorf("sync stored token authorization: %w (rollback token restore: %v)", err, rollbackErr)
+		}
+		return nil, err
+	}
+	if err := s.unlinkReplacedTokenAuthorization(ctx, previous, tok); err != nil {
+		if rollbackErr := s.rollbackStoredToken(ctx, previous, tok.ID); rollbackErr != nil {
+			return nil, fmt.Errorf("unlink replaced token authorization: %w (rollback token restore: %v)", err, rollbackErr)
+		}
+		if unlinkErr := s.unlinkStoredTokenAuthorization(ctx, tok); unlinkErr != nil {
+			return nil, fmt.Errorf("unlink replaced token authorization: %w (rollback new authorization unlink: %v)", err, unlinkErr)
+		}
+		return nil, err
+	}
 	return tok, nil
 }
 
-func validateDiscoveryMetadata(metadata map[string]string) error {
+func (s *Server) rollbackStoredToken(ctx context.Context, previous *core.IntegrationToken, tokenID string) error {
+	if previous != nil {
+		return s.tokens.RestoreToken(ctx, previous)
+	}
+	return s.tokens.DeleteToken(ctx, tokenID)
+}
+
+func (s *Server) unlinkReplacedTokenAuthorization(ctx context.Context, previous, current *core.IntegrationToken) error {
+	if previous == nil {
+		return nil
+	}
+	previousRef, previousOK, err := externalIdentityRefFromMetadataJSON(previous.MetadataJSON)
+	if err != nil {
+		return err
+	}
+	currentRef, currentOK, err := externalIdentityRefFromMetadataJSON(current.MetadataJSON)
+	if err != nil {
+		return err
+	}
+	if previousOK == currentOK && externalIdentityRefsEqual(previousRef, currentRef) {
+		return nil
+	}
+	if !previousOK {
+		return nil
+	}
+	return s.unlinkStoredTokenAuthorization(ctx, previous)
+}
+
+func validateProviderMetadata(source string, metadata map[string]string) error {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		source = "provider"
+	}
 	for k, v := range metadata {
 		if !safeParamValue.MatchString(k) || !safeTokenResponseValue.MatchString(v) {
-			return fmt.Errorf("discovery returned invalid key or value for %q", k)
+			return fmt.Errorf("%s returned invalid key or value for %q", source, k)
 		}
 	}
 	return nil
+}
+
+func validateDiscoveryMetadata(metadata map[string]string) error {
+	return validateProviderMetadata("discovery", metadata)
+}
+
+func validatePostConnectMetadata(metadata map[string]string) error {
+	return validateProviderMetadata("post-connect", metadata)
 }
 
 func mergeMetadataJSON(existing string, extra map[string]string) (string, error) {
@@ -330,10 +394,7 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 				return nil, err
 			}
 			tm.MetadataJSON = merged
-			if _, err := s.storeTokenFromMaterial(ctx, tm); err != nil {
-				return nil, err
-			}
-			return &postConnectResult{Status: "connected", Integration: tm.Integration}, nil
+			return s.completeConnection(ctx, prov, tm)
 		}
 
 		pendingToken, err := s.encodePendingConnectionToken(tm, candidates)
@@ -349,10 +410,50 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 		}, nil
 	}
 
+	return s.completeConnection(ctx, prov, tm)
+}
+
+func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm tokenMaterial) (*postConnectResult, error) {
+	tm, err := s.applyProviderPostConnect(ctx, prov, tm)
+	if err != nil {
+		return nil, err
+	}
 	if _, err := s.storeTokenFromMaterial(ctx, tm); err != nil {
 		return nil, err
 	}
 	return &postConnectResult{Status: "connected", Integration: tm.Integration}, nil
+}
+
+func (s *Server) applyProviderPostConnect(ctx context.Context, prov core.Provider, tm tokenMaterial) (tokenMaterial, error) {
+	if !core.SupportsPostConnect(prov) {
+		return tm, nil
+	}
+	token := &core.IntegrationToken{
+		SubjectID:    tm.SubjectID,
+		Integration:  tm.Integration,
+		Connection:   tm.Connection,
+		Instance:     tm.Instance,
+		AccessToken:  tm.AccessToken,
+		RefreshToken: tm.RefreshToken,
+		ExpiresAt:    tm.TokenExpiresAt,
+		MetadataJSON: tm.MetadataJSON,
+	}
+	metadata, _, err := core.PostConnect(ctx, prov, token)
+	if err != nil {
+		return tm, err
+	}
+	if metadata == nil {
+		slog.Warn("provider post-connect returned nil metadata", "integration", tm.Integration, "connection", tm.Connection, "instance", tm.Instance)
+	}
+	if err := validatePostConnectMetadata(metadata); err != nil {
+		return tm, err
+	}
+	merged, err := mergeMetadataJSON(tm.MetadataJSON, metadata)
+	if err != nil {
+		return tm, err
+	}
+	tm.MetadataJSON = merged
+	return tm, nil
 }
 
 func manualConnectionAllowed(prov core.Provider, auth config.ConnectionAuthDef) bool {

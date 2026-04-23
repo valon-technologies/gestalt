@@ -93,6 +93,34 @@ export type SessionCatalogHandler = (
 ) => MaybePromise<SessionCatalog | null | undefined>;
 
 /**
+ * Host-managed connection payload passed into a provider post-connect hook.
+ */
+export interface ConnectedToken {
+  id: string;
+  subjectId: string;
+  integration: string;
+  connection: string;
+  instance: string;
+  accessToken: string;
+  refreshToken: string;
+  scopes: string;
+  expiresAt?: Date | undefined;
+  lastRefreshedAt?: Date | undefined;
+  refreshErrorCount: number;
+  metadataJson: string;
+  metadata: Record<string, string>;
+  createdAt?: Date | undefined;
+  updatedAt?: Date | undefined;
+}
+
+/**
+ * Callback used to add derived metadata after a connection is established.
+ */
+export type PostConnectHandler = (
+  token: ConnectedToken,
+) => MaybePromise<Record<string, string> | null | undefined>;
+
+/**
  * Runtime hooks required to implement a plugin provider.
  */
 export interface PluginDefinitionOptions extends RuntimeProviderOptions {
@@ -102,6 +130,7 @@ export interface PluginDefinitionOptions extends RuntimeProviderOptions {
   securitySchemes?: Record<string, HTTPSecurityScheme>;
   http?: Record<string, HTTPBinding>;
   resolveHTTPSubject?: HTTPSubjectResolver;
+  postConnect?: PostConnectHandler;
   iconSvg?: string;
   operations: Array<OperationDefinition<any, any>>;
   sessionCatalog?: SessionCatalogHandler;
@@ -159,6 +188,7 @@ export class PluginProvider extends RuntimeProvider {
 
   private readonly sessionCatalogHandler: SessionCatalogHandler | undefined;
   private readonly httpSubjectResolver: HTTPSubjectResolver | undefined;
+  private readonly postConnectHandler: PostConnectHandler | undefined;
   private readonly operations = new Map<string, OperationDefinition<any, any>>();
 
   constructor(options: PluginDefinitionOptions) {
@@ -170,6 +200,7 @@ export class PluginProvider extends RuntimeProvider {
     this.securitySchemes = normalizeHTTPSecuritySchemes(options.securitySchemes);
     this.http = normalizeHTTPBindings(options.http);
     this.httpSubjectResolver = options.resolveHTTPSubject;
+    this.postConnectHandler = options.postConnect;
     this.sessionCatalogHandler = options.sessionCatalog;
 
     for (const rawEntry of options.operations) {
@@ -198,6 +229,22 @@ export class PluginProvider extends RuntimeProvider {
     request: Request,
   ): Promise<SessionCatalog | null | undefined> {
     return await this.sessionCatalogHandler?.(request);
+  }
+
+  /**
+   * Reports whether the provider exposes a connect-time metadata hook.
+   */
+  supportsPostConnect(): boolean {
+    return this.postConnectHandler !== undefined;
+  }
+
+  /**
+   * Computes additional connection metadata after a successful connect flow.
+   */
+  async postConnectMetadata(
+    token: ConnectedToken,
+  ): Promise<Record<string, string> | null | undefined> {
+    return await this.postConnectHandler?.(cloneConnectedToken(token));
   }
 
   /**
@@ -419,6 +466,21 @@ function normalizeConnectionParams(
     output[key] = entry;
   }
   return output;
+}
+
+function cloneConnectedToken(token: ConnectedToken): ConnectedToken {
+  return {
+    ...token,
+    metadata: {
+      ...(token.metadata ?? {}),
+    },
+    expiresAt: token.expiresAt ? new Date(token.expiresAt) : undefined,
+    lastRefreshedAt: token.lastRefreshedAt
+      ? new Date(token.lastRefreshedAt)
+      : undefined,
+    createdAt: token.createdAt ? new Date(token.createdAt) : undefined,
+    updatedAt: token.updatedAt ? new Date(token.updatedAt) : undefined,
+  };
 }
 
 function normalizeHTTPSecuritySchemes(

@@ -408,7 +408,12 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 
 	tm := state.Token
 	tm.MetadataJSON = merged
-	if _, err := s.storeTokenFromMaterial(r.Context(), tm); err != nil {
+	prov, ok := s.getProvider(w, state.Token.Integration)
+	if !ok {
+		auditErr = errors.New("integration not found")
+		return
+	}
+	if _, err := s.completeConnection(r.Context(), prov, tm); err != nil {
 		auditErr = errors.New("failed to store connection")
 		writeError(w, http.StatusInternalServerError, "failed to store connection")
 		return

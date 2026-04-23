@@ -63,6 +63,14 @@ type SessionCatalogProvider interface {
 	CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error)
 }
 
+// PostConnectCapable is an optional interface for providers that need to
+// derive connection metadata after a credential has been established. The
+// returned metadata is merged into the stored connection metadata before the
+// host persists the token.
+type PostConnectCapable interface {
+	PostConnect(ctx context.Context, token *IntegrationToken) (map[string]string, error)
+}
+
 type ConnectionParamDef struct {
 	Required    bool
 	Description string

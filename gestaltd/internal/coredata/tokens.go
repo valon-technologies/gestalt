@@ -29,6 +29,14 @@ func NewTokenService(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) *T
 }
 
 func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationToken) error {
+	return s.storeToken(ctx, token, false)
+}
+
+func (s *TokenService) RestoreToken(ctx context.Context, token *core.IntegrationToken) error {
+	return s.storeToken(ctx, token, true)
+}
+
+func (s *TokenService) storeToken(ctx context.Context, token *core.IntegrationToken, preserveTimestamps bool) error {
 	token.SubjectID = strings.TrimSpace(token.SubjectID)
 
 	accessEnc, refreshEnc, err := s.enc.EncryptTokenPair(token.AccessToken, token.RefreshToken)
@@ -39,6 +47,8 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 		token.ID = uuid.New().String()
 	}
 	now := time.Now()
+	createdAt := tokenCreatedAt(token, now)
+	updatedAt := tokenUpdatedAt(token, now, preserveTimestamps)
 	fields := indexeddb.Record{
 		"subject_id":              token.SubjectID,
 		"integration":             token.Integration,
@@ -51,7 +61,7 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 		"last_refreshed_at":       token.LastRefreshedAt,
 		"refresh_error_count":     token.RefreshErrorCount,
 		"metadata_json":           token.MetadataJSON,
-		"updated_at":              now,
+		"updated_at":              updatedAt,
 	}
 
 	existing, err := s.tokenRecord(ctx, token.SubjectID, token.Integration, token.Connection, token.Instance)
@@ -59,17 +69,20 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 	case nil:
 		token.ID = recString(existing, "id")
 		fields["id"] = token.ID
-		createdAt := recTime(existing, "created_at")
-		if createdAt.IsZero() {
-			createdAt = now
+		existingCreatedAt := recTime(existing, "created_at")
+		if preserveTimestamps && !token.CreatedAt.IsZero() {
+			existingCreatedAt = token.CreatedAt
 		}
-		fields["created_at"] = createdAt
+		if existingCreatedAt.IsZero() {
+			existingCreatedAt = createdAt
+		}
+		fields["created_at"] = existingCreatedAt
 		if err := s.store.Put(ctx, fields); err != nil {
 			return fmt.Errorf("update token: %w", err)
 		}
 	case core.ErrNotFound:
 		fields["id"] = token.ID
-		fields["created_at"] = now
+		fields["created_at"] = createdAt
 		if err := s.store.Add(ctx, fields); err != nil {
 			return fmt.Errorf("create token: %w", err)
 		}
@@ -81,6 +94,20 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 		return err
 	}
 	return nil
+}
+
+func tokenCreatedAt(token *core.IntegrationToken, fallback time.Time) time.Time {
+	if !token.CreatedAt.IsZero() {
+		return token.CreatedAt
+	}
+	return fallback
+}
+
+func tokenUpdatedAt(token *core.IntegrationToken, fallback time.Time, preserve bool) time.Time {
+	if preserve && !token.UpdatedAt.IsZero() {
+		return token.UpdatedAt
+	}
+	return fallback
 }
 
 func (s *TokenService) Token(ctx context.Context, subjectID, integration, connection, instance string) (*core.IntegrationToken, error) {
