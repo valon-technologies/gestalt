@@ -12,15 +12,17 @@ import (
 	"sync/atomic"
 
 	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 )
 
 type LocalProvider struct {
 	nextID uint64
 
-	mu       sync.Mutex
-	sessions map[string]*localSession
-	closed   bool
+	telemetry metricutil.TelemetryProviders
+	mu        sync.Mutex
+	sessions  map[string]*localSession
+	closed    bool
 }
 
 type localSession struct {
@@ -46,10 +48,24 @@ type localPlugin struct {
 	process *providerhost.PluginProcess
 }
 
-func NewLocalProvider() *LocalProvider {
-	return &LocalProvider{
+type LocalOption func(*LocalProvider)
+
+func WithLocalTelemetry(telemetry metricutil.TelemetryProviders) LocalOption {
+	return func(p *LocalProvider) {
+		p.telemetry = telemetry
+	}
+}
+
+func NewLocalProvider(opts ...LocalOption) *LocalProvider {
+	p := &LocalProvider{
 		sessions: make(map[string]*localSession),
 	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(p)
+		}
+	}
+	return p
 }
 
 func (p *LocalProvider) Support(context.Context) (Support, error) {
@@ -248,6 +264,8 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 		DefaultAction: egress.PolicyAction(req.DefaultAction),
 		HostBinary:    req.HostBinary,
 		SocketDir:     rootDir,
+		ProviderName:  req.PluginName,
+		Telemetry:     p.telemetry,
 	})
 	if err != nil {
 		p.mu.Lock()

@@ -11,14 +11,14 @@ import (
 const meterName = "gestaltd"
 
 var (
-	attrProvider       = attribute.Key("gestalt.provider")
+	attrProvider       = AttrProvider
 	attrAction         = attribute.Key("gestalt.action")
 	attrDB             = attribute.Key("gestalt.db")
 	attrType           = attribute.Key("gestalt.type")
 	attrMethod         = attribute.Key("gestalt.method")
 	attrObjectStore    = attribute.Key("gestalt.object_store")
 	attrPlugin         = attribute.Key("gestalt.plugin")
-	attrConnectionMode = attribute.Key("gestalt.connection_mode")
+	attrConnectionMode = AttrConnectionMode
 )
 
 type counterMetrics struct {

@@ -10,7 +10,11 @@ import (
 	"strings"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -22,7 +26,60 @@ type dialedHostedPluginConn struct {
 	plugin    proto.IntegrationProviderClient
 }
 
-func DialHostedPlugin(ctx context.Context, target string) (HostedPluginConn, error) {
+type DialOption func(*dialConfig)
+
+type dialConfig struct {
+	providerName   string
+	telemetry      metricutil.TelemetryProviders
+	meterProvider  metric.MeterProvider
+	tracerProvider trace.TracerProvider
+}
+
+type dialTelemetryProviders struct {
+	meterProvider  metric.MeterProvider
+	tracerProvider trace.TracerProvider
+}
+
+func (p dialTelemetryProviders) MeterProvider() metric.MeterProvider {
+	return p.meterProvider
+}
+
+func (p dialTelemetryProviders) TracerProvider() trace.TracerProvider {
+	return p.tracerProvider
+}
+
+func WithProviderName(name string) DialOption {
+	return func(cfg *dialConfig) {
+		cfg.providerName = strings.TrimSpace(name)
+	}
+}
+
+func WithTelemetry(telemetry metricutil.TelemetryProviders) DialOption {
+	return func(cfg *dialConfig) {
+		cfg.telemetry = telemetry
+	}
+}
+
+func WithMeterProvider(provider metric.MeterProvider) DialOption {
+	return func(cfg *dialConfig) {
+		cfg.meterProvider = provider
+	}
+}
+
+func WithTracerProvider(provider trace.TracerProvider) DialOption {
+	return func(cfg *dialConfig) {
+		cfg.tracerProvider = provider
+	}
+}
+
+func DialHostedPlugin(ctx context.Context, target string, opts ...DialOption) (HostedPluginConn, error) {
+	var cfg dialConfig
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&cfg)
+		}
+	}
+
 	network, address, err := dialTarget(target)
 	if err != nil {
 		return nil, err
@@ -30,11 +87,11 @@ func DialHostedPlugin(ctx context.Context, target string) (HostedPluginConn, err
 	var conn *grpc.ClientConn
 	switch network {
 	case "unix":
-		conn, err = dialUnixTarget(ctx, address)
+		conn, err = dialUnixTarget(ctx, address, cfg)
 	case "tcp":
-		conn, err = dialTCPTarget(address)
+		conn, err = dialTCPTarget(address, cfg)
 	case "tls":
-		conn, err = dialTLSTarget(address)
+		conn, err = dialTLSTarget(address, cfg)
 	default:
 		err = fmt.Errorf("unsupported hosted plugin dial network %q", network)
 	}
@@ -105,7 +162,7 @@ func dialTarget(raw string) (network string, address string, err error) {
 	return "unix", filepath.Clean(raw), nil
 }
 
-func dialUnixTarget(ctx context.Context, socket string) (*grpc.ClientConn, error) {
+func dialUnixTarget(ctx context.Context, socket string, cfg dialConfig) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
 		"passthrough:///localhost",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -114,7 +171,7 @@ func dialUnixTarget(ctx context.Context, socket string) (*grpc.ClientConn, error
 			var d net.Dialer
 			return d.DialContext(ctx, "unix", socket)
 		}),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedPluginGRPCOptions(cfg)...)),
 	)
 	if err != nil {
 		return nil, err
@@ -123,11 +180,11 @@ func dialUnixTarget(ctx context.Context, socket string) (*grpc.ClientConn, error
 	return conn, nil
 }
 
-func dialTCPTarget(address string) (*grpc.ClientConn, error) {
+func dialTCPTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedPluginGRPCOptions(cfg)...)),
 	)
 	if err != nil {
 		return nil, err
@@ -136,7 +193,7 @@ func dialTCPTarget(address string) (*grpc.ClientConn, error) {
 	return conn, nil
 }
 
-func dialTLSTarget(address string) (*grpc.ClientConn, error) {
+func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, fmt.Errorf("parse hosted plugin tls dial target %q: %w", address, err)
@@ -148,11 +205,34 @@ func dialTLSTarget(address string) (*grpc.ClientConn, error) {
 			ServerName: host,
 			NextProtos: []string{"h2"},
 		})),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedPluginGRPCOptions(cfg)...)),
 	)
 	if err != nil {
 		return nil, err
 	}
 	conn.Connect()
 	return conn, nil
+}
+
+func hostedPluginGRPCOptions(cfg dialConfig) []otelgrpc.Option {
+	attrs := []attribute.KeyValue{
+		metricutil.AttrRPCRole.String("hosted_plugin_client"),
+	}
+	if cfg.providerName != "" {
+		attrs = append(attrs, metricutil.AttrProvider.String(metricutil.AttrValue(cfg.providerName)))
+	}
+	return metricutil.GRPCOptions(cfg.telemetryProviders(), attrs...)
+}
+
+func (cfg dialConfig) telemetryProviders() metricutil.TelemetryProviders {
+	if cfg.telemetry != nil {
+		return cfg.telemetry
+	}
+	if cfg.meterProvider == nil && cfg.tracerProvider == nil {
+		return nil
+	}
+	return dialTelemetryProviders{
+		meterProvider:  cfg.meterProvider,
+		tracerProvider: cfg.tracerProvider,
+	}
 }

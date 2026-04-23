@@ -38,6 +38,7 @@ func NewExecutableAuthorizationProvider(ctx context.Context, cfg AuthorizationEx
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
 		HostServices: cfg.HostServices,
+		ProviderName: cfg.Name,
 	}
 	proc, err := startProviderProcess(ctx, execCfg.processConfig())
 	if err != nil {

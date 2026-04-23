@@ -54,6 +54,10 @@ func recordOperationMetrics(
 		attrTransport.String(metricutil.AttrValue(transport)),
 		attrConnectionMode.String(metricutil.AttrValue(connectionMode)),
 	}
+	if surface := InvocationSurfaceFromContext(ctx); surface != "" {
+		attrs = append(attrs, metricutil.AttrInvocationSurface.String(metricutil.AttrValue(string(surface))))
+	}
+	metricutil.AddHTTPAttributes(ctx, attrs...)
 
 	metrics.count.Add(ctx, 1, metric.WithAttributes(attrs...))
 	duration := time.Since(startedAt)

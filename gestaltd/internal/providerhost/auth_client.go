@@ -61,6 +61,7 @@ func NewExecutableAuthenticationProvider(ctx context.Context, cfg Authentication
 		AllowedHosts: cfg.AllowedHosts,
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
+		ProviderName: cfg.Name,
 	}
 	proc, err := startProviderProcess(ctx, execCfg.processConfig())
 	if err != nil {

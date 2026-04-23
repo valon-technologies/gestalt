@@ -17,6 +17,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/sandbox"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
@@ -40,6 +41,8 @@ type ProcessConfig struct {
 	Cleanup       func()
 	HostServices  []HostService
 	SocketDir     string
+	ProviderName  string
+	Telemetry     metricutil.TelemetryProviders
 }
 
 type ExecConfig struct {
@@ -55,11 +58,14 @@ type ExecConfig struct {
 	HostServices     []HostService
 	InvocationTokens *InvocationTokenManager
 	InvocationGrants invocationGrants
+	ProviderName     string
+	Telemetry        metricutil.TelemetryProviders
 }
 
 type HostService struct {
 	Register func(*grpc.Server)
 	EnvVar   string
+	Name     string
 }
 
 type providerProcess struct {
@@ -119,6 +125,8 @@ func (c ExecConfig) processConfig() ProcessConfig {
 		HostBinary:    c.HostBinary,
 		Cleanup:       c.Cleanup,
 		HostServices:  c.HostServices,
+		ProviderName:  firstNonBlank(c.ProviderName, c.StaticSpec.Name),
+		Telemetry:     c.Telemetry,
 	}
 }
 
@@ -182,7 +190,8 @@ func serveProvider(ctx context.Context, register func(*grpc.Server)) error {
 		_ = os.Remove(socket)
 	}()
 
-	srv := grpc.NewServer()
+	providerName := strings.TrimSpace(os.Getenv(proto.EnvProviderName))
+	srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler(providerServerGRPCOptions(providerName, nil)...)))
 	register(srv)
 
 	stopped := make(chan struct{})
@@ -218,10 +227,14 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 		return nil, fmt.Errorf("create socket dir: %w", err)
 	}
 	pluginSocket := filepath.Join(dir, "plugin.sock")
-	env := mergeExecEnv(cfg.Env, map[string]string{
+	execEnv := map[string]string{
 		proto.EnvProviderSocket:    pluginSocket,
 		proto.EnvProviderParentPID: strconv.Itoa(os.Getpid()),
-	})
+	}
+	if providerName := strings.TrimSpace(cfg.ProviderName); providerName != "" {
+		execEnv[proto.EnvProviderName] = providerName
+	}
+	env := mergeExecEnv(cfg.Env, execEnv)
 
 	proc := &providerProcess{dir: dir}
 	proc.cleanup = cfg.Cleanup
@@ -244,7 +257,7 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 			}
 			return nil, fmt.Errorf("listen on host socket: %w", err)
 		}
-		srv := grpc.NewServer()
+		srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.ProviderName, hostService, cfg.Telemetry)...)))
 		hostService.Register(srv)
 		proc.hostLiss = append(proc.hostLiss, lis)
 		proc.hostSrvs = append(proc.hostSrvs, srv)
@@ -329,7 +342,7 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 	startCtx, cancel := context.WithTimeout(ctx, processStartupTimeout)
 	defer cancel()
 
-	conn, err := waitForPluginConn(startCtx, pluginSocket, proc.waitCh)
+	conn, err := waitForPluginConn(startCtx, pluginSocket, proc.waitCh, cfg)
 	if err != nil {
 		_ = proc.Close()
 		return nil, err
@@ -562,6 +575,15 @@ func envSlice(values map[string]string) []string {
 	return out
 }
 
+func firstNonBlank(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 var safeEnvKeys = []string{
 	"PATH", "HOME", "TMPDIR", "LANG", "TZ",
 	"SSL_CERT_FILE", "SSL_CERT_DIR",
@@ -577,10 +599,10 @@ func safeBaseEnv() []string {
 	return out
 }
 
-func waitForPluginConn(ctx context.Context, socket string, waitCh <-chan error) (*grpc.ClientConn, error) {
+func waitForPluginConn(ctx context.Context, socket string, waitCh <-chan error, cfg ProcessConfig) (*grpc.ClientConn, error) {
 	for {
 		if _, err := os.Stat(socket); err == nil {
-			conn, dialErr := dialUnixSocket(ctx, socket)
+			conn, dialErr := dialUnixSocket(ctx, socket, cfg)
 			if dialErr == nil {
 				return conn, nil
 			}
@@ -603,7 +625,7 @@ func waitForPluginConn(ctx context.Context, socket string, waitCh <-chan error) 
 	}
 }
 
-func dialUnixSocket(ctx context.Context, socket string) (*grpc.ClientConn, error) {
+func dialUnixSocket(ctx context.Context, socket string, cfg ProcessConfig) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
 		"passthrough:///localhost",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -616,7 +638,7 @@ func dialUnixSocket(ctx context.Context, socket string) (*grpc.ClientConn, error
 			var d net.Dialer
 			return d.DialContext(ctx, "unix", socket)
 		}),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler(providerClientGRPCOptions(cfg.ProviderName, cfg.Telemetry)...)),
 	)
 	if err != nil {
 		return nil, err

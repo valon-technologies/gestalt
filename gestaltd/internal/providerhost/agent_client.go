@@ -42,6 +42,7 @@ func NewExecutableAgent(ctx context.Context, cfg AgentExecConfig) (coreagent.Pro
 		HostBinary:    cfg.HostBinary,
 		Cleanup:       cfg.Cleanup,
 		HostServices:  cfg.HostServices,
+		ProviderName:  cfg.Name,
 	}
 	proc, err := startAgentProviderProcess(ctx, execCfg.processConfig())
 	if err != nil {

@@ -53,6 +53,11 @@ linters:
         linters:
           - gocritic
           - revive
+      # golangci-lint v2.11.3 reports false unused findings for helper types
+      # in this large integration test file on Linux CI.
+      - path: internal/server/server_test\.go
+        linters:
+          - unused
       # Test helper packages: relaxed style and errcheck for deferred Close
       - path: core/testing/
         linters:

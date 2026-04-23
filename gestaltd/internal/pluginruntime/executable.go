@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -22,6 +23,7 @@ type ExecutableConfig struct {
 	Config       map[string]any
 	AllowedHosts []string
 	HostBinary   string
+	Telemetry    metricutil.TelemetryProviders
 }
 
 type executableProvider struct {
@@ -29,8 +31,9 @@ type executableProvider struct {
 	runtime   proto.PluginRuntimeProviderClient
 	lifecycle proto.ProviderLifecycleClient
 
-	mu       sync.Mutex
-	sessions map[string]*Session
+	telemetry metricutil.TelemetryProviders
+	mu        sync.Mutex
+	sessions  map[string]*Session
 }
 
 func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider, error) {
@@ -40,6 +43,8 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 		Env:          cfg.Env,
 		AllowedHosts: cfg.AllowedHosts,
 		HostBinary:   cfg.HostBinary,
+		ProviderName: cfg.Name,
+		Telemetry:    cfg.Telemetry,
 	})
 	if err != nil {
 		return nil, err
@@ -55,6 +60,7 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 		proc:      proc,
 		runtime:   proto.NewPluginRuntimeProviderClient(proc.Conn()),
 		lifecycle: lifecycle,
+		telemetry: cfg.Telemetry,
 		sessions:  make(map[string]*Session),
 	}, nil
 }
