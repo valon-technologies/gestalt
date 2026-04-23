@@ -709,6 +709,56 @@ func TestGlobalAgentRunCreateRejectsMismatchedIdempotencyKeySources(t *testing.T
 	}
 }
 
+func TestGlobalAgentRunCreateRejectsEmptyMessagesBeforeProviderStart(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryAgentProvider()
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:   testutil.NewProviderRegistry(t),
+		Agent:       &stubAgentControl{defaultProviderName: "managed", provider: provider},
+		RunMetadata: services.AgentRunMetadata,
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.AgentManager = manager
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+	var payload map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if payload["error"] != agentmanager.ErrAgentMessagesRequired.Error() {
+		t.Fatalf("error = %q, want %q", payload["error"], agentmanager.ErrAgentMessagesRequired.Error())
+	}
+	if len(provider.startRunRequests) != 0 {
+		t.Fatalf("unexpected StartRun requests = %#v", provider.startRunRequests)
+	}
+}
+
 func TestGlobalAgentRunCreateMapsProviderInvalidArgumentToBadRequest(t *testing.T) {
 	t.Parallel()
 
@@ -737,7 +787,7 @@ func TestGlobalAgentRunCreateMapsProviderInvalidArgumentToBadRequest(t *testing.
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/", bytes.NewBufferString(`{}`))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/", bytes.NewBufferString(`{"messages":[{"role":"user","text":"Continue"}]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	resp, err := http.DefaultClient.Do(req)

@@ -177,7 +177,7 @@ func agentManagerStatusError(err error) error {
 		return status.Error(codes.Aborted, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentNotConfigured), errors.Is(err, agentmanager.ErrAgentProviderRequired), errors.Is(err, agentmanager.ErrAgentProviderNotAvailable), errors.Is(err, agentmanager.ErrAgentRunMetadataNotConfigured), errors.Is(err, invocation.ErrNoToken), errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
 		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, agentmanager.ErrAgentCallerPluginRequired), errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool):
+	case errors.Is(err, agentmanager.ErrAgentCallerPluginRequired), errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool), errors.Is(err, agentmanager.ErrAgentMessagesRequired):
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentSubjectRequired), errors.Is(err, invocation.ErrNotAuthenticated):
 		return status.Error(codes.Unauthenticated, err.Error())

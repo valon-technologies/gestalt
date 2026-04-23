@@ -558,7 +558,8 @@ func (s *Server) writeAgentRunManagerError(w http.ResponseWriter, r *http.Reques
 	case errors.Is(err, agentmanager.ErrAgentRunCreationInProgress):
 		writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentCallerPluginRequired),
-		errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool):
+		errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool),
+		errors.Is(err, agentmanager.ErrAgentMessagesRequired):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, invocation.ErrProviderNotFound),
 		errors.Is(err, invocation.ErrOperationNotFound),

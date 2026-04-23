@@ -150,15 +150,17 @@ fn test_cli_creates_agent_run_from_request_file() {
 }
 
 #[test]
-fn test_cli_rejects_agent_run_create_without_messages() {
+fn test_cli_surfaces_agent_run_create_validation_error_from_server() {
     let mut server = Server::new();
     let create = authed_json_mock!(
         server,
         Method::POST,
         "/api/v1/agent/runs",
-        StatusCode::CREATED
+        StatusCode::BAD_REQUEST
     )
-    .expect(0)
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString("{}".to_string()))
+    .with_body(r#"{"error":"messages must contain at least one entry"}"#)
     .create();
 
     let home = tempfile::tempdir().unwrap();
@@ -167,7 +169,7 @@ fn test_cli_rejects_agent_run_create_without_messages() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "agent runs create requires at least one message",
+            "failed to create agent run: messages must contain at least one entry",
         ));
 
     create.assert();
