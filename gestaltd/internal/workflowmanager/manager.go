@@ -927,11 +927,12 @@ func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerN
 		return nil, ErrWorkflowSubjectRequired
 	}
 	return m.workflowExecutionRefs.Put(ctx, &coreworkflow.ExecutionReference{
-		ID:           executionRefID,
-		ProviderName: strings.TrimSpace(providerName),
-		Target:       target,
-		SubjectID:    subjectID,
-		Permissions:  principal.PermissionsToAccessPermissions(p.TokenPermissions),
+		ID:                  executionRefID,
+		ProviderName:        strings.TrimSpace(providerName),
+		Target:              target,
+		SubjectID:           subjectID,
+		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
+		Permissions:         principal.PermissionsToAccessPermissions(p.TokenPermissions),
 	})
 }
 

@@ -101,22 +101,28 @@ func (r *agentRuntime) TrackRun(ctx context.Context, providerName string, req co
 		return fmt.Errorf("%w: agent run metadata is not configured", invocation.ErrInternal)
 	}
 	subjectID := ""
+	credentialSubjectID := ""
 	if p := principal.Canonicalized(principal.FromContext(ctx)); p != nil {
 		subjectID = strings.TrimSpace(p.SubjectID)
+		credentialSubjectID = strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
 	}
 	if subjectID == "" {
 		subjectID = strings.TrimSpace(req.CreatedBy.SubjectID)
+	}
+	if credentialSubjectID == "" && principal.IsSystemSubjectID(subjectID) {
+		credentialSubjectID = subjectID
 	}
 	if subjectID == "" {
 		return fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
 	_, err := runMetadata.Put(ctx, &coreagent.ExecutionReference{
-		ID:             runID,
-		ProviderName:   strings.TrimSpace(providerName),
-		SubjectID:      subjectID,
-		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
-		Permissions:    permissionsForAgentTools(req.Tools),
-		Tools:          append([]coreagent.Tool(nil), req.Tools...),
+		ID:                  runID,
+		ProviderName:        strings.TrimSpace(providerName),
+		SubjectID:           subjectID,
+		CredentialSubjectID: credentialSubjectID,
+		IdempotencyKey:      strings.TrimSpace(req.IdempotencyKey),
+		Permissions:         permissionsForAgentTools(req.Tools),
+		Tools:               append([]coreagent.Tool(nil), req.Tools...),
 	})
 	return err
 }
@@ -221,7 +227,7 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	if !ok {
 		return nil, fmt.Errorf("%w: agent tool %q is not available for run %q", invocation.ErrAuthorizationDenied, strings.TrimSpace(req.ToolID), runID)
 	}
-	principalValue := agentExecutionPrincipal(ref)
+	principalValue := executionReferencePrincipal(ref.SubjectID, ref.CredentialSubjectID, ref.Permissions)
 	if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
@@ -250,22 +256,6 @@ func lookupAgentTool(tools []coreagent.Tool, toolID string) (coreagent.Tool, boo
 		}
 	}
 	return coreagent.Tool{}, false
-}
-
-func agentExecutionPrincipal(ref *coreagent.ExecutionReference) *principal.Principal {
-	if ref == nil {
-		return nil
-	}
-	permissions := principal.CompilePermissions(ref.Permissions)
-	value := &principal.Principal{
-		SubjectID:        strings.TrimSpace(ref.SubjectID),
-		Scopes:           principal.PermissionPlugins(permissions),
-		TokenPermissions: permissions,
-	}
-	if principal.IsSystemSubjectID(value.SubjectID) {
-		value.CredentialSubjectID = value.SubjectID
-	}
-	return principal.Canonicalize(value)
 }
 
 func permissionsForAgentTools(tools []coreagent.Tool) []core.AccessPermission {

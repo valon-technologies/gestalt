@@ -52,6 +52,21 @@ func IsManagedProviderRelationship(rel *core.Relationship) bool {
 	}
 }
 
+func ProviderAuthorizationModelForRoles(policyRoles, pluginStaticRoles, pluginDynamicRoles, adminDynamicRoles []string) *core.AuthorizationModel {
+	return buildProviderAuthorizationModel(providerBackedRoleState{
+		policyStaticRoles: map[string][]string{
+			"": append([]string(nil), policyRoles...),
+		},
+		pluginStaticRoles: map[string][]string{
+			"": append([]string(nil), pluginStaticRoles...),
+		},
+		pluginDynamicRoles: map[string][]string{
+			"": append([]string(nil), pluginDynamicRoles...),
+		},
+		adminDynamicRoles: append([]string(nil), adminDynamicRoles...),
+	})
+}
+
 func buildProviderAuthorizationModel(state providerBackedRoleState) *core.AuthorizationModel {
 	model := &core.AuthorizationModel{Version: 1}
 

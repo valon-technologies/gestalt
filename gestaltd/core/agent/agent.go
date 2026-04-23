@@ -148,14 +148,15 @@ type ManagerCancelRunRequest struct {
 }
 
 type ExecutionReference struct {
-	ID             string
-	ProviderName   string
-	SubjectID      string
-	IdempotencyKey string
-	Permissions    []core.AccessPermission
-	Tools          []Tool
-	CreatedAt      *time.Time
-	RevokedAt      *time.Time
+	ID                  string
+	ProviderName        string
+	SubjectID           string
+	CredentialSubjectID string
+	IdempotencyKey      string
+	Permissions         []core.AccessPermission
+	Tools               []Tool
+	CreatedAt           *time.Time
+	RevokedAt           *time.Time
 }
 
 type Provider interface {
