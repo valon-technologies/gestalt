@@ -1346,8 +1346,9 @@ func TestWorkflowExecutionRefService(t *testing.T) {
 				PluginName: "roadmap",
 				Operation:  "sync",
 			},
-			SubjectID:   principal.UserSubjectID("user-123"),
-			Permissions: []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}},
+			SubjectID:           principal.UserSubjectID("user-123"),
+			CredentialSubjectID: principal.ManagedIdentitySubjectID("credential-123"),
+			Permissions:         []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}},
 		})
 		if err != nil {
 			t.Fatalf("Put: %v", err)
@@ -1363,6 +1364,9 @@ func TestWorkflowExecutionRefService(t *testing.T) {
 		want := []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}}
 		if !reflect.DeepEqual(got.Permissions, want) {
 			t.Fatalf("Permissions = %#v, want %#v", got.Permissions, want)
+		}
+		if got.CredentialSubjectID != principal.ManagedIdentitySubjectID("credential-123") {
+			t.Fatalf("CredentialSubjectID = %q, want %q", got.CredentialSubjectID, principal.ManagedIdentitySubjectID("credential-123"))
 		}
 	})
 

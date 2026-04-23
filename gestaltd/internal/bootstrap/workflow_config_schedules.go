@@ -430,10 +430,11 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target) []core
 
 func workflowConfigExecutionReference(cfg *config.Config, providerName string, target coreworkflow.Target) (*coreworkflow.ExecutionReference, error) {
 	ref := &coreworkflow.ExecutionReference{
-		ProviderName: providerName,
-		Target:       target,
-		SubjectID:    workflowConfigOwnerSubjectID(),
-		Permissions:  workflowExecutionRefPermissionsForTarget(target),
+		ProviderName:        providerName,
+		Target:              target,
+		SubjectID:           workflowConfigOwnerSubjectID(),
+		CredentialSubjectID: workflowConfigOwnerSubjectID(),
+		Permissions:         workflowExecutionRefPermissionsForTarget(target),
 	}
 	mode, err := workflowConfigTargetConnectionMode(cfg, target.PluginName)
 	if err != nil {

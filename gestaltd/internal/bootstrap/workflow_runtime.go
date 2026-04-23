@@ -211,7 +211,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		if err != nil {
 			return nil, err
 		}
-		principalValue = workflowExecutionPrincipal(resolvedRef)
+		principalValue = executionReferencePrincipal(resolvedRef.SubjectID, resolvedRef.CredentialSubjectID, resolvedRef.Permissions)
 		target.PluginName = resolvedRef.Target.PluginName
 		target.Operation = resolvedRef.Target.Operation
 		target.Connection = resolvedRef.Target.Connection
@@ -269,22 +269,6 @@ func resolveWorkflowExecutionRef(ctx context.Context, service *coredata.Workflow
 		return nil, fmt.Errorf("%w: workflow execution ref %q target does not match the scheduled invocation", invocation.ErrAuthorizationDenied, refID)
 	}
 	return ref, nil
-}
-
-func workflowExecutionPrincipal(ref *coreworkflow.ExecutionReference) *principal.Principal {
-	if ref == nil {
-		return nil
-	}
-	permissions := principal.CompilePermissions(ref.Permissions)
-	value := &principal.Principal{
-		SubjectID:        strings.TrimSpace(ref.SubjectID),
-		Scopes:           principal.PermissionPlugins(permissions),
-		TokenPermissions: permissions,
-	}
-	if principal.IsSystemSubjectID(value.SubjectID) {
-		value.CredentialSubjectID = value.SubjectID
-	}
-	return principal.Canonicalize(value)
 }
 
 func workflowInvocationParams(req coreworkflow.InvokeOperationRequest) map[string]any {

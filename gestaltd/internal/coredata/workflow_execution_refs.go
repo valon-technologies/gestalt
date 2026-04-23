@@ -57,16 +57,17 @@ func (s *WorkflowExecutionRefService) Put(ctx context.Context, ref *coreworkflow
 	}
 
 	rec := indexeddb.Record{
-		"id":                id,
-		"provider_name":     providerName,
-		"target_plugin":     targetPlugin,
-		"target_operation":  targetOperation,
-		"target_connection": strings.TrimSpace(ref.Target.Connection),
-		"target_instance":   strings.TrimSpace(ref.Target.Instance),
-		"subject_id":        subjectID,
-		"permissions_json":  permissionsJSON,
-		"created_at":        *createdAt,
-		"revoked_at":        timeOrNil(ref.RevokedAt),
+		"id":                    id,
+		"provider_name":         providerName,
+		"target_plugin":         targetPlugin,
+		"target_operation":      targetOperation,
+		"target_connection":     strings.TrimSpace(ref.Target.Connection),
+		"target_instance":       strings.TrimSpace(ref.Target.Instance),
+		"subject_id":            subjectID,
+		"credential_subject_id": strings.TrimSpace(ref.CredentialSubjectID),
+		"permissions_json":      permissionsJSON,
+		"created_at":            *createdAt,
+		"revoked_at":            timeOrNil(ref.RevokedAt),
 	}
 	if err := s.store.Put(ctx, rec); err != nil {
 		return nil, fmt.Errorf("put workflow execution ref: %w", err)
@@ -107,10 +108,11 @@ func recordToWorkflowExecutionRef(rec indexeddb.Record) *coreworkflow.ExecutionR
 			Connection: recString(rec, "target_connection"),
 			Instance:   recString(rec, "target_instance"),
 		},
-		SubjectID:   recString(rec, "subject_id"),
-		Permissions: recWorkflowExecutionRefPermissions(rec),
-		CreatedAt:   recTimePtr(rec, "created_at"),
-		RevokedAt:   recTimePtr(rec, "revoked_at"),
+		SubjectID:           recString(rec, "subject_id"),
+		CredentialSubjectID: recString(rec, "credential_subject_id"),
+		Permissions:         recWorkflowExecutionRefPermissions(rec),
+		CreatedAt:           recTimePtr(rec, "created_at"),
+		RevokedAt:           recTimePtr(rec, "revoked_at"),
 	}
 }
 
