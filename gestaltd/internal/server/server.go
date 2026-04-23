@@ -83,6 +83,8 @@ type Server struct {
 	users                  *coredata.UserService
 	tokens                 *coredata.TokenService
 	apiTokens              *coredata.APITokenService
+	identities             *coredata.IdentityService
+	identityGrants         *coredata.IdentityManagementGrantService
 	workspaceRoles         *coredata.WorkspaceRoleService
 	identityPluginAccess   *coredata.IdentityPluginAccessService
 	workflowExecutionRefs  *coredata.WorkflowExecutionRefService
@@ -233,6 +235,8 @@ func New(cfg Config) (*Server, error) {
 	users := cfg.Services.Users
 	tokens := cfg.Services.Tokens
 	apiTokens := cfg.Services.APITokens
+	identities := cfg.Services.Identities
+	identityGrants := cfg.Services.IdentityManagementGrants
 	workspaceRoles := cfg.Services.WorkspaceRoles
 	identityPluginAccess := cfg.Services.IdentityPluginAccess
 	workflowExecutionRefs := cfg.Services.WorkflowExecutionRefs
@@ -281,6 +285,8 @@ func New(cfg Config) (*Server, error) {
 		users:                  users,
 		tokens:                 tokens,
 		apiTokens:              apiTokens,
+		identities:             identities,
+		identityGrants:         identityGrants,
 		workspaceRoles:         workspaceRoles,
 		identityPluginAccess:   identityPluginAccess,
 		workflowExecutionRefs:  workflowExecutionRefs,
