@@ -243,6 +243,9 @@ func mergeGeneratedHTTPBinding(base, override *providermanifestv1.HTTPBinding) *
 	if override.Method != "" {
 		merged.Method = override.Method
 	}
+	if override.CredentialMode != "" {
+		merged.CredentialMode = override.CredentialMode
+	}
 	if override.Security != "" {
 		merged.Security = override.Security
 	}

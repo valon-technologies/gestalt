@@ -13363,6 +13363,83 @@ func TestHostedHTTPBinding_RejectsReservedSystemResolvedSubject(t *testing.T) {
 	}
 }
 
+func TestHostedHTTPBinding_CredentialModeNoneBypassesProviderTokenLookup(t *testing.T) {
+	t.Parallel()
+
+	type bindingInvocation struct {
+		Token      string
+		Credential invocation.CredentialContext
+	}
+
+	invocations := make(chan bindingInvocation, 1)
+	provider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "events",
+			ConnMode: core.ConnectionModeUser,
+			ExecuteFn: func(ctx context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
+				if op != "handle_event" {
+					t.Fatalf("operation = %q, want %q", op, "handle_event")
+				}
+				invocations <- bindingInvocation{
+					Token:      token,
+					Credential: invocation.CredentialContextFromContext(ctx),
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"accepted":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "handle_event", Method: http.MethodPost}},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"events": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"public": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:           "/event",
+						Method:         http.MethodPost,
+						CredentialMode: providermanifestv1.ConnectionModeNone,
+						Security:       "public",
+						Target:         "handle_event",
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/events/event", strings.NewReader(`{"event":"opened"}`))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http binding request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	select {
+	case invocation := <-invocations:
+		if invocation.Token != "" {
+			t.Fatalf("token = %q, want empty", invocation.Token)
+		}
+		if got, want := invocation.Credential.Mode, core.ConnectionModeNone; got != want {
+			t.Fatalf("credential mode = %q, want %q", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for http binding invocation")
+	}
+}
+
 func TestHostedHTTPBinding_RejectsGenericOperationRouteConflicts(t *testing.T) {
 	t.Parallel()
 

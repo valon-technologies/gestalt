@@ -134,12 +134,13 @@ const (
 )
 
 type HTTPBinding struct {
-	Path        string           `json:"path" yaml:"path"`
-	Method      string           `json:"method" yaml:"method"`
-	RequestBody *HTTPRequestBody `json:"requestBody,omitempty" yaml:"requestBody,omitempty"`
-	Security    string           `json:"security,omitempty" yaml:"security,omitempty"`
-	Target      string           `json:"target" yaml:"target"`
-	Ack         *HTTPAck         `json:"ack,omitempty" yaml:"ack,omitempty"`
+	Path           string           `json:"path" yaml:"path"`
+	Method         string           `json:"method" yaml:"method"`
+	CredentialMode ConnectionMode   `json:"credentialMode,omitempty" yaml:"credentialMode,omitempty"`
+	RequestBody    *HTTPRequestBody `json:"requestBody,omitempty" yaml:"requestBody,omitempty"`
+	Security       string           `json:"security,omitempty" yaml:"security,omitempty"`
+	Target         string           `json:"target" yaml:"target"`
+	Ack            *HTTPAck         `json:"ack,omitempty" yaml:"ack,omitempty"`
 }
 
 type HTTPRequestBody struct {

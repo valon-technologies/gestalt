@@ -66,12 +66,13 @@ type HTTPSecurityScheme struct {
 // HTTPBinding describes one hosted HTTP endpoint bound to a registered
 // operation target.
 type HTTPBinding struct {
-	Path        string           `json:"path" yaml:"path"`
-	Method      string           `json:"method" yaml:"method"`
-	RequestBody *HTTPRequestBody `json:"requestBody,omitempty" yaml:"requestBody,omitempty"`
-	Security    string           `json:"security,omitempty" yaml:"security,omitempty"`
-	Target      string           `json:"target" yaml:"target"`
-	Ack         *HTTPAck         `json:"ack,omitempty" yaml:"ack,omitempty"`
+	Path           string           `json:"path" yaml:"path"`
+	Method         string           `json:"method" yaml:"method"`
+	CredentialMode string           `json:"credentialMode,omitempty" yaml:"credentialMode,omitempty"`
+	RequestBody    *HTTPRequestBody `json:"requestBody,omitempty" yaml:"requestBody,omitempty"`
+	Security       string           `json:"security,omitempty" yaml:"security,omitempty"`
+	Target         string           `json:"target" yaml:"target"`
+	Ack            *HTTPAck         `json:"ack,omitempty" yaml:"ack,omitempty"`
 }
 
 // HTTPRequestBody describes the accepted content types for a hosted HTTP

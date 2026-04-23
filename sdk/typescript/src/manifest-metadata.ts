@@ -47,6 +47,7 @@ export interface HTTPAck {
 export interface HTTPBinding {
   path: string;
   method: string;
+  credentialMode?: "none" | "user";
   requestBody?: HTTPRequestBody;
   security: string;
   target: string;

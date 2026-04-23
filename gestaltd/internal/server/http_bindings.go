@@ -92,15 +92,16 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 				return nil, fmt.Errorf("http binding %s.%s references undefined security scheme %q", pluginName, bindingName, securityName)
 			}
 			mounted = append(mounted, MountedHTTPBinding{
-				Name:         bindingName,
-				PluginName:   pluginName,
-				Path:         mountedHTTPBindingPath(pluginName, relativePath),
-				Method:       method,
-				Target:       target,
-				RequestBody:  binding.RequestBody,
-				Ack:          binding.Ack,
-				SecurityName: securityName,
-				Security:     scheme,
+				Name:           bindingName,
+				PluginName:     pluginName,
+				Path:           mountedHTTPBindingPath(pluginName, relativePath),
+				Method:         method,
+				Target:         target,
+				CredentialMode: core.ConnectionMode(binding.CredentialMode),
+				RequestBody:    binding.RequestBody,
+				Ack:            binding.Ack,
+				SecurityName:   securityName,
+				Security:       scheme,
 			})
 		}
 	}
@@ -186,6 +187,12 @@ func validateMountedHTTPBinding(pluginName, bindingName string, binding *config.
 		return fmt.Errorf("%s.method %q is not a valid HTTP method", path, binding.Method)
 	}
 	binding.Method = method
+	binding.CredentialMode = providermanifestv1.ConnectionMode(strings.TrimSpace(string(binding.CredentialMode)))
+	switch binding.CredentialMode {
+	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
+	default:
+		return fmt.Errorf("%s.credentialMode %q is not supported", path, binding.CredentialMode)
+	}
 	binding.Target = strings.TrimSpace(binding.Target)
 	if binding.Target == "" {
 		return fmt.Errorf("%s.target is required", path)

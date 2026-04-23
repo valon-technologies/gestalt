@@ -752,6 +752,9 @@ func mergeHTTPBinding(base, override *HTTPBinding) *HTTPBinding {
 	if override.Method != "" {
 		merged.Method = override.Method
 	}
+	if override.CredentialMode != "" {
+		merged.CredentialMode = override.CredentialMode
+	}
 	if override.Security != "" {
 		merged.Security = override.Security
 	}

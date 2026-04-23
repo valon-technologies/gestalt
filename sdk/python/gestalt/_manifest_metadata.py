@@ -55,6 +55,7 @@ class HTTPBindingRequired(TypedDict):
 
 
 class HTTPBinding(HTTPBindingRequired, total=False):
+    credentialMode: str
     requestBody: HTTPRequestBody
     ack: HTTPAck
 
