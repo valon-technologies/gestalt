@@ -538,6 +538,47 @@ Workflow targets are always explicit: `plugin`, `operation`, and optional
 triggers are reconciled into the provider at startup. See
 [Workflow](/providers/workflow) for the user-facing and provider model.
 
+## Configuring agent providers
+
+The `providers.agent` block declares the global pool of agent backends. There
+is no `server.providers.agent`: a run request either names a provider
+explicitly or inherits the sole/default `providers.agent` entry when it omits
+`provider`.
+
+```yaml
+providers:
+  agent:
+    openai:
+      source: ./providers/agent/openai/manifest.yaml
+      default: true
+      config:
+        model: gpt-5.4
+        apiKey:
+          secret:
+            provider: default
+            name: openai-api-key
+
+    claude:
+      source: ./providers/agent/claude/manifest.yaml
+      config:
+        model: claude-sonnet
+        apiKey:
+          secret:
+            provider: default
+            name: anthropic-api-key
+```
+
+Agent providers receive neutral run requests with `messages`, optional tools,
+optional structured-output schema, and optional `sessionRef`. The same
+provider pool is used by the global agent runs API/CLI and by plugins that use
+the host agent manager surface. In V1 there is no standardized storage binding
+for agent providers, so provider-owned persistence should be declared in the
+provider's own `config`.
+
+See [Agent](/providers/agent) for the provider model and
+[Custom Providers > Agent](/custom-providers/agent) if you need to implement
+your own backend.
+
 ## Telemetry and audit
 
 Gestalt ships with builtin telemetry and audit providers that work without any configuration. The defaults emit to stdout:

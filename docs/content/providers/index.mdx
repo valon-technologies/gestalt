@@ -6,8 +6,9 @@ asIndexPage: true
 
 Gestalt loads most integration and platform surfaces as providers instead of
 compiling them into `gestaltd`. Plugins, authentication backends, IndexedDB backends,
-authorization backends, workflow backends, runtime backends, cache backends, S3 object stores,
-external secret managers, and public UIs all use the same provider model:
+authorization backends, agent backends, workflow backends, runtime backends,
+cache backends, S3 object stores, external secret managers, and public UIs all
+use the same provider model:
 you reference a package in config, the host resolves it, validates it, and
 starts it with the permissions and request context it needs.
 
@@ -18,6 +19,7 @@ starts it with the permissions and request context it needs.
 | `plugin` | Tool providers that expose operations over CLI, HTTP API, and MCP | `plugins.<name>` |
 | `auth` | Platform authentication backends | `providers.authentication.<name>` |
 | `authorization` | Dynamic human authorization backends | `providers.authorization.<name>` |
+| `agent` | Global agent run backends that reason over messages and tools | `providers.agent.<name>` |
 | `cache` | Plugin-bound cache backends | `providers.cache.<name>` |
 | `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddb.<name>` |
 | `runtime` | Hosted execution backends for executable plugins | `runtime.providers.<name>` |
@@ -61,6 +63,11 @@ The repository is organized by provider type:
 | Secret | [`secrets/`](https://github.com/valon-technologies/gestalt-providers/tree/main/secrets) | `providers.secrets.<name>` |
 | Workflow | [`workflow/`](https://github.com/valon-technologies/gestalt-providers/tree/main/workflow) | `providers.workflow.<name>` |
 | UI | [`web/`](https://github.com/valon-technologies/gestalt-providers/tree/main/web) | `providers.ui` |
+
+There is not yet a first-party agent provider published from
+`valon-technologies/gestalt-providers`. If you need one today, implement it as
+a custom provider with the neutral agent protocol described in
+[Custom Providers > Agent](/custom-providers/agent).
 
 ## Using providers
 
@@ -131,6 +138,7 @@ release workflow now lives under [Custom Providers](/custom-providers).
 
 - [Authentication](/providers/authentication): platform login providers
 - [Authorization](/providers/authorization): human authorization providers
+- [Agent](/providers/agent): global agent-provider pool and selection model
 - [Cache](/providers/cache): plugin-bound cache backends
 - [IndexedDB](/providers/indexeddb): storage backends
 - [Plugin](/providers/plugins): choosing and configuring plugin providers

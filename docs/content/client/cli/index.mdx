@@ -32,6 +32,7 @@ asIndexPage: true
 | `gestalt workflows triggers ...` | Create, list, inspect, update, pause, resume, or delete workflow triggers. |
 | `gestalt workflows events publish ...` | Publish an event into the workflow system. |
 | `gestalt workflows runs ...` | List, inspect, and cancel workflow runs. |
+| `gestalt agent runs ...` | Create, list, inspect, and cancel global agent runs. |
 | `gestalt tokens create\|list\|revoke` | Manage Gestalt API tokens. |
 
 ## URL resolution
@@ -243,3 +244,47 @@ gestalt workflows runs list --plugin github --status failed
 gestalt workflows runs get <run-id>
 gestalt workflows runs cancel <run-id> --reason "operator requested"
 ```
+
+### Agent Runs
+
+```sh
+gestalt agent runs create \
+  --provider managed \
+  --model gpt-5.4 \
+  --system "Be concise." \
+  --message "Summarize the roadmap risk." \
+  --tool roadmap:sync \
+  --idempotency-key agent-run-1
+
+gestalt agent runs list --provider managed --status running
+gestalt agent runs get <run-id>
+gestalt agent runs cancel <run-id> --reason "operator requested"
+
+# advanced fields such as responseSchema, metadata, or providerOptions
+# go through --request-file, which also accepts "-" for stdin:
+cat <<'JSON' | gestalt --format json agent runs create --request-file -
+{
+  "provider": "managed",
+  "model": "gpt-5.4",
+  "sessionRef": "session-1",
+  "messages": [
+    {"role": "user", "text": "Summarize the roadmap risk."}
+  ],
+  "toolRefs": [
+    {"pluginName": "roadmap", "operation": "sync"}
+  ],
+  "responseSchema": {
+    "type": "object",
+    "properties": {
+      "summary": {"type": "string"}
+    },
+    "required": ["summary"]
+  }
+}
+JSON
+```
+
+`gestalt agent runs create` supports repeated `--system`, repeated `--message`,
+repeated `--tool plugin:operation`, `--session-ref`, `--idempotency-key`, and
+`--request-file`. Use `--format json` when you want the raw HTTP response shape
+instead of the default table view.

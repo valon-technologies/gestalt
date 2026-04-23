@@ -1,6 +1,6 @@
 # First-Party Providers
 
-Gestalt does not compile authentication, authorization, workflow, runtime,
+Gestalt does not compile authentication, authorization, agent, workflow, runtime,
 IndexedDB, or S3 providers into the `gestaltd` binary. They are loaded at
 startup as external provider processes through the same runtime model that also
 powers plugins. The first-party implementations are published from
@@ -149,6 +149,15 @@ workflows:
 | Name | Purpose |
 | --- | --- |
 | `indexeddb` | Stores workflow runs, schedules, and triggers in IndexedDB and invokes plugin operations through the workflow host. |
+
+## Agent Providers
+
+Agent providers are configured under `providers.agent.<name>`, but there is
+not yet a first-party agent provider published from
+`valon-technologies/gestalt-providers`.
+
+If you need one today, implement it with
+[Custom Providers > Agent](/custom-providers/agent).
 
 ## S3 Providers
 

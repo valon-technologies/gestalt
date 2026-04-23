@@ -5,7 +5,7 @@ import { Tabs } from "nextra/components";
 Gestalt provider packages and release archives are described by a manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`. YAML is the easiest format to author by hand.
 
 Providers are the umbrella concept in Gestalt. Authentication, authorization,
-cache, indexeddb, runtime, S3, secrets, workflow, and plugin packages all use
+agent, cache, indexeddb, runtime, S3, secrets, workflow, and plugin packages all use
 this manifest format. The `plugin` manifest kind is reserved for providers that
 expose callable operations.
 
@@ -18,6 +18,7 @@ Every manifest defines exactly one provider kind, set by the `kind` field:
 | `plugin` | Plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
 | `authentication` | Platform authentication provider. |
 | `authorization` | Human authorization decision and control-plane provider. |
+| `agent` | Global run-based agent provider. |
 | `cache` | Cache backend for plugin-bound cache bindings. |
 | `indexeddb` | Persistence backend. |
 | `runtime` | Hosted execution backend for executable plugins. |
@@ -34,7 +35,7 @@ These fields appear at the top level of every manifest regardless of kind.
 
 | Field         | Type       | Required | Purpose                                                                                                                                                                                              |
 | ------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`        | string     | yes      | The provider kind (`plugin`, `authentication`, `authorization`, `cache`, `indexeddb`, `runtime`, `s3`, `secrets`, `ui`, `workflow`).                                                                                                                |
+| `kind`        | string     | yes      | The provider kind (`plugin`, `authentication`, `authorization`, `agent`, `cache`, `indexeddb`, `runtime`, `s3`, `secrets`, `ui`, `workflow`).                                                                                                                |
 | `source`      | string     | yes      | Canonical provider source identifier. Use `github.com/<org>/<repo>/<path>`. The final path segment is the provider package name; preceding segments are used for release tags and source resolution. |
 | `version`     | string     | yes      | Semver version. Pre-release suffixes like `-alpha.1` are allowed.                                                                                                                                    |
 | `displayName` | string     | no       | Human-readable label shown in the UI.                                                                                                                                                                |

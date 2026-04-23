@@ -1,10 +1,10 @@
 use clap::{CommandFactory, Parser};
 use gestalt::api::{self, ApiClient};
 use gestalt::cli::{
-    AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs, IdentityCommands,
-    IdentityGrantCommands, IdentityMemberCommands, IdentityTokenCommands, InvokeArgs,
-    PluginCommands, TokenCommands, WorkflowCommands, WorkflowEventCommands, WorkflowRunCommands,
-    WorkflowScheduleCommands, WorkflowTriggerCommands,
+    AgentCommands, AgentRunCommands, AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs,
+    IdentityCommands, IdentityGrantCommands, IdentityMemberCommands, IdentityTokenCommands,
+    InvokeArgs, PluginCommands, TokenCommands, WorkflowCommands, WorkflowEventCommands,
+    WorkflowRunCommands, WorkflowScheduleCommands, WorkflowTriggerCommands,
 };
 use gestalt::commands;
 use gestalt::output;
@@ -198,6 +198,26 @@ fn run() -> anyhow::Result<()> {
                 WorkflowCommands::Events { command } => match command {
                     WorkflowEventCommands::Publish(args) => {
                         commands::workflows::publish_event(&client, &args, format)
+                    }
+                },
+            }
+        }
+        Commands::Agent { command } => {
+            let client = ApiClient::from_env(url)?;
+            match command {
+                AgentCommands::Runs { command } => match command {
+                    AgentRunCommands::Create(args) => {
+                        commands::agents::create_run(&client, &args, format)
+                    }
+                    AgentRunCommands::List { provider, status } => commands::agents::list_runs(
+                        &client,
+                        provider.as_deref(),
+                        status.as_deref(),
+                        format,
+                    ),
+                    AgentRunCommands::Get { id } => commands::agents::get_run(&client, &id, format),
+                    AgentRunCommands::Cancel { id, reason } => {
+                        commands::agents::cancel_run(&client, &id, reason.as_deref(), format)
                     }
                 },
             }

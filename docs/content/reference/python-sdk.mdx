@@ -31,3 +31,20 @@ The generated API reference is published separately as static HTML:
 Those pages focus on the handwritten SDK surface. Generated protobuf bindings
 under `gestalt.gen` remain available to provider code, but they are not
 expanded as authored reference pages.
+
+The Python SDK also exposes agent-provider helpers:
+
+```python
+import gestalt
+
+
+class ExampleAgent(gestalt.AgentProvider):
+    def StartRun(self, request, context):
+        return gestalt.pb.BoundAgentRun(
+            id=request.run_id,
+            provider_name=request.provider_name,
+            model=request.model,
+            status=gestalt.pb.AGENT_RUN_STATUS_PENDING,
+            messages=request.messages,
+        )
+```

@@ -48,3 +48,23 @@ gestalt::export_provider!(constructor = EchoProvider::default, router = router);
 
 `docs.rs` renders the crate docs, module docs, and symbol docs from the source
 and checked-in generated bindings.
+
+Agent host and provider utilities are also part of the crate:
+
+```rust
+use gestalt::generated::v1 as pb;
+
+async fn execute_bound_tool() -> Result<(), Box<dyn std::error::Error>> {
+    let mut host = gestalt::AgentHost::connect().await?;
+    let response = host
+        .execute_tool(pb::ExecuteAgentToolRequest {
+            run_id: "run-123".into(),
+            tool_call_id: "call-1".into(),
+            tool_id: "roadmap/sync".into(),
+            arguments: None,
+        })
+        .await?;
+    println!("{}", response.status);
+    Ok(())
+}
+```

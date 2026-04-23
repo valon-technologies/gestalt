@@ -30,3 +30,34 @@ import { parseRuntimeArgs, serve } from "@valon-technologies/gestalt/runtime";
 
 const args = parseRuntimeArgs(process.argv.slice(2));
 ```
+
+Agent-provider surfaces are part of the same package:
+
+```ts
+import {
+  AgentRunStatus,
+  defineAgentProvider,
+} from "@valon-technologies/gestalt";
+
+export const provider = defineAgentProvider({
+  displayName: "Example Agent",
+  async startRun(request) {
+    return {
+      id: request.runId,
+      providerName: request.providerName || "example",
+      model: request.model,
+      status: AgentRunStatus.PENDING,
+      messages: request.messages,
+    };
+  },
+  async getRun(request) {
+    return { id: request.runId, providerName: "example", status: AgentRunStatus.RUNNING };
+  },
+  async listRuns() {
+    return [];
+  },
+  async cancelRun(request) {
+    return { id: request.runId, providerName: "example", status: AgentRunStatus.CANCELED };
+  },
+});
+```

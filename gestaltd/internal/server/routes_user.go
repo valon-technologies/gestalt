@@ -33,6 +33,12 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Get("/{runID}", s.getGlobalWorkflowRun)
 			r.Post("/{runID}/cancel", s.cancelGlobalWorkflowRun)
 		})
+		r.Route("/agent/runs", func(r chi.Router) {
+			r.Post("/", s.createGlobalAgentRun)
+			r.Get("/", s.listGlobalAgentRuns)
+			r.Get("/{runID}", s.getGlobalAgentRun)
+			r.Post("/{runID}/cancel", s.cancelGlobalAgentRun)
+		})
 
 		r.Post("/auth/start-oauth", s.startIntegrationOAuth)
 		r.Post("/auth/connect-manual", s.connectManual)

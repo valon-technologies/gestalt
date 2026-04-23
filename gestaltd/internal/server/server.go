@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/session"
+	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -90,6 +91,7 @@ type Server struct {
 	identityPluginAccess   *coredata.IdentityPluginAccessService
 	workflowExecutionRefs  *coredata.WorkflowExecutionRefService
 	workflowSchedules      *workflowmanager.Manager
+	agentRuns              agentmanager.Service
 	authorizationProvider  core.AuthorizationProvider
 	managedIdentityMu      sync.Mutex
 	providers              *registry.ProviderMap[core.Provider]
@@ -142,6 +144,7 @@ type Config struct {
 	AuditSink             core.AuditSink
 	Services              *coredata.Services
 	Providers             *registry.ProviderMap[core.Provider]
+	AgentManager          agentmanager.Service
 	Workflow              bootstrap.WorkflowControl
 	PluginRuntimes        bootstrap.RuntimeInspector
 	Invoker               invocation.Invoker
@@ -292,6 +295,7 @@ func New(cfg Config) (*Server, error) {
 		workspaceRoles:         workspaceRoles,
 		identityPluginAccess:   identityPluginAccess,
 		workflowExecutionRefs:  workflowExecutionRefs,
+		agentRuns:              cfg.AgentManager,
 		authorizationProvider:  cfg.AuthorizationProvider,
 		providers:              cfg.Providers,
 		workflow:               cfg.Workflow,

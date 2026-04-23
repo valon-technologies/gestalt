@@ -1619,6 +1619,10 @@ func (unavailableAgentManager) ListRuns(context.Context, *principal.Principal) (
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
+func (unavailableAgentManager) ListRunsByProvider(context.Context, *principal.Principal, string) ([]*coreagent.ManagedRun, error) {
+	return nil, fmt.Errorf("agent manager is not available")
+}
+
 func (unavailableAgentManager) CancelRun(context.Context, *principal.Principal, string, string) (*coreagent.ManagedRun, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
