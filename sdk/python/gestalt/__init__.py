@@ -45,6 +45,9 @@ from ._manifest_metadata import (
 )
 
 _LAZY_EXPORTS = {
+    "AgentHost": ("._agent", "AgentHost"),
+    "AgentManager": ("._agent", "AgentManager"),
+    "AgentProvider": ("._providers", "AgentProvider"),
     "AlreadyExistsError": ("._indexeddb", "AlreadyExistsError"),
     "AuthenticatedUser": ("._providers", "AuthenticatedUser"),
     "AuthenticationProvider": ("._providers", "AuthenticationProvider"),
@@ -58,6 +61,9 @@ _LAZY_EXPORTS = {
     "Cache": ("._cache", "Cache"),
     "CacheEntry": ("._cache", "CacheEntry"),
     "CacheProvider": ("._providers", "CacheProvider"),
+    "ENV_AGENT_HOST_SOCKET": ("._agent", "ENV_AGENT_HOST_SOCKET"),
+    "ENV_AGENT_MANAGER_SOCKET": ("._agent", "ENV_AGENT_MANAGER_SOCKET"),
+    "ENV_AGENT_MANAGER_SOCKET_TOKEN": ("._agent", "ENV_AGENT_MANAGER_SOCKET_TOKEN"),
     "ENV_CACHE_SOCKET_TOKEN": ("._cache", "ENV_CACHE_SOCKET_TOKEN"),
     "Catalog": ("._catalog", "Catalog"),
     "CatalogOperation": ("._catalog", "CatalogOperation"),
@@ -131,6 +137,9 @@ def __getattr__(name: str):
     return value
 
 __all__ = [
+    "AgentHost",
+    "AgentManager",
+    "AgentProvider",
     "AlreadyExistsError",
     "AuthenticationProvider",
     "AuthenticatedUser",
@@ -153,6 +162,9 @@ __all__ = [
     "CompleteLoginRequest",
     "Cursor",
     "Error",
+    "ENV_AGENT_HOST_SOCKET",
+    "ENV_AGENT_MANAGER_SOCKET",
+    "ENV_AGENT_MANAGER_SOCKET_TOKEN",
     "ENV_S3_SOCKET",
     "ENV_S3_SOCKET_TOKEN",
     "ENV_PLUGIN_INVOKER_SOCKET",

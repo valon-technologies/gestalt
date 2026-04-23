@@ -18,8 +18,11 @@
         "indexeddb",
         "cache",
         "s3",
+        "workflow",
+        "agent",
         "secrets",
-        "ui"
+        "ui",
+        "runtime"
       ]
     },
     "source": {

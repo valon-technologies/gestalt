@@ -1,0 +1,154 @@
+package providerhost
+
+import (
+	"context"
+	"io"
+
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"google.golang.org/protobuf/types/known/emptypb"
+)
+
+type AgentExecConfig struct {
+	Command       string
+	Args          []string
+	Env           map[string]string
+	Config        map[string]any
+	AllowedHosts  []string
+	DefaultAction egress.PolicyAction
+	HostBinary    string
+	Cleanup       func()
+	HostServices  []HostService
+	Name          string
+}
+
+var startAgentProviderProcess = startProviderProcess
+
+type remoteAgent struct {
+	client  proto.AgentProviderClient
+	runtime proto.ProviderLifecycleClient
+	closer  io.Closer
+}
+
+func NewExecutableAgent(ctx context.Context, cfg AgentExecConfig) (coreagent.Provider, error) {
+	execCfg := ExecConfig{
+		Command:       cfg.Command,
+		Args:          cfg.Args,
+		Env:           cfg.Env,
+		Config:        cfg.Config,
+		AllowedHosts:  cfg.AllowedHosts,
+		DefaultAction: cfg.DefaultAction,
+		HostBinary:    cfg.HostBinary,
+		Cleanup:       cfg.Cleanup,
+		HostServices:  cfg.HostServices,
+	}
+	proc, err := startAgentProviderProcess(ctx, execCfg.processConfig())
+	if err != nil {
+		return nil, err
+	}
+
+	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
+	agentClient := proto.NewAgentProviderClient(proc.conn)
+	if _, err := ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_AGENT, cfg.Name, cfg.Config); err != nil {
+		_ = proc.Close()
+		return nil, err
+	}
+	return &remoteAgent{client: agentClient, runtime: runtimeClient, closer: proc}, nil
+}
+
+func (r *remoteAgent) StartRun(ctx context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	tools, err := agentToolsToProto(req.Tools)
+	if err != nil {
+		return nil, err
+	}
+	responseSchema, err := structFromMap(req.ResponseSchema)
+	if err != nil {
+		return nil, err
+	}
+	metadata, err := structFromMap(req.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	providerOptions, err := structFromMap(req.ProviderOptions)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.client.StartRun(ctx, &proto.StartAgentProviderRunRequest{
+		RunId:           req.RunID,
+		IdempotencyKey:  req.IdempotencyKey,
+		ProviderName:    req.ProviderName,
+		Model:           req.Model,
+		Messages:        agentMessagesToProto(req.Messages),
+		Tools:           tools,
+		ResponseSchema:  responseSchema,
+		SessionRef:      req.SessionRef,
+		Metadata:        metadata,
+		ProviderOptions: providerOptions,
+		CreatedBy:       agentActorToProto(req.CreatedBy),
+		ExecutionRef:    req.ExecutionRef,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return agentRunFromProto(resp)
+}
+
+func (r *remoteAgent) GetRun(ctx context.Context, req coreagent.GetRunRequest) (*coreagent.Run, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resp, err := r.client.GetRun(ctx, &proto.GetAgentProviderRunRequest{RunId: req.RunID})
+	if err != nil {
+		return nil, err
+	}
+	return agentRunFromProto(resp)
+}
+
+func (r *remoteAgent) ListRuns(ctx context.Context, req coreagent.ListRunsRequest) ([]*coreagent.Run, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resp, err := r.client.ListRuns(ctx, &proto.ListAgentProviderRunsRequest{})
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]*coreagent.Run, 0, len(resp.GetRuns()))
+	for _, run := range resp.GetRuns() {
+		value, err := agentRunFromProto(run)
+		if err != nil {
+			return nil, err
+		}
+		runs = append(runs, value)
+	}
+	return runs, nil
+}
+
+func (r *remoteAgent) CancelRun(ctx context.Context, req coreagent.CancelRunRequest) (*coreagent.Run, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resp, err := r.client.CancelRun(ctx, &proto.CancelAgentProviderRunRequest{
+		RunId:  req.RunID,
+		Reason: req.Reason,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return agentRunFromProto(resp)
+}
+
+func (r *remoteAgent) Ping(ctx context.Context) error {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	_, err := r.runtime.HealthCheck(ctx, &emptypb.Empty{})
+	return err
+}
+
+func (r *remoteAgent) Close() error {
+	if r == nil || r.closer == nil {
+		return nil
+	}
+	return r.closer.Close()
+}
+
+var _ coreagent.Provider = (*remoteAgent)(nil)

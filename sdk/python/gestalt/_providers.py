@@ -19,14 +19,17 @@ if TYPE_CHECKING:
     from ._cache import CacheEntry
 
 _s3_pb2_grpc: Any | None
+_agent_pb2_grpc: Any | None
 _workflow_pb2_grpc: Any | None
 
 try:
+    _agent_pb2_grpc = import_module(".gen.v1.agent_pb2_grpc", __package__)
     _s3_pb2_grpc = import_module(".gen.v1.s3_pb2_grpc", __package__)
     _workflow_pb2_grpc = import_module(".gen.v1.workflow_pb2_grpc", __package__)
 except ModuleNotFoundError as exc:
     if exc.name != "grpc":
         raise
+    _agent_pb2_grpc = None
     _s3_pb2_grpc = None
     _workflow_pb2_grpc = None
 
@@ -39,6 +42,11 @@ if _s3_pb2_grpc is None:
     _S3ServicerBase = object
 else:
     _S3ServicerBase = _s3_pb2_grpc.S3Servicer
+
+if _agent_pb2_grpc is None:
+    _AgentProviderServicerBase = object
+else:
+    _AgentProviderServicerBase = _agent_pb2_grpc.AgentProviderServicer
 
 if _workflow_pb2_grpc is None:
     _WorkflowProviderServicerBase = object
@@ -53,6 +61,7 @@ class ProviderKind(str, Enum):
     AUTHENTICATION = "authentication"
     CACHE = "cache"
     S3 = "s3"
+    AGENT = "agent"
     WORKFLOW = "workflow"
     SECRETS = "secrets"
     TELEMETRY = "telemetry"
@@ -272,6 +281,17 @@ class S3Provider(PluginProvider, _S3ServicerBase):
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.S3)
+
+
+class AgentProvider(PluginProvider, _AgentProviderServicerBase):
+    """Base class for agent-provider runtimes."""
+
+    def serve(self) -> None:
+        """Start the agent runtime."""
+
+        from . import _runtime
+
+        _runtime.serve(self, runtime_kind=ProviderKind.AGENT)
 
 
 class WorkflowProvider(PluginProvider, _WorkflowProviderServicerBase):

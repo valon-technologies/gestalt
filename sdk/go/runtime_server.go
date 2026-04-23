@@ -93,6 +93,8 @@ func providerKindToProto(kind ProviderKind) proto.ProviderKind {
 		return proto.ProviderKind_PROVIDER_KIND_S3
 	case ProviderKindWorkflow:
 		return proto.ProviderKind_PROVIDER_KIND_WORKFLOW
+	case ProviderKindAgent:
+		return proto.ProviderKind_PROVIDER_KIND_AGENT
 	case ProviderKindRuntime:
 		return proto.ProviderKind_PROVIDER_KIND_RUNTIME
 	default:

@@ -32,6 +32,8 @@ const (
 	ProviderKindS3 ProviderKind = "s3"
 	// ProviderKindWorkflow serves the workflow orchestration surface.
 	ProviderKindWorkflow ProviderKind = "workflow"
+	// ProviderKindAgent serves the agent run surface.
+	ProviderKindAgent ProviderKind = "agent"
 	// ProviderKindRuntime serves hosted executable-plugin runtime management.
 	ProviderKindRuntime ProviderKind = "runtime"
 )

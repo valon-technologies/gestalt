@@ -44,6 +44,12 @@ const PROVIDER_KIND_DEFINITIONS = {
     defaultExportNames: ["workflow", "provider"],
     label: "workflow provider",
   },
+  agent: {
+    tokens: ["agent"],
+    formatToken: "agent",
+    defaultExportNames: ["agent", "provider"],
+    label: "agent provider",
+  },
   telemetry: {
     tokens: ["telemetry"],
     formatToken: "telemetry",

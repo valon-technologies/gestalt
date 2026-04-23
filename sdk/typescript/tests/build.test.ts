@@ -8,6 +8,10 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { expect, test } from "bun:test";
 
 import {
+  AgentProvider as AgentProviderService,
+  StartAgentProviderRunRequestSchema,
+} from "../gen/v1/agent_pb.ts";
+import {
   AuthenticationProvider as AuthenticationProviderService,
   BeginLoginRequestSchema,
 } from "../gen/v1/authentication_pb.ts";
@@ -903,6 +907,77 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
     );
     expect(run.target?.pluginName).toBe("roadmap");
     expect(run.id).toBe("roadmap:sync:1");
+  } finally {
+    if (child) {
+      await stopProcess(child);
+    }
+    removeTempDir(tempDir);
+  }
+}, 60_000);
+
+test("buildProviderBinary compiles a runnable agent provider executable", async () => {
+  const { goos, goarch, executableSuffix } = hostTarget();
+  const compileTarget = hostCompileTarget(goos, goarch);
+  const tempDir = makeTempDir("gts-agent-");
+  const outputPath = join(tempDir, `fixture-agent${executableSuffix}`);
+  const socketPath = join(tempDir, "provider.sock");
+  let child: ChildProcess | undefined;
+
+  try {
+    buildProviderBinary({
+      root: fixturePath("agent-provider"),
+      target: "agent:./agent.ts#provider",
+      outputPath,
+      providerName: "fixture-agent",
+      goos,
+      goarch,
+      compileTarget,
+    });
+
+    expect(existsSync(outputPath)).toBe(true);
+
+    child = spawn(outputPath, [], {
+      env: {
+        ...process.env,
+        [ENV_PROVIDER_SOCKET]: socketPath,
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const stderrText = captureChildStderr(child);
+
+    await waitForSocket(socketPath, stderrText);
+
+    const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
+    const agent = createUnixGrpcClient(AgentProviderService, socketPath);
+
+    const metadata = await runtime.getProviderIdentity(create(EmptySchema, {}));
+    expect(metadata.kind).toBe(ProtoProviderKind.AGENT);
+    expect(metadata.name).toBe("fixture-agent");
+
+    await runtime.configureProvider(
+      create(ConfigureProviderRequestSchema, {
+        name: "fixture-agent",
+        config: {},
+        protocolVersion: CURRENT_PROTOCOL_VERSION,
+      }),
+    );
+
+    const run = await agent.startRun(
+      create(StartAgentProviderRunRequestSchema, {
+        runId: "run-1",
+        providerName: "fixture-agent",
+        model: "gpt-test",
+        messages: [
+          {
+            role: "user",
+            text: "Check build smoke test",
+          },
+        ],
+      }),
+    );
+    expect(run.id).toBe("run-1");
+    expect(run.model).toBe("gpt-test");
+    expect(run.outputText).toBe("echo:Check build smoke test");
   } finally {
     if (child) {
       await stopProcess(child);

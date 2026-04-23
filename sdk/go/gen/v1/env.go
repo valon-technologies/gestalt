@@ -12,6 +12,14 @@ const (
 	// use to manage global workflow schedules through the host.
 	EnvWorkflowManagerSocket = "GESTALT_WORKFLOW_MANAGER_SOCKET"
 
+	// EnvAgentHostSocket is the Unix socket path an executable agent provider can
+	// use to invoke host-resolved tools through the host.
+	EnvAgentHostSocket = "GESTALT_AGENT_HOST_SOCKET"
+
+	// EnvAgentManagerSocket is the Unix socket path an executable provider can
+	// use to manage agent runs through the host.
+	EnvAgentManagerSocket = "GESTALT_AGENT_MANAGER_SOCKET"
+
 	// EnvProviderParentPID is the host process ID for executable providers that
 	// want to terminate themselves when the parent goes away unexpectedly.
 	EnvProviderParentPID = "GESTALT_PLUGIN_PARENT_PID"

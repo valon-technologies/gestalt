@@ -107,6 +107,16 @@ export {
   type PluginInvokeOptions,
 } from "./invoker.ts";
 export {
+  ENV_AGENT_MANAGER_SOCKET,
+  ENV_AGENT_MANAGER_SOCKET_TOKEN,
+  AgentManager,
+  type AgentManagerCancelRunInput,
+  type AgentManagerGetRunInput,
+  type AgentManagerListRunsInput,
+  type AgentManagerRunInput,
+  type ManagedAgentRunMessage,
+} from "./agent-manager.ts";
+export {
   ENV_WORKFLOW_MANAGER_SOCKET,
   ENV_WORKFLOW_MANAGER_SOCKET_TOKEN,
   WorkflowManager,
@@ -276,6 +286,29 @@ export {
   type S3ProviderOptions,
   type WriteOptions,
 } from "./s3.ts";
+export {
+  ENV_AGENT_HOST_SOCKET,
+  AgentHost,
+  AgentProvider,
+  AgentRunStatus,
+  AgentToolSourceMode,
+  createAgentProviderService,
+  defineAgentProvider,
+  isAgentProvider,
+  type AgentActor,
+  type AgentMessage,
+  type AgentProviderOptions,
+  type AgentToolRef,
+  type BoundAgentRun,
+  type BoundAgentToolTarget,
+  type CancelAgentProviderRunRequest,
+  type ExecuteAgentToolRequest,
+  type ExecuteAgentToolResponse,
+  type GetAgentProviderRunRequest,
+  type ListAgentProviderRunsRequest,
+  type ResolvedAgentTool,
+  type StartAgentProviderRunRequest,
+} from "./agent.ts";
 export {
   ENV_WORKFLOW_HOST_SOCKET,
   WorkflowHost,

@@ -67,6 +67,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	}
 	defer func() { _ = authz.Close() }()
 	prepared.Deps.WorkflowRuntime.SetExecutionRefs(prepared.Services.WorkflowExecutionRefs)
+	prepared.Deps.AgentRuntime.SetRunMetadata(prepared.Services.AgentRunMetadata)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.Tokens,
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
@@ -76,11 +77,17 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		}),
 	)
 	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)
+	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
 	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
 		return warnings, err
 	}
 	defer func() { _ = closeWorkflows(extraWorkflows...) }()
+	extraAgents, err := buildAgents(ctx, cfg, factories, prepared.Deps)
+	if err != nil {
+		return warnings, err
+	}
+	defer func() { _ = closeAgents(extraAgents...) }()
 	<-providersReady
 	if errs := errResolver(); len(errs) > 0 {
 		return warnings, fmt.Errorf("bootstrap: provider validation failed: %w", errors.Join(errs...))

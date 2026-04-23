@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 PROTO_MODULES = (
+    "agent",
     "authentication",
     "cache",
     "datastore",

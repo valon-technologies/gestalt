@@ -126,6 +126,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 	if err := validateWorkflowConfig(cfg); err != nil {
 		return err
 	}
+	if err := validateAgentConfig(cfg); err != nil {
+		return err
+	}
 	if err := validateS3Config(cfg); err != nil {
 		return err
 	}
@@ -632,6 +635,68 @@ func validateWorkflowConfig(cfg *Config) error {
 	if len(defaults) > 1 {
 		sort.Strings(defaults)
 		return fmt.Errorf("config validation: providers.workflow declares multiple defaults: %s", strings.Join(defaults, ", "))
+	}
+	return nil
+}
+
+func validateAgentConfig(cfg *Config) error {
+	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
+	defaults := make([]string, 0, len(cfg.Providers.Agent))
+	for name, entry := range cfg.Providers.Agent {
+		if entry == nil {
+			return fmt.Errorf("config validation: providers.agent.%s is required", name)
+		}
+		if entry.Default {
+			defaults = append(defaults, name)
+		}
+		if err := validateAgentProviderFields(name, entry); err != nil {
+			return err
+		}
+		if err := validateProviderEntrySource("agent", name, entry, sourceSyntax); err != nil {
+			return err
+		}
+	}
+	if len(defaults) > 1 {
+		sort.Strings(defaults)
+		return fmt.Errorf("config validation: providers.agent declares multiple defaults: %s", strings.Join(defaults, ", "))
+	}
+	return nil
+}
+
+func validateAgentProviderFields(name string, entry *ProviderEntry) error {
+	if entry == nil {
+		return nil
+	}
+	subject := "providers.agent." + name
+	if entry.RouteAuth != nil {
+		return fmt.Errorf("config validation: %s.auth is only supported on plugins.*; use %s.source.auth for source auth", subject, subject)
+	}
+	if strings.TrimSpace(entry.MountPath) != "" {
+		return fmt.Errorf("config validation: %s.mountPath is only supported on plugins.*", subject)
+	}
+	if strings.TrimSpace(entry.UI) != "" {
+		return fmt.Errorf("config validation: %s.ui is only supported on plugins.*", subject)
+	}
+	if entry.IndexedDB != nil {
+		return fmt.Errorf("config validation: %s.indexeddb is not supported", subject)
+	}
+	if len(entry.Cache) > 0 {
+		return fmt.Errorf("config validation: %s.cache is only supported on plugins.*", subject)
+	}
+	if len(entry.S3) > 0 {
+		return fmt.Errorf("config validation: %s.s3 is only supported on plugins.*", subject)
+	}
+	if len(entry.Invokes) > 0 {
+		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
+	}
+	if entry.Runtime != nil {
+		return fmt.Errorf("config validation: %s.runtime is only supported on plugins.*", subject)
+	}
+	if entry.Surfaces != nil {
+		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
+	}
+	if entry.AuthorizationPolicy != "" {
+		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on plugins.* and ui.*", subject)
 	}
 	return nil
 }

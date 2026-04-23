@@ -22,6 +22,7 @@ else:
                 return decorator
 
 if TYPE_CHECKING:
+    from ._agent import AgentManager
     from ._invoker import PluginInvoker
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
@@ -82,6 +83,11 @@ class Request:
         from ._invoker import PluginInvoker
 
         return PluginInvoker(self.invocation_token)
+
+    def agent_manager(self) -> "AgentManager":
+        from ._agent import AgentManager
+
+        return AgentManager(self.invocation_token)
 
 
 @dataclasses.dataclass(slots=True)

@@ -46,6 +46,10 @@ func (r Request) WorkflowManager() (*WorkflowManagerClient, error) {
 	return WorkflowManager(r.invocationToken)
 }
 
+func (r Request) AgentManager() (*AgentManagerClient, error) {
+	return AgentManager(r.invocationToken)
+}
+
 func (r Request) Authorization() (*AuthorizationClient, error) {
 	return Authorization()
 }

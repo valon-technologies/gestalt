@@ -12,6 +12,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -143,6 +144,7 @@ type Deps struct {
 	CacheFactory          CacheFactory
 	S3                    map[string]s3store.Client
 	WorkflowRuntime       *workflowRuntime
+	AgentRuntime          *agentRuntime
 	WorkflowManager       workflowmanager.Service
 	Egress                EgressDeps
 	AuthorizationProvider core.AuthorizationProvider
@@ -158,6 +160,7 @@ type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
 type CacheFactory func(node yaml.Node) (corecache.Cache, error)
 type S3Factory func(node yaml.Node) (s3store.Client, error)
 type WorkflowFactory func(ctx context.Context, name string, node yaml.Node, hostServices []providerhost.HostService, deps Deps) (coreworkflow.Provider, error)
+type AgentFactory func(ctx context.Context, name string, node yaml.Node, hostServices []providerhost.HostService, deps Deps) (coreagent.Provider, error)
 type RuntimeFactory func(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (pluginruntime.Provider, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
@@ -171,6 +174,7 @@ type FactoryRegistry struct {
 	Runtime       RuntimeFactory
 	S3            S3Factory
 	Workflow      WorkflowFactory
+	Agent         AgentFactory
 	Telemetry     map[string]TelemetryFactory
 	Audit         AuditFactory
 	Builtins      []core.Provider
@@ -193,8 +197,10 @@ type Result struct {
 	ExtraIndexedDBs       []indexeddb.IndexedDB
 	ExtraS3s              []s3store.Client
 	ExtraWorkflows        []coreworkflow.Provider
+	ExtraAgents           []coreagent.Provider
 	Providers             *registry.ProviderMap[core.Provider]
 	WorkflowControl       WorkflowControl
+	AgentControl          AgentControl
 	ProvidersReady        <-chan struct{}
 	Authorizer            authorization.RuntimeAuthorizer
 	ConnectionAuth        func() map[string]map[string]OAuthHandler
@@ -260,6 +266,7 @@ func (r *Result) Close(ctx context.Context) error {
 		closeIndexedDBs(r.ExtraIndexedDBs...),
 		closeS3s(r.ExtraS3s...),
 		closeWorkflows(r.ExtraWorkflows...),
+		closeAgents(r.ExtraAgents...),
 		closeSecretManager(r.SecretManager),
 		closePluginRuntimeRegistry(r.pluginRuntimeRegistry),
 	)
@@ -320,6 +327,19 @@ func closeWorkflows(providers ...coreworkflow.Provider) error {
 	return errors.Join(errs...)
 }
 
+func closeAgents(providers ...coreagent.Provider) error {
+	var errs []error
+	for _, provider := range providers {
+		if provider == nil {
+			continue
+		}
+		if err := provider.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
 type workflowProviderWithCleanup struct {
 	coreworkflow.Provider
 	cleanup func()
@@ -336,6 +356,131 @@ func (p *workflowProviderWithCleanup) Close() error {
 		p.cleanup()
 	}
 	return errors.Join(errs...)
+}
+
+type agentProviderWithTracking struct {
+	delegate     coreagent.Provider
+	providerName string
+	runtime      *agentRuntime
+}
+
+func (p *agentProviderWithTracking) StartRun(ctx context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
+	if p == nil || p.delegate == nil {
+		return nil, fmt.Errorf("agent provider is not configured")
+	}
+	trackReq := req
+	trackReq.RunID = strings.TrimSpace(trackReq.RunID)
+	tracked := p.runtime != nil && trackReq.RunID != ""
+	if tracked {
+		if err := p.runtime.TrackRun(ctx, p.providerName, trackReq); err != nil {
+			return nil, err
+		}
+	}
+	run, err := p.delegate.StartRun(ctx, req)
+	if err != nil {
+		if tracked {
+			if existing, getErr := p.delegate.GetRun(ctx, coreagent.GetRunRequest{RunID: trackReq.RunID}); getErr != nil || existing == nil {
+				_ = p.runtime.DeleteTrackedRun(context.Background(), trackReq.RunID)
+			}
+		}
+		return nil, err
+	}
+	if tracked && p.runtime != nil && run != nil {
+		actualRunID := strings.TrimSpace(run.ID)
+		if actualRunID != "" && actualRunID != trackReq.RunID {
+			trackErr := fmt.Errorf("%w: agent provider %q returned run id %q for requested run id %q", invocation.ErrInternal, p.providerName, actualRunID, trackReq.RunID)
+			_ = p.runtime.DeleteTrackedRun(context.Background(), trackReq.RunID)
+			cancelErr := p.cancelProviderRun(actualRunID, "agent provider returned mismatched run id")
+			if cancelErr != nil {
+				return nil, errors.Join(trackErr, cancelErr)
+			}
+			return nil, trackErr
+		}
+	}
+	if !tracked && p.runtime != nil && run != nil && strings.TrimSpace(run.ID) != "" {
+		trackReq.RunID = strings.TrimSpace(run.ID)
+		if trackErr := p.runtime.TrackRun(ctx, p.providerName, trackReq); trackErr != nil {
+			cancelErr := p.cancelTrackedRun(trackReq.RunID)
+			if cancelErr != nil {
+				return nil, errors.Join(trackErr, cancelErr)
+			}
+			return nil, trackErr
+		}
+	}
+	return run, nil
+}
+
+func (p *agentProviderWithTracking) GetRun(ctx context.Context, req coreagent.GetRunRequest) (*coreagent.Run, error) {
+	if p == nil || p.delegate == nil {
+		return nil, fmt.Errorf("agent provider is not configured")
+	}
+	return p.delegate.GetRun(ctx, req)
+}
+
+func (p *agentProviderWithTracking) ListRuns(ctx context.Context, req coreagent.ListRunsRequest) ([]*coreagent.Run, error) {
+	if p == nil || p.delegate == nil {
+		return nil, fmt.Errorf("agent provider is not configured")
+	}
+	return p.delegate.ListRuns(ctx, req)
+}
+
+func (p *agentProviderWithTracking) CancelRun(ctx context.Context, req coreagent.CancelRunRequest) (*coreagent.Run, error) {
+	if p == nil || p.delegate == nil {
+		return nil, fmt.Errorf("agent provider is not configured")
+	}
+	run, err := p.delegate.CancelRun(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if p.runtime != nil {
+		runID := strings.TrimSpace(req.RunID)
+		if runID == "" && run != nil && strings.TrimSpace(run.ID) != "" {
+			runID = strings.TrimSpace(run.ID)
+		}
+		if runID != "" {
+			_ = p.runtime.DeleteTrackedRun(context.Background(), runID)
+		}
+	}
+	return run, nil
+}
+
+func (p *agentProviderWithTracking) Ping(ctx context.Context) error {
+	if p == nil || p.delegate == nil {
+		return fmt.Errorf("agent provider is not configured")
+	}
+	return p.delegate.Ping(ctx)
+}
+
+func (p *agentProviderWithTracking) cancelTrackedRun(runID string) error {
+	if p.runtime != nil {
+		_ = p.runtime.DeleteTrackedRun(context.Background(), runID)
+	}
+	return p.cancelProviderRun(runID, "agent run tracking failed")
+}
+
+func (p *agentProviderWithTracking) cancelProviderRun(runID string, reason string) error {
+	if p == nil || p.delegate == nil {
+		return nil
+	}
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return nil
+	}
+	_, cancelErr := p.delegate.CancelRun(context.Background(), coreagent.CancelRunRequest{
+		RunID:  runID,
+		Reason: strings.TrimSpace(reason),
+	})
+	if cancelErr != nil && !errors.Is(cancelErr, core.ErrNotFound) {
+		return cancelErr
+	}
+	return nil
+}
+
+func (p *agentProviderWithTracking) Close() error {
+	if p == nil || p.delegate == nil {
+		return nil
+	}
+	return p.delegate.Close()
 }
 
 type preparedCore struct {
@@ -504,6 +649,11 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	workflowRuntime.InitProviderPlaceholders(cfg.Providers.Workflow)
 	deps.WorkflowRuntime = workflowRuntime
+	agentRuntime, err := newAgentRuntime(cfg)
+	if err != nil {
+		return nil, err
+	}
+	deps.AgentRuntime = agentRuntime
 
 	selectedAuthName, authProviders, err := buildAuthProviders(cfg, factories, deps)
 	if err != nil {
@@ -706,6 +856,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}
 	prepared.Deps.WorkflowRuntime.SetExecutionRefs(prepared.Services.WorkflowExecutionRefs)
+	prepared.Deps.AgentRuntime.SetRunMetadata(prepared.Services.AgentRunMetadata)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.Tokens,
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
@@ -713,6 +864,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
 	)
 	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)
+	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
 	workflowManager.SetTarget(workflowmanager.New(workflowmanager.Config{
 		Providers:             providers,
 		Workflow:              prepared.Deps.WorkflowRuntime,
@@ -730,6 +882,16 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	defer func() {
 		if closeWorkflowsOnError {
 			_ = closeWorkflows(extraWorkflows...)
+		}
+	}()
+	extraAgents, err := buildAgents(ctx, cfg, factories, prepared.Deps)
+	if err != nil {
+		return nil, err
+	}
+	closeAgentsOnError := true
+	defer func() {
+		if closeAgentsOnError {
+			_ = closeAgents(extraAgents...)
 		}
 	}()
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
@@ -755,6 +917,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeAudit = false
 	closeAuthz = false
 	closeWorkflowsOnError = false
+	closeAgentsOnError = false
 	return &Result{
 		Auth:                  prepared.Auth,
 		SelectedAuthProvider:  prepared.SelectedAuthProvider,
@@ -764,8 +927,10 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		ExtraIndexedDBs:       prepared.ExtraIndexedDBs,
 		ExtraS3s:              prepared.ExtraS3s,
 		ExtraWorkflows:        extraWorkflows,
+		ExtraAgents:           extraAgents,
 		Providers:             providers,
 		WorkflowControl:       prepared.Deps.WorkflowRuntime,
+		AgentControl:          prepared.Deps.AgentRuntime,
 		ProvidersReady:        providersReady,
 		Authorizer:            authz,
 		ConnectionAuth:        connAuthResolver,
@@ -801,6 +966,28 @@ func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryR
 		extraWorkflows = append(extraWorkflows, value)
 	}
 	return extraWorkflows, nil
+}
+
+func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreagent.Provider, error) {
+	var extraAgents []coreagent.Provider
+	for name, entry := range cfg.Providers.Agent {
+		if entry == nil {
+			continue
+		}
+		value, err := buildAgent(ctx, name, entry, factories, deps)
+		if err != nil {
+			if deps.AgentRuntime != nil {
+				deps.AgentRuntime.FailProvider(name)
+			}
+			_ = closeAgents(extraAgents...)
+			return nil, fmt.Errorf("bootstrap: agent from resource %q: %w", name, err)
+		}
+		if deps.AgentRuntime != nil {
+			deps.AgentRuntime.PublishProvider(name, value)
+		}
+		extraAgents = append(extraAgents, value)
+	}
+	return extraAgents, nil
 }
 
 func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.TelemetryProvider, error) {
@@ -1184,4 +1371,36 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 		cleanup = nil
 	}
 	return provider, nil
+}
+
+func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (coreagent.Provider, error) {
+	if entry == nil {
+		return nil, fmt.Errorf("agent provider is required")
+	}
+	if factories.Agent == nil {
+		return nil, fmt.Errorf("agent factory is not registered")
+	}
+	node := entry.Config
+	if !config.IsComponentRuntimeConfigNode(node) {
+		var err error
+		node, err = config.BuildComponentRuntimeConfigNode(name, "agent", entry, entry.Config)
+		if err != nil {
+			return nil, fmt.Errorf("agent provider: %w", err)
+		}
+	}
+	hostServices := []providerhost.HostService{{
+		EnvVar: providerhost.DefaultAgentHostSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterAgentHostServer(srv, providerhost.NewAgentHostServer(name, deps.AgentRuntime.ExecuteTool))
+		},
+	}}
+	provider, err := factories.Agent(ctx, name, node, hostServices, deps)
+	if err != nil {
+		return nil, fmt.Errorf("agent provider: %w", err)
+	}
+	return &agentProviderWithTracking{
+		delegate:     provider,
+		providerName: name,
+		runtime:      deps.AgentRuntime,
+	}, nil
 }
