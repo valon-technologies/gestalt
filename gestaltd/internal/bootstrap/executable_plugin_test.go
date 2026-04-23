@@ -31,6 +31,7 @@ import (
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
@@ -38,6 +39,7 @@ import (
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -48,6 +50,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
+	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -462,6 +465,10 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 					Method: http.MethodPost,
 				},
 				{
+					ID:     "agent_manager_roundtrip",
+					Method: http.MethodPost,
+				},
+				{
 					ID:     "authorization_roundtrip",
 					Method: http.MethodPost,
 				},
@@ -547,6 +554,16 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 			case "workflow_manager_roundtrip":
 				record, err := fakeHostedWorkflowManagerRoundTrip(providerhost.InvocationTokenFromContext(ctx), env)
+				if err != nil {
+					return nil, err
+				}
+				body, err := json.Marshal(record)
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			case "agent_manager_roundtrip":
+				record, err := fakeHostedAgentManagerRoundTrip(providerhost.InvocationTokenFromContext(ctx), env)
 				if err != nil {
 					return nil, err
 				}
@@ -993,6 +1010,70 @@ func fakeHostedAuthorizationRoundTrip(env map[string]string) (map[string]any, er
 		"subject_id":   resp.GetSubjects()[0].GetId(),
 		"subject_type": resp.GetSubjects()[0].GetType(),
 		"capabilities": meta.GetCapabilities(),
+	}, nil
+}
+
+func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]string) (map[string]any, error) {
+	target := strings.TrimSpace(env[providerhost.DefaultAgentManagerSocketEnv])
+	if target == "" {
+		return nil, fmt.Errorf("missing agent manager relay target in %s", providerhost.DefaultAgentManagerSocketEnv)
+	}
+	token := strings.TrimSpace(env[providerhost.AgentManagerSocketTokenEnv()])
+	if token == "" {
+		return nil, fmt.Errorf("missing agent manager relay token in %s", providerhost.AgentManagerSocketTokenEnv())
+	}
+	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
+	if address == "" || address == target {
+		return nil, fmt.Errorf("unsupported agent manager relay target %q", target)
+	}
+
+	conn, err := grpc.NewClient(
+		address,
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true,
+			MinVersion:         tls.VersionTLS12,
+			NextProtos:         []string{"h2"},
+		})),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("connect agent manager relay: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+
+	client := proto.NewAgentManagerHostClient(conn)
+	created, err := client.Run(ctx, &proto.AgentManagerRunRequest{
+		InvocationToken: invocationToken,
+		ProviderName:    "managed",
+		IdempotencyKey:  "plugin-agent-run",
+		ToolSource:      proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_INHERIT_INVOKES,
+		Messages: []*proto.AgentMessage{{
+			Role: "user",
+			Text: "sync it",
+		}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create agent run: %w", err)
+	}
+	runID := strings.TrimSpace(created.GetRun().GetId())
+	if runID == "" {
+		return nil, fmt.Errorf("agent manager create did not return a run id")
+	}
+	fetched, err := client.GetRun(ctx, &proto.AgentManagerGetRunRequest{
+		InvocationToken: invocationToken,
+		RunId:           runID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get agent run: %w", err)
+	}
+
+	return map[string]any{
+		"provider_name": created.GetProviderName(),
+		"run_id":        runID,
+		"status":        fetched.GetRun().GetStatus().String(),
 	}, nil
 }
 
@@ -1449,6 +1530,72 @@ func (m *stubWorkflowManager) Subjects() []string {
 	defer m.mu.Unlock()
 	return append([]string(nil), m.subjects...)
 }
+
+type stubAgentRunManagerProvider struct {
+	mu               sync.Mutex
+	startRunRequests []coreagent.StartRunRequest
+	runs             map[string]*coreagent.Run
+}
+
+func newStubAgentRunManagerProvider() *stubAgentRunManagerProvider {
+	return &stubAgentRunManagerProvider{
+		runs: map[string]*coreagent.Run{},
+	}
+}
+
+func (p *stubAgentRunManagerProvider) StartRun(_ context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.startRunRequests = append(p.startRunRequests, req)
+	run := &coreagent.Run{
+		ID:           req.RunID,
+		ProviderName: req.ProviderName,
+		Status:       coreagent.RunStatusRunning,
+		ExecutionRef: req.ExecutionRef,
+		CreatedBy:    req.CreatedBy,
+	}
+	p.runs[req.RunID] = run
+	cloned := *run
+	return &cloned, nil
+}
+
+func (p *stubAgentRunManagerProvider) GetRun(_ context.Context, req coreagent.GetRunRequest) (*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	run, ok := p.runs[req.RunID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	cloned := *run
+	return &cloned, nil
+}
+
+func (p *stubAgentRunManagerProvider) ListRuns(context.Context, coreagent.ListRunsRequest) ([]*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]*coreagent.Run, 0, len(p.runs))
+	for _, run := range p.runs {
+		cloned := *run
+		out = append(out, &cloned)
+	}
+	return out, nil
+}
+
+func (p *stubAgentRunManagerProvider) CancelRun(_ context.Context, req coreagent.CancelRunRequest) (*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	run, ok := p.runs[req.RunID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	cloned := *run
+	cloned.Status = coreagent.RunStatusCanceled
+	p.runs[req.RunID] = &cloned
+	return &cloned, nil
+}
+
+func (p *stubAgentRunManagerProvider) Ping(context.Context) error { return nil }
+func (p *stubAgentRunManagerProvider) Close() error               { return nil }
 
 func cloneManagedSchedule(value *workflowmanager.ManagedSchedule) *workflowmanager.ManagedSchedule {
 	if value == nil {
@@ -3057,6 +3204,231 @@ func TestPluginWorkflowManagerExposeHostSocketEnv(t *testing.T) {
 	}
 	if !env.Found || env.Value == "" {
 		t.Fatalf("workflow manager env %q should be set for executable plugins", providerhost.DefaultWorkflowManagerSocketEnv)
+	}
+}
+
+func TestPluginAgentManagerExposeHostSocketEnv(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echo",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Agent manager host env")
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echo": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+		AgentRuntime: &agentRuntime{providers: map[string]coreagent.Provider{}},
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echo")
+	if err != nil {
+		t.Fatalf("providers.Get(echo): %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": providerhost.DefaultAgentManagerSocketEnv}, "")
+	if err != nil {
+		t.Fatalf("Execute read_env: %v", err)
+	}
+
+	var env struct {
+		Value string `json:"value"`
+		Found bool   `json:"found"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if !env.Found || env.Value == "" {
+		t.Fatalf("agent manager env %q should be set for executable plugins", providerhost.DefaultAgentManagerSocketEnv)
+	}
+}
+
+func TestPluginAgentManagerRunUsesInheritedInvokesAndRequestContext(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret))
+	relaySrv.EnableHTTP2 = true
+	relaySrv.StartTLS()
+	testutil.CloseOnCleanup(t, relaySrv)
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "agent_manager_roundtrip", Method: http.MethodPost},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Agent manager run roundtrip")
+	services := coretesting.NewStubServices(t)
+
+	pluginProviders := registry.New()
+	if err := pluginProviders.Providers.Register("roadmap", &coretesting.StubIntegration{
+		N:        "roadmap",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "roadmap",
+			Operations: []catalog.CatalogOperation{{
+				ID:          "sync",
+				Method:      http.MethodPost,
+				Title:       "Sync roadmap",
+				Description: "Sync the roadmap state",
+			}},
+		},
+		ExecuteFn: func(ctx context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
+			body, err := json.Marshal(map[string]any{
+				"operation": operation,
+				"subject":   principal.FromContext(ctx).SubjectID,
+				"taskId":    params["taskId"],
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &core.OperationResult{Status: http.StatusAccepted, Body: string(body)}, nil
+		},
+	}); err != nil {
+		t.Fatalf("Register roadmap provider: %v", err)
+	}
+
+	agentProvider := newStubAgentRunManagerProvider()
+	agentRuntime := &agentRuntime{defaultProviderName: "managed", providers: map[string]coreagent.Provider{"managed": agentProvider}}
+	broker := invocation.NewBroker(&pluginProviders.Providers, services.Users, services.Tokens)
+	agentRuntime.SetRunMetadata(services.AgentRunMetadata)
+	agentRuntime.SetInvoker(broker)
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:   &pluginProviders.Providers,
+		Agent:       agentRuntime,
+		RunMetadata: services.AgentRunMetadata,
+		Invoker:     broker,
+		PluginInvokes: map[string][]config.PluginInvocationDependency{
+			"echoext": {{
+				Plugin:    "roadmap",
+				Operation: "sync",
+			}},
+		},
+	})
+
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+				Invokes: []config.PluginInvocationDependency{{
+					Plugin:    "roadmap",
+					Operation: "sync",
+				}},
+			},
+		},
+	}
+
+	deps := Deps{
+		BaseURL:       relaySrv.URL,
+		EncryptionKey: secret,
+		Services:      services,
+		AgentRuntime:  agentRuntime,
+		AgentManager:  manager,
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get(echoext): %v", err)
+	}
+
+	perms := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "roadmap",
+		Operations: []string{"sync"},
+	}})
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID:        "user:user-123",
+		UserID:           "user-123",
+		Kind:             principal.KindUser,
+		Source:           principal.SourceSession,
+		TokenPermissions: perms,
+		Scopes:           append([]string{"echoext"}, principal.PermissionPlugins(perms)...),
+	})
+
+	result, err := prov.Execute(ctx, "agent_manager_roundtrip", nil, "")
+	if err != nil {
+		t.Fatalf("Execute(agent_manager_roundtrip): %v", err)
+	}
+
+	var roundTrip struct {
+		ProviderName string `json:"provider_name"`
+		RunID        string `json:"run_id"`
+		Status       string `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &roundTrip); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if roundTrip.ProviderName != "managed" || roundTrip.RunID == "" {
+		t.Fatalf("agent roundtrip result = %+v", roundTrip)
+	}
+
+	agentProvider.mu.Lock()
+	startRunCount := len(agentProvider.startRunRequests)
+	startReq := agentProvider.startRunRequests[0]
+	agentProvider.mu.Unlock()
+
+	if startRunCount != 1 {
+		t.Fatalf("StartRun count = %d, want 1", startRunCount)
+	}
+	if startReq.IdempotencyKey != "plugin-agent-run" {
+		t.Fatalf("StartRun idempotency_key = %q, want %q", startReq.IdempotencyKey, "plugin-agent-run")
+	}
+	if startReq.CreatedBy.SubjectID != "user:user-123" {
+		t.Fatalf("StartRun created_by.subject_id = %q, want %q", startReq.CreatedBy.SubjectID, "user:user-123")
+	}
+	if len(startReq.Tools) != 1 {
+		t.Fatalf("StartRun tools = %#v, want 1 inherited tool", startReq.Tools)
+	}
+	if startReq.Tools[0].Target.PluginName != "roadmap" || startReq.Tools[0].Target.Operation != "sync" {
+		t.Fatalf("StartRun tool target = %#v", startReq.Tools[0].Target)
 	}
 }
 

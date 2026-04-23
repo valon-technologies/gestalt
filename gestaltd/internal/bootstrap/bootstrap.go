@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -146,6 +147,7 @@ type Deps struct {
 	WorkflowRuntime       *workflowRuntime
 	AgentRuntime          *agentRuntime
 	WorkflowManager       workflowmanager.Service
+	AgentManager          agentmanager.Service
 	Egress                EgressDeps
 	AuthorizationProvider core.AuthorizationProvider
 	PluginInvoker         invocation.Invoker
@@ -201,6 +203,7 @@ type Result struct {
 	Providers             *registry.ProviderMap[core.Provider]
 	WorkflowControl       WorkflowControl
 	AgentControl          AgentControl
+	AgentManager          agentmanager.Service
 	ProvidersReady        <-chan struct{}
 	Authorizer            authorization.RuntimeAuthorizer
 	ConnectionAuth        func() map[string]map[string]OAuthHandler
@@ -816,8 +819,10 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
+	agentManager := newLazyAgentManager()
 	prepared.Deps.PluginInvoker = pluginInvoker
 	prepared.Deps.WorkflowManager = workflowManager
+	prepared.Deps.AgentManager = agentManager
 
 	providers, providersReady, connAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
@@ -873,6 +878,16 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Authorizer:            authz,
 		DefaultConnection:     connMaps.DefaultConnection,
 		CatalogConnection:     connMaps.APIConnection,
+	}))
+	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
+		Providers:         providers,
+		Agent:             prepared.Deps.AgentRuntime,
+		RunMetadata:       prepared.Services.AgentRunMetadata,
+		Invoker:           sharedInvoker,
+		Authorizer:        authz,
+		DefaultConnection: connMaps.DefaultConnection,
+		CatalogConnection: connMaps.APIConnection,
+		PluginInvokes:     agentPluginInvokes(cfg),
 	}))
 	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
@@ -931,6 +946,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Providers:             providers,
 		WorkflowControl:       prepared.Deps.WorkflowRuntime,
 		AgentControl:          prepared.Deps.AgentRuntime,
+		AgentManager:          prepared.Deps.AgentManager,
 		ProvidersReady:        providersReady,
 		Authorizer:            authz,
 		ConnectionAuth:        connAuthResolver,
@@ -988,6 +1004,20 @@ func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		extraAgents = append(extraAgents, value)
 	}
 	return extraAgents, nil
+}
+
+func agentPluginInvokes(cfg *config.Config) map[string][]config.PluginInvocationDependency {
+	if cfg == nil || len(cfg.Plugins) == 0 {
+		return nil
+	}
+	out := make(map[string][]config.PluginInvocationDependency, len(cfg.Plugins))
+	for pluginName, entry := range cfg.Plugins {
+		if entry == nil || len(entry.Invokes) == 0 {
+			continue
+		}
+		out[pluginName] = append([]config.PluginInvocationDependency(nil), entry.Invokes...)
+	}
+	return out
 }
 
 func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.TelemetryProvider, error) {

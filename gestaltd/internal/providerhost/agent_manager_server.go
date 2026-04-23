@@ -2,10 +2,14 @@ package providerhost
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -46,16 +50,17 @@ func (s *AgentManagerServer) Run(ctx context.Context, req *proto.AgentManagerRun
 		return nil, err
 	}
 	managed, err := s.manager.Run(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, coreagent.ManagerRunRequest{
-		ProviderName:    strings.TrimSpace(req.GetProviderName()),
-		Model:           strings.TrimSpace(req.GetModel()),
-		Messages:        agentMessagesFromProto(req.GetMessages()),
-		ToolRefs:        agentToolRefsFromProto(req.GetToolRefs()),
-		ToolSource:      agentToolSourceModeFromProto(req.GetToolSource()),
-		ResponseSchema:  mapFromStruct(req.GetResponseSchema()),
-		SessionRef:      strings.TrimSpace(req.GetSessionRef()),
-		Metadata:        mapFromStruct(req.GetMetadata()),
-		ProviderOptions: mapFromStruct(req.GetProviderOptions()),
-		IdempotencyKey:  strings.TrimSpace(req.GetIdempotencyKey()),
+		CallerPluginName: strings.TrimSpace(s.pluginName),
+		ProviderName:     strings.TrimSpace(req.GetProviderName()),
+		Model:            strings.TrimSpace(req.GetModel()),
+		Messages:         agentMessagesFromProto(req.GetMessages()),
+		ToolRefs:         agentToolRefsFromProto(req.GetToolRefs()),
+		ToolSource:       agentToolSourceModeFromProto(req.GetToolSource()),
+		ResponseSchema:   mapFromStruct(req.GetResponseSchema()),
+		SessionRef:       strings.TrimSpace(req.GetSessionRef()),
+		Metadata:         mapFromStruct(req.GetMetadata()),
+		ProviderOptions:  mapFromStruct(req.GetProviderOptions()),
+		IdempotencyKey:   strings.TrimSpace(req.GetIdempotencyKey()),
 	})
 	if err != nil {
 		return nil, agentManagerStatusError(err)
@@ -167,7 +172,24 @@ func agentManagerStatusError(err error) error {
 	if existing, ok := status.FromError(err); ok {
 		return existing.Err()
 	}
-	return status.Error(codes.Unknown, err.Error())
+	switch {
+	case errors.Is(err, agentmanager.ErrAgentRunCreationInProgress):
+		return status.Error(codes.Aborted, err.Error())
+	case errors.Is(err, agentmanager.ErrAgentNotConfigured), errors.Is(err, agentmanager.ErrAgentRunMetadataNotConfigured), errors.Is(err, invocation.ErrNoToken), errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
+		return status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, agentmanager.ErrAgentCallerPluginRequired), errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool):
+		return status.Error(codes.InvalidArgument, err.Error())
+	case errors.Is(err, agentmanager.ErrAgentSubjectRequired), errors.Is(err, invocation.ErrNotAuthenticated):
+		return status.Error(codes.Unauthenticated, err.Error())
+	case errors.Is(err, invocation.ErrInternal):
+		return status.Error(codes.Internal, err.Error())
+	case errors.Is(err, invocation.ErrAuthorizationDenied), errors.Is(err, invocation.ErrScopeDenied):
+		return status.Error(codes.PermissionDenied, err.Error())
+	case errors.Is(err, invocation.ErrProviderNotFound), errors.Is(err, invocation.ErrOperationNotFound), errors.Is(err, core.ErrNotFound):
+		return status.Error(codes.NotFound, err.Error())
+	default:
+		return status.Error(codes.Unknown, err.Error())
+	}
 }
 
 var _ proto.AgentManagerHostServer = (*AgentManagerServer)(nil)

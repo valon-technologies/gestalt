@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -20,6 +21,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -30,6 +32,7 @@ import (
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -606,6 +609,202 @@ func (s *stubAgentProvider) CancelRequests() []coreagent.CancelRunRequest {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]coreagent.CancelRunRequest(nil), s.cancelRequests...)
+}
+
+type recordingAgentProvider struct {
+	mu               sync.Mutex
+	startRunRequests []coreagent.StartRunRequest
+	cancelRequests   []coreagent.CancelRunRequest
+	runs             map[string]*coreagent.Run
+}
+
+func newRecordingAgentProvider() *recordingAgentProvider {
+	return &recordingAgentProvider{runs: map[string]*coreagent.Run{}}
+}
+
+func (p *recordingAgentProvider) StartRun(_ context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.startRunRequests = append(p.startRunRequests, req)
+	run := &coreagent.Run{
+		ID:           req.RunID,
+		ProviderName: req.ProviderName,
+		Status:       coreagent.RunStatusRunning,
+		ExecutionRef: req.ExecutionRef,
+		CreatedBy:    req.CreatedBy,
+	}
+	p.runs[req.RunID] = run
+	return run, nil
+}
+
+func (p *recordingAgentProvider) GetRun(_ context.Context, req coreagent.GetRunRequest) (*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	run, ok := p.runs[req.RunID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	cloned := *run
+	return &cloned, nil
+}
+
+func (p *recordingAgentProvider) ListRuns(context.Context, coreagent.ListRunsRequest) ([]*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]*coreagent.Run, 0, len(p.runs))
+	for _, run := range p.runs {
+		cloned := *run
+		out = append(out, &cloned)
+	}
+	return out, nil
+}
+
+func (p *recordingAgentProvider) CancelRun(_ context.Context, req coreagent.CancelRunRequest) (*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cancelRequests = append(p.cancelRequests, req)
+	run, ok := p.runs[req.RunID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	cloned := *run
+	cloned.Status = coreagent.RunStatusCanceled
+	p.runs[req.RunID] = &cloned
+	return &cloned, nil
+}
+
+func (p *recordingAgentProvider) Ping(context.Context) error { return nil }
+func (p *recordingAgentProvider) Close() error               { return nil }
+
+type callbackAgentProvider struct {
+	mu               sync.Mutex
+	started          *providerhost.StartedHostServices
+	socketPath       string
+	startRunRequests []coreagent.StartRunRequest
+	cancelRequests   []coreagent.CancelRunRequest
+	toolBodies       []string
+	runs             map[string]*coreagent.Run
+}
+
+func newCallbackAgentProvider(started *providerhost.StartedHostServices) (*callbackAgentProvider, error) {
+	if started == nil {
+		return nil, fmt.Errorf("started host services are required")
+	}
+	var socketPath string
+	for _, binding := range started.Bindings() {
+		if binding.EnvVar == providerhost.DefaultAgentHostSocketEnv {
+			socketPath = binding.SocketPath
+			break
+		}
+	}
+	if strings.TrimSpace(socketPath) == "" {
+		return nil, fmt.Errorf("agent host socket binding is missing")
+	}
+	return &callbackAgentProvider{
+		started:    started,
+		socketPath: socketPath,
+		runs:       map[string]*coreagent.Run{},
+	}, nil
+}
+
+func (p *callbackAgentProvider) StartRun(ctx context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
+	p.mu.Lock()
+	p.startRunRequests = append(p.startRunRequests, req)
+	p.mu.Unlock()
+
+	outputBody := ""
+	if len(req.Tools) > 0 {
+		conn, err := grpc.NewClient(
+			"passthrough:///localhost",
+			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, "unix", p.socketPath)
+			}),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("dial agent host: %w", err)
+		}
+		defer func() { _ = conn.Close() }()
+
+		resp, err := proto.NewAgentHostClient(conn).ExecuteTool(ctx, &proto.ExecuteAgentToolRequest{
+			RunId:      req.RunID,
+			ToolCallId: "tool-call-1",
+			ToolId:     req.Tools[0].ID,
+			Arguments: func() *structpb.Struct {
+				value, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
+				if err != nil {
+					panic(err)
+				}
+				return value
+			}(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		outputBody = resp.GetBody()
+		p.mu.Lock()
+		p.toolBodies = append(p.toolBodies, outputBody)
+		p.mu.Unlock()
+	}
+
+	run := &coreagent.Run{
+		ID:           req.RunID,
+		ProviderName: req.ProviderName,
+		Status:       coreagent.RunStatusSucceeded,
+		OutputText:   outputBody,
+		ExecutionRef: req.ExecutionRef,
+		CreatedBy:    req.CreatedBy,
+	}
+	p.mu.Lock()
+	p.runs[req.RunID] = run
+	p.mu.Unlock()
+	return run, nil
+}
+
+func (p *callbackAgentProvider) GetRun(_ context.Context, req coreagent.GetRunRequest) (*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	run, ok := p.runs[req.RunID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	cloned := *run
+	return &cloned, nil
+}
+
+func (p *callbackAgentProvider) ListRuns(context.Context, coreagent.ListRunsRequest) ([]*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]*coreagent.Run, 0, len(p.runs))
+	for _, run := range p.runs {
+		cloned := *run
+		out = append(out, &cloned)
+	}
+	return out, nil
+}
+
+func (p *callbackAgentProvider) CancelRun(_ context.Context, req coreagent.CancelRunRequest) (*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cancelRequests = append(p.cancelRequests, req)
+	run, ok := p.runs[req.RunID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	cloned := *run
+	cloned.Status = coreagent.RunStatusCanceled
+	p.runs[req.RunID] = &cloned
+	return &cloned, nil
+}
+
+func (p *callbackAgentProvider) Ping(context.Context) error { return nil }
+
+func (p *callbackAgentProvider) Close() error {
+	if p == nil || p.started == nil {
+		return nil
+	}
+	return p.started.Close()
 }
 
 type generatedIDAgentProvider struct {
@@ -1555,6 +1754,308 @@ func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
 	}
 	if run == nil || run.ID != "run-1" {
 		t.Fatalf("run = %#v, want ID run-1", run)
+	}
+}
+
+func TestBootstrapAgentManagerRunPersistsMetadataForToolCallbacks(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	factories := validFactories()
+	factories.Builtins = append(factories.Builtins, &coretesting.StubIntegration{
+		N:        "roadmap",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "roadmap",
+			Operations: []catalog.CatalogOperation{{
+				ID:          "sync",
+				Method:      http.MethodPost,
+				Title:       "Sync roadmap",
+				Description: "Sync the roadmap state",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{"taskId":{"type":"string"}}}`),
+			}},
+		},
+		ExecuteFn: func(ctx context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
+			body, err := json.Marshal(map[string]any{
+				"operation": operation,
+				"subject":   principal.FromContext(ctx).SubjectID,
+				"taskId":    params["taskId"],
+			})
+			if err != nil {
+				return nil, err
+			}
+			return &core.OperationResult{Status: http.StatusAccepted, Body: string(body)}, nil
+		},
+	})
+
+	var provider *callbackAgentProvider
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := providerhost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	perms := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "roadmap",
+		Operations: []string{"sync"},
+	}})
+	p := &principal.Principal{
+		SubjectID:        "user:user-123",
+		UserID:           "user-123",
+		Kind:             principal.KindUser,
+		Source:           principal.SourceSession,
+		TokenPermissions: perms,
+		Scopes:           principal.PermissionPlugins(perms),
+	}
+	ctx := principal.WithPrincipal(context.Background(), p)
+
+	req := coreagent.ManagerRunRequest{
+		ProviderName:   "managed",
+		IdempotencyKey: "demo-idempotency-key",
+		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
+		ToolRefs: []coreagent.ToolRef{{
+			PluginName: "roadmap",
+			Operation:  "sync",
+			Title:      "Roadmap sync",
+		}},
+	}
+
+	first, err := result.AgentManager.Run(ctx, p, req)
+	if err != nil {
+		t.Fatalf("AgentManager.Run(first): %v", err)
+	}
+	second, err := result.AgentManager.Run(ctx, p, req)
+	if err != nil {
+		t.Fatalf("AgentManager.Run(second): %v", err)
+	}
+	if first.Run == nil || second.Run == nil {
+		t.Fatalf("managed runs = %#v / %#v", first, second)
+	}
+	if first.Run.ID != second.Run.ID {
+		t.Fatalf("idempotent run ids = (%q, %q), want identical ids", first.Run.ID, second.Run.ID)
+	}
+
+	provider.mu.Lock()
+	startRunCount := len(provider.startRunRequests)
+	startReq := provider.startRunRequests[0]
+	toolBodies := append([]string(nil), provider.toolBodies...)
+	provider.mu.Unlock()
+
+	if startRunCount != 1 {
+		t.Fatalf("StartRun count = %d, want 1", startRunCount)
+	}
+	if startReq.RunID != first.Run.ID {
+		t.Fatalf("StartRun run_id = %q, want %q", startReq.RunID, first.Run.ID)
+	}
+	if startReq.ExecutionRef != first.Run.ID {
+		t.Fatalf("StartRun execution_ref = %q, want %q", startReq.ExecutionRef, first.Run.ID)
+	}
+	if startReq.CreatedBy.SubjectID != p.SubjectID {
+		t.Fatalf("StartRun created_by.subject_id = %q, want %q", startReq.CreatedBy.SubjectID, p.SubjectID)
+	}
+	if len(startReq.Tools) != 1 {
+		t.Fatalf("StartRun tools = %#v, want 1 tool", startReq.Tools)
+	}
+	if startReq.Tools[0].Target.PluginName != "roadmap" || startReq.Tools[0].Target.Operation != "sync" {
+		t.Fatalf("StartRun tool target = %#v", startReq.Tools[0].Target)
+	}
+	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"subject":"user:user-123"`) || !strings.Contains(toolBodies[0], `"taskId":"task-123"`) {
+		t.Fatalf("tool callback bodies = %#v", toolBodies)
+	}
+
+	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), first.Run.ID)
+	if err != nil {
+		t.Fatalf("AgentRunMetadata.Get: %v", err)
+	}
+	if ref.IdempotencyKey != "demo-idempotency-key" {
+		t.Fatalf("stored idempotency key = %q, want %q", ref.IdempotencyKey, "demo-idempotency-key")
+	}
+	if len(ref.Tools) != 1 || ref.Tools[0].ID != startReq.Tools[0].ID {
+		t.Fatalf("stored tools = %#v, want tool id %q", ref.Tools, startReq.Tools[0].ID)
+	}
+}
+
+func TestBootstrapAgentManagerRunReturnsInProgressForClaimedIdempotencyWithoutMetadata(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	provider := newRecordingAgentProvider()
+	factories := validFactories()
+	factories.Agent = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreagent.Provider, error) {
+		return provider, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	p := &principal.Principal{
+		SubjectID: "user:user-123",
+		UserID:    "user-123",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceSession,
+	}
+	ctx := principal.WithPrincipal(context.Background(), p)
+
+	const runID = "pending-run"
+	claimedRunID, claimed, err := result.Services.AgentRunMetadata.ClaimIdempotency(context.Background(), p.SubjectID, "managed", "pending-key", runID, time.Now())
+	if err != nil {
+		t.Fatalf("ClaimIdempotency: %v", err)
+	}
+	if !claimed || claimedRunID != runID {
+		t.Fatalf("ClaimIdempotency = (%q, %t), want (%q, true)", claimedRunID, claimed, runID)
+	}
+
+	_, err = result.AgentManager.Run(ctx, p, coreagent.ManagerRunRequest{
+		ProviderName:   "managed",
+		IdempotencyKey: "pending-key",
+		Messages:       []coreagent.Message{{Role: "user", Text: "continue"}},
+	})
+	if !errors.Is(err, agentmanager.ErrAgentRunCreationInProgress) {
+		t.Fatalf("AgentManager.Run error = %v, want %v", err, agentmanager.ErrAgentRunCreationInProgress)
+	}
+
+	provider.mu.Lock()
+	startRunCount := len(provider.startRunRequests)
+	provider.mu.Unlock()
+	if startRunCount != 0 {
+		t.Fatalf("StartRun count = %d, want 0", startRunCount)
+	}
+}
+
+func TestBootstrapAgentManagerIdempotentReplayDoesNotDeleteMetadataWhenCallerLosesToolAccess(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	factories := validFactories()
+	factories.Builtins = append(factories.Builtins, &coretesting.StubIntegration{
+		N:        "roadmap",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "roadmap",
+			Operations: []catalog.CatalogOperation{{
+				ID:     "sync",
+				Method: http.MethodPost,
+			}},
+		},
+		ExecuteFn: func(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+			return &core.OperationResult{Status: http.StatusAccepted}, nil
+		},
+	})
+
+	provider := newRecordingAgentProvider()
+	factories.Agent = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreagent.Provider, error) {
+		return provider, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	perms := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "roadmap",
+		Operations: []string{"sync"},
+	}})
+	full := &principal.Principal{
+		SubjectID:        "user:user-123",
+		UserID:           "user-123",
+		Kind:             principal.KindUser,
+		Source:           principal.SourceSession,
+		TokenPermissions: perms,
+		Scopes:           principal.PermissionPlugins(perms),
+	}
+	fullCtx := principal.WithPrincipal(context.Background(), full)
+
+	first, err := result.AgentManager.Run(fullCtx, full, coreagent.ManagerRunRequest{
+		ProviderName:   "managed",
+		IdempotencyKey: "same-run",
+		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
+		ToolRefs: []coreagent.ToolRef{{
+			PluginName: "roadmap",
+			Operation:  "sync",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.Run(first): %v", err)
+	}
+	if first.Run == nil {
+		t.Fatalf("AgentManager.Run(first) returned nil run: %#v", first)
+	}
+
+	restricted := &principal.Principal{
+		SubjectID:        "user:user-123",
+		UserID:           "user-123",
+		Kind:             principal.KindUser,
+		Source:           principal.SourceSession,
+		TokenPermissions: principal.PermissionSet{},
+		Scopes:           []string{},
+	}
+	restrictedCtx := principal.WithPrincipal(context.Background(), restricted)
+
+	_, err = result.AgentManager.Run(restrictedCtx, restricted, coreagent.ManagerRunRequest{
+		ProviderName:   "managed",
+		IdempotencyKey: "same-run",
+		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
+	})
+	if !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("AgentManager.Run(replay) error = %v, want %v", err, core.ErrNotFound)
+	}
+
+	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), first.Run.ID)
+	if err != nil {
+		t.Fatalf("AgentRunMetadata.Get: %v", err)
+	}
+	if ref.ID != first.Run.ID {
+		t.Fatalf("stored run id = %q, want %q", ref.ID, first.Run.ID)
+	}
+
+	provider.mu.Lock()
+	startRunCount := len(provider.startRunRequests)
+	provider.mu.Unlock()
+	if startRunCount != 1 {
+		t.Fatalf("StartRun count = %d, want 1", startRunCount)
 	}
 }
 
