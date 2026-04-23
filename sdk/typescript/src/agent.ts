@@ -17,6 +17,8 @@ import {
   AgentRunStatus,
   AgentToolSourceMode,
   BoundAgentRunSchema,
+  EmitAgentEventRequestSchema,
+  ExecuteAgentToolRequestSchema,
   ListAgentProviderRunsResponseSchema,
   type AgentActor,
   type AgentMessage,
@@ -146,13 +148,15 @@ export class AgentHost {
   }
 
   async executeTool(
-    request: ExecuteAgentToolRequest,
+    request: MessageInitShape<typeof ExecuteAgentToolRequestSchema>,
   ): Promise<ExecuteAgentToolResponse> {
-    return await this.client.executeTool(request);
+    return await this.client.executeTool(create(ExecuteAgentToolRequestSchema, request));
   }
 
-  async emitEvent(request: EmitAgentEventRequest): Promise<void> {
-    await this.client.emitEvent(request);
+  async emitEvent(
+    request: MessageInitShape<typeof EmitAgentEventRequestSchema>,
+  ): Promise<void> {
+    await this.client.emitEvent(create(EmitAgentEventRequestSchema, request));
   }
 }
 

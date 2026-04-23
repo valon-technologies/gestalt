@@ -92,15 +92,45 @@ The neutral agent run shape is intentionally small:
     },
     "required": ["summary"]
   },
+  "providerOptions": {
+    "temperature": 0.2,
+    "metadata": {
+      "source": "roadmap-review"
+    }
+  },
   "sessionRef": "session-123"
 }
 ```
 
 ## First-party agent providers
 
-There is not yet a first-party agent provider published from
-`valon-technologies/gestalt-providers`. If you need one today, implement a
-custom provider against the neutral protocol.
+`openai` is a first-party source package backed by the OpenAI Responses API:
+
+```yaml
+providers:
+  agent:
+    openai:
+      source: ./providers/agent/openai/manifest.yaml
+      default: true
+      config:
+        model: gpt-5.4
+        baseURL: https://api.openai.com/v1
+        apiKey:
+          secret:
+            provider: default
+            name: openai-api-key
+        timeoutMs: 120000
+        maxTurns: 8
+```
+
+The provider maps Gestalt tools to OpenAI function tools, calls
+`AgentHost.ExecuteTool` for each `function_call`, sends
+`function_call_output` items back to OpenAI, and emits run events such as
+`agent.run.started`, `agent.model.response`, `agent.tool_call.completed`, and
+`agent.run.completed`. Gestalt accepts the neutral run response and
+persists/streams emitted events; the provider owns the vendor loop, run state,
+session continuation via OpenAI response IDs, and any vendor-specific request
+options.
 
 ## What to read next
 

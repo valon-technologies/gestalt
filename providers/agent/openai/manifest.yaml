@@ -1,0 +1,7 @@
+kind: agent
+source: github.com/valon-technologies/gestalt/providers/agent/openai
+version: 0.0.1-alpha.0
+displayName: OpenAI Agent
+description: OpenAI Responses API-backed agent provider.
+spec:
+  configSchemaPath: ./config.schema.json

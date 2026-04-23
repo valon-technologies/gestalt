@@ -152,12 +152,24 @@ workflows:
 
 ## Agent Providers
 
-Agent providers are configured under `providers.agent.<name>`, but there is
-not yet a first-party agent provider published from
-`valon-technologies/gestalt-providers`.
+Agent providers are configured under `providers.agent.<name>`, then referenced
+by global agent run requests, the agent CLI, or plugins using the host agent
+manager.
 
-If you need one today, implement it with
-[Custom Providers > Agent](/custom-providers/agent).
+```yaml
+providers:
+  agent:
+    openai:
+      source: ./providers/agent/openai/manifest.yaml
+      default: true
+      config:
+        model: gpt-5.4
+        apiKey: ${OPENAI_API_KEY}
+```
+
+| Name | Purpose |
+| --- | --- |
+| `openai` | Runs the neutral agent protocol on the OpenAI Responses API and maps Gestalt tools to function calls. |
 
 ## S3 Providers
 

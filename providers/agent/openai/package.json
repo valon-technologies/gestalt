@@ -1,0 +1,15 @@
+{
+  "name": "@valon-technologies/gestalt-agent-provider-openai",
+  "version": "0.0.1-alpha.0",
+  "private": true,
+  "type": "module",
+  "gestalt": {
+    "provider": {
+      "kind": "agent",
+      "target": "./agent.ts#provider"
+    }
+  },
+  "dependencies": {
+    "@valon-technologies/gestalt": "0.0.1-alpha.10"
+  }
+}

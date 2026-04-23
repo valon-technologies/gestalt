@@ -38,6 +38,9 @@ The agent service includes four run methods:
 
 Providers can also call back into Gestalt through `AgentHost.ExecuteTool` when
 they want the host to execute a bound plugin operation during a run.
+Providers should call `AgentHost.EmitEvent` for provider-owned run progress,
+tool calls, and model responses; the host persists and streams those events
+without owning the provider's internal state machine.
 
 ## Run shape
 
@@ -186,9 +189,33 @@ Gestalt returns an HTTP-like envelope:
 }
 ```
 
-In V1 there is no standardized IndexedDB or general storage binding for agent
-providers. If your provider needs durable state, define it in your own config
-schema and manage it behind the provider.
+## Run events
+
+Providers emit events through `AgentHost.EmitEvent`:
+
+```json
+{
+  "runId": "run-123",
+  "type": "agent.tool_call.completed",
+  "visibility": "public",
+  "data": {
+    "toolCallId": "call-1",
+    "toolId": "roadmap/sync",
+    "status": 200
+  }
+}
+```
+
+Event `type` and `data` are provider-owned. Use stable reverse-DNS-style or
+agent-prefixed names for public events, and keep provider-specific details in
+`data` rather than adding host-owned fields. Common event names are
+`agent.run.started`, `agent.model.response`, `agent.tool_call.started`,
+`agent.tool_call.completed`, `agent.tool_call.failed`, `agent.run.completed`,
+and `agent.run.failed`.
+
+If your provider needs durable state, configure an IndexedDB binding on the
+`providers.agent.<name>` entry or define your own storage config. The provider
+still owns its run schema and object-store names.
 
 ## What to read next
 
