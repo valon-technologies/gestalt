@@ -10,6 +10,7 @@ import { expect, test } from "bun:test";
 
 import {
   AgentHost as AgentHostService,
+  EmitAgentEventRequestSchema,
   ExecuteAgentToolRequestSchema,
   ExecuteAgentToolResponseSchema,
 } from "../gen/v1/agent_pb.ts";
@@ -21,6 +22,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
   const socketPath = join(tempDir, "agent-host.sock");
   const previousSocket = process.env[ENV_AGENT_HOST_SOCKET];
   const calls: Array<{ runId: string; toolCallId: string; toolId: string }> = [];
+  const events: Array<{ runId: string; type: string; visibility: string; data: unknown }> = [];
 
   const handler = connectNodeAdapter({
     grpc: true,
@@ -41,6 +43,15 @@ test("AgentHost executes tools through the configured unix socket", async () => 
               toolId: input.toolId,
             }),
           });
+        },
+        async emitEvent(input) {
+          events.push({
+            runId: input.runId,
+            type: input.type,
+            visibility: input.visibility,
+            data: input.data,
+          });
+          return {};
         },
       } satisfies Partial<ServiceImpl<typeof AgentHostService>>);
     },
@@ -77,11 +88,35 @@ test("AgentHost executes tools through the configured unix socket", async () => 
       },
       toolId: "lookup-status",
     });
+
+    await host.emitEvent(
+      create(EmitAgentEventRequestSchema, {
+        runId: "run-123",
+        type: "agent.tool_call.started",
+        visibility: "public",
+        data: {
+          phase: "tool_call",
+          attempt: 1,
+        },
+      }),
+    );
+
     expect(calls).toEqual([
       {
         runId: "run-123",
         toolCallId: "call-123",
         toolId: "lookup-status",
+      },
+    ]);
+    expect(events).toEqual([
+      {
+        runId: "run-123",
+        type: "agent.tool_call.started",
+        visibility: "public",
+        data: {
+          phase: "tool_call",
+          attempt: 1,
+        },
       },
     ]);
   } finally {

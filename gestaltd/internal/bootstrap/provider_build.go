@@ -1629,6 +1629,10 @@ func (unavailableAgentManager) CancelRun(context.Context, *principal.Principal, 
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
+func (unavailableAgentManager) ListRunEvents(context.Context, *principal.Principal, string, int64, int) ([]*coreagent.RunEvent, error) {
+	return nil, fmt.Errorf("agent manager is not available")
+}
+
 func buildPluginScopedIndexedDB(pluginName string, effective config.EffectivePluginIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {
 	return buildScopedIndexedDB(scopedIndexedDBBuildOptions{
 		MetricsName:        effective.ProviderName,

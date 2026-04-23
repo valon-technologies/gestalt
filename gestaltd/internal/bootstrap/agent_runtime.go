@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
@@ -25,6 +26,7 @@ type agentRuntime struct {
 	providers           map[string]coreagent.Provider
 	invoker             invocation.Invoker
 	runMetadata         *coredata.AgentRunMetadataService
+	runEvents           *coredata.AgentRunEventService
 }
 
 func newAgentRuntime(cfg *config.Config) (*agentRuntime, error) {
@@ -86,6 +88,15 @@ func (r *agentRuntime) SetRunMetadata(service *coredata.AgentRunMetadataService)
 	r.runMetadata = service
 }
 
+func (r *agentRuntime) SetRunEvents(service *coredata.AgentRunEventService) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.runEvents = service
+}
+
 func (r *agentRuntime) TrackRun(ctx context.Context, providerName string, req coreagent.StartRunRequest) error {
 	if r == nil {
 		return nil
@@ -137,8 +148,41 @@ func (r *agentRuntime) DeleteTrackedRun(ctx context.Context, runID string) error
 	if runMetadata == nil {
 		return nil
 	}
-	return runMetadata.Delete(ctx, runID)
+	var err error
+	if deleteErr := runMetadata.Delete(ctx, runID); deleteErr != nil {
+		err = errors.Join(err, deleteErr)
+	}
+	r.mu.RLock()
+	runEvents := r.runEvents
+	r.mu.RUnlock()
+	if runEvents != nil {
+		if deleteErr := runEvents.DeleteByRun(ctx, runID); deleteErr != nil {
+			err = errors.Join(err, deleteErr)
+		}
+	}
+	return err
 }
+
+func (r *agentRuntime) RevokeTrackedRun(ctx context.Context, runID string) error {
+	if r == nil || strings.TrimSpace(runID) == "" {
+		return nil
+	}
+	r.mu.RLock()
+	runMetadata := r.runMetadata
+	r.mu.RUnlock()
+	if runMetadata == nil {
+		return nil
+	}
+	_, err := runMetadata.Revoke(ctx, runID, time.Now())
+	if err != nil {
+		if errors.Is(err, indexeddb.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 func (r *agentRuntime) ResolveProvider(name string) (coreagent.Provider, error) {
 	if r == nil {
 		return nil, fmt.Errorf("agent runtime is not configured")
@@ -246,6 +290,58 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 		Status: result.Status,
 		Body:   result.Body,
 	}, nil
+}
+
+func (r *agentRuntime) EmitEvent(ctx context.Context, req coreagent.EmitEventRequest) (*coreagent.RunEvent, error) {
+	if r == nil {
+		return nil, fmt.Errorf("agent runtime is not configured")
+	}
+	r.mu.RLock()
+	runMetadata := r.runMetadata
+	runEvents := r.runEvents
+	r.mu.RUnlock()
+	if runMetadata == nil {
+		return nil, fmt.Errorf("%w: agent run metadata is not configured", invocation.ErrInternal)
+	}
+	if runEvents == nil {
+		return nil, fmt.Errorf("%w: agent run events are not configured", invocation.ErrInternal)
+	}
+	runID := strings.TrimSpace(req.RunID)
+	if runID == "" {
+		return nil, fmt.Errorf("%w: run id is required", invocation.ErrAuthorizationDenied)
+	}
+	eventType := strings.TrimSpace(req.Type)
+	if eventType == "" {
+		return nil, fmt.Errorf("%w: event type is required", invocation.ErrAuthorizationDenied)
+	}
+	ref, err := runMetadata.Get(ctx, runID)
+	if err != nil {
+		if errors.Is(err, indexeddb.ErrNotFound) {
+			return nil, fmt.Errorf("%w: agent run %q was not found", invocation.ErrAuthorizationDenied, runID)
+		}
+		return nil, fmt.Errorf("%w: agent run %q lookup failed: %v", invocation.ErrInternal, runID, err)
+	}
+	if ref == nil {
+		return nil, fmt.Errorf("%w: agent run %q was not found", invocation.ErrAuthorizationDenied, runID)
+	}
+	if ref.RevokedAt != nil && !ref.RevokedAt.IsZero() {
+		return nil, fmt.Errorf("%w: agent run %q is revoked", invocation.ErrAuthorizationDenied, runID)
+	}
+	providerName := strings.TrimSpace(req.ProviderName)
+	if providerName != "" && strings.TrimSpace(ref.ProviderName) != providerName {
+		return nil, fmt.Errorf("%w: agent run %q is not valid for provider %q", invocation.ErrAuthorizationDenied, runID, providerName)
+	}
+	event, err := runEvents.Append(ctx, coreagent.RunEvent{
+		RunID:      runID,
+		Type:       eventType,
+		Source:     providerName,
+		Visibility: strings.TrimSpace(req.Visibility),
+		Data:       maps.Clone(req.Data),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", invocation.ErrInternal, err)
+	}
+	return event, nil
 }
 
 func lookupAgentTool(tools []coreagent.Tool, toolID string) (coreagent.Tool, bool) {

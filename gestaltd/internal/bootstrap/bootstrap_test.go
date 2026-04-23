@@ -1067,6 +1067,42 @@ func invokeAgentHostCallback(t *testing.T, hostServices []providerhost.HostServi
 	return proto.NewAgentHostClient(conn).ExecuteTool(context.Background(), req)
 }
 
+func invokeAgentHostEmitEvent(t *testing.T, hostServices []providerhost.HostService, req *proto.EmitAgentEventRequest) error {
+	t.Helper()
+
+	if len(hostServices) != 1 {
+		t.Fatalf("agent host services = %d, want 1", len(hostServices))
+	}
+	if hostServices[0].Register == nil {
+		t.Fatal("agent host register func is nil")
+	}
+
+	lis := bufconn.Listen(1024 * 1024)
+	srv := grpc.NewServer()
+	hostServices[0].Register(srv)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(func() {
+		srv.Stop()
+		_ = lis.Close()
+	})
+
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.NewClient: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	_, err = proto.NewAgentHostClient(conn).EmitEvent(context.Background(), req)
+	return err
+}
+
 func withIndexedDBHostClient(t *testing.T, hostService providerhost.HostService, fn func(proto.IndexedDBClient)) {
 	t.Helper()
 	if hostService.Register == nil {
@@ -4034,6 +4070,26 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		t.Fatalf("request body = %q, want taskId payload", got)
 	}
 
+	eventData, err := structpb.NewStruct(map[string]any{"text": "review started"})
+	if err != nil {
+		t.Fatalf("structpb.NewStruct event: %v", err)
+	}
+	if err := invokeAgentHostEmitEvent(t, capturedHostServices, &proto.EmitAgentEventRequest{
+		RunId:      "agent-run-1",
+		Type:       "agent.message.delta",
+		Visibility: "public",
+		Data:       eventData,
+	}); err != nil {
+		t.Fatalf("invoke agent host emit event: %v", err)
+	}
+	events, err := result.Services.AgentRunEvents.ListByRun(context.Background(), "agent-run-1", 0, 10)
+	if err != nil {
+		t.Fatalf("ListByRun: %v", err)
+	}
+	if len(events) != 1 || events[0].Seq != 1 || events[0].Source != "reviewer" || events[0].Type != "agent.message.delta" || events[0].Data["text"] != "review started" {
+		t.Fatalf("events after host emit = %#v", events)
+	}
+
 	if _, err := provider.CancelRun(startCtx, coreagent.CancelRunRequest{RunID: "agent-run-1"}); err != nil {
 		t.Fatalf("CancelRun: %v", err)
 	}
@@ -4043,6 +4099,20 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 	}
 	if cancelRequests[0].RunID != "agent-run-1" {
 		t.Fatalf("CancelRun run_id = %q, want %q", cancelRequests[0].RunID, "agent-run-1")
+	}
+	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), "agent-run-1")
+	if err != nil {
+		t.Fatalf("AgentRunMetadata.Get after cancel: %v", err)
+	}
+	if ref.RevokedAt == nil || ref.RevokedAt.IsZero() {
+		t.Fatalf("RevokedAt after cancel = %#v, want set", ref.RevokedAt)
+	}
+	eventsAfterCancel, err := result.Services.AgentRunEvents.ListByRun(context.Background(), "agent-run-1", 0, 10)
+	if err != nil {
+		t.Fatalf("ListByRun after cancel: %v", err)
+	}
+	if len(eventsAfterCancel) != 1 || eventsAfterCancel[0].ID != events[0].ID {
+		t.Fatalf("events after cancel = %#v, want retained %#v", eventsAfterCancel, events)
 	}
 	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
 		RunId:      "agent-run-1",

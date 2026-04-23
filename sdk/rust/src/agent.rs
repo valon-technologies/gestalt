@@ -45,6 +45,14 @@ impl AgentHost {
     ) -> std::result::Result<pb::ExecuteAgentToolResponse, AgentHostError> {
         Ok(self.client.execute_tool(request).await?.into_inner())
     }
+
+    pub async fn emit_event(
+        &mut self,
+        request: pb::EmitAgentEventRequest,
+    ) -> std::result::Result<(), AgentHostError> {
+        self.client.emit_event(request).await?;
+        Ok(())
+    }
 }
 
 async fn connect_unix(

@@ -118,6 +118,24 @@ message ExecuteAgentToolResponse {
   string body = 2;
 }
 
+message AgentRunEvent {
+  string id = 1;
+  string run_id = 2;
+  int64 seq = 3;
+  string type = 4;
+  string source = 5;
+  string visibility = 6;
+  google.protobuf.Struct data = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message EmitAgentEventRequest {
+  string run_id = 1;
+  string type = 2;
+  string visibility = 3;
+  google.protobuf.Struct data = 4;
+}
+
 message ManagedAgentRun {
   string provider_name = 1;
   BoundAgentRun run = 2;
@@ -173,6 +191,7 @@ service AgentProvider {
 
 service AgentHost {
   rpc ExecuteTool(ExecuteAgentToolRequest) returns (ExecuteAgentToolResponse);
+  rpc EmitEvent(EmitAgentEventRequest) returns (google.protobuf.Empty);
 }
 
 service AgentManagerHost {

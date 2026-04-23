@@ -11,6 +11,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -236,6 +237,7 @@ var AgentProvider_ServiceDesc = grpc.ServiceDesc{
 
 const (
 	AgentHost_ExecuteTool_FullMethodName = "/gestalt.provider.v1.AgentHost/ExecuteTool"
+	AgentHost_EmitEvent_FullMethodName   = "/gestalt.provider.v1.AgentHost/EmitEvent"
 )
 
 // AgentHostClient is the client API for AgentHost service.
@@ -243,6 +245,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AgentHostClient interface {
 	ExecuteTool(ctx context.Context, in *ExecuteAgentToolRequest, opts ...grpc.CallOption) (*ExecuteAgentToolResponse, error)
+	EmitEvent(ctx context.Context, in *EmitAgentEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type agentHostClient struct {
@@ -263,11 +266,22 @@ func (c *agentHostClient) ExecuteTool(ctx context.Context, in *ExecuteAgentToolR
 	return out, nil
 }
 
+func (c *agentHostClient) EmitEvent(ctx context.Context, in *EmitAgentEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, AgentHost_EmitEvent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentHostServer is the server API for AgentHost service.
 // All implementations must embed UnimplementedAgentHostServer
 // for forward compatibility.
 type AgentHostServer interface {
 	ExecuteTool(context.Context, *ExecuteAgentToolRequest) (*ExecuteAgentToolResponse, error)
+	EmitEvent(context.Context, *EmitAgentEventRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedAgentHostServer()
 }
 
@@ -280,6 +294,9 @@ type UnimplementedAgentHostServer struct{}
 
 func (UnimplementedAgentHostServer) ExecuteTool(context.Context, *ExecuteAgentToolRequest) (*ExecuteAgentToolResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExecuteTool not implemented")
+}
+func (UnimplementedAgentHostServer) EmitEvent(context.Context, *EmitAgentEventRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method EmitEvent not implemented")
 }
 func (UnimplementedAgentHostServer) mustEmbedUnimplementedAgentHostServer() {}
 func (UnimplementedAgentHostServer) testEmbeddedByValue()                   {}
@@ -320,6 +337,24 @@ func _AgentHost_ExecuteTool_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentHost_EmitEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EmitAgentEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentHostServer).EmitEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentHost_EmitEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentHostServer).EmitEvent(ctx, req.(*EmitAgentEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentHost_ServiceDesc is the grpc.ServiceDesc for AgentHost service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -330,6 +365,10 @@ var AgentHost_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ExecuteTool",
 			Handler:    _AgentHost_ExecuteTool_Handler,
+		},
+		{
+			MethodName: "EmitEvent",
+			Handler:    _AgentHost_EmitEvent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

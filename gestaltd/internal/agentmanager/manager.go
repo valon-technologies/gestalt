@@ -26,6 +26,7 @@ import (
 var (
 	ErrAgentNotConfigured            = errors.New("agent is not configured")
 	ErrAgentRunMetadataNotConfigured = errors.New("agent run metadata is not configured")
+	ErrAgentRunEventsNotConfigured   = errors.New("agent run events are not configured")
 	ErrAgentSubjectRequired          = errors.New("agent subject is required")
 	ErrAgentCallerPluginRequired     = errors.New("agent caller plugin is required for inherited tools")
 	ErrAgentInheritedSurfaceTool     = errors.New("agent inherited surface tools are not supported")
@@ -44,12 +45,14 @@ type Service interface {
 	ListRuns(ctx context.Context, p *principal.Principal) ([]*coreagent.ManagedRun, error)
 	ListRunsByProvider(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.ManagedRun, error)
 	CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*coreagent.ManagedRun, error)
+	ListRunEvents(ctx context.Context, p *principal.Principal, runID string, afterSeq int64, limit int) ([]*coreagent.RunEvent, error)
 }
 
 type Config struct {
 	Providers         *registry.ProviderMap[core.Provider]
 	Agent             AgentControl
 	RunMetadata       *coredata.AgentRunMetadataService
+	RunEvents         *coredata.AgentRunEventService
 	Invoker           invocation.Invoker
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
@@ -62,6 +65,7 @@ type Manager struct {
 	providers         *registry.ProviderMap[core.Provider]
 	agent             AgentControl
 	runMetadata       *coredata.AgentRunMetadataService
+	runEvents         *coredata.AgentRunEventService
 	invoker           invocation.Invoker
 	authorizer        authorization.RuntimeAuthorizer
 	defaultConnection map[string]string
@@ -83,6 +87,7 @@ func New(cfg Config) *Manager {
 		providers:         cfg.Providers,
 		agent:             cfg.Agent,
 		runMetadata:       cfg.RunMetadata,
+		runEvents:         cfg.RunEvents,
 		invoker:           cfg.Invoker,
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
@@ -290,6 +295,9 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, 
 	if err != nil {
 		return nil, err
 	}
+	if _, err := m.runMetadata.Revoke(ctx, ref.ID, m.now()); err != nil {
+		return nil, err
+	}
 	normalized, err := normalizeProviderRun(ref.ProviderName, strings.TrimSpace(runID), run)
 	if err != nil {
 		return nil, err
@@ -298,6 +306,17 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, 
 		ProviderName: ref.ProviderName,
 		Run:          normalized,
 	}, nil
+}
+
+func (m *Manager) ListRunEvents(ctx context.Context, p *principal.Principal, runID string, afterSeq int64, limit int) ([]*coreagent.RunEvent, error) {
+	if m == nil || m.runEvents == nil {
+		return nil, ErrAgentRunEventsNotConfigured
+	}
+	ref, err := m.requireOwnedRunMetadata(ctx, runID, p)
+	if err != nil {
+		return nil, err
+	}
+	return m.runEvents.ListByRun(ctx, ref.ID, afterSeq, limit)
 }
 
 func (m *Manager) getManagedRunByMetadata(ctx context.Context, p *principal.Principal, ref *coreagent.ExecutionReference) (*coreagent.ManagedRun, error) {

@@ -304,6 +304,7 @@ export {
   type BoundAgentRun,
   type BoundAgentToolTarget,
   type CancelAgentProviderRunRequest,
+  type EmitAgentEventRequest,
   type ExecuteAgentToolRequest,
   type ExecuteAgentToolResponse,
   type GetAgentProviderRunRequest,

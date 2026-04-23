@@ -10,20 +10,24 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type agentExecuteToolFunc func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error)
+type agentEmitEventFunc func(context.Context, coreagent.EmitEventRequest) (*coreagent.RunEvent, error)
 
 type AgentHostServer struct {
 	proto.UnimplementedAgentHostServer
 	providerName string
 	executeTool  agentExecuteToolFunc
+	emitEvent    agentEmitEventFunc
 }
 
-func NewAgentHostServer(providerName string, executeTool agentExecuteToolFunc) *AgentHostServer {
+func NewAgentHostServer(providerName string, executeTool agentExecuteToolFunc, emitEvent agentEmitEventFunc) *AgentHostServer {
 	return &AgentHostServer{
 		providerName: providerName,
 		executeTool:  executeTool,
+		emitEvent:    emitEvent,
 	}
 }
 
@@ -50,7 +54,7 @@ func (s *AgentHostServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAge
 		Arguments:    mapFromStruct(req.GetArguments()),
 	})
 	if err != nil {
-		return nil, status.Errorf(agentExecuteToolErrorCode(err), "agent execute tool: %v", err)
+		return nil, status.Errorf(agentHostErrorCode(err), "agent execute tool: %v", err)
 	}
 	if resp == nil {
 		return &proto.ExecuteAgentToolResponse{}, nil
@@ -61,7 +65,34 @@ func (s *AgentHostServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAge
 	}, nil
 }
 
-func agentExecuteToolErrorCode(err error) codes.Code {
+func (s *AgentHostServer) EmitEvent(ctx context.Context, req *proto.EmitAgentEventRequest) (*emptypb.Empty, error) {
+	if s == nil || s.emitEvent == nil {
+		return nil, status.Error(codes.FailedPrecondition, "agent host event emitter is not configured")
+	}
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	runID := strings.TrimSpace(req.GetRunId())
+	if runID == "" {
+		return nil, status.Error(codes.InvalidArgument, "run_id is required")
+	}
+	eventType := strings.TrimSpace(req.GetType())
+	if eventType == "" {
+		return nil, status.Error(codes.InvalidArgument, "type is required")
+	}
+	if _, err := s.emitEvent(ctx, coreagent.EmitEventRequest{
+		ProviderName: strings.TrimSpace(s.providerName),
+		RunID:        runID,
+		Type:         eventType,
+		Visibility:   strings.TrimSpace(req.GetVisibility()),
+		Data:         mapFromStruct(req.GetData()),
+	}); err != nil {
+		return nil, status.Errorf(agentHostErrorCode(err), "agent emit event: %v", err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func agentHostErrorCode(err error) codes.Code {
 	if err == nil {
 		return codes.OK
 	}

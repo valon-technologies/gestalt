@@ -32,6 +32,9 @@ class AgentHost:
     def execute_tool(self, request: Any) -> Any:
         return _grpc_call(self._stub.ExecuteTool, request)
 
+    def emit_event(self, request: Any) -> Any:
+        return _grpc_call(self._stub.EmitEvent, request)
+
     def __enter__(self) -> AgentHost:
         return self
 
