@@ -7764,6 +7764,32 @@ pub struct BoundWorkflowEventTrigger {
     #[prost(string, tag = "8")]
     pub execution_ref: ::prost::alloc::string::String,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowAccessPermission {
+    #[prost(string, tag = "1")]
+    pub plugin: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "2")]
+    pub operations: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowExecutionReference {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub target: ::core::option::Option<BoundWorkflowTarget>,
+    #[prost(string, tag = "4")]
+    pub subject_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub credential_subject_id: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "6")]
+    pub permissions: ::prost::alloc::vec::Vec<WorkflowAccessPermission>,
+    #[prost(message, optional, tag = "7")]
+    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "8")]
+    pub revoked_at: ::core::option::Option<::prost_types::Timestamp>,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StartWorkflowProviderRunRequest {
     #[prost(message, optional, tag = "1")]
@@ -7864,6 +7890,26 @@ pub struct ListWorkflowProviderEventTriggersRequest {}
 pub struct ListWorkflowProviderEventTriggersResponse {
     #[prost(message, repeated, tag = "1")]
     pub triggers: ::prost::alloc::vec::Vec<BoundWorkflowEventTrigger>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PutWorkflowExecutionReferenceRequest {
+    #[prost(message, optional, tag = "1")]
+    pub reference: ::core::option::Option<WorkflowExecutionReference>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetWorkflowExecutionReferenceRequest {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListWorkflowExecutionReferencesRequest {
+    #[prost(string, tag = "1")]
+    pub subject_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListWorkflowExecutionReferencesResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub references: ::prost::alloc::vec::Vec<WorkflowExecutionReference>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DeleteWorkflowProviderEventTriggerRequest {
@@ -8481,6 +8527,65 @@ pub mod workflow_provider_client {
             ));
             self.inner.unary(req, path, codec).await
         }
+        pub async fn put_execution_reference(
+            &mut self,
+            request: impl tonic::IntoRequest<super::PutWorkflowExecutionReferenceRequest>,
+        ) -> std::result::Result<tonic::Response<super::WorkflowExecutionReference>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowProvider/PutExecutionReference",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "PutExecutionReference",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn get_execution_reference(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetWorkflowExecutionReferenceRequest>,
+        ) -> std::result::Result<tonic::Response<super::WorkflowExecutionReference>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowProvider/GetExecutionReference",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "GetExecutionReference",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn list_execution_references(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ListWorkflowExecutionReferencesRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListWorkflowExecutionReferencesResponse>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.WorkflowProvider/ListExecutionReferences",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "ListExecutionReferences",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
         pub async fn publish_event(
             &mut self,
             request: impl tonic::IntoRequest<super::PublishWorkflowProviderEventRequest>,
@@ -8587,6 +8692,21 @@ pub mod workflow_provider_server {
             &self,
             request: tonic::Request<super::ResumeWorkflowProviderEventTriggerRequest>,
         ) -> std::result::Result<tonic::Response<super::BoundWorkflowEventTrigger>, tonic::Status>;
+        async fn put_execution_reference(
+            &self,
+            request: tonic::Request<super::PutWorkflowExecutionReferenceRequest>,
+        ) -> std::result::Result<tonic::Response<super::WorkflowExecutionReference>, tonic::Status>;
+        async fn get_execution_reference(
+            &self,
+            request: tonic::Request<super::GetWorkflowExecutionReferenceRequest>,
+        ) -> std::result::Result<tonic::Response<super::WorkflowExecutionReference>, tonic::Status>;
+        async fn list_execution_references(
+            &self,
+            request: tonic::Request<super::ListWorkflowExecutionReferencesRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListWorkflowExecutionReferencesResponse>,
+            tonic::Status,
+        >;
         async fn publish_event(
             &self,
             request: tonic::Request<super::PublishWorkflowProviderEventRequest>,
@@ -9335,6 +9455,135 @@ pub mod workflow_provider_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = ResumeEventTriggerSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.WorkflowProvider/PutExecutionReference" => {
+                    #[allow(non_camel_case_types)]
+                    struct PutExecutionReferenceSvc<T: WorkflowProvider>(pub Arc<T>);
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::PutWorkflowExecutionReferenceRequest>
+                        for PutExecutionReferenceSvc<T>
+                    {
+                        type Response = super::WorkflowExecutionReference;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::PutWorkflowExecutionReferenceRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowProvider>::put_execution_reference(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = PutExecutionReferenceSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.WorkflowProvider/GetExecutionReference" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetExecutionReferenceSvc<T: WorkflowProvider>(pub Arc<T>);
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::GetWorkflowExecutionReferenceRequest>
+                        for GetExecutionReferenceSvc<T>
+                    {
+                        type Response = super::WorkflowExecutionReference;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetWorkflowExecutionReferenceRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowProvider>::get_execution_reference(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetExecutionReferenceSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.WorkflowProvider/ListExecutionReferences" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListExecutionReferencesSvc<T: WorkflowProvider>(pub Arc<T>);
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::ListWorkflowExecutionReferencesRequest>
+                        for ListExecutionReferencesSvc<T>
+                    {
+                        type Response = super::ListWorkflowExecutionReferencesResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ListWorkflowExecutionReferencesRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as WorkflowProvider>::list_execution_references(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListExecutionReferencesSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

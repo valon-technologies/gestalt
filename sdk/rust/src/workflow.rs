@@ -223,4 +223,26 @@ where
     ) -> std::result::Result<GrpcResponse<()>, Status> {
         self.provider.publish_event(request).await
     }
+
+    async fn put_execution_reference(
+        &self,
+        request: GrpcRequest<pb::PutWorkflowExecutionReferenceRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::WorkflowExecutionReference>, Status> {
+        self.provider.put_execution_reference(request).await
+    }
+
+    async fn get_execution_reference(
+        &self,
+        request: GrpcRequest<pb::GetWorkflowExecutionReferenceRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::WorkflowExecutionReference>, Status> {
+        self.provider.get_execution_reference(request).await
+    }
+
+    async fn list_execution_references(
+        &self,
+        request: GrpcRequest<pb::ListWorkflowExecutionReferencesRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::ListWorkflowExecutionReferencesResponse>, Status>
+    {
+        self.provider.list_execution_references(request).await
+    }
 }

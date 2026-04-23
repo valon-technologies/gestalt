@@ -289,13 +289,16 @@ type startupWorkflowProviderProxy struct {
 	mu       sync.RWMutex
 	provider coreworkflow.Provider
 	err      error
+
+	pendingExecutionRefs map[string]*coreworkflow.ExecutionReference
 }
 
 func newStartupWorkflowProviderProxy(providerName string, tracker *startupWaitTracker) *startupWorkflowProviderProxy {
 	return &startupWorkflowProviderProxy{
-		providerName: providerName,
-		tracker:      tracker,
-		ready:        make(chan struct{}),
+		providerName:         providerName,
+		tracker:              tracker,
+		ready:                make(chan struct{}),
+		pendingExecutionRefs: map[string]*coreworkflow.ExecutionReference{},
 	}
 }
 
@@ -473,6 +476,98 @@ func (p *startupWorkflowProviderProxy) PublishEvent(ctx context.Context, req cor
 	return provider.PublishEvent(ctx, req)
 }
 
+func (p *startupWorkflowProviderProxy) PutExecutionReference(ctx context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
+	pluginName := ""
+	if ref != nil {
+		pluginName = ref.Target.PluginName
+	}
+	select {
+	case <-p.ready:
+	default:
+		stored := cloneStartupWorkflowExecutionRef(ref)
+		if stored == nil || strings.TrimSpace(stored.ID) == "" {
+			return nil, fmt.Errorf("workflow execution reference id is required")
+		}
+		p.mu.Lock()
+		p.pendingExecutionRefs[stored.ID] = stored
+		p.mu.Unlock()
+		return cloneStartupWorkflowExecutionRef(stored), nil
+	}
+	provider, err := p.awaitForPlugin(ctx, pluginName)
+	if err != nil {
+		return nil, err
+	}
+	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
+	if !ok {
+		return nil, fmt.Errorf("workflow provider %q does not support execution references", p.providerName)
+	}
+	return store.PutExecutionReference(ctx, ref)
+}
+
+func (p *startupWorkflowProviderProxy) GetExecutionReference(ctx context.Context, id string) (*coreworkflow.ExecutionReference, error) {
+	id = strings.TrimSpace(id)
+	p.mu.RLock()
+	if ref := p.pendingExecutionRefs[id]; ref != nil {
+		p.mu.RUnlock()
+		return cloneStartupWorkflowExecutionRef(ref), nil
+	}
+	p.mu.RUnlock()
+
+	provider, err := p.await(ctx)
+	if err != nil {
+		return nil, err
+	}
+	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
+	if !ok {
+		return nil, fmt.Errorf("workflow provider %q does not support execution references", p.providerName)
+	}
+	return store.GetExecutionReference(ctx, id)
+}
+
+func (p *startupWorkflowProviderProxy) ListExecutionReferences(ctx context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
+	pending := p.pendingExecutionRefsForSubject(subjectID)
+	select {
+	case <-p.ready:
+	default:
+		return pending, nil
+	}
+	provider, err := p.await(ctx)
+	if err != nil {
+		return nil, err
+	}
+	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
+	if !ok {
+		if len(pending) > 0 {
+			return pending, nil
+		}
+		return nil, fmt.Errorf("workflow provider %q does not support execution references", p.providerName)
+	}
+	refs, err := store.ListExecutionReferences(ctx, subjectID)
+	if err != nil {
+		return nil, err
+	}
+	if len(pending) == 0 {
+		return refs, nil
+	}
+	merged := make([]*coreworkflow.ExecutionReference, 0, len(pending)+len(refs))
+	seen := make(map[string]bool, len(pending)+len(refs))
+	for _, ref := range pending {
+		if ref == nil || seen[ref.ID] {
+			continue
+		}
+		seen[ref.ID] = true
+		merged = append(merged, ref)
+	}
+	for _, ref := range refs {
+		if ref == nil || seen[ref.ID] {
+			continue
+		}
+		seen[ref.ID] = true
+		merged = append(merged, ref)
+	}
+	return merged, nil
+}
+
 func (p *startupWorkflowProviderProxy) Ping(ctx context.Context) error {
 	provider, err := p.await(ctx)
 	if err != nil {
@@ -517,4 +612,44 @@ func (p *startupWorkflowProviderProxy) beginPluginWait(pluginName string) (func(
 		return func() {}, nil
 	}
 	return p.tracker.beginPluginWait(pluginName, p.providerName)
+}
+
+func (p *startupWorkflowProviderProxy) pendingExecutionRefsForSubject(subjectID string) []*coreworkflow.ExecutionReference {
+	subjectID = strings.TrimSpace(subjectID)
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	out := make([]*coreworkflow.ExecutionReference, 0, len(p.pendingExecutionRefs))
+	for _, ref := range p.pendingExecutionRefs {
+		if ref == nil {
+			continue
+		}
+		if subjectID != "" && strings.TrimSpace(ref.SubjectID) != subjectID {
+			continue
+		}
+		out = append(out, cloneStartupWorkflowExecutionRef(ref))
+	}
+	return out
+}
+
+func cloneStartupWorkflowExecutionRef(ref *coreworkflow.ExecutionReference) *coreworkflow.ExecutionReference {
+	if ref == nil {
+		return nil
+	}
+	clone := *ref
+	if ref.Target.Input != nil {
+		clone.Target.Input = maps.Clone(ref.Target.Input)
+	}
+	clone.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
+	for i := range clone.Permissions {
+		clone.Permissions[i].Operations = append([]string(nil), clone.Permissions[i].Operations...)
+	}
+	if ref.CreatedAt != nil {
+		createdAt := ref.CreatedAt.UTC()
+		clone.CreatedAt = &createdAt
+	}
+	if ref.RevokedAt != nil {
+		revokedAt := ref.RevokedAt.UTC()
+		clone.RevokedAt = &revokedAt
+	}
+	return &clone
 }

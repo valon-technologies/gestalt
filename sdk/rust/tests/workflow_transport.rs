@@ -207,6 +207,32 @@ impl WorkflowProviderGrpc for TestWorkflowProvider {
             .push((request.plugin_name, event.r#type));
         Ok(GrpcResponse::new(()))
     }
+
+    async fn put_execution_reference(
+        &self,
+        _request: GrpcRequest<gestalt::proto::v1::PutWorkflowExecutionReferenceRequest>,
+    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::WorkflowExecutionReference>, Status>
+    {
+        Err(Status::unimplemented("not used"))
+    }
+
+    async fn get_execution_reference(
+        &self,
+        _request: GrpcRequest<gestalt::proto::v1::GetWorkflowExecutionReferenceRequest>,
+    ) -> std::result::Result<GrpcResponse<gestalt::proto::v1::WorkflowExecutionReference>, Status>
+    {
+        Err(Status::unimplemented("not used"))
+    }
+
+    async fn list_execution_references(
+        &self,
+        _request: GrpcRequest<gestalt::proto::v1::ListWorkflowExecutionReferencesRequest>,
+    ) -> std::result::Result<
+        GrpcResponse<gestalt::proto::v1::ListWorkflowExecutionReferencesResponse>,
+        Status,
+    > {
+        Err(Status::unimplemented("not used"))
+    }
 }
 
 #[tonic::async_trait]

@@ -87,7 +87,6 @@ type Server struct {
 	identityGrants         *coredata.IdentityManagementGrantService
 	workspaceRoles         *coredata.WorkspaceRoleService
 	identityPluginAccess   *coredata.IdentityPluginAccessService
-	workflowExecutionRefs  *coredata.WorkflowExecutionRefService
 	workflowSchedules      *workflowmanager.Manager
 	agentRuns              agentmanager.Service
 	authorizationProvider  core.AuthorizationProvider
@@ -239,7 +238,6 @@ func New(cfg Config) (*Server, error) {
 	identityGrants := cfg.Services.IdentityManagementGrants
 	workspaceRoles := cfg.Services.WorkspaceRoles
 	identityPluginAccess := cfg.Services.IdentityPluginAccess
-	workflowExecutionRefs := cfg.Services.WorkflowExecutionRefs
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, cfg.Authorizer)
 	authProviders := make(map[string]core.AuthenticationProvider, len(cfg.AuthProviders)+1)
 	for name, provider := range cfg.AuthProviders {
@@ -289,7 +287,6 @@ func New(cfg Config) (*Server, error) {
 		identityGrants:         identityGrants,
 		workspaceRoles:         workspaceRoles,
 		identityPluginAccess:   identityPluginAccess,
-		workflowExecutionRefs:  workflowExecutionRefs,
 		agentRuns:              cfg.AgentManager,
 		authorizationProvider:  cfg.AuthorizationProvider,
 		providers:              cfg.Providers,
@@ -325,14 +322,13 @@ func New(cfg Config) (*Server, error) {
 		httpBindingReplayStore: newMemoryHTTPBindingReplayStore(),
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
-		Providers:             cfg.Providers,
-		Workflow:              cfg.Workflow,
-		WorkflowExecutionRefs: workflowExecutionRefs,
-		Invoker:               cfg.Invoker,
-		Authorizer:            cfg.Authorizer,
-		DefaultConnection:     cfg.DefaultConnection,
-		CatalogConnection:     cfg.CatalogConnection,
-		Now:                   now,
+		Providers:         cfg.Providers,
+		Workflow:          cfg.Workflow,
+		Invoker:           cfg.Invoker,
+		Authorizer:        cfg.Authorizer,
+		DefaultConnection: cfg.DefaultConnection,
+		CatalogConnection: cfg.CatalogConnection,
+		Now:               now,
 	})
 	if noAuth || hasAnonymousAuthProvider(authProviders) {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)

@@ -10,12 +10,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type workflowRuntime struct {
@@ -24,7 +25,6 @@ type workflowRuntime struct {
 	providers           map[string]coreworkflow.Provider
 	startupWaits        *startupWaitTracker
 	invoker             invocation.Invoker
-	executionRefs       *coredata.WorkflowExecutionRefService
 }
 
 func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
@@ -119,15 +119,6 @@ func (r *workflowRuntime) SetInvoker(invoker invocation.Invoker) {
 	r.invoker = invoker
 }
 
-func (r *workflowRuntime) SetExecutionRefs(service *coredata.WorkflowExecutionRefService) {
-	if r == nil {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.executionRefs = service
-}
-
 func (r *workflowRuntime) HasConfiguredProviders() bool {
 	if r == nil {
 		return false
@@ -193,7 +184,6 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 	}
 	r.mu.RLock()
 	invoker := r.invoker
-	executionRefs := r.executionRefs
 	r.mu.RUnlock()
 	if invoker == nil {
 		return nil, fmt.Errorf("workflow runtime invoker is not configured")
@@ -207,7 +197,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 	invokeConnection := ""
 	invokeInstance := ""
 	if strings.TrimSpace(req.ExecutionRef) != "" {
-		resolvedRef, err := resolveWorkflowExecutionRef(ctx, executionRefs, req)
+		resolvedRef, err := r.resolveWorkflowExecutionRef(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -241,14 +231,23 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 	}, nil
 }
 
-func resolveWorkflowExecutionRef(ctx context.Context, service *coredata.WorkflowExecutionRefService, req coreworkflow.InvokeOperationRequest) (*coreworkflow.ExecutionReference, error) {
-	if service == nil {
-		return nil, fmt.Errorf("%w: workflow execution refs are not configured", invocation.ErrInternal)
-	}
+func (r *workflowRuntime) resolveWorkflowExecutionRef(ctx context.Context, req coreworkflow.InvokeOperationRequest) (*coreworkflow.ExecutionReference, error) {
 	refID := strings.TrimSpace(req.ExecutionRef)
-	ref, err := service.Get(ctx, refID)
+	providerName := strings.TrimSpace(req.ProviderName)
+	if providerName == "" {
+		return nil, fmt.Errorf("%w: workflow execution provider is required", invocation.ErrInternal)
+	}
+	provider, err := r.ResolveProvider(providerName)
 	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
+		return nil, fmt.Errorf("%w: workflow provider %q is not available: %v", invocation.ErrInternal, providerName, err)
+	}
+	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
+	if !ok {
+		return nil, fmt.Errorf("%w: workflow provider %q does not support execution refs", invocation.ErrInternal, providerName)
+	}
+	ref, err := store.GetExecutionReference(ctx, refID)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound {
 			return nil, fmt.Errorf("%w: workflow execution ref %q was not found", invocation.ErrAuthorizationDenied, refID)
 		}
 		return nil, fmt.Errorf("%w: workflow execution ref %q lookup failed: %v", invocation.ErrInternal, refID, err)

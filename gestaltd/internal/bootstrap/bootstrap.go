@@ -880,7 +880,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			return nil, err
 		}
 	}
-	prepared.Deps.WorkflowRuntime.SetExecutionRefs(prepared.Services.WorkflowExecutionRefs)
 	prepared.Deps.AgentRuntime.SetRunMetadata(prepared.Services.AgentRunMetadata)
 	prepared.Deps.AgentRuntime.SetRunEvents(prepared.Services.AgentRunEvents)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.Tokens,
@@ -892,13 +891,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)
 	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
 	workflowManager.SetTarget(workflowmanager.New(workflowmanager.Config{
-		Providers:             providers,
-		Workflow:              prepared.Deps.WorkflowRuntime,
-		WorkflowExecutionRefs: prepared.Services.WorkflowExecutionRefs,
-		Invoker:               sharedInvoker,
-		Authorizer:            authz,
-		DefaultConnection:     connMaps.DefaultConnection,
-		CatalogConnection:     connMaps.APIConnection,
+		Providers:         providers,
+		Workflow:          prepared.Deps.WorkflowRuntime,
+		Invoker:           sharedInvoker,
+		Authorizer:        authz,
+		DefaultConnection: connMaps.DefaultConnection,
+		CatalogConnection: connMaps.APIConnection,
 	}))
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:         providers,
@@ -942,10 +940,10 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "plugin", audit, invocation.WithoutRateLimit()))
-	if err := reconcileWorkflowConfigSchedules(ctx, cfg, prepared.Deps.WorkflowRuntime, prepared.Services.DB); err != nil {
+	if err := reconcileWorkflowConfigSchedules(ctx, cfg, prepared.Deps.WorkflowRuntime); err != nil {
 		return nil, err
 	}
-	if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, prepared.Deps.WorkflowRuntime, prepared.Services.DB); err != nil {
+	if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, prepared.Deps.WorkflowRuntime); err != nil {
 		return nil, err
 	}
 

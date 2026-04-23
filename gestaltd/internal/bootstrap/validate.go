@@ -66,7 +66,6 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		return warnings, err
 	}
 	defer func() { _ = authz.Close() }()
-	prepared.Deps.WorkflowRuntime.SetExecutionRefs(prepared.Services.WorkflowExecutionRefs)
 	prepared.Deps.AgentRuntime.SetRunMetadata(prepared.Services.AgentRunMetadata)
 	prepared.Deps.AgentRuntime.SetRunEvents(prepared.Services.AgentRunEvents)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.Tokens,

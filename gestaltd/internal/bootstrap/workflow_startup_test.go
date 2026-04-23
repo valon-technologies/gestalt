@@ -223,7 +223,15 @@ func invokeWorkflowHostDuringStartup(t *testing.T, hostServices []providerhost.H
 
 func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, target coreworkflow.Target) string {
 	t.Helper()
-	ref, err := deps.Services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
+	if err != nil {
+		t.Fatalf("resolve workflow provider %q: %v", providerName, err)
+	}
+	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
+	if !ok {
+		t.Fatalf("workflow provider %q does not support execution refs", providerName)
+	}
+	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, target.Operation),
 		ProviderName: providerName,
 		Target:       target,

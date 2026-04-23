@@ -972,6 +972,158 @@ func (x *BoundWorkflowEventTrigger) GetExecutionRef() string {
 	return ""
 }
 
+type WorkflowAccessPermission struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Plugin        string                 `protobuf:"bytes,1,opt,name=plugin,proto3" json:"plugin,omitempty"`
+	Operations    []string               `protobuf:"bytes,2,rep,name=operations,proto3" json:"operations,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowAccessPermission) Reset() {
+	*x = WorkflowAccessPermission{}
+	mi := &file_v1_workflow_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowAccessPermission) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowAccessPermission) ProtoMessage() {}
+
+func (x *WorkflowAccessPermission) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_workflow_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowAccessPermission.ProtoReflect.Descriptor instead.
+func (*WorkflowAccessPermission) Descriptor() ([]byte, []int) {
+	return file_v1_workflow_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *WorkflowAccessPermission) GetPlugin() string {
+	if x != nil {
+		return x.Plugin
+	}
+	return ""
+}
+
+func (x *WorkflowAccessPermission) GetOperations() []string {
+	if x != nil {
+		return x.Operations
+	}
+	return nil
+}
+
+type WorkflowExecutionReference struct {
+	state               protoimpl.MessageState      `protogen:"open.v1"`
+	Id                  string                      `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ProviderName        string                      `protobuf:"bytes,2,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
+	Target              *BoundWorkflowTarget        `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
+	SubjectId           string                      `protobuf:"bytes,4,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
+	CredentialSubjectId string                      `protobuf:"bytes,5,opt,name=credential_subject_id,json=credentialSubjectId,proto3" json:"credential_subject_id,omitempty"`
+	Permissions         []*WorkflowAccessPermission `protobuf:"bytes,6,rep,name=permissions,proto3" json:"permissions,omitempty"`
+	CreatedAt           *timestamppb.Timestamp      `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	RevokedAt           *timestamppb.Timestamp      `protobuf:"bytes,8,opt,name=revoked_at,json=revokedAt,proto3" json:"revoked_at,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *WorkflowExecutionReference) Reset() {
+	*x = WorkflowExecutionReference{}
+	mi := &file_v1_workflow_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowExecutionReference) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowExecutionReference) ProtoMessage() {}
+
+func (x *WorkflowExecutionReference) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_workflow_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowExecutionReference.ProtoReflect.Descriptor instead.
+func (*WorkflowExecutionReference) Descriptor() ([]byte, []int) {
+	return file_v1_workflow_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *WorkflowExecutionReference) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *WorkflowExecutionReference) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
+}
+
+func (x *WorkflowExecutionReference) GetTarget() *BoundWorkflowTarget {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *WorkflowExecutionReference) GetSubjectId() string {
+	if x != nil {
+		return x.SubjectId
+	}
+	return ""
+}
+
+func (x *WorkflowExecutionReference) GetCredentialSubjectId() string {
+	if x != nil {
+		return x.CredentialSubjectId
+	}
+	return ""
+}
+
+func (x *WorkflowExecutionReference) GetPermissions() []*WorkflowAccessPermission {
+	if x != nil {
+		return x.Permissions
+	}
+	return nil
+}
+
+func (x *WorkflowExecutionReference) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *WorkflowExecutionReference) GetRevokedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RevokedAt
+	}
+	return nil
+}
+
 type StartWorkflowProviderRunRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Target         *BoundWorkflowTarget   `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
@@ -984,7 +1136,7 @@ type StartWorkflowProviderRunRequest struct {
 
 func (x *StartWorkflowProviderRunRequest) Reset() {
 	*x = StartWorkflowProviderRunRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[11]
+	mi := &file_v1_workflow_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -996,7 +1148,7 @@ func (x *StartWorkflowProviderRunRequest) String() string {
 func (*StartWorkflowProviderRunRequest) ProtoMessage() {}
 
 func (x *StartWorkflowProviderRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[11]
+	mi := &file_v1_workflow_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1009,7 +1161,7 @@ func (x *StartWorkflowProviderRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartWorkflowProviderRunRequest.ProtoReflect.Descriptor instead.
 func (*StartWorkflowProviderRunRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{11}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *StartWorkflowProviderRunRequest) GetTarget() *BoundWorkflowTarget {
@@ -1049,7 +1201,7 @@ type GetWorkflowProviderRunRequest struct {
 
 func (x *GetWorkflowProviderRunRequest) Reset() {
 	*x = GetWorkflowProviderRunRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[12]
+	mi := &file_v1_workflow_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1061,7 +1213,7 @@ func (x *GetWorkflowProviderRunRequest) String() string {
 func (*GetWorkflowProviderRunRequest) ProtoMessage() {}
 
 func (x *GetWorkflowProviderRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[12]
+	mi := &file_v1_workflow_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1074,7 +1226,7 @@ func (x *GetWorkflowProviderRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorkflowProviderRunRequest.ProtoReflect.Descriptor instead.
 func (*GetWorkflowProviderRunRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{12}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetWorkflowProviderRunRequest) GetRunId() string {
@@ -1092,7 +1244,7 @@ type ListWorkflowProviderRunsRequest struct {
 
 func (x *ListWorkflowProviderRunsRequest) Reset() {
 	*x = ListWorkflowProviderRunsRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[13]
+	mi := &file_v1_workflow_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1104,7 +1256,7 @@ func (x *ListWorkflowProviderRunsRequest) String() string {
 func (*ListWorkflowProviderRunsRequest) ProtoMessage() {}
 
 func (x *ListWorkflowProviderRunsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[13]
+	mi := &file_v1_workflow_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1117,7 +1269,7 @@ func (x *ListWorkflowProviderRunsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWorkflowProviderRunsRequest.ProtoReflect.Descriptor instead.
 func (*ListWorkflowProviderRunsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{13}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{15}
 }
 
 type ListWorkflowProviderRunsResponse struct {
@@ -1129,7 +1281,7 @@ type ListWorkflowProviderRunsResponse struct {
 
 func (x *ListWorkflowProviderRunsResponse) Reset() {
 	*x = ListWorkflowProviderRunsResponse{}
-	mi := &file_v1_workflow_proto_msgTypes[14]
+	mi := &file_v1_workflow_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1141,7 +1293,7 @@ func (x *ListWorkflowProviderRunsResponse) String() string {
 func (*ListWorkflowProviderRunsResponse) ProtoMessage() {}
 
 func (x *ListWorkflowProviderRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[14]
+	mi := &file_v1_workflow_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1154,7 +1306,7 @@ func (x *ListWorkflowProviderRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWorkflowProviderRunsResponse.ProtoReflect.Descriptor instead.
 func (*ListWorkflowProviderRunsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{14}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListWorkflowProviderRunsResponse) GetRuns() []*BoundWorkflowRun {
@@ -1174,7 +1326,7 @@ type CancelWorkflowProviderRunRequest struct {
 
 func (x *CancelWorkflowProviderRunRequest) Reset() {
 	*x = CancelWorkflowProviderRunRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[15]
+	mi := &file_v1_workflow_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1186,7 +1338,7 @@ func (x *CancelWorkflowProviderRunRequest) String() string {
 func (*CancelWorkflowProviderRunRequest) ProtoMessage() {}
 
 func (x *CancelWorkflowProviderRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[15]
+	mi := &file_v1_workflow_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1199,7 +1351,7 @@ func (x *CancelWorkflowProviderRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelWorkflowProviderRunRequest.ProtoReflect.Descriptor instead.
 func (*CancelWorkflowProviderRunRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{15}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CancelWorkflowProviderRunRequest) GetRunId() string {
@@ -1231,7 +1383,7 @@ type UpsertWorkflowProviderScheduleRequest struct {
 
 func (x *UpsertWorkflowProviderScheduleRequest) Reset() {
 	*x = UpsertWorkflowProviderScheduleRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[16]
+	mi := &file_v1_workflow_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1243,7 +1395,7 @@ func (x *UpsertWorkflowProviderScheduleRequest) String() string {
 func (*UpsertWorkflowProviderScheduleRequest) ProtoMessage() {}
 
 func (x *UpsertWorkflowProviderScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[16]
+	mi := &file_v1_workflow_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1256,7 +1408,7 @@ func (x *UpsertWorkflowProviderScheduleRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use UpsertWorkflowProviderScheduleRequest.ProtoReflect.Descriptor instead.
 func (*UpsertWorkflowProviderScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{16}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *UpsertWorkflowProviderScheduleRequest) GetScheduleId() string {
@@ -1317,7 +1469,7 @@ type GetWorkflowProviderScheduleRequest struct {
 
 func (x *GetWorkflowProviderScheduleRequest) Reset() {
 	*x = GetWorkflowProviderScheduleRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[17]
+	mi := &file_v1_workflow_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1329,7 +1481,7 @@ func (x *GetWorkflowProviderScheduleRequest) String() string {
 func (*GetWorkflowProviderScheduleRequest) ProtoMessage() {}
 
 func (x *GetWorkflowProviderScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[17]
+	mi := &file_v1_workflow_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1342,7 +1494,7 @@ func (x *GetWorkflowProviderScheduleRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetWorkflowProviderScheduleRequest.ProtoReflect.Descriptor instead.
 func (*GetWorkflowProviderScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{17}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetWorkflowProviderScheduleRequest) GetScheduleId() string {
@@ -1360,7 +1512,7 @@ type ListWorkflowProviderSchedulesRequest struct {
 
 func (x *ListWorkflowProviderSchedulesRequest) Reset() {
 	*x = ListWorkflowProviderSchedulesRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[18]
+	mi := &file_v1_workflow_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1372,7 +1524,7 @@ func (x *ListWorkflowProviderSchedulesRequest) String() string {
 func (*ListWorkflowProviderSchedulesRequest) ProtoMessage() {}
 
 func (x *ListWorkflowProviderSchedulesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[18]
+	mi := &file_v1_workflow_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1385,7 +1537,7 @@ func (x *ListWorkflowProviderSchedulesRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use ListWorkflowProviderSchedulesRequest.ProtoReflect.Descriptor instead.
 func (*ListWorkflowProviderSchedulesRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{18}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{20}
 }
 
 type ListWorkflowProviderSchedulesResponse struct {
@@ -1397,7 +1549,7 @@ type ListWorkflowProviderSchedulesResponse struct {
 
 func (x *ListWorkflowProviderSchedulesResponse) Reset() {
 	*x = ListWorkflowProviderSchedulesResponse{}
-	mi := &file_v1_workflow_proto_msgTypes[19]
+	mi := &file_v1_workflow_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1409,7 +1561,7 @@ func (x *ListWorkflowProviderSchedulesResponse) String() string {
 func (*ListWorkflowProviderSchedulesResponse) ProtoMessage() {}
 
 func (x *ListWorkflowProviderSchedulesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[19]
+	mi := &file_v1_workflow_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1422,7 +1574,7 @@ func (x *ListWorkflowProviderSchedulesResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use ListWorkflowProviderSchedulesResponse.ProtoReflect.Descriptor instead.
 func (*ListWorkflowProviderSchedulesResponse) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{19}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ListWorkflowProviderSchedulesResponse) GetSchedules() []*BoundWorkflowSchedule {
@@ -1441,7 +1593,7 @@ type DeleteWorkflowProviderScheduleRequest struct {
 
 func (x *DeleteWorkflowProviderScheduleRequest) Reset() {
 	*x = DeleteWorkflowProviderScheduleRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[20]
+	mi := &file_v1_workflow_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1453,7 +1605,7 @@ func (x *DeleteWorkflowProviderScheduleRequest) String() string {
 func (*DeleteWorkflowProviderScheduleRequest) ProtoMessage() {}
 
 func (x *DeleteWorkflowProviderScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[20]
+	mi := &file_v1_workflow_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1466,7 +1618,7 @@ func (x *DeleteWorkflowProviderScheduleRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use DeleteWorkflowProviderScheduleRequest.ProtoReflect.Descriptor instead.
 func (*DeleteWorkflowProviderScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{20}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *DeleteWorkflowProviderScheduleRequest) GetScheduleId() string {
@@ -1485,7 +1637,7 @@ type PauseWorkflowProviderScheduleRequest struct {
 
 func (x *PauseWorkflowProviderScheduleRequest) Reset() {
 	*x = PauseWorkflowProviderScheduleRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[21]
+	mi := &file_v1_workflow_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1497,7 +1649,7 @@ func (x *PauseWorkflowProviderScheduleRequest) String() string {
 func (*PauseWorkflowProviderScheduleRequest) ProtoMessage() {}
 
 func (x *PauseWorkflowProviderScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[21]
+	mi := &file_v1_workflow_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1510,7 +1662,7 @@ func (x *PauseWorkflowProviderScheduleRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use PauseWorkflowProviderScheduleRequest.ProtoReflect.Descriptor instead.
 func (*PauseWorkflowProviderScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{21}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *PauseWorkflowProviderScheduleRequest) GetScheduleId() string {
@@ -1529,7 +1681,7 @@ type ResumeWorkflowProviderScheduleRequest struct {
 
 func (x *ResumeWorkflowProviderScheduleRequest) Reset() {
 	*x = ResumeWorkflowProviderScheduleRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[22]
+	mi := &file_v1_workflow_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1541,7 +1693,7 @@ func (x *ResumeWorkflowProviderScheduleRequest) String() string {
 func (*ResumeWorkflowProviderScheduleRequest) ProtoMessage() {}
 
 func (x *ResumeWorkflowProviderScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[22]
+	mi := &file_v1_workflow_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1554,7 +1706,7 @@ func (x *ResumeWorkflowProviderScheduleRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use ResumeWorkflowProviderScheduleRequest.ProtoReflect.Descriptor instead.
 func (*ResumeWorkflowProviderScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{22}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ResumeWorkflowProviderScheduleRequest) GetScheduleId() string {
@@ -1578,7 +1730,7 @@ type UpsertWorkflowProviderEventTriggerRequest struct {
 
 func (x *UpsertWorkflowProviderEventTriggerRequest) Reset() {
 	*x = UpsertWorkflowProviderEventTriggerRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[23]
+	mi := &file_v1_workflow_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1590,7 +1742,7 @@ func (x *UpsertWorkflowProviderEventTriggerRequest) String() string {
 func (*UpsertWorkflowProviderEventTriggerRequest) ProtoMessage() {}
 
 func (x *UpsertWorkflowProviderEventTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[23]
+	mi := &file_v1_workflow_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1603,7 +1755,7 @@ func (x *UpsertWorkflowProviderEventTriggerRequest) ProtoReflect() protoreflect.
 
 // Deprecated: Use UpsertWorkflowProviderEventTriggerRequest.ProtoReflect.Descriptor instead.
 func (*UpsertWorkflowProviderEventTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{23}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *UpsertWorkflowProviderEventTriggerRequest) GetTriggerId() string {
@@ -1657,7 +1809,7 @@ type GetWorkflowProviderEventTriggerRequest struct {
 
 func (x *GetWorkflowProviderEventTriggerRequest) Reset() {
 	*x = GetWorkflowProviderEventTriggerRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[24]
+	mi := &file_v1_workflow_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1669,7 +1821,7 @@ func (x *GetWorkflowProviderEventTriggerRequest) String() string {
 func (*GetWorkflowProviderEventTriggerRequest) ProtoMessage() {}
 
 func (x *GetWorkflowProviderEventTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[24]
+	mi := &file_v1_workflow_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1682,7 +1834,7 @@ func (x *GetWorkflowProviderEventTriggerRequest) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use GetWorkflowProviderEventTriggerRequest.ProtoReflect.Descriptor instead.
 func (*GetWorkflowProviderEventTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{24}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetWorkflowProviderEventTriggerRequest) GetTriggerId() string {
@@ -1700,7 +1852,7 @@ type ListWorkflowProviderEventTriggersRequest struct {
 
 func (x *ListWorkflowProviderEventTriggersRequest) Reset() {
 	*x = ListWorkflowProviderEventTriggersRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[25]
+	mi := &file_v1_workflow_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1712,7 +1864,7 @@ func (x *ListWorkflowProviderEventTriggersRequest) String() string {
 func (*ListWorkflowProviderEventTriggersRequest) ProtoMessage() {}
 
 func (x *ListWorkflowProviderEventTriggersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[25]
+	mi := &file_v1_workflow_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1725,7 +1877,7 @@ func (x *ListWorkflowProviderEventTriggersRequest) ProtoReflect() protoreflect.M
 
 // Deprecated: Use ListWorkflowProviderEventTriggersRequest.ProtoReflect.Descriptor instead.
 func (*ListWorkflowProviderEventTriggersRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{25}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{27}
 }
 
 type ListWorkflowProviderEventTriggersResponse struct {
@@ -1737,7 +1889,7 @@ type ListWorkflowProviderEventTriggersResponse struct {
 
 func (x *ListWorkflowProviderEventTriggersResponse) Reset() {
 	*x = ListWorkflowProviderEventTriggersResponse{}
-	mi := &file_v1_workflow_proto_msgTypes[26]
+	mi := &file_v1_workflow_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1749,7 +1901,7 @@ func (x *ListWorkflowProviderEventTriggersResponse) String() string {
 func (*ListWorkflowProviderEventTriggersResponse) ProtoMessage() {}
 
 func (x *ListWorkflowProviderEventTriggersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[26]
+	mi := &file_v1_workflow_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1762,12 +1914,188 @@ func (x *ListWorkflowProviderEventTriggersResponse) ProtoReflect() protoreflect.
 
 // Deprecated: Use ListWorkflowProviderEventTriggersResponse.ProtoReflect.Descriptor instead.
 func (*ListWorkflowProviderEventTriggersResponse) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{26}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ListWorkflowProviderEventTriggersResponse) GetTriggers() []*BoundWorkflowEventTrigger {
 	if x != nil {
 		return x.Triggers
+	}
+	return nil
+}
+
+type PutWorkflowExecutionReferenceRequest struct {
+	state         protoimpl.MessageState      `protogen:"open.v1"`
+	Reference     *WorkflowExecutionReference `protobuf:"bytes,1,opt,name=reference,proto3" json:"reference,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PutWorkflowExecutionReferenceRequest) Reset() {
+	*x = PutWorkflowExecutionReferenceRequest{}
+	mi := &file_v1_workflow_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PutWorkflowExecutionReferenceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PutWorkflowExecutionReferenceRequest) ProtoMessage() {}
+
+func (x *PutWorkflowExecutionReferenceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_workflow_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PutWorkflowExecutionReferenceRequest.ProtoReflect.Descriptor instead.
+func (*PutWorkflowExecutionReferenceRequest) Descriptor() ([]byte, []int) {
+	return file_v1_workflow_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *PutWorkflowExecutionReferenceRequest) GetReference() *WorkflowExecutionReference {
+	if x != nil {
+		return x.Reference
+	}
+	return nil
+}
+
+type GetWorkflowExecutionReferenceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetWorkflowExecutionReferenceRequest) Reset() {
+	*x = GetWorkflowExecutionReferenceRequest{}
+	mi := &file_v1_workflow_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetWorkflowExecutionReferenceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetWorkflowExecutionReferenceRequest) ProtoMessage() {}
+
+func (x *GetWorkflowExecutionReferenceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_workflow_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetWorkflowExecutionReferenceRequest.ProtoReflect.Descriptor instead.
+func (*GetWorkflowExecutionReferenceRequest) Descriptor() ([]byte, []int) {
+	return file_v1_workflow_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *GetWorkflowExecutionReferenceRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type ListWorkflowExecutionReferencesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SubjectId     string                 `protobuf:"bytes,1,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWorkflowExecutionReferencesRequest) Reset() {
+	*x = ListWorkflowExecutionReferencesRequest{}
+	mi := &file_v1_workflow_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWorkflowExecutionReferencesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWorkflowExecutionReferencesRequest) ProtoMessage() {}
+
+func (x *ListWorkflowExecutionReferencesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_workflow_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWorkflowExecutionReferencesRequest.ProtoReflect.Descriptor instead.
+func (*ListWorkflowExecutionReferencesRequest) Descriptor() ([]byte, []int) {
+	return file_v1_workflow_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ListWorkflowExecutionReferencesRequest) GetSubjectId() string {
+	if x != nil {
+		return x.SubjectId
+	}
+	return ""
+}
+
+type ListWorkflowExecutionReferencesResponse struct {
+	state         protoimpl.MessageState        `protogen:"open.v1"`
+	References    []*WorkflowExecutionReference `protobuf:"bytes,1,rep,name=references,proto3" json:"references,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWorkflowExecutionReferencesResponse) Reset() {
+	*x = ListWorkflowExecutionReferencesResponse{}
+	mi := &file_v1_workflow_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWorkflowExecutionReferencesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWorkflowExecutionReferencesResponse) ProtoMessage() {}
+
+func (x *ListWorkflowExecutionReferencesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_workflow_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWorkflowExecutionReferencesResponse.ProtoReflect.Descriptor instead.
+func (*ListWorkflowExecutionReferencesResponse) Descriptor() ([]byte, []int) {
+	return file_v1_workflow_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ListWorkflowExecutionReferencesResponse) GetReferences() []*WorkflowExecutionReference {
+	if x != nil {
+		return x.References
 	}
 	return nil
 }
@@ -1781,7 +2109,7 @@ type DeleteWorkflowProviderEventTriggerRequest struct {
 
 func (x *DeleteWorkflowProviderEventTriggerRequest) Reset() {
 	*x = DeleteWorkflowProviderEventTriggerRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[27]
+	mi := &file_v1_workflow_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1793,7 +2121,7 @@ func (x *DeleteWorkflowProviderEventTriggerRequest) String() string {
 func (*DeleteWorkflowProviderEventTriggerRequest) ProtoMessage() {}
 
 func (x *DeleteWorkflowProviderEventTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[27]
+	mi := &file_v1_workflow_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1806,7 +2134,7 @@ func (x *DeleteWorkflowProviderEventTriggerRequest) ProtoReflect() protoreflect.
 
 // Deprecated: Use DeleteWorkflowProviderEventTriggerRequest.ProtoReflect.Descriptor instead.
 func (*DeleteWorkflowProviderEventTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{27}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *DeleteWorkflowProviderEventTriggerRequest) GetTriggerId() string {
@@ -1825,7 +2153,7 @@ type PauseWorkflowProviderEventTriggerRequest struct {
 
 func (x *PauseWorkflowProviderEventTriggerRequest) Reset() {
 	*x = PauseWorkflowProviderEventTriggerRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[28]
+	mi := &file_v1_workflow_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1837,7 +2165,7 @@ func (x *PauseWorkflowProviderEventTriggerRequest) String() string {
 func (*PauseWorkflowProviderEventTriggerRequest) ProtoMessage() {}
 
 func (x *PauseWorkflowProviderEventTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[28]
+	mi := &file_v1_workflow_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1850,7 +2178,7 @@ func (x *PauseWorkflowProviderEventTriggerRequest) ProtoReflect() protoreflect.M
 
 // Deprecated: Use PauseWorkflowProviderEventTriggerRequest.ProtoReflect.Descriptor instead.
 func (*PauseWorkflowProviderEventTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{28}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *PauseWorkflowProviderEventTriggerRequest) GetTriggerId() string {
@@ -1869,7 +2197,7 @@ type ResumeWorkflowProviderEventTriggerRequest struct {
 
 func (x *ResumeWorkflowProviderEventTriggerRequest) Reset() {
 	*x = ResumeWorkflowProviderEventTriggerRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[29]
+	mi := &file_v1_workflow_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1881,7 +2209,7 @@ func (x *ResumeWorkflowProviderEventTriggerRequest) String() string {
 func (*ResumeWorkflowProviderEventTriggerRequest) ProtoMessage() {}
 
 func (x *ResumeWorkflowProviderEventTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[29]
+	mi := &file_v1_workflow_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1894,7 +2222,7 @@ func (x *ResumeWorkflowProviderEventTriggerRequest) ProtoReflect() protoreflect.
 
 // Deprecated: Use ResumeWorkflowProviderEventTriggerRequest.ProtoReflect.Descriptor instead.
 func (*ResumeWorkflowProviderEventTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{29}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ResumeWorkflowProviderEventTriggerRequest) GetTriggerId() string {
@@ -1914,7 +2242,7 @@ type PublishWorkflowProviderEventRequest struct {
 
 func (x *PublishWorkflowProviderEventRequest) Reset() {
 	*x = PublishWorkflowProviderEventRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[30]
+	mi := &file_v1_workflow_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1926,7 +2254,7 @@ func (x *PublishWorkflowProviderEventRequest) String() string {
 func (*PublishWorkflowProviderEventRequest) ProtoMessage() {}
 
 func (x *PublishWorkflowProviderEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[30]
+	mi := &file_v1_workflow_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1939,7 +2267,7 @@ func (x *PublishWorkflowProviderEventRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use PublishWorkflowProviderEventRequest.ProtoReflect.Descriptor instead.
 func (*PublishWorkflowProviderEventRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{30}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *PublishWorkflowProviderEventRequest) GetPluginName() string {
@@ -1971,7 +2299,7 @@ type InvokeWorkflowOperationRequest struct {
 
 func (x *InvokeWorkflowOperationRequest) Reset() {
 	*x = InvokeWorkflowOperationRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[31]
+	mi := &file_v1_workflow_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1983,7 +2311,7 @@ func (x *InvokeWorkflowOperationRequest) String() string {
 func (*InvokeWorkflowOperationRequest) ProtoMessage() {}
 
 func (x *InvokeWorkflowOperationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[31]
+	mi := &file_v1_workflow_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1996,7 +2324,7 @@ func (x *InvokeWorkflowOperationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeWorkflowOperationRequest.ProtoReflect.Descriptor instead.
 func (*InvokeWorkflowOperationRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{31}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *InvokeWorkflowOperationRequest) GetTarget() *BoundWorkflowTarget {
@@ -2058,7 +2386,7 @@ type InvokeWorkflowOperationResponse struct {
 
 func (x *InvokeWorkflowOperationResponse) Reset() {
 	*x = InvokeWorkflowOperationResponse{}
-	mi := &file_v1_workflow_proto_msgTypes[32]
+	mi := &file_v1_workflow_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2070,7 +2398,7 @@ func (x *InvokeWorkflowOperationResponse) String() string {
 func (*InvokeWorkflowOperationResponse) ProtoMessage() {}
 
 func (x *InvokeWorkflowOperationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[32]
+	mi := &file_v1_workflow_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2083,7 +2411,7 @@ func (x *InvokeWorkflowOperationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeWorkflowOperationResponse.ProtoReflect.Descriptor instead.
 func (*InvokeWorkflowOperationResponse) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{32}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *InvokeWorkflowOperationResponse) GetStatus() int32 {
@@ -2110,7 +2438,7 @@ type ManagedWorkflowSchedule struct {
 
 func (x *ManagedWorkflowSchedule) Reset() {
 	*x = ManagedWorkflowSchedule{}
-	mi := &file_v1_workflow_proto_msgTypes[33]
+	mi := &file_v1_workflow_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2122,7 +2450,7 @@ func (x *ManagedWorkflowSchedule) String() string {
 func (*ManagedWorkflowSchedule) ProtoMessage() {}
 
 func (x *ManagedWorkflowSchedule) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[33]
+	mi := &file_v1_workflow_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2135,7 +2463,7 @@ func (x *ManagedWorkflowSchedule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedWorkflowSchedule.ProtoReflect.Descriptor instead.
 func (*ManagedWorkflowSchedule) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{33}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *ManagedWorkflowSchedule) GetProviderName() string {
@@ -2162,7 +2490,7 @@ type ManagedWorkflowEventTrigger struct {
 
 func (x *ManagedWorkflowEventTrigger) Reset() {
 	*x = ManagedWorkflowEventTrigger{}
-	mi := &file_v1_workflow_proto_msgTypes[34]
+	mi := &file_v1_workflow_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2174,7 +2502,7 @@ func (x *ManagedWorkflowEventTrigger) String() string {
 func (*ManagedWorkflowEventTrigger) ProtoMessage() {}
 
 func (x *ManagedWorkflowEventTrigger) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[34]
+	mi := &file_v1_workflow_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2187,7 +2515,7 @@ func (x *ManagedWorkflowEventTrigger) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedWorkflowEventTrigger.ProtoReflect.Descriptor instead.
 func (*ManagedWorkflowEventTrigger) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{34}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *ManagedWorkflowEventTrigger) GetProviderName() string {
@@ -2218,7 +2546,7 @@ type WorkflowManagerCreateScheduleRequest struct {
 
 func (x *WorkflowManagerCreateScheduleRequest) Reset() {
 	*x = WorkflowManagerCreateScheduleRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[35]
+	mi := &file_v1_workflow_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2230,7 +2558,7 @@ func (x *WorkflowManagerCreateScheduleRequest) String() string {
 func (*WorkflowManagerCreateScheduleRequest) ProtoMessage() {}
 
 func (x *WorkflowManagerCreateScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[35]
+	mi := &file_v1_workflow_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2243,7 +2571,7 @@ func (x *WorkflowManagerCreateScheduleRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use WorkflowManagerCreateScheduleRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerCreateScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{35}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *WorkflowManagerCreateScheduleRequest) GetProviderName() string {
@@ -2298,7 +2626,7 @@ type WorkflowManagerGetScheduleRequest struct {
 
 func (x *WorkflowManagerGetScheduleRequest) Reset() {
 	*x = WorkflowManagerGetScheduleRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[36]
+	mi := &file_v1_workflow_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2310,7 +2638,7 @@ func (x *WorkflowManagerGetScheduleRequest) String() string {
 func (*WorkflowManagerGetScheduleRequest) ProtoMessage() {}
 
 func (x *WorkflowManagerGetScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[36]
+	mi := &file_v1_workflow_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2323,7 +2651,7 @@ func (x *WorkflowManagerGetScheduleRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use WorkflowManagerGetScheduleRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerGetScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{36}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *WorkflowManagerGetScheduleRequest) GetScheduleId() string {
@@ -2355,7 +2683,7 @@ type WorkflowManagerUpdateScheduleRequest struct {
 
 func (x *WorkflowManagerUpdateScheduleRequest) Reset() {
 	*x = WorkflowManagerUpdateScheduleRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[37]
+	mi := &file_v1_workflow_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2367,7 +2695,7 @@ func (x *WorkflowManagerUpdateScheduleRequest) String() string {
 func (*WorkflowManagerUpdateScheduleRequest) ProtoMessage() {}
 
 func (x *WorkflowManagerUpdateScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[37]
+	mi := &file_v1_workflow_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2380,7 +2708,7 @@ func (x *WorkflowManagerUpdateScheduleRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use WorkflowManagerUpdateScheduleRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerUpdateScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{37}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *WorkflowManagerUpdateScheduleRequest) GetScheduleId() string {
@@ -2442,7 +2770,7 @@ type WorkflowManagerDeleteScheduleRequest struct {
 
 func (x *WorkflowManagerDeleteScheduleRequest) Reset() {
 	*x = WorkflowManagerDeleteScheduleRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[38]
+	mi := &file_v1_workflow_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2454,7 +2782,7 @@ func (x *WorkflowManagerDeleteScheduleRequest) String() string {
 func (*WorkflowManagerDeleteScheduleRequest) ProtoMessage() {}
 
 func (x *WorkflowManagerDeleteScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[38]
+	mi := &file_v1_workflow_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2467,7 +2795,7 @@ func (x *WorkflowManagerDeleteScheduleRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use WorkflowManagerDeleteScheduleRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerDeleteScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{38}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *WorkflowManagerDeleteScheduleRequest) GetScheduleId() string {
@@ -2494,7 +2822,7 @@ type WorkflowManagerPauseScheduleRequest struct {
 
 func (x *WorkflowManagerPauseScheduleRequest) Reset() {
 	*x = WorkflowManagerPauseScheduleRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[39]
+	mi := &file_v1_workflow_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2506,7 +2834,7 @@ func (x *WorkflowManagerPauseScheduleRequest) String() string {
 func (*WorkflowManagerPauseScheduleRequest) ProtoMessage() {}
 
 func (x *WorkflowManagerPauseScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[39]
+	mi := &file_v1_workflow_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2519,7 +2847,7 @@ func (x *WorkflowManagerPauseScheduleRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use WorkflowManagerPauseScheduleRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerPauseScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{39}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *WorkflowManagerPauseScheduleRequest) GetScheduleId() string {
@@ -2546,7 +2874,7 @@ type WorkflowManagerResumeScheduleRequest struct {
 
 func (x *WorkflowManagerResumeScheduleRequest) Reset() {
 	*x = WorkflowManagerResumeScheduleRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[40]
+	mi := &file_v1_workflow_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2558,7 +2886,7 @@ func (x *WorkflowManagerResumeScheduleRequest) String() string {
 func (*WorkflowManagerResumeScheduleRequest) ProtoMessage() {}
 
 func (x *WorkflowManagerResumeScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[40]
+	mi := &file_v1_workflow_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2571,7 +2899,7 @@ func (x *WorkflowManagerResumeScheduleRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use WorkflowManagerResumeScheduleRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerResumeScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{40}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *WorkflowManagerResumeScheduleRequest) GetScheduleId() string {
@@ -2601,7 +2929,7 @@ type WorkflowManagerCreateEventTriggerRequest struct {
 
 func (x *WorkflowManagerCreateEventTriggerRequest) Reset() {
 	*x = WorkflowManagerCreateEventTriggerRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[41]
+	mi := &file_v1_workflow_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2613,7 +2941,7 @@ func (x *WorkflowManagerCreateEventTriggerRequest) String() string {
 func (*WorkflowManagerCreateEventTriggerRequest) ProtoMessage() {}
 
 func (x *WorkflowManagerCreateEventTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[41]
+	mi := &file_v1_workflow_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2626,7 +2954,7 @@ func (x *WorkflowManagerCreateEventTriggerRequest) ProtoReflect() protoreflect.M
 
 // Deprecated: Use WorkflowManagerCreateEventTriggerRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerCreateEventTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{41}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *WorkflowManagerCreateEventTriggerRequest) GetProviderName() string {
@@ -2674,7 +3002,7 @@ type WorkflowManagerGetEventTriggerRequest struct {
 
 func (x *WorkflowManagerGetEventTriggerRequest) Reset() {
 	*x = WorkflowManagerGetEventTriggerRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[42]
+	mi := &file_v1_workflow_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2686,7 +3014,7 @@ func (x *WorkflowManagerGetEventTriggerRequest) String() string {
 func (*WorkflowManagerGetEventTriggerRequest) ProtoMessage() {}
 
 func (x *WorkflowManagerGetEventTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[42]
+	mi := &file_v1_workflow_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2699,7 +3027,7 @@ func (x *WorkflowManagerGetEventTriggerRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use WorkflowManagerGetEventTriggerRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerGetEventTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{42}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *WorkflowManagerGetEventTriggerRequest) GetTriggerId() string {
@@ -2730,7 +3058,7 @@ type WorkflowManagerUpdateEventTriggerRequest struct {
 
 func (x *WorkflowManagerUpdateEventTriggerRequest) Reset() {
 	*x = WorkflowManagerUpdateEventTriggerRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[43]
+	mi := &file_v1_workflow_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2742,7 +3070,7 @@ func (x *WorkflowManagerUpdateEventTriggerRequest) String() string {
 func (*WorkflowManagerUpdateEventTriggerRequest) ProtoMessage() {}
 
 func (x *WorkflowManagerUpdateEventTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[43]
+	mi := &file_v1_workflow_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2755,7 +3083,7 @@ func (x *WorkflowManagerUpdateEventTriggerRequest) ProtoReflect() protoreflect.M
 
 // Deprecated: Use WorkflowManagerUpdateEventTriggerRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerUpdateEventTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{43}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *WorkflowManagerUpdateEventTriggerRequest) GetTriggerId() string {
@@ -2810,7 +3138,7 @@ type WorkflowManagerDeleteEventTriggerRequest struct {
 
 func (x *WorkflowManagerDeleteEventTriggerRequest) Reset() {
 	*x = WorkflowManagerDeleteEventTriggerRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[44]
+	mi := &file_v1_workflow_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2822,7 +3150,7 @@ func (x *WorkflowManagerDeleteEventTriggerRequest) String() string {
 func (*WorkflowManagerDeleteEventTriggerRequest) ProtoMessage() {}
 
 func (x *WorkflowManagerDeleteEventTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[44]
+	mi := &file_v1_workflow_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2835,7 +3163,7 @@ func (x *WorkflowManagerDeleteEventTriggerRequest) ProtoReflect() protoreflect.M
 
 // Deprecated: Use WorkflowManagerDeleteEventTriggerRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerDeleteEventTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{44}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *WorkflowManagerDeleteEventTriggerRequest) GetTriggerId() string {
@@ -2862,7 +3190,7 @@ type WorkflowManagerPauseEventTriggerRequest struct {
 
 func (x *WorkflowManagerPauseEventTriggerRequest) Reset() {
 	*x = WorkflowManagerPauseEventTriggerRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[45]
+	mi := &file_v1_workflow_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2874,7 +3202,7 @@ func (x *WorkflowManagerPauseEventTriggerRequest) String() string {
 func (*WorkflowManagerPauseEventTriggerRequest) ProtoMessage() {}
 
 func (x *WorkflowManagerPauseEventTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[45]
+	mi := &file_v1_workflow_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2887,7 +3215,7 @@ func (x *WorkflowManagerPauseEventTriggerRequest) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use WorkflowManagerPauseEventTriggerRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerPauseEventTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{45}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *WorkflowManagerPauseEventTriggerRequest) GetTriggerId() string {
@@ -2914,7 +3242,7 @@ type WorkflowManagerResumeEventTriggerRequest struct {
 
 func (x *WorkflowManagerResumeEventTriggerRequest) Reset() {
 	*x = WorkflowManagerResumeEventTriggerRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[46]
+	mi := &file_v1_workflow_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2926,7 +3254,7 @@ func (x *WorkflowManagerResumeEventTriggerRequest) String() string {
 func (*WorkflowManagerResumeEventTriggerRequest) ProtoMessage() {}
 
 func (x *WorkflowManagerResumeEventTriggerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[46]
+	mi := &file_v1_workflow_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2939,7 +3267,7 @@ func (x *WorkflowManagerResumeEventTriggerRequest) ProtoReflect() protoreflect.M
 
 // Deprecated: Use WorkflowManagerResumeEventTriggerRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerResumeEventTriggerRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{46}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *WorkflowManagerResumeEventTriggerRequest) GetTriggerId() string {
@@ -2966,7 +3294,7 @@ type WorkflowManagerPublishEventRequest struct {
 
 func (x *WorkflowManagerPublishEventRequest) Reset() {
 	*x = WorkflowManagerPublishEventRequest{}
-	mi := &file_v1_workflow_proto_msgTypes[47]
+	mi := &file_v1_workflow_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2978,7 +3306,7 @@ func (x *WorkflowManagerPublishEventRequest) String() string {
 func (*WorkflowManagerPublishEventRequest) ProtoMessage() {}
 
 func (x *WorkflowManagerPublishEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_workflow_proto_msgTypes[47]
+	mi := &file_v1_workflow_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2991,7 +3319,7 @@ func (x *WorkflowManagerPublishEventRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use WorkflowManagerPublishEventRequest.ProtoReflect.Descriptor instead.
 func (*WorkflowManagerPublishEventRequest) Descriptor() ([]byte, []int) {
-	return file_v1_workflow_proto_rawDescGZIP(), []int{47}
+	return file_v1_workflow_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *WorkflowManagerPublishEventRequest) GetEvent() *WorkflowEvent {
@@ -3105,7 +3433,24 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12A\n" +
 	"\n" +
 	"created_by\x18\a \x01(\v2\".gestalt.provider.v1.WorkflowActorR\tcreatedBy\x12#\n" +
-	"\rexecution_ref\x18\b \x01(\tR\fexecutionRef\"\xf4\x01\n" +
+	"\rexecution_ref\x18\b \x01(\tR\fexecutionRef\"R\n" +
+	"\x18WorkflowAccessPermission\x12\x16\n" +
+	"\x06plugin\x18\x01 \x01(\tR\x06plugin\x12\x1e\n" +
+	"\n" +
+	"operations\x18\x02 \x03(\tR\n" +
+	"operations\"\xad\x03\n" +
+	"\x1aWorkflowExecutionReference\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
+	"\rprovider_name\x18\x02 \x01(\tR\fproviderName\x12@\n" +
+	"\x06target\x18\x03 \x01(\v2(.gestalt.provider.v1.BoundWorkflowTargetR\x06target\x12\x1d\n" +
+	"\n" +
+	"subject_id\x18\x04 \x01(\tR\tsubjectId\x122\n" +
+	"\x15credential_subject_id\x18\x05 \x01(\tR\x13credentialSubjectId\x12O\n" +
+	"\vpermissions\x18\x06 \x03(\v2-.gestalt.provider.v1.WorkflowAccessPermissionR\vpermissions\x129\n" +
+	"\n" +
+	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"revoked_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\trevokedAt\"\xf4\x01\n" +
 	"\x1fStartWorkflowProviderRunRequest\x12@\n" +
 	"\x06target\x18\x01 \x01(\v2(.gestalt.provider.v1.BoundWorkflowTargetR\x06target\x12'\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\x12A\n" +
@@ -3157,7 +3502,18 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"trigger_id\x18\x02 \x01(\tR\ttriggerId\"*\n" +
 	"(ListWorkflowProviderEventTriggersRequest\"w\n" +
 	")ListWorkflowProviderEventTriggersResponse\x12J\n" +
-	"\btriggers\x18\x01 \x03(\v2..gestalt.provider.v1.BoundWorkflowEventTriggerR\btriggers\"J\n" +
+	"\btriggers\x18\x01 \x03(\v2..gestalt.provider.v1.BoundWorkflowEventTriggerR\btriggers\"u\n" +
+	"$PutWorkflowExecutionReferenceRequest\x12M\n" +
+	"\treference\x18\x01 \x01(\v2/.gestalt.provider.v1.WorkflowExecutionReferenceR\treference\"6\n" +
+	"$GetWorkflowExecutionReferenceRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"G\n" +
+	"&ListWorkflowExecutionReferencesRequest\x12\x1d\n" +
+	"\n" +
+	"subject_id\x18\x01 \x01(\tR\tsubjectId\"z\n" +
+	"'ListWorkflowExecutionReferencesResponse\x12O\n" +
+	"\n" +
+	"references\x18\x01 \x03(\v2/.gestalt.provider.v1.WorkflowExecutionReferenceR\n" +
+	"references\"J\n" +
 	")DeleteWorkflowProviderEventTriggerRequest\x12\x1d\n" +
 	"\n" +
 	"trigger_id\x18\x02 \x01(\tR\ttriggerId\"I\n" +
@@ -3260,7 +3616,7 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x1bWORKFLOW_RUN_STATUS_RUNNING\x10\x02\x12!\n" +
 	"\x1dWORKFLOW_RUN_STATUS_SUCCEEDED\x10\x03\x12\x1e\n" +
 	"\x1aWORKFLOW_RUN_STATUS_FAILED\x10\x04\x12 \n" +
-	"\x1cWORKFLOW_RUN_STATUS_CANCELED\x10\x052\x8b\x10\n" +
+	"\x1cWORKFLOW_RUN_STATUS_CANCELED\x10\x052\xae\x13\n" +
 	"\x10WorkflowProvider\x12g\n" +
 	"\bStartRun\x124.gestalt.provider.v1.StartWorkflowProviderRunRequest\x1a%.gestalt.provider.v1.BoundWorkflowRun\x12c\n" +
 	"\x06GetRun\x122.gestalt.provider.v1.GetWorkflowProviderRunRequest\x1a%.gestalt.provider.v1.BoundWorkflowRun\x12w\n" +
@@ -3277,7 +3633,10 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x11ListEventTriggers\x12=.gestalt.provider.v1.ListWorkflowProviderEventTriggersRequest\x1a>.gestalt.provider.v1.ListWorkflowProviderEventTriggersResponse\x12l\n" +
 	"\x12DeleteEventTrigger\x12>.gestalt.provider.v1.DeleteWorkflowProviderEventTriggerRequest\x1a\x16.google.protobuf.Empty\x12\x82\x01\n" +
 	"\x11PauseEventTrigger\x12=.gestalt.provider.v1.PauseWorkflowProviderEventTriggerRequest\x1a..gestalt.provider.v1.BoundWorkflowEventTrigger\x12\x84\x01\n" +
-	"\x12ResumeEventTrigger\x12>.gestalt.provider.v1.ResumeWorkflowProviderEventTriggerRequest\x1a..gestalt.provider.v1.BoundWorkflowEventTrigger\x12`\n" +
+	"\x12ResumeEventTrigger\x12>.gestalt.provider.v1.ResumeWorkflowProviderEventTriggerRequest\x1a..gestalt.provider.v1.BoundWorkflowEventTrigger\x12\x83\x01\n" +
+	"\x15PutExecutionReference\x129.gestalt.provider.v1.PutWorkflowExecutionReferenceRequest\x1a/.gestalt.provider.v1.WorkflowExecutionReference\x12\x83\x01\n" +
+	"\x15GetExecutionReference\x129.gestalt.provider.v1.GetWorkflowExecutionReferenceRequest\x1a/.gestalt.provider.v1.WorkflowExecutionReference\x12\x94\x01\n" +
+	"\x17ListExecutionReferences\x12;.gestalt.provider.v1.ListWorkflowExecutionReferencesRequest\x1a<.gestalt.provider.v1.ListWorkflowExecutionReferencesResponse\x12`\n" +
 	"\fPublishEvent\x128.gestalt.provider.v1.PublishWorkflowProviderEventRequest\x1a\x16.google.protobuf.Empty2\x8c\x01\n" +
 	"\fWorkflowHost\x12|\n" +
 	"\x0fInvokeOperation\x123.gestalt.provider.v1.InvokeWorkflowOperationRequest\x1a4.gestalt.provider.v1.InvokeWorkflowOperationResponse2\xd2\f\n" +
@@ -3310,7 +3669,7 @@ func file_v1_workflow_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_workflow_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
+var file_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 55)
 var file_v1_workflow_proto_goTypes = []any{
 	(WorkflowRunStatus)(0),                            // 0: gestalt.provider.v1.WorkflowRunStatus
 	(*BoundWorkflowTarget)(nil),                       // 1: gestalt.provider.v1.BoundWorkflowTarget
@@ -3324,55 +3683,61 @@ var file_v1_workflow_proto_goTypes = []any{
 	(*BoundWorkflowRun)(nil),                          // 9: gestalt.provider.v1.BoundWorkflowRun
 	(*BoundWorkflowSchedule)(nil),                     // 10: gestalt.provider.v1.BoundWorkflowSchedule
 	(*BoundWorkflowEventTrigger)(nil),                 // 11: gestalt.provider.v1.BoundWorkflowEventTrigger
-	(*StartWorkflowProviderRunRequest)(nil),           // 12: gestalt.provider.v1.StartWorkflowProviderRunRequest
-	(*GetWorkflowProviderRunRequest)(nil),             // 13: gestalt.provider.v1.GetWorkflowProviderRunRequest
-	(*ListWorkflowProviderRunsRequest)(nil),           // 14: gestalt.provider.v1.ListWorkflowProviderRunsRequest
-	(*ListWorkflowProviderRunsResponse)(nil),          // 15: gestalt.provider.v1.ListWorkflowProviderRunsResponse
-	(*CancelWorkflowProviderRunRequest)(nil),          // 16: gestalt.provider.v1.CancelWorkflowProviderRunRequest
-	(*UpsertWorkflowProviderScheduleRequest)(nil),     // 17: gestalt.provider.v1.UpsertWorkflowProviderScheduleRequest
-	(*GetWorkflowProviderScheduleRequest)(nil),        // 18: gestalt.provider.v1.GetWorkflowProviderScheduleRequest
-	(*ListWorkflowProviderSchedulesRequest)(nil),      // 19: gestalt.provider.v1.ListWorkflowProviderSchedulesRequest
-	(*ListWorkflowProviderSchedulesResponse)(nil),     // 20: gestalt.provider.v1.ListWorkflowProviderSchedulesResponse
-	(*DeleteWorkflowProviderScheduleRequest)(nil),     // 21: gestalt.provider.v1.DeleteWorkflowProviderScheduleRequest
-	(*PauseWorkflowProviderScheduleRequest)(nil),      // 22: gestalt.provider.v1.PauseWorkflowProviderScheduleRequest
-	(*ResumeWorkflowProviderScheduleRequest)(nil),     // 23: gestalt.provider.v1.ResumeWorkflowProviderScheduleRequest
-	(*UpsertWorkflowProviderEventTriggerRequest)(nil), // 24: gestalt.provider.v1.UpsertWorkflowProviderEventTriggerRequest
-	(*GetWorkflowProviderEventTriggerRequest)(nil),    // 25: gestalt.provider.v1.GetWorkflowProviderEventTriggerRequest
-	(*ListWorkflowProviderEventTriggersRequest)(nil),  // 26: gestalt.provider.v1.ListWorkflowProviderEventTriggersRequest
-	(*ListWorkflowProviderEventTriggersResponse)(nil), // 27: gestalt.provider.v1.ListWorkflowProviderEventTriggersResponse
-	(*DeleteWorkflowProviderEventTriggerRequest)(nil), // 28: gestalt.provider.v1.DeleteWorkflowProviderEventTriggerRequest
-	(*PauseWorkflowProviderEventTriggerRequest)(nil),  // 29: gestalt.provider.v1.PauseWorkflowProviderEventTriggerRequest
-	(*ResumeWorkflowProviderEventTriggerRequest)(nil), // 30: gestalt.provider.v1.ResumeWorkflowProviderEventTriggerRequest
-	(*PublishWorkflowProviderEventRequest)(nil),       // 31: gestalt.provider.v1.PublishWorkflowProviderEventRequest
-	(*InvokeWorkflowOperationRequest)(nil),            // 32: gestalt.provider.v1.InvokeWorkflowOperationRequest
-	(*InvokeWorkflowOperationResponse)(nil),           // 33: gestalt.provider.v1.InvokeWorkflowOperationResponse
-	(*ManagedWorkflowSchedule)(nil),                   // 34: gestalt.provider.v1.ManagedWorkflowSchedule
-	(*ManagedWorkflowEventTrigger)(nil),               // 35: gestalt.provider.v1.ManagedWorkflowEventTrigger
-	(*WorkflowManagerCreateScheduleRequest)(nil),      // 36: gestalt.provider.v1.WorkflowManagerCreateScheduleRequest
-	(*WorkflowManagerGetScheduleRequest)(nil),         // 37: gestalt.provider.v1.WorkflowManagerGetScheduleRequest
-	(*WorkflowManagerUpdateScheduleRequest)(nil),      // 38: gestalt.provider.v1.WorkflowManagerUpdateScheduleRequest
-	(*WorkflowManagerDeleteScheduleRequest)(nil),      // 39: gestalt.provider.v1.WorkflowManagerDeleteScheduleRequest
-	(*WorkflowManagerPauseScheduleRequest)(nil),       // 40: gestalt.provider.v1.WorkflowManagerPauseScheduleRequest
-	(*WorkflowManagerResumeScheduleRequest)(nil),      // 41: gestalt.provider.v1.WorkflowManagerResumeScheduleRequest
-	(*WorkflowManagerCreateEventTriggerRequest)(nil),  // 42: gestalt.provider.v1.WorkflowManagerCreateEventTriggerRequest
-	(*WorkflowManagerGetEventTriggerRequest)(nil),     // 43: gestalt.provider.v1.WorkflowManagerGetEventTriggerRequest
-	(*WorkflowManagerUpdateEventTriggerRequest)(nil),  // 44: gestalt.provider.v1.WorkflowManagerUpdateEventTriggerRequest
-	(*WorkflowManagerDeleteEventTriggerRequest)(nil),  // 45: gestalt.provider.v1.WorkflowManagerDeleteEventTriggerRequest
-	(*WorkflowManagerPauseEventTriggerRequest)(nil),   // 46: gestalt.provider.v1.WorkflowManagerPauseEventTriggerRequest
-	(*WorkflowManagerResumeEventTriggerRequest)(nil),  // 47: gestalt.provider.v1.WorkflowManagerResumeEventTriggerRequest
-	(*WorkflowManagerPublishEventRequest)(nil),        // 48: gestalt.provider.v1.WorkflowManagerPublishEventRequest
-	nil,                           // 49: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry
-	(*structpb.Struct)(nil),       // 50: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil), // 51: google.protobuf.Timestamp
-	(*structpb.Value)(nil),        // 52: google.protobuf.Value
-	(*emptypb.Empty)(nil),         // 53: google.protobuf.Empty
+	(*WorkflowAccessPermission)(nil),                  // 12: gestalt.provider.v1.WorkflowAccessPermission
+	(*WorkflowExecutionReference)(nil),                // 13: gestalt.provider.v1.WorkflowExecutionReference
+	(*StartWorkflowProviderRunRequest)(nil),           // 14: gestalt.provider.v1.StartWorkflowProviderRunRequest
+	(*GetWorkflowProviderRunRequest)(nil),             // 15: gestalt.provider.v1.GetWorkflowProviderRunRequest
+	(*ListWorkflowProviderRunsRequest)(nil),           // 16: gestalt.provider.v1.ListWorkflowProviderRunsRequest
+	(*ListWorkflowProviderRunsResponse)(nil),          // 17: gestalt.provider.v1.ListWorkflowProviderRunsResponse
+	(*CancelWorkflowProviderRunRequest)(nil),          // 18: gestalt.provider.v1.CancelWorkflowProviderRunRequest
+	(*UpsertWorkflowProviderScheduleRequest)(nil),     // 19: gestalt.provider.v1.UpsertWorkflowProviderScheduleRequest
+	(*GetWorkflowProviderScheduleRequest)(nil),        // 20: gestalt.provider.v1.GetWorkflowProviderScheduleRequest
+	(*ListWorkflowProviderSchedulesRequest)(nil),      // 21: gestalt.provider.v1.ListWorkflowProviderSchedulesRequest
+	(*ListWorkflowProviderSchedulesResponse)(nil),     // 22: gestalt.provider.v1.ListWorkflowProviderSchedulesResponse
+	(*DeleteWorkflowProviderScheduleRequest)(nil),     // 23: gestalt.provider.v1.DeleteWorkflowProviderScheduleRequest
+	(*PauseWorkflowProviderScheduleRequest)(nil),      // 24: gestalt.provider.v1.PauseWorkflowProviderScheduleRequest
+	(*ResumeWorkflowProviderScheduleRequest)(nil),     // 25: gestalt.provider.v1.ResumeWorkflowProviderScheduleRequest
+	(*UpsertWorkflowProviderEventTriggerRequest)(nil), // 26: gestalt.provider.v1.UpsertWorkflowProviderEventTriggerRequest
+	(*GetWorkflowProviderEventTriggerRequest)(nil),    // 27: gestalt.provider.v1.GetWorkflowProviderEventTriggerRequest
+	(*ListWorkflowProviderEventTriggersRequest)(nil),  // 28: gestalt.provider.v1.ListWorkflowProviderEventTriggersRequest
+	(*ListWorkflowProviderEventTriggersResponse)(nil), // 29: gestalt.provider.v1.ListWorkflowProviderEventTriggersResponse
+	(*PutWorkflowExecutionReferenceRequest)(nil),      // 30: gestalt.provider.v1.PutWorkflowExecutionReferenceRequest
+	(*GetWorkflowExecutionReferenceRequest)(nil),      // 31: gestalt.provider.v1.GetWorkflowExecutionReferenceRequest
+	(*ListWorkflowExecutionReferencesRequest)(nil),    // 32: gestalt.provider.v1.ListWorkflowExecutionReferencesRequest
+	(*ListWorkflowExecutionReferencesResponse)(nil),   // 33: gestalt.provider.v1.ListWorkflowExecutionReferencesResponse
+	(*DeleteWorkflowProviderEventTriggerRequest)(nil), // 34: gestalt.provider.v1.DeleteWorkflowProviderEventTriggerRequest
+	(*PauseWorkflowProviderEventTriggerRequest)(nil),  // 35: gestalt.provider.v1.PauseWorkflowProviderEventTriggerRequest
+	(*ResumeWorkflowProviderEventTriggerRequest)(nil), // 36: gestalt.provider.v1.ResumeWorkflowProviderEventTriggerRequest
+	(*PublishWorkflowProviderEventRequest)(nil),       // 37: gestalt.provider.v1.PublishWorkflowProviderEventRequest
+	(*InvokeWorkflowOperationRequest)(nil),            // 38: gestalt.provider.v1.InvokeWorkflowOperationRequest
+	(*InvokeWorkflowOperationResponse)(nil),           // 39: gestalt.provider.v1.InvokeWorkflowOperationResponse
+	(*ManagedWorkflowSchedule)(nil),                   // 40: gestalt.provider.v1.ManagedWorkflowSchedule
+	(*ManagedWorkflowEventTrigger)(nil),               // 41: gestalt.provider.v1.ManagedWorkflowEventTrigger
+	(*WorkflowManagerCreateScheduleRequest)(nil),      // 42: gestalt.provider.v1.WorkflowManagerCreateScheduleRequest
+	(*WorkflowManagerGetScheduleRequest)(nil),         // 43: gestalt.provider.v1.WorkflowManagerGetScheduleRequest
+	(*WorkflowManagerUpdateScheduleRequest)(nil),      // 44: gestalt.provider.v1.WorkflowManagerUpdateScheduleRequest
+	(*WorkflowManagerDeleteScheduleRequest)(nil),      // 45: gestalt.provider.v1.WorkflowManagerDeleteScheduleRequest
+	(*WorkflowManagerPauseScheduleRequest)(nil),       // 46: gestalt.provider.v1.WorkflowManagerPauseScheduleRequest
+	(*WorkflowManagerResumeScheduleRequest)(nil),      // 47: gestalt.provider.v1.WorkflowManagerResumeScheduleRequest
+	(*WorkflowManagerCreateEventTriggerRequest)(nil),  // 48: gestalt.provider.v1.WorkflowManagerCreateEventTriggerRequest
+	(*WorkflowManagerGetEventTriggerRequest)(nil),     // 49: gestalt.provider.v1.WorkflowManagerGetEventTriggerRequest
+	(*WorkflowManagerUpdateEventTriggerRequest)(nil),  // 50: gestalt.provider.v1.WorkflowManagerUpdateEventTriggerRequest
+	(*WorkflowManagerDeleteEventTriggerRequest)(nil),  // 51: gestalt.provider.v1.WorkflowManagerDeleteEventTriggerRequest
+	(*WorkflowManagerPauseEventTriggerRequest)(nil),   // 52: gestalt.provider.v1.WorkflowManagerPauseEventTriggerRequest
+	(*WorkflowManagerResumeEventTriggerRequest)(nil),  // 53: gestalt.provider.v1.WorkflowManagerResumeEventTriggerRequest
+	(*WorkflowManagerPublishEventRequest)(nil),        // 54: gestalt.provider.v1.WorkflowManagerPublishEventRequest
+	nil,                           // 55: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry
+	(*structpb.Struct)(nil),       // 56: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil), // 57: google.protobuf.Timestamp
+	(*structpb.Value)(nil),        // 58: google.protobuf.Value
+	(*emptypb.Empty)(nil),         // 59: google.protobuf.Empty
 }
 var file_v1_workflow_proto_depIdxs = []int32{
-	50, // 0: gestalt.provider.v1.BoundWorkflowTarget.input:type_name -> google.protobuf.Struct
-	51, // 1: gestalt.provider.v1.WorkflowEvent.time:type_name -> google.protobuf.Timestamp
-	50, // 2: gestalt.provider.v1.WorkflowEvent.data:type_name -> google.protobuf.Struct
-	49, // 3: gestalt.provider.v1.WorkflowEvent.extensions:type_name -> gestalt.provider.v1.WorkflowEvent.ExtensionsEntry
-	51, // 4: gestalt.provider.v1.WorkflowScheduleTrigger.scheduled_for:type_name -> google.protobuf.Timestamp
+	56, // 0: gestalt.provider.v1.BoundWorkflowTarget.input:type_name -> google.protobuf.Struct
+	57, // 1: gestalt.provider.v1.WorkflowEvent.time:type_name -> google.protobuf.Timestamp
+	56, // 2: gestalt.provider.v1.WorkflowEvent.data:type_name -> google.protobuf.Struct
+	55, // 3: gestalt.provider.v1.WorkflowEvent.extensions:type_name -> gestalt.provider.v1.WorkflowEvent.ExtensionsEntry
+	57, // 4: gestalt.provider.v1.WorkflowScheduleTrigger.scheduled_for:type_name -> google.protobuf.Timestamp
 	3,  // 5: gestalt.provider.v1.WorkflowEventTriggerInvocation.event:type_name -> gestalt.provider.v1.WorkflowEvent
 	5,  // 6: gestalt.provider.v1.WorkflowRunTrigger.manual:type_name -> gestalt.provider.v1.WorkflowManualTrigger
 	6,  // 7: gestalt.provider.v1.WorkflowRunTrigger.schedule:type_name -> gestalt.provider.v1.WorkflowScheduleTrigger
@@ -3380,113 +3745,125 @@ var file_v1_workflow_proto_depIdxs = []int32{
 	0,  // 9: gestalt.provider.v1.BoundWorkflowRun.status:type_name -> gestalt.provider.v1.WorkflowRunStatus
 	1,  // 10: gestalt.provider.v1.BoundWorkflowRun.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
 	8,  // 11: gestalt.provider.v1.BoundWorkflowRun.trigger:type_name -> gestalt.provider.v1.WorkflowRunTrigger
-	51, // 12: gestalt.provider.v1.BoundWorkflowRun.created_at:type_name -> google.protobuf.Timestamp
-	51, // 13: gestalt.provider.v1.BoundWorkflowRun.started_at:type_name -> google.protobuf.Timestamp
-	51, // 14: gestalt.provider.v1.BoundWorkflowRun.completed_at:type_name -> google.protobuf.Timestamp
+	57, // 12: gestalt.provider.v1.BoundWorkflowRun.created_at:type_name -> google.protobuf.Timestamp
+	57, // 13: gestalt.provider.v1.BoundWorkflowRun.started_at:type_name -> google.protobuf.Timestamp
+	57, // 14: gestalt.provider.v1.BoundWorkflowRun.completed_at:type_name -> google.protobuf.Timestamp
 	2,  // 15: gestalt.provider.v1.BoundWorkflowRun.created_by:type_name -> gestalt.provider.v1.WorkflowActor
 	1,  // 16: gestalt.provider.v1.BoundWorkflowSchedule.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	51, // 17: gestalt.provider.v1.BoundWorkflowSchedule.created_at:type_name -> google.protobuf.Timestamp
-	51, // 18: gestalt.provider.v1.BoundWorkflowSchedule.updated_at:type_name -> google.protobuf.Timestamp
-	51, // 19: gestalt.provider.v1.BoundWorkflowSchedule.next_run_at:type_name -> google.protobuf.Timestamp
+	57, // 17: gestalt.provider.v1.BoundWorkflowSchedule.created_at:type_name -> google.protobuf.Timestamp
+	57, // 18: gestalt.provider.v1.BoundWorkflowSchedule.updated_at:type_name -> google.protobuf.Timestamp
+	57, // 19: gestalt.provider.v1.BoundWorkflowSchedule.next_run_at:type_name -> google.protobuf.Timestamp
 	2,  // 20: gestalt.provider.v1.BoundWorkflowSchedule.created_by:type_name -> gestalt.provider.v1.WorkflowActor
 	4,  // 21: gestalt.provider.v1.BoundWorkflowEventTrigger.match:type_name -> gestalt.provider.v1.WorkflowEventMatch
 	1,  // 22: gestalt.provider.v1.BoundWorkflowEventTrigger.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	51, // 23: gestalt.provider.v1.BoundWorkflowEventTrigger.created_at:type_name -> google.protobuf.Timestamp
-	51, // 24: gestalt.provider.v1.BoundWorkflowEventTrigger.updated_at:type_name -> google.protobuf.Timestamp
+	57, // 23: gestalt.provider.v1.BoundWorkflowEventTrigger.created_at:type_name -> google.protobuf.Timestamp
+	57, // 24: gestalt.provider.v1.BoundWorkflowEventTrigger.updated_at:type_name -> google.protobuf.Timestamp
 	2,  // 25: gestalt.provider.v1.BoundWorkflowEventTrigger.created_by:type_name -> gestalt.provider.v1.WorkflowActor
-	1,  // 26: gestalt.provider.v1.StartWorkflowProviderRunRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	2,  // 27: gestalt.provider.v1.StartWorkflowProviderRunRequest.created_by:type_name -> gestalt.provider.v1.WorkflowActor
-	9,  // 28: gestalt.provider.v1.ListWorkflowProviderRunsResponse.runs:type_name -> gestalt.provider.v1.BoundWorkflowRun
-	1,  // 29: gestalt.provider.v1.UpsertWorkflowProviderScheduleRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	2,  // 30: gestalt.provider.v1.UpsertWorkflowProviderScheduleRequest.requested_by:type_name -> gestalt.provider.v1.WorkflowActor
-	10, // 31: gestalt.provider.v1.ListWorkflowProviderSchedulesResponse.schedules:type_name -> gestalt.provider.v1.BoundWorkflowSchedule
-	4,  // 32: gestalt.provider.v1.UpsertWorkflowProviderEventTriggerRequest.match:type_name -> gestalt.provider.v1.WorkflowEventMatch
-	1,  // 33: gestalt.provider.v1.UpsertWorkflowProviderEventTriggerRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	2,  // 34: gestalt.provider.v1.UpsertWorkflowProviderEventTriggerRequest.requested_by:type_name -> gestalt.provider.v1.WorkflowActor
-	11, // 35: gestalt.provider.v1.ListWorkflowProviderEventTriggersResponse.triggers:type_name -> gestalt.provider.v1.BoundWorkflowEventTrigger
-	3,  // 36: gestalt.provider.v1.PublishWorkflowProviderEventRequest.event:type_name -> gestalt.provider.v1.WorkflowEvent
-	1,  // 37: gestalt.provider.v1.InvokeWorkflowOperationRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	8,  // 38: gestalt.provider.v1.InvokeWorkflowOperationRequest.trigger:type_name -> gestalt.provider.v1.WorkflowRunTrigger
-	50, // 39: gestalt.provider.v1.InvokeWorkflowOperationRequest.input:type_name -> google.protobuf.Struct
-	50, // 40: gestalt.provider.v1.InvokeWorkflowOperationRequest.metadata:type_name -> google.protobuf.Struct
-	2,  // 41: gestalt.provider.v1.InvokeWorkflowOperationRequest.created_by:type_name -> gestalt.provider.v1.WorkflowActor
-	10, // 42: gestalt.provider.v1.ManagedWorkflowSchedule.schedule:type_name -> gestalt.provider.v1.BoundWorkflowSchedule
-	11, // 43: gestalt.provider.v1.ManagedWorkflowEventTrigger.trigger:type_name -> gestalt.provider.v1.BoundWorkflowEventTrigger
-	1,  // 44: gestalt.provider.v1.WorkflowManagerCreateScheduleRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	1,  // 45: gestalt.provider.v1.WorkflowManagerUpdateScheduleRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	4,  // 46: gestalt.provider.v1.WorkflowManagerCreateEventTriggerRequest.match:type_name -> gestalt.provider.v1.WorkflowEventMatch
-	1,  // 47: gestalt.provider.v1.WorkflowManagerCreateEventTriggerRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	4,  // 48: gestalt.provider.v1.WorkflowManagerUpdateEventTriggerRequest.match:type_name -> gestalt.provider.v1.WorkflowEventMatch
-	1,  // 49: gestalt.provider.v1.WorkflowManagerUpdateEventTriggerRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
-	3,  // 50: gestalt.provider.v1.WorkflowManagerPublishEventRequest.event:type_name -> gestalt.provider.v1.WorkflowEvent
-	52, // 51: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry.value:type_name -> google.protobuf.Value
-	12, // 52: gestalt.provider.v1.WorkflowProvider.StartRun:input_type -> gestalt.provider.v1.StartWorkflowProviderRunRequest
-	13, // 53: gestalt.provider.v1.WorkflowProvider.GetRun:input_type -> gestalt.provider.v1.GetWorkflowProviderRunRequest
-	14, // 54: gestalt.provider.v1.WorkflowProvider.ListRuns:input_type -> gestalt.provider.v1.ListWorkflowProviderRunsRequest
-	16, // 55: gestalt.provider.v1.WorkflowProvider.CancelRun:input_type -> gestalt.provider.v1.CancelWorkflowProviderRunRequest
-	17, // 56: gestalt.provider.v1.WorkflowProvider.UpsertSchedule:input_type -> gestalt.provider.v1.UpsertWorkflowProviderScheduleRequest
-	18, // 57: gestalt.provider.v1.WorkflowProvider.GetSchedule:input_type -> gestalt.provider.v1.GetWorkflowProviderScheduleRequest
-	19, // 58: gestalt.provider.v1.WorkflowProvider.ListSchedules:input_type -> gestalt.provider.v1.ListWorkflowProviderSchedulesRequest
-	21, // 59: gestalt.provider.v1.WorkflowProvider.DeleteSchedule:input_type -> gestalt.provider.v1.DeleteWorkflowProviderScheduleRequest
-	22, // 60: gestalt.provider.v1.WorkflowProvider.PauseSchedule:input_type -> gestalt.provider.v1.PauseWorkflowProviderScheduleRequest
-	23, // 61: gestalt.provider.v1.WorkflowProvider.ResumeSchedule:input_type -> gestalt.provider.v1.ResumeWorkflowProviderScheduleRequest
-	24, // 62: gestalt.provider.v1.WorkflowProvider.UpsertEventTrigger:input_type -> gestalt.provider.v1.UpsertWorkflowProviderEventTriggerRequest
-	25, // 63: gestalt.provider.v1.WorkflowProvider.GetEventTrigger:input_type -> gestalt.provider.v1.GetWorkflowProviderEventTriggerRequest
-	26, // 64: gestalt.provider.v1.WorkflowProvider.ListEventTriggers:input_type -> gestalt.provider.v1.ListWorkflowProviderEventTriggersRequest
-	28, // 65: gestalt.provider.v1.WorkflowProvider.DeleteEventTrigger:input_type -> gestalt.provider.v1.DeleteWorkflowProviderEventTriggerRequest
-	29, // 66: gestalt.provider.v1.WorkflowProvider.PauseEventTrigger:input_type -> gestalt.provider.v1.PauseWorkflowProviderEventTriggerRequest
-	30, // 67: gestalt.provider.v1.WorkflowProvider.ResumeEventTrigger:input_type -> gestalt.provider.v1.ResumeWorkflowProviderEventTriggerRequest
-	31, // 68: gestalt.provider.v1.WorkflowProvider.PublishEvent:input_type -> gestalt.provider.v1.PublishWorkflowProviderEventRequest
-	32, // 69: gestalt.provider.v1.WorkflowHost.InvokeOperation:input_type -> gestalt.provider.v1.InvokeWorkflowOperationRequest
-	36, // 70: gestalt.provider.v1.WorkflowManagerHost.CreateSchedule:input_type -> gestalt.provider.v1.WorkflowManagerCreateScheduleRequest
-	37, // 71: gestalt.provider.v1.WorkflowManagerHost.GetSchedule:input_type -> gestalt.provider.v1.WorkflowManagerGetScheduleRequest
-	38, // 72: gestalt.provider.v1.WorkflowManagerHost.UpdateSchedule:input_type -> gestalt.provider.v1.WorkflowManagerUpdateScheduleRequest
-	39, // 73: gestalt.provider.v1.WorkflowManagerHost.DeleteSchedule:input_type -> gestalt.provider.v1.WorkflowManagerDeleteScheduleRequest
-	40, // 74: gestalt.provider.v1.WorkflowManagerHost.PauseSchedule:input_type -> gestalt.provider.v1.WorkflowManagerPauseScheduleRequest
-	41, // 75: gestalt.provider.v1.WorkflowManagerHost.ResumeSchedule:input_type -> gestalt.provider.v1.WorkflowManagerResumeScheduleRequest
-	42, // 76: gestalt.provider.v1.WorkflowManagerHost.CreateEventTrigger:input_type -> gestalt.provider.v1.WorkflowManagerCreateEventTriggerRequest
-	43, // 77: gestalt.provider.v1.WorkflowManagerHost.GetEventTrigger:input_type -> gestalt.provider.v1.WorkflowManagerGetEventTriggerRequest
-	44, // 78: gestalt.provider.v1.WorkflowManagerHost.UpdateEventTrigger:input_type -> gestalt.provider.v1.WorkflowManagerUpdateEventTriggerRequest
-	45, // 79: gestalt.provider.v1.WorkflowManagerHost.DeleteEventTrigger:input_type -> gestalt.provider.v1.WorkflowManagerDeleteEventTriggerRequest
-	46, // 80: gestalt.provider.v1.WorkflowManagerHost.PauseEventTrigger:input_type -> gestalt.provider.v1.WorkflowManagerPauseEventTriggerRequest
-	47, // 81: gestalt.provider.v1.WorkflowManagerHost.ResumeEventTrigger:input_type -> gestalt.provider.v1.WorkflowManagerResumeEventTriggerRequest
-	48, // 82: gestalt.provider.v1.WorkflowManagerHost.PublishEvent:input_type -> gestalt.provider.v1.WorkflowManagerPublishEventRequest
-	9,  // 83: gestalt.provider.v1.WorkflowProvider.StartRun:output_type -> gestalt.provider.v1.BoundWorkflowRun
-	9,  // 84: gestalt.provider.v1.WorkflowProvider.GetRun:output_type -> gestalt.provider.v1.BoundWorkflowRun
-	15, // 85: gestalt.provider.v1.WorkflowProvider.ListRuns:output_type -> gestalt.provider.v1.ListWorkflowProviderRunsResponse
-	9,  // 86: gestalt.provider.v1.WorkflowProvider.CancelRun:output_type -> gestalt.provider.v1.BoundWorkflowRun
-	10, // 87: gestalt.provider.v1.WorkflowProvider.UpsertSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
-	10, // 88: gestalt.provider.v1.WorkflowProvider.GetSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
-	20, // 89: gestalt.provider.v1.WorkflowProvider.ListSchedules:output_type -> gestalt.provider.v1.ListWorkflowProviderSchedulesResponse
-	53, // 90: gestalt.provider.v1.WorkflowProvider.DeleteSchedule:output_type -> google.protobuf.Empty
-	10, // 91: gestalt.provider.v1.WorkflowProvider.PauseSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
-	10, // 92: gestalt.provider.v1.WorkflowProvider.ResumeSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
-	11, // 93: gestalt.provider.v1.WorkflowProvider.UpsertEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
-	11, // 94: gestalt.provider.v1.WorkflowProvider.GetEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
-	27, // 95: gestalt.provider.v1.WorkflowProvider.ListEventTriggers:output_type -> gestalt.provider.v1.ListWorkflowProviderEventTriggersResponse
-	53, // 96: gestalt.provider.v1.WorkflowProvider.DeleteEventTrigger:output_type -> google.protobuf.Empty
-	11, // 97: gestalt.provider.v1.WorkflowProvider.PauseEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
-	11, // 98: gestalt.provider.v1.WorkflowProvider.ResumeEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
-	53, // 99: gestalt.provider.v1.WorkflowProvider.PublishEvent:output_type -> google.protobuf.Empty
-	33, // 100: gestalt.provider.v1.WorkflowHost.InvokeOperation:output_type -> gestalt.provider.v1.InvokeWorkflowOperationResponse
-	34, // 101: gestalt.provider.v1.WorkflowManagerHost.CreateSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
-	34, // 102: gestalt.provider.v1.WorkflowManagerHost.GetSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
-	34, // 103: gestalt.provider.v1.WorkflowManagerHost.UpdateSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
-	53, // 104: gestalt.provider.v1.WorkflowManagerHost.DeleteSchedule:output_type -> google.protobuf.Empty
-	34, // 105: gestalt.provider.v1.WorkflowManagerHost.PauseSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
-	34, // 106: gestalt.provider.v1.WorkflowManagerHost.ResumeSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
-	35, // 107: gestalt.provider.v1.WorkflowManagerHost.CreateEventTrigger:output_type -> gestalt.provider.v1.ManagedWorkflowEventTrigger
-	35, // 108: gestalt.provider.v1.WorkflowManagerHost.GetEventTrigger:output_type -> gestalt.provider.v1.ManagedWorkflowEventTrigger
-	35, // 109: gestalt.provider.v1.WorkflowManagerHost.UpdateEventTrigger:output_type -> gestalt.provider.v1.ManagedWorkflowEventTrigger
-	53, // 110: gestalt.provider.v1.WorkflowManagerHost.DeleteEventTrigger:output_type -> google.protobuf.Empty
-	35, // 111: gestalt.provider.v1.WorkflowManagerHost.PauseEventTrigger:output_type -> gestalt.provider.v1.ManagedWorkflowEventTrigger
-	35, // 112: gestalt.provider.v1.WorkflowManagerHost.ResumeEventTrigger:output_type -> gestalt.provider.v1.ManagedWorkflowEventTrigger
-	3,  // 113: gestalt.provider.v1.WorkflowManagerHost.PublishEvent:output_type -> gestalt.provider.v1.WorkflowEvent
-	83, // [83:114] is the sub-list for method output_type
-	52, // [52:83] is the sub-list for method input_type
-	52, // [52:52] is the sub-list for extension type_name
-	52, // [52:52] is the sub-list for extension extendee
-	0,  // [0:52] is the sub-list for field type_name
+	1,  // 26: gestalt.provider.v1.WorkflowExecutionReference.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
+	12, // 27: gestalt.provider.v1.WorkflowExecutionReference.permissions:type_name -> gestalt.provider.v1.WorkflowAccessPermission
+	57, // 28: gestalt.provider.v1.WorkflowExecutionReference.created_at:type_name -> google.protobuf.Timestamp
+	57, // 29: gestalt.provider.v1.WorkflowExecutionReference.revoked_at:type_name -> google.protobuf.Timestamp
+	1,  // 30: gestalt.provider.v1.StartWorkflowProviderRunRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
+	2,  // 31: gestalt.provider.v1.StartWorkflowProviderRunRequest.created_by:type_name -> gestalt.provider.v1.WorkflowActor
+	9,  // 32: gestalt.provider.v1.ListWorkflowProviderRunsResponse.runs:type_name -> gestalt.provider.v1.BoundWorkflowRun
+	1,  // 33: gestalt.provider.v1.UpsertWorkflowProviderScheduleRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
+	2,  // 34: gestalt.provider.v1.UpsertWorkflowProviderScheduleRequest.requested_by:type_name -> gestalt.provider.v1.WorkflowActor
+	10, // 35: gestalt.provider.v1.ListWorkflowProviderSchedulesResponse.schedules:type_name -> gestalt.provider.v1.BoundWorkflowSchedule
+	4,  // 36: gestalt.provider.v1.UpsertWorkflowProviderEventTriggerRequest.match:type_name -> gestalt.provider.v1.WorkflowEventMatch
+	1,  // 37: gestalt.provider.v1.UpsertWorkflowProviderEventTriggerRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
+	2,  // 38: gestalt.provider.v1.UpsertWorkflowProviderEventTriggerRequest.requested_by:type_name -> gestalt.provider.v1.WorkflowActor
+	11, // 39: gestalt.provider.v1.ListWorkflowProviderEventTriggersResponse.triggers:type_name -> gestalt.provider.v1.BoundWorkflowEventTrigger
+	13, // 40: gestalt.provider.v1.PutWorkflowExecutionReferenceRequest.reference:type_name -> gestalt.provider.v1.WorkflowExecutionReference
+	13, // 41: gestalt.provider.v1.ListWorkflowExecutionReferencesResponse.references:type_name -> gestalt.provider.v1.WorkflowExecutionReference
+	3,  // 42: gestalt.provider.v1.PublishWorkflowProviderEventRequest.event:type_name -> gestalt.provider.v1.WorkflowEvent
+	1,  // 43: gestalt.provider.v1.InvokeWorkflowOperationRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
+	8,  // 44: gestalt.provider.v1.InvokeWorkflowOperationRequest.trigger:type_name -> gestalt.provider.v1.WorkflowRunTrigger
+	56, // 45: gestalt.provider.v1.InvokeWorkflowOperationRequest.input:type_name -> google.protobuf.Struct
+	56, // 46: gestalt.provider.v1.InvokeWorkflowOperationRequest.metadata:type_name -> google.protobuf.Struct
+	2,  // 47: gestalt.provider.v1.InvokeWorkflowOperationRequest.created_by:type_name -> gestalt.provider.v1.WorkflowActor
+	10, // 48: gestalt.provider.v1.ManagedWorkflowSchedule.schedule:type_name -> gestalt.provider.v1.BoundWorkflowSchedule
+	11, // 49: gestalt.provider.v1.ManagedWorkflowEventTrigger.trigger:type_name -> gestalt.provider.v1.BoundWorkflowEventTrigger
+	1,  // 50: gestalt.provider.v1.WorkflowManagerCreateScheduleRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
+	1,  // 51: gestalt.provider.v1.WorkflowManagerUpdateScheduleRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
+	4,  // 52: gestalt.provider.v1.WorkflowManagerCreateEventTriggerRequest.match:type_name -> gestalt.provider.v1.WorkflowEventMatch
+	1,  // 53: gestalt.provider.v1.WorkflowManagerCreateEventTriggerRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
+	4,  // 54: gestalt.provider.v1.WorkflowManagerUpdateEventTriggerRequest.match:type_name -> gestalt.provider.v1.WorkflowEventMatch
+	1,  // 55: gestalt.provider.v1.WorkflowManagerUpdateEventTriggerRequest.target:type_name -> gestalt.provider.v1.BoundWorkflowTarget
+	3,  // 56: gestalt.provider.v1.WorkflowManagerPublishEventRequest.event:type_name -> gestalt.provider.v1.WorkflowEvent
+	58, // 57: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry.value:type_name -> google.protobuf.Value
+	14, // 58: gestalt.provider.v1.WorkflowProvider.StartRun:input_type -> gestalt.provider.v1.StartWorkflowProviderRunRequest
+	15, // 59: gestalt.provider.v1.WorkflowProvider.GetRun:input_type -> gestalt.provider.v1.GetWorkflowProviderRunRequest
+	16, // 60: gestalt.provider.v1.WorkflowProvider.ListRuns:input_type -> gestalt.provider.v1.ListWorkflowProviderRunsRequest
+	18, // 61: gestalt.provider.v1.WorkflowProvider.CancelRun:input_type -> gestalt.provider.v1.CancelWorkflowProviderRunRequest
+	19, // 62: gestalt.provider.v1.WorkflowProvider.UpsertSchedule:input_type -> gestalt.provider.v1.UpsertWorkflowProviderScheduleRequest
+	20, // 63: gestalt.provider.v1.WorkflowProvider.GetSchedule:input_type -> gestalt.provider.v1.GetWorkflowProviderScheduleRequest
+	21, // 64: gestalt.provider.v1.WorkflowProvider.ListSchedules:input_type -> gestalt.provider.v1.ListWorkflowProviderSchedulesRequest
+	23, // 65: gestalt.provider.v1.WorkflowProvider.DeleteSchedule:input_type -> gestalt.provider.v1.DeleteWorkflowProviderScheduleRequest
+	24, // 66: gestalt.provider.v1.WorkflowProvider.PauseSchedule:input_type -> gestalt.provider.v1.PauseWorkflowProviderScheduleRequest
+	25, // 67: gestalt.provider.v1.WorkflowProvider.ResumeSchedule:input_type -> gestalt.provider.v1.ResumeWorkflowProviderScheduleRequest
+	26, // 68: gestalt.provider.v1.WorkflowProvider.UpsertEventTrigger:input_type -> gestalt.provider.v1.UpsertWorkflowProviderEventTriggerRequest
+	27, // 69: gestalt.provider.v1.WorkflowProvider.GetEventTrigger:input_type -> gestalt.provider.v1.GetWorkflowProviderEventTriggerRequest
+	28, // 70: gestalt.provider.v1.WorkflowProvider.ListEventTriggers:input_type -> gestalt.provider.v1.ListWorkflowProviderEventTriggersRequest
+	34, // 71: gestalt.provider.v1.WorkflowProvider.DeleteEventTrigger:input_type -> gestalt.provider.v1.DeleteWorkflowProviderEventTriggerRequest
+	35, // 72: gestalt.provider.v1.WorkflowProvider.PauseEventTrigger:input_type -> gestalt.provider.v1.PauseWorkflowProviderEventTriggerRequest
+	36, // 73: gestalt.provider.v1.WorkflowProvider.ResumeEventTrigger:input_type -> gestalt.provider.v1.ResumeWorkflowProviderEventTriggerRequest
+	30, // 74: gestalt.provider.v1.WorkflowProvider.PutExecutionReference:input_type -> gestalt.provider.v1.PutWorkflowExecutionReferenceRequest
+	31, // 75: gestalt.provider.v1.WorkflowProvider.GetExecutionReference:input_type -> gestalt.provider.v1.GetWorkflowExecutionReferenceRequest
+	32, // 76: gestalt.provider.v1.WorkflowProvider.ListExecutionReferences:input_type -> gestalt.provider.v1.ListWorkflowExecutionReferencesRequest
+	37, // 77: gestalt.provider.v1.WorkflowProvider.PublishEvent:input_type -> gestalt.provider.v1.PublishWorkflowProviderEventRequest
+	38, // 78: gestalt.provider.v1.WorkflowHost.InvokeOperation:input_type -> gestalt.provider.v1.InvokeWorkflowOperationRequest
+	42, // 79: gestalt.provider.v1.WorkflowManagerHost.CreateSchedule:input_type -> gestalt.provider.v1.WorkflowManagerCreateScheduleRequest
+	43, // 80: gestalt.provider.v1.WorkflowManagerHost.GetSchedule:input_type -> gestalt.provider.v1.WorkflowManagerGetScheduleRequest
+	44, // 81: gestalt.provider.v1.WorkflowManagerHost.UpdateSchedule:input_type -> gestalt.provider.v1.WorkflowManagerUpdateScheduleRequest
+	45, // 82: gestalt.provider.v1.WorkflowManagerHost.DeleteSchedule:input_type -> gestalt.provider.v1.WorkflowManagerDeleteScheduleRequest
+	46, // 83: gestalt.provider.v1.WorkflowManagerHost.PauseSchedule:input_type -> gestalt.provider.v1.WorkflowManagerPauseScheduleRequest
+	47, // 84: gestalt.provider.v1.WorkflowManagerHost.ResumeSchedule:input_type -> gestalt.provider.v1.WorkflowManagerResumeScheduleRequest
+	48, // 85: gestalt.provider.v1.WorkflowManagerHost.CreateEventTrigger:input_type -> gestalt.provider.v1.WorkflowManagerCreateEventTriggerRequest
+	49, // 86: gestalt.provider.v1.WorkflowManagerHost.GetEventTrigger:input_type -> gestalt.provider.v1.WorkflowManagerGetEventTriggerRequest
+	50, // 87: gestalt.provider.v1.WorkflowManagerHost.UpdateEventTrigger:input_type -> gestalt.provider.v1.WorkflowManagerUpdateEventTriggerRequest
+	51, // 88: gestalt.provider.v1.WorkflowManagerHost.DeleteEventTrigger:input_type -> gestalt.provider.v1.WorkflowManagerDeleteEventTriggerRequest
+	52, // 89: gestalt.provider.v1.WorkflowManagerHost.PauseEventTrigger:input_type -> gestalt.provider.v1.WorkflowManagerPauseEventTriggerRequest
+	53, // 90: gestalt.provider.v1.WorkflowManagerHost.ResumeEventTrigger:input_type -> gestalt.provider.v1.WorkflowManagerResumeEventTriggerRequest
+	54, // 91: gestalt.provider.v1.WorkflowManagerHost.PublishEvent:input_type -> gestalt.provider.v1.WorkflowManagerPublishEventRequest
+	9,  // 92: gestalt.provider.v1.WorkflowProvider.StartRun:output_type -> gestalt.provider.v1.BoundWorkflowRun
+	9,  // 93: gestalt.provider.v1.WorkflowProvider.GetRun:output_type -> gestalt.provider.v1.BoundWorkflowRun
+	17, // 94: gestalt.provider.v1.WorkflowProvider.ListRuns:output_type -> gestalt.provider.v1.ListWorkflowProviderRunsResponse
+	9,  // 95: gestalt.provider.v1.WorkflowProvider.CancelRun:output_type -> gestalt.provider.v1.BoundWorkflowRun
+	10, // 96: gestalt.provider.v1.WorkflowProvider.UpsertSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
+	10, // 97: gestalt.provider.v1.WorkflowProvider.GetSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
+	22, // 98: gestalt.provider.v1.WorkflowProvider.ListSchedules:output_type -> gestalt.provider.v1.ListWorkflowProviderSchedulesResponse
+	59, // 99: gestalt.provider.v1.WorkflowProvider.DeleteSchedule:output_type -> google.protobuf.Empty
+	10, // 100: gestalt.provider.v1.WorkflowProvider.PauseSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
+	10, // 101: gestalt.provider.v1.WorkflowProvider.ResumeSchedule:output_type -> gestalt.provider.v1.BoundWorkflowSchedule
+	11, // 102: gestalt.provider.v1.WorkflowProvider.UpsertEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
+	11, // 103: gestalt.provider.v1.WorkflowProvider.GetEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
+	29, // 104: gestalt.provider.v1.WorkflowProvider.ListEventTriggers:output_type -> gestalt.provider.v1.ListWorkflowProviderEventTriggersResponse
+	59, // 105: gestalt.provider.v1.WorkflowProvider.DeleteEventTrigger:output_type -> google.protobuf.Empty
+	11, // 106: gestalt.provider.v1.WorkflowProvider.PauseEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
+	11, // 107: gestalt.provider.v1.WorkflowProvider.ResumeEventTrigger:output_type -> gestalt.provider.v1.BoundWorkflowEventTrigger
+	13, // 108: gestalt.provider.v1.WorkflowProvider.PutExecutionReference:output_type -> gestalt.provider.v1.WorkflowExecutionReference
+	13, // 109: gestalt.provider.v1.WorkflowProvider.GetExecutionReference:output_type -> gestalt.provider.v1.WorkflowExecutionReference
+	33, // 110: gestalt.provider.v1.WorkflowProvider.ListExecutionReferences:output_type -> gestalt.provider.v1.ListWorkflowExecutionReferencesResponse
+	59, // 111: gestalt.provider.v1.WorkflowProvider.PublishEvent:output_type -> google.protobuf.Empty
+	39, // 112: gestalt.provider.v1.WorkflowHost.InvokeOperation:output_type -> gestalt.provider.v1.InvokeWorkflowOperationResponse
+	40, // 113: gestalt.provider.v1.WorkflowManagerHost.CreateSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
+	40, // 114: gestalt.provider.v1.WorkflowManagerHost.GetSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
+	40, // 115: gestalt.provider.v1.WorkflowManagerHost.UpdateSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
+	59, // 116: gestalt.provider.v1.WorkflowManagerHost.DeleteSchedule:output_type -> google.protobuf.Empty
+	40, // 117: gestalt.provider.v1.WorkflowManagerHost.PauseSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
+	40, // 118: gestalt.provider.v1.WorkflowManagerHost.ResumeSchedule:output_type -> gestalt.provider.v1.ManagedWorkflowSchedule
+	41, // 119: gestalt.provider.v1.WorkflowManagerHost.CreateEventTrigger:output_type -> gestalt.provider.v1.ManagedWorkflowEventTrigger
+	41, // 120: gestalt.provider.v1.WorkflowManagerHost.GetEventTrigger:output_type -> gestalt.provider.v1.ManagedWorkflowEventTrigger
+	41, // 121: gestalt.provider.v1.WorkflowManagerHost.UpdateEventTrigger:output_type -> gestalt.provider.v1.ManagedWorkflowEventTrigger
+	59, // 122: gestalt.provider.v1.WorkflowManagerHost.DeleteEventTrigger:output_type -> google.protobuf.Empty
+	41, // 123: gestalt.provider.v1.WorkflowManagerHost.PauseEventTrigger:output_type -> gestalt.provider.v1.ManagedWorkflowEventTrigger
+	41, // 124: gestalt.provider.v1.WorkflowManagerHost.ResumeEventTrigger:output_type -> gestalt.provider.v1.ManagedWorkflowEventTrigger
+	3,  // 125: gestalt.provider.v1.WorkflowManagerHost.PublishEvent:output_type -> gestalt.provider.v1.WorkflowEvent
+	92, // [92:126] is the sub-list for method output_type
+	58, // [58:92] is the sub-list for method input_type
+	58, // [58:58] is the sub-list for extension type_name
+	58, // [58:58] is the sub-list for extension extendee
+	0,  // [0:58] is the sub-list for field type_name
 }
 
 func init() { file_v1_workflow_proto_init() }
@@ -3505,7 +3882,7 @@ func file_v1_workflow_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_workflow_proto_rawDesc), len(file_v1_workflow_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   49,
+			NumMessages:   55,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

@@ -14,10 +14,11 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -62,25 +63,23 @@ type Service interface {
 }
 
 type Config struct {
-	Providers             *registry.ProviderMap[core.Provider]
-	Workflow              WorkflowControl
-	WorkflowExecutionRefs *coredata.WorkflowExecutionRefService
-	Invoker               invocation.Invoker
-	Authorizer            authorization.RuntimeAuthorizer
-	DefaultConnection     map[string]string
-	CatalogConnection     map[string]string
-	Now                   func() time.Time
+	Providers         *registry.ProviderMap[core.Provider]
+	Workflow          WorkflowControl
+	Invoker           invocation.Invoker
+	Authorizer        authorization.RuntimeAuthorizer
+	DefaultConnection map[string]string
+	CatalogConnection map[string]string
+	Now               func() time.Time
 }
 
 type Manager struct {
-	providers             *registry.ProviderMap[core.Provider]
-	workflow              WorkflowControl
-	workflowExecutionRefs *coredata.WorkflowExecutionRefService
-	invoker               invocation.Invoker
-	authorizer            authorization.RuntimeAuthorizer
-	defaultConnection     map[string]string
-	catalogConnection     map[string]string
-	now                   func() time.Time
+	providers         *registry.ProviderMap[core.Provider]
+	workflow          WorkflowControl
+	invoker           invocation.Invoker
+	authorizer        authorization.RuntimeAuthorizer
+	defaultConnection map[string]string
+	catalogConnection map[string]string
+	now               func() time.Time
 }
 
 type ScheduleUpsert struct {
@@ -125,14 +124,13 @@ func New(cfg Config) *Manager {
 		now = time.Now
 	}
 	return &Manager{
-		providers:             cfg.Providers,
-		workflow:              cfg.Workflow,
-		workflowExecutionRefs: cfg.WorkflowExecutionRefs,
-		invoker:               cfg.Invoker,
-		authorizer:            cfg.Authorizer,
-		defaultConnection:     maps.Clone(cfg.DefaultConnection),
-		catalogConnection:     maps.Clone(cfg.CatalogConnection),
-		now:                   now,
+		providers:         cfg.Providers,
+		workflow:          cfg.Workflow,
+		invoker:           cfg.Invoker,
+		authorizer:        cfg.Authorizer,
+		defaultConnection: maps.Clone(cfg.DefaultConnection),
+		catalogConnection: maps.Clone(cfg.CatalogConnection),
+		now:               now,
 	}
 }
 
@@ -206,7 +204,7 @@ func (m *Manager) GetRun(ctx context.Context, p *principal.Principal, runID stri
 		}
 		run, err := provider.GetRun(ctx, coreworkflow.GetRunRequest{RunID: runID})
 		if err != nil {
-			if errors.Is(err, core.ErrNotFound) {
+			if isWorkflowProviderNotFound(err) {
 				continue
 			}
 			if firstErr == nil {
@@ -306,7 +304,7 @@ func (m *Manager) ListSchedules(ctx context.Context, p *principal.Principal) ([]
 		}
 		schedule, err := provider.GetSchedule(ctx, coreworkflow.GetScheduleRequest{ScheduleID: scheduleID})
 		if err != nil {
-			if errors.Is(err, core.ErrNotFound) {
+			if isWorkflowProviderNotFound(err) {
 				continue
 			}
 			return nil, err
@@ -356,7 +354,7 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 
 	scheduleID := uuid.NewString()
 	executionRefID := scheduleExecutionRefID(scheduleID)
-	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, target, p)
+	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p)
 	if err != nil {
 		return nil, err
 	}
@@ -404,7 +402,7 @@ func (m *Manager) UpdateSchedule(ctx context.Context, p *principal.Principal, sc
 	}
 
 	executionRefID := scheduleExecutionRefID(strings.TrimSpace(existing.Schedule.ID))
-	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, target, p)
+	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, nextProvider, target, p)
 	if err != nil {
 		return nil, err
 	}
@@ -507,7 +505,7 @@ func (m *Manager) ListEventTriggers(ctx context.Context, p *principal.Principal)
 		}
 		trigger, err := provider.GetEventTrigger(ctx, coreworkflow.GetEventTriggerRequest{TriggerID: triggerID})
 		if err != nil {
-			if errors.Is(err, core.ErrNotFound) {
+			if isWorkflowProviderNotFound(err) {
 				continue
 			}
 			return nil, err
@@ -561,7 +559,7 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 
 	triggerID := uuid.NewString()
 	executionRefID := eventTriggerExecutionRefID(triggerID)
-	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, target, p)
+	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p)
 	if err != nil {
 		return nil, err
 	}
@@ -612,7 +610,7 @@ func (m *Manager) UpdateEventTrigger(ctx context.Context, p *principal.Principal
 	}
 
 	executionRefID := eventTriggerExecutionRefID(strings.TrimSpace(existing.Trigger.ID))
-	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, target, p)
+	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, nextProvider, target, p)
 	if err != nil {
 		return nil, err
 	}
@@ -852,23 +850,34 @@ func (m *Manager) requireOwnedEventTrigger(ctx context.Context, triggerID string
 }
 
 func (m *Manager) listOwnedExecutionRefs(ctx context.Context, p *principal.Principal, activeOnly bool) ([]*coreworkflow.ExecutionReference, error) {
-	if m == nil || m.workflowExecutionRefs == nil {
+	if m == nil || m.workflow == nil {
 		return nil, ErrExecutionRefsNotConfigured
 	}
 	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
 	if subjectID == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	refs, err := m.workflowExecutionRefs.ListBySubject(ctx, subjectID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]*coreworkflow.ExecutionReference, 0, len(refs))
-	for _, ref := range refs {
-		if !executionRefOwnedBy(ref, p) || (activeOnly && !executionRefActive(ref)) {
-			continue
+	out := []*coreworkflow.ExecutionReference{}
+	for _, providerName := range m.workflow.ProviderNames() {
+		provider, err := m.resolveProviderByName(providerName)
+		if err != nil {
+			return nil, err
 		}
-		out = append(out, ref)
+		store, err := workflowExecutionReferenceStore(providerName, provider)
+		if err != nil {
+			return nil, err
+		}
+		refs, err := store.ListExecutionReferences(ctx, subjectID)
+		if err != nil {
+			return nil, err
+		}
+		for _, ref := range refs {
+			ref = workflowExecutionRefForProvider(ref, providerName)
+			if !executionRefOwnedBy(ref, p) || (activeOnly && !executionRefActive(ref)) {
+				continue
+			}
+			out = append(out, ref)
+		}
 	}
 	return out, nil
 }
@@ -917,16 +926,17 @@ func (m *Manager) findOwnedEventTriggerExecutionRef(ctx context.Context, trigger
 	return match, nil
 }
 
-func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerName string, target coreworkflow.Target, p *principal.Principal) (*coreworkflow.ExecutionReference, error) {
-	if m == nil || m.workflowExecutionRefs == nil {
-		return nil, ErrExecutionRefsNotConfigured
+func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal) (*coreworkflow.ExecutionReference, error) {
+	store, err := workflowExecutionReferenceStore(providerName, provider)
+	if err != nil {
+		return nil, err
 	}
 	p = principal.Canonicalized(p)
 	subjectID := strings.TrimSpace(principalSubjectID(p))
 	if subjectID == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	return m.workflowExecutionRefs.Put(ctx, &coreworkflow.ExecutionReference{
+	return store.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{
 		ID:                  executionRefID,
 		ProviderName:        strings.TrimSpace(providerName),
 		Target:              target,
@@ -937,13 +947,54 @@ func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerN
 }
 
 func (m *Manager) revokeExecutionRef(ctx context.Context, ref *coreworkflow.ExecutionReference) {
-	if m == nil || m.workflowExecutionRefs == nil || ref == nil || strings.TrimSpace(ref.ID) == "" {
+	if m == nil || ref == nil || strings.TrimSpace(ref.ID) == "" {
+		return
+	}
+	providerName := strings.TrimSpace(ref.ProviderName)
+	provider, err := m.resolveProviderByName(providerName)
+	if err != nil {
+		return
+	}
+	store, err := workflowExecutionReferenceStore(providerName, provider)
+	if err != nil {
 		return
 	}
 	cloned := *ref
 	now := m.now().UTC().Truncate(time.Second)
 	cloned.RevokedAt = &now
-	_, _ = m.workflowExecutionRefs.Put(ctx, &cloned)
+	_, _ = store.PutExecutionReference(ctx, &cloned)
+}
+
+func workflowExecutionReferenceStore(providerName string, provider coreworkflow.Provider) (coreworkflow.ExecutionReferenceStore, error) {
+	if provider == nil {
+		return nil, fmt.Errorf("%w: workflow provider %q is not configured", ErrExecutionRefsNotConfigured, strings.TrimSpace(providerName))
+	}
+	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
+	if !ok {
+		return nil, fmt.Errorf("%w: workflow provider %q does not support execution references", ErrExecutionRefsNotConfigured, strings.TrimSpace(providerName))
+	}
+	return store, nil
+}
+
+func workflowExecutionRefForProvider(ref *coreworkflow.ExecutionReference, providerName string) *coreworkflow.ExecutionReference {
+	if ref == nil {
+		return nil
+	}
+	providerName = strings.TrimSpace(providerName)
+	refProviderName := strings.TrimSpace(ref.ProviderName)
+	if providerName == "" || refProviderName == providerName {
+		return ref
+	}
+	if refProviderName != "" {
+		return nil
+	}
+	cloned := *ref
+	cloned.ProviderName = providerName
+	return &cloned
+}
+
+func isWorkflowProviderNotFound(err error) bool {
+	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
 }
 
 func (m *Manager) allowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
