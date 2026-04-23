@@ -150,6 +150,30 @@ fn test_cli_creates_agent_run_from_request_file() {
 }
 
 #[test]
+fn test_cli_rejects_agent_run_create_without_messages() {
+    let mut server = Server::new();
+    let create = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/agent/runs",
+        StatusCode::CREATED
+    )
+    .expect(0)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["agent", "runs", "create"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "agent runs create requires at least one message",
+        ));
+
+    create.assert();
+}
+
+#[test]
 fn test_cli_lists_agent_runs_with_server_side_filters() {
     let mut server = Server::new();
     let _mock = authed_json_mock!(

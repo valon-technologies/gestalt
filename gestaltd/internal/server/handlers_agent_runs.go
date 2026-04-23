@@ -19,6 +19,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 const agentIdempotencyKeyHeader = "Idempotency-Key"
@@ -600,6 +602,8 @@ func (s *Server) writeAgentRunProviderError(ctx context.Context, w http.Response
 	switch {
 	case errors.Is(err, core.ErrNotFound):
 		writeError(w, http.StatusNotFound, fmt.Sprintf("agent run %q not found", runID))
+	case grpcstatus.Code(err) == codes.InvalidArgument:
+		writeError(w, http.StatusBadRequest, grpcstatus.Convert(err).Message())
 	default:
 		slog.ErrorContext(ctx, "agent run provider error", "run_id", runID, "error", err)
 		writeError(w, http.StatusInternalServerError, "agent run request failed")
