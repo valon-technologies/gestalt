@@ -67,7 +67,7 @@ The runtime surface is intentionally small but lifecycle-oriented:
 
 | Method | Purpose |
 | --- | --- |
-| `GetCapabilities` | Advertise what this backend can actually do. |
+| `GetCapabilities` | Advertise grouped runtime support for this backend. |
 | `StartSession` | Create a hosted runtime session for a plugin. |
 | `GetSession` | Report session status so Gestalt can wait for readiness. |
 | `StopSession` | Tear a session down on shutdown or bootstrap failure. |
@@ -100,10 +100,15 @@ func (p *Provider) Configure(context.Context, string, map[string]any) error {
 
 func (p *Provider) GetCapabilities(context.Context, *emptypb.Empty) (*proto.GetPluginRuntimeCapabilitiesResponse, error) {
 	return &proto.GetPluginRuntimeCapabilitiesResponse{
-		Capabilities: &proto.PluginRuntimeCapabilities{
-			HostedPluginRuntime: true,
-			HostServiceTunnels:  true,
-			ProviderGrpcTunnel:  true,
+		Support: &proto.PluginRuntimeSupport{
+			CanHostPlugins:   true,
+			HostServiceAccess: proto.PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT,
+			EgressMode:        proto.PluginRuntimeEgressMode_PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME,
+			LaunchMode:        proto.PluginRuntimeLaunchMode_PLUGIN_RUNTIME_LAUNCH_MODE_BUNDLE,
+			ExecutionTarget: &proto.PluginRuntimeExecutionTarget{
+				Goos:   "linux",
+				Goarch: "amd64",
+			},
 		},
 	}, nil
 }
@@ -151,33 +156,36 @@ func main() {
 }
 ```
 
-## Capability guidelines
+## Support guidelines
 
-Advertise capabilities conservatively. The host still receives the raw runtime
-capability flags, but it derives a higher-level runtime profile from them. That
-profile is what operators see in admin inspection, and it is what bootstrap
-uses to decide whether a hosted plugin can start safely on a given backend.
+Advertise the smallest truthful grouped support surface you can.
 
-In practice that means `host_service_tunnels` should only be true when your
-backend can really expose direct guest-local host-service sockets. If that flag
-is false, Gestalt may still derive an effective relay-backed host-service mode
-when `server.baseURL` and `server.encryptionKey` allow the public relay path.
+`can_host_plugins` should only be true when the backend can actually launch a
+host-reachable executable plugin session. If that is false, Gestalt will reject
+hosted execution for that runtime immediately instead of failing later during
+bootstrap.
 
-Likewise, `hostname_proxy_egress` is not just a firewall hint. It means the
-runtime can preserve Gestalt's hostname-based `allowedHosts` semantics. That
-preservation may happen inside the backend itself, or it may happen by routing
-hosted HTTP(S) traffic through Gestalt's public egress proxy. `cidr_egress`
-remains useful metadata, but it is not equivalent to hostname-based policy.
+`host_service_access` should be `direct` only when the backend can really
+expose guest-local host-service sockets inside the runtime session. When that
+value is `none`, Gestalt may still derive an *effective* relay-backed
+host-service path if the current host deployment has the public relay
+prerequisites, but that relay behavior is host-provided, not runtime-advertised.
 
-`host_path_execution` should only be true when the backend can execute directly
-from the host paths Gestalt provides. Otherwise Gestalt will derive a bundle
-launch mode and stage a runtime bundle first. When bundle launch is required,
-`execution_goos` and `execution_goarch` must accurately describe the target
-platform so the host can choose or stage the right artifact.
+`egress_mode` should be `hostname` only when the runtime can preserve
+Gestalt's hostname-based `allowedHosts` model. `cidr` is useful metadata, but
+it is not equivalent to hostname-based policy. If your backend can only express
+network controls at firewall or CIDR granularity, advertise `cidr`.
 
-If these capabilities are wrong, operators will see either false compatibility
-rejections or late runtime failures. The safest rule is to advertise the
-smallest truthful surface and let Gestalt derive the rest.
+`launch_mode` should be `host_path` only when the backend can execute directly
+from the host paths Gestalt provides. Otherwise advertise `bundle`, which tells
+the host to stage a runtime bundle first. When bundle launch is required,
+`execution_target` must accurately describe the platform the backend will
+actually run so the host can choose or stage the right artifact.
+
+Older runtime providers may continue returning the legacy `capabilities` field
+for compatibility, but new providers should populate `support` instead. Gestalt
+still understands the old booleans, but the grouped support shape is now the
+primary contract and the one operators see reflected in inspection.
 
 ## Sessions and host services
 

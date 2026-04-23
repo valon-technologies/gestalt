@@ -9,12 +9,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 )
 
-type RuntimeHostServiceMode string
+type RuntimeHostServiceAccess string
 
 const (
-	RuntimeHostServiceModeNone   RuntimeHostServiceMode = "none"
-	RuntimeHostServiceModeRelay  RuntimeHostServiceMode = "relay"
-	RuntimeHostServiceModeDirect RuntimeHostServiceMode = "direct"
+	RuntimeHostServiceAccessNone   RuntimeHostServiceAccess = "none"
+	RuntimeHostServiceAccessRelay  RuntimeHostServiceAccess = "relay"
+	RuntimeHostServiceAccessDirect RuntimeHostServiceAccess = "direct"
 )
 
 type RuntimeEgressMode string
@@ -25,12 +25,12 @@ const (
 	RuntimeEgressModeHostname RuntimeEgressMode = "hostname"
 )
 
-type RuntimeHostnameEgressTransport string
+type RuntimeHostnameEgressDelivery string
 
 const (
-	RuntimeHostnameEgressTransportNone        RuntimeHostnameEgressTransport = "none"
-	RuntimeHostnameEgressTransportRuntime     RuntimeHostnameEgressTransport = "runtime"
-	RuntimeHostnameEgressTransportPublicProxy RuntimeHostnameEgressTransport = "public_proxy"
+	RuntimeHostnameEgressDeliveryNone        RuntimeHostnameEgressDelivery = "none"
+	RuntimeHostnameEgressDeliveryRuntime     RuntimeHostnameEgressDelivery = "runtime"
+	RuntimeHostnameEgressDeliveryPublicProxy RuntimeHostnameEgressDelivery = "public_proxy"
 )
 
 type RuntimeLaunchMode string
@@ -49,86 +49,71 @@ func (t RuntimeExecutionTarget) IsSet() bool {
 	return strings.TrimSpace(t.GOOS) != "" && strings.TrimSpace(t.GOARCH) != ""
 }
 
-type RuntimeProfile struct {
-	HostedExecution bool
-	HostServiceMode RuntimeHostServiceMode
-	EgressMode      RuntimeEgressMode
-	LaunchMode      RuntimeLaunchMode
-	ExecutionTarget RuntimeExecutionTarget
+type RuntimeBehavior struct {
+	CanHostPlugins    bool
+	HostServiceAccess RuntimeHostServiceAccess
+	EgressMode        RuntimeEgressMode
+	LaunchMode        RuntimeLaunchMode
+	ExecutionTarget   RuntimeExecutionTarget
 }
 
 type PluginRuntimePlan struct {
-	Effective                 RuntimeProfile
+	Resolved                  RuntimeBehavior
 	RequiresHostServiceAccess bool
 	RequiresHostnameEgress    bool
-	HostnameEgressTransport   RuntimeHostnameEgressTransport
+	HostnameEgressDelivery    RuntimeHostnameEgressDelivery
 }
 
-func buildPluginRuntimePlan(pluginName string, entry *config.ProviderEntry, deps Deps, caps pluginruntime.Capabilities) (PluginRuntimePlan, error) {
-	advertised := runtimeAdvertisedProfile(caps)
-	effective := runtimeEffectiveProfile(advertised, caps, deps)
+func buildPluginRuntimePlan(pluginName string, entry *config.ProviderEntry, deps Deps, support pluginruntime.Support) (PluginRuntimePlan, error) {
+	advertised := runtimeAdvertisedBehavior(support)
+	resolved := runtimeResolvedBehavior(advertised, deps)
 	requiresHostServiceAccess, requiresHostnameEgress, err := pluginRuntimeRequirementsForPlugin(pluginName, entry, deps)
 	if err != nil {
 		return PluginRuntimePlan{}, err
 	}
 	return PluginRuntimePlan{
-		Effective:                 effective,
+		Resolved:                  resolved,
 		RequiresHostServiceAccess: requiresHostServiceAccess,
 		RequiresHostnameEgress:    requiresHostnameEgress,
-		HostnameEgressTransport:   runtimeHostnameEgressTransport(requiresHostnameEgress, caps, effective, deps),
+		HostnameEgressDelivery:    runtimeHostnameEgressDelivery(requiresHostnameEgress, resolved),
 	}, nil
 }
 
-func runtimeAdvertisedProfile(caps pluginruntime.Capabilities) RuntimeProfile {
-	hostServiceMode := RuntimeHostServiceModeNone
-	if caps.HostServiceTunnels {
-		hostServiceMode = RuntimeHostServiceModeDirect
-	}
-	egressMode := RuntimeEgressModeNone
-	switch {
-	case caps.HostnameProxyEgress:
-		egressMode = RuntimeEgressModeHostname
-	case caps.CIDREgress:
-		egressMode = RuntimeEgressModeCIDR
-	}
-	launchMode := RuntimeLaunchModeBundle
-	if caps.HostPathExecution {
-		launchMode = RuntimeLaunchModeHostPath
-	}
-	return RuntimeProfile{
-		HostedExecution: caps.HostedPluginRuntime && caps.ProviderGRPCTunnel,
-		HostServiceMode: hostServiceMode,
-		EgressMode:      egressMode,
-		LaunchMode:      launchMode,
+func runtimeAdvertisedBehavior(support pluginruntime.Support) RuntimeBehavior {
+	return RuntimeBehavior{
+		CanHostPlugins:    support.CanHostPlugins,
+		HostServiceAccess: runtimeHostServiceAccessFromSupport(support.HostServiceAccess),
+		EgressMode:        runtimeEgressModeFromSupport(support.EgressMode),
+		LaunchMode:        runtimeLaunchModeFromSupport(support.LaunchMode),
 		ExecutionTarget: RuntimeExecutionTarget{
-			GOOS:   strings.TrimSpace(caps.ExecutionGOOS),
-			GOARCH: strings.TrimSpace(caps.ExecutionGOARCH),
+			GOOS:   strings.TrimSpace(support.ExecutionTarget.GOOS),
+			GOARCH: strings.TrimSpace(support.ExecutionTarget.GOARCH),
 		},
 	}
 }
 
-func runtimeEffectiveProfile(advertised RuntimeProfile, caps pluginruntime.Capabilities, deps Deps) RuntimeProfile {
-	effective := advertised
-	if effective.HostServiceMode == RuntimeHostServiceModeNone && hostCanRelayPluginRuntimeHostServices(deps) {
-		effective.HostServiceMode = RuntimeHostServiceModeRelay
+func runtimeResolvedBehavior(advertised RuntimeBehavior, deps Deps) RuntimeBehavior {
+	resolved := advertised
+	if resolved.HostServiceAccess == RuntimeHostServiceAccessNone && hostCanRelayPluginRuntimeHostServices(deps) {
+		resolved.HostServiceAccess = RuntimeHostServiceAccessRelay
 	}
-	if effective.EgressMode == RuntimeEgressModeHostname && !caps.HostServiceTunnels && !hostCanProvideHostedHostnameEgress(deps) {
-		effective.EgressMode = RuntimeEgressModeNone
+	if resolved.EgressMode == RuntimeEgressModeHostname && resolved.HostServiceAccess != RuntimeHostServiceAccessDirect && !hostCanProvideHostedHostnameEgress(deps) {
+		resolved.EgressMode = RuntimeEgressModeNone
 	}
-	return effective
+	return resolved
 }
 
-func runtimeHostnameEgressTransport(required bool, caps pluginruntime.Capabilities, effective RuntimeProfile, deps Deps) RuntimeHostnameEgressTransport {
-	if !required || effective.EgressMode != RuntimeEgressModeHostname {
-		return RuntimeHostnameEgressTransportNone
+func runtimeHostnameEgressDelivery(required bool, resolved RuntimeBehavior) RuntimeHostnameEgressDelivery {
+	if !required || resolved.EgressMode != RuntimeEgressModeHostname {
+		return RuntimeHostnameEgressDeliveryNone
 	}
-	if caps.HostServiceTunnels {
-		return RuntimeHostnameEgressTransportRuntime
+	if resolved.HostServiceAccess == RuntimeHostServiceAccessDirect {
+		return RuntimeHostnameEgressDeliveryRuntime
 	}
-	if hostCanProvideHostedHostnameEgress(deps) {
-		return RuntimeHostnameEgressTransportPublicProxy
+	if resolved.HostServiceAccess == RuntimeHostServiceAccessRelay {
+		return RuntimeHostnameEgressDeliveryPublicProxy
 	}
-	return RuntimeHostnameEgressTransportNone
+	return RuntimeHostnameEgressDeliveryNone
 }
 
 func hostCanRelayPluginRuntimeHostServices(deps Deps) bool {
@@ -177,17 +162,46 @@ func (p PluginRuntimePlan) Validate(label string) error {
 	if label == "" {
 		label = "plugin runtime"
 	}
-	if !p.Effective.HostedExecution {
+	if !p.Resolved.CanHostPlugins {
 		return fmt.Errorf("%s cannot host executable plugins in a host-reachable session", label)
 	}
-	if p.RequiresHostServiceAccess && p.Effective.HostServiceMode == RuntimeHostServiceModeNone {
+	if p.RequiresHostServiceAccess && p.Resolved.HostServiceAccess == RuntimeHostServiceAccessNone {
 		return fmt.Errorf("%s cannot provide host service access required by this plugin", label)
 	}
-	if p.RequiresHostnameEgress && p.Effective.EgressMode != RuntimeEgressModeHostname {
+	if p.RequiresHostnameEgress && p.Resolved.EgressMode != RuntimeEgressModeHostname {
 		return fmt.Errorf("%s cannot preserve hostname-based egress required by this plugin", label)
 	}
-	if p.Effective.LaunchMode == RuntimeLaunchModeBundle && !p.Effective.ExecutionTarget.IsSet() {
+	if p.Resolved.LaunchMode == RuntimeLaunchModeBundle && !p.Resolved.ExecutionTarget.IsSet() {
 		return fmt.Errorf("%s cannot stage hosted plugin bundles because it does not declare an execution target", label)
 	}
 	return nil
+}
+
+func runtimeHostServiceAccessFromSupport(src pluginruntime.HostServiceAccess) RuntimeHostServiceAccess {
+	switch src {
+	case pluginruntime.HostServiceAccessDirect:
+		return RuntimeHostServiceAccessDirect
+	default:
+		return RuntimeHostServiceAccessNone
+	}
+}
+
+func runtimeEgressModeFromSupport(src pluginruntime.EgressMode) RuntimeEgressMode {
+	switch src {
+	case pluginruntime.EgressModeHostname:
+		return RuntimeEgressModeHostname
+	case pluginruntime.EgressModeCIDR:
+		return RuntimeEgressModeCIDR
+	default:
+		return RuntimeEgressModeNone
+	}
+}
+
+func runtimeLaunchModeFromSupport(src pluginruntime.LaunchMode) RuntimeLaunchMode {
+	switch src {
+	case pluginruntime.LaunchModeHostPath:
+		return RuntimeLaunchModeHostPath
+	default:
+		return RuntimeLaunchModeBundle
+	}
 }

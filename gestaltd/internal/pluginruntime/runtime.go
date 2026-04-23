@@ -28,15 +28,39 @@ const (
 	PolicyDeny  PolicyAction = "deny"
 )
 
-type Capabilities struct {
-	HostedPluginRuntime bool
-	HostServiceTunnels  bool
-	ProviderGRPCTunnel  bool
-	HostnameProxyEgress bool
-	CIDREgress          bool
-	HostPathExecution   bool
-	ExecutionGOOS       string
-	ExecutionGOARCH     string
+type HostServiceAccess string
+
+const (
+	HostServiceAccessNone   HostServiceAccess = "none"
+	HostServiceAccessDirect HostServiceAccess = "direct"
+)
+
+type EgressMode string
+
+const (
+	EgressModeNone     EgressMode = "none"
+	EgressModeCIDR     EgressMode = "cidr"
+	EgressModeHostname EgressMode = "hostname"
+)
+
+type LaunchMode string
+
+const (
+	LaunchModeHostPath LaunchMode = "host_path"
+	LaunchModeBundle   LaunchMode = "bundle"
+)
+
+type ExecutionTarget struct {
+	GOOS   string
+	GOARCH string
+}
+
+type Support struct {
+	CanHostPlugins    bool
+	HostServiceAccess HostServiceAccess
+	EgressMode        EgressMode
+	LaunchMode        LaunchMode
+	ExecutionTarget   ExecutionTarget
 }
 
 type Session struct {
@@ -111,7 +135,7 @@ type HostedPluginConn interface {
 }
 
 type Provider interface {
-	Capabilities(ctx context.Context) (Capabilities, error)
+	Support(ctx context.Context) (Support, error)
 	ListSessions(ctx context.Context) ([]Session, error)
 	StartSession(ctx context.Context, req StartSessionRequest) (*Session, error)
 	GetSession(ctx context.Context, req GetSessionRequest) (*Session, error)

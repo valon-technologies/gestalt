@@ -14,16 +14,15 @@ type RuntimeInspector interface {
 }
 
 type RuntimeProviderSnapshot struct {
-	Name               string
-	Driver             config.RuntimeProviderDriver
-	Default            bool
-	Loaded             bool
-	CapabilitiesLoaded bool
-	Capabilities       pluginruntime.Capabilities
-	AdvertisedProfile  RuntimeProfile
-	EffectiveProfile   RuntimeProfile
-	Sessions           []pluginruntime.Session
-	Error              string
+	Name          string
+	Driver        config.RuntimeProviderDriver
+	Default       bool
+	Loaded        bool
+	SupportLoaded bool
+	Advertised    RuntimeBehavior
+	Effective     RuntimeBehavior
+	Sessions      []pluginruntime.Session
+	Error         string
 }
 
 func (r *pluginRuntimeRegistry) SnapshotPluginRuntimes(ctx context.Context) ([]RuntimeProviderSnapshot, error) {
@@ -74,16 +73,15 @@ func (r *pluginRuntimeRegistry) SnapshotPluginRuntimes(ctx context.Context) ([]R
 		}
 		if item.provider != nil {
 			snapshot.Loaded = true
-			caps, err := item.provider.Capabilities(ctx)
+			support, err := item.provider.Support(ctx)
 			if err != nil {
-				snapshot.Error = fmt.Sprintf("capabilities: %v", err)
+				snapshot.Error = fmt.Sprintf("support: %v", err)
 				out = append(out, snapshot)
 				continue
 			}
-			snapshot.Capabilities = caps
-			snapshot.CapabilitiesLoaded = true
-			snapshot.AdvertisedProfile = runtimeAdvertisedProfile(caps)
-			snapshot.EffectiveProfile = runtimeEffectiveProfile(snapshot.AdvertisedProfile, caps, r.deps)
+			snapshot.SupportLoaded = true
+			snapshot.Advertised = runtimeAdvertisedBehavior(support)
+			snapshot.Effective = runtimeResolvedBehavior(snapshot.Advertised, r.deps)
 			sessions, err := item.provider.ListSessions(ctx)
 			if err != nil {
 				snapshot.Error = fmt.Sprintf("list sessions: %v", err)

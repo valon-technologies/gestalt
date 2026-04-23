@@ -9,22 +9,13 @@ import (
 )
 
 type adminRuntimeProviderInfo struct {
-	Name         string                    `json:"name"`
-	Driver       string                    `json:"driver"`
-	Default      bool                      `json:"default"`
-	Loaded       bool                      `json:"loaded"`
-	SessionCount *int                      `json:"sessionCount,omitempty"`
-	Capabilities *adminRuntimeCapabilities `json:"capabilities,omitempty"`
-	Profile      *adminRuntimeProfilePair  `json:"profile,omitempty"`
-	Error        string                    `json:"error,omitempty"`
-}
-
-type adminRuntimeCapabilities struct {
-	HostedPluginRuntime bool `json:"hostedPluginRuntime"`
-	HostServiceTunnels  bool `json:"hostServiceTunnels"`
-	ProviderGRPCTunnel  bool `json:"providerGRPCTunnel"`
-	HostnameProxyEgress bool `json:"hostnameProxyEgress"`
-	CIDREgress          bool `json:"cidrEgress"`
+	Name         string                   `json:"name"`
+	Driver       string                   `json:"driver"`
+	Default      bool                     `json:"default"`
+	Loaded       bool                     `json:"loaded"`
+	SessionCount *int                     `json:"sessionCount,omitempty"`
+	Profile      *adminRuntimeProfilePair `json:"profile,omitempty"`
+	Error        string                   `json:"error,omitempty"`
 }
 
 type adminRuntimeProfilePair struct {
@@ -33,7 +24,7 @@ type adminRuntimeProfilePair struct {
 }
 
 type adminRuntimeProfile struct {
-	HostedExecution   bool                         `json:"hostedExecution"`
+	CanHostPlugins    bool                         `json:"canHostPlugins"`
 	HostServiceAccess string                       `json:"hostServiceAccess"`
 	EgressMode        string                       `json:"egressMode"`
 	LaunchMode        string                       `json:"launchMode"`
@@ -73,8 +64,7 @@ func (s *Server) listAdminRuntimeProviders(w http.ResponseWriter, r *http.Reques
 			Loaded:  snapshot.Loaded,
 			Error:   strings.TrimSpace(snapshot.Error),
 		}
-		if snapshot.Loaded && snapshot.CapabilitiesLoaded {
-			row.Capabilities = adminRuntimeCapabilitiesFromSnapshot(snapshot)
+		if snapshot.Loaded && snapshot.SupportLoaded {
 			row.Profile = adminRuntimeProfilePairFromSnapshot(snapshot)
 		}
 		if snapshot.Loaded && row.Error == "" {
@@ -129,34 +119,24 @@ func (s *Server) adminRuntimeSnapshots(r *http.Request) ([]bootstrap.RuntimeProv
 	return s.pluginRuntimes.SnapshotPluginRuntimes(r.Context())
 }
 
-func adminRuntimeCapabilitiesFromSnapshot(snapshot *bootstrap.RuntimeProviderSnapshot) *adminRuntimeCapabilities {
-	return &adminRuntimeCapabilities{
-		HostedPluginRuntime: snapshot.Capabilities.HostedPluginRuntime,
-		HostServiceTunnels:  snapshot.Capabilities.HostServiceTunnels,
-		ProviderGRPCTunnel:  snapshot.Capabilities.ProviderGRPCTunnel,
-		HostnameProxyEgress: snapshot.Capabilities.HostnameProxyEgress,
-		CIDREgress:          snapshot.Capabilities.CIDREgress,
-	}
-}
-
 func adminRuntimeProfilePairFromSnapshot(snapshot *bootstrap.RuntimeProviderSnapshot) *adminRuntimeProfilePair {
 	return &adminRuntimeProfilePair{
-		Advertised: adminRuntimeProfileFromBootstrap(snapshot.AdvertisedProfile),
-		Effective:  adminRuntimeProfileFromBootstrap(snapshot.EffectiveProfile),
+		Advertised: adminRuntimeProfileFromBootstrap(snapshot.Advertised),
+		Effective:  adminRuntimeProfileFromBootstrap(snapshot.Effective),
 	}
 }
 
-func adminRuntimeProfileFromBootstrap(profile bootstrap.RuntimeProfile) adminRuntimeProfile {
+func adminRuntimeProfileFromBootstrap(behavior bootstrap.RuntimeBehavior) adminRuntimeProfile {
 	out := adminRuntimeProfile{
-		HostedExecution:   profile.HostedExecution,
-		HostServiceAccess: strings.TrimSpace(string(profile.HostServiceMode)),
-		EgressMode:        strings.TrimSpace(string(profile.EgressMode)),
-		LaunchMode:        strings.TrimSpace(string(profile.LaunchMode)),
+		CanHostPlugins:    behavior.CanHostPlugins,
+		HostServiceAccess: strings.TrimSpace(string(behavior.HostServiceAccess)),
+		EgressMode:        strings.TrimSpace(string(behavior.EgressMode)),
+		LaunchMode:        strings.TrimSpace(string(behavior.LaunchMode)),
 	}
-	if profile.ExecutionTarget.IsSet() {
+	if behavior.ExecutionTarget.IsSet() {
 		out.ExecutionTarget = &adminRuntimeExecutionTarget{
-			GOOS:   strings.TrimSpace(profile.ExecutionTarget.GOOS),
-			GOARCH: strings.TrimSpace(profile.ExecutionTarget.GOARCH),
+			GOOS:   strings.TrimSpace(behavior.ExecutionTarget.GOOS),
+			GOARCH: strings.TrimSpace(behavior.ExecutionTarget.GOARCH),
 		}
 	}
 	return out
