@@ -145,7 +145,13 @@ These metrics carry low-cardinality attributes: `gestalt.provider` (the
 plugin key), `gestalt.operation` (the catalog operation id),
 `gestalt.transport` (how the operation is implemented: `plugin`, `rest`, or
 `mcp-passthrough`), and `gestalt.connection_mode` (the provider auth mode:
-`none` or `user`).
+`none` or `user`). When the invocation came from a known surface, they also
+carry `gestalt.invocation_surface`.
+
+`gestaltd.operation.error_count` records failed operation invocations across
+surfaces, but it does not classify failures by HTTP status. For 4xx versus 5xx
+breakdowns on HTTP-invoked provider operations, use the HTTP server metrics with
+the resolved `gestalt.provider` and `gestalt.operation` labels described below.
 
 When a request references an unknown provider or operation, `gestaltd` records
 `unknown` for the missing metric attributes instead of using raw user input.
@@ -340,6 +346,30 @@ can resolve, including `gestalt.provider`, `gestalt.operation`,
 `gestalt.transport`, `gestalt.connection_mode`, `gestalt.invocation_surface`,
 `gestalt.http_binding`, and `gestalt.ui`.
 
+`http.route` is the framework route template, not the concrete request path. For
+example, a request to `/api/v1/datadog/query_metrics` is grouped under the route
+template `/api/v1/{integration}/{operation}`. Use `http.route` for route-shape
+latency and traffic graphs, and use `gestalt.provider` plus
+`gestalt.operation` when you need the resolved integration and operation names.
+Unknown provider or operation paths keep the templated route label but do not get
+resolved provider or operation labels.
+
+For Datadog dashboards, provider-operation status splits can be built from the
+HTTP server duration metric:
+
+```text
+count:http.server.request.duration{service:<service>,gestalt.provider:*,http.response.status_code:4*}
+  by {gestalt.provider,gestalt.operation}.as_rate()
+```
+
+```text
+count:http.server.request.duration{service:<service>,gestalt.provider:*,http.response.status_code:5*}
+  by {gestalt.provider,gestalt.operation}.as_rate()
+```
+
+Use the same metric with `http.response.status_code` in the grouping when a
+single graph should show both status class and provider-operation identity.
+
 If the process is started with
 `OTEL_SEMCONV_STABILITY_OPT_IN=http/dup`, the underlying HTTP instrumentation
 also emits the older legacy HTTP metric families alongside the current ones.
@@ -365,9 +395,14 @@ service traffic. They only apply to provider-backed components.
 </Tabs>
 
 These metrics use standard OpenTelemetry gRPC semantic attributes such as
-`rpc.system.name=grpc`, `rpc.method`, and `rpc.response.status_code`. Gestalt
-also attaches `gestalt.rpc.role`, `gestalt.provider`, and
-`gestalt.host_service` when it can resolve them.
+`rpc.system.name=grpc`, `rpc.method`, and gRPC status code labels such as
+`rpc.grpc.status_code`. Gestalt also attaches `gestalt.rpc.role`,
+`gestalt.provider`, and `gestalt.host_service` when it can resolve them.
+
+The built-in gRPC stats handlers emit call duration metrics. They do not emit
+request body size, response body size, request messages per RPC, or response
+messages per RPC. Add custom interceptors and metric instruments if those
+dimensions become operationally important.
 
 If the process is started with `OTEL_SEMCONV_STABILITY_OPT_IN=rpc/dup`, the
 underlying gRPC instrumentation also emits legacy RPC metric families such as
