@@ -1609,6 +1609,10 @@ func (unavailableWorkflowManager) PublishEvent(context.Context, *principal.Princ
 
 type unavailableAgentManager struct{}
 
+func (unavailableAgentManager) Available() bool {
+	return false
+}
+
 func (unavailableAgentManager) Run(context.Context, *principal.Principal, coreagent.ManagerRunRequest) (*coreagent.ManagedRun, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }

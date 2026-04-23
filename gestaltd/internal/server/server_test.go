@@ -41,6 +41,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/adminui"
+	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
@@ -13657,6 +13658,7 @@ func TestAuthInfo(t *testing.T) {
 	if body["loginSupported"] != true {
 		t.Fatalf("expected loginSupported true, got %#v", body["loginSupported"])
 	}
+	requireAuthInfoAgentFeature(t, body, false)
 }
 
 func TestAuthInfoFallback(t *testing.T) {
@@ -13690,6 +13692,7 @@ func TestAuthInfoFallback(t *testing.T) {
 	if body["loginSupported"] != true {
 		t.Fatalf("expected loginSupported true, got %#v", body["loginSupported"])
 	}
+	requireAuthInfoAgentFeature(t, body, false)
 }
 
 func TestAuthInfoNoAuth(t *testing.T) {
@@ -13722,6 +13725,49 @@ func TestAuthInfoNoAuth(t *testing.T) {
 	}
 	if body["loginSupported"] != false {
 		t.Fatalf("expected loginSupported false, got %#v", body["loginSupported"])
+	}
+	requireAuthInfoAgentFeature(t, body, false)
+}
+
+func TestAuthInfoAgentFeature(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent: &stubAgentControl{
+				defaultProviderName: "managed",
+				provider:            newMemoryAgentProvider(),
+			},
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/api/v1/auth/info")
+	if err != nil {
+		t.Fatalf("GET /api/v1/auth/info: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	requireAuthInfoAgentFeature(t, body, true)
+}
+
+func requireAuthInfoAgentFeature(t *testing.T, body map[string]any, want bool) {
+	t.Helper()
+
+	features, ok := body["features"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected features object, got %#v", body["features"])
+	}
+	if features["agent"] != want {
+		t.Fatalf("expected features.agent %v, got %#v", want, features["agent"])
 	}
 }
 

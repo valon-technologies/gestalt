@@ -40,6 +40,7 @@ type AgentControl interface {
 }
 
 type Service interface {
+	Available() bool
 	Run(ctx context.Context, p *principal.Principal, req coreagent.ManagerRunRequest) (*coreagent.ManagedRun, error)
 	GetRun(ctx context.Context, p *principal.Principal, runID string) (*coreagent.ManagedRun, error)
 	ListRuns(ctx context.Context, p *principal.Principal) ([]*coreagent.ManagedRun, error)
@@ -95,6 +96,13 @@ func New(cfg Config) *Manager {
 		pluginInvokes:     pluginInvokes,
 		now:               now,
 	}
+}
+
+func (m *Manager) Available() bool {
+	if m == nil || m.agent == nil {
+		return false
+	}
+	return len(m.agent.ProviderNames()) > 0
 }
 
 func (m *Manager) Run(ctx context.Context, p *principal.Principal, req coreagent.ManagerRunRequest) (*coreagent.ManagedRun, error) {
