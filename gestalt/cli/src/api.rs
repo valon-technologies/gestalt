@@ -201,6 +201,7 @@ pub fn env_api_key_is_set() -> bool {
 
 pub struct ApiClient {
     client: Client,
+    stream_client: Client,
     base_url: String,
     token: String,
     token_source: TokenSource,
@@ -287,14 +288,22 @@ impl ApiClient {
             HeaderValue::from_static(http::APPLICATION_JSON),
         );
 
+        let request_timeout = std::time::Duration::from_secs(30);
         let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .default_headers(default_headers)
+            .timeout(request_timeout)
+            .default_headers(default_headers.clone())
             .build()
             .context("failed to build HTTP client")?;
+        let stream_client = Client::builder()
+            .timeout(None::<std::time::Duration>)
+            .connect_timeout(request_timeout)
+            .default_headers(default_headers)
+            .build()
+            .context("failed to build streaming HTTP client")?;
 
         Ok(Self {
             client,
+            stream_client,
             base_url: base_url.trim_end_matches('/').to_string(),
             token: token.to_string(),
             token_source: TokenSource::Direct,
@@ -303,6 +312,27 @@ impl ApiClient {
 
     pub fn get(&self, path: &str) -> Result<serde_json::Value> {
         self.send(Method::GET, path)
+    }
+
+    pub fn get_stream(&self, path: &str) -> Result<reqwest::blocking::Response> {
+        let url = format!("{}{}", self.base_url, path);
+        let resp = self
+            .stream_client
+            .request(Method::GET, &url)
+            .bearer_auth(&self.token)
+            .header(
+                header::ACCEPT,
+                HeaderValue::from_static("text/event-stream"),
+            )
+            .send()
+            .map_err(|e| self.wrap_send_error(e, &url))?;
+        let status = resp.status();
+        if !(status.is_client_error() || status.is_server_error()) {
+            return Ok(resp);
+        }
+        let body = resp.text().context("failed to read response body")?;
+        self.bail_on_error_response(status, &body)?;
+        bail!("HTTP {}: {}", status.as_u16(), body)
     }
 
     pub fn post<T>(&self, path: &str, body: &T) -> Result<serde_json::Value>

@@ -71,6 +71,8 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | `GET` | `/api/v1/agent/runs` | List agent runs. Supports optional `provider` and `status` query filters. |
 | `GET` | `/api/v1/agent/runs/{runID}` | Inspect one agent run. |
 | `POST` | `/api/v1/agent/runs/{runID}/cancel` | Cancel one agent run. The request body may include an optional `reason`. |
+| `GET` | `/api/v1/agent/runs/{runID}/events` | List stored events for one agent run. Supports optional `after` sequence cursor and `limit`. |
+| `GET` | `/api/v1/agent/runs/{runID}/events/stream` | Stream agent run events as server-sent events. Supports optional `after` sequence cursor and `limit`. |
 
 Agent run creation accepts `provider`, `model`, `messages`, `toolRefs`,
 optional `toolSource`, optional `responseSchema`, optional `sessionRef`,
@@ -241,6 +243,14 @@ curl -X POST http://localhost:8080/api/v1/agent/runs \
 # Inspect a run
 curl -H 'Authorization: Bearer gst_api_...' \
   http://localhost:8080/api/v1/agent/runs/run-123
+
+# List run events after sequence 0
+curl -H 'Authorization: Bearer gst_api_...' \
+  'http://localhost:8080/api/v1/agent/runs/run-123/events?after=0&limit=100'
+
+# Stream run events
+curl -N -H 'Authorization: Bearer gst_api_...' \
+  'http://localhost:8080/api/v1/agent/runs/run-123/events/stream?after=0'
 
 # List filtered runs
 curl -H 'Authorization: Bearer gst_api_...' \

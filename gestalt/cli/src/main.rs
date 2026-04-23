@@ -1,9 +1,9 @@
 use clap::{CommandFactory, Parser};
 use gestalt::api::{self, ApiClient};
 use gestalt::cli::{
-    AgentCommands, AgentRunCommands, AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs,
-    InvokeArgs, PluginCommands, TokenCommands, WorkflowCommands, WorkflowEventCommands,
-    WorkflowRunCommands, WorkflowScheduleCommands, WorkflowTriggerCommands,
+    AgentCommands, AgentRunCommands, AgentRunEventCommands, AuthCommands, Cli, Commands,
+    ConfigCommands, DescribeArgs, InvokeArgs, PluginCommands, TokenCommands, WorkflowCommands,
+    WorkflowEventCommands, WorkflowRunCommands, WorkflowScheduleCommands, WorkflowTriggerCommands,
 };
 use gestalt::commands;
 use gestalt::output;
@@ -140,6 +140,14 @@ fn run() -> anyhow::Result<()> {
                     AgentRunCommands::Cancel { id, reason } => {
                         commands::agents::cancel_run(&client, &id, reason.as_deref(), format)
                     }
+                    AgentRunCommands::Events { command } => match command {
+                        AgentRunEventCommands::List(args) => {
+                            commands::agents::list_run_events(&client, &args, format)
+                        }
+                        AgentRunEventCommands::Stream(args) => {
+                            commands::agents::stream_run_events(&client, &args)
+                        }
+                    },
                 },
             }
         }

@@ -16,6 +16,29 @@ const RUN_JSON: &str = r#"{
     "executionRef":"run-1"
 }"#;
 
+const RUN_EVENTS_JSON: &str = r#"[
+    {
+        "id":"evt-1",
+        "runId":"run-1",
+        "seq":1,
+        "type":"agent.run.started",
+        "source":"managed",
+        "visibility":"public",
+        "data":{"status":"running"},
+        "createdAt":"2026-04-22T00:00:01Z"
+    },
+    {
+        "id":"evt-2",
+        "runId":"run-1",
+        "seq":2,
+        "type":"agent.message.delta",
+        "source":"managed",
+        "visibility":"public",
+        "data":{"text":"risk is dependency churn"},
+        "createdAt":"2026-04-22T00:00:02Z"
+    }
+]"#;
+
 #[test]
 fn test_cli_creates_agent_run() {
     let mut server = Server::new();
@@ -207,4 +230,55 @@ fn test_cli_cancels_agent_run() {
         .assert()
         .success()
         .stdout(predicate::str::contains("canceled"));
+}
+
+#[test]
+fn test_cli_lists_agent_run_events() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/agent/runs/run-1/events?after=0&limit=10",
+        StatusCode::OK
+    )
+    .with_body(RUN_EVENTS_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "--format", "json", "agent", "runs", "events", "list", "run-1", "--after", "0",
+            "--limit", "10",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("agent.message.delta"))
+        .stdout(predicate::str::contains("risk is dependency churn"));
+}
+
+#[test]
+fn test_cli_streams_agent_run_events() {
+    let mut server = Server::new();
+    let _mock = server
+        .mock(
+            Method::GET.as_str(),
+            "/api/v1/agent/runs/run-1/events/stream?after=2&limit=1",
+        )
+        .match_header(header::AUTHORIZATION.as_str(), Matcher::Exact(test_bearer()))
+        .with_status(usize::from(StatusCode::OK.as_u16()))
+        .with_header(header::CONTENT_TYPE.as_str(), "text/event-stream")
+        .with_body(
+            "id: 3\nevent: agent.run.completed\ndata: {\"seq\":3,\"type\":\"agent.run.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        )
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "agent", "runs", "events", "stream", "run-1", "--after", "2", "--limit", "1",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("event: agent.run.completed"))
+        .stdout(predicate::str::contains(r#""status":"succeeded""#));
 }
