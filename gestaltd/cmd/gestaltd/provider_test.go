@@ -346,6 +346,40 @@ func TestRun_ProviderReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testin
 	}
 }
 
+func TestRun_ProviderReleaseWritesExecutableMetadataForManifestBackedPythonSourcePlugin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Python build fixture is POSIX-only")
+	}
+
+	t.Setenv("GESTALT_TEST_PYINSTALLER_BINARY", pluginBin)
+	t.Setenv("PATH", pathWithoutGo(t))
+
+	pluginDir := newManifestBackedPythonSourceReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.12-manifest.1"
+
+	runProviderReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := expectedPythonArchiveName(testVersion, runtime.GOOS, runtime.GOARCH)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	assertReleasedManifestHasHostedHTTPMetadata(t, manifest, "greet")
+	if manifest.Entrypoint == nil {
+		t.Fatal("expected provider entrypoint")
+	}
+
+	metadata := readProviderReleaseMetadata(t, outputDir)
+	if metadata.Runtime != providerReleaseRuntimeKindExecutable {
+		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindExecutable)
+	}
+	if _, ok := metadata.Artifacts[providerpkg.CurrentPlatformString()]; !ok {
+		t.Fatalf("release metadata artifacts missing current platform key %q: %+v", providerpkg.CurrentPlatformString(), metadata.Artifacts)
+	}
+}
+
 func TestRun_ProviderReleaseBuildsTypeScriptSourcePluginForCurrentPlatform(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake Bun build fixture is POSIX-only")
@@ -2295,6 +2329,37 @@ def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
 	}
 	writeTestFile(t, pluginDir, "manifest.yaml", manifestData, 0o644)
 	writeFakePythonReleaseInterpreter(t, filepath.Join(pluginDir, ".venv", "bin", "python"), runtime.GOOS, runtime.GOARCH)
+	return pluginDir
+}
+
+func newManifestBackedPythonSourceReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := newPythonSourceReleaseFixture(t, dir)
+	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindPlugin,
+		Source:  "github.com/testowner/plugins/python-release",
+		Version: "0.0.1",
+		Spec: &providermanifestv1.Spec{
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					BaseURL: "https://api.example.test",
+					Operations: []providermanifestv1.ProviderOperation{
+						{
+							Name:   "list_widgets",
+							Method: "GET",
+							Path:   "/widgets",
+						},
+					},
+				},
+			},
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+				},
+			},
+		},
+	})
 	return pluginDir
 }
 
