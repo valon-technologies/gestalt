@@ -13,7 +13,6 @@ const (
 	StoreWorkspaceRoles           = "workspace_roles"
 	StoreIdentityPluginAccess     = "identity_plugin_access"
 	StoreAPITokenAccess           = "api_token_access"
-	StoreWorkflowExecutionRefs    = "workflow_execution_refs"
 	StoreAgentRunMetadata         = "agent_run_metadata"
 	StoreAgentRunIdempotency      = "agent_run_idempotency"
 	StoreAgentRunEvents           = "agent_run_events"
@@ -199,25 +198,6 @@ var APITokenAccessSchema = indexeddb.ObjectStoreSchema{
 		{Name: "expires_at", Type: indexeddb.TypeTime},
 		{Name: "created_at", Type: indexeddb.TypeTime},
 		{Name: "updated_at", Type: indexeddb.TypeTime},
-	},
-}
-
-var WorkflowExecutionRefsSchema = indexeddb.ObjectStoreSchema{
-	Indexes: []indexeddb.IndexSchema{
-		{Name: "by_subject", KeyPath: []string{"subject_id"}},
-	},
-	Columns: []indexeddb.ColumnDef{
-		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-		{Name: "provider_name", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "target_plugin", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "target_operation", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "target_connection", Type: indexeddb.TypeString},
-		{Name: "target_instance", Type: indexeddb.TypeString},
-		{Name: "subject_id", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "credential_subject_id", Type: indexeddb.TypeString},
-		{Name: "permissions_json", Type: indexeddb.TypeString},
-		{Name: "created_at", Type: indexeddb.TypeTime},
-		{Name: "revoked_at", Type: indexeddb.TypeTime},
 	},
 }
 

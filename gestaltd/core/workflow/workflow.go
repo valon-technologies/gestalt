@@ -45,6 +45,12 @@ type ExecutionReference struct {
 	RevokedAt           *time.Time
 }
 
+type ExecutionReferenceStore interface {
+	PutExecutionReference(ctx context.Context, ref *ExecutionReference) (*ExecutionReference, error)
+	GetExecutionReference(ctx context.Context, id string) (*ExecutionReference, error)
+	ListExecutionReferences(ctx context.Context, subjectID string) ([]*ExecutionReference, error)
+}
+
 type Event struct {
 	ID              string
 	Source          string

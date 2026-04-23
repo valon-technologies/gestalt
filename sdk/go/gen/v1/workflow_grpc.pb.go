@@ -20,23 +20,26 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	WorkflowProvider_StartRun_FullMethodName           = "/gestalt.provider.v1.WorkflowProvider/StartRun"
-	WorkflowProvider_GetRun_FullMethodName             = "/gestalt.provider.v1.WorkflowProvider/GetRun"
-	WorkflowProvider_ListRuns_FullMethodName           = "/gestalt.provider.v1.WorkflowProvider/ListRuns"
-	WorkflowProvider_CancelRun_FullMethodName          = "/gestalt.provider.v1.WorkflowProvider/CancelRun"
-	WorkflowProvider_UpsertSchedule_FullMethodName     = "/gestalt.provider.v1.WorkflowProvider/UpsertSchedule"
-	WorkflowProvider_GetSchedule_FullMethodName        = "/gestalt.provider.v1.WorkflowProvider/GetSchedule"
-	WorkflowProvider_ListSchedules_FullMethodName      = "/gestalt.provider.v1.WorkflowProvider/ListSchedules"
-	WorkflowProvider_DeleteSchedule_FullMethodName     = "/gestalt.provider.v1.WorkflowProvider/DeleteSchedule"
-	WorkflowProvider_PauseSchedule_FullMethodName      = "/gestalt.provider.v1.WorkflowProvider/PauseSchedule"
-	WorkflowProvider_ResumeSchedule_FullMethodName     = "/gestalt.provider.v1.WorkflowProvider/ResumeSchedule"
-	WorkflowProvider_UpsertEventTrigger_FullMethodName = "/gestalt.provider.v1.WorkflowProvider/UpsertEventTrigger"
-	WorkflowProvider_GetEventTrigger_FullMethodName    = "/gestalt.provider.v1.WorkflowProvider/GetEventTrigger"
-	WorkflowProvider_ListEventTriggers_FullMethodName  = "/gestalt.provider.v1.WorkflowProvider/ListEventTriggers"
-	WorkflowProvider_DeleteEventTrigger_FullMethodName = "/gestalt.provider.v1.WorkflowProvider/DeleteEventTrigger"
-	WorkflowProvider_PauseEventTrigger_FullMethodName  = "/gestalt.provider.v1.WorkflowProvider/PauseEventTrigger"
-	WorkflowProvider_ResumeEventTrigger_FullMethodName = "/gestalt.provider.v1.WorkflowProvider/ResumeEventTrigger"
-	WorkflowProvider_PublishEvent_FullMethodName       = "/gestalt.provider.v1.WorkflowProvider/PublishEvent"
+	WorkflowProvider_StartRun_FullMethodName                = "/gestalt.provider.v1.WorkflowProvider/StartRun"
+	WorkflowProvider_GetRun_FullMethodName                  = "/gestalt.provider.v1.WorkflowProvider/GetRun"
+	WorkflowProvider_ListRuns_FullMethodName                = "/gestalt.provider.v1.WorkflowProvider/ListRuns"
+	WorkflowProvider_CancelRun_FullMethodName               = "/gestalt.provider.v1.WorkflowProvider/CancelRun"
+	WorkflowProvider_UpsertSchedule_FullMethodName          = "/gestalt.provider.v1.WorkflowProvider/UpsertSchedule"
+	WorkflowProvider_GetSchedule_FullMethodName             = "/gestalt.provider.v1.WorkflowProvider/GetSchedule"
+	WorkflowProvider_ListSchedules_FullMethodName           = "/gestalt.provider.v1.WorkflowProvider/ListSchedules"
+	WorkflowProvider_DeleteSchedule_FullMethodName          = "/gestalt.provider.v1.WorkflowProvider/DeleteSchedule"
+	WorkflowProvider_PauseSchedule_FullMethodName           = "/gestalt.provider.v1.WorkflowProvider/PauseSchedule"
+	WorkflowProvider_ResumeSchedule_FullMethodName          = "/gestalt.provider.v1.WorkflowProvider/ResumeSchedule"
+	WorkflowProvider_UpsertEventTrigger_FullMethodName      = "/gestalt.provider.v1.WorkflowProvider/UpsertEventTrigger"
+	WorkflowProvider_GetEventTrigger_FullMethodName         = "/gestalt.provider.v1.WorkflowProvider/GetEventTrigger"
+	WorkflowProvider_ListEventTriggers_FullMethodName       = "/gestalt.provider.v1.WorkflowProvider/ListEventTriggers"
+	WorkflowProvider_DeleteEventTrigger_FullMethodName      = "/gestalt.provider.v1.WorkflowProvider/DeleteEventTrigger"
+	WorkflowProvider_PauseEventTrigger_FullMethodName       = "/gestalt.provider.v1.WorkflowProvider/PauseEventTrigger"
+	WorkflowProvider_ResumeEventTrigger_FullMethodName      = "/gestalt.provider.v1.WorkflowProvider/ResumeEventTrigger"
+	WorkflowProvider_PutExecutionReference_FullMethodName   = "/gestalt.provider.v1.WorkflowProvider/PutExecutionReference"
+	WorkflowProvider_GetExecutionReference_FullMethodName   = "/gestalt.provider.v1.WorkflowProvider/GetExecutionReference"
+	WorkflowProvider_ListExecutionReferences_FullMethodName = "/gestalt.provider.v1.WorkflowProvider/ListExecutionReferences"
+	WorkflowProvider_PublishEvent_FullMethodName            = "/gestalt.provider.v1.WorkflowProvider/PublishEvent"
 )
 
 // WorkflowProviderClient is the client API for WorkflowProvider service.
@@ -59,6 +62,9 @@ type WorkflowProviderClient interface {
 	DeleteEventTrigger(ctx context.Context, in *DeleteWorkflowProviderEventTriggerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	PauseEventTrigger(ctx context.Context, in *PauseWorkflowProviderEventTriggerRequest, opts ...grpc.CallOption) (*BoundWorkflowEventTrigger, error)
 	ResumeEventTrigger(ctx context.Context, in *ResumeWorkflowProviderEventTriggerRequest, opts ...grpc.CallOption) (*BoundWorkflowEventTrigger, error)
+	PutExecutionReference(ctx context.Context, in *PutWorkflowExecutionReferenceRequest, opts ...grpc.CallOption) (*WorkflowExecutionReference, error)
+	GetExecutionReference(ctx context.Context, in *GetWorkflowExecutionReferenceRequest, opts ...grpc.CallOption) (*WorkflowExecutionReference, error)
+	ListExecutionReferences(ctx context.Context, in *ListWorkflowExecutionReferencesRequest, opts ...grpc.CallOption) (*ListWorkflowExecutionReferencesResponse, error)
 	PublishEvent(ctx context.Context, in *PublishWorkflowProviderEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
@@ -230,6 +236,36 @@ func (c *workflowProviderClient) ResumeEventTrigger(ctx context.Context, in *Res
 	return out, nil
 }
 
+func (c *workflowProviderClient) PutExecutionReference(ctx context.Context, in *PutWorkflowExecutionReferenceRequest, opts ...grpc.CallOption) (*WorkflowExecutionReference, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WorkflowExecutionReference)
+	err := c.cc.Invoke(ctx, WorkflowProvider_PutExecutionReference_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowProviderClient) GetExecutionReference(ctx context.Context, in *GetWorkflowExecutionReferenceRequest, opts ...grpc.CallOption) (*WorkflowExecutionReference, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(WorkflowExecutionReference)
+	err := c.cc.Invoke(ctx, WorkflowProvider_GetExecutionReference_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowProviderClient) ListExecutionReferences(ctx context.Context, in *ListWorkflowExecutionReferencesRequest, opts ...grpc.CallOption) (*ListWorkflowExecutionReferencesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListWorkflowExecutionReferencesResponse)
+	err := c.cc.Invoke(ctx, WorkflowProvider_ListExecutionReferences_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *workflowProviderClient) PublishEvent(ctx context.Context, in *PublishWorkflowProviderEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
@@ -260,6 +296,9 @@ type WorkflowProviderServer interface {
 	DeleteEventTrigger(context.Context, *DeleteWorkflowProviderEventTriggerRequest) (*emptypb.Empty, error)
 	PauseEventTrigger(context.Context, *PauseWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error)
 	ResumeEventTrigger(context.Context, *ResumeWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error)
+	PutExecutionReference(context.Context, *PutWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error)
+	GetExecutionReference(context.Context, *GetWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error)
+	ListExecutionReferences(context.Context, *ListWorkflowExecutionReferencesRequest) (*ListWorkflowExecutionReferencesResponse, error)
 	PublishEvent(context.Context, *PublishWorkflowProviderEventRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedWorkflowProviderServer()
 }
@@ -318,6 +357,15 @@ func (UnimplementedWorkflowProviderServer) PauseEventTrigger(context.Context, *P
 }
 func (UnimplementedWorkflowProviderServer) ResumeEventTrigger(context.Context, *ResumeWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResumeEventTrigger not implemented")
+}
+func (UnimplementedWorkflowProviderServer) PutExecutionReference(context.Context, *PutWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error) {
+	return nil, status.Error(codes.Unimplemented, "method PutExecutionReference not implemented")
+}
+func (UnimplementedWorkflowProviderServer) GetExecutionReference(context.Context, *GetWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetExecutionReference not implemented")
+}
+func (UnimplementedWorkflowProviderServer) ListExecutionReferences(context.Context, *ListWorkflowExecutionReferencesRequest) (*ListWorkflowExecutionReferencesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListExecutionReferences not implemented")
 }
 func (UnimplementedWorkflowProviderServer) PublishEvent(context.Context, *PublishWorkflowProviderEventRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method PublishEvent not implemented")
@@ -631,6 +679,60 @@ func _WorkflowProvider_ResumeEventTrigger_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WorkflowProvider_PutExecutionReference_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PutWorkflowExecutionReferenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowProviderServer).PutExecutionReference(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowProvider_PutExecutionReference_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowProviderServer).PutExecutionReference(ctx, req.(*PutWorkflowExecutionReferenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowProvider_GetExecutionReference_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetWorkflowExecutionReferenceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowProviderServer).GetExecutionReference(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowProvider_GetExecutionReference_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowProviderServer).GetExecutionReference(ctx, req.(*GetWorkflowExecutionReferenceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowProvider_ListExecutionReferences_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListWorkflowExecutionReferencesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowProviderServer).ListExecutionReferences(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowProvider_ListExecutionReferences_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowProviderServer).ListExecutionReferences(ctx, req.(*ListWorkflowExecutionReferencesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _WorkflowProvider_PublishEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PublishWorkflowProviderEventRequest)
 	if err := dec(in); err != nil {
@@ -719,6 +821,18 @@ var WorkflowProvider_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResumeEventTrigger",
 			Handler:    _WorkflowProvider_ResumeEventTrigger_Handler,
+		},
+		{
+			MethodName: "PutExecutionReference",
+			Handler:    _WorkflowProvider_PutExecutionReference_Handler,
+		},
+		{
+			MethodName: "GetExecutionReference",
+			Handler:    _WorkflowProvider_GetExecutionReference_Handler,
+		},
+		{
+			MethodName: "ListExecutionReferences",
+			Handler:    _WorkflowProvider_ListExecutionReferences_Handler,
 		},
 		{
 			MethodName: "PublishEvent",

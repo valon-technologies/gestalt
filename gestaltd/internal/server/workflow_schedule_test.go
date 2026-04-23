@@ -83,6 +83,7 @@ type memoryWorkflowProvider struct {
 	schedules            map[string]*coreworkflow.Schedule
 	triggers             map[string]*coreworkflow.EventTrigger
 	runs                 map[string]*coreworkflow.Run
+	executionRefs        map[string]*coreworkflow.ExecutionReference
 	publishEventReqs     []coreworkflow.PublishEventRequest
 	upsertReqs           []coreworkflow.UpsertScheduleRequest
 	upsertTriggerReqs    []coreworkflow.UpsertEventTriggerRequest
@@ -107,9 +108,10 @@ type memoryWorkflowProvider struct {
 
 func newMemoryWorkflowProvider() *memoryWorkflowProvider {
 	return &memoryWorkflowProvider{
-		schedules: map[string]*coreworkflow.Schedule{},
-		triggers:  map[string]*coreworkflow.EventTrigger{},
-		runs:      map[string]*coreworkflow.Run{},
+		schedules:     map[string]*coreworkflow.Schedule{},
+		triggers:      map[string]*coreworkflow.EventTrigger{},
+		runs:          map[string]*coreworkflow.Run{},
+		executionRefs: map[string]*coreworkflow.ExecutionReference{},
 	}
 }
 
@@ -339,8 +341,61 @@ func (p *memoryWorkflowProvider) PublishEvent(_ context.Context, req coreworkflo
 	return nil
 }
 
+func (p *memoryWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
+	if p.executionRefs == nil {
+		p.executionRefs = map[string]*coreworkflow.ExecutionReference{}
+	}
+	stored := cloneWorkflowExecutionReference(ref)
+	p.executionRefs[stored.ID] = stored
+	return cloneWorkflowExecutionReference(stored), nil
+}
+
+func (p *memoryWorkflowProvider) GetExecutionReference(_ context.Context, id string) (*coreworkflow.ExecutionReference, error) {
+	ref := p.executionRefs[strings.TrimSpace(id)]
+	if ref == nil {
+		return nil, core.ErrNotFound
+	}
+	return cloneWorkflowExecutionReference(ref), nil
+}
+
+func (p *memoryWorkflowProvider) ListExecutionReferences(_ context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
+	subjectID = strings.TrimSpace(subjectID)
+	out := make([]*coreworkflow.ExecutionReference, 0, len(p.executionRefs))
+	for _, ref := range p.executionRefs {
+		if ref == nil {
+			continue
+		}
+		if subjectID != "" && strings.TrimSpace(ref.SubjectID) != subjectID {
+			continue
+		}
+		out = append(out, cloneWorkflowExecutionReference(ref))
+	}
+	return out, nil
+}
+
 func (p *memoryWorkflowProvider) Ping(context.Context) error { return nil }
 func (p *memoryWorkflowProvider) Close() error               { return nil }
+
+func cloneWorkflowExecutionReference(ref *coreworkflow.ExecutionReference) *coreworkflow.ExecutionReference {
+	if ref == nil {
+		return nil
+	}
+	cloned := *ref
+	cloned.Target.Input = cloneMap(ref.Target.Input)
+	cloned.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
+	for i := range cloned.Permissions {
+		cloned.Permissions[i].Operations = append([]string(nil), cloned.Permissions[i].Operations...)
+	}
+	if ref.CreatedAt != nil {
+		value := *ref.CreatedAt
+		cloned.CreatedAt = &value
+	}
+	if ref.RevokedAt != nil {
+		value := *ref.RevokedAt
+		cloned.RevokedAt = &value
+	}
+	return &cloned
+}
 
 func cloneWorkflowSchedule(schedule *coreworkflow.Schedule) *coreworkflow.Schedule {
 	if schedule == nil {
@@ -542,7 +597,7 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	if createUpsert.ExecutionRef == "" {
 		t.Fatal("expected execution ref to be stored on create")
 	}
-	ref, err := services.WorkflowExecutionRefs.Get(context.Background(), createUpsert.ExecutionRef)
+	ref, err := provider.GetExecutionReference(context.Background(), createUpsert.ExecutionRef)
 	if err != nil {
 		t.Fatalf("Get execution ref: %v", err)
 	}
@@ -591,7 +646,7 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	if updateUpsert.ExecutionRef == "" || updateUpsert.ExecutionRef == createUpsert.ExecutionRef {
 		t.Fatalf("update execution ref = %q, want rotated from %q", updateUpsert.ExecutionRef, createUpsert.ExecutionRef)
 	}
-	oldRef, err := services.WorkflowExecutionRefs.Get(context.Background(), createUpsert.ExecutionRef)
+	oldRef, err := provider.GetExecutionReference(context.Background(), createUpsert.ExecutionRef)
 	if err != nil {
 		t.Fatalf("Get rotated old ref: %v", err)
 	}
@@ -634,7 +689,7 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	if _, ok := provider.schedules[created.ID]; ok {
 		t.Fatal("expected schedule to be deleted from provider")
 	}
-	ref, err = services.WorkflowExecutionRefs.Get(context.Background(), updateUpsert.ExecutionRef)
+	ref, err = provider.GetExecutionReference(context.Background(), updateUpsert.ExecutionRef)
 	if err != nil {
 		t.Fatalf("Get revoked ref: %v", err)
 	}
@@ -675,7 +730,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
-	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "workflow_schedule:sched-ada:ref-ada",
 		ProviderName: "basic",
 		Target:       provider.schedules["sched-ada"].Target,
@@ -683,7 +738,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Put ada ref: %v", err)
 	}
-	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "workflow_schedule:sched-grace:ref-grace",
 		ProviderName: "basic",
 		Target:       provider.schedules["sched-grace"].Target,
@@ -691,7 +746,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Put grace ref: %v", err)
 	}
-	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "workflow_schedule:sched-analytics:ref-analytics",
 		ProviderName: "basic",
 		Target:       provider.schedules["sched-analytics"].Target,
@@ -912,7 +967,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 			SubjectID:    principal.UserSubjectID(user.ID),
 		},
 	} {
-		if _, err := services.WorkflowExecutionRefs.Put(context.Background(), ref); err != nil {
+		if _, err := provider.PutExecutionReference(context.Background(), ref); err != nil {
 			t.Fatalf("Put execution ref %q: %v", ref.ID, err)
 		}
 	}
@@ -1022,7 +1077,7 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
-	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "workflow_schedule:sched-ada:ref-old",
 		ProviderName: "basic",
 		Target:       oldTarget,
@@ -1085,14 +1140,14 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 	if provider.schedules["sched-ada"].Target.Instance != "tenant-a" {
 		t.Fatalf("schedule target after failed update = %#v", provider.schedules["sched-ada"].Target)
 	}
-	oldRef, err := services.WorkflowExecutionRefs.Get(context.Background(), "workflow_schedule:sched-ada:ref-old")
+	oldRef, err := provider.GetExecutionReference(context.Background(), "workflow_schedule:sched-ada:ref-old")
 	if err != nil {
 		t.Fatalf("Get old ref: %v", err)
 	}
 	if oldRef.RevokedAt != nil && !oldRef.RevokedAt.IsZero() {
 		t.Fatalf("expected old ref to remain active, got %#v", oldRef)
 	}
-	newRef, err := services.WorkflowExecutionRefs.Get(context.Background(), provider.upsertReqs[0].ExecutionRef)
+	newRef, err := provider.GetExecutionReference(context.Background(), provider.upsertReqs[0].ExecutionRef)
 	if err != nil {
 		t.Fatalf("Get new ref: %v", err)
 	}
@@ -1261,7 +1316,7 @@ func TestGlobalWorkflowScheduleLookupIgnoresUnrelatedProviderFailures(t *testing
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
 	}
-	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+	if _, err := basicProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "workflow_schedule:sched-ada-basic:ref-basic",
 		ProviderName: "basic",
 		Target:       basicProvider.schedules["sched-ada-basic"].Target,
@@ -1362,7 +1417,7 @@ func TestGlobalWorkflowScheduleRejectsDuplicateActiveExecutionRefs(t *testing.T)
 	}
 	provider.schedules[schedule.ID] = schedule
 	for _, refID := range []string{"workflow_schedule:sched-ada:active-ref-1", "workflow_schedule:sched-ada:active-ref-2"} {
-		if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+		if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 			ID:           refID,
 			ProviderName: "basic",
 			Target:       schedule.Target,
@@ -1569,7 +1624,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	if updatedExecutionRef == "" || updatedExecutionRef == initialExecutionRef {
 		t.Fatalf("updated execution ref = %q, want rotated from %q", updatedExecutionRef, initialExecutionRef)
 	}
-	oldRef, err := services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
+	oldRef, err := basicProvider.GetExecutionReference(context.Background(), initialExecutionRef)
 	if err != nil {
 		t.Fatalf("Get initial execution ref: %v", err)
 	}
@@ -1618,7 +1673,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	if _, ok := advancedProvider.schedules[created.ID]; ok {
 		t.Fatal("expected schedule to be deleted from current global provider")
 	}
-	finalRef, err := services.WorkflowExecutionRefs.Get(context.Background(), updatedExecutionRef)
+	finalRef, err := advancedProvider.GetExecutionReference(context.Background(), updatedExecutionRef)
 	if err != nil {
 		t.Fatalf("Get final execution ref: %v", err)
 	}
@@ -1681,7 +1736,11 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 			SubjectID:    principal.UserSubjectID(grace.ID),
 		},
 	} {
-		if _, err := services.WorkflowExecutionRefs.Put(context.Background(), ref); err != nil {
+		targetProvider := basicProvider
+		if ref.ProviderName == "advanced" {
+			targetProvider = advancedProvider
+		}
+		if _, err := targetProvider.PutExecutionReference(context.Background(), ref); err != nil {
 			t.Fatalf("Put execution ref %q: %v", ref.ID, err)
 		}
 	}
@@ -1924,7 +1983,7 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	if updatedExecutionRef == "" || updatedExecutionRef == initialExecutionRef {
 		t.Fatalf("updated execution ref = %q, want rotated from %q", updatedExecutionRef, initialExecutionRef)
 	}
-	oldRef, err := services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
+	oldRef, err := basicProvider.GetExecutionReference(context.Background(), initialExecutionRef)
 	if err != nil {
 		t.Fatalf("Get initial execution ref: %v", err)
 	}
@@ -1973,7 +2032,7 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	if _, ok := advancedProvider.triggers[created.ID]; ok {
 		t.Fatal("expected event trigger to be deleted from current global provider")
 	}
-	finalRef, err := services.WorkflowExecutionRefs.Get(context.Background(), updatedExecutionRef)
+	finalRef, err := advancedProvider.GetExecutionReference(context.Background(), updatedExecutionRef)
 	if err != nil {
 		t.Fatalf("Get final execution ref: %v", err)
 	}
@@ -2036,7 +2095,11 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 			SubjectID:    principal.UserSubjectID(grace.ID),
 		},
 	} {
-		if _, err := services.WorkflowExecutionRefs.Put(context.Background(), ref); err != nil {
+		targetProvider := basicProvider
+		if ref.ProviderName == "advanced" {
+			targetProvider = advancedProvider
+		}
+		if _, err := targetProvider.PutExecutionReference(context.Background(), ref); err != nil {
 			t.Fatalf("Put execution ref %q: %v", ref.ID, err)
 		}
 	}

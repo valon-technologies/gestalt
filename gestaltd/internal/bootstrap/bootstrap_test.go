@@ -53,7 +53,15 @@ import (
 
 func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, providerName string, target coreworkflow.Target) string {
 	t.Helper()
-	ref, err := deps.Services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
+	if err != nil {
+		t.Fatalf("resolve workflow provider %q: %v", providerName, err)
+	}
+	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
+	if !ok {
+		t.Fatalf("workflow provider %q does not support execution refs", providerName)
+	}
+	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, target.Operation),
 		ProviderName: providerName,
 		Target:       target,
@@ -774,6 +782,7 @@ type recordingWorkflowProvider struct {
 	getEventTrigger            *coreworkflow.EventTrigger
 	getEventTriggerErr         error
 	eventTriggers              map[string]*coreworkflow.EventTrigger
+	executionRefs              map[string]*coreworkflow.ExecutionReference
 	deleteMissingNotFound      bool
 	deleteEventMissingNotFound bool
 	closed                     *atomic.Bool
@@ -823,7 +832,14 @@ func (p *recordingWorkflowProvider) ListSchedules(context.Context, coreworkflow.
 	if p.listSchedulesErr != nil {
 		return nil, p.listSchedulesErr
 	}
-	return append([]*coreworkflow.Schedule(nil), p.listedSchedules...), nil
+	if p.listedSchedules != nil {
+		return append([]*coreworkflow.Schedule(nil), p.listedSchedules...), nil
+	}
+	out := make([]*coreworkflow.Schedule, 0, len(p.schedules))
+	for _, schedule := range p.schedules {
+		out = append(out, p.scheduleGetResponse(schedule))
+	}
+	return out, nil
 }
 func (p *recordingWorkflowProvider) DeleteSchedule(_ context.Context, req coreworkflow.DeleteScheduleRequest) error {
 	p.deletedSchedules = append(p.deletedSchedules, req)
@@ -881,7 +897,14 @@ func (p *recordingWorkflowProvider) ListEventTriggers(context.Context, coreworkf
 	if p.listEventTriggersErr != nil {
 		return nil, p.listEventTriggersErr
 	}
-	return append([]*coreworkflow.EventTrigger(nil), p.listedEventTriggers...), nil
+	if p.listedEventTriggers != nil {
+		return append([]*coreworkflow.EventTrigger(nil), p.listedEventTriggers...), nil
+	}
+	out := make([]*coreworkflow.EventTrigger, 0, len(p.eventTriggers))
+	for _, trigger := range p.eventTriggers {
+		out = append(out, trigger)
+	}
+	return out, nil
 }
 func (p *recordingWorkflowProvider) DeleteEventTrigger(_ context.Context, req coreworkflow.DeleteEventTriggerRequest) error {
 	p.deletedEventTriggers = append(p.deletedEventTriggers, req)
@@ -911,6 +934,34 @@ func (p *recordingWorkflowProvider) ResumeEventTrigger(context.Context, corework
 func (p *recordingWorkflowProvider) PublishEvent(context.Context, coreworkflow.PublishEventRequest) error {
 	return nil
 }
+func (p *recordingWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
+	if p.executionRefs == nil {
+		p.executionRefs = map[string]*coreworkflow.ExecutionReference{}
+	}
+	stored := cloneBootstrapWorkflowExecutionRef(ref)
+	p.executionRefs[stored.ID] = stored
+	return cloneBootstrapWorkflowExecutionRef(stored), nil
+}
+func (p *recordingWorkflowProvider) GetExecutionReference(_ context.Context, id string) (*coreworkflow.ExecutionReference, error) {
+	if ref := p.executionRefs[strings.TrimSpace(id)]; ref != nil {
+		return cloneBootstrapWorkflowExecutionRef(ref), nil
+	}
+	return nil, core.ErrNotFound
+}
+func (p *recordingWorkflowProvider) ListExecutionReferences(_ context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
+	subjectID = strings.TrimSpace(subjectID)
+	out := make([]*coreworkflow.ExecutionReference, 0, len(p.executionRefs))
+	for _, ref := range p.executionRefs {
+		if ref == nil {
+			continue
+		}
+		if subjectID != "" && strings.TrimSpace(ref.SubjectID) != subjectID {
+			continue
+		}
+		out = append(out, cloneBootstrapWorkflowExecutionRef(ref))
+	}
+	return out, nil
+}
 func (p *recordingWorkflowProvider) Ping(context.Context) error { return nil }
 func (p *recordingWorkflowProvider) Close() error {
 	if p.closed != nil {
@@ -928,6 +979,29 @@ func (p *recordingWorkflowProvider) scheduleGetResponse(schedule *coreworkflow.S
 		value.ExecutionRef = ""
 	}
 	return &value
+}
+
+func cloneBootstrapWorkflowExecutionRef(ref *coreworkflow.ExecutionReference) *coreworkflow.ExecutionReference {
+	if ref == nil {
+		return nil
+	}
+	clone := *ref
+	if ref.Target.Input != nil {
+		clone.Target.Input = maps.Clone(ref.Target.Input)
+	}
+	clone.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
+	for i := range clone.Permissions {
+		clone.Permissions[i].Operations = append([]string(nil), clone.Permissions[i].Operations...)
+	}
+	if ref.CreatedAt != nil {
+		createdAt := ref.CreatedAt.UTC()
+		clone.CreatedAt = &createdAt
+	}
+	if ref.RevokedAt != nil {
+		revokedAt := ref.RevokedAt.UTC()
+		clone.RevokedAt = &revokedAt
+	}
+	return &clone
 }
 
 type trackedIndexedDB struct {
@@ -2455,7 +2529,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	if strings.TrimSpace(got.ExecutionRef) == "" {
 		t.Fatal("execution ref = empty")
 	}
-	ref, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), got.ExecutionRef)
+	ref, err := recorder.GetExecutionReference(context.Background(), got.ExecutionRef)
 	if err != nil {
 		t.Fatalf("Get execution ref: %v", err)
 	}
@@ -2548,8 +2622,13 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
 	recorders := []*recordingWorkflowProvider{}
+	sharedSchedules := map[string]*coreworkflow.Schedule{}
+	sharedExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
 	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		recorder := &recordingWorkflowProvider{}
+		recorder := &recordingWorkflowProvider{
+			schedules:     sharedSchedules,
+			executionRefs: sharedExecutionRefs,
+		}
 		recorders = append(recorders, recorder)
 		return recorder, nil
 	}
@@ -2611,7 +2690,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
 	if len(recorder.upsertedSchedules) != 0 {
 		t.Fatalf("upserted schedules = %d, want 0", len(recorder.upsertedSchedules))
 	}
-	ref, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
+	ref, err := recorder.GetExecutionReference(context.Background(), initialExecutionRef)
 	if err != nil {
 		t.Fatalf("Get revoked execution ref: %v", err)
 	}
@@ -2665,8 +2744,19 @@ func TestBootstrapMovesConfiguredWorkflowSchedulesToNewProvider(t *testing.T) {
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
 	recorders := map[string][]*recordingWorkflowProvider{}
+	sharedSchedules := map[string]map[string]*coreworkflow.Schedule{}
+	sharedExecutionRefs := map[string]map[string]*coreworkflow.ExecutionReference{}
 	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		recorder := &recordingWorkflowProvider{}
+		if sharedSchedules[name] == nil {
+			sharedSchedules[name] = map[string]*coreworkflow.Schedule{}
+		}
+		if sharedExecutionRefs[name] == nil {
+			sharedExecutionRefs[name] = map[string]*coreworkflow.ExecutionReference{}
+		}
+		recorder := &recordingWorkflowProvider{
+			schedules:     sharedSchedules[name],
+			executionRefs: sharedExecutionRefs[name],
+		}
 		recorders[name] = append(recorders[name], recorder)
 		return recorder, nil
 	}
@@ -2736,14 +2826,14 @@ func TestBootstrapMovesConfiguredWorkflowSchedulesToNewProvider(t *testing.T) {
 		t.Fatalf("backup upserted schedules = %d, want 1", len(recorders["backup"][1].upsertedSchedules))
 	}
 	backupExecutionRef := recorders["backup"][1].upsertedSchedules[0].ExecutionRef
-	oldRef, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
+	oldRef, err := recorders["temporal"][1].GetExecutionReference(context.Background(), initialExecutionRef)
 	if err != nil {
 		t.Fatalf("Get initial execution ref: %v", err)
 	}
 	if oldRef.RevokedAt == nil || oldRef.RevokedAt.IsZero() {
 		t.Fatalf("initial revokedAt = %#v, want set", oldRef.RevokedAt)
 	}
-	newRef, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), backupExecutionRef)
+	newRef, err := recorders["backup"][1].GetExecutionReference(context.Background(), backupExecutionRef)
 	if err != nil {
 		t.Fatalf("Get backup execution ref: %v", err)
 	}
@@ -2770,7 +2860,22 @@ func TestBootstrapClosesWorkflowProvidersWhenConfigScheduleReconcileFails(t *tes
 	db := &coretesting.StubIndexedDB{}
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+	temporalSchedules := map[string]*coreworkflow.Schedule{}
+	temporalExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
+	temporalStarts := 0
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		if name == "temporal" {
+			temporalStarts++
+			provider := &recordingWorkflowProvider{
+				schedules:     temporalSchedules,
+				executionRefs: temporalExecutionRefs,
+				closed:        closed,
+			}
+			if temporalStarts > 1 {
+				provider.deleteScheduleErr = fmt.Errorf("delete boom")
+			}
+			return provider, nil
+		}
 		return &recordingWorkflowProvider{closed: closed}, nil
 	}
 
@@ -2804,12 +2909,13 @@ func TestBootstrapClosesWorkflowProvidersWhenConfigScheduleReconcileFails(t *tes
 		},
 	})
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
-		"backup": {Source: config.ProviderSource{Path: "stub"}},
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		"backup":   {Source: config.ProviderSource{Path: "stub"}},
 	}
 
 	_, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err == nil || !strings.Contains(err.Error(), `requires provider "temporal"`) {
-		t.Fatalf("Bootstrap error = %v, want missing old provider cleanup failure", err)
+	if err == nil || !strings.Contains(err.Error(), "delete boom") {
+		t.Fatalf("Bootstrap error = %v, want delete failure", err)
 	}
 	if !closed.Load() {
 		t.Fatal("workflow provider was not closed after reconcile failure")
@@ -2946,10 +3052,10 @@ func TestBootstrapReAdoptsManagedSchedulesWhenOwnershipStateIsMissing(t *testing
 		t.Fatalf("upserted schedules = %d, want 2", len(provider.upsertedSchedules))
 	}
 	rotatedExecutionRef := provider.upsertedSchedules[1].ExecutionRef
-	if rotatedExecutionRef == initialExecutionRef {
-		t.Fatalf("execution ref = %q, want rotation from %q", rotatedExecutionRef, initialExecutionRef)
+	if rotatedExecutionRef != initialExecutionRef {
+		t.Fatalf("execution ref = %q, want reuse of %q", rotatedExecutionRef, initialExecutionRef)
 	}
-	newRef, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), rotatedExecutionRef)
+	newRef, err := provider.GetExecutionReference(context.Background(), rotatedExecutionRef)
 	if err != nil {
 		t.Fatalf("Get rotated execution ref: %v", err)
 	}
@@ -3005,7 +3111,7 @@ func TestBootstrapReusesConfiguredWorkflowExecutionRefAcrossUnchangedBootstrap(t
 	if reusedExecutionRef != initialExecutionRef {
 		t.Fatalf("execution ref = %q, want reuse of %q", reusedExecutionRef, initialExecutionRef)
 	}
-	ref, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
+	ref, err := provider.GetExecutionReference(context.Background(), initialExecutionRef)
 	if err != nil {
 		t.Fatalf("Get execution ref: %v", err)
 	}
@@ -3044,7 +3150,6 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowSchedule(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Bootstrap initial: %v", err)
 	}
-	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
 	_ = result.Close(context.Background())
 	provider.schedules = map[string]*coreworkflow.Schedule{}
 
@@ -3062,15 +3167,8 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowSchedule(t *testing.T) 
 	}
 	_ = result.Close(context.Background())
 
-	if len(provider.deletedSchedules) != 1 {
-		t.Fatalf("deleted schedules = %d, want 1", len(provider.deletedSchedules))
-	}
-	ref, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
-	if err != nil {
-		t.Fatalf("Get revoked execution ref: %v", err)
-	}
-	if ref.RevokedAt == nil || ref.RevokedAt.IsZero() {
-		t.Fatalf("revokedAt = %#v, want set", ref.RevokedAt)
+	if len(provider.deletedSchedules) != 0 {
+		t.Fatalf("deleted schedules = %d, want 0", len(provider.deletedSchedules))
 	}
 
 	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
@@ -3080,8 +3178,8 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowSchedule(t *testing.T) 
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	if len(provider.deletedSchedules) != 1 {
-		t.Fatalf("deleted schedules after replay = %d, want 1", len(provider.deletedSchedules))
+	if len(provider.deletedSchedules) != 0 {
+		t.Fatalf("deleted schedules after replay = %d, want 0", len(provider.deletedSchedules))
 	}
 }
 
@@ -3134,12 +3232,12 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedulesWhenProviderDropsExec
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	ref, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
+	ref, err := provider.GetExecutionReference(context.Background(), initialExecutionRef)
 	if err != nil {
 		t.Fatalf("Get revoked execution ref: %v", err)
 	}
-	if ref.RevokedAt == nil || ref.RevokedAt.IsZero() {
-		t.Fatalf("revokedAt = %#v, want set", ref.RevokedAt)
+	if ref.RevokedAt != nil {
+		t.Fatalf("revokedAt = %#v, want nil when provider omits execution_ref", ref.RevokedAt)
 	}
 }
 
@@ -3178,7 +3276,6 @@ func TestBootstrapIgnoresMissingOldScheduleDuringWorkflowProviderMove(t *testing
 	if err != nil {
 		t.Fatalf("Bootstrap initial: %v", err)
 	}
-	initialExecutionRef := temporal.upsertedSchedules[0].ExecutionRef
 	_ = result.Close(context.Background())
 	temporal.schedules = map[string]*coreworkflow.Schedule{}
 
@@ -3208,15 +3305,8 @@ func TestBootstrapIgnoresMissingOldScheduleDuringWorkflowProviderMove(t *testing
 	if len(backup.upsertedSchedules) != 1 {
 		t.Fatalf("backup upserted schedules = %d, want 1", len(backup.upsertedSchedules))
 	}
-	if len(temporal.deletedSchedules) == 0 {
-		t.Fatal("expected temporal cleanup delete to be attempted")
-	}
-	ref, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), initialExecutionRef)
-	if err != nil {
-		t.Fatalf("Get revoked execution ref: %v", err)
-	}
-	if ref.RevokedAt == nil || ref.RevokedAt.IsZero() {
-		t.Fatalf("revokedAt = %#v, want set", ref.RevokedAt)
+	if len(temporal.deletedSchedules) != 0 {
+		t.Fatalf("temporal deleted schedules = %d, want 0", len(temporal.deletedSchedules))
 	}
 }
 
@@ -3285,7 +3375,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	if strings.TrimSpace(got.ExecutionRef) == "" {
 		t.Fatal("execution ref = empty")
 	}
-	ref, err := result.Services.WorkflowExecutionRefs.Get(context.Background(), got.ExecutionRef)
+	ref, err := recorder.GetExecutionReference(context.Background(), got.ExecutionRef)
 	if err != nil {
 		t.Fatalf("Get execution ref: %v", err)
 	}
@@ -3346,8 +3436,13 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowEventTriggers(t *testing.T) {
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
 	recorders := []*recordingWorkflowProvider{}
+	sharedEventTriggers := map[string]*coreworkflow.EventTrigger{}
+	sharedExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
 	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		recorder := &recordingWorkflowProvider{}
+		recorder := &recordingWorkflowProvider{
+			eventTriggers: sharedEventTriggers,
+			executionRefs: sharedExecutionRefs,
+		}
 		recorders = append(recorders, recorder)
 		return recorder, nil
 	}
@@ -3415,8 +3510,19 @@ func TestBootstrapMovesConfiguredWorkflowEventTriggersToNewProvider(t *testing.T
 	factories := validFactories()
 	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
 	recorders := map[string][]*recordingWorkflowProvider{}
+	sharedEventTriggers := map[string]map[string]*coreworkflow.EventTrigger{}
+	sharedExecutionRefs := map[string]map[string]*coreworkflow.ExecutionReference{}
 	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		recorder := &recordingWorkflowProvider{}
+		if sharedEventTriggers[name] == nil {
+			sharedEventTriggers[name] = map[string]*coreworkflow.EventTrigger{}
+		}
+		if sharedExecutionRefs[name] == nil {
+			sharedExecutionRefs[name] = map[string]*coreworkflow.ExecutionReference{}
+		}
+		recorder := &recordingWorkflowProvider{
+			eventTriggers: sharedEventTriggers[name],
+			executionRefs: sharedExecutionRefs[name],
+		}
 		recorders[name] = append(recorders[name], recorder)
 		return recorder, nil
 	}
@@ -3698,8 +3804,8 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowEventTrigger(t *testing
 	}
 	_ = result.Close(context.Background())
 
-	if len(provider.deletedEventTriggers) != 1 {
-		t.Fatalf("deleted event triggers = %d, want 1", len(provider.deletedEventTriggers))
+	if len(provider.deletedEventTriggers) != 0 {
+		t.Fatalf("deleted event triggers = %d, want 0", len(provider.deletedEventTriggers))
 	}
 
 	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
@@ -3709,8 +3815,8 @@ func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowEventTrigger(t *testing
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	if len(provider.deletedEventTriggers) != 1 {
-		t.Fatalf("deleted event triggers after replay = %d, want 1", len(provider.deletedEventTriggers))
+	if len(provider.deletedEventTriggers) != 0 {
+		t.Fatalf("deleted event triggers after replay = %d, want 0", len(provider.deletedEventTriggers))
 	}
 }
 
@@ -3780,8 +3886,8 @@ func TestBootstrapIgnoresMissingOldEventTriggerDuringWorkflowProviderMove(t *tes
 	if len(backup.upsertedEventTriggers) != 1 {
 		t.Fatalf("backup upserted event triggers = %d, want 1", len(backup.upsertedEventTriggers))
 	}
-	if len(temporal.deletedEventTriggers) == 0 {
-		t.Fatal("expected temporal cleanup delete to be attempted")
+	if len(temporal.deletedEventTriggers) != 0 {
+		t.Fatalf("temporal deleted event triggers = %d, want 0", len(temporal.deletedEventTriggers))
 	}
 }
 

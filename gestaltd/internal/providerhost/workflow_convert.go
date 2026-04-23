@@ -6,6 +6,7 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -80,6 +81,81 @@ func workflowActorFromProto(actor *proto.WorkflowActor) coreworkflow.Actor {
 		DisplayName: actor.GetDisplayName(),
 		AuthSource:  actor.GetAuthSource(),
 	}
+}
+
+func workflowExecutionReferenceToProto(ref *coreworkflow.ExecutionReference) (*proto.WorkflowExecutionReference, error) {
+	if ref == nil {
+		return nil, nil
+	}
+	target, err := workflowTargetToProto(ref.Target)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.WorkflowExecutionReference{
+		Id:                  ref.ID,
+		ProviderName:        ref.ProviderName,
+		Target:              target,
+		SubjectId:           ref.SubjectID,
+		CredentialSubjectId: ref.CredentialSubjectID,
+		Permissions:         workflowAccessPermissionsToProto(ref.Permissions),
+		CreatedAt:           timeToProto(ref.CreatedAt),
+		RevokedAt:           timeToProto(ref.RevokedAt),
+	}, nil
+}
+
+func workflowExecutionReferenceFromProto(ref *proto.WorkflowExecutionReference) (*coreworkflow.ExecutionReference, error) {
+	if ref == nil {
+		return nil, nil
+	}
+	return &coreworkflow.ExecutionReference{
+		ID:                  strings.TrimSpace(ref.GetId()),
+		ProviderName:        strings.TrimSpace(ref.GetProviderName()),
+		Target:              workflowTargetFromProto(ref.GetTarget()),
+		SubjectID:           strings.TrimSpace(ref.GetSubjectId()),
+		CredentialSubjectID: strings.TrimSpace(ref.GetCredentialSubjectId()),
+		Permissions:         workflowAccessPermissionsFromProto(ref.GetPermissions()),
+		CreatedAt:           timeFromProto(ref.GetCreatedAt()),
+		RevokedAt:           timeFromProto(ref.GetRevokedAt()),
+	}, nil
+}
+
+func workflowAccessPermissionsToProto(values []core.AccessPermission) []*proto.WorkflowAccessPermission {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]*proto.WorkflowAccessPermission, 0, len(values))
+	for _, value := range values {
+		pluginName := strings.TrimSpace(value.Plugin)
+		if pluginName == "" {
+			continue
+		}
+		out = append(out, &proto.WorkflowAccessPermission{
+			Plugin:     pluginName,
+			Operations: append([]string(nil), value.Operations...),
+		})
+	}
+	return out
+}
+
+func workflowAccessPermissionsFromProto(values []*proto.WorkflowAccessPermission) []core.AccessPermission {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]core.AccessPermission, 0, len(values))
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		pluginName := strings.TrimSpace(value.GetPlugin())
+		if pluginName == "" {
+			continue
+		}
+		out = append(out, core.AccessPermission{
+			Plugin:     pluginName,
+			Operations: append([]string(nil), value.GetOperations()...),
+		})
+	}
+	return out
 }
 
 func workflowEventToProto(event coreworkflow.Event) (*proto.WorkflowEvent, error) {

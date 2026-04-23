@@ -108,6 +108,22 @@ message BoundWorkflowEventTrigger {
   string execution_ref = 8;
 }
 
+message WorkflowAccessPermission {
+  string plugin = 1;
+  repeated string operations = 2;
+}
+
+message WorkflowExecutionReference {
+  string id = 1;
+  string provider_name = 2;
+  BoundWorkflowTarget target = 3;
+  string subject_id = 4;
+  string credential_subject_id = 5;
+  repeated WorkflowAccessPermission permissions = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp revoked_at = 8;
+}
+
 message StartWorkflowProviderRunRequest {
   BoundWorkflowTarget target = 1;
   string idempotency_key = 2;
@@ -179,6 +195,22 @@ message ListWorkflowProviderEventTriggersRequest {}
 
 message ListWorkflowProviderEventTriggersResponse {
   repeated BoundWorkflowEventTrigger triggers = 1;
+}
+
+message PutWorkflowExecutionReferenceRequest {
+  WorkflowExecutionReference reference = 1;
+}
+
+message GetWorkflowExecutionReferenceRequest {
+  string id = 1;
+}
+
+message ListWorkflowExecutionReferencesRequest {
+  string subject_id = 1;
+}
+
+message ListWorkflowExecutionReferencesResponse {
+  repeated WorkflowExecutionReference references = 1;
 }
 
 message DeleteWorkflowProviderEventTriggerRequest {
@@ -349,6 +381,10 @@ service WorkflowProvider {
   rpc DeleteEventTrigger(DeleteWorkflowProviderEventTriggerRequest) returns (google.protobuf.Empty);
   rpc PauseEventTrigger(PauseWorkflowProviderEventTriggerRequest) returns (BoundWorkflowEventTrigger);
   rpc ResumeEventTrigger(ResumeWorkflowProviderEventTriggerRequest) returns (BoundWorkflowEventTrigger);
+
+  rpc PutExecutionReference(PutWorkflowExecutionReferenceRequest) returns (WorkflowExecutionReference);
+  rpc GetExecutionReference(GetWorkflowExecutionReferenceRequest) returns (WorkflowExecutionReference);
+  rpc ListExecutionReferences(ListWorkflowExecutionReferencesRequest) returns (ListWorkflowExecutionReferencesResponse);
 
   rpc PublishEvent(PublishWorkflowProviderEventRequest) returns (google.protobuf.Empty);
 }

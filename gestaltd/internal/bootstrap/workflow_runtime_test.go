@@ -11,12 +11,10 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
@@ -34,73 +32,83 @@ func (f funcInvoker) Invoke(ctx context.Context, p *principal.Principal, provide
 	return f.invoke(ctx, p, providerName, instance, operation, params)
 }
 
-type erroringIndexedDB struct {
-	err error
+type workflowRuntimeExecutionRefProvider struct {
+	startupTestWorkflowProvider
+	refs map[string]*coreworkflow.ExecutionReference
+	err  error
 }
 
-func (d *erroringIndexedDB) ObjectStore(string) indexeddb.ObjectStore {
-	return erroringObjectStore{err: d.err}
-}
-func (d *erroringIndexedDB) CreateObjectStore(context.Context, string, indexeddb.ObjectStoreSchema) error {
-	return d.err
-}
-func (d *erroringIndexedDB) DeleteObjectStore(context.Context, string) error { return d.err }
-func (d *erroringIndexedDB) Ping(context.Context) error                      { return d.err }
-func (d *erroringIndexedDB) Close() error                                    { return d.err }
-
-type erroringObjectStore struct {
-	err error
+func newWorkflowRuntimeExecutionRefProvider() *workflowRuntimeExecutionRefProvider {
+	return &workflowRuntimeExecutionRefProvider{refs: map[string]*coreworkflow.ExecutionReference{}}
 }
 
-func (o erroringObjectStore) Get(context.Context, string) (indexeddb.Record, error) {
-	return nil, o.err
-}
-func (o erroringObjectStore) GetKey(context.Context, string) (string, error) { return "", o.err }
-func (o erroringObjectStore) Add(context.Context, indexeddb.Record) error    { return o.err }
-func (o erroringObjectStore) Put(context.Context, indexeddb.Record) error    { return o.err }
-func (o erroringObjectStore) Delete(context.Context, string) error           { return o.err }
-func (o erroringObjectStore) Clear(context.Context) error                    { return o.err }
-func (o erroringObjectStore) GetAll(context.Context, *indexeddb.KeyRange) ([]indexeddb.Record, error) {
-	return nil, o.err
-}
-func (o erroringObjectStore) GetAllKeys(context.Context, *indexeddb.KeyRange) ([]string, error) {
-	return nil, o.err
-}
-func (o erroringObjectStore) Count(context.Context, *indexeddb.KeyRange) (int64, error) {
-	return 0, o.err
-}
-func (o erroringObjectStore) DeleteRange(context.Context, indexeddb.KeyRange) (int64, error) {
-	return 0, o.err
-}
-func (o erroringObjectStore) Index(string) indexeddb.Index { return erroringIndex(o) }
-func (o erroringObjectStore) OpenCursor(context.Context, *indexeddb.KeyRange, indexeddb.CursorDirection) (indexeddb.Cursor, error) {
-	return nil, o.err
-}
-func (o erroringObjectStore) OpenKeyCursor(context.Context, *indexeddb.KeyRange, indexeddb.CursorDirection) (indexeddb.Cursor, error) {
-	return nil, o.err
+func (p *workflowRuntimeExecutionRefProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
+	if p.refs == nil {
+		p.refs = map[string]*coreworkflow.ExecutionReference{}
+	}
+	stored := cloneRuntimeExecutionRef(ref)
+	p.refs[stored.ID] = stored
+	return cloneRuntimeExecutionRef(stored), nil
 }
 
-type erroringIndex struct {
-	err error
+func (p *workflowRuntimeExecutionRefProvider) GetExecutionReference(_ context.Context, id string) (*coreworkflow.ExecutionReference, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
+	ref := p.refs[id]
+	if ref == nil {
+		return nil, core.ErrNotFound
+	}
+	return cloneRuntimeExecutionRef(ref), nil
 }
 
-func (i erroringIndex) Get(context.Context, ...any) (indexeddb.Record, error) { return nil, i.err }
-func (i erroringIndex) GetKey(context.Context, ...any) (string, error)        { return "", i.err }
-func (i erroringIndex) GetAll(context.Context, *indexeddb.KeyRange, ...any) ([]indexeddb.Record, error) {
-	return nil, i.err
+func (p *workflowRuntimeExecutionRefProvider) ListExecutionReferences(_ context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
+	out := make([]*coreworkflow.ExecutionReference, 0, len(p.refs))
+	for _, ref := range p.refs {
+		if subjectID != "" && ref.SubjectID != subjectID {
+			continue
+		}
+		out = append(out, cloneRuntimeExecutionRef(ref))
+	}
+	return out, nil
 }
-func (i erroringIndex) GetAllKeys(context.Context, *indexeddb.KeyRange, ...any) ([]string, error) {
-	return nil, i.err
+
+func cloneRuntimeExecutionRef(ref *coreworkflow.ExecutionReference) *coreworkflow.ExecutionReference {
+	if ref == nil {
+		return nil
+	}
+	clone := *ref
+	clone.Target.Input = cloneMapAny(ref.Target.Input)
+	clone.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
+	for i := range clone.Permissions {
+		clone.Permissions[i].Operations = append([]string(nil), ref.Permissions[i].Operations...)
+	}
+	if ref.CreatedAt != nil {
+		createdAt := ref.CreatedAt.UTC()
+		clone.CreatedAt = &createdAt
+	}
+	if ref.RevokedAt != nil {
+		revokedAt := ref.RevokedAt.UTC()
+		clone.RevokedAt = &revokedAt
+	}
+	return &clone
 }
-func (i erroringIndex) Count(context.Context, *indexeddb.KeyRange, ...any) (int64, error) {
-	return 0, i.err
-}
-func (i erroringIndex) Delete(context.Context, ...any) (int64, error) { return 0, i.err }
-func (i erroringIndex) OpenCursor(context.Context, *indexeddb.KeyRange, indexeddb.CursorDirection, ...any) (indexeddb.Cursor, error) {
-	return nil, i.err
-}
-func (i erroringIndex) OpenKeyCursor(context.Context, *indexeddb.KeyRange, indexeddb.CursorDirection, ...any) (indexeddb.Cursor, error) {
-	return nil, i.err
+
+func cloneMapAny(value map[string]any) map[string]any {
+	if value == nil {
+		return nil
+	}
+	out := make(map[string]any, len(value))
+	for key, item := range value {
+		out[key] = item
+	}
+	return out
 }
 
 type workflowRoundTripProvider struct {
@@ -337,7 +345,8 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
-	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "exec-ref-123",
 		ProviderName: "temporal",
 		Target: coreworkflow.Target{
@@ -352,7 +361,9 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 		t.Fatalf("Put execution ref: %v", err)
 	}
 
-	runtime := &workflowRuntime{executionRefs: services.WorkflowExecutionRefs}
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
 
 	var gotPrincipal *principal.Principal
 	var gotProvider string
@@ -416,8 +427,8 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 func TestWorkflowRuntimeInvokeExecutionRefUsesStoredWorkloadPrincipal(t *testing.T) {
 	t.Parallel()
 
-	services := coretesting.NewStubServices(t)
-	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "exec-ref-workload",
 		ProviderName: "temporal",
 		Target: coreworkflow.Target{
@@ -429,7 +440,9 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredWorkloadPrincipal(t *testing
 		t.Fatalf("Put execution ref: %v", err)
 	}
 
-	runtime := &workflowRuntime{executionRefs: services.WorkflowExecutionRefs}
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
 
 	var gotPrincipal *principal.Principal
 	runtime.SetInvoker(funcInvoker{
@@ -469,7 +482,8 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
-	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "exec-ref-denied",
 		ProviderName: "temporal",
 		Target: coreworkflow.Target{
@@ -527,7 +541,9 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 		t.Fatalf("authorization.New: %v", err)
 	}
 
-	runtime := &workflowRuntime{executionRefs: services.WorkflowExecutionRefs}
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
 	runtime.SetInvoker(invocation.NewBroker(&providers.Providers, services.Users, services.Tokens, invocation.WithAuthorizer(authz)))
 
 	_, err = runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
@@ -557,7 +573,8 @@ func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *tes
 	services := coretesting.NewStubServices(t)
 	ctx := context.Background()
 
-	if _, err := services.WorkflowExecutionRefs.Put(ctx, &coreworkflow.ExecutionReference{
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{
 		ID:           "exec-ref-123",
 		ProviderName: "basic",
 		Target: coreworkflow.Target{
@@ -595,8 +612,8 @@ func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *tes
 
 	broker := invocation.NewBroker(&providers.Providers, services.Users, services.Tokens)
 	runtime := &workflowRuntime{
-		invoker:       broker,
-		executionRefs: services.WorkflowExecutionRefs,
+		invoker:   broker,
+		providers: map[string]coreworkflow.Provider{"basic": refProvider},
 	}
 
 	_, err := runtime.Invoke(ctx, coreworkflow.InvokeOperationRequest{
@@ -622,8 +639,10 @@ func TestWorkflowRuntimeInvokeExecutionRefLookupInfrastructureErrorIsInternal(t 
 	t.Parallel()
 
 	lookupErr := errors.New("boom")
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	refProvider.err = lookupErr
 	runtime := &workflowRuntime{
-		executionRefs: coredata.NewWorkflowExecutionRefService(&erroringIndexedDB{err: lookupErr}),
+		providers: map[string]coreworkflow.Provider{"basic": refProvider},
 	}
 	runtime.SetInvoker(funcInvoker{
 		invoke: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {

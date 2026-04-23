@@ -19,7 +19,6 @@ type Services struct {
 	WorkspaceRoles           *WorkspaceRoleService
 	IdentityPluginAccess     *IdentityPluginAccessService
 	APITokenAccess           *APITokenAccessService
-	WorkflowExecutionRefs    *WorkflowExecutionRefService
 	AgentRunMetadata         *AgentRunMetadataService
 	AgentRunEvents           *AgentRunEventService
 	DB                       indexeddb.IndexedDB
@@ -57,9 +56,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := ds.CreateObjectStore(ctx, StoreAPITokenAccess, APITokenAccessSchema); err != nil {
 		return nil, fmt.Errorf("create api_token_access store: %w", err)
 	}
-	if err := ds.CreateObjectStore(ctx, StoreWorkflowExecutionRefs, WorkflowExecutionRefsSchema); err != nil {
-		return nil, fmt.Errorf("create workflow_execution_refs store: %w", err)
-	}
 	if err := ds.CreateObjectStore(ctx, StoreAgentRunMetadata, AgentRunMetadataSchema); err != nil {
 		return nil, fmt.Errorf("create agent_run_metadata store: %w", err)
 	}
@@ -77,7 +73,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	workspaceRoles := NewWorkspaceRoleService(ds)
 	identityPluginAccess := NewIdentityPluginAccessService(ds)
 	apiTokenAccess := NewAPITokenAccessService(ds)
-	workflowExecutionRefs := NewWorkflowExecutionRefService(ds)
 	agentRunMetadata := NewAgentRunMetadataService(ds)
 	agentRunEvents := NewAgentRunEventService(ds)
 
@@ -108,7 +103,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 		WorkspaceRoles:           workspaceRoles,
 		IdentityPluginAccess:     identityPluginAccess,
 		APITokenAccess:           apiTokenAccess,
-		WorkflowExecutionRefs:    workflowExecutionRefs,
 		AgentRunMetadata:         agentRunMetadata,
 		AgentRunEvents:           agentRunEvents,
 		DB:                       ds,

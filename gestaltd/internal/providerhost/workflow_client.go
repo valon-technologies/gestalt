@@ -303,6 +303,48 @@ func (r *remoteWorkflow) PublishEvent(ctx context.Context, req coreworkflow.Publ
 	return err
 }
 
+func (r *remoteWorkflow) PutExecutionReference(ctx context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	pbRef, err := workflowExecutionReferenceToProto(ref)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.client.PutExecutionReference(ctx, &proto.PutWorkflowExecutionReferenceRequest{Reference: pbRef})
+	if err != nil {
+		return nil, err
+	}
+	return workflowExecutionReferenceFromProto(resp)
+}
+
+func (r *remoteWorkflow) GetExecutionReference(ctx context.Context, id string) (*coreworkflow.ExecutionReference, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resp, err := r.client.GetExecutionReference(ctx, &proto.GetWorkflowExecutionReferenceRequest{Id: id})
+	if err != nil {
+		return nil, err
+	}
+	return workflowExecutionReferenceFromProto(resp)
+}
+
+func (r *remoteWorkflow) ListExecutionReferences(ctx context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resp, err := r.client.ListExecutionReferences(ctx, &proto.ListWorkflowExecutionReferencesRequest{SubjectId: subjectID})
+	if err != nil {
+		return nil, err
+	}
+	refs := make([]*coreworkflow.ExecutionReference, 0, len(resp.GetReferences()))
+	for _, ref := range resp.GetReferences() {
+		value, err := workflowExecutionReferenceFromProto(ref)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, value)
+	}
+	return refs, nil
+}
+
 func (r *remoteWorkflow) Ping(ctx context.Context) error {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
@@ -318,3 +360,4 @@ func (r *remoteWorkflow) Close() error {
 }
 
 var _ coreworkflow.Provider = (*remoteWorkflow)(nil)
+var _ coreworkflow.ExecutionReferenceStore = (*remoteWorkflow)(nil)

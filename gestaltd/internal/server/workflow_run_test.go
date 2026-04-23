@@ -89,7 +89,7 @@ func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) 
 			SubjectID:    principal.UserSubjectID(other.ID),
 		},
 	} {
-		if _, err := services.WorkflowExecutionRefs.Put(context.Background(), ref); err != nil {
+		if _, err := provider.PutExecutionReference(context.Background(), ref); err != nil {
 			t.Fatalf("Put execution ref %q: %v", ref.ID, err)
 		}
 	}
@@ -218,7 +218,7 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 			SubjectID:    principal.UserSubjectID(user.ID),
 		},
 	} {
-		if _, err := services.WorkflowExecutionRefs.Put(context.Background(), ref); err != nil {
+		if _, err := provider.PutExecutionReference(context.Background(), ref); err != nil {
 			t.Fatalf("Put execution ref %q: %v", ref.ID, err)
 		}
 	}
@@ -296,7 +296,7 @@ func TestGlobalWorkflowRunCancelUpdatesOwnedRun(t *testing.T) {
 		StartedAt:    &now,
 	}
 	provider.runs[run.ID] = run
-	if _, err := services.WorkflowExecutionRefs.Put(context.Background(), &coreworkflow.ExecutionReference{
+	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           run.ExecutionRef,
 		ProviderName: "basic",
 		Target:       run.Target,
