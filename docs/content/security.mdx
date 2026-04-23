@@ -92,8 +92,8 @@ not be treated as a portable security boundary by itself.
 
 The built-in `local` runtime uses this same host-local sandbox path. Hosted
 runtime providers may define a stronger or different execution boundary, but
-they only count as equivalent for security policy purposes when they advertise
-the matching runtime capabilities. In particular, Gestalt's `allowedHosts`
+they only count as equivalent for security policy purposes when their support
+profile preserves the same policy. In particular, Gestalt's `allowedHosts`
 model is hostname-based, so a backend that only supports CIDR or firewall rules
 is not a drop-in replacement for hostname-aware egress enforcement.
 

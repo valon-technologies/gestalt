@@ -10,13 +10,11 @@ A plugin package includes a manifest that defines metadata, connections, and
 optional passthrough API surfaces. Some plugins are fully executable, some are
 fully declarative, and some are hybrid packages that combine both models.
 
-From a deployment point of view, the important pieces are:
-
-- `source` to choose the package, using either a local manifest path or a published `provider-release.yaml` metadata URL
-- `config` for provider-specific settings such as OAuth app credentials
-- `allowedOperations` to publish only part of a large catalog
-- `allowedHosts` to declare outbound egress policy
-- `runtime` to opt an executable plugin into hosted execution
+From a deployment point of view, `source` chooses the package, `config`
+passes provider-specific settings such as OAuth app credentials,
+`allowedOperations` publishes only part of a large catalog, `allowedHosts`
+declares outbound egress policy, and `runtime` opts an executable plugin into
+hosted execution.
 
 If the manifest enables MCP, the same operations are also exposed through the
 server's `/mcp` endpoint.
@@ -115,14 +113,13 @@ them to choose a sandbox template, container image, or lifecycle labels.
 A built-in `local` runtime is always available for same-machine execution. The
 first installable hosted runtime provider is `modal`. It requires
 `runtime.providers.<name>.config.app` and `plugins.<name>.runtime.image`.
-Gestalt only uses it for plain executable plugins today. Modal does not expose
-generic direct host-service tunnels, but it can still run plugins that need
-relay-backed host services or Gestalt's hostname-based egress model when the
-host is configured for the public relay and proxy path. In practice that means
-`server.baseURL` and `server.encryptionKey` must be set, and the runtime
-provider must advertise the matching capabilities. Without those prerequisites,
-plugins that need `indexeddb`, `cache`, `s3`, workflow-manager access when
-workflows are configured, nested `invokes`, `allowedHosts`, or
+Gestalt only uses it for plain executable plugins today. Modal can still run
+plugins that need Gestalt-owned services or hostname-based egress when the host
+is configured for the public relay and proxy path. In practice that means
+`server.baseURL` and `server.encryptionKey` must be set, and the runtime must
+report a compatible support profile. Without those prerequisites, plugins that
+need `indexeddb`, `cache`, `s3`, workflow-manager access when workflows are
+configured, nested `invokes`, `allowedHosts`, or
 `server.egress.defaultAction: deny` stay on `local`.
 
 For the runtime-provider model itself, see [Providers > Runtime](/providers/runtime).
@@ -180,8 +177,8 @@ release packaging now live under [Custom Providers > Plugin](/custom-providers/p
 
 ## What to read next
 
-- [Configuration](/configuration): provider entries, connections, and `allowedHosts`
-- [HTTP API](/reference/http-api): invoking plugin operations
-- [Provider Manifests](/reference/plugin-manifests): manifest field reference
-- [Authorization](/providers/authorization): runtime authorization semantics
-- [Custom Plugin](/custom-providers/plugins): advanced authoring docs
+For configuration, see [Configuration](/configuration). For operation
+invocation, see [HTTP API](/reference/http-api). For manifest fields, see
+[Provider Manifests](/reference/plugin-manifests). For authorization behavior,
+see [Authorization](/providers/authorization). To build a plugin, see
+[Custom Plugin](/custom-providers/plugins).

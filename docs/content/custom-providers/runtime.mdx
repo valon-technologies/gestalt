@@ -133,10 +133,10 @@ func (p *Provider) StopSession(context.Context, *proto.StopPluginRuntimeSessionR
 
 func (p *Provider) BindHostService(context.Context, req *proto.BindPluginRuntimeHostServiceRequest) (*proto.PluginRuntimeHostServiceBinding, error) {
 	return &proto.PluginRuntimeHostServiceBinding{
-		Id:         "binding-1",
-		SessionId:  req.GetSessionId(),
-		EnvVar:     req.GetEnvVar(),
-		SocketPath: req.GetHostSocketPath(),
+		Id:        "binding-1",
+		SessionId: req.GetSessionId(),
+		EnvVar:    req.GetEnvVar(),
+		Relay:     req.GetRelay(),
 	}, nil
 }
 
@@ -165,11 +165,11 @@ host-reachable executable plugin session. If that is false, Gestalt will reject
 hosted execution for that runtime immediately instead of failing later during
 bootstrap.
 
-`host_service_access` should be `direct` only when the backend can really
-expose guest-local host-service sockets inside the runtime session. When that
-value is `none`, Gestalt may still derive an *effective* relay-backed
-host-service path if the current host deployment has the public relay
-prerequisites, but that relay behavior is host-provided, not runtime-advertised.
+`host_service_access` should be `direct` only when the backend can expose
+guest-local host-service sockets inside the runtime session. Most hosted
+runtimes should report `none` and let Gestalt decide whether the current
+deployment can provide relay-backed host services through the public relay
+path. That relay path is host-provided behavior, not runtime-owned behavior.
 
 `egress_mode` should be `hostname` only when the runtime can preserve
 Gestalt's hostname-based `allowedHosts` model. `cidr` is useful metadata, but
@@ -182,10 +182,8 @@ the host to stage a runtime bundle first. When bundle launch is required,
 `execution_target` must accurately describe the platform the backend will
 actually run so the host can choose or stage the right artifact.
 
-Older runtime providers may continue returning the legacy `capabilities` field
-for compatibility, but new providers should populate `support` instead. Gestalt
-still understands the old booleans, but the grouped support shape is now the
-primary contract and the one operators see reflected in inspection.
+New providers should populate `support`. That grouped support shape is the
+runtime contract operators see in inspection.
 
 ## Sessions and host services
 
@@ -202,11 +200,8 @@ the provider receives a public dial target and the hosted plugin talks back to
 ## Dial targets
 
 `StartPlugin` returns a host-reachable `dial_target`, not a guest-local socket
-path. Gestalt currently supports:
-
-- `unix://...`
-- `tcp://host:port`
-- `tls://host:port`
+path. Gestalt currently supports `unix://...`, `tcp://host:port`, and
+`tls://host:port`.
 
 If your backend starts the plugin behind a guest-local listener, the runtime
 provider is responsible for bridging that listener back into one of the
@@ -225,7 +220,7 @@ Then point `runtime.providers.<name>.source` at the resulting
 
 ## What to read next
 
-- [Providers > Runtime](/providers/runtime): operator-facing runtime model
-- [Releasing](/custom-providers/releasing): packaging and published artifacts
-- [Config File](/reference/config-file#runtime): runtime config fields
-- [Provider Manifests](/reference/plugin-manifests): manifest schema
+For the operator-facing model, see [Providers > Runtime](/providers/runtime).
+For packaging, see [Releasing](/custom-providers/releasing). For config and
+manifest fields, see [Config File](/reference/config-file#runtime) and
+[Provider Manifests](/reference/plugin-manifests).

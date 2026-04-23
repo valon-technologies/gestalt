@@ -11,16 +11,8 @@ over gRPC.
 ## Scope
 
 Runtime providers only apply to executable plugins under `plugins.<name>`.
-They do **not** replace host-local infrastructure providers such as:
-
-- `providers.authentication`
-- `providers.authorization`
-- `providers.indexeddb`
-- `providers.cache`
-- `providers.s3`
-- `providers.secrets`
-- `providers.workflow`
-
+They do **not** replace host-local infrastructure providers such as
+authentication, authorization, IndexedDB, cache, S3, secrets, or workflow.
 Those providers still live on the `gestaltd` host. A runtime provider only
 changes where the plugin process runs.
 
@@ -29,16 +21,13 @@ changes where the plugin process runs.
 By default, executable plugins run on the same machine as `gestaltd`. A plugin
 only uses a runtime provider when it opts in with `plugins.<name>.runtime`.
 
-When a plugin does opt in, Gestalt follows this lifecycle:
-
-1. Select a runtime backend from `runtime.providers`
-2. Query its runtime support
-3. Start a runtime session
-4. Wait for the session to become ready
-5. Bind host-local services into that session
-6. Start the plugin process inside the session
-7. Dial the plugin back over gRPC and use it like any other plugin
-8. Stop the session on shutdown or bootstrap failure
+When a plugin does opt in, Gestalt selects a backend from `runtime.providers`,
+reads the backend's support profile, starts a runtime session, waits for that
+session to become ready, binds any required host-local services, starts the
+plugin process inside the session, then dials the plugin back over gRPC. From
+that point on, the hosted plugin behaves like any other plugin from the
+caller's point of view. Gestalt stops the runtime session during shutdown or
+after a bootstrap failure.
 
 That is why the runtime interface is bigger than a single `StartPlugin` call:
 Gestalt needs an explicit lifecycle boundary, not just a fire-and-forget launch
@@ -73,40 +62,31 @@ plugins:
         environment: production
 ```
 
-Selection is two-step:
-
-- `runtime.providers` defines named backends
-- `plugins.<name>.runtime` opts a specific plugin into hosted execution
-
-`server.runtime.provider` is only a default selector for plugins that already
-set `plugins.<name>.runtime`.
+Selection is intentionally two-step. `runtime.providers` defines named
+backends, while `plugins.<name>.runtime` opts a specific plugin into hosted
+execution. `server.runtime.provider` is only a default selector for plugins
+that already set `plugins.<name>.runtime`.
 
 ## Runtime profiles
 
-Runtime backends are not interchangeable, but most operators should not have to
-reason about a bag of low-level booleans to understand why a runtime is or is
-not compatible with a plugin. Gestalt therefore evaluates a runtime in terms of
-four higher-level questions.
+Runtime backends are not interchangeable, but the compatibility check is meant
+to read in terms of behavior, not implementation details. Gestalt asks whether
+the runtime can host plugins, how hosted plugins reach Gestalt-owned services,
+whether the runtime can preserve hostname-based `allowedHosts`, and whether the
+plugin should launch from a host path or from a staged bundle.
 
-First, can the runtime host executable plugins at all. Second, how do hosted
-plugins reach Gestalt-owned services such as IndexedDB, cache, S3,
-workflow-manager access, authorization, and nested plugin invocation. Gestalt
-describes that as a host-service access mode of `none`, `relay`, or `direct`.
-Third, what kind of egress policy can the runtime preserve: no policy, CIDR or
-firewall style controls, or Gestalt's hostname-based `allowedHosts` model.
-Fourth, how does the plugin launch: directly from host paths or from a staged
-bundle, and on what execution target.
+Host-service access is reported as `none`, `relay`, or `direct`. `direct`
+means the runtime can expose guest-local service sockets inside the session.
+`relay` means the current host deployment can provide those services through
+Gestalt's public relay path. Egress support is separate: a runtime must preserve
+Gestalt's hostname-based policy model before plugins with `allowedHosts` or a
+default-deny egress policy can run there.
 
-The admin inspection API exposes that grouped model directly. `GET
-/admin/api/v1/runtime/providers` returns an `advertised` profile, which is what
-the runtime says it can do, and an `effective` profile, which is what the
-current `gestaltd` deployment can actually guarantee once relay and public
-proxy prerequisites are considered.
-
-Older runtime providers may still advertise the legacy boolean capability bag.
-Gestalt continues to accept that format for compatibility, but it immediately
-derives the grouped support model from it and does not treat the raw booleans
-as the primary operator interface anymore.
+The admin inspection API exposes both sides of that decision. `GET
+/admin/api/v1/runtime/providers` includes `profile.advertised`, which is what
+the runtime reports, and `profile.effective`, which is what this `gestaltd`
+deployment can actually provide after relay and public proxy prerequisites are
+considered.
 
 ## Host services and hosted plugins
 
@@ -135,7 +115,7 @@ Today there are two main runtime choices:
 | Backend | Type | Notes |
 | --- | --- | --- |
 | `local` | Built-in driver | Runs the plugin on the same machine as `gestaltd`. Supports host-path execution and the existing host-local runtime behavior. |
-| `modal` | Installable `kind: runtime` provider | Runs the plugin in a hosted Linux sandbox. Requires `runtime.providers.<name>.config.app` and `plugins.<name>.runtime.image`. When the host is configured for the public relay and proxy path, Modal uses relay-backed host services and Gestalt's public hostname-egress proxy instead of generic direct host-service tunnels. |
+| `modal` | Installable `kind: runtime` provider | Runs the plugin in a hosted Linux sandbox. Requires `runtime.providers.<name>.config.app` and `plugins.<name>.runtime.image`. When the host is configured for the public relay and proxy path, Modal can run plugins that need Gestalt-owned services and hostname-based egress. |
 
 ## Bundle staging and host-path execution
 
@@ -152,8 +132,8 @@ universal plugin semantics.
 
 ## What to read next
 
-- [Configuration](/configuration): selecting a runtime backend
-- [Plugin](/providers/plugins): plugin-side runtime opt-in
-- [Config File](/reference/config-file#runtime): field-by-field config reference
-- [Security](/security): how runtimes affect the execution boundary
-- [Custom Providers > Runtime](/custom-providers/runtime): building your own runtime provider
+For the config fields, see [Configuration](/configuration) and
+[Config File](/reference/config-file#runtime). For plugin-side opt-in, see
+[Plugin](/providers/plugins). For the execution boundary, see
+[Security](/security). To build a runtime backend, see
+[Custom Providers > Runtime](/custom-providers/runtime).
