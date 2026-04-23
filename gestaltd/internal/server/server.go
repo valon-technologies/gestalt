@@ -52,15 +52,16 @@ type MountedUI struct {
 }
 
 type MountedHTTPBinding struct {
-	Name         string
-	PluginName   string
-	Path         string
-	Method       string
-	Target       string
-	RequestBody  *providermanifestv1.HTTPRequestBody
-	Ack          *providermanifestv1.HTTPAck
-	SecurityName string
-	Security     *providermanifestv1.HTTPSecurityScheme
+	Name           string
+	PluginName     string
+	Path           string
+	Method         string
+	Target         string
+	CredentialMode core.ConnectionMode
+	RequestBody    *providermanifestv1.HTTPRequestBody
+	Ack            *providermanifestv1.HTTPAck
+	SecurityName   string
+	Security       *providermanifestv1.HTTPSecurityScheme
 }
 
 type AdminRouteConfig struct {

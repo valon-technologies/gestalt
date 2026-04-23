@@ -215,7 +215,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 
 	metricProvider = providerName
-	metricConnectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
+	metricConnectionMode = metricutil.NormalizeConnectionMode(effectiveConnectionMode(ctx, prov))
 	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
 
 	if p == nil {
@@ -386,7 +386,7 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	}
 
 	metricProvider = providerName
-	metricConnectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
+	metricConnectionMode = metricutil.NormalizeConnectionMode(effectiveConnectionMode(ctx, prov))
 	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
 
 	if p == nil {
@@ -610,7 +610,7 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 		ctx = withResolvedPrincipal(ctx, p)
 	}
 
-	mode := core.NormalizeConnectionMode(prov.ConnectionMode())
+	mode := effectiveConnectionMode(ctx, prov)
 	switch mode {
 	case core.ConnectionModeNone:
 		SetCredentialAudit(ctx, core.ConnectionModeNone, "", "", "")
@@ -754,7 +754,7 @@ func (b *Broker) resolveSubjectToken(ctx context.Context, prov core.Provider, su
 		}
 	}
 
-	accessToken, err := b.refreshTokenIfNeeded(ctx, storedToken, providerName, connection, metricutil.NormalizeConnectionMode(prov.ConnectionMode()))
+	accessToken, err := b.refreshTokenIfNeeded(ctx, storedToken, providerName, connection, metricutil.NormalizeConnectionMode(effectiveConnectionMode(ctx, prov)))
 	return ctx, accessToken, err
 }
 

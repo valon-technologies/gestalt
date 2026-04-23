@@ -78,6 +78,14 @@ pub enum HTTPAuthScheme {
     Bearer,
 }
 
+/// Credential modes supported by hosted HTTP bindings.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HTTPBindingCredentialMode {
+    None,
+    User,
+}
+
 /// Secret reference used by generated hosted HTTP bindings.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct HTTPSecretRef {
@@ -358,6 +366,8 @@ impl HTTPAck {
 pub struct HTTPBinding {
     pub path: String,
     pub method: String,
+    #[serde(rename = "credentialMode", skip_serializing_if = "Option::is_none")]
+    pub credential_mode: Option<HTTPBindingCredentialMode>,
     #[serde(rename = "requestBody", skip_serializing_if = "Option::is_none")]
     pub request_body: Option<HTTPRequestBody>,
     pub security: String,
@@ -377,11 +387,18 @@ impl HTTPBinding {
         Self {
             path: path.into().trim().to_owned(),
             method: normalize_method(method.as_ref()),
+            credential_mode: None,
             request_body: None,
             security: security.into().trim().to_owned(),
             target: target.into().trim().to_owned(),
             ack: None,
         }
+    }
+
+    /// Overrides provider credential resolution for this binding.
+    pub fn credential_mode(mut self, credential_mode: HTTPBindingCredentialMode) -> Self {
+        self.credential_mode = Some(credential_mode);
+        self
     }
 
     /// Attaches request-body metadata.

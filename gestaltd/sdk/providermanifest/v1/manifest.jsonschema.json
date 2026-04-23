@@ -321,6 +321,13 @@
             "DELETE"
           ]
         },
+        "credentialMode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "user"
+          ]
+        },
         "requestBody": {
           "$ref": "#/$defs/httpRequestBody"
         },

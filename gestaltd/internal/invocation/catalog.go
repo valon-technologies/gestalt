@@ -156,7 +156,7 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 			instance = boundCredential.Instance
 		}
 	}
-	if prov.ConnectionMode() == core.ConnectionModeNone {
+	if effectiveConnectionMode(ctx, prov) == core.ConnectionModeNone {
 		if resolver != nil && p != nil {
 			enrichedCtx, token, err := ResolveTokenForBinding(ctx, resolver, p, provName, connection, instance, boundCredential)
 			if err != nil {

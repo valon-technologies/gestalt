@@ -22,7 +22,8 @@ func CallDirectTool(ctx context.Context, resolver TokenResolver, p *principal.Pr
 	if p == nil {
 		return nil, ErrNotAuthenticated
 	}
-	if resolver != nil && prov.ConnectionMode() != core.ConnectionModeNone {
+	mode := effectiveConnectionMode(ctx, prov)
+	if resolver != nil && mode != core.ConnectionModeNone {
 		var token string
 		var err error
 		ctx, token, err = ResolveTokenForBinding(ctx, resolver, p, provName, connection, instance, boundCredential)
@@ -30,7 +31,7 @@ func CallDirectTool(ctx context.Context, resolver TokenResolver, p *principal.Pr
 			return nil, err
 		}
 		ctx = mcpupstream.WithUpstreamToken(ctx, token)
-	} else if prov.ConnectionMode() == core.ConnectionModeNone {
+	} else if mode == core.ConnectionModeNone {
 		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
 	}
 	ctx = mcpupstream.WithCallToolMeta(ctx, meta)

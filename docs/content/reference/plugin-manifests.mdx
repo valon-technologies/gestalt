@@ -271,6 +271,7 @@ mounts at `/api/v1/example/command`.
 | --- | --- | --- |
 | `path` | string | Plugin-relative route path. |
 | `method` | string | HTTP method for the hosted route. |
+| `credentialMode` | string | Optional credential override for the bound operation. `none` skips provider OAuth token resolution for the route; omit it to inherit the provider default. |
 | `security` | string | Name of a scheme from `spec.securitySchemes`. |
 | `target` | string | Canonical operation ID to invoke. |
 | `requestBody` | HTTPRequestBody | Allowed request content types. |
@@ -294,6 +295,7 @@ spec:
     command:
       path: /command
       method: POST
+      credentialMode: none
       security: signed
       target: handle_command
       requestBody:
