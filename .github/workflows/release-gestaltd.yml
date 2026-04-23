@@ -89,7 +89,7 @@ jobs:
       component-summary: |
         Self-hosted integration gateway for Gestalt with the embedded client UI, admin UI, HTTP API, and optional MCP endpoint.
       install-markdown: |
-        - Homebrew: `brew upgrade gestaltd`
+        - Homebrew: `brew upgrade valon-technologies/gestalt/gestaltd`
         - Docker: `docker pull valontechnologies/gestaltd:${version}`
         - Docs: [Deployment guide](https://gestaltd.ai/deploy)
       exclude-subject-patterns: |
@@ -137,6 +137,13 @@ jobs:
         with:
           ref: main
           token: ${{ secrets.PAT_TOKEN }}
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: valon-technologies/homebrew-gestalt
+          ref: main
+          token: ${{ secrets.PAT_TOKEN }}
+          path: homebrew-tap
       - name: Extract version
         id: version
         run: echo "version=${GITHUB_REF_NAME#gestaltd/v}" >> "$GITHUB_OUTPUT"
@@ -165,33 +172,40 @@ jobs:
           SHA_LINUX_ARM64: ${{ steps.checksums.outputs.linux-arm64 }}
           SHA_LINUX_X86: ${{ steps.checksums.outputs.linux-x86_64 }}
         run: |
-          FORMULA="Formula/gestaltd.rb"
-          OLD_VERSION=$(grep '^\s*version ' "$FORMULA" | sed 's/.*version "\(.*\)"/\1/')
-          sed -i "s/version \"${OLD_VERSION}\"/version \"${VERSION}\"/" "$FORMULA"
-          perl -0pi -e 's{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestaltd-macos-arm64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestaltd-macos-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestaltd-macos-x86_64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestaltd-macos-x86_64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestaltd-linux-arm64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestaltd-linux-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestaltd-linux-x86_64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestaltd-linux-x86_64.tar.gz}g' "$FORMULA"
-          awk -v sha_macos_arm64="$SHA_MACOS_ARM64" \
-              -v sha_macos_x86="$SHA_MACOS_X86" \
-              -v sha_linux_arm64="$SHA_LINUX_ARM64" \
-              -v sha_linux_x86="$SHA_LINUX_X86" \
-          '
-          /gestaltd-macos-arm64\.tar\.gz/ { found="macos-arm64" }
-          /gestaltd-macos-x86_64\.tar\.gz/ { found="macos-x86" }
-          /gestaltd-linux-arm64\.tar\.gz/ { found="linux-arm64" }
-          /gestaltd-linux-x86_64\.tar\.gz/ { found="linux-x86" }
-          /sha256 "/ {
-            if (found == "macos-arm64") { sub(/"[^"]*"/, "\"" sha_macos_arm64 "\"") }
-            if (found == "macos-x86") { sub(/"[^"]*"/, "\"" sha_macos_x86 "\"") }
-            if (found == "linux-arm64") { sub(/"[^"]*"/, "\"" sha_linux_arm64 "\"") }
-            if (found == "linux-x86") { sub(/"[^"]*"/, "\"" sha_linux_x86 "\"") }
-            found=""
-          }
-          { print }
-          ' "$FORMULA" > "${FORMULA}.tmp" && mv "${FORMULA}.tmp" "$FORMULA"
+          FORMULAS=(
+            "Formula/gestaltd.rb"
+            "homebrew-tap/Formula/gestaltd.rb"
+          )
+
+          for formula in "${FORMULAS[@]}"; do
+            old_version=$(grep '^\s*version ' "$formula" | sed 's/.*version "\(.*\)"/\1/')
+            sed -i "s/version \"${old_version}\"/version \"${VERSION}\"/" "$formula"
+            perl -0pi -e 's{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestaltd-macos-arm64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestaltd-macos-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestaltd-macos-x86_64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestaltd-macos-x86_64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestaltd-linux-arm64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestaltd-linux-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestaltd-linux-x86_64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestaltd-linux-x86_64.tar.gz}g' "$formula"
+            awk -v sha_macos_arm64="$SHA_MACOS_ARM64" \
+                -v sha_macos_x86="$SHA_MACOS_X86" \
+                -v sha_linux_arm64="$SHA_LINUX_ARM64" \
+                -v sha_linux_x86="$SHA_LINUX_X86" \
+            '
+            /gestaltd-macos-arm64\.tar\.gz/ { found="macos-arm64" }
+            /gestaltd-macos-x86_64\.tar\.gz/ { found="macos-x86" }
+            /gestaltd-linux-arm64\.tar\.gz/ { found="linux-arm64" }
+            /gestaltd-linux-x86_64\.tar\.gz/ { found="linux-x86" }
+            /sha256 "/ {
+              if (found == "macos-arm64") { sub(/"[^"]*"/, "\"" sha_macos_arm64 "\"") }
+              if (found == "macos-x86") { sub(/"[^"]*"/, "\"" sha_macos_x86 "\"") }
+              if (found == "linux-arm64") { sub(/"[^"]*"/, "\"" sha_linux_arm64 "\"") }
+              if (found == "linux-x86") { sub(/"[^"]*"/, "\"" sha_linux_x86 "\"") }
+              found=""
+            }
+            { print }
+            ' "$formula" > "${formula}.tmp" && mv "${formula}.tmp" "$formula"
+          done
       - name: Verify formula
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           grep -q "version \"${VERSION}\"" Formula/gestaltd.rb
+          grep -q "version \"${VERSION}\"" homebrew-tap/Formula/gestaltd.rb
           echo "Formula verified"
       - name: Update Helm chart version
         env:
@@ -207,13 +221,23 @@ jobs:
         run: |
           helm package gestaltd/deploy/helm/gestalt --destination /tmp/charts
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-          helm push /tmp/charts/gestalt-${VERSION}.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
-      - name: Commit and push
+          helm push "/tmp/charts/gestalt-${VERSION}.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"
+      - name: Commit and push repository updates
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/gestaltd.rb gestaltd/deploy/helm/gestalt/Chart.yaml
-          git diff --cached --quiet && { echo "No changes"; exit 0; }
+          git diff --cached --quiet && { echo "No repository changes"; exit 0; }
           git commit -m "Update gestaltd formula and chart to v${{ steps.version.outputs.version }}"
           git pull --rebase origin main
           git push
+
+      - name: Commit and push Homebrew tap
+        run: |
+          git -C homebrew-tap config user.name "github-actions[bot]"
+          git -C homebrew-tap config user.email "github-actions[bot]@users.noreply.github.com"
+          git -C homebrew-tap add Formula/gestaltd.rb
+          git -C homebrew-tap diff --cached --quiet && { echo "No Homebrew tap changes"; exit 0; }
+          git -C homebrew-tap commit -m "Update gestaltd formula to v${{ steps.version.outputs.version }}"
+          git -C homebrew-tap pull --rebase origin main
+          git -C homebrew-tap push

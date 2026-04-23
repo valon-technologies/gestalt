@@ -54,7 +54,7 @@ jobs:
       component-summary: |
         Command-line client for authenticating with Gestalt, connecting integrations, invoking operations, and managing API tokens from the terminal.
       install-markdown: |
-        - Homebrew: `brew upgrade gestalt`
+        - Homebrew: `brew upgrade valon-technologies/gestalt/gestalt`
         - Docker: `docker pull valontechnologies/gestalt:${version}`
         - Docs: [CLI reference](https://gestaltd.ai/reference/cli)
       exclude-subject-patterns: |
@@ -84,11 +84,19 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Checkout main branch
+      - name: Checkout repository main branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: main
           token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          repository: valon-technologies/homebrew-gestalt
+          ref: main
+          token: ${{ secrets.PAT_TOKEN }}
+          path: homebrew-tap
 
       - name: Extract version from tag
         id: version
@@ -123,50 +131,66 @@ jobs:
           SHA_LINUX_ARM64: ${{ steps.checksums.outputs.linux_arm64 }}
           SHA_LINUX_X86_64: ${{ steps.checksums.outputs.linux_x86_64 }}
         run: |
-          FORMULA="Formula/gestalt.rb"
-          OLD_VERSION=$(grep '^\s*version ' "$FORMULA" | sed 's/.*version "\(.*\)"/\1/')
+          FORMULAS=(
+            "Formula/gestalt.rb"
+            "homebrew-tap/Formula/gestalt.rb"
+          )
 
-          sed -i "s/version \"${OLD_VERSION}\"/version \"${VERSION}\"/" "$FORMULA"
-          perl -0pi -e 's{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-macos-arm64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-macos-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-macos-x86_64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-macos-x86_64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-linux-arm64(?:-musl)?\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-linux-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-linux-x86_64(?:-musl)?\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-linux-x86_64.tar.gz}g' "$FORMULA"
+          for formula in "${FORMULAS[@]}"; do
+            old_version=$(grep '^\s*version ' "$formula" | sed 's/.*version "\(.*\)"/\1/')
 
-          # Update SHA256 for each platform by matching the URL above it
-          awk -v sha_macos_arm64="$SHA_MACOS_ARM64" \
-              -v sha_macos_x86_64="$SHA_MACOS_X86_64" \
-              -v sha_linux_arm64="$SHA_LINUX_ARM64" \
-              -v sha_linux_x86_64="$SHA_LINUX_X86_64" \
-          '
-          /gestalt-macos-arm64\.tar\.gz/ { found="macos-arm64" }
-          /gestalt-macos-x86_64\.tar\.gz/ { found="macos-x86_64" }
-          /gestalt-linux-arm64\.tar\.gz/ { found="linux-arm64" }
-          /gestalt-linux-x86_64\.tar\.gz/ { found="linux-x86_64" }
-          /sha256 "/ {
-            if (found == "macos-arm64") { sub(/"[^"]*"/, "\"" sha_macos_arm64 "\"") }
-            if (found == "macos-x86_64") { sub(/"[^"]*"/, "\"" sha_macos_x86_64 "\"") }
-            if (found == "linux-arm64") { sub(/"[^"]*"/, "\"" sha_linux_arm64 "\"") }
-            if (found == "linux-x86_64") { sub(/"[^"]*"/, "\"" sha_linux_x86_64 "\"") }
-            found=""
-          }
-          { print }
-          ' "$FORMULA" > "${FORMULA}.tmp" && mv "${FORMULA}.tmp" "$FORMULA"
+            sed -i "s/version \"${old_version}\"/version \"${VERSION}\"/" "$formula"
+            perl -0pi -e 's{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-macos-arm64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-macos-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-macos-x86_64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-macos-x86_64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-linux-arm64(?:-musl)?\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-linux-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-linux-x86_64(?:-musl)?\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-linux-x86_64.tar.gz}g' "$formula"
+
+            awk -v sha_macos_arm64="$SHA_MACOS_ARM64" \
+                -v sha_macos_x86_64="$SHA_MACOS_X86_64" \
+                -v sha_linux_arm64="$SHA_LINUX_ARM64" \
+                -v sha_linux_x86_64="$SHA_LINUX_X86_64" \
+            '
+            /gestalt-macos-arm64\.tar\.gz/ { found="macos-arm64" }
+            /gestalt-macos-x86_64\.tar\.gz/ { found="macos-x86_64" }
+            /gestalt-linux-arm64\.tar\.gz/ { found="linux-arm64" }
+            /gestalt-linux-x86_64\.tar\.gz/ { found="linux-x86_64" }
+            /sha256 "/ {
+              if (found == "macos-arm64") { sub(/"[^"]*"/, "\"" sha_macos_arm64 "\"") }
+              if (found == "macos-x86_64") { sub(/"[^"]*"/, "\"" sha_macos_x86_64 "\"") }
+              if (found == "linux-arm64") { sub(/"[^"]*"/, "\"" sha_linux_arm64 "\"") }
+              if (found == "linux-x86_64") { sub(/"[^"]*"/, "\"" sha_linux_x86_64 "\"") }
+              found=""
+            }
+            { print }
+            ' "$formula" > "${formula}.tmp" && mv "${formula}.tmp" "$formula"
+          done
 
       - name: Verify formula was updated
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          echo "=== Updated formula ==="
-          cat Formula/gestalt.rb
-          echo ""
-          echo "=== Verification ==="
-          grep -q "version \"${VERSION}\"" Formula/gestalt.rb || { echo "ERROR: version not updated"; exit 1; }
-          grep -q "PLACEHOLDER" Formula/gestalt.rb && { echo "ERROR: PLACEHOLDER still present"; exit 1; }
+          for formula in Formula/gestalt.rb homebrew-tap/Formula/gestalt.rb; do
+            echo "=== ${formula} ==="
+            cat "$formula"
+            echo ""
+            grep -q "version \"${VERSION}\"" "$formula" || { echo "ERROR: version not updated in ${formula}"; exit 1; }
+            grep -q "PLACEHOLDER" "$formula" && { echo "ERROR: PLACEHOLDER still present in ${formula}"; exit 1; }
+          done
           echo "Formula verified successfully"
 
-      - name: Commit and push
+      - name: Commit and push repository formula
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/gestalt.rb
-          git diff --cached --quiet && { echo "No formula changes to commit"; exit 0; }
+          git diff --cached --quiet && { echo "No repository formula changes to commit"; exit 0; }
           git commit -m "Update gestalt formula to v${{ steps.version.outputs.version }}"
           git pull --rebase origin main
           git push
+
+      - name: Commit and push Homebrew tap
+        run: |
+          git -C homebrew-tap config user.name "github-actions[bot]"
+          git -C homebrew-tap config user.email "github-actions[bot]@users.noreply.github.com"
+          git -C homebrew-tap add Formula/gestalt.rb
+          git -C homebrew-tap diff --cached --quiet && { echo "No Homebrew tap changes to commit"; exit 0; }
+          git -C homebrew-tap commit -m "Update gestalt formula to v${{ steps.version.outputs.version }}"
+          git -C homebrew-tap pull --rebase origin main
+          git -C homebrew-tap push
