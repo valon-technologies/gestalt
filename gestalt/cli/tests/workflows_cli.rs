@@ -77,12 +77,27 @@ fn test_cli_lists_schedules() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["workflows", "schedules", "list"])
+        .args(["workflow", "schedules", "list"])
         .assert()
         .success()
         .stdout(predicate::str::contains("sched-1"))
         .stdout(predicate::str::contains("dummy"))
         .stdout(predicate::str::contains("doit"));
+
+    let _mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/workflow/schedules",
+        StatusCode::OK
+    )
+    .with_body(format!("[{SCHEDULE_JSON}]"))
+    .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args(["workflows", "schedules", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("sched-1"));
 }
 
 #[test]
@@ -103,7 +118,7 @@ fn test_cli_list_schedules_filters_by_plugin() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["workflows", "schedules", "list", "--plugin", "beta"])
+        .args(["workflow", "schedules", "list", "--plugin", "beta"])
         .assert()
         .success()
         .stdout(predicate::str::contains("sched-b"))
@@ -124,7 +139,7 @@ fn test_cli_gets_schedule() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["workflows", "schedules", "get", "sched-1"])
+        .args(["workflow", "schedules", "get", "sched-1"])
         .assert()
         .success()
         .stdout(predicate::str::contains("sched-1"))
@@ -156,7 +171,7 @@ fn test_cli_creates_schedule() {
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
-            "workflows",
+            "workflow",
             "schedules",
             "create",
             "--cron",
@@ -211,7 +226,7 @@ fn test_cli_updates_schedule_merges_existing_fields() {
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
-            "workflows",
+            "workflow",
             "schedules",
             "update",
             "sched-1",
@@ -237,7 +252,7 @@ fn test_cli_deletes_schedule() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["workflows", "schedules", "delete", "sched-1"])
+        .args(["workflow", "schedules", "delete", "sched-1"])
         .assert()
         .success()
         .stderr(predicate::str::contains(
@@ -259,7 +274,7 @@ fn test_cli_pauses_schedule() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["workflows", "schedules", "pause", "sched-1"])
+        .args(["workflow", "schedules", "pause", "sched-1"])
         .assert()
         .success()
         .stdout(predicate::str::contains("sched-1"));
@@ -279,7 +294,7 @@ fn test_cli_resumes_schedule() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["workflows", "schedules", "resume", "sched-1"])
+        .args(["workflow", "schedules", "resume", "sched-1"])
         .assert()
         .success()
         .stdout(predicate::str::contains("sched-1"));
@@ -299,7 +314,7 @@ fn test_cli_list_schedules_json_format() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["--format", "json", "workflows", "schedules", "list"])
+        .args(["--format", "json", "workflow", "schedules", "list"])
         .assert()
         .success()
         .stdout(predicate::str::contains(r#""id": "sched-1""#))
@@ -320,7 +335,7 @@ fn test_cli_lists_event_triggers() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["workflows", "triggers", "list"])
+        .args(["workflow", "triggers", "list"])
         .assert()
         .success()
         .stdout(predicate::str::contains("trg-1"))
@@ -347,7 +362,7 @@ fn test_cli_list_event_triggers_filters() {
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
-            "workflows",
+            "workflow",
             "triggers",
             "list",
             "--plugin",
@@ -375,7 +390,7 @@ fn test_cli_gets_event_trigger() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["workflows", "triggers", "get", "trg-1"])
+        .args(["workflow", "triggers", "get", "trg-1"])
         .assert()
         .success()
         .stdout(predicate::str::contains("trg-1"))
@@ -406,7 +421,7 @@ fn test_cli_creates_event_trigger() {
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
-            "workflows",
+            "workflow",
             "triggers",
             "create",
             "--type",
@@ -463,7 +478,7 @@ fn test_cli_updates_event_trigger_merges_existing_fields() {
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
-            "workflows",
+            "workflow",
             "triggers",
             "update",
             "trg-1",
@@ -489,7 +504,7 @@ fn test_cli_deletes_event_trigger() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["workflows", "triggers", "delete", "trg-1"])
+        .args(["workflow", "triggers", "delete", "trg-1"])
         .assert()
         .success()
         .stderr(predicate::str::contains("Workflow trigger trg-1 deleted."));
@@ -509,7 +524,7 @@ fn test_cli_pauses_event_trigger() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["workflows", "triggers", "pause", "trg-1"])
+        .args(["workflow", "triggers", "pause", "trg-1"])
         .assert()
         .success()
         .stdout(predicate::str::contains("trg-1"));
@@ -529,7 +544,7 @@ fn test_cli_resumes_event_trigger() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["workflows", "triggers", "resume", "trg-1"])
+        .args(["workflow", "triggers", "resume", "trg-1"])
         .assert()
         .success()
         .stdout(predicate::str::contains("trg-1"));
@@ -544,7 +559,7 @@ fn test_cli_lists_runs() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["workflows", "runs", "list"])
+        .args(["workflow", "runs", "list"])
         .assert()
         .success()
         .stdout(predicate::str::contains("run-1"))
@@ -566,13 +581,7 @@ fn test_cli_list_runs_filters() {
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
-            "workflows",
-            "runs",
-            "list",
-            "--plugin",
-            "beta",
-            "--status",
-            "failed",
+            "workflow", "runs", "list", "--plugin", "beta", "--status", "failed",
         ])
         .assert()
         .success()
@@ -594,7 +603,7 @@ fn test_cli_gets_run() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["workflows", "runs", "get", "run-1"])
+        .args(["workflow", "runs", "get", "run-1"])
         .assert()
         .success()
         .stdout(predicate::str::contains("run-1"))
@@ -628,7 +637,7 @@ fn test_cli_cancels_run() {
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
-            "workflows",
+            "workflow",
             "runs",
             "cancel",
             "run-1",
@@ -668,7 +677,7 @@ fn test_cli_publishes_event() {
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
-            "workflows",
+            "workflow",
             "events",
             "publish",
             "--type",

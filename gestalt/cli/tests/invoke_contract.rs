@@ -47,11 +47,11 @@ fn test_invoke_precondition_error_suggests_connect_command() {
     .create();
 
     cli_command_for_server(home.path(), &server)
-        .args(["plugins", "invoke", "auth_svc", "list_items"])
+        .args(["plugin", "invoke", "auth_svc", "list_items"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "failed to invoke auth_svc.list_items: plugin \"auth_svc\" is not connected. Connect it first with `gestalt plugins connect auth_svc`",
+            "failed to invoke auth_svc.list_items: plugin \"auth_svc\" is not connected. Connect it first with `gestalt plugin connect auth_svc`",
         ))
         .stderr(predicate::str::contains("OAuth first").not());
 }
@@ -80,11 +80,11 @@ fn test_invoke_reconnect_error_suggests_reconnect_command() {
     .create();
 
     cli_command_for_server(home.path(), &server)
-        .args(["plugins", "invoke", "clickhouse", "run_query"])
+        .args(["plugin", "invoke", "clickhouse", "run_query"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "failed to invoke clickhouse.run_query: token for plugin \"clickhouse\" expired or was revoked. Reconnect it with `gestalt plugins connect clickhouse`",
+            "failed to invoke clickhouse.run_query: token for plugin \"clickhouse\" expired or was revoked. Reconnect it with `gestalt plugin connect clickhouse`",
         ))
         .stderr(predicate::str::contains("OAuth token for integration").not());
 }
@@ -104,11 +104,11 @@ fn test_catalog_reconnect_error_suggests_reconnect_command() {
     .create();
 
     cli_command_for_server(home.path(), &server)
-        .args(["plugins", "invoke", "clickhouse"])
+        .args(["plugin", "invoke", "clickhouse"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "failed to invoke clickhouse: token for plugin \"clickhouse\" expired or was revoked. Reconnect it with `gestalt plugins connect clickhouse`",
+            "failed to invoke clickhouse: token for plugin \"clickhouse\" expired or was revoked. Reconnect it with `gestalt plugin connect clickhouse`",
         ))
         .stderr(predicate::str::contains("OAuth token for integration").not());
 }
@@ -150,7 +150,7 @@ fn test_list_operations_formats_parameters() {
     )
     .create();
 
-    let output = run_cli(&server, &["plugins", "invoke", "test_svc"]);
+    let output = run_cli(&server, &["plugin", "invoke", "test_svc"]);
     mock.assert();
     assert!(
         output.status.success(),
@@ -309,7 +309,7 @@ fn test_invoke_with_connection_and_instance() {
 
     secondary_invoke_mock.assert();
     assert!(err.contains(
-        "Connect it first with `gestalt plugins connect other_svc --connection workspace --instance team-a`"
+        "Connect it first with `gestalt plugin connect other_svc --connection workspace --instance team-a`"
     ));
 }
 
@@ -344,7 +344,7 @@ fn test_invoke_retries_without_catalog_when_preflight_masks_surface_error() {
 
     cli_command_for_server(home.path(), &server)
         .args([
-            "plugins",
+            "plugin",
             "invoke",
             "--connection",
             "session-conn",
@@ -379,7 +379,7 @@ fn test_cli_lists_operations_with_connection_and_instance() {
     cmd.env("GESTALT_API_KEY", TEST_TOKEN).args([
         "--url",
         &server.url(),
-        "plugins",
+        "plugin",
         "invoke",
         "--connection",
         "workspace",
@@ -423,7 +423,7 @@ fn test_describe_operation() {
     .with_body(catalog_body())
     .create();
 
-    let output = run_cli(&server, &["plugins", "describe", "test_svc", "do_thing"]);
+    let output = run_cli(&server, &["plugin", "describe", "test_svc", "do_thing"]);
     assert!(
         output.status.success(),
         "stderr: {}",
@@ -484,7 +484,7 @@ fn test_cli_invoke_merges_file_params_and_selects_output() {
         &server.url(),
         "--format",
         "json",
-        "plugins",
+        "plugin",
         "invoke",
         "test_svc",
         "do_thing",
@@ -540,7 +540,7 @@ fn test_cli_invoke_table_keeps_nested_json_inline() {
     cmd.env("GESTALT_API_KEY", TEST_TOKEN).args([
         "--url",
         &server.url(),
-        "plugins",
+        "plugin",
         "invoke",
         "test_svc",
         "do_thing",
@@ -578,7 +578,7 @@ fn test_cli_invoke_rejects_duplicate_scalar_params() {
     cmd.env("GESTALT_API_KEY", TEST_TOKEN).args([
         "--url",
         &server.url(),
-        "plugins",
+        "plugin",
         "invoke",
         "test_svc",
         "do_thing",
@@ -604,7 +604,7 @@ fn test_prefix_match_shows_filtered_table() {
     .with_body(multi_operation_catalog())
     .create();
 
-    let output = run_cli(&server, &["plugins", "invoke", "test_svc", "widgets"]);
+    let output = run_cli(&server, &["plugin", "invoke", "test_svc", "widgets"]);
     assert!(
         output.status.success(),
         "stderr: {}",
@@ -625,7 +625,7 @@ fn test_prefix_match_shows_filtered_table() {
 
     let output = run_cli(
         &server,
-        &["plugins", "invoke", "test_svc", "widgets", "bulk"],
+        &["plugin", "invoke", "test_svc", "widgets", "bulk"],
     );
     assert!(
         output.status.success(),
@@ -697,7 +697,7 @@ fn test_space_separated_segments_invoke() {
 
     let output = run_cli(
         &server,
-        &["plugins", "invoke", "test_svc", "widgets", "bulk", "create"],
+        &["plugin", "invoke", "test_svc", "widgets", "bulk", "create"],
     );
     assert!(
         output.status.success(),
@@ -717,7 +717,7 @@ fn test_space_separated_segments_invoke() {
 
     let output = run_cli(
         &server,
-        &["plugins", "invoke", "test_svc", "widgets", "delete"],
+        &["plugin", "invoke", "test_svc", "widgets", "delete"],
     );
     assert!(
         output.status.success(),
@@ -739,7 +739,7 @@ fn test_no_match_returns_error() {
     .with_body(multi_operation_catalog())
     .create();
 
-    let output = run_cli(&server, &["plugins", "invoke", "test_svc", "nonexistent"]);
+    let output = run_cli(&server, &["plugin", "invoke", "test_svc", "nonexistent"]);
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("no operation matching"), "stderr: {stderr}");
@@ -759,7 +759,7 @@ fn test_prefix_match_with_params_warns() {
 
     let output = run_cli(
         &server,
-        &["plugins", "invoke", "test_svc", "widgets", "-p", "name=foo"],
+        &["plugin", "invoke", "test_svc", "widgets", "-p", "name=foo"],
     );
     assert!(
         output.status.success(),

@@ -261,7 +261,7 @@ fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["plugins", "connect", "widget_metrics"])
+        .args(["plugin", "connect", "widget_metrics"])
         .write_stdin("eu-west\nwm-key\n")
         .assert()
         .success()
@@ -331,7 +331,7 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["plugins", "connect", "manual-svc"])
+        .args(["plugin", "connect", "manual-svc"])
         .write_stdin("1\nabc123\n2\n")
         .assert()
         .success()
@@ -379,7 +379,7 @@ fn test_connection_selection_uses_selected_connection_auth_type() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["plugins", "connect", "manual-svc"])
+        .args(["plugin", "connect", "manual-svc"])
         .write_stdin("1\n")
         .assert()
         .success()
@@ -423,7 +423,7 @@ fn test_connect_auto_selects_single_connection_and_uses_its_auth_type() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["plugins", "connect", "single-svc"])
+        .args(["plugin", "connect", "single-svc"])
         .assert()
         .success()
         .stderr(predicate::str::contains("Select a Single Service connection:").not())
@@ -450,7 +450,7 @@ fn test_connect_unknown_connection_lists_normalized_available_names() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["plugins", "connect", "manual-svc", "--connection", "bogus"])
+        .args(["plugin", "connect", "manual-svc", "--connection", "bogus"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("unknown connection 'bogus'"))
@@ -491,7 +491,7 @@ fn test_manual_connect_uses_credentials_object_for_multi_field_auth() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["plugins", "connect", "widget_metrics"])
+        .args(["plugin", "connect", "widget_metrics"])
         .write_stdin("wm-key\nworkspace-42\n")
         .assert()
         .success()
@@ -522,7 +522,7 @@ fn test_manual_connect_falls_back_to_generic_credential_prompt() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["plugins", "connect", "manual-svc"])
+        .args(["plugin", "connect", "manual-svc"])
         .write_stdin("secret\n")
         .assert()
         .success()
@@ -540,7 +540,7 @@ fn test_manual_connect_fails_when_stdin_closes_during_prompt() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["plugins", "connect", "manual-svc"])
+        .args(["plugin", "connect", "manual-svc"])
         .write_stdin("")
         .assert()
         .failure()
@@ -568,7 +568,7 @@ fn test_cli_plugins_list_table_output() {
         .create();
 
     let mut cmd = cli_command(home.path());
-    cmd.args(["plugins", "list"]);
+    cmd.args(["plugin", "list"]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("ACME_CRM").or(predicate::str::contains("acme_crm")))
@@ -589,6 +589,20 @@ fn test_cli_plugins_list_table_output() {
 
     let mut cmd = cli_command(home.path());
     cmd.args(["integrations", "list"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("acme_crm"));
+
+    mock.assert();
+
+    let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+        .with_body(
+            r#"[{"name":"acme_crm","description":"Acme CRM plugin with a longer description","connected":true}]"#,
+        )
+        .create();
+
+    let mut cmd = cli_command(home.path());
+    cmd.args(["plugins", "list"]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("acme_crm"));
@@ -618,7 +632,7 @@ fn test_cli_plugins_list_accepts_legacy_credentials_without_api_url() {
     config_cmd.assert().success();
 
     let mut cmd = cli_command(home.path());
-    cmd.args(["plugins", "list"]);
+    cmd.args(["plugin", "list"]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("Acme CRM plugin"));

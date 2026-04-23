@@ -24,7 +24,7 @@ docker run --rm \
   -e GESTALT_URL=https://gestalt.example.com \
   -e GESTALT_API_KEY=gst_api_... \
   valontechnologies/gestalt:latest \
-  plugins list
+  plugin list
 ```
 
 ## CI example
@@ -39,5 +39,5 @@ jobs:
             -e GESTALT_URL="${{ vars.GESTALT_URL }}" \
             -e GESTALT_API_KEY="${{ secrets.GESTALT_API_KEY }}" \
             valontechnologies/gestalt:latest \
-            plugins list --format json
+            plugin list --format json
 ```

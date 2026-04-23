@@ -5,7 +5,7 @@ use crate::params;
 
 #[derive(Parser)]
 #[command(name = "gestalt")]
-#[command(about = "CLI for Gestalt API - authentication, plugins, and operations")]
+#[command(about = "CLI for Gestalt API - authentication, plugin, workflow, agent, and operations")]
 #[command(version)]
 pub struct Cli {
     #[command(subcommand)]
@@ -38,8 +38,8 @@ pub enum Commands {
     },
 
     /// Manage plugins
-    #[command(alias = "integrations")]
-    Plugins {
+    #[command(aliases = ["plugins", "integrations"])]
+    Plugin {
         #[command(subcommand)]
         command: PluginCommands,
     },
@@ -59,7 +59,8 @@ pub enum Commands {
     },
 
     /// Manage workflow resources
-    Workflows {
+    #[command(alias = "workflows")]
+    Workflow {
         #[command(subcommand)]
         command: WorkflowCommands,
     },

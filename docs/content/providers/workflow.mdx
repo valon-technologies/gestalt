@@ -155,14 +155,14 @@ omitted, that field is ignored during matching.
 ## Creating user-owned schedules
 
 User-owned schedules are global resources exposed through
-`POST /api/v1/workflow/schedules` and `gestalt workflows schedules ...`.
+`POST /api/v1/workflow/schedules` and `gestalt workflow schedules ...`.
 These schedules execute as the creating subject, not as a plugin-local or
 synthetic workflow workload.
 
 <Tabs items={['CLI', 'HTTP']}>
   <Tabs.Tab>
     ```sh
-    gestalt workflows schedules create \
+    gestalt workflow schedules create \
       --cron "0 */6 * * *" \
       --timezone America/New_York \
       --plugin github \
@@ -177,18 +177,18 @@ synthetic workflow workload.
     List schedules:
 
     ```sh
-    gestalt workflows schedules list
-    gestalt workflows schedules list --plugin github
+    gestalt workflow schedules list
+    gestalt workflow schedules list --plugin github
     ```
 
     Inspect, update, pause, resume, or delete a schedule:
 
     ```sh
-    gestalt workflows schedules get <schedule-id>
-    gestalt workflows schedules update <schedule-id> --cron "0 9 * * 1-5"
-    gestalt workflows schedules pause <schedule-id>
-    gestalt workflows schedules resume <schedule-id>
-    gestalt workflows schedules delete <schedule-id>
+    gestalt workflow schedules get <schedule-id>
+    gestalt workflow schedules update <schedule-id> --cron "0 9 * * 1-5"
+    gestalt workflow schedules pause <schedule-id>
+    gestalt workflow schedules resume <schedule-id>
+    gestalt workflow schedules delete <schedule-id>
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -246,13 +246,13 @@ workflow backend.
 
 User-owned triggers are global resources exposed through
 `POST /api/v1/workflow/event-triggers` and
-`gestalt workflows triggers ...`. These triggers execute as the creating
+`gestalt workflow triggers ...`. These triggers execute as the creating
 subject, not as a plugin-local or synthetic workflow workload.
 
 <Tabs items={['CLI', 'HTTP']}>
   <Tabs.Tab>
     ```sh
-    gestalt workflows triggers create \
+    gestalt workflow triggers create \
       --type roadmap.item.updated \
       --source roadmap \
       --subject item \
@@ -266,18 +266,18 @@ subject, not as a plugin-local or synthetic workflow workload.
     List triggers:
 
     ```sh
-    gestalt workflows triggers list
-    gestalt workflows triggers list --plugin slack --type roadmap.item.updated
+    gestalt workflow triggers list
+    gestalt workflow triggers list --plugin slack --type roadmap.item.updated
     ```
 
     Inspect, update, pause, resume, or delete a trigger:
 
     ```sh
-    gestalt workflows triggers get <trigger-id>
-    gestalt workflows triggers update <trigger-id> --type roadmap.item.synced
-    gestalt workflows triggers pause <trigger-id>
-    gestalt workflows triggers resume <trigger-id>
-    gestalt workflows triggers delete <trigger-id>
+    gestalt workflow triggers get <trigger-id>
+    gestalt workflow triggers update <trigger-id> --type roadmap.item.synced
+    gestalt workflow triggers pause <trigger-id>
+    gestalt workflow triggers resume <trigger-id>
+    gestalt workflow triggers delete <trigger-id>
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -337,7 +337,7 @@ specific workflow backend.
 Triggers become useful once something can publish matching events into
 the workflow system. Gestalt now exposes a public event-ingress route at
 `POST /api/v1/workflow/events` and the matching CLI command
-`gestalt workflows events publish`.
+`gestalt workflow events publish`.
 
 When you publish an event, Gestalt normalizes the event ID, spec version, and
 timestamp if you omit them, then fans that event out across the configured
@@ -349,7 +349,7 @@ workflows.
 <Tabs items={['CLI', 'HTTP']}>
   <Tabs.Tab>
     ```sh
-    gestalt workflows events publish \
+    gestalt workflow events publish \
       --type roadmap.item.updated \
       --source roadmap \
       --subject item \
@@ -445,15 +445,15 @@ Runs are the execution records produced by schedules, triggers, or other
 workflow-provider actions. The global run surface is
 `GET /api/v1/workflow/runs`, `GET /api/v1/workflow/runs/{runID}`,
 `POST /api/v1/workflow/runs/{runID}/cancel`, and
-`gestalt workflows runs ...`.
+`gestalt workflow runs ...`.
 
 <Tabs items={['CLI', 'HTTP', 'UI']}>
   <Tabs.Tab>
     ```sh
-    gestalt workflows runs list
-    gestalt workflows runs list --plugin github --status failed
-    gestalt workflows runs get <run-id>
-    gestalt workflows runs cancel <run-id> --reason "operator requested"
+    gestalt workflow runs list
+    gestalt workflow runs list --plugin github --status failed
+    gestalt workflow runs get <run-id>
+    gestalt workflow runs cancel <run-id> --reason "operator requested"
     ```
   </Tabs.Tab>
   <Tabs.Tab>

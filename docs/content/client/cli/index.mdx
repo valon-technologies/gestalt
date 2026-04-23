@@ -22,15 +22,15 @@ asIndexPage: true
 | `gestalt auth status` | Show current authentication state and server connectivity. |
 | `gestalt init` | Run the interactive setup wizard. |
 | `gestalt config get\|set\|unset\|list` | Manage the local client config. |
-| `gestalt plugins list` | List plugins from the server. |
-| `gestalt plugins connect NAME` | Connect a plugin through OAuth or interactive manual authentication. |
-| `gestalt plugins disconnect NAME` | Disconnect a plugin, removing stored credentials. |
-| `gestalt plugins invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
-| `gestalt plugins describe NAME OPERATION` | Show one operation's parameter contract. |
-| `gestalt workflows schedules ...` | Create, list, inspect, update, pause, resume, or delete workflow schedules. |
-| `gestalt workflows triggers ...` | Create, list, inspect, update, pause, resume, or delete workflow triggers. |
-| `gestalt workflows events publish ...` | Publish an event into the workflow system. |
-| `gestalt workflows runs ...` | List, inspect, and cancel workflow runs. |
+| `gestalt plugin list` | List plugins from the server. |
+| `gestalt plugin connect NAME` | Connect a plugin through OAuth or interactive manual authentication. |
+| `gestalt plugin disconnect NAME` | Disconnect a plugin, removing stored credentials. |
+| `gestalt plugin invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
+| `gestalt plugin describe NAME OPERATION` | Show one operation's parameter contract. |
+| `gestalt workflow schedules ...` | Create, list, inspect, update, pause, resume, or delete workflow schedules. |
+| `gestalt workflow triggers ...` | Create, list, inspect, update, pause, resume, or delete workflow triggers. |
+| `gestalt workflow events publish ...` | Publish an event into the workflow system. |
+| `gestalt workflow runs ...` | List, inspect, and cancel workflow runs. |
 | `gestalt agent runs ...` | Create, list, inspect, and cancel global agent runs. |
 | `gestalt tokens create\|list\|revoke` | Manage Gestalt API tokens. |
 
@@ -63,43 +63,43 @@ The CLI searches the current directory and then parent directories until it find
 
 ## Plugin connect flags
 
-`gestalt plugins connect NAME` accepts `--connection` and `--instance`. When the selected connection uses manual authentication instead of OAuth, the CLI prompts for the required credential fields and connection parameters.
+`gestalt plugin connect NAME` accepts `--connection` and `--instance`. When the selected connection uses manual authentication instead of OAuth, the CLI prompts for the required credential fields and connection parameters.
 
 ## Plugin disconnect flags
 
-`gestalt plugins disconnect NAME` accepts `--connection` and `--instance` to target a specific named connection or stored instance. When both are omitted, the default connection is disconnected.
+`gestalt plugin disconnect NAME` accepts `--connection` and `--instance` to target a specific named connection or stored instance. When both are omitted, the default connection is disconnected.
 
 ## Invoke flags
 
-`gestalt plugins invoke` accepts `-p`/`--param key=value`, `--input-file file.json` (use `-` for stdin), `--connection`, `--instance`, and `--select`. Use `:=` instead of `=` to pass JSON values: `-p items:='["a","b"]'`.
+`gestalt plugin invoke` accepts `-p`/`--param key=value`, `--input-file file.json` (use `-` for stdin), `--connection`, `--instance`, and `--select`. Use `:=` instead of `=` to pass JSON values: `-p items:='["a","b"]'`.
 
 ## Operation name matching
 
 Operation names with dots (like `chat.postMessage`) can be typed as space-separated segments:
 
 ```sh
-gestalt plugins invoke slack chat postMessage
+gestalt plugin invoke slack chat postMessage
 ```
 
-This resolves to `chat.postMessage`. If the segments match a prefix shared by multiple operations, the CLI displays the matching subset instead of an error. For example, `gestalt plugins invoke slack chat` lists all operations starting with `chat.`.
+This resolves to `chat.postMessage`. If the segments match a prefix shared by multiple operations, the CLI displays the matching subset instead of an error. For example, `gestalt plugin invoke slack chat` lists all operations starting with `chat.`.
 
 ## Examples
 
 ```sh
-gestalt plugins list
-gestalt plugins connect notion --connection MCP
-gestalt plugins describe slack chat.postMessage
-gestalt plugins invoke slack chat postMessage \
+gestalt plugin list
+gestalt plugin connect notion --connection MCP
+gestalt plugin describe slack chat.postMessage
+gestalt plugin invoke slack chat postMessage \
   --connection plugin \
   -p channel=C123 \
   -p text='hello'
-gestalt workflows schedules create \
+gestalt workflow schedules create \
   --cron "0 */6 * * *" \
   --plugin github \
   --operation issues.list \
   -p owner=valon-technologies \
   -p repo=gestalt
-gestalt workflows triggers create \
+gestalt workflow triggers create \
   --type roadmap.item.updated \
   --source roadmap \
   --subject item \
@@ -107,13 +107,13 @@ gestalt workflows triggers create \
   --operation chat.postMessage \
   -p channel=C123 \
   -p text='Roadmap item updated'
-gestalt workflows events publish \
+gestalt workflow events publish \
   --type roadmap.item.updated \
   --source roadmap \
   --subject item \
   -p id=item-1 \
   -e traceId=trace-1
-gestalt workflows runs list --plugin github --status failed
+gestalt workflow runs list --plugin github --status failed
 gestalt tokens create --name automation
 ```
 
@@ -125,10 +125,10 @@ workflow runs.
 ### Schedules
 
 ```sh
-gestalt workflows schedules list
-gestalt workflows schedules list --plugin github
-gestalt workflows schedules get <schedule-id>
-gestalt workflows schedules create \
+gestalt workflow schedules list
+gestalt workflow schedules list --plugin github
+gestalt workflow schedules get <schedule-id>
+gestalt workflow schedules create \
   --cron "0 */6 * * *" \
   --timezone America/New_York \
   --plugin github \
@@ -138,10 +138,10 @@ gestalt workflows schedules create \
   -p owner=valon-technologies \
   -p repo=gestalt \
   -p state=open
-gestalt workflows schedules update <schedule-id> --cron "0 9 * * 1-5"
-gestalt workflows schedules pause <schedule-id>
-gestalt workflows schedules resume <schedule-id>
-gestalt workflows schedules delete <schedule-id>
+gestalt workflow schedules update <schedule-id> --cron "0 9 * * 1-5"
+gestalt workflow schedules pause <schedule-id>
+gestalt workflow schedules resume <schedule-id>
+gestalt workflow schedules delete <schedule-id>
 ```
 
 Use `-p key=value` for strings and `-p key:=json` for structured values. Use
@@ -150,10 +150,10 @@ Use `-p key=value` for strings and `-p key:=json` for structured values. Use
 ### Triggers
 
 ```sh
-gestalt workflows triggers list
-gestalt workflows triggers list --plugin slack --type roadmap.item.updated
-gestalt workflows triggers get <trigger-id>
-gestalt workflows triggers create \
+gestalt workflow triggers list
+gestalt workflow triggers list --plugin slack --type roadmap.item.updated
+gestalt workflow triggers get <trigger-id>
+gestalt workflow triggers create \
   --type roadmap.item.updated \
   --source roadmap \
   --subject item \
@@ -162,10 +162,10 @@ gestalt workflows triggers create \
   --connection default \
   -p channel=C123 \
   -p text='Roadmap item updated'
-gestalt workflows triggers update <trigger-id> --type roadmap.item.synced
-gestalt workflows triggers pause <trigger-id>
-gestalt workflows triggers resume <trigger-id>
-gestalt workflows triggers delete <trigger-id>
+gestalt workflow triggers update <trigger-id> --type roadmap.item.synced
+gestalt workflow triggers pause <trigger-id>
+gestalt workflow triggers resume <trigger-id>
+gestalt workflow triggers delete <trigger-id>
 ```
 
 The create and update commands use the same target input conventions as
@@ -175,7 +175,7 @@ match fields.
 ### Event publishing
 
 ```sh
-gestalt workflows events publish \
+gestalt workflow events publish \
   --type roadmap.item.updated \
   --source roadmap \
   --subject item \
@@ -194,10 +194,10 @@ start the next operations.
 ### Runs
 
 ```sh
-gestalt workflows runs list
-gestalt workflows runs list --plugin github --status failed
-gestalt workflows runs get <run-id>
-gestalt workflows runs cancel <run-id> --reason "operator requested"
+gestalt workflow runs list
+gestalt workflow runs list --plugin github --status failed
+gestalt workflow runs get <run-id>
+gestalt workflow runs cancel <run-id> --reason "operator requested"
 ```
 
 ### Agent Runs

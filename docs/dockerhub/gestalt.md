@@ -1,8 +1,8 @@
 # gestalt Docker image
 
 `gestalt` is a CLI client for the Gestalt API. It connects to a running
-`gestaltd` server and provides commands for authenticating, managing workspace
-identities, listing plugins, invoking integration operations, and managing
+`gestaltd` server and provides commands for authenticating, listing plugins,
+invoking integration operations, managing workflow and agent runs, and managing
 credentials.
 
 > **Alpha.** Gestalt is under active development. Images are tagged
@@ -37,7 +37,7 @@ docker run --rm \
   -e GESTALT_URL=https://gestalt.example.com \
   -e GESTALT_API_KEY=gst_api_... \
   valontechnologies/gestalt:latest \
-  plugins list
+  plugin list
 ```
 
 ### Invoke an operation
@@ -47,46 +47,8 @@ docker run --rm \
   -e GESTALT_URL=https://gestalt.example.com \
   -e GESTALT_API_KEY=gst_api_... \
   valontechnologies/gestalt:latest \
-  plugins invoke github search_code -p "query=gestalt org:my-org"
+  plugin invoke github search_code -p "query=gestalt org:my-org"
 ```
-
-### Manage managed identities
-
-The same image exposes the top-level `identities` command surface:
-
-```sh
-docker run --rm \
-  -e GESTALT_URL=https://gestalt.example.com \
-  -e GESTALT_API_KEY=gst_api_... \
-  valontechnologies/gestalt:latest \
-  identities list
-
-docker run --rm \
-  -e GESTALT_URL=https://gestalt.example.com \
-  -e GESTALT_API_KEY=gst_api_... \
-  valontechnologies/gestalt:latest \
-  identities create --name "Release Bot"
-
-docker run --rm \
-  -e GESTALT_URL=https://gestalt.example.com \
-  -e GESTALT_API_KEY=gst_api_... \
-  valontechnologies/gestalt:latest \
-  identities members add <identity-id> deployer@example.com --role editor
-
-docker run --rm \
-  -e GESTALT_URL=https://gestalt.example.com \
-  -e GESTALT_API_KEY=gst_api_... \
-  valontechnologies/gestalt:latest \
-  identities grants set <identity-id> github --operation issues.list
-
-docker run --rm \
-  -e GESTALT_URL=https://gestalt.example.com \
-  -e GESTALT_API_KEY=gst_api_... \
-  valontechnologies/gestalt:latest \
-  identities tokens create <identity-id> --name ci --permission github:issues.list
-```
-
-Members with the `viewer` role can list and create identity-owned API tokens. Revoking identity-owned tokens requires `editor` or `admin` membership.
 
 ### Use in CI pipelines
 
@@ -103,18 +65,19 @@ jobs:
             -e GESTALT_URL="${{ vars.GESTALT_URL }}" \
             -e GESTALT_API_KEY="${{ secrets.GESTALT_API_KEY }}" \
             valontechnologies/gestalt:latest \
-            plugins list --format json
+            plugin list --format json
 ```
 
 ## Key commands
 
 | Command | Description |
 |---|---|
-| `plugins list` | List available plugins |
-| `plugins connect NAME` | Connect a plugin via OAuth or manual authentication |
-| `plugins disconnect NAME` | Disconnect a plugin |
-| `plugins invoke NAME OP` | Execute a plugin operation |
-| `identities ...` | Manage managed identities, members, grants, and identity-owned tokens |
+| `plugin list` | List available plugins |
+| `plugin connect NAME` | Connect a plugin via OAuth or manual authentication |
+| `plugin disconnect NAME` | Disconnect a plugin |
+| `plugin invoke NAME OP` | Execute a plugin operation |
+| `workflow ...` | Manage workflow schedules, triggers, events, and runs |
+| `agent runs ...` | Create, list, inspect, and cancel agent runs |
 | `tokens create/list/revoke` | Manage API tokens |
 
 Use `--format json` or `--format table` to control output format. See the
@@ -134,7 +97,7 @@ to inspect available commands:
 
 ```sh
 docker run --rm valontechnologies/gestalt:latest --help
-docker run --rm valontechnologies/gestalt:latest plugins invoke --help
+docker run --rm valontechnologies/gestalt:latest plugin invoke --help
 ```
 
 For an interactive shell, use the native binary or Homebrew install instead

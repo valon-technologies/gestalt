@@ -31,7 +31,7 @@ fn run() -> anyhow::Result<()> {
             ConfigCommands::Unset { key } => commands::config::unset(&key),
             ConfigCommands::List => commands::config::list(format),
         },
-        Commands::Plugins { command } => dispatch_plugin_command(command, url, format),
+        Commands::Plugin { command } => dispatch_plugin_command(command, url, format),
         Commands::Invoke(args) => {
             dispatch_plugin_command(PluginCommands::Invoke(args), url, format)
         }
@@ -48,7 +48,7 @@ fn run() -> anyhow::Result<()> {
                 TokenCommands::Revoke { id } => commands::tokens::revoke(&client, &id, format),
             }
         }
-        Commands::Workflows { command } => {
+        Commands::Workflow { command } => {
             let client = ApiClient::from_env(url)?;
             match command {
                 WorkflowCommands::Schedules { command } => match command {

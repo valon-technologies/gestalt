@@ -2,7 +2,7 @@
 
 `gestaltd` exposes a REST API and an optional MCP endpoint. When `server.management` is not configured, every route below is served from the public listener. When `server.management` is configured, `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener and return `404` on the public listener. Prefer the split-listener setup for production so the operator surface does not share the public listener.
 
-The HTTP API uses "integrations" in route paths (e.g. `/api/v1/integrations`) as a stable code surface. The CLI and config both use "plugins" as the canonical term. See [Config File](/reference/config-file#providersplugins) for context.
+The HTTP API uses "integrations" in route paths (e.g. `/api/v1/integrations`) as a stable code surface. The CLI uses the `plugin` command, while config still uses the `plugins` map. See [Config File](/reference/config-file#providersplugins) for context.
 
 ## Authentication model
 
