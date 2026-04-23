@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from typing import Any, Iterator, Protocol, cast
 from urllib import parse as _urlparse
 
+from ._optional_imports import is_optional_provider_import_error
+
 try:
     import grpc as _grpc
     from google.protobuf import struct_pb2 as _struct_pb2
@@ -17,7 +19,7 @@ try:
     from .gen.v1 import datastore_pb2 as _pb
     from .gen.v1 import datastore_pb2_grpc as _pb_grpc
 except ModuleNotFoundError as exc:
-    if exc.name not in {"google", "grpc"}:
+    if not is_optional_provider_import_error(exc):
         raise
     _IMPORT_ERROR: ModuleNotFoundError | None = exc
     _grpc: Any = None
