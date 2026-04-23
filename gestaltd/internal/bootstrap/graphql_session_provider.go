@@ -60,6 +60,18 @@ func (p *graphQLSessionCatalogProvider) SupportsSessionCatalog() bool {
 	return true
 }
 
+func (p *graphQLSessionCatalogProvider) SupportsPostConnect() bool {
+	return core.SupportsPostConnect(p.Provider)
+}
+
+func (p *graphQLSessionCatalogProvider) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+	metadata, supported, err := core.PostConnect(ctx, p.Provider, token)
+	if !supported {
+		return nil, core.ErrPostConnectUnsupported
+	}
+	return metadata, err
+}
+
 func (p *graphQLSessionCatalogProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	if _, ok := graphQLCatalogOperation(p.Catalog(), operation); ok {
 		return p.Provider.Execute(ctx, operation, params, token)

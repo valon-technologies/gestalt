@@ -89,6 +89,9 @@ func SupportsPostConnect(prov Provider) bool {
 }
 
 func PostConnect(ctx context.Context, prov Provider, token *IntegrationToken) (map[string]string, bool, error) {
+	if !SupportsPostConnect(prov) {
+		return nil, false, nil
+	}
 	pcp, ok := prov.(PostConnectCapable)
 	if !ok {
 		return nil, false, nil

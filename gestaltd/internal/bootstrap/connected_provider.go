@@ -60,8 +60,16 @@ func (p *connectedProvider) DiscoveryConfig() *core.DiscoveryConfig {
 }
 func (p *connectedProvider) ConnectionForOperation(string) string { return p.connection }
 func (p *connectedProvider) Catalog() *catalog.Catalog            { return p.inner.Catalog() }
+func (p *connectedProvider) SupportsPostConnect() bool            { return core.SupportsPostConnect(p.inner) }
 func (p *connectedProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	return p.inner.Execute(ctx, operation, params, token)
+}
+func (p *connectedProvider) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+	metadata, supported, err := core.PostConnect(ctx, p.inner, token)
+	if !supported {
+		return nil, core.ErrPostConnectUnsupported
+	}
+	return metadata, err
 }
 func (p *connectedProvider) Close() error {
 	if closer, ok := p.inner.(io.Closer); ok {
@@ -73,6 +81,18 @@ func (p *connectedProvider) Close() error {
 type connectedSessionCatalogProvider struct {
 	core.Provider
 	session core.SessionCatalogProvider
+}
+
+func (p *connectedSessionCatalogProvider) SupportsPostConnect() bool {
+	return core.SupportsPostConnect(p.Provider)
+}
+
+func (p *connectedSessionCatalogProvider) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+	metadata, supported, err := core.PostConnect(ctx, p.Provider, token)
+	if !supported {
+		return nil, core.ErrPostConnectUnsupported
+	}
+	return metadata, err
 }
 
 func (p *connectedSessionCatalogProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
@@ -89,6 +109,18 @@ func (p *connectedSessionCatalogProvider) Close() error {
 type connectedGraphQLProvider struct {
 	core.Provider
 	graphQL core.GraphQLSurfaceInvoker
+}
+
+func (p *connectedGraphQLProvider) SupportsPostConnect() bool {
+	return core.SupportsPostConnect(p.Provider)
+}
+
+func (p *connectedGraphQLProvider) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+	metadata, supported, err := core.PostConnect(ctx, p.Provider, token)
+	if !supported {
+		return nil, core.ErrPostConnectUnsupported
+	}
+	return metadata, err
 }
 
 func (p *connectedGraphQLProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
@@ -113,6 +145,18 @@ func (p *connectedGraphQLProvider) Close() error {
 type connectedOAuthProvider struct {
 	core.Provider
 	auth core.OAuthProvider
+}
+
+func (p *connectedOAuthProvider) SupportsPostConnect() bool {
+	return core.SupportsPostConnect(p.Provider)
+}
+
+func (p *connectedOAuthProvider) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+	metadata, supported, err := core.PostConnect(ctx, p.Provider, token)
+	if !supported {
+		return nil, core.ErrPostConnectUnsupported
+	}
+	return metadata, err
 }
 
 func (p *connectedOAuthProvider) AuthorizationURL(state string, scopes []string) string {

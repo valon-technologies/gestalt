@@ -222,6 +222,17 @@ func (r *Restricted) DiscoveryConfig() *core.DiscoveryConfig {
 	return r.inner.DiscoveryConfig()
 }
 
+func (r *Restricted) SupportsPostConnect() bool {
+	return core.SupportsPostConnect(r.inner)
+}
+
+func (r *Restricted) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+	if pcp, ok := r.inner.(core.PostConnectCapable); ok {
+		return pcp.PostConnect(ctx, token)
+	}
+	return nil, core.ErrPostConnectUnsupported
+}
+
 func (r *Restricted) ConnectionForOperation(operation string) string {
 	if _, ok := r.allowed[operation]; !ok {
 		return ""
