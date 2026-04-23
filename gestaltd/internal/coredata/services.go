@@ -12,9 +12,6 @@ type Services struct {
 	Users                    *UserService
 	Tokens                   *TokenService
 	APITokens                *APITokenService
-	ManagedIdentities        *ManagedIdentityService
-	IdentityMemberships      *ManagedIdentityMembershipService
-	IdentityGrants           *ManagedIdentityGrantService
 	Identities               *IdentityService
 	IdentityAuthBindings     *IdentityAuthBindingService
 	IdentityManagementGrants *IdentityManagementGrantService
@@ -37,15 +34,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	}
 	if err := ds.CreateObjectStore(ctx, StoreAPITokens, APITokensSchema); err != nil {
 		return nil, fmt.Errorf("create api_tokens store: %w", err)
-	}
-	if err := ds.CreateObjectStore(ctx, StoreManagedIdentities, ManagedIdentitiesSchema); err != nil {
-		return nil, fmt.Errorf("create managed_identities store: %w", err)
-	}
-	if err := ds.CreateObjectStore(ctx, StoreManagedIdentityMemberships, ManagedIdentityMembershipsSchema); err != nil {
-		return nil, fmt.Errorf("create managed_identity_memberships store: %w", err)
-	}
-	if err := ds.CreateObjectStore(ctx, StoreManagedIdentityGrants, ManagedIdentityGrantsSchema); err != nil {
-		return nil, fmt.Errorf("create managed_identity_grants store: %w", err)
 	}
 	if err := ds.CreateObjectStore(ctx, StoreIdentities, IdentitiesSchema); err != nil {
 		return nil, fmt.Errorf("create identities store: %w", err)
@@ -92,9 +80,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := users.BackfillNormalizedEmails(ctx); err != nil {
 		return nil, fmt.Errorf("backfill users store: %w", err)
 	}
-	managedIdentities := NewManagedIdentityService(ds, identities)
-	identityMemberships := NewManagedIdentityMembershipService(ds, identityManagementGrants, users)
-	identityGrants := NewManagedIdentityGrantService(ds, identityPluginAccess)
 	apiTokens := NewAPITokenService(ds, apiTokenAccess, users)
 	tokens := NewTokenService(ds, enc)
 
@@ -104,15 +89,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := users.BackfillCanonicalIdentities(ctx); err != nil {
 		return nil, fmt.Errorf("backfill canonical identities from users: %w", err)
 	}
-	if err := managedIdentities.BackfillCanonicalIdentities(ctx); err != nil {
-		return nil, fmt.Errorf("backfill canonical identities from managed identities: %w", err)
-	}
-	if err := identityMemberships.BackfillCanonicalGrants(ctx); err != nil {
-		return nil, fmt.Errorf("backfill canonical identity management grants: %w", err)
-	}
-	if err := identityGrants.BackfillCanonicalAccess(ctx); err != nil {
-		return nil, fmt.Errorf("backfill canonical identity grants: %w", err)
-	}
 	if err := apiTokens.BackfillTokenAccess(ctx); err != nil {
 		return nil, fmt.Errorf("backfill canonical api token access: %w", err)
 	}
@@ -120,9 +96,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 		Users:                    users,
 		Tokens:                   tokens,
 		APITokens:                apiTokens,
-		ManagedIdentities:        managedIdentities,
-		IdentityMemberships:      identityMemberships,
-		IdentityGrants:           identityGrants,
 		Identities:               identities,
 		IdentityAuthBindings:     authBindings,
 		IdentityManagementGrants: identityManagementGrants,

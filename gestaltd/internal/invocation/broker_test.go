@@ -124,7 +124,7 @@ func TestBrokerResolveToken_WorkflowContextDoesNotBypassWorkloadIdentityBinding(
 	}
 }
 
-func TestBrokerResolveToken_ManagedIdentityDoesNotBypassSelectorBinding(t *testing.T) {
+func TestBrokerResolveToken_CredentialedWorkloadDoesNotBypassSelectorBinding(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
@@ -132,19 +132,32 @@ func TestBrokerResolveToken_ManagedIdentityDoesNotBypassSelectorBinding(t *testi
 		N:        "slack",
 		ConnMode: core.ConnectionModeUser,
 	})
-	authz := mustAuthorizer(t, config.AuthorizationConfig{}, providers)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"ops-bot": {
+				Token: "gst_wld_ops-bot-token",
+				Providers: map[string]config.WorkloadProviderDef{
+					"slack": {
+						Connection: "workspace",
+						Instance:   "team-a",
+						Allow:      []string{"list"},
+					},
+				},
+			},
+		},
+	}, providers)
 	broker := NewBroker(providers, svc.Users, svc.Tokens, WithAuthorizer(authz))
 
 	identity := &principal.Principal{
 		Kind:                principal.KindWorkload,
-		SubjectID:           principal.ManagedIdentitySubjectID("ops-bot"),
+		SubjectID:           principal.WorkloadSubjectID("ops-bot"),
 		CredentialSubjectID: principal.UserSubjectID("creator-user"),
 		Source:              principal.SourceAPIToken,
 	}
 
 	_, _, err := broker.ResolveToken(context.Background(), identity, "slack", "workspace", "team-b")
 	if err == nil {
-		t.Fatal("expected managed identity selector override to be rejected")
+		t.Fatal("expected credentialed workload selector override to be rejected")
 	}
 	if got, want := err.Error(), "workloads may not override connection or instance bindings"; got == "" || !strings.Contains(got, want) {
 		t.Fatalf("ResolveToken error = %q, want substring %q", got, want)

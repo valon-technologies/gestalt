@@ -283,63 +283,6 @@ func TestNew(t *testing.T) {
 		}
 	})
 
-	t.Run("skips_malformed_managed_identity_grants_during_canonical_backfill", func(t *testing.T) {
-		t.Parallel()
-
-		db := &coretesting.StubIndexedDB{}
-		ctx := context.Background()
-		createdAt := time.Date(2026, 1, 3, 12, 0, 0, 0, time.UTC)
-		if err := db.ObjectStore(coredata.StoreManagedIdentities).Add(ctx, indexeddb.Record{
-			"id":                     "mi-1",
-			"display_name":           "Deploy Bot",
-			"created_by_identity_id": "legacy-user",
-			"created_at":             createdAt,
-			"updated_at":             createdAt,
-		}); err != nil {
-			t.Fatalf("seed managed identity: %v", err)
-		}
-		if err := db.ObjectStore(coredata.StoreManagedIdentityGrants).Add(ctx, indexeddb.Record{
-			"id":              "grant-good",
-			"identity_id":     "mi-1",
-			"plugin":          "slack",
-			"operations_json": `["read"]`,
-			"created_at":      createdAt,
-			"updated_at":      createdAt,
-		}); err != nil {
-			t.Fatalf("seed valid managed identity grant: %v", err)
-		}
-		if err := db.ObjectStore(coredata.StoreManagedIdentityGrants).Add(ctx, indexeddb.Record{
-			"id":              "grant-bad",
-			"identity_id":     "mi-1",
-			"plugin":          "github",
-			"operations_json": `{`,
-			"created_at":      createdAt,
-			"updated_at":      createdAt,
-		}); err != nil {
-			t.Fatalf("seed invalid managed identity grant: %v", err)
-		}
-
-		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
-		if err != nil {
-			t.Fatalf("NewAESGCM: %v", err)
-		}
-		svc, err := coredata.New(db, enc)
-		if err != nil {
-			t.Fatalf("coredata.New: %v", err)
-		}
-
-		access, err := svc.IdentityPluginAccess.GetAccess(ctx, "mi-1", "slack")
-		if err != nil {
-			t.Fatalf("GetAccess valid grant: %v", err)
-		}
-		if access.Plugin != "slack" {
-			t.Fatalf("valid access plugin = %q, want %q", access.Plugin, "slack")
-		}
-		if _, err := svc.IdentityPluginAccess.GetAccess(ctx, "mi-1", "github"); !errors.Is(err, core.ErrNotFound) {
-			t.Fatalf("GetAccess invalid grant err = %v, want ErrNotFound", err)
-		}
-	})
-
 	t.Run("backfills_multiple_identity_bindings_without_blank_auth_subject_keys", func(t *testing.T) {
 		t.Parallel()
 
@@ -1223,17 +1166,18 @@ func TestAPITokenService(t *testing.T) {
 			t.Fatalf("StoreAPIToken owned: %v", err)
 		}
 
+		otherUser := mustCreateUser(t, svc, "other@test.com")
 		otherOwner := &core.APIToken{
-			ID:                  "managed-token",
-			OwnerKind:           core.APITokenOwnerKindManagedIdentity,
-			OwnerID:             "managed-123",
-			CredentialSubjectID: "managed_identity:managed-123",
-			Name:                "managed",
-			HashedToken:         "sha256:managed",
-			Permissions:         []core.AccessPermission{{Plugin: "managed"}},
+			ID:                  "other-token",
+			OwnerKind:           core.APITokenOwnerKindUser,
+			OwnerID:             otherUser.ID,
+			CredentialSubjectID: principal.UserSubjectID(otherUser.ID),
+			Name:                "other",
+			HashedToken:         "sha256:other",
+			Permissions:         []core.AccessPermission{{Plugin: "other"}},
 		}
 		if err := svc.APITokens.StoreAPIToken(ctx, otherOwner); err != nil {
-			t.Fatalf("StoreAPIToken managed: %v", err)
+			t.Fatalf("StoreAPIToken other: %v", err)
 		}
 
 		deleted, err := svc.APITokens.RevokeAllAPITokens(ctx, user.ID)
@@ -1252,20 +1196,20 @@ func TestAPITokenService(t *testing.T) {
 			t.Fatalf("remaining user tokens = %+v, want none", tokens)
 		}
 
-		managedTokens, err := svc.APITokens.ListAPITokensByOwner(ctx, core.APITokenOwnerKindManagedIdentity, "managed-123")
+		otherTokens, err := svc.APITokens.ListAPITokens(ctx, otherUser.ID)
 		if err != nil {
-			t.Fatalf("ListAPITokensByOwner(managed): %v", err)
+			t.Fatalf("ListAPITokens(other): %v", err)
 		}
-		if len(managedTokens) != 1 || managedTokens[0].ID != otherOwner.ID {
-			t.Fatalf("remaining managed tokens = %+v, want managed survivor", managedTokens)
+		if len(otherTokens) != 1 || otherTokens[0].ID != otherOwner.ID {
+			t.Fatalf("remaining other-owner tokens = %+v, want survivor", otherTokens)
 		}
 
 		access, err := svc.APITokenAccess.ListByToken(ctx, otherOwner.ID)
 		if err != nil {
-			t.Fatalf("ListByToken managed-token: %v", err)
+			t.Fatalf("ListByToken other-token: %v", err)
 		}
-		if len(access) != 1 || access[0].Plugin != "managed" {
-			t.Fatalf("managed token access = %+v, want surviving access", access)
+		if len(access) != 1 || access[0].Plugin != "other" {
+			t.Fatalf("other token access = %+v, want surviving access", access)
 		}
 	})
 
@@ -1347,7 +1291,7 @@ func TestWorkflowExecutionRefService(t *testing.T) {
 				Operation:  "sync",
 			},
 			SubjectID:           principal.UserSubjectID("user-123"),
-			CredentialSubjectID: principal.ManagedIdentitySubjectID("credential-123"),
+			CredentialSubjectID: principal.WorkloadSubjectID("credential-123"),
 			Permissions:         []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}},
 		})
 		if err != nil {
@@ -1365,8 +1309,8 @@ func TestWorkflowExecutionRefService(t *testing.T) {
 		if !reflect.DeepEqual(got.Permissions, want) {
 			t.Fatalf("Permissions = %#v, want %#v", got.Permissions, want)
 		}
-		if got.CredentialSubjectID != principal.ManagedIdentitySubjectID("credential-123") {
-			t.Fatalf("CredentialSubjectID = %q, want %q", got.CredentialSubjectID, principal.ManagedIdentitySubjectID("credential-123"))
+		if got.CredentialSubjectID != principal.WorkloadSubjectID("credential-123") {
+			t.Fatalf("CredentialSubjectID = %q, want %q", got.CredentialSubjectID, principal.WorkloadSubjectID("credential-123"))
 		}
 	})
 
@@ -1382,13 +1326,13 @@ func TestWorkflowExecutionRefService(t *testing.T) {
 				PluginName: "roadmap",
 				Operation:  "sync",
 			},
-			SubjectID: principal.ManagedIdentitySubjectID("managed-123"),
+			SubjectID: principal.WorkloadSubjectID("managed-123"),
 		})
 		if err != nil {
 			t.Fatalf("Put: %v", err)
 		}
-		if ref.SubjectID != principal.ManagedIdentitySubjectID("managed-123") {
-			t.Fatalf("SubjectID = %q, want %q", ref.SubjectID, principal.ManagedIdentitySubjectID("managed-123"))
+		if ref.SubjectID != principal.WorkloadSubjectID("managed-123") {
+			t.Fatalf("SubjectID = %q, want %q", ref.SubjectID, principal.WorkloadSubjectID("managed-123"))
 		}
 	})
 }

@@ -70,22 +70,18 @@ func ParseTokenType(token string) (TokenType, bool) {
 }
 
 type Resolver struct {
-	auth              core.AuthenticationProvider
-	users             *coredata.UserService
-	apiTokens         *coredata.APITokenService
-	managedIdentities *coredata.ManagedIdentityService
-	identityGrants    *coredata.ManagedIdentityGrantService
-	workloads         WorkloadTokenResolver
+	auth      core.AuthenticationProvider
+	users     *coredata.UserService
+	apiTokens *coredata.APITokenService
+	workloads WorkloadTokenResolver
 }
 
-func NewResolver(auth core.AuthenticationProvider, users *coredata.UserService, apiTokens *coredata.APITokenService, managedIdentities *coredata.ManagedIdentityService, identityGrants *coredata.ManagedIdentityGrantService, workloads WorkloadTokenResolver) *Resolver {
+func NewResolver(auth core.AuthenticationProvider, users *coredata.UserService, apiTokens *coredata.APITokenService, workloads WorkloadTokenResolver) *Resolver {
 	return &Resolver{
-		auth:              auth,
-		users:             users,
-		apiTokens:         apiTokens,
-		managedIdentities: managedIdentities,
-		identityGrants:    identityGrants,
-		workloads:         workloads,
+		auth:      auth,
+		users:     users,
+		apiTokens: apiTokens,
+		workloads: workloads,
 	}
 }
 
@@ -132,8 +128,6 @@ func (r *Resolver) resolveAPIToken(ctx context.Context, token string) (*Principa
 	}
 
 	switch ownerKind := r.apiTokenOwnerKind(apiToken); ownerKind {
-	case core.APITokenOwnerKindManagedIdentity:
-		return r.resolveManagedIdentityAPIToken(ctx, apiToken)
 	case core.APITokenOwnerKindUser:
 	default:
 		return nil, ErrInvalidToken
@@ -168,48 +162,6 @@ func (r *Resolver) resolveAPIToken(ctx context.Context, token string) (*Principa
 		p.Scopes = PermissionPlugins(perms)
 	}
 	return p, nil
-}
-
-func (r *Resolver) resolveManagedIdentityAPIToken(ctx context.Context, apiToken *core.APIToken) (*Principal, error) {
-	if r.managedIdentities == nil || r.identityGrants == nil {
-		return nil, ErrInvalidToken
-	}
-	identityID := strings.TrimSpace(apiToken.OwnerID)
-	if identityID == "" {
-		return nil, ErrInvalidToken
-	}
-
-	identity, err := r.managedIdentities.GetIdentity(ctx, identityID)
-	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			return nil, ErrInvalidToken
-		}
-		return nil, err
-	}
-	grants, err := r.identityGrants.ListGrantsByIdentity(ctx, identityID)
-	if err != nil {
-		return nil, err
-	}
-
-	tokenPerms := permissionsForAPIToken(apiToken)
-	if tokenPerms == nil {
-		tokenPerms = PermissionSet{}
-	}
-	grantPerms := CompileManagedIdentityGrants(grants)
-	effectivePerms := IntersectPermissions(tokenPerms, grantPerms)
-	if effectivePerms == nil {
-		effectivePerms = PermissionSet{}
-	}
-
-	return &Principal{
-		SubjectID:           ManagedIdentitySubjectID(identity.ID),
-		CredentialSubjectID: apiToken.CredentialSubjectID,
-		DisplayName:         identity.DisplayName,
-		Kind:                KindWorkload,
-		Source:              SourceAPIToken,
-		Scopes:              PermissionPlugins(effectivePerms),
-		TokenPermissions:    effectivePerms,
-	}, nil
 }
 
 func (r *Resolver) resolveWorkloadToken(token string) (*Principal, error) {

@@ -427,35 +427,7 @@ func (a *Authorizer) bindingForPrincipal(p *principal.Principal, provider string
 	if binding, ok := a.bindingForSubject(p, provider); ok {
 		return binding, true
 	}
-	if a == nil || p == nil || principal.ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID)) == "" {
-		return WorkloadProviderBinding{}, false
-	}
-	if !principal.AllowsProviderPermission(p, provider) {
-		return WorkloadProviderBinding{}, false
-	}
-	mode, ok := a.providerModes[provider]
-	if !ok {
-		return WorkloadProviderBinding{}, false
-	}
-	switch core.NormalizeConnectionMode(mode) {
-	case core.ConnectionModeNone:
-		return WorkloadProviderBinding{
-			CredentialBinding: CredentialBinding{Mode: core.ConnectionModeNone},
-		}, true
-	case core.ConnectionModeUser:
-		subjectID := principal.EffectiveCredentialSubjectID(p)
-		if subjectID == "" {
-			return WorkloadProviderBinding{}, false
-		}
-		return WorkloadProviderBinding{
-			CredentialBinding: CredentialBinding{
-				Mode:                core.ConnectionModeUser,
-				CredentialSubjectID: subjectID,
-			},
-		}, true
-	default:
-		return WorkloadProviderBinding{}, false
-	}
+	return WorkloadProviderBinding{}, false
 }
 
 func (a *Authorizer) bindingForSubject(p *principal.Principal, provider string) (WorkloadProviderBinding, bool) {

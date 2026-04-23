@@ -2,7 +2,6 @@ use clap::{CommandFactory, Parser};
 use gestalt::api::{self, ApiClient};
 use gestalt::cli::{
     AgentCommands, AgentRunCommands, AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs,
-    IdentityCommands, IdentityGrantCommands, IdentityMemberCommands, IdentityTokenCommands,
     InvokeArgs, PluginCommands, TokenCommands, WorkflowCommands, WorkflowEventCommands,
     WorkflowRunCommands, WorkflowScheduleCommands, WorkflowTriggerCommands,
 };
@@ -47,84 +46,6 @@ fn run() -> anyhow::Result<()> {
                 }
                 TokenCommands::List => commands::tokens::list(&client, format),
                 TokenCommands::Revoke { id } => commands::tokens::revoke(&client, &id, format),
-            }
-        }
-        Commands::Identities { command } => {
-            let client = ApiClient::from_env(url)?;
-            match command {
-                IdentityCommands::List => commands::identities::list(&client, format),
-                IdentityCommands::Create { display_name } => {
-                    commands::identities::create(&client, &display_name, format)
-                }
-                IdentityCommands::Get { id } => commands::identities::get(&client, &id, format),
-                IdentityCommands::Update { id, display_name } => {
-                    commands::identities::update(&client, &id, &display_name, format)
-                }
-                IdentityCommands::Delete { id } => {
-                    commands::identities::delete(&client, &id, format)
-                }
-                IdentityCommands::Members { command } => match command {
-                    IdentityMemberCommands::List { identity } => {
-                        commands::identities::list_members(&client, &identity, format)
-                    }
-                    IdentityMemberCommands::Add {
-                        identity,
-                        email,
-                        role,
-                    }
-                    | IdentityMemberCommands::Update {
-                        identity,
-                        email,
-                        role,
-                    } => commands::identities::upsert_member(
-                        &client,
-                        &identity,
-                        &email,
-                        role.as_str(),
-                        format,
-                    ),
-                    IdentityMemberCommands::Remove { identity, email } => {
-                        commands::identities::remove_member(&client, &identity, &email, format)
-                    }
-                },
-                IdentityCommands::Grants { command } => match command {
-                    IdentityGrantCommands::List { identity } => {
-                        commands::identities::list_grants(&client, &identity, format)
-                    }
-                    IdentityGrantCommands::Set {
-                        identity,
-                        plugin,
-                        operations,
-                    } => commands::identities::set_grant(
-                        &client,
-                        &identity,
-                        &plugin,
-                        &operations,
-                        format,
-                    ),
-                    IdentityGrantCommands::Revoke { identity, plugin } => {
-                        commands::identities::revoke_grant(&client, &identity, &plugin, format)
-                    }
-                },
-                IdentityCommands::Tokens { command } => match command {
-                    IdentityTokenCommands::List { identity } => {
-                        commands::identities::list_tokens(&client, &identity, format)
-                    }
-                    IdentityTokenCommands::Create {
-                        identity,
-                        name,
-                        permissions,
-                    } => commands::identities::create_token(
-                        &client,
-                        &identity,
-                        name.as_deref(),
-                        &permissions,
-                        format,
-                    ),
-                    IdentityTokenCommands::Revoke { identity, id } => {
-                        commands::identities::revoke_token(&client, &identity, &id, format)
-                    }
-                },
             }
         }
         Commands::Workflows { command } => {

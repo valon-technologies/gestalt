@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -84,16 +83,12 @@ type Server struct {
 	users                  *coredata.UserService
 	tokens                 *coredata.TokenService
 	apiTokens              *coredata.APITokenService
-	managedIdentities      *coredata.ManagedIdentityService
-	identityMemberships    *coredata.ManagedIdentityMembershipService
-	identityGrants         *coredata.ManagedIdentityGrantService
 	workspaceRoles         *coredata.WorkspaceRoleService
 	identityPluginAccess   *coredata.IdentityPluginAccessService
 	workflowExecutionRefs  *coredata.WorkflowExecutionRefService
 	workflowSchedules      *workflowmanager.Manager
 	agentRuns              agentmanager.Service
 	authorizationProvider  core.AuthorizationProvider
-	managedIdentityMu      sync.Mutex
 	providers              *registry.ProviderMap[core.Provider]
 	workflow               bootstrap.WorkflowControl
 	pluginRuntimes         bootstrap.RuntimeInspector
@@ -238,13 +233,10 @@ func New(cfg Config) (*Server, error) {
 	users := cfg.Services.Users
 	tokens := cfg.Services.Tokens
 	apiTokens := cfg.Services.APITokens
-	managedIdentities := cfg.Services.ManagedIdentities
-	identityMemberships := cfg.Services.IdentityMemberships
-	identityGrants := cfg.Services.IdentityGrants
 	workspaceRoles := cfg.Services.WorkspaceRoles
 	identityPluginAccess := cfg.Services.IdentityPluginAccess
 	workflowExecutionRefs := cfg.Services.WorkflowExecutionRefs
-	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, managedIdentities, identityGrants, cfg.Authorizer)
+	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, cfg.Authorizer)
 	authProviders := make(map[string]core.AuthenticationProvider, len(cfg.AuthProviders)+1)
 	for name, provider := range cfg.AuthProviders {
 		if provider == nil {
@@ -259,7 +251,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	authResolvers := make(map[string]*principal.Resolver, len(authProviders))
 	for name, provider := range authProviders {
-		authResolvers[name] = principal.NewResolver(provider, users, apiTokens, managedIdentities, identityGrants, cfg.Authorizer)
+		authResolvers[name] = principal.NewResolver(provider, users, apiTokens, cfg.Authorizer)
 	}
 
 	router := chi.NewRouter()
@@ -289,9 +281,6 @@ func New(cfg Config) (*Server, error) {
 		users:                  users,
 		tokens:                 tokens,
 		apiTokens:              apiTokens,
-		managedIdentities:      managedIdentities,
-		identityMemberships:    identityMemberships,
-		identityGrants:         identityGrants,
 		workspaceRoles:         workspaceRoles,
 		identityPluginAccess:   identityPluginAccess,
 		workflowExecutionRefs:  workflowExecutionRefs,

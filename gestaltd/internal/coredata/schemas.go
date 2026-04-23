@@ -3,22 +3,19 @@ package coredata
 import "github.com/valon-technologies/gestalt/server/core/indexeddb"
 
 const (
-	StoreUsers                      = "users"
-	StoreIntegrationTokens          = "integration_tokens"
-	StoreAPITokens                  = "api_tokens"
-	StoreManagedIdentities          = "managed_identities"
-	StoreManagedIdentityMemberships = "managed_identity_memberships"
-	StoreManagedIdentityGrants      = "managed_identity_grants"
-	StoreIdentities                 = "identities"
-	StoreIdentityAuthBindings       = "identity_auth_bindings"
-	StoreIdentityManagementGrants   = "identity_management_grants"
-	StoreIdentityDelegations        = "identity_delegations"
-	StoreWorkspaceRoles             = "workspace_roles"
-	StoreIdentityPluginAccess       = "identity_plugin_access"
-	StoreAPITokenAccess             = "api_token_access"
-	StoreWorkflowExecutionRefs      = "workflow_execution_refs"
-	StoreAgentRunMetadata           = "agent_run_metadata"
-	StoreAgentRunIdempotency        = "agent_run_idempotency"
+	StoreUsers                    = "users"
+	StoreIntegrationTokens        = "integration_tokens"
+	StoreAPITokens                = "api_tokens"
+	StoreIdentities               = "identities"
+	StoreIdentityAuthBindings     = "identity_auth_bindings"
+	StoreIdentityManagementGrants = "identity_management_grants"
+	StoreIdentityDelegations      = "identity_delegations"
+	StoreWorkspaceRoles           = "workspace_roles"
+	StoreIdentityPluginAccess     = "identity_plugin_access"
+	StoreAPITokenAccess           = "api_token_access"
+	StoreWorkflowExecutionRefs    = "workflow_execution_refs"
+	StoreAgentRunMetadata         = "agent_run_metadata"
+	StoreAgentRunIdempotency      = "agent_run_idempotency"
 )
 
 var UsersSchema = indexeddb.ObjectStoreSchema{
@@ -82,48 +79,6 @@ var APITokensSchema = indexeddb.ObjectStoreSchema{
 		{Name: "scopes", Type: indexeddb.TypeString},
 		{Name: "permissions_json", Type: indexeddb.TypeString},
 		{Name: "expires_at", Type: indexeddb.TypeTime},
-		{Name: "created_at", Type: indexeddb.TypeTime},
-		{Name: "updated_at", Type: indexeddb.TypeTime},
-	},
-}
-
-var ManagedIdentitiesSchema = indexeddb.ObjectStoreSchema{
-	Columns: []indexeddb.ColumnDef{
-		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-		{Name: "display_name", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "created_by_identity_id", Type: indexeddb.TypeString},
-		{Name: "created_at", Type: indexeddb.TypeTime},
-		{Name: "updated_at", Type: indexeddb.TypeTime},
-	},
-}
-
-var ManagedIdentityMembershipsSchema = indexeddb.ObjectStoreSchema{
-	Indexes: []indexeddb.IndexSchema{
-		{Name: "by_identity", KeyPath: []string{"identity_id"}},
-		{Name: "by_subject", KeyPath: []string{"subject_id"}},
-		{Name: "by_identity_subject", KeyPath: []string{"identity_id", "subject_id"}, Unique: true},
-	},
-	Columns: []indexeddb.ColumnDef{
-		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-		{Name: "identity_id", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "subject_id", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "email", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "role", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "created_at", Type: indexeddb.TypeTime},
-		{Name: "updated_at", Type: indexeddb.TypeTime},
-	},
-}
-
-var ManagedIdentityGrantsSchema = indexeddb.ObjectStoreSchema{
-	Indexes: []indexeddb.IndexSchema{
-		{Name: "by_identity", KeyPath: []string{"identity_id"}},
-		{Name: "by_identity_plugin", KeyPath: []string{"identity_id", "plugin"}, Unique: true},
-	},
-	Columns: []indexeddb.ColumnDef{
-		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-		{Name: "identity_id", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "plugin", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "operations_json", Type: indexeddb.TypeString},
 		{Name: "created_at", Type: indexeddb.TypeTime},
 		{Name: "updated_at", Type: indexeddb.TypeTime},
 	},

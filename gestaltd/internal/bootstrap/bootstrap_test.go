@@ -1736,7 +1736,7 @@ func TestBootstrapAgentManagerRunPersistsMetadataForToolCallbacks(t *testing.T) 
 	p := &principal.Principal{
 		SubjectID:           "user:user-123",
 		UserID:              "user-123",
-		CredentialSubjectID: principal.ManagedIdentitySubjectID("agent-credential"),
+		CredentialSubjectID: principal.WorkloadSubjectID("agent-credential"),
 		Kind:                principal.KindUser,
 		Source:              principal.SourceSession,
 		TokenPermissions:    perms,
@@ -1808,8 +1808,8 @@ func TestBootstrapAgentManagerRunPersistsMetadataForToolCallbacks(t *testing.T) 
 	if len(ref.Tools) != 1 || ref.Tools[0].ID != startReq.Tools[0].ID {
 		t.Fatalf("stored tools = %#v, want tool id %q", ref.Tools, startReq.Tools[0].ID)
 	}
-	if ref.CredentialSubjectID != principal.ManagedIdentitySubjectID("agent-credential") {
-		t.Fatalf("stored credential subject = %q, want %q", ref.CredentialSubjectID, principal.ManagedIdentitySubjectID("agent-credential"))
+	if ref.CredentialSubjectID != principal.WorkloadSubjectID("agent-credential") {
+		t.Fatalf("stored credential subject = %q, want %q", ref.CredentialSubjectID, principal.WorkloadSubjectID("agent-credential"))
 	}
 }
 
@@ -5640,22 +5640,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if _, ok := provider.relsByModel[existingModelID][unmanagedKey]; !ok {
 			t.Fatal("expected unrelated provider relationship to be preserved")
 		}
-		if err := result.Services.ManagedIdentities.CreateIdentity(ctx, &core.ManagedIdentity{
-			ID:          "svc-bot",
-			DisplayName: "Service Bot",
-		}); err != nil {
-			t.Fatalf("CreateIdentity: %v", err)
-		}
-		if _, err := result.Services.IdentityGrants.UpsertGrant(ctx, &core.ManagedIdentityGrant{
-			IdentityID: "svc-bot",
-			Plugin:     "calendar",
-		}); err != nil {
-			t.Fatalf("UpsertGrant: %v", err)
-		}
-		if _, err := result.Services.IdentityPluginAccess.GetAccess(ctx, "svc-bot", "calendar"); err != nil {
-			t.Fatalf("GetAccess managed identity after start: %v", err)
-		}
-
 		staticPrincipal := &principal.Principal{
 			SubjectID: "user:static-viewer",
 			UserID:    "static-viewer",

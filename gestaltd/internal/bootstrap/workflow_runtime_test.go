@@ -347,7 +347,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 			Instance:   "tenant-a",
 		},
 		SubjectID:           principal.UserSubjectID(user.ID),
-		CredentialSubjectID: principal.ManagedIdentitySubjectID("workflow-credential"),
+		CredentialSubjectID: principal.WorkloadSubjectID("workflow-credential"),
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
@@ -399,8 +399,8 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	if gotPrincipal == nil || gotPrincipal.Kind != principal.KindUser || gotPrincipal.UserID != user.ID || gotPrincipal.SubjectID != principal.UserSubjectID(user.ID) {
 		t.Fatalf("principal = %#v", gotPrincipal)
 	}
-	if gotPrincipal.CredentialSubjectID != principal.ManagedIdentitySubjectID("workflow-credential") {
-		t.Fatalf("credential subject = %q, want %q", gotPrincipal.CredentialSubjectID, principal.ManagedIdentitySubjectID("workflow-credential"))
+	if gotPrincipal.CredentialSubjectID != principal.WorkloadSubjectID("workflow-credential") {
+		t.Fatalf("credential subject = %q, want %q", gotPrincipal.CredentialSubjectID, principal.WorkloadSubjectID("workflow-credential"))
 	}
 	if gotProvider != "roadmap" {
 		t.Fatalf("provider = %q, want %q", gotProvider, "roadmap")
