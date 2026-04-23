@@ -16,7 +16,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -351,93 +350,6 @@ func writeMemoryAuthorizationModel(t *testing.T, provider *memoryAuthorizationPr
 		t.Fatalf("WriteModel: %v", err)
 	}
 	return ref.GetId()
-}
-
-func bootstrapManagedAuthorizationModel(policyRoles, pluginStaticRoles, pluginDynamicRoles, adminDynamicRoles []string) *core.AuthorizationModel {
-	model := &core.AuthorizationModel{Version: 1}
-	model.ResourceTypes = append(model.ResourceTypes, bootstrapAuthorizationResourceType(
-		authorization.ProviderResourceTypePolicyStatic,
-		nil,
-		policyRoles,
-		[]string{authorization.ProviderSubjectTypeSubject},
-	))
-	model.ResourceTypes = appendIfAuthorizationResourceType(model.ResourceTypes, bootstrapAuthorizationResourceType(
-		authorization.ProviderResourceTypePluginStatic,
-		nil,
-		pluginStaticRoles,
-		[]string{authorization.ProviderSubjectTypeSubject},
-	))
-	model.ResourceTypes = appendIfAuthorizationResourceType(model.ResourceTypes, bootstrapAuthorizationResourceType(
-		authorization.ProviderResourceTypePluginDynamic,
-		nil,
-		pluginDynamicRoles,
-		[]string{authorization.ProviderSubjectTypeSubject},
-	))
-	model.ResourceTypes = appendIfAuthorizationResourceType(model.ResourceTypes, bootstrapAuthorizationResourceType(
-		authorization.ProviderResourceTypeAdminPolicyStatic,
-		nil,
-		policyRoles,
-		[]string{authorization.ProviderSubjectTypeSubject},
-	))
-	model.ResourceTypes = appendIfAuthorizationResourceType(model.ResourceTypes, bootstrapAuthorizationResourceType(
-		authorization.ProviderResourceTypeAdminDynamic,
-		nil,
-		adminDynamicRoles,
-		[]string{authorization.ProviderSubjectTypeSubject},
-	))
-	slices.SortFunc(model.ResourceTypes, func(left, right *core.AuthorizationModelResourceType) int {
-		return strings.Compare(left.GetName(), right.GetName())
-	})
-	return model
-}
-
-func appendIfAuthorizationResourceType(target []*core.AuthorizationModelResourceType, resourceType *core.AuthorizationModelResourceType) []*core.AuthorizationModelResourceType {
-	if resourceType == nil {
-		return target
-	}
-	return append(target, resourceType)
-}
-
-func bootstrapAuthorizationResourceType(name string, extraRelations map[string][]string, actions []string, subjects []string) *core.AuthorizationModelResourceType {
-	relations := map[string][]string{}
-	for relation, relationSubjects := range extraRelations {
-		relations[relation] = append([]string(nil), relationSubjects...)
-	}
-	for _, action := range actions {
-		action = strings.TrimSpace(action)
-		if action == "" {
-			continue
-		}
-		relations[action] = append([]string(nil), subjects...)
-	}
-	if len(relations) == 0 {
-		return nil
-	}
-	resourceType := &core.AuthorizationModelResourceType{Name: name}
-	relationNames := make([]string, 0, len(relations))
-	for relation := range relations {
-		relationNames = append(relationNames, relation)
-	}
-	slices.Sort(relationNames)
-	for _, relation := range relationNames {
-		resourceType.Relations = append(resourceType.Relations, &core.AuthorizationModelRelation{
-			Name:         relation,
-			SubjectTypes: append([]string(nil), relations[relation]...),
-		})
-	}
-	actionNames := append([]string(nil), actions...)
-	slices.Sort(actionNames)
-	for _, action := range actionNames {
-		action = strings.TrimSpace(action)
-		if action == "" {
-			continue
-		}
-		resourceType.Actions = append(resourceType.Actions, &core.AuthorizationModelAction{
-			Name:      action,
-			Relations: []string{action},
-		})
-	}
-	return resourceType
 }
 
 func bootstrapRelationshipKey(subject *core.SubjectRef, relation string, resource *core.ResourceRef) string {
@@ -1822,12 +1734,13 @@ func TestBootstrapAgentManagerRunPersistsMetadataForToolCallbacks(t *testing.T) 
 		Operations: []string{"sync"},
 	}})
 	p := &principal.Principal{
-		SubjectID:        "user:user-123",
-		UserID:           "user-123",
-		Kind:             principal.KindUser,
-		Source:           principal.SourceSession,
-		TokenPermissions: perms,
-		Scopes:           principal.PermissionPlugins(perms),
+		SubjectID:           "user:user-123",
+		UserID:              "user-123",
+		CredentialSubjectID: principal.ManagedIdentitySubjectID("agent-credential"),
+		Kind:                principal.KindUser,
+		Source:              principal.SourceSession,
+		TokenPermissions:    perms,
+		Scopes:              principal.PermissionPlugins(perms),
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
 
@@ -1894,6 +1807,9 @@ func TestBootstrapAgentManagerRunPersistsMetadataForToolCallbacks(t *testing.T) 
 	}
 	if len(ref.Tools) != 1 || ref.Tools[0].ID != startReq.Tools[0].ID {
 		t.Fatalf("stored tools = %#v, want tool id %q", ref.Tools, startReq.Tools[0].ID)
+	}
+	if ref.CredentialSubjectID != principal.ManagedIdentitySubjectID("agent-credential") {
+		t.Fatalf("stored credential subject = %q, want %q", ref.CredentialSubjectID, principal.ManagedIdentitySubjectID("agent-credential"))
 	}
 }
 
@@ -5577,7 +5493,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		cfg.Server.Providers.Authorization = "indexeddb"
 
 		provider := newMemoryAuthorizationProvider("memory-authorization")
-		existingModelID := writeMemoryAuthorizationModel(t, provider, bootstrapManagedAuthorizationModel(
+		existingModelID := writeMemoryAuthorizationModel(t, provider, authorization.ProviderAuthorizationModelForRoles(
 			[]string{"admin", "viewer"},
 			[]string{"viewer"},
 			[]string{"editor"},
@@ -5881,7 +5797,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		db := &coretesting.StubIndexedDB{}
 		provider := newMemoryAuthorizationProvider("memory-authorization")
-		writeMemoryAuthorizationModel(t, provider, bootstrapManagedAuthorizationModel(
+		writeMemoryAuthorizationModel(t, provider, authorization.ProviderAuthorizationModelForRoles(
 			nil,
 			nil,
 			[]string{"editor"},
@@ -6009,7 +5925,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		cfg.Server.Providers.Authorization = "indexeddb"
 
 		provider := newMemoryAuthorizationProvider("memory-authorization")
-		existingModelID := writeMemoryAuthorizationModel(t, provider, bootstrapManagedAuthorizationModel(
+		existingModelID := writeMemoryAuthorizationModel(t, provider, authorization.ProviderAuthorizationModelForRoles(
 			nil,
 			nil,
 			[]string{"editor", "viewer"},

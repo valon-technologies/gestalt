@@ -35,13 +35,14 @@ type Target struct {
 }
 
 type ExecutionReference struct {
-	ID           string
-	ProviderName string
-	Target       Target
-	SubjectID    string
-	Permissions  []core.AccessPermission
-	CreatedAt    *time.Time
-	RevokedAt    *time.Time
+	ID                  string
+	ProviderName        string
+	Target              Target
+	SubjectID           string
+	CredentialSubjectID string
+	Permissions         []core.AccessPermission
+	CreatedAt           *time.Time
+	RevokedAt           *time.Time
 }
 
 type Event struct {

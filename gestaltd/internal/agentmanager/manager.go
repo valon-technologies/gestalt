@@ -145,12 +145,13 @@ func (m *Manager) Run(ctx context.Context, p *principal.Principal, req coreagent
 		}
 	}
 	ref, err := m.runMetadata.Put(ctx, &coreagent.ExecutionReference{
-		ID:             runID,
-		ProviderName:   providerName,
-		SubjectID:      subjectID,
-		IdempotencyKey: idempotencyKey,
-		Permissions:    principal.PermissionsToAccessPermissions(p.TokenPermissions),
-		Tools:          tools,
+		ID:                  runID,
+		ProviderName:        providerName,
+		SubjectID:           subjectID,
+		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
+		IdempotencyKey:      idempotencyKey,
+		Permissions:         principal.PermissionsToAccessPermissions(p.TokenPermissions),
+		Tools:               tools,
 	})
 	if err != nil {
 		if idempotencyKey != "" {

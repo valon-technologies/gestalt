@@ -60,14 +60,15 @@ func (s *AgentRunMetadataService) Put(ctx context.Context, ref *coreagent.Execut
 	}
 
 	rec := indexeddb.Record{
-		"id":               id,
-		"provider_name":    providerName,
-		"subject_id":       subjectID,
-		"permissions_json": permissionsJSON,
-		"idempotency_key":  strings.TrimSpace(ref.IdempotencyKey),
-		"tools_json":       toolsJSON,
-		"created_at":       *createdAt,
-		"revoked_at":       timeOrNil(ref.RevokedAt),
+		"id":                    id,
+		"provider_name":         providerName,
+		"subject_id":            subjectID,
+		"credential_subject_id": strings.TrimSpace(ref.CredentialSubjectID),
+		"permissions_json":      permissionsJSON,
+		"idempotency_key":       strings.TrimSpace(ref.IdempotencyKey),
+		"tools_json":            toolsJSON,
+		"created_at":            *createdAt,
+		"revoked_at":            timeOrNil(ref.RevokedAt),
 	}
 	if err := s.store.Put(ctx, rec); err != nil {
 		return nil, fmt.Errorf("put agent run metadata: %w", err)
@@ -218,14 +219,15 @@ func (s *AgentRunMetadataService) deleteIdempotencyRecord(ctx context.Context, r
 
 func recordToAgentRunMetadata(rec indexeddb.Record) *coreagent.ExecutionReference {
 	return &coreagent.ExecutionReference{
-		ID:             recString(rec, "id"),
-		ProviderName:   recString(rec, "provider_name"),
-		SubjectID:      recString(rec, "subject_id"),
-		IdempotencyKey: recString(rec, "idempotency_key"),
-		Permissions:    recAgentRunMetadataPermissions(rec),
-		Tools:          recAgentRunMetadataTools(rec),
-		CreatedAt:      recTimePtr(rec, "created_at"),
-		RevokedAt:      recTimePtr(rec, "revoked_at"),
+		ID:                  recString(rec, "id"),
+		ProviderName:        recString(rec, "provider_name"),
+		SubjectID:           recString(rec, "subject_id"),
+		CredentialSubjectID: recString(rec, "credential_subject_id"),
+		IdempotencyKey:      recString(rec, "idempotency_key"),
+		Permissions:         recAgentRunMetadataPermissions(rec),
+		Tools:               recAgentRunMetadataTools(rec),
+		CreatedAt:           recTimePtr(rec, "created_at"),
+		RevokedAt:           recTimePtr(rec, "revoked_at"),
 	}
 }
 
