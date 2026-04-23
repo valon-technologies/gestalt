@@ -200,10 +200,9 @@ plugins:
 ## Choosing a plugin runtime
 
 Executable plugins run on the same machine as `gestaltd` unless the plugin opts
-into a hosted runtime. Runtime selection is two-step:
-
-- define named backends under `runtime.providers`
-- opt an individual plugin in with `plugins.<name>.runtime`
+into a hosted runtime. Runtime selection is two-step: define named backends
+under `runtime.providers`, then opt an individual plugin in with
+`plugins.<name>.runtime`.
 
 `server.runtime.provider` is only a default selector for plugins that already
 set `plugins.<name>.runtime`; it does not move every plugin into a hosted
@@ -240,22 +239,18 @@ selected runtime backend. Their meaning is backend-specific: a local runtime may
 ignore them, while a hosted runtime may use them to choose a sandbox template,
 container image, or labels/tags for lifecycle management.
 
-The built-in runtime drivers are:
-
-- `local` for same-machine execution
-- installable `kind: runtime` providers such as Modal for hosted execution
+The built-in `local` runtime handles same-machine execution. Installable
+`kind: runtime` providers such as Modal handle hosted execution.
 
 The current Modal backend requires `runtime.providers.<name>.config.app` and
-`plugins.<name>.runtime.image`. Modal does not expose generic direct
-host-service tunnels, but it can still satisfy plugins that need relay-backed
-host services or Gestalt's hostname-based egress model when the host is
-configured for the public relay and proxy path. In practice that means
-`server.baseURL` and `server.encryptionKey` must be set, and the runtime
-provider must advertise the matching capabilities. Without those prerequisites,
-Gestalt rejects Modal for plugins that require relay-backed host services or
-hostname-based egress.
+`plugins.<name>.runtime.image`. Modal can satisfy plugins that need
+Gestalt-owned services or hostname-based egress when the host is configured for
+the public relay and proxy path. In practice that means `server.baseURL` and
+`server.encryptionKey` must be set, and the runtime must report a compatible
+support profile. Without those prerequisites, Gestalt rejects Modal for plugins
+that require relay-backed host services or hostname-based egress.
 
-For the runtime-provider lifecycle and capability model, see
+For the runtime-provider lifecycle and support model, see
 [Providers > Runtime](/providers/runtime).
 
 ## Binding S3 object stores
