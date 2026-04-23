@@ -3353,7 +3353,7 @@ func TestPluginAgentManagerRunUsesInheritedInvokesAndRequestContext(t *testing.T
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 				Invokes: []config.PluginInvocationDependency{{
 					Plugin:    "roadmap",
 					Operation: "sync",
@@ -5021,7 +5021,7 @@ func TestPluginRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *te
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime: &config.PluginRuntimeConfig{
+				Runtime: &config.HostedRuntimeConfig{
 					Template: "python-dev",
 					Image:    "ghcr.io/valon/gestalt-python-runtime:latest",
 					Metadata: map[string]string{"tenant": "eng"},
@@ -5067,8 +5067,11 @@ func TestPluginRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *te
 	if req.Metadata["tenant"] != "eng" {
 		t.Fatalf("StartSession Metadata[tenant] = %q, want eng", req.Metadata["tenant"])
 	}
-	if req.Metadata["plugin"] != "echoext" {
-		t.Fatalf("StartSession Metadata[plugin] = %q, want echoext", req.Metadata["plugin"])
+	if req.Metadata["provider_kind"] != "plugin" {
+		t.Fatalf("StartSession Metadata[provider_kind] = %q, want plugin", req.Metadata["provider_kind"])
+	}
+	if req.Metadata["provider_name"] != "echoext" {
+		t.Fatalf("StartSession Metadata[provider_name] = %q, want echoext", req.Metadata["provider_name"])
 	}
 	if factoryContextValue != ctxSentinel {
 		t.Fatalf("runtime factory context value = %#v, want %#v", factoryContextValue, ctxSentinel)
@@ -5140,7 +5143,7 @@ func TestPluginRuntimeStagesBundleForNonHostPathExecution(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: manifestPath,
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 			},
 		},
 	}
@@ -5247,7 +5250,7 @@ func TestPluginRuntimeDropsSourceStyleArgsForNonHostPathExecution(t *testing.T) 
 				Args:                 []string{"-m", "gestalt._runtime", "/host/source", "pkg.provider", "integration"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: manifestPath,
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 			},
 		},
 	}
@@ -5348,7 +5351,7 @@ func TestPluginRuntimeRewritesHostPathArgsForNonHostPathExecution(t *testing.T) 
 				Args:                 []string{"--config", configPath, "--name", "example"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: manifestPath,
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 			},
 		},
 	}
@@ -5418,7 +5421,7 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 				S3:                   []string{"main"},
 			},
 		},
@@ -5583,7 +5586,7 @@ func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnel
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: manifestPath,
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 			},
 		},
 	}
@@ -5689,7 +5692,7 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 				IndexedDB:            &config.PluginIndexedDBConfig{ObjectStores: []string{"tasks"}},
 			},
 		},
@@ -5817,7 +5820,7 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 				IndexedDB:            &config.PluginIndexedDBConfig{ObjectStores: []string{"tasks"}},
 			},
 		},
@@ -5929,7 +5932,7 @@ func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapabili
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 				Cache:                []string{"session", "rate_limit"},
 			},
 		},
@@ -6061,7 +6064,7 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 				Cache:                []string{"session"},
 			},
 		},
@@ -6189,7 +6192,7 @@ func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 				S3:                   []string{"main"},
 			},
 		},
@@ -6341,7 +6344,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 				Args:                 []string{"provider"},
 				ResolvedManifest:     callerManifest,
 				ResolvedManifestPath: filepath.Join(callerRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 				Invokes: []config.PluginInvocationDependency{
 					{Plugin: "example", Operation: "request_context"},
 				},
@@ -6503,7 +6506,7 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 			},
 		},
 	}
@@ -6610,7 +6613,7 @@ func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T)
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 				AllowedHosts:         []string{"api.github.com"},
 			},
 		},
@@ -6619,7 +6622,7 @@ func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T)
 	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
 		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	})
-	if err == nil || !strings.Contains(err.Error(), "cannot preserve hostname-based egress required by this plugin") {
+	if err == nil || !strings.Contains(err.Error(), "cannot preserve hostname-based egress required by this provider") {
 		t.Fatalf("buildProvidersStrict error = %v, want hostname-based egress requirement failure", err)
 	}
 }
@@ -6663,7 +6666,7 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 				Cache:                []string{"session"},
 			},
 		},
@@ -6680,7 +6683,7 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 
 	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
-	if err == nil || !strings.Contains(err.Error(), "cannot provide host service access required by this plugin") {
+	if err == nil || !strings.Contains(err.Error(), "cannot provide host service access required by this provider") {
 		t.Fatalf("buildProvidersStrict error = %v, want host service access failure", err)
 	}
 }
@@ -6961,7 +6964,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 			},
 		},
 	}
@@ -7110,7 +7113,7 @@ func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *t
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 			},
 		},
 	}
@@ -7231,7 +7234,7 @@ func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapa
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 				AllowedHosts:         []string{"api.github.com"},
 			},
 		},
@@ -7319,7 +7322,7 @@ func TestPluginRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequire
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 			},
 		},
 	}
@@ -7386,7 +7389,7 @@ func TestPluginRuntimeConfigUsesDirectHostServiceBindingsAndSkipsPublicEgressPro
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 				AllowedHosts:         []string{"api.github.com"},
 				Cache:                []string{"session"},
 			},
@@ -7489,7 +7492,7 @@ func TestPluginRuntimePublicEgressProxyRoundTripsThroughHostedPlugin(t *testing.
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 				AllowedHosts:         []string{"127.0.0.1", "localhost"},
 			},
 		},
@@ -7581,7 +7584,7 @@ func TestPluginRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t 
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.PluginRuntimeConfig{},
+				Runtime:              &config.HostedRuntimeConfig{},
 			},
 		},
 	}
@@ -7592,7 +7595,7 @@ func TestPluginRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t 
 		}),
 		Egress: EgressDeps{DefaultAction: egress.PolicyDeny},
 	})
-	if err == nil || !strings.Contains(err.Error(), "cannot preserve hostname-based egress required by this plugin") {
+	if err == nil || !strings.Contains(err.Error(), "cannot preserve hostname-based egress required by this provider") {
 		t.Fatalf("buildProvidersStrict error = %v, want hostname-based egress requirement failure", err)
 	}
 }

@@ -524,7 +524,7 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 	if err := validateAuthorizationPolicyReference(cfg, "plugin", name, entry.AuthorizationPolicy); err != nil {
 		return err
 	}
-	if _, err := cfg.EffectivePluginRuntime(name, entry); err != nil {
+	if _, err := cfg.EffectiveHostedRuntime("plugins."+name, entry); err != nil {
 		return err
 	}
 	return validateManifestBackedIntegration(name, entry)
@@ -693,14 +693,14 @@ func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry)
 	if len(entry.Invokes) > 0 {
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
 	}
-	if entry.Runtime != nil {
-		return fmt.Errorf("config validation: %s.runtime is only supported on plugins.*", subject)
-	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
 	}
 	if entry.AuthorizationPolicy != "" {
 		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on plugins.* and ui.*", subject)
+	}
+	if _, err := cfg.EffectiveHostedRuntime(subject, entry); err != nil {
+		return err
 	}
 	if entry.IndexedDB == nil {
 		return nil

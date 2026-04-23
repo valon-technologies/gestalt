@@ -11,6 +11,11 @@ optional session continuation state. They are a good fit when you want Gestalt
 to select between OpenAI-, Anthropic-, or custom-backed agent engines without
 hard-coding those SDKs into every caller.
 
+Whether the provider runs directly on the `gestaltd` host or inside a hosted
+runtime is an operator decision, not an authoring change. A provider that
+implements `kind: agent` can be launched locally or through
+`providers.agent.<name>.runtime` without changing its protocol surface.
+
 ## Manifest
 
 An agent provider manifest declares `kind: agent`:
@@ -37,7 +42,9 @@ The agent service includes four run methods:
 | `CancelRun` | Request cancellation for one run |
 
 Providers can also call back into Gestalt through `AgentHost.ExecuteTool` when
-they want the host to execute a bound plugin operation during a run.
+they want the host to execute a bound plugin operation during a run. That
+callback works the same way when the provider is launched inside a hosted
+runtime.
 
 ## Run shape
 

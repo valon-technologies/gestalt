@@ -16,6 +16,7 @@ import (
 var (
 	sharedEchoPluginBin      string
 	sharedExampleProviderBin string
+	sharedAgentProviderBin   string
 	sharedGestaltdBin        string
 )
 
@@ -28,6 +29,7 @@ func TestMain(m *testing.M) {
 
 	sharedEchoPluginBin = filepath.Join(tmpDir, "gestalt-plugin-echo")
 	sharedExampleProviderBin = filepath.Join(tmpDir, "provider-go")
+	sharedAgentProviderBin = filepath.Join(tmpDir, "gestalt-agent-test")
 	sharedGestaltdBin = filepath.Join(tmpDir, "gestaltd")
 
 	root, err := repoRootForBootstrapTests()
@@ -56,6 +58,12 @@ func TestMain(m *testing.M) {
 			dir:    testutil.MustExampleProviderPluginPath(),
 			target: "",
 			output: sharedExampleProviderBin,
+		},
+		{
+			name:   "agent provider",
+			dir:    filepath.Join(root, "gestaltd"),
+			target: "./internal/testplugins/agent",
+			output: sharedAgentProviderBin,
 		},
 		{
 			name:   "gestaltd",

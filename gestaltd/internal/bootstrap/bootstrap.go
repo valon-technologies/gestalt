@@ -1429,9 +1429,6 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 	if entry == nil {
 		return nil, fmt.Errorf("agent provider is required")
 	}
-	if factories.Agent == nil {
-		return nil, fmt.Errorf("agent factory is not registered")
-	}
 	node := entry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
 		var err error
@@ -1465,9 +1462,20 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		hostServices = append(hostServices, indexedDBHostServices...)
 		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
-	provider, err := factories.Agent(ctx, name, node, hostServices, deps)
-	if err != nil {
-		return nil, fmt.Errorf("agent provider: %w", err)
+	var (
+		provider    coreagent.Provider
+		providerErr error
+	)
+	if entry.Runtime != nil {
+		provider, providerErr = buildHostedAgentProvider(ctx, name, entry, node, hostServices, deps)
+	} else {
+		if factories.Agent == nil {
+			return nil, fmt.Errorf("agent factory is not registered")
+		}
+		provider, providerErr = factories.Agent(ctx, name, node, hostServices, deps)
+	}
+	if providerErr != nil {
+		return nil, fmt.Errorf("agent provider: %w", providerErr)
 	}
 	tracked := &agentProviderWithTracking{
 		delegate:     provider,

@@ -70,6 +70,28 @@ provider entry. Gestalt exposes the selected store to the provider process as
 the standard SDK `GESTALT_INDEXEDDB_SOCKET`; the provider still owns its run
 record schema and object-store names.
 
+If you want the agent provider to run in a hosted sandbox instead of directly
+on the `gestaltd` host, add a `runtime` block to that same
+`providers.agent.<name>` entry:
+
+```yaml
+providers:
+  agent:
+    openai:
+      source: ./providers/agent/openai/manifest.yaml
+      runtime:
+        provider: modal
+        image: ghcr.io/valon/gestalt-python-runtime:latest
+      allowedHosts:
+        - api.openai.com
+      config:
+        model: gpt-5.4
+```
+
+This keeps the agent interface the same for callers. The run request still
+targets `provider: openai`. The only difference is where the provider process
+executes and how `gestaltd` enforces host-service access and egress.
+
 ## Request shape
 
 The neutral agent run shape is intentionally small:
@@ -100,7 +122,8 @@ The neutral agent run shape is intentionally small:
 
 There is not yet a first-party agent provider published from
 `valon-technologies/gestalt-providers`. If you need one today, implement a
-custom provider against the neutral protocol.
+custom provider against the neutral protocol or deploy a local source-backed
+provider under `providers.agent`.
 
 ## What to read next
 

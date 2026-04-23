@@ -130,6 +130,12 @@ type HostedPluginConn interface {
 	Close() error
 }
 
+type HostedAgentConn interface {
+	Lifecycle() proto.ProviderLifecycleClient
+	Agent() proto.AgentProviderClient
+	Close() error
+}
+
 type Provider interface {
 	Support(ctx context.Context) (Support, error)
 	ListSessions(ctx context.Context) ([]Session, error)

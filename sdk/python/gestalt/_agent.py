@@ -13,6 +13,7 @@ pb: Any = _pb
 pb_grpc: Any = _pb_grpc
 
 ENV_AGENT_HOST_SOCKET = "GESTALT_AGENT_HOST_SOCKET"
+ENV_AGENT_HOST_SOCKET_TOKEN = f"{ENV_AGENT_HOST_SOCKET}_TOKEN"
 ENV_AGENT_MANAGER_SOCKET = "GESTALT_AGENT_MANAGER_SOCKET"
 ENV_AGENT_MANAGER_SOCKET_TOKEN = f"{ENV_AGENT_MANAGER_SOCKET}_TOKEN"
 _AGENT_MANAGER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
@@ -20,10 +21,11 @@ _AGENT_MANAGER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
 
 class AgentHost:
     def __init__(self) -> None:
-        socket_path = os.environ.get(ENV_AGENT_HOST_SOCKET, "")
-        if not socket_path:
+        target = os.environ.get(ENV_AGENT_HOST_SOCKET, "")
+        if not target:
             raise RuntimeError(f"{ENV_AGENT_HOST_SOCKET} is not set")
-        self._channel = grpc.insecure_channel(f"unix:{socket_path}")
+        relay_token = os.environ.get(ENV_AGENT_HOST_SOCKET_TOKEN, "")
+        self._channel = _host_service_channel("agent host", target, token=relay_token)
         self._stub = pb_grpc.AgentHostStub(self._channel)
 
     def close(self) -> None:
@@ -53,7 +55,7 @@ class AgentManager:
             raise RuntimeError(f"agent manager: {ENV_AGENT_MANAGER_SOCKET} is not set")
         relay_token = os.environ.get(ENV_AGENT_MANAGER_SOCKET_TOKEN, "")
 
-        self._channel = _agent_manager_channel(target, token=relay_token)
+        self._channel = _host_service_channel("agent manager", target, token=relay_token)
         self._stub = pb_grpc.AgentManagerHostStub(self._channel)
         self._invocation_token = trimmed_token
 
@@ -120,8 +122,8 @@ class _ClientCallDetails(grpc.ClientCallDetails):
         self.compression = compression
 
 
-def _agent_manager_channel(target: str, *, token: str = "") -> Any:
-    scheme, address = _parse_agent_manager_target(target)
+def _host_service_channel(service_name: str, target: str, *, token: str = "") -> Any:
+    scheme, address = _parse_host_service_target(service_name, target)
     if scheme == "unix":
         channel = grpc.insecure_channel(f"unix:{address}")
     elif scheme == "tcp":
@@ -129,42 +131,34 @@ def _agent_manager_channel(target: str, *, token: str = "") -> Any:
     elif scheme == "tls":
         channel = grpc.secure_channel(address, grpc.ssl_channel_credentials())
     else:
-        raise RuntimeError(f"unsupported agent manager transport scheme {scheme!r}")
+        raise RuntimeError(f"unsupported {service_name} transport scheme {scheme!r}")
     if token:
         channel = grpc.intercept_channel(channel, _RelayTokenInterceptor(token))
     return channel
 
 
-def _parse_agent_manager_target(raw: str) -> tuple[str, str]:
+def _parse_host_service_target(service_name: str, raw: str) -> tuple[str, str]:
     target = raw.strip()
     if not target:
-        raise RuntimeError("agent manager: transport target is required")
+        raise RuntimeError(f"{service_name}: transport target is required")
     if target.startswith("tcp://"):
         address = target.removeprefix("tcp://").strip()
         if not address:
-            raise RuntimeError(
-                f"agent manager: tcp target {raw!r} is missing host:port"
-            )
+            raise RuntimeError(f"{service_name}: tcp target {raw!r} is missing host:port")
         return "tcp", address
     if target.startswith("tls://"):
         address = target.removeprefix("tls://").strip()
         if not address:
-            raise RuntimeError(
-                f"agent manager: tls target {raw!r} is missing host:port"
-            )
+            raise RuntimeError(f"{service_name}: tls target {raw!r} is missing host:port")
         return "tls", address
     if target.startswith("unix://"):
         address = target.removeprefix("unix://").strip()
         if not address:
-            raise RuntimeError(
-                f"agent manager: unix target {raw!r} is missing a socket path"
-            )
+            raise RuntimeError(f"{service_name}: unix target {raw!r} is missing a socket path")
         return "unix", address
     if "://" in target:
         parsed = _urlparse.urlparse(target)
-        raise RuntimeError(
-            f"agent manager: unsupported target scheme {parsed.scheme!r}"
-        )
+        raise RuntimeError(f"{service_name}: unsupported target scheme {parsed.scheme!r}")
     return "unix", target
 
 
