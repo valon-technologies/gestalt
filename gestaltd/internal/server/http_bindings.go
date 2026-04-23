@@ -231,7 +231,8 @@ func validateMountedHTTPBinding(pluginName, bindingName string, binding *config.
 
 func validateMountedHTTPBindingRoutes(bindings []MountedHTTPBinding, mountedUIs []MountedUI) error {
 	seen := make(map[string]string, len(bindings))
-	for _, binding := range bindings {
+	for i := range bindings {
+		binding := &bindings[i]
 		if binding.Path == "" {
 			return fmt.Errorf("http binding %s.%s path is required", binding.PluginName, binding.Name)
 		}
@@ -258,8 +259,8 @@ func validateMountedHTTPBindingRoutes(bindings []MountedHTTPBinding, mountedUIs 
 }
 
 func (s *Server) mountHTTPBindingRoutes(r chi.Router) {
-	for _, binding := range s.mountedHTTPBindings {
-		binding := binding
+	for i := range s.mountedHTTPBindings {
+		binding := &s.mountedHTTPBindings[i]
 		r.MethodFunc(binding.Method, binding.Path, func(w http.ResponseWriter, r *http.Request) {
 			metricutil.AddHTTPAttributes(r.Context(),
 				metricutil.AttrProvider.String(metricutil.AttrValue(binding.PluginName)),
@@ -267,7 +268,7 @@ func (s *Server) mountHTTPBindingRoutes(r chi.Router) {
 				metricutil.AttrHTTPBinding.String(metricutil.AttrValue(binding.Name)),
 				metricutil.AttrInvocationSurface.String("http"),
 			)
-			s.handleHTTPBinding(binding, w, r)
+			s.handleHTTPBinding(*binding, w, r)
 		})
 	}
 }
