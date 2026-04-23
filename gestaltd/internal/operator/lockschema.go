@@ -10,7 +10,8 @@ import (
 
 const (
 	providerLockSchemaName         = "gestaltd-provider-lock"
-	providerLockSchemaVersion      = 4
+	providerLockSchemaVersion      = 5
+	providerLockSchemaVersionV4    = 4
 	providerLockSchemaVersionV3    = 3
 	providerLockSchemaVersionV2    = 2
 	providerLockRevision           = 0
@@ -39,6 +40,7 @@ type providerLockBuckets struct {
 	Cache          map[string]portableLockEntry `json:"cache,omitempty"`
 	S3             map[string]portableLockEntry `json:"s3,omitempty"`
 	Workflow       map[string]portableLockEntry `json:"workflow,omitempty"`
+	Agent          map[string]portableLockEntry `json:"agent,omitempty"`
 	Runtime        map[string]portableLockEntry `json:"runtime,omitempty"`
 	Secrets        map[string]portableLockEntry `json:"secrets,omitempty"`
 	Telemetry      map[string]portableLockEntry `json:"telemetry,omitempty"`
@@ -66,6 +68,7 @@ func newLockfile() *Lockfile {
 		Caches:         make(map[string]LockEntry),
 		S3:             make(map[string]LockEntry),
 		Workflows:      make(map[string]LockEntry),
+		Agents:         make(map[string]LockEntry),
 		Runtimes:       make(map[string]LockEntry),
 		Secrets:        make(map[string]LockEntry),
 		Telemetry:      make(map[string]LockEntry),
@@ -103,6 +106,9 @@ func normalizeLockfile(lock *Lockfile) *Lockfile {
 	}
 	if lock.Workflows == nil {
 		lock.Workflows = make(map[string]LockEntry)
+	}
+	if lock.Agents == nil {
+		lock.Agents = make(map[string]LockEntry)
 	}
 	if lock.Runtimes == nil {
 		lock.Runtimes = make(map[string]LockEntry)
@@ -169,6 +175,7 @@ func providerLockKinds() []string {
 		providermanifestv1.KindCache,
 		providermanifestv1.KindS3,
 		providermanifestv1.KindWorkflow,
+		providermanifestv1.KindAgent,
 		providermanifestv1.KindRuntime,
 		providermanifestv1.KindSecrets,
 		providerLockKindTelemetry,
@@ -196,6 +203,8 @@ func lockEntriesForProviderKind(lock *Lockfile, kind string) map[string]LockEntr
 		return lock.S3
 	case providermanifestv1.KindWorkflow:
 		return lock.Workflows
+	case providermanifestv1.KindAgent:
+		return lock.Agents
 	case providermanifestv1.KindRuntime:
 		return lock.Runtimes
 	case providermanifestv1.KindSecrets:
@@ -225,6 +234,7 @@ func providerLockfileFromLockfile(lock *Lockfile) *providerLockfile {
 			Cache:          portableEntriesFromLockEntries(lock.Caches, providermanifestv1.KindCache),
 			S3:             portableEntriesFromLockEntries(lock.S3, providermanifestv1.KindS3),
 			Workflow:       portableEntriesFromLockEntries(lock.Workflows, providerLockKindWorkflow),
+			Agent:          portableEntriesFromLockEntries(lock.Agents, providermanifestv1.KindAgent),
 			Runtime:        portableEntriesFromLockEntries(lock.Runtimes, providermanifestv1.KindRuntime),
 			Secrets:        portableEntriesFromLockEntries(lock.Secrets, providermanifestv1.KindSecrets),
 			Telemetry:      portableEntriesFromLockEntries(lock.Telemetry, providerLockKindTelemetry),
@@ -246,6 +256,7 @@ func (lock *providerLockfile) toLockfile() *Lockfile {
 	runtimeLock.Caches = lockEntriesFromPortableEntries(lock.Providers.Cache)
 	runtimeLock.S3 = lockEntriesFromPortableEntries(lock.Providers.S3)
 	runtimeLock.Workflows = lockEntriesFromPortableEntries(lock.Providers.Workflow)
+	runtimeLock.Agents = lockEntriesFromPortableEntries(lock.Providers.Agent)
 	runtimeLock.Runtimes = lockEntriesFromPortableEntries(lock.Providers.Runtime)
 	runtimeLock.Secrets = lockEntriesFromPortableEntries(lock.Providers.Secrets)
 	runtimeLock.Telemetry = lockEntriesFromPortableEntries(lock.Providers.Telemetry)
@@ -261,7 +272,7 @@ func validateProviderLockfile(lock *providerLockfile) error {
 	if lock.Schema != providerLockSchemaName {
 		return fmt.Errorf("unsupported lockfile schema %q; run `gestaltd init` to upgrade", lock.Schema)
 	}
-	if lock.SchemaVersion != providerLockSchemaVersion && lock.SchemaVersion != providerLockSchemaVersionV3 && lock.SchemaVersion != providerLockSchemaVersionV2 {
+	if lock.SchemaVersion != providerLockSchemaVersion && lock.SchemaVersion != providerLockSchemaVersionV4 && lock.SchemaVersion != providerLockSchemaVersionV3 && lock.SchemaVersion != providerLockSchemaVersionV2 {
 		return fmt.Errorf("unsupported lockfile schema version %d; run `gestaltd init` to upgrade", lock.SchemaVersion)
 	}
 	return nil

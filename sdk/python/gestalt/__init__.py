@@ -34,6 +34,23 @@ from ._api import (
     Subject,
     field,
 )
+from ._indexeddb import (
+    CURSOR_NEXT,
+    CURSOR_NEXT_UNIQUE,
+    CURSOR_PREV,
+    CURSOR_PREV_UNIQUE,
+    AlreadyExistsError,
+    Cursor,
+    Index,
+    IndexedDB,
+    IndexSchema,
+    KeyRange,
+    NotFoundError,
+    ObjectStore,
+    ObjectStoreSchema,
+    indexeddb_socket_env,
+    indexeddb_socket_token_env,
+)
 from ._manifest_metadata import (
     HTTPAck,
     HTTPBinding,
@@ -48,7 +65,6 @@ _LAZY_EXPORTS = {
     "AgentHost": ("._agent", "AgentHost"),
     "AgentManager": ("._agent", "AgentManager"),
     "AgentProvider": ("._providers", "AgentProvider"),
-    "AlreadyExistsError": ("._indexeddb", "AlreadyExistsError"),
     "AuthenticatedUser": ("._providers", "AuthenticatedUser"),
     "AuthenticationProvider": ("._providers", "AuthenticationProvider"),
     "Authorization": ("._authorization", "Authorization"),
@@ -56,10 +72,6 @@ _LAZY_EXPORTS = {
     "BeginLoginRequest": ("._providers", "BeginLoginRequest"),
     "BeginLoginResponse": ("._providers", "BeginLoginResponse"),
     "ByteRange": ("._s3", "ByteRange"),
-    "CURSOR_NEXT": ("._indexeddb", "CURSOR_NEXT"),
-    "CURSOR_NEXT_UNIQUE": ("._indexeddb", "CURSOR_NEXT_UNIQUE"),
-    "CURSOR_PREV": ("._indexeddb", "CURSOR_PREV"),
-    "CURSOR_PREV_UNIQUE": ("._indexeddb", "CURSOR_PREV_UNIQUE"),
     "Cache": ("._cache", "Cache"),
     "CacheEntry": ("._cache", "CacheEntry"),
     "CacheProvider": ("._providers", "CacheProvider"),
@@ -79,7 +91,6 @@ _LAZY_EXPORTS = {
     "CompleteLoginRequest": ("._providers", "CompleteLoginRequest"),
     "CopyOptions": ("._s3", "CopyOptions"),
     "ConnectedToken": ("._plugin", "ConnectedToken"),
-    "Cursor": ("._indexeddb", "Cursor"),
     "ENV_PLUGIN_INVOKER_SOCKET": ("._invoker", "ENV_PLUGIN_INVOKER_SOCKET"),
     "ENV_PLUGIN_INVOKER_SOCKET_TOKEN": ("._invoker", "ENV_PLUGIN_INVOKER_SOCKET_TOKEN"),
     "ENV_S3_SOCKET": ("._s3", "ENV_S3_SOCKET"),
@@ -92,18 +103,11 @@ _LAZY_EXPORTS = {
         "._http_subject",
         "HTTPSubjectResolutionError",
     ),
-    "Index": ("._indexeddb", "Index"),
-    "IndexedDB": ("._indexeddb", "IndexedDB"),
-    "IndexSchema": ("._indexeddb", "IndexSchema"),
-    "KeyRange": ("._indexeddb", "KeyRange"),
     "ListOptions": ("._s3", "ListOptions"),
     "ListPage": ("._s3", "ListPage"),
     "MetadataProvider": ("._providers", "MetadataProvider"),
-    "NotFoundError": ("._indexeddb", "NotFoundError"),
     "ObjectMeta": ("._s3", "ObjectMeta"),
     "ObjectRef": ("._s3", "ObjectRef"),
-    "ObjectStore": ("._indexeddb", "ObjectStore"),
-    "ObjectStoreSchema": ("._indexeddb", "ObjectStoreSchema"),
     "OperationAnnotations": ("._catalog", "OperationAnnotations"),
     "Plugin": ("._plugin", "Plugin"),
     "PluginInvoker": ("._invoker", "PluginInvoker"),
@@ -133,8 +137,6 @@ _LAZY_EXPORTS = {
     "cache_socket_token_env": ("._cache", "cache_socket_token_env"),
     "http_subject": ("._plugin", "http_subject"),
     "http_subject_error": ("._http_subject", "http_subject_error"),
-    "indexeddb_socket_env": ("._indexeddb", "indexeddb_socket_env"),
-    "indexeddb_socket_token_env": ("._indexeddb", "indexeddb_socket_token_env"),
     "operation": ("._plugin", "operation"),
     "post_connect": ("._plugin", "post_connect"),
     "s3_socket_env": ("._s3", "s3_socket_env"),
@@ -151,6 +153,7 @@ def __getattr__(name: str):
     value = getattr(import_module(module_name, __name__), attr_name)
     globals()[name] = value
     return value
+
 
 __all__ = [
     "AgentHost",
