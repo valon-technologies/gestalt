@@ -156,7 +156,7 @@ func (b *Broker) ListCapabilities() []core.Capability {
 	return caps
 }
 
-func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (_ *core.OperationResult, err error) {
+func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (result *core.OperationResult, err error) {
 	startedAt := time.Now()
 	metricProvider := metricutil.UnknownAttrValue
 	metricOperation := metricutil.UnknownAttrValue
@@ -168,6 +168,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	)
 	defer span.End()
 	defer func() {
+		resultStatus := operationResultStatus(result, err)
 		recordOperationMetrics(
 			ctx,
 			startedAt,
@@ -175,7 +176,8 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 			metricOperation,
 			metricTransport,
 			metricConnectionMode,
-			err != nil,
+			resultStatus,
+			operationResultFailed(resultStatus, err),
 		)
 	}()
 
@@ -293,16 +295,16 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 
 	if transport == catalog.TransportMCPPassthrough {
-		result, err := CallDirectTool(ctx, b, p, prov, providerName, operation, conn, instance, boundCredential, params, mcpupstream.CallToolMetaFromContext(ctx))
+		toolResult, err := CallDirectTool(ctx, b, p, prov, providerName, operation, conn, instance, boundCredential, params, mcpupstream.CallToolMetaFromContext(ctx))
 		if err != nil {
 			return fail(err)
 		}
-		opResult, err := toolResultToOperationResult(result)
+		opResult, err := toolResultToOperationResult(toolResult)
 		if err != nil {
 			return fail(fmt.Errorf("%w: converting tool result: %v", ErrInternal, err))
 		}
-		if result != nil {
-			opResult.MCPResult = result
+		if toolResult != nil {
+			opResult.MCPResult = toolResult
 		}
 		return opResult, nil
 	}
@@ -312,7 +314,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(err)
 	}
 
-	result, err := prov.Execute(ctx, operation, params, accessToken)
+	result, err = prov.Execute(ctx, operation, params, accessToken)
 	if err != nil {
 		return fail(err)
 	}
@@ -320,7 +322,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	return result, nil
 }
 
-func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, providerName, instance string, request GraphQLRequest) (_ *core.OperationResult, err error) {
+func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, providerName, instance string, request GraphQLRequest) (result *core.OperationResult, err error) {
 	startedAt := time.Now()
 	metricProvider := metricutil.UnknownAttrValue
 	metricOperation := metricutil.AttrValue("graphql")
@@ -332,6 +334,7 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	)
 	defer span.End()
 	defer func() {
+		resultStatus := operationResultStatus(result, err)
 		recordOperationMetrics(
 			ctx,
 			startedAt,
@@ -339,7 +342,8 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 			metricOperation,
 			metricTransport,
 			metricConnectionMode,
-			err != nil,
+			resultStatus,
+			operationResultFailed(resultStatus, err),
 		)
 	}()
 
@@ -441,7 +445,7 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 		return fail(err)
 	}
 
-	result, err := graphQLProv.InvokeGraphQL(ctx, request, accessToken)
+	result, err = graphQLProv.InvokeGraphQL(ctx, request, accessToken)
 	if err != nil {
 		return fail(err)
 	}

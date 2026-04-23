@@ -290,17 +290,29 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		"gestalt.type":     "oauth",
 		"gestalt.action":   "refresh",
 	})
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.count", 2, map[string]string{
-		"gestalt.provider":        providerName,
-		"gestalt.operation":       "list",
-		"gestalt.transport":       "rest",
-		"gestalt.connection_mode": "user",
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.count", 1, map[string]string{
+		"gestalt.provider":            providerName,
+		"gestalt.operation":           "list",
+		"gestalt.transport":           "rest",
+		"gestalt.connection_mode":     "user",
+		"gestalt.result_status":       "200",
+		"gestalt.result_status_class": "2xx",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.count", 1, map[string]string{
+		"gestalt.provider":            providerName,
+		"gestalt.operation":           "list",
+		"gestalt.transport":           "rest",
+		"gestalt.connection_mode":     "user",
+		"gestalt.result_status":       "412",
+		"gestalt.result_status_class": "4xx",
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.error_count", 1, map[string]string{
-		"gestalt.provider":        providerName,
-		"gestalt.operation":       "list",
-		"gestalt.transport":       "rest",
-		"gestalt.connection_mode": "user",
+		"gestalt.provider":            providerName,
+		"gestalt.operation":           "list",
+		"gestalt.transport":           "rest",
+		"gestalt.connection_mode":     "user",
+		"gestalt.result_status":       "412",
+		"gestalt.result_status_class": "4xx",
 	})
 }
 
@@ -318,6 +330,9 @@ func TestOperationMetricsDefaultRESTTransportFromCatalogContext(t *testing.T) {
 				N:        providerName,
 				ConnMode: core.ConnectionModeNone,
 				ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					if operation == "lookup" {
+						return &core.OperationResult{Status: http.StatusNotFound, Body: `{"error":"missing"}`}, nil
+					}
 					return &core.OperationResult{Status: http.StatusOK, Body: `{"operation":"` + operation + `"}`}, nil
 				},
 			},
@@ -325,6 +340,7 @@ func TestOperationMetricsDefaultRESTTransportFromCatalogContext(t *testing.T) {
 				Name: providerName,
 				Operations: []catalog.CatalogOperation{
 					{ID: "list", Method: http.MethodGet, Path: "/list"},
+					{ID: "lookup", Method: http.MethodGet, Path: "/lookup"},
 				},
 			},
 		})
@@ -341,21 +357,71 @@ func TestOperationMetricsDefaultRESTTransportFromCatalogContext(t *testing.T) {
 		t.Fatalf("operation status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
+	errorReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/"+providerName+"/lookup", nil)
+	errorResp, err := http.DefaultClient.Do(errorReq)
+	if err != nil {
+		t.Fatalf("operation error request: %v", err)
+	}
+	defer func() { _ = errorResp.Body.Close() }()
+	if errorResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("operation error status = %d, want %d", errorResp.StatusCode, http.StatusNotFound)
+	}
+
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.count", 1, map[string]string{
-		"gestalt.provider":           providerName,
-		"gestalt.operation":          "list",
-		"gestalt.transport":          "rest",
-		"gestalt.connection_mode":    "none",
-		"gestalt.invocation_surface": "http",
+		"gestalt.provider":            providerName,
+		"gestalt.operation":           "list",
+		"gestalt.transport":           "rest",
+		"gestalt.connection_mode":     "none",
+		"gestalt.invocation_surface":  "http",
+		"gestalt.result_status":       "200",
+		"gestalt.result_status_class": "2xx",
+	})
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.operation.duration", map[string]string{
+		"gestalt.provider":            providerName,
+		"gestalt.operation":           "list",
+		"gestalt.transport":           "rest",
+		"gestalt.connection_mode":     "none",
+		"gestalt.invocation_surface":  "http",
+		"gestalt.result_status":       "200",
+		"gestalt.result_status_class": "2xx",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.count", 1, map[string]string{
+		"gestalt.provider":            providerName,
+		"gestalt.operation":           "lookup",
+		"gestalt.transport":           "rest",
+		"gestalt.connection_mode":     "none",
+		"gestalt.invocation_surface":  "http",
+		"gestalt.result_status":       "404",
+		"gestalt.result_status_class": "4xx",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.error_count", 1, map[string]string{
+		"gestalt.provider":            providerName,
+		"gestalt.operation":           "lookup",
+		"gestalt.transport":           "rest",
+		"gestalt.connection_mode":     "none",
+		"gestalt.invocation_surface":  "http",
+		"gestalt.result_status":       "404",
+		"gestalt.result_status_class": "4xx",
+	})
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.operation.duration", map[string]string{
+		"gestalt.provider":            providerName,
+		"gestalt.operation":           "lookup",
+		"gestalt.transport":           "rest",
+		"gestalt.connection_mode":     "none",
+		"gestalt.invocation_surface":  "http",
+		"gestalt.result_status":       "404",
+		"gestalt.result_status_class": "4xx",
 	})
 	metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", map[string]string{
-		"http.route":                 "/api/v1/{integration}/{operation}",
-		"gestalt.provider":           providerName,
-		"gestalt.operation":          "list",
-		"gestalt.transport":          "rest",
-		"gestalt.connection_mode":    "none",
-		"gestalt.invocation_surface": "http",
+		"http.route":                  "/api/v1/{integration}/{operation}",
+		"gestalt.provider":            providerName,
+		"gestalt.operation":           "list",
+		"gestalt.transport":           "rest",
+		"gestalt.connection_mode":     "none",
+		"gestalt.invocation_surface":  "http",
+		"gestalt.result_status":       "200",
+		"gestalt.result_status_class": "2xx",
 	})
 }
 

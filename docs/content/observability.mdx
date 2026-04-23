@@ -148,10 +148,16 @@ plugin key), `gestalt.operation` (the catalog operation id),
 `none` or `user`). When the invocation came from a known surface, they also
 carry `gestalt.invocation_surface`.
 
-`gestaltd.operation.error_count` records failed operation invocations across
-surfaces, but it does not classify failures by HTTP status. For 4xx versus 5xx
-breakdowns on HTTP-invoked provider operations, use the HTTP server metrics with
-the resolved `gestalt.provider` and `gestalt.operation` labels described below.
+Operation metrics also carry `gestalt.result_status` and
+`gestalt.result_status_class`. `gestalt.result_status` is the normalized
+HTTP-like operation result status (`200`, `400`, `502`, and so on), and
+`gestalt.result_status_class` is the matching class (`1xx`, `2xx`, `3xx`,
+`4xx`, `5xx`, or `unknown`). Provider-returned statuses use the provider
+`OperationResult` status. Platform failures before provider execution use the
+same status mapping as the HTTP invocation handlers. `gestaltd.operation.error_count` records
+invocations with an invocation error or an operation result status of `400` or
+higher, so provider-returned 4xx and 5xx results are counted as operation
+failures.
 
 When a request references an unknown provider or operation, `gestaltd` records
 `unknown` for the missing metric attributes instead of using raw user input.
@@ -310,10 +316,12 @@ need actor, target, and outcome details.
 
 ### Current Non-Goals
 
-The built-in `gestaltd` metric surface does not yet emit per-operation upstream
-HTTP `status_code` or `status_class` metrics, nor deduplicated DAU, WAU, or MAU
-analytics for users or plugins. Those need separate semantic decisions or
-an analytics pipeline instead of more process-local counters.
+The built-in `gestaltd` metric surface emits broker operation result status via
+`gestalt.result_status` and `gestalt.result_status_class`, but it does not emit
+separate per-upstream-request HTTP `status_code` or `status_class` metrics for
+HTTP catalog transports. It also does not emit deduplicated DAU, WAU, or MAU
+analytics for users or plugins. Those need separate semantic decisions or an
+analytics pipeline instead of more process-local counters.
 
 ### HTTP Server Metrics
 
@@ -355,20 +363,22 @@ Unknown provider or operation paths keep the templated route label but do not ge
 resolved provider or operation labels.
 
 For Datadog dashboards, provider-operation status splits can be built from the
-HTTP server duration metric:
+broker operation metrics:
 
 ```text
-count:http.server.request.duration{service:<service>,gestalt.provider:*,http.response.status_code:4*}
-  by {gestalt.provider,gestalt.operation}.as_rate()
+sum:gestaltd.operation.error_count{service:<service>,gestalt.result_status_class:4xx}
+  by {gestalt.provider,gestalt.operation,gestalt.result_status}.as_count()
 ```
 
 ```text
-count:http.server.request.duration{service:<service>,gestalt.provider:*,http.response.status_code:5*}
-  by {gestalt.provider,gestalt.operation}.as_rate()
+sum:gestaltd.operation.error_count{service:<service>,gestalt.result_status_class:5xx}
+  by {gestalt.provider,gestalt.operation,gestalt.result_status}.as_count()
 ```
 
-Use the same metric with `http.response.status_code` in the grouping when a
-single graph should show both status class and provider-operation identity.
+For HTTP-only views, use `http.server.request.duration` with
+`http.response.status_code`. For cross-surface provider-operation views, prefer
+`gestaltd.operation.*` with `gestalt.result_status` and
+`gestalt.result_status_class`.
 
 If the process is started with
 `OTEL_SEMCONV_STABILITY_OPT_IN=http/dup`, the underlying HTTP instrumentation
