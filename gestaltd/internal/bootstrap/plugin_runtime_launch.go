@@ -22,13 +22,13 @@ type pluginRuntimeLaunch struct {
 	cleanup   func()
 }
 
-func preparePluginRuntimeLaunch(name string, entry *config.ProviderEntry, command string, args []string, cleanup func(), caps pluginruntime.Capabilities) (pluginRuntimeLaunch, error) {
+func preparePluginRuntimeLaunch(name string, entry *config.ProviderEntry, command string, args []string, cleanup func(), profile RuntimeProfile) (pluginRuntimeLaunch, error) {
 	launch := pluginRuntimeLaunch{
 		command: command,
 		args:    slices.Clone(args),
 		cleanup: cleanup,
 	}
-	if caps.HostPathExecution {
+	if profile.LaunchMode == RuntimeLaunchModeHostPath {
 		return launch, nil
 	}
 	if entry == nil {
@@ -39,7 +39,7 @@ func preparePluginRuntimeLaunch(name string, entry *config.ProviderEntry, comman
 		return pluginRuntimeLaunch{}, fmt.Errorf("resolved manifest path is required for non-local plugin runtime")
 	}
 	rootDir := filepath.Dir(manifestPath)
-	if strings.TrimSpace(caps.ExecutionGOOS) == "" || strings.TrimSpace(caps.ExecutionGOARCH) == "" {
+	if !profile.ExecutionTarget.IsSet() {
 		return pluginRuntimeLaunch{}, fmt.Errorf("non-local plugin runtime must declare execution goos/goarch")
 	}
 
@@ -51,7 +51,7 @@ func preparePluginRuntimeLaunch(name string, entry *config.ProviderEntry, comman
 		_ = os.RemoveAll(bundleDir)
 	}
 
-	localCommand, err := stagePluginRuntimeBundle(name, manifestPath, bundleDir, caps.ExecutionGOOS, caps.ExecutionGOARCH)
+	localCommand, err := stagePluginRuntimeBundle(name, manifestPath, bundleDir, profile.ExecutionTarget.GOOS, profile.ExecutionTarget.GOARCH)
 	if err != nil {
 		bundleCleanup()
 		return pluginRuntimeLaunch{}, err

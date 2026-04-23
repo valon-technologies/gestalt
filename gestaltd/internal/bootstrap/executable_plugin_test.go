@@ -6618,8 +6618,70 @@ func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T)
 	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{
 		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
 	})
-	if err == nil || !strings.Contains(err.Error(), "hostname-based egress controls") {
-		t.Fatalf("buildProvidersStrict error = %v, want missing hostname-based egress controls", err)
+	if err == nil || !strings.Contains(err.Error(), "cannot preserve hostname-based egress required by this plugin") {
+		t.Fatalf("buildProvidersStrict error = %v, want hostname-based egress requirement failure", err)
+	}
+}
+
+func TestPluginRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := &staticCapabilityPluginRuntime{
+		inner: pluginruntime.NewLocalProvider(),
+		capabilities: pluginruntime.Capabilities{
+			HostedPluginRuntime: true,
+			ProviderGRPCTunnel:  true,
+			HostPathExecution:   true,
+		},
+	}
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+				Cache:                []string{"session"},
+			},
+		},
+	}
+
+	deps := Deps{
+		CacheDefs: map[string]*config.ProviderEntry{
+			"session": {Config: mustNode(t, map[string]any{"namespace": "session"})},
+		},
+		CacheFactory: func(yaml.Node) (corecache.Cache, error) {
+			return coretesting.NewStubCache(), nil
+		},
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	_, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err == nil || !strings.Contains(err.Error(), "cannot provide host service access required by this plugin") {
+		t.Fatalf("buildProvidersStrict error = %v, want host service access failure", err)
 	}
 }
 
@@ -7220,6 +7282,163 @@ func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapa
 	}
 }
 
+func TestPluginRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequired(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyAllow)},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+			},
+		},
+	}
+	deps := Deps{
+		BaseURL:       "https://gestalt.example.test",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		Egress:        EgressDeps{DefaultAction: egress.PolicyAllow},
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env["HTTP_PROXY"]; got != "" {
+		t.Fatalf("StartPlugin HTTP_PROXY = %q, want empty when hostname egress is not required", got)
+	}
+	if got := startRequests[0].Env["HTTPS_PROXY"]; got != "" {
+		t.Fatalf("StartPlugin HTTPS_PROXY = %q, want empty when hostname egress is not required", got)
+	}
+}
+
+func TestPluginRuntimeConfigUsesDirectHostServiceBindingsAndSkipsPublicEgressProxy(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.capabilities.HostServiceTunnels = true
+	runtimeProvider.capabilities.HostnameProxyEgress = true
+	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.fakeHosted = true
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.PluginRuntimeConfig{},
+				AllowedHosts:         []string{"api.github.com"},
+				Cache:                []string{"session"},
+			},
+		},
+	}
+	deps := Deps{
+		BaseURL:       "https://gestalt.example.test",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		Egress:        EgressDeps{DefaultAction: egress.PolicyDeny},
+		CacheDefs: map[string]*config.ProviderEntry{
+			"session": {Config: mustNode(t, map[string]any{"namespace": "session"})},
+		},
+		CacheFactory: func(yaml.Node) (corecache.Cache, error) {
+			return coretesting.NewStubCache(), nil
+		},
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env["HTTP_PROXY"]; got != "" {
+		t.Fatalf("StartPlugin HTTP_PROXY = %q, want empty when direct host service bindings are available", got)
+	}
+	if got := startRequests[0].Env["HTTPS_PROXY"]; got != "" {
+		t.Fatalf("StartPlugin HTTPS_PROXY = %q, want empty when direct host service bindings are available", got)
+	}
+	if got := startRequests[0].Env[providerhost.CacheSocketTokenEnv("session")]; got != "" {
+		t.Fatalf("StartPlugin cache token env = %q, want empty for direct host service bindings", got)
+	}
+	if got := startRequests[0].AllowedHosts; !slices.Equal(got, []string{"api.github.com"}) {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want original allowedHosts only", got)
+	}
+
+	bindRequests := runtimeProvider.bindHostServiceRequests()
+	if len(bindRequests) == 0 {
+		t.Fatal("BindHostService requests = 0, want at least one direct host service binding")
+	}
+	for _, req := range bindRequests {
+		if got := req.Relay.DialTarget; !strings.HasPrefix(got, "unix://") {
+			t.Fatalf("BindHostService(%s) relay target = %q, want unix direct dial target", req.EnvVar, got)
+		}
+	}
+}
+
 func TestPluginRuntimePublicEgressProxyRoundTripsThroughHostedPlugin(t *testing.T) {
 	t.Parallel()
 
@@ -7374,8 +7593,8 @@ func TestPluginRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t 
 		}),
 		Egress: EgressDeps{DefaultAction: egress.PolicyDeny},
 	})
-	if err == nil || !strings.Contains(err.Error(), "hostname-based egress controls") {
-		t.Fatalf("buildProvidersStrict error = %v, want missing hostname-based egress controls", err)
+	if err == nil || !strings.Contains(err.Error(), "cannot preserve hostname-based egress required by this plugin") {
+		t.Fatalf("buildProvidersStrict error = %v, want hostname-based egress requirement failure", err)
 	}
 }
 
