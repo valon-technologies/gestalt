@@ -328,7 +328,10 @@ func (r *agentRuntime) EmitEvent(ctx context.Context, req coreagent.EmitEventReq
 		return nil, fmt.Errorf("%w: agent run %q is revoked", invocation.ErrAuthorizationDenied, runID)
 	}
 	providerName := strings.TrimSpace(req.ProviderName)
-	if providerName != "" && strings.TrimSpace(ref.ProviderName) != providerName {
+	if providerName == "" {
+		return nil, fmt.Errorf("%w: provider name is required", invocation.ErrAuthorizationDenied)
+	}
+	if strings.TrimSpace(ref.ProviderName) != providerName {
 		return nil, fmt.Errorf("%w: agent run %q is not valid for provider %q", invocation.ErrAuthorizationDenied, runID, providerName)
 	}
 	event, err := runEvents.Append(ctx, coreagent.RunEvent{
