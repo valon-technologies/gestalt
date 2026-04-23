@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use serde_json::{Map, Value, json};
 use std::io;
 
@@ -114,8 +114,22 @@ fn build_create_body(args: &AgentRunCreateArgs) -> Result<Value> {
             Value::Array(args.tools.iter().map(agent_tool_ref_value).collect()),
         );
     }
+    validate_create_body(&body)?;
 
     Ok(Value::Object(body))
+}
+
+fn validate_create_body(body: &Map<String, Value>) -> Result<()> {
+    let has_messages = body
+        .get("messages")
+        .and_then(Value::as_array)
+        .is_some_and(|messages| !messages.is_empty());
+    if !has_messages {
+        bail!(
+            "agent runs create requires at least one message; pass --message, --system, or --request-file with a non-empty messages array"
+        );
+    }
+    Ok(())
 }
 
 fn build_messages(args: &AgentRunCreateArgs) -> Vec<Value> {
