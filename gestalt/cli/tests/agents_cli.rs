@@ -70,6 +70,63 @@ fn test_cli_creates_agent_run() {
 }
 
 #[test]
+fn test_cli_creates_agent_run_from_request_file() {
+    let request_json = r#"{
+        "provider":"managed",
+        "model":"gpt-5.4",
+        "toolSource":"explicit",
+        "sessionRef":"session-1",
+        "metadata":{"ticket":"AIT-123"},
+        "providerOptions":{"temperature":0.2},
+        "responseSchema":{
+            "type":"object",
+            "properties":{"summary":{"type":"string"}},
+            "required":["summary"]
+        },
+        "messages":[
+            {"role":"user","text":"Summarize the roadmap risk."}
+        ],
+        "toolRefs":[
+            {
+                "pluginName":"roadmap",
+                "operation":"sync",
+                "connection":"workspace",
+                "instance":"prod",
+                "title":"Roadmap sync",
+                "description":"Read roadmap state"
+            }
+        ]
+    }"#;
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/agent/runs",
+        StatusCode::CREATED
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(request_json.to_string()))
+    .with_body(RUN_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    let request_path = home.path().join("agent-request.json");
+    std::fs::write(&request_path, request_json).unwrap();
+
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "agent",
+            "runs",
+            "create",
+            "--request-file",
+            request_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("run-1"));
+}
+
+#[test]
 fn test_cli_lists_agent_runs_with_server_side_filters() {
     let mut server = Server::new();
     let _mock = authed_json_mock!(

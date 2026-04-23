@@ -222,7 +222,7 @@ fn rewrite_connect_error(
 }
 
 fn connect_command(plugin: &str, connection: Option<&str>, instance: Option<&str>) -> String {
-    let mut connect_command = format!("gestalt plugins connect {}", plugin);
+    let mut connect_command = format!("gestalt plugin connect {}", plugin);
     if let Some(connection) = connection {
         connect_command.push_str(" --connection ");
         connect_command.push_str(connection);

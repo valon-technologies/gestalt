@@ -521,7 +521,7 @@ plugins:
 ```
 
 ```sh
-gestalt plugins invoke slack-readonly conversations.list -p limit=5
+gestalt plugin invoke slack-readonly conversations.list -p limit=5
 ```
 
 Gestalt handles OAuth token injection, request formatting, and response passthrough. The `spec.surfaces.rest.baseUrl` is the root for all declared paths, and each operation's `parameters` define how input fields map to query parameters or request body fields.
@@ -532,7 +532,7 @@ You can also declare OpenAPI, GraphQL, and MCP surfaces using `spec.surfaces.ope
 
 Operation IDs should use period-separated hierarchical names. The Slack plugin uses `conversations.list`, `conversations.history`, `chat.postMessage`, and `users.info`.
 
-This convention enables prefix matching in the CLI. When you run `gestalt plugins invoke slack conversations`, the CLI joins the space-separated segments with periods and shows all operations whose ID starts with `conversations.`. This makes large catalogs navigable without memorizing every operation name.
+This convention enables prefix matching in the CLI. When you run `gestalt plugin invoke slack conversations`, the CLI joins the space-separated segments with periods and shows all operations whose ID starts with `conversations.`. This makes large catalogs navigable without memorizing every operation name.
 
 ## Dynamic catalogs
 
@@ -664,7 +664,7 @@ gestaltd serve --config ./config.yaml
 ```
 
 ```sh
-gestalt plugins invoke slack conversations.getMessage -p channel=C01ABC23DEF -p ts=1712161829.000300
+gestalt plugin invoke slack conversations.getMessage -p channel=C01ABC23DEF -p ts=1712161829.000300
 ```
 
 If your plugin makes outbound HTTP requests and you see 403 errors, check

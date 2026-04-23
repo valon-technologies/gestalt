@@ -411,7 +411,7 @@ top-level `workflows.schedules.*.provider` or
 explicitly, or inherit the sole/default workflow provider when `provider` is
 omitted. User-owned schedules and triggers use the same provider pool
 through `/api/v1/workflow/schedules`,
-`/api/v1/workflow/event-triggers`, and `gestalt workflows ...`.
+`/api/v1/workflow/event-triggers`, and `gestalt workflow ...`.
 
 ```yaml
 providers:
@@ -913,7 +913,7 @@ Disables audit output explicitly. `providers.audit.<name>.config` is not allowed
 
 ## `plugins`
 
-Each entry in the `plugins` map is a named plugin backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, and declares connection policy. The HTTP API route paths still use "integrations" (e.g. `/api/v1/integrations`) as stable code surface, but the CLI and config both use `plugins` as the canonical term.
+Each entry in the `plugins` map is a named plugin backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, and declares connection policy. The HTTP API route paths still use "integrations" (e.g. `/api/v1/integrations`) as stable code surface, while the CLI uses the singular `plugin` command.
 
 ```yaml
 plugins:
