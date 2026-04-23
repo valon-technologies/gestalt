@@ -1182,9 +1182,8 @@ func buildPluginRuntimeHostServiceBinding(pluginName, sessionID string, hostServ
 		}, relayEnv, relayHost, nil
 	}
 	return pluginruntime.BindHostServiceRequest{
-		SessionID:      sessionID,
-		EnvVar:         hostService.EnvVar,
-		HostSocketPath: hostService.SocketPath,
+		SessionID: sessionID,
+		EnvVar:    hostService.EnvVar,
 		Relay: pluginruntime.HostServiceRelay{
 			DialTarget: "unix://" + hostService.SocketPath,
 		},
