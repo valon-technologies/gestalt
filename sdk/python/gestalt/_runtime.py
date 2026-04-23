@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Final, cast
 from ._api import Access, Credential, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
+from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
 from ._operations import INTERNAL_ERROR_MESSAGE
 from ._plugin import ConnectedToken, Plugin, _module_plugin
 
@@ -682,6 +683,38 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
                 return plugin_pb2.OperationResult(status=status, body=body)
             return plugin_pb2.OperationResult(status=result.status, body=result.body)
 
+        def ResolveHTTPSubject(self, request: Any, context: Any) -> Any:
+            if not plugin.supports_http_subject():
+                return plugin_pb2.ResolveHTTPSubjectResponse()
+
+            try:
+                subject = plugin.resolve_http_subject(
+                    _http_subject_request(getattr(request, "request", None)),
+                    _plugin_request(request),
+                )
+            except HTTPSubjectResolutionError as error:
+                return plugin_pb2.ResolveHTTPSubjectResponse(
+                    reject_status=error.status,
+                    reject_message=error.message,
+                )
+            except Exception as error:
+                traceback.print_exception(error)
+                return context.abort(
+                    grpc.StatusCode.UNKNOWN,
+                    f"resolve http subject: {error}",
+                )
+
+            if subject is None:
+                return plugin_pb2.ResolveHTTPSubjectResponse()
+            return plugin_pb2.ResolveHTTPSubjectResponse(
+                subject=plugin_pb2.SubjectContext(
+                    id=subject.id,
+                    kind=subject.kind,
+                    display_name=subject.display_name,
+                    auth_source=subject.auth_source,
+                )
+            )
+
         def GetSessionCatalog(self, request: Any, context: Any) -> Any:
             if not plugin.supports_session_catalog():
                 return context.abort(
@@ -927,6 +960,35 @@ def _plugin_request(request: Any) -> Request:
         workflow=_workflow_from_proto(getattr(request, "context", None)),
         invocation_token=getattr(request, "invocation_token", ""),
     )
+
+
+def _http_subject_request(request: Any) -> HTTPSubjectRequest:
+    if request is None:
+        return HTTPSubjectRequest()
+    return HTTPSubjectRequest(
+        binding=getattr(request, "binding", ""),
+        method=getattr(request, "method", ""),
+        path=getattr(request, "path", ""),
+        content_type=getattr(request, "content_type", ""),
+        headers=_string_lists_from_proto_map(getattr(request, "headers", {})),
+        query=_string_lists_from_proto_map(getattr(request, "query", {})),
+        params=_message_to_dict(
+            field_name="params",
+            message=getattr(request, "params", None),
+            request=request,
+        ),
+        raw_body=bytes(getattr(request, "raw_body", b"")),
+        security_scheme=getattr(request, "security_scheme", ""),
+        verified_subject=getattr(request, "verified_subject", ""),
+        verified_claims=dict(getattr(request, "verified_claims", {})),
+    )
+
+
+def _string_lists_from_proto_map(values: Any) -> dict[str, list[str]]:
+    return {
+        str(key): list(getattr(value, "values", ()))
+        for key, value in dict(values or {}).items()
+    }
 
 
 def _subject_from_proto(request_context: Any) -> Subject:
