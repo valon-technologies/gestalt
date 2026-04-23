@@ -138,6 +138,36 @@ func RequireFloat64Histogram(t *testing.T, rm metricdata.ResourceMetrics, name s
 	t.Fatalf("metric %q with attrs %v not found", name, attrs)
 }
 
+func RequireFloat64HistogramOmitsAttr(t *testing.T, rm metricdata.ResourceMetrics, name string, attrs map[string]string, forbiddenKey string) {
+	t.Helper()
+
+	found := false
+	for _, scope := range rm.ScopeMetrics {
+		for _, metric := range scope.Metrics {
+			if metric.Name != name {
+				continue
+			}
+			histogram, ok := metric.Data.(metricdata.Histogram[float64])
+			if !ok {
+				t.Fatalf("metric %q is %T, want Histogram[float64]", name, metric.Data)
+			}
+			for _, point := range histogram.DataPoints {
+				if !AttrsMatch(point.Attributes, attrs) {
+					continue
+				}
+				found = true
+				if _, ok := point.Attributes.Value(attribute.Key(forbiddenKey)); ok {
+					t.Fatalf("metric %q attrs %v unexpectedly include %q", name, attrs, forbiddenKey)
+				}
+			}
+		}
+	}
+
+	if !found {
+		t.Fatalf("metric %q with attrs %v not found", name, attrs)
+	}
+}
+
 func AttrsMatch(set attribute.Set, want map[string]string) bool {
 	for key, expected := range want {
 		value, ok := set.Value(attribute.Key(key))

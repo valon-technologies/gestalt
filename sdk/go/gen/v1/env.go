@@ -24,6 +24,10 @@ const (
 	// want to terminate themselves when the parent goes away unexpectedly.
 	EnvProviderParentPID = "GESTALT_PLUGIN_PARENT_PID"
 
+	// EnvProviderName is the provider name assigned by the host for executable
+	// providers.
+	EnvProviderName = "GESTALT_PLUGIN_NAME"
+
 	// CurrentProtocolVersion is the provider protocol version spoken by this
 	// build of the host and SDK. Providers must echo this version in their
 	// StartProviderResponse.

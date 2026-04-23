@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/httpbinding"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
@@ -253,6 +254,12 @@ func (s *Server) mountHTTPBindingRoutes(r chi.Router) {
 	for _, binding := range s.mountedHTTPBindings {
 		binding := binding
 		r.MethodFunc(binding.Method, binding.Path, func(w http.ResponseWriter, r *http.Request) {
+			metricutil.AddHTTPAttributes(r.Context(),
+				metricutil.AttrProvider.String(metricutil.AttrValue(binding.PluginName)),
+				metricutil.AttrOperation.String(metricutil.AttrValue(binding.Target)),
+				metricutil.AttrHTTPBinding.String(metricutil.AttrValue(binding.Name)),
+				metricutil.AttrInvocationSurface.String("http"),
+			)
 			s.handleHTTPBinding(binding, w, r)
 		})
 	}

@@ -32,11 +32,11 @@ const (
 	tracerName            = "gestaltd"
 	graphQLOperationID    = "graphql"
 
-	attrProvider       = attribute.Key("gestalt.provider")
-	attrOperation      = attribute.Key("gestalt.operation")
-	attrTransport      = attribute.Key("gestalt.transport")
+	attrProvider       = metricutil.AttrProvider
+	attrOperation      = metricutil.AttrOperation
+	attrTransport      = metricutil.AttrTransport
 	attrSubjectID      = attribute.Key("gestalt.subject_id")
-	attrConnectionMode = attribute.Key("gestalt.connection_mode")
+	attrConnectionMode = metricutil.AttrConnectionMode
 )
 
 type connectionCtxKey struct{}

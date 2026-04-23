@@ -6,11 +6,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 )
 
 func (s *Server) routes() {
 	r := s.router
 	r.Use(requestMetaMiddleware)
+	r.Use(routePatternTelemetryMiddleware)
 	r.Use(s.securityHeadersMiddleware)
 	r.Use(s.hostServiceRelayMiddleware)
 	r.Use(s.egressProxyMiddleware)
@@ -121,6 +123,19 @@ func redirectPreservingQuery(w http.ResponseWriter, r *http.Request, target stri
 		target += "?" + rawQuery
 	}
 	http.Redirect(w, r, target, code)
+}
+
+func routePatternTelemetryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+		routeCtx := chi.RouteContext(r.Context())
+		if routeCtx == nil {
+			return
+		}
+		if route := routeCtx.RoutePattern(); route != "" {
+			metricutil.AddHTTPAttributes(r.Context(), metricutil.AttrHTTPRoute.String(route))
+		}
+	})
 }
 
 func (s *Server) mountManagementHiddenRoutes(r chi.Router) {

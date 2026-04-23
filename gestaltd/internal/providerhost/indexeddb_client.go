@@ -39,6 +39,7 @@ func NewExecutableIndexedDB(ctx context.Context, cfg IndexedDBExecConfig) (index
 		AllowedHosts: cfg.AllowedHosts,
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
+		ProviderName: cfg.Name,
 	}
 	proc, err := startProviderProcess(ctx, execCfg.processConfig())
 	if err != nil {

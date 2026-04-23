@@ -343,10 +343,19 @@ func TestOperationMetricsDefaultRESTTransportFromCatalogContext(t *testing.T) {
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.count", 1, map[string]string{
-		"gestalt.provider":        providerName,
-		"gestalt.operation":       "list",
-		"gestalt.transport":       "rest",
-		"gestalt.connection_mode": "none",
+		"gestalt.provider":           providerName,
+		"gestalt.operation":          "list",
+		"gestalt.transport":          "rest",
+		"gestalt.connection_mode":    "none",
+		"gestalt.invocation_surface": "http",
+	})
+	metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", map[string]string{
+		"http.route":                 "/api/v1/{integration}/{operation}",
+		"gestalt.provider":           providerName,
+		"gestalt.operation":          "list",
+		"gestalt.transport":          "rest",
+		"gestalt.connection_mode":    "none",
+		"gestalt.invocation_surface": "http",
 	})
 }
 
@@ -569,6 +578,34 @@ func TestHTTPMiddlewareMetricsUseConfiguredMeterProvider(t *testing.T) {
 	if !hasMetricWithPrefix(rm, "http.server.") {
 		t.Fatalf("expected otelhttp metrics in configured meter provider, got %+v", rm.ScopeMetrics)
 	}
+	metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", map[string]string{
+		"http.route": "/ready",
+	})
+}
+
+func TestHTTPMetricsDoNotLabelUnknownPluginRouteParams(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.MeterProvider = metrics.Provider
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/not-a-provider/not-an-operation", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusOK {
+		t.Fatalf("expected non-200 for unknown provider route")
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	routeAttrs := map[string]string{"http.route": "/api/v1/{integration}/{operation}"}
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", routeAttrs, "gestalt.provider")
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", routeAttrs, "gestalt.operation")
 }
 
 func TestHTTPDiscoveryMetrics(t *testing.T) {

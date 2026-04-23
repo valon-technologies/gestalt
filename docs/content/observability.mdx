@@ -335,41 +335,43 @@ API traffic, health and readiness checks, the embedded admin UI, and scrapes of
 
 These metrics use standard OpenTelemetry HTTP server semantic attributes such as
 request method, response status, scheme, host, protocol, and route information
-when available.
+when available. Gestalt also attaches stable dimensions for request surfaces it
+can resolve, including `gestalt.provider`, `gestalt.operation`,
+`gestalt.transport`, `gestalt.connection_mode`, `gestalt.invocation_surface`,
+`gestalt.http_binding`, and `gestalt.ui`.
 
 If the process is started with
 `OTEL_SEMCONV_STABILITY_OPT_IN=http/dup`, the underlying HTTP instrumentation
 also emits the older legacy HTTP metric families alongside the current ones.
 
-### Provider gRPC Client Metrics
+### Provider gRPC Metrics
 
-These come from the OpenTelemetry gRPC client stats handler used for outbound
-gRPC traffic from `gestaltd` to provider processes. They only apply to
-provider-backed components.
+These come from OpenTelemetry gRPC stats handlers used for provider and host
+service traffic. They only apply to provider-backed components.
 
 <Tabs items={['OpenTelemetry', 'Prometheus']}>
   <Tabs.Tab>
     | Metric | Type | Meaning |
     | --- | --- | --- |
-    | `rpc.client.duration` | Histogram | Outbound provider RPC duration |
-    | `rpc.client.request.size` | Histogram | Outbound provider request message size |
-    | `rpc.client.response.size` | Histogram | Inbound plugin response message size |
-    | `rpc.client.requests_per_rpc` | Histogram | Request messages per RPC |
-    | `rpc.client.responses_per_rpc` | Histogram | Response messages per RPC |
+    | `rpc.client.call.duration` | Histogram | Outbound provider RPC duration |
+    | `rpc.server.call.duration` | Histogram | Inbound provider or host-service RPC duration |
   </Tabs.Tab>
   <Tabs.Tab>
     | Metric | Type | Meaning |
     | --- | --- | --- |
-    | `rpc_client_duration_milliseconds` | Histogram | Outbound plugin RPC duration |
-    | `rpc_client_request_size_bytes` | Histogram | Outbound plugin request message size |
-    | `rpc_client_response_size_bytes` | Histogram | Inbound plugin response message size |
-    | `rpc_client_requests_per_rpc` | Histogram | Request messages per RPC |
-    | `rpc_client_responses_per_rpc` | Histogram | Response messages per RPC |
+    | `rpc_client_call_duration_seconds` | Histogram | Outbound plugin RPC duration |
+    | `rpc_server_call_duration_seconds` | Histogram | Inbound provider or host-service RPC duration |
   </Tabs.Tab>
 </Tabs>
 
-These metrics use standard OpenTelemetry gRPC client semantic attributes such as
-`rpc.system=grpc`, `rpc.service`, and `rpc.method`.
+These metrics use standard OpenTelemetry gRPC semantic attributes such as
+`rpc.system.name=grpc`, `rpc.method`, and `rpc.response.status_code`. Gestalt
+also attaches `gestalt.rpc.role`, `gestalt.provider`, and
+`gestalt.host_service` when it can resolve them.
+
+If the process is started with `OTEL_SEMCONV_STABILITY_OPT_IN=rpc/dup`, the
+underlying gRPC instrumentation also emits legacy RPC metric families such as
+`rpc.client.duration` alongside the current ones.
 
 ## Prometheus Scrape Endpoint
 

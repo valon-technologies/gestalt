@@ -441,6 +441,12 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	metricutil.AddHTTPAttributes(r.Context(),
+		metricutil.AttrProvider.String(metricutil.AttrValue(name)),
+		metricutil.AttrOperation.String(operation),
+		metricutil.AttrConnectionMode.String(metricutil.NormalizeConnectionMode(prov.ConnectionMode())),
+		metricutil.AttrInvocationSurface.String("http"),
+	)
 	p := PrincipalFromContext(r.Context())
 	if !s.allowProviderContext(r.Context(), p, name) {
 		s.auditHTTPEvent(r.Context(), p, name, operation, false, errOperationAccess)
@@ -637,6 +643,12 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		s.writeInvocationError(w, r, providerName, operationName, err)
 		return
 	}
+	metricutil.AddHTTPAttributes(r.Context(),
+		metricutil.AttrProvider.String(metricutil.AttrValue(providerName)),
+		metricutil.AttrOperation.String(metricutil.AttrValue(opMeta.ID)),
+		metricutil.AttrConnectionMode.String(metricutil.NormalizeConnectionMode(prov.ConnectionMode())),
+		metricutil.AttrInvocationSurface.String("http"),
+	)
 	if s.authorizer != nil && !s.authorizer.AllowCatalogOperation(ctx, p, providerName, opMeta) {
 		s.auditHTTPAuthorizationEvent(ctx, p, providerName, operationName, false, errOperationAccess, auditAuthorization{
 			Policy:   access.Policy,

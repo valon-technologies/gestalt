@@ -850,7 +850,11 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		return nil, err
 	}
 	cleanup = chainCleanup(cleanup, runtimeCleanup)
-	startedHostServices, err := providerhost.StartHostServices(hostServices)
+	startedHostServices, err := providerhost.StartHostServices(
+		hostServices,
+		providerhost.WithHostServicesProviderName(name),
+		providerhost.WithHostServicesTelemetry(deps.Telemetry),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("start runtime host services: %w", err)
 	}
@@ -904,7 +908,10 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	if err != nil {
 		return nil, fmt.Errorf("start hosted plugin: %w", err)
 	}
-	conn, err := pluginruntime.DialHostedPlugin(ctx, hostedPlugin.DialTarget)
+	conn, err := pluginruntime.DialHostedPlugin(ctx, hostedPlugin.DialTarget,
+		pluginruntime.WithProviderName(name),
+		pluginruntime.WithTelemetry(deps.Telemetry),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("dial hosted plugin: %w", err)
 	}
@@ -950,10 +957,10 @@ func effectivePluginRuntime(ctx context.Context, name string, entry *config.Prov
 			return runtimeConfig, runtimeProvider, false, nil
 		}
 		if runtimeConfig.Enabled {
-			return runtimeConfig, pluginruntime.NewLocalProvider(), true, nil
+			return runtimeConfig, pluginruntime.NewLocalProvider(pluginruntime.WithLocalTelemetry(deps.Telemetry)), true, nil
 		}
 	}
-	return config.EffectivePluginRuntime{}, pluginruntime.NewLocalProvider(), true, nil
+	return config.EffectivePluginRuntime{}, pluginruntime.NewLocalProvider(pluginruntime.WithLocalTelemetry(deps.Telemetry)), true, nil
 }
 
 const (
@@ -1327,6 +1334,7 @@ func buildPluginIndexedDBHostServices(pluginName string, effective config.Effect
 	}
 
 	hostServices := []providerhost.HostService{{
+		Name:   "indexeddb",
 		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, pluginName, providerhost.IndexedDBServerOptions{
@@ -1359,6 +1367,7 @@ func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry
 		}
 		boundCaches = append(boundCaches, value)
 		hostServices = append(hostServices, providerhost.HostService{
+			Name:   "cache",
 			EnvVar: providerhost.CacheSocketEnv(bindingName),
 			Register: func(cacheValue corecache.Cache) func(*grpc.Server) {
 				return func(srv *grpc.Server) {
@@ -1370,6 +1379,7 @@ func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry
 	if len(boundCaches) == 1 {
 		value := boundCaches[0]
 		hostServices = append(hostServices, providerhost.HostService{
+			Name:   "cache",
 			EnvVar: providerhost.DefaultCacheSocketEnv,
 			Register: func(srv *grpc.Server) {
 				proto.RegisterCacheServer(srv, providerhost.NewCacheServer(value, pluginName))
@@ -1393,6 +1403,7 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 			return nil, fmt.Errorf("s3 %q is not available", binding)
 		}
 		hostServices = append(hostServices, providerhost.HostService{
+			Name:   "s3",
 			EnvVar: providerhost.S3SocketEnv(binding),
 			Register: func(client s3store.Client) func(*grpc.Server) {
 				return func(srv *grpc.Server) {
@@ -1404,6 +1415,7 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 	if len(entry.S3) == 1 {
 		client := deps.S3[entry.S3[0]]
 		hostServices = append(hostServices, providerhost.HostService{
+			Name:   "s3",
 			EnvVar: providerhost.DefaultS3SocketEnv,
 			Register: func(srv *grpc.Server) {
 				proto.RegisterS3Server(srv, providerhost.NewS3Server(client, pluginName))
@@ -1424,6 +1436,7 @@ func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveW
 	}
 
 	hostServices := []providerhost.HostService{{
+		Name:   "indexeddb",
 		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, name, providerhost.IndexedDBServerOptions{
@@ -1465,6 +1478,7 @@ func buildPluginWorkflowManagerHostService(pluginName string, deps Deps, tokens 
 		manager = unavailableWorkflowManager{}
 	}
 	return providerhost.HostService{
+		Name:   "workflow_manager",
 		EnvVar: providerhost.DefaultWorkflowManagerSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterWorkflowManagerHostServer(srv, providerhost.NewWorkflowManagerServer(pluginName, manager, tokens))
@@ -1478,6 +1492,7 @@ func buildPluginAgentManagerHostService(pluginName string, deps Deps, tokens *pr
 		manager = unavailableAgentManager{}
 	}
 	return providerhost.HostService{
+		Name:   "agent_manager",
 		EnvVar: providerhost.DefaultAgentManagerSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterAgentManagerHostServer(srv, providerhost.NewAgentManagerServer(pluginName, manager, tokens))
@@ -1487,6 +1502,7 @@ func buildPluginAgentManagerHostService(pluginName string, deps Deps, tokens *pr
 
 func buildPluginAuthorizationHostService(provider core.AuthorizationProvider) providerhost.HostService {
 	return providerhost.HostService{
+		Name:   "authorization",
 		EnvVar: providerhost.DefaultAuthorizationSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterAuthorizationProviderServer(srv, providerhost.NewAuthorizationProviderServer(provider))
@@ -1500,6 +1516,7 @@ func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntr
 		invoker = unavailablePluginInvoker{}
 	}
 	return providerhost.HostService{
+		Name:   "plugin_invoker",
 		EnvVar: providerhost.DefaultPluginInvokerSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterPluginInvokerServer(srv, providerhost.NewPluginInvokerServer(pluginName, entry.Invokes, invoker, tokens))

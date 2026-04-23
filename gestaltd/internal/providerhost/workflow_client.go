@@ -42,6 +42,7 @@ func NewExecutableWorkflow(ctx context.Context, cfg WorkflowExecConfig) (corewor
 		HostBinary:    cfg.HostBinary,
 		Cleanup:       cfg.Cleanup,
 		HostServices:  cfg.HostServices,
+		ProviderName:  cfg.Name,
 	}
 	proc, err := startWorkflowProviderProcess(ctx, execCfg.processConfig())
 	if err != nil {

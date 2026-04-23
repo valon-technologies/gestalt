@@ -153,6 +153,7 @@ type Deps struct {
 	PluginInvoker         invocation.Invoker
 	PluginRuntime         pluginruntime.Provider
 	PluginRuntimeRegistry *pluginRuntimeRegistry
+	Telemetry             core.TelemetryProvider
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
@@ -663,6 +664,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		EncryptionKey: encKey,
 		BaseURL:       cfg.Server.BaseURL,
 		SecretManager: sm,
+		Telemetry:     tp,
 	}
 	workflowRuntime, err := newWorkflowRuntime(cfg)
 	if err != nil {
@@ -1317,6 +1319,7 @@ func buildHostIndexedDBHostServices(selectedName string, indexeddbs map[string]i
 
 func indexedDBHostService(envVar, name string, ds indexeddb.IndexedDB) providerhost.HostService {
 	return providerhost.HostService{
+		Name:   "indexeddb",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, name, providerhost.IndexedDBServerOptions{}))
@@ -1384,6 +1387,7 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 		}
 	}
 	hostServices := []providerhost.HostService{{
+		Name:   "workflow_host",
 		EnvVar: providerhost.DefaultWorkflowHostSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterWorkflowHostServer(srv, providerhost.NewWorkflowHostServer(name, deps.WorkflowRuntime.Invoke))
@@ -1437,6 +1441,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		}
 	}
 	hostServices := []providerhost.HostService{{
+		Name:   "agent_host",
 		EnvVar: providerhost.DefaultAgentHostSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterAgentHostServer(srv, providerhost.NewAgentHostServer(name, deps.AgentRuntime.ExecuteTool))

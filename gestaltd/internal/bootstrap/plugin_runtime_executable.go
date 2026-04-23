@@ -9,7 +9,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 )
 
-func buildExecutablePluginRuntime(ctx context.Context, name string, entry *config.RuntimeProviderEntry, _ Deps) (pluginruntime.Provider, error) {
+func buildExecutablePluginRuntime(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (pluginruntime.Provider, error) {
 	if entry == nil {
 		return nil, fmt.Errorf("runtime provider entry is required")
 	}
@@ -38,5 +38,6 @@ func buildExecutablePluginRuntime(ctx context.Context, name string, entry *confi
 		Config:       runtimeConfig,
 		AllowedHosts: append([]string(nil), entry.AllowedHosts...),
 		HostBinary:   entry.HostBinary,
+		Telemetry:    deps.Telemetry,
 	})
 }

@@ -59,7 +59,7 @@ func (r *pluginRuntimeRegistry) Resolve(ctx context.Context, pluginName string, 
 	var provider pluginruntime.Provider
 	switch effective.Provider.Driver {
 	case config.RuntimeProviderDriverLocal:
-		provider = pluginruntime.NewLocalProvider()
+		provider = pluginruntime.NewLocalProvider(pluginruntime.WithLocalTelemetry(r.deps.Telemetry))
 	default:
 		if factory == nil {
 			return config.EffectivePluginRuntime{}, nil, fmt.Errorf("runtime provider %q is not registered", providerName)

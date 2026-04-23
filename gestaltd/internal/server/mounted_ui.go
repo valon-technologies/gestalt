@@ -14,9 +14,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/adminui"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/ui"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const browserLoginPath = "/api/v1/auth/login"
@@ -256,7 +258,7 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 	if mounted.Path != "/" {
 		inner = http.StripPrefix(mounted.Path, inner)
 	}
-	return s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin)
+	return mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
 }
 
 func (s *Server) adminUIHandler() http.Handler {
@@ -265,7 +267,7 @@ func (s *Server) adminUIHandler() http.Handler {
 	}
 	mounted := s.adminMountedUI()
 	inner := http.StripPrefix(mounted.Path, mounted.Handler)
-	return s.protectedUIHandler(mounted, inner, s.redirectAdminUILogin)
+	return mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectAdminUILogin))
 }
 
 func (s *Server) adminMountedUI() MountedUI {
@@ -293,6 +295,20 @@ func (s *Server) protectedUIHandler(mounted MountedUI, inner http.Handler, redir
 			return
 		}
 		inner.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func mountedUITelemetryHandler(mounted MountedUI, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attrs := []attribute.KeyValue{
+			metricutil.AttrUI.String(metricutil.AttrValue(mounted.Name)),
+			metricutil.AttrInvocationSurface.String("ui"),
+		}
+		if mounted.PluginName != "" {
+			attrs = append(attrs, metricutil.AttrProvider.String(metricutil.AttrValue(mounted.PluginName)))
+		}
+		metricutil.AddHTTPAttributes(r.Context(), attrs...)
+		next.ServeHTTP(w, r)
 	})
 }
 

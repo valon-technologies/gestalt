@@ -8,10 +8,13 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
 
 type StartedHostService struct {
+	Name       string
 	EnvVar     string
 	SocketPath string
 }
@@ -25,7 +28,33 @@ type StartedHostServices struct {
 	closeErr  error
 }
 
-func StartHostServices(services []HostService) (*StartedHostServices, error) {
+type HostServicesOption func(*hostServicesConfig)
+
+type hostServicesConfig struct {
+	providerName string
+	telemetry    metricutil.TelemetryProviders
+}
+
+func WithHostServicesProviderName(name string) HostServicesOption {
+	return func(cfg *hostServicesConfig) {
+		cfg.providerName = name
+	}
+}
+
+func WithHostServicesTelemetry(telemetry metricutil.TelemetryProviders) HostServicesOption {
+	return func(cfg *hostServicesConfig) {
+		cfg.telemetry = telemetry
+	}
+}
+
+func StartHostServices(services []HostService, opts ...HostServicesOption) (*StartedHostServices, error) {
+	var cfg hostServicesConfig
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&cfg)
+		}
+	}
+
 	active := make([]HostService, 0, len(services))
 	for _, service := range services {
 		if service.Register == nil || service.EnvVar == "" {
@@ -55,11 +84,12 @@ func StartHostServices(services []HostService) (*StartedHostServices, error) {
 			}
 			return nil, fmt.Errorf("listen on host socket: %w", err)
 		}
-		srv := grpc.NewServer()
+		srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.providerName, service, cfg.telemetry)...)))
 		service.Register(srv)
 		started.hostLiss = append(started.hostLiss, lis)
 		started.hostSrvs = append(started.hostSrvs, srv)
 		started.services = append(started.services, StartedHostService{
+			Name:       hostServiceMetricName(service),
 			EnvVar:     service.EnvVar,
 			SocketPath: hostSocket,
 		})
