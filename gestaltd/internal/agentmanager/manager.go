@@ -25,6 +25,8 @@ import (
 
 var (
 	ErrAgentNotConfigured            = errors.New("agent is not configured")
+	ErrAgentProviderRequired         = errors.New("agent provider is required")
+	ErrAgentProviderNotAvailable     = errors.New("agent provider is not available")
 	ErrAgentRunMetadataNotConfigured = errors.New("agent run metadata is not configured")
 	ErrAgentRunEventsNotConfigured   = errors.New("agent run events are not configured")
 	ErrAgentSubjectRequired          = errors.New("agent subject is required")
@@ -32,6 +34,26 @@ var (
 	ErrAgentInheritedSurfaceTool     = errors.New("agent inherited surface tools are not supported")
 	ErrAgentRunCreationInProgress    = errors.New("agent run creation is already in progress for this idempotency key")
 )
+
+type AgentProviderNotAvailableError struct {
+	Name string
+}
+
+func (e AgentProviderNotAvailableError) Error() string {
+	name := strings.TrimSpace(e.Name)
+	if name == "" {
+		return ErrAgentProviderNotAvailable.Error()
+	}
+	return fmt.Sprintf("agent provider %q is not available", name)
+}
+
+func (e AgentProviderNotAvailableError) Unwrap() error {
+	return ErrAgentProviderNotAvailable
+}
+
+func NewAgentProviderNotAvailableError(name string) error {
+	return AgentProviderNotAvailableError{Name: name}
+}
 
 type AgentControl interface {
 	ResolveProvider(name string) (coreagent.Provider, error)

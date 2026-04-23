@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -191,7 +192,7 @@ func (r *agentRuntime) ResolveProvider(name string) (coreagent.Provider, error) 
 	defer r.mu.RUnlock()
 	provider, ok := r.providers[strings.TrimSpace(name)]
 	if !ok || provider == nil {
-		return nil, fmt.Errorf("agent provider %q is not available", name)
+		return nil, agentmanager.NewAgentProviderNotAvailableError(name)
 	}
 	return provider, nil
 }
@@ -207,11 +208,11 @@ func (r *agentRuntime) ResolveProviderSelection(name string) (string, coreagent.
 		selectedName = strings.TrimSpace(r.defaultProviderName)
 	}
 	if selectedName == "" {
-		return "", nil, fmt.Errorf("agent provider is required")
+		return "", nil, agentmanager.ErrAgentProviderRequired
 	}
 	provider, ok := r.providers[selectedName]
 	if !ok || provider == nil {
-		return "", nil, fmt.Errorf("agent provider %q is not available", selectedName)
+		return "", nil, agentmanager.NewAgentProviderNotAvailableError(selectedName)
 	}
 	return selectedName, provider, nil
 }

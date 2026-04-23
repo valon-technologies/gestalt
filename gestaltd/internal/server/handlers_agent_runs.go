@@ -546,6 +546,8 @@ func (s *Server) writeAgentRunManagerError(w http.ResponseWriter, r *http.Reques
 	pluginName, operation := firstAgentToolTarget(req.ToolRefs)
 	switch {
 	case errors.Is(err, agentmanager.ErrAgentNotConfigured),
+		errors.Is(err, agentmanager.ErrAgentProviderRequired),
+		errors.Is(err, agentmanager.ErrAgentProviderNotAvailable),
 		errors.Is(err, agentmanager.ErrAgentRunMetadataNotConfigured),
 		errors.Is(err, agentmanager.ErrAgentRunEventsNotConfigured):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
