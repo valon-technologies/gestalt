@@ -52,15 +52,16 @@ func NewLocalProvider() *LocalProvider {
 	}
 }
 
-func (p *LocalProvider) Capabilities(context.Context) (Capabilities, error) {
-	return Capabilities{
-		HostedPluginRuntime: true,
-		HostServiceTunnels:  true,
-		ProviderGRPCTunnel:  true,
-		HostnameProxyEgress: true,
-		HostPathExecution:   true,
-		ExecutionGOOS:       runtime.GOOS,
-		ExecutionGOARCH:     runtime.GOARCH,
+func (p *LocalProvider) Support(context.Context) (Support, error) {
+	return Support{
+		CanHostPlugins:    true,
+		HostServiceAccess: HostServiceAccessDirect,
+		EgressMode:        EgressModeHostname,
+		LaunchMode:        LaunchModeHostPath,
+		ExecutionTarget: ExecutionTarget{
+			GOOS:   runtime.GOOS,
+			GOARCH: runtime.GOARCH,
+		},
 	}, nil
 }
 

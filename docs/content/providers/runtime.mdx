@@ -32,7 +32,7 @@ only uses a runtime provider when it opts in with `plugins.<name>.runtime`.
 When a plugin does opt in, Gestalt follows this lifecycle:
 
 1. Select a runtime backend from `runtime.providers`
-2. Query its capabilities
+2. Query its runtime support
 3. Start a runtime session
 4. Wait for the session to become ready
 5. Bind host-local services into that session
@@ -97,28 +97,16 @@ firewall style controls, or Gestalt's hostname-based `allowedHosts` model.
 Fourth, how does the plugin launch: directly from host paths or from a staged
 bundle, and on what execution target.
 
-The admin inspection API exposes both the runtime's raw capability flags and
-this derived profile. `GET /admin/api/v1/runtime/providers` returns an
-`advertised` profile, which is what the runtime says it can do, and an
-`effective` profile, which is what the current `gestaltd` deployment can
-actually guarantee once public relay and proxy prerequisites are considered.
+The admin inspection API exposes that grouped model directly. `GET
+/admin/api/v1/runtime/providers` returns an `advertised` profile, which is what
+the runtime says it can do, and an `effective` profile, which is what the
+current `gestaltd` deployment can actually guarantee once relay and public
+proxy prerequisites are considered.
 
-The raw capability flags still exist because runtime authors need precise
-contract boundaries. The most important ones are:
-
-| Capability | Meaning |
-| --- | --- |
-| `hosted_plugin_runtime` | The backend can host executable plugins at all. |
-| `host_service_tunnels` | The backend can inject guest-local host-service sockets directly. When this is false, Gestalt may still provide relay-backed host services through its public relay path. |
-| `provider_grpc_tunnel` | The backend can return a host-reachable gRPC dial target for the hosted plugin. |
-| `hostname_proxy_egress` | The backend can preserve Gestalt's hostname-based `allowedHosts` model. |
-| `cidr_egress` | The backend supports CIDR or firewall style controls. This is useful, but it is not equivalent to hostname-based policy. |
-| `host_path_execution` | The backend can execute directly from host paths instead of requiring bundle staging. |
-| `execution_goos` / `execution_goarch` | The execution platform the runtime reports to the host when bundle staging is required. |
-
-Gestalt uses those raw flags to derive the higher-level profile, validate a
-plugin's actual needs, and reject incompatible runtime or plugin combinations
-before startup instead of silently weakening the security model.
+Older runtime providers may still advertise the legacy boolean capability bag.
+Gestalt continues to accept that format for compatibility, but it immediately
+derives the grouped support model from it and does not treat the raw booleans
+as the primary operator interface anymore.
 
 ## Host services and hosted plugins
 
@@ -153,10 +141,10 @@ Today there are two main runtime choices:
 
 Some runtimes can execute directly from host paths. Others cannot.
 
-When a backend reports `host_path_execution`, Gestalt may launch the plugin
-directly from local paths, including synthesized source-provider execution.
-When it does not, Gestalt stages a runtime bundle first and asks the backend to
-start the plugin from that staged bundle instead.
+When a backend advertises a `host_path` launch mode, Gestalt may launch the
+plugin directly from local paths, including synthesized source-provider
+execution. When it advertises `bundle`, Gestalt stages a runtime bundle first
+and asks the backend to start the plugin from that staged bundle instead.
 
 This is why `plugins.<name>.runtime.image`, `template`, and `metadata` are
 forwarded to the runtime backend: they are runtime-specific launch hints, not

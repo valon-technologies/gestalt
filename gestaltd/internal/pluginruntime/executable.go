@@ -59,12 +59,12 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 	}, nil
 }
 
-func (p *executableProvider) Capabilities(ctx context.Context) (Capabilities, error) {
+func (p *executableProvider) Support(ctx context.Context) (Support, error) {
 	resp, err := p.runtime.GetCapabilities(ctx, &emptypb.Empty{})
 	if err != nil {
-		return Capabilities{}, fmt.Errorf("get runtime capabilities: %w", err)
+		return Support{}, fmt.Errorf("get runtime support: %w", err)
 	}
-	return capabilitiesFromProto(resp.GetCapabilities()), nil
+	return supportFromProtoResponse(resp), nil
 }
 
 func (p *executableProvider) StartSession(ctx context.Context, req StartSessionRequest) (*Session, error) {
@@ -216,19 +216,97 @@ func (p *executableProvider) Close() error {
 	return p.proc.Close()
 }
 
-func capabilitiesFromProto(src *proto.PluginRuntimeCapabilities) Capabilities {
+func supportFromProtoResponse(src *proto.GetPluginRuntimeCapabilitiesResponse) Support {
 	if src == nil {
-		return Capabilities{}
+		return Support{}
 	}
-	return Capabilities{
-		HostedPluginRuntime: src.GetHostedPluginRuntime(),
-		HostServiceTunnels:  src.GetHostServiceTunnels(),
-		ProviderGRPCTunnel:  src.GetProviderGrpcTunnel(),
-		HostnameProxyEgress: src.GetHostnameProxyEgress(),
-		CIDREgress:          src.GetCidrEgress(),
-		HostPathExecution:   src.GetHostPathExecution(),
-		ExecutionGOOS:       src.GetExecutionGoos(),
-		ExecutionGOARCH:     src.GetExecutionGoarch(),
+	if support := supportFromProto(src.GetSupport()); support != (Support{}) {
+		return support
+	}
+	//nolint:staticcheck // older runtime providers still populate the legacy field during the compatibility window
+	return supportFromLegacyCapabilities(src.Capabilities)
+}
+
+func supportFromProto(src *proto.PluginRuntimeSupport) Support {
+	if src == nil {
+		return Support{}
+	}
+	return Support{
+		CanHostPlugins:    src.GetCanHostPlugins(),
+		HostServiceAccess: hostServiceAccessFromProto(src.GetHostServiceAccess()),
+		EgressMode:        egressModeFromProto(src.GetEgressMode()),
+		LaunchMode:        launchModeFromProto(src.GetLaunchMode()),
+		ExecutionTarget:   executionTargetFromProto(src.GetExecutionTarget()),
+	}
+}
+
+func supportFromLegacyCapabilities(src *proto.PluginRuntimeCapabilities) Support {
+	if src == nil {
+		return Support{}
+	}
+	hostServiceAccess := HostServiceAccessNone
+	if src.GetHostServiceTunnels() {
+		hostServiceAccess = HostServiceAccessDirect
+	}
+	egressMode := EgressModeNone
+	switch {
+	case src.GetHostnameProxyEgress():
+		egressMode = EgressModeHostname
+	case src.GetCidrEgress():
+		egressMode = EgressModeCIDR
+	}
+	launchMode := LaunchModeBundle
+	if src.GetHostPathExecution() {
+		launchMode = LaunchModeHostPath
+	}
+	return Support{
+		CanHostPlugins:    src.GetHostedPluginRuntime() && src.GetProviderGrpcTunnel(),
+		HostServiceAccess: hostServiceAccess,
+		EgressMode:        egressMode,
+		LaunchMode:        launchMode,
+		ExecutionTarget: ExecutionTarget{
+			GOOS:   strings.TrimSpace(src.GetExecutionGoos()),
+			GOARCH: strings.TrimSpace(src.GetExecutionGoarch()),
+		},
+	}
+}
+
+func hostServiceAccessFromProto(src proto.PluginRuntimeHostServiceAccess) HostServiceAccess {
+	switch src {
+	case proto.PluginRuntimeHostServiceAccess_PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT:
+		return HostServiceAccessDirect
+	default:
+		return HostServiceAccessNone
+	}
+}
+
+func egressModeFromProto(src proto.PluginRuntimeEgressMode) EgressMode {
+	switch src {
+	case proto.PluginRuntimeEgressMode_PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME:
+		return EgressModeHostname
+	case proto.PluginRuntimeEgressMode_PLUGIN_RUNTIME_EGRESS_MODE_CIDR:
+		return EgressModeCIDR
+	default:
+		return EgressModeNone
+	}
+}
+
+func launchModeFromProto(src proto.PluginRuntimeLaunchMode) LaunchMode {
+	switch src {
+	case proto.PluginRuntimeLaunchMode_PLUGIN_RUNTIME_LAUNCH_MODE_HOST_PATH:
+		return LaunchModeHostPath
+	default:
+		return LaunchModeBundle
+	}
+}
+
+func executionTargetFromProto(src *proto.PluginRuntimeExecutionTarget) ExecutionTarget {
+	if src == nil {
+		return ExecutionTarget{}
+	}
+	return ExecutionTarget{
+		GOOS:   strings.TrimSpace(src.GetGoos()),
+		GOARCH: strings.TrimSpace(src.GetGoarch()),
 	}
 }
 

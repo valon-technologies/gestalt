@@ -206,8 +206,8 @@ func newCapturingPluginRuntime() *capturingPluginRuntime {
 	return &capturingPluginRuntime{provider: pluginruntime.NewLocalProvider()}
 }
 
-func (r *capturingPluginRuntime) Capabilities(ctx context.Context) (pluginruntime.Capabilities, error) {
-	return r.provider.Capabilities(ctx)
+func (r *capturingPluginRuntime) Support(ctx context.Context) (pluginruntime.Support, error) {
+	return r.provider.Support(ctx)
 }
 
 func (r *capturingPluginRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
@@ -277,7 +277,7 @@ func (r *capturingPluginRuntime) bindHostServiceRequests() []pluginruntime.BindH
 
 type capturingBundlePluginRuntime struct {
 	provider      *pluginruntime.LocalProvider
-	capabilities  pluginruntime.Capabilities
+	support       pluginruntime.Support
 	bindHostCalls atomic.Int32
 	fakeHosted    bool
 
@@ -296,18 +296,20 @@ type fakeHostedPluginServer struct {
 func newCapturingBundlePluginRuntime() *capturingBundlePluginRuntime {
 	return &capturingBundlePluginRuntime{
 		provider: pluginruntime.NewLocalProvider(),
-		capabilities: pluginruntime.Capabilities{
-			HostedPluginRuntime: true,
-			ProviderGRPCTunnel:  true,
-			ExecutionGOOS:       runtime.GOOS,
-			ExecutionGOARCH:     runtime.GOARCH,
+		support: pluginruntime.Support{
+			CanHostPlugins: true,
+			LaunchMode:     pluginruntime.LaunchModeBundle,
+			ExecutionTarget: pluginruntime.ExecutionTarget{
+				GOOS:   runtime.GOOS,
+				GOARCH: runtime.GOARCH,
+			},
 		},
 		fakePlugins: make(map[string]*fakeHostedPluginServer),
 	}
 }
 
-func (r *capturingBundlePluginRuntime) Capabilities(context.Context) (pluginruntime.Capabilities, error) {
-	return r.capabilities, nil
+func (r *capturingBundlePluginRuntime) Support(context.Context) (pluginruntime.Support, error) {
+	return r.support, nil
 }
 
 func (r *capturingBundlePluginRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
@@ -1205,8 +1207,8 @@ type slowStopPluginRuntime struct {
 	stopCount atomic.Int32
 }
 
-func (r *slowStopPluginRuntime) Capabilities(ctx context.Context) (pluginruntime.Capabilities, error) {
-	return r.inner.Capabilities(ctx)
+func (r *slowStopPluginRuntime) Support(ctx context.Context) (pluginruntime.Support, error) {
+	return r.inner.Support(ctx)
 }
 
 func (r *slowStopPluginRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
@@ -1249,12 +1251,12 @@ func (r *failingBindSlowStopPluginRuntime) BindHostService(context.Context, plug
 }
 
 type staticCapabilityPluginRuntime struct {
-	inner        pluginruntime.Provider
-	capabilities pluginruntime.Capabilities
+	inner   pluginruntime.Provider
+	support pluginruntime.Support
 }
 
-func (r *staticCapabilityPluginRuntime) Capabilities(context.Context) (pluginruntime.Capabilities, error) {
-	return r.capabilities, nil
+func (r *staticCapabilityPluginRuntime) Support(context.Context) (pluginruntime.Support, error) {
+	return r.support, nil
 }
 
 func (r *staticCapabilityPluginRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
@@ -3326,8 +3328,8 @@ func TestPluginAgentManagerRunUsesInheritedInvokesAndRequestContext(t *testing.T
 	})
 
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -5387,12 +5389,12 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -5557,8 +5559,8 @@ func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnel
 	}
 
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -5662,8 +5664,8 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -5791,8 +5793,8 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
@@ -5902,8 +5904,8 @@ func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapabili
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -6035,8 +6037,8 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
@@ -6163,8 +6165,8 @@ func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
@@ -6314,8 +6316,8 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	}
 
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 
 	factories := NewFactoryRegistry()
@@ -6476,8 +6478,8 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -6582,10 +6584,9 @@ func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T)
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := &staticCapabilityPluginRuntime{
 		inner: pluginruntime.NewLocalProvider(),
-		capabilities: pluginruntime.Capabilities{
-			HostedPluginRuntime: true,
-			ProviderGRPCTunnel:  true,
-			HostServiceTunnels:  true,
+		support: pluginruntime.Support{
+			CanHostPlugins:    true,
+			HostServiceAccess: pluginruntime.HostServiceAccessDirect,
 		},
 	}
 	factories := NewFactoryRegistry()
@@ -6636,10 +6637,9 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := &staticCapabilityPluginRuntime{
 		inner: pluginruntime.NewLocalProvider(),
-		capabilities: pluginruntime.Capabilities{
-			HostedPluginRuntime: true,
-			ProviderGRPCTunnel:  true,
-			HostPathExecution:   true,
+		support: pluginruntime.Support{
+			CanHostPlugins: true,
+			LaunchMode:     pluginruntime.LaunchModeHostPath,
 		},
 	}
 	factories := NewFactoryRegistry()
@@ -6937,8 +6937,8 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -7086,8 +7086,8 @@ func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *t
 		},
 	}
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -7206,8 +7206,8 @@ func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapa
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -7294,8 +7294,8 @@ func TestPluginRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequire
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -7360,9 +7360,9 @@ func TestPluginRuntimeConfigUsesDirectHostServiceBindingsAndSkipsPublicEgressPro
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostServiceTunnels = true
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.HostServiceAccess = pluginruntime.HostServiceAccessDirect
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -7465,8 +7465,8 @@ func TestPluginRuntimePublicEgressProxyRoundTripsThroughHostedPlugin(t *testing.
 	})
 	manifest := newExecutableManifest("Echo", "Hosted egress proxy roundtrip")
 	runtimeProvider := newCapturingBundlePluginRuntime()
-	runtimeProvider.capabilities.HostnameProxyEgress = true
-	runtimeProvider.capabilities.HostPathExecution = true
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
 	runtimeProvider.fakeHosted = true
 	factories := NewFactoryRegistry()
 	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
@@ -7554,10 +7554,9 @@ func TestPluginRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t 
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := &staticCapabilityPluginRuntime{
 		inner: pluginruntime.NewLocalProvider(),
-		capabilities: pluginruntime.Capabilities{
-			HostedPluginRuntime: true,
-			ProviderGRPCTunnel:  true,
-			HostServiceTunnels:  true,
+		support: pluginruntime.Support{
+			CanHostPlugins:    true,
+			HostServiceAccess: pluginruntime.HostServiceAccessDirect,
 		},
 	}
 	factories := NewFactoryRegistry()

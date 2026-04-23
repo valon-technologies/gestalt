@@ -2887,32 +2887,25 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 					Default: true,
 				},
 				{
-					Name:               "modal",
-					Driver:             config.RuntimeProviderDriver("modal"),
-					Loaded:             true,
-					CapabilitiesLoaded: true,
-					Capabilities: pluginruntime.Capabilities{
-						HostedPluginRuntime: true,
-						ProviderGRPCTunnel:  true,
-						CIDREgress:          true,
-						ExecutionGOOS:       "linux",
-						ExecutionGOARCH:     "amd64",
-					},
-					AdvertisedProfile: bootstrap.RuntimeProfile{
-						HostedExecution: true,
-						HostServiceMode: bootstrap.RuntimeHostServiceModeNone,
-						EgressMode:      bootstrap.RuntimeEgressModeCIDR,
-						LaunchMode:      bootstrap.RuntimeLaunchModeBundle,
+					Name:          "modal",
+					Driver:        config.RuntimeProviderDriver("modal"),
+					Loaded:        true,
+					SupportLoaded: true,
+					Advertised: bootstrap.RuntimeBehavior{
+						CanHostPlugins:    true,
+						HostServiceAccess: bootstrap.RuntimeHostServiceAccessNone,
+						EgressMode:        bootstrap.RuntimeEgressModeCIDR,
+						LaunchMode:        bootstrap.RuntimeLaunchModeBundle,
 						ExecutionTarget: bootstrap.RuntimeExecutionTarget{
 							GOOS:   "linux",
 							GOARCH: "amd64",
 						},
 					},
-					EffectiveProfile: bootstrap.RuntimeProfile{
-						HostedExecution: true,
-						HostServiceMode: bootstrap.RuntimeHostServiceModeRelay,
-						EgressMode:      bootstrap.RuntimeEgressModeCIDR,
-						LaunchMode:      bootstrap.RuntimeLaunchModeBundle,
+					Effective: bootstrap.RuntimeBehavior{
+						CanHostPlugins:    true,
+						HostServiceAccess: bootstrap.RuntimeHostServiceAccessRelay,
+						EgressMode:        bootstrap.RuntimeEgressModeCIDR,
+						LaunchMode:        bootstrap.RuntimeLaunchModeBundle,
 						ExecutionTarget: bootstrap.RuntimeExecutionTarget{
 							GOOS:   "linux",
 							GOARCH: "amd64",
@@ -2970,13 +2963,6 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 	if got := providers[1]["sessionCount"]; got != float64(1) {
 		t.Fatalf("runtime providers[1].sessionCount = %v, want 1", got)
 	}
-	caps, ok := providers[1]["capabilities"].(map[string]any)
-	if !ok {
-		t.Fatalf("runtime providers[1].capabilities = %#v, want object", providers[1]["capabilities"])
-	}
-	if caps["hostedPluginRuntime"] != true || caps["providerGRPCTunnel"] != true || caps["cidrEgress"] != true {
-		t.Fatalf("runtime providers[1].capabilities = %#v", caps)
-	}
 	profile, ok := providers[1]["profile"].(map[string]any)
 	if !ok {
 		t.Fatalf("runtime providers[1].profile = %#v, want object", providers[1]["profile"])
@@ -2989,10 +2975,10 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 	if !ok {
 		t.Fatalf("runtime providers[1].profile.effective = %#v, want object", profile["effective"])
 	}
-	if advertised["hostedExecution"] != true || advertised["hostServiceAccess"] != "none" || advertised["egressMode"] != "cidr" || advertised["launchMode"] != "bundle" {
+	if advertised["canHostPlugins"] != true || advertised["hostServiceAccess"] != "none" || advertised["egressMode"] != "cidr" || advertised["launchMode"] != "bundle" {
 		t.Fatalf("runtime providers[1].profile.advertised = %#v", advertised)
 	}
-	if effective["hostedExecution"] != true || effective["hostServiceAccess"] != "relay" || effective["egressMode"] != "cidr" || effective["launchMode"] != "bundle" {
+	if effective["canHostPlugins"] != true || effective["hostServiceAccess"] != "relay" || effective["egressMode"] != "cidr" || effective["launchMode"] != "bundle" {
 		t.Fatalf("runtime providers[1].profile.effective = %#v", effective)
 	}
 	executionTarget, ok := effective["executionTarget"].(map[string]any)
@@ -3063,7 +3049,7 @@ func TestAdminAPI_RuntimeProviderInspectionError(t *testing.T) {
 				Name:   "modal",
 				Driver: config.RuntimeProviderDriver("modal"),
 				Loaded: true,
-				Error:  "capabilities: boom",
+				Error:  "support: boom",
 			}},
 		}
 	})
@@ -3086,8 +3072,8 @@ func TestAdminAPI_RuntimeProviderInspectionError(t *testing.T) {
 	if len(providers) != 1 {
 		t.Fatalf("runtime providers len = %d, want 1", len(providers))
 	}
-	if got := providers[0]["error"]; got != "capabilities: boom" {
-		t.Fatalf("runtime providers[0].error = %v, want capabilities: boom", got)
+	if got := providers[0]["error"]; got != "support: boom" {
+		t.Fatalf("runtime providers[0].error = %v, want support: boom", got)
 	}
 	if _, ok := providers[0]["profile"]; ok {
 		t.Fatalf("runtime providers[0].profile unexpectedly present: %#v", providers[0]["profile"])
@@ -3116,26 +3102,21 @@ func TestAdminAPI_RuntimeProviderSessionInspectionErrorKeepsProfile(t *testing.T
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.PluginRuntimes = &staticRuntimeInspector{
 			snapshots: []bootstrap.RuntimeProviderSnapshot{{
-				Name:               "modal",
-				Driver:             config.RuntimeProviderDriver("modal"),
-				Loaded:             true,
-				CapabilitiesLoaded: true,
-				Capabilities: pluginruntime.Capabilities{
-					HostedPluginRuntime: true,
-					ProviderGRPCTunnel:  true,
-					CIDREgress:          true,
+				Name:          "modal",
+				Driver:        config.RuntimeProviderDriver("modal"),
+				Loaded:        true,
+				SupportLoaded: true,
+				Advertised: bootstrap.RuntimeBehavior{
+					CanHostPlugins:    true,
+					HostServiceAccess: bootstrap.RuntimeHostServiceAccessNone,
+					EgressMode:        bootstrap.RuntimeEgressModeCIDR,
+					LaunchMode:        bootstrap.RuntimeLaunchModeBundle,
 				},
-				AdvertisedProfile: bootstrap.RuntimeProfile{
-					HostedExecution: true,
-					HostServiceMode: bootstrap.RuntimeHostServiceModeNone,
-					EgressMode:      bootstrap.RuntimeEgressModeCIDR,
-					LaunchMode:      bootstrap.RuntimeLaunchModeBundle,
-				},
-				EffectiveProfile: bootstrap.RuntimeProfile{
-					HostedExecution: true,
-					HostServiceMode: bootstrap.RuntimeHostServiceModeRelay,
-					EgressMode:      bootstrap.RuntimeEgressModeCIDR,
-					LaunchMode:      bootstrap.RuntimeLaunchModeBundle,
+				Effective: bootstrap.RuntimeBehavior{
+					CanHostPlugins:    true,
+					HostServiceAccess: bootstrap.RuntimeHostServiceAccessRelay,
+					EgressMode:        bootstrap.RuntimeEgressModeCIDR,
+					LaunchMode:        bootstrap.RuntimeLaunchModeBundle,
 				},
 				Error: "list sessions: boom",
 			}},
@@ -3165,9 +3146,6 @@ func TestAdminAPI_RuntimeProviderSessionInspectionErrorKeepsProfile(t *testing.T
 	}
 	if _, ok := providers[0]["sessionCount"]; ok {
 		t.Fatalf("runtime providers[0].sessionCount unexpectedly present: %#v", providers[0]["sessionCount"])
-	}
-	if _, ok := providers[0]["capabilities"].(map[string]any); !ok {
-		t.Fatalf("runtime providers[0].capabilities = %#v, want object", providers[0]["capabilities"])
 	}
 	profile, ok := providers[0]["profile"].(map[string]any)
 	if !ok {

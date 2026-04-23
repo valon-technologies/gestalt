@@ -755,14 +755,14 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	if err != nil {
 		return nil, err
 	}
-	runtimeCapabilities, err := runtimeProvider.Capabilities(ctx)
+	runtimeSupport, err := runtimeProvider.Support(ctx)
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
 		}
-		return nil, fmt.Errorf("query %s capabilities: %w", pluginRuntimeLabel(runtimeConfig), err)
+		return nil, fmt.Errorf("query %s support: %w", pluginRuntimeLabel(runtimeConfig), err)
 	}
-	runtimePlan, err := buildPluginRuntimePlan(name, entry, deps, runtimeCapabilities)
+	runtimePlan, err := buildPluginRuntimePlan(name, entry, deps, runtimeSupport)
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -775,7 +775,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		}
 		return nil, err
 	}
-	if command == "" && runtimePlan.Effective.LaunchMode == RuntimeLaunchModeHostPath {
+	if command == "" && runtimePlan.Resolved.LaunchMode == RuntimeLaunchModeHostPath {
 		if entry.ResolvedManifestPath == "" {
 			if runtimeOwned {
 				_ = runtimeProvider.Close()
@@ -810,10 +810,10 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			maps.Copy(env, execEnv)
 		}
 	}
-	if command == "" && runtimePlan.Effective.LaunchMode != RuntimeLaunchModeHostPath {
+	if command == "" && runtimePlan.Resolved.LaunchMode != RuntimeLaunchModeHostPath {
 		args = nil
 	}
-	launch, err := preparePluginRuntimeLaunch(name, entry, command, args, cleanup, runtimePlan.Effective)
+	launch, err := preparePluginRuntimeLaunch(name, entry, command, args, cleanup, runtimePlan.Resolved)
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -845,7 +845,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		return nil, fmt.Errorf("wait for plugin runtime session %q ready: %w", sessionID, err)
 	}
 
-	hostServices, invTokens, runtimeCleanup, err := buildPluginRuntimeHostServices(name, entry, deps, runtimePlan.Effective.HostServiceMode == RuntimeHostServiceModeDirect)
+	hostServices, invTokens, runtimeCleanup, err := buildPluginRuntimeHostServices(name, entry, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect)
 	if err != nil {
 		return nil, err
 	}
@@ -862,7 +862,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	startEnv := maps.Clone(env)
 	allowedHosts := slices.Clone(entry.AllowedHosts)
 	for _, hostService := range startedHostServices.Bindings() {
-		bindingReq, bindingEnv, relayHost, err := buildPluginRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimePlan.Effective.HostServiceMode == RuntimeHostServiceModeDirect)
+		bindingReq, bindingEnv, relayHost, err := buildPluginRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect)
 		if err != nil {
 			return nil, err
 		}
@@ -877,7 +877,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		}
 		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
 	}
-	if runtimePlan.HostnameEgressTransport == RuntimeHostnameEgressTransportPublicProxy {
+	if runtimePlan.HostnameEgressDelivery == RuntimeHostnameEgressDeliveryPublicProxy {
 		proxyEnv, err := buildPluginRuntimePublicEgressProxy(name, sessionID, entry.AllowedHosts, deps.Egress.DefaultAction, deps)
 		if err != nil {
 			return nil, err
