@@ -587,6 +587,12 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 			}
 			addDesiredRelationship(desired, rel)
 			adminDynamicRoles[relation] = struct{}{}
+		case resourceTypeExternalIdentity:
+			relation := strings.TrimSpace(rel.GetRelation())
+			if relation != relationExternalIdentityAssume || rel.GetSubject() == nil || strings.TrimSpace(rel.GetSubject().GetType()) != subjectTypeUser || strings.TrimSpace(rel.GetSubject().GetId()) == "" {
+				continue
+			}
+			addDesiredRelationship(desired, rel)
 		}
 	}
 

@@ -59,6 +59,12 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Post("/{identityID}/tokens", s.createManagedIdentityToken)
 			r.Delete("/{identityID}/tokens/{id}", s.revokeManagedIdentityToken)
 		})
+
+		r.Route("/users/me/external-identities", func(r chi.Router) {
+			r.Get("/", s.listCurrentUserExternalIdentities)
+			r.Post("/", s.createCurrentUserExternalIdentity)
+			r.Delete("/{linkID}", s.deleteCurrentUserExternalIdentity)
+		})
 	})
 
 	r.With(s.pluginRouteAuthMiddleware("name")).Get("/integrations/{name}/operations", s.listOperations)
