@@ -43,7 +43,7 @@ func (s *stubAgentControl) ResolveProviderSelection(name string) (string, coreag
 		name = s.defaultProviderName
 	}
 	if name == "" {
-		return "", nil, errors.New("provider not found")
+		return "", nil, agentmanager.ErrAgentProviderRequired
 	}
 	provider, err := s.ResolveProvider(name)
 	if err != nil {
@@ -59,9 +59,12 @@ func (s *stubAgentControl) ResolveProvider(name string) (coreagent.Provider, err
 	if s.providers != nil {
 		provider, ok := s.providers[name]
 		if !ok {
-			return nil, errors.New("provider not found")
+			return nil, agentmanager.NewAgentProviderNotAvailableError(name)
 		}
 		return provider, nil
+	}
+	if s.provider == nil {
+		return nil, agentmanager.NewAgentProviderNotAvailableError(name)
 	}
 	return s.provider, nil
 }
@@ -444,6 +447,124 @@ func readSSEFrame(t *testing.T, body io.Reader) string {
 		if strings.TrimSpace(line) == "" {
 			return frame.String()
 		}
+	}
+}
+
+func TestGlobalAgentRunProviderAvailabilityFailuresArePreconditionFailures(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	subjectID := principal.UserSubjectID(user.ID)
+	if _, err := services.AgentRunMetadata.Put(context.Background(), &coreagent.ExecutionReference{
+		ID:           "run-managed",
+		ProviderName: "managed",
+		SubjectID:    subjectID,
+	}); err != nil {
+		t.Fatalf("Put agent run metadata: %v", err)
+	}
+	if _, err := services.AgentRunEvents.Append(context.Background(), coreagent.RunEvent{
+		RunID:      "run-managed",
+		Type:       "agent.run.started",
+		Source:     "managed",
+		Visibility: "public",
+		Data:       map[string]any{"status": "running"},
+	}); err != nil {
+		t.Fatalf("Append agent run event: %v", err)
+	}
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:   testutil.NewProviderRegistry(t),
+		Agent:       &stubAgentControl{providers: map[string]coreagent.Provider{}},
+		RunMetadata: services.AgentRunMetadata,
+		RunEvents:   services.AgentRunEvents,
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.AgentManager = manager
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	errorCases := []struct {
+		name      string
+		method    string
+		path      string
+		body      string
+		wantError string
+	}{
+		{
+			name:      "create without selected provider",
+			method:    http.MethodPost,
+			path:      "/api/v1/agent/runs/",
+			body:      `{"messages":[{"role":"user","text":"Summarize the rollout."}]}`,
+			wantError: "agent provider is required",
+		},
+		{
+			name:      "create with unavailable provider",
+			method:    http.MethodPost,
+			path:      "/api/v1/agent/runs/",
+			body:      `{"provider":"managed","messages":[{"role":"user","text":"Summarize the rollout."}]}`,
+			wantError: `agent provider "managed" is not available`,
+		},
+		{
+			name:      "get stale run with unavailable provider",
+			method:    http.MethodGet,
+			path:      "/api/v1/agent/runs/run-managed",
+			wantError: `agent provider "managed" is not available`,
+		},
+	}
+	for _, tc := range errorCases {
+		var body io.Reader
+		if tc.body != "" {
+			body = strings.NewReader(tc.body)
+		}
+		req, _ := http.NewRequest(tc.method, ts.URL+tc.path, body)
+		if tc.body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s request: %v", tc.name, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusPreconditionFailed {
+			t.Fatalf("%s status = %d, want %d", tc.name, resp.StatusCode, http.StatusPreconditionFailed)
+		}
+		var payload map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			t.Fatalf("%s decode error response: %v", tc.name, err)
+		}
+		if payload["error"] != tc.wantError {
+			t.Fatalf("%s error = %q, want %q", tc.name, payload["error"], tc.wantError)
+		}
+	}
+
+	eventsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/runs/run-managed/events?after=0&limit=10", nil)
+	eventsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	eventsResp, err := http.DefaultClient.Do(eventsReq)
+	if err != nil {
+		t.Fatalf("events request: %v", err)
+	}
+	defer func() { _ = eventsResp.Body.Close() }()
+	if eventsResp.StatusCode != http.StatusOK {
+		t.Fatalf("events status = %d, want %d", eventsResp.StatusCode, http.StatusOK)
+	}
+	var events []agentRunEventResponse
+	if err := json.NewDecoder(eventsResp.Body).Decode(&events); err != nil {
+		t.Fatalf("decode events response: %v", err)
+	}
+	if len(events) != 1 || events[0].RunID != "run-managed" || events[0].Source != "managed" {
+		t.Fatalf("events = %#v, want stored managed event", events)
 	}
 }
 
