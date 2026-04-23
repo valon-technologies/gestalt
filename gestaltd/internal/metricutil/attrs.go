@@ -20,6 +20,8 @@ const (
 	AttrUI                = attribute.Key("gestalt.ui")
 	AttrRPCRole           = attribute.Key("gestalt.rpc.role")
 	AttrHostService       = attribute.Key("gestalt.host_service")
+	AttrResultStatus      = attribute.Key("gestalt.result_status")
+	AttrResultStatusClass = attribute.Key("gestalt.result_status_class")
 	AttrHTTPRoute         = attribute.Key("http.route")
 )
 
