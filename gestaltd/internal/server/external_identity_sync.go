@@ -7,6 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
 
 var errExternalIdentityAlreadyLinked = errors.New("external identity already linked")
@@ -38,11 +39,11 @@ func (s *Server) unlinkStoredTokenAuthorization(ctx context.Context, tok *core.I
 }
 
 func (s *Server) subjectHasOtherExternalIdentityLink(ctx context.Context, subjectID string, ref externalIdentityRef, skipTokenID string) (bool, error) {
-	if s.tokens == nil || subjectID == "" {
+	if coredata.ExternalCredentialProviderMissing(s.externalCredentials) || subjectID == "" {
 		return false, nil
 	}
 	ref = normalizeExternalIdentityRef(ref)
-	tokens, err := s.tokens.ListTokens(ctx, subjectID)
+	tokens, err := s.externalCredentials.ListCredentials(ctx, subjectID)
 	if err != nil {
 		return false, err
 	}

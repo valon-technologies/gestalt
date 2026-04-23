@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/plugininvocation"
@@ -68,7 +69,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	defer func() { _ = authz.Close() }()
 	prepared.Deps.AgentRuntime.SetRunMetadata(prepared.Services.AgentRunMetadata)
 	prepared.Deps.AgentRuntime.SetRunEvents(prepared.Services.AgentRunEvents)
-	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.Tokens,
+	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, coredata.EffectiveExternalCredentialProvider(prepared.Services),
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),

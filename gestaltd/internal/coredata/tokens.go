@@ -14,29 +14,94 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
-type TokenService struct {
+type LocalExternalCredentialProvider struct {
 	store indexeddb.ObjectStore
 	enc   *corecrypto.AESGCMEncryptor
 }
 
+type TokenService = LocalExternalCredentialProvider
+
 var errUnreadableStoredIntegrationToken = errors.New("unreadable stored integration token")
 
-func NewTokenService(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) *TokenService {
-	return &TokenService{
+var _ core.ExternalCredentialProvider = (*LocalExternalCredentialProvider)(nil)
+
+func NewLocalExternalCredentialProvider(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) *LocalExternalCredentialProvider {
+	return &LocalExternalCredentialProvider{
 		store: ds.ObjectStore(StoreIntegrationTokens),
 		enc:   enc,
 	}
 }
 
-func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationToken) error {
+func NewTokenService(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) *LocalExternalCredentialProvider {
+	return NewLocalExternalCredentialProvider(ds, enc)
+}
+
+func (s *LocalExternalCredentialProvider) PutCredential(ctx context.Context, credential *core.ExternalCredential) error {
+	return s.storeToken(ctx, credential, false)
+}
+
+func (s *LocalExternalCredentialProvider) RestoreCredential(ctx context.Context, credential *core.ExternalCredential) error {
+	return s.storeToken(ctx, credential, true)
+}
+
+func (s *LocalExternalCredentialProvider) GetCredential(ctx context.Context, subjectID, integration, connection, instance string) (*core.ExternalCredential, error) {
+	rec, err := s.tokenRecord(ctx, subjectID, integration, connection, instance)
+	if err != nil {
+		return nil, err
+	}
+	return s.recordToToken(rec)
+}
+
+func (s *LocalExternalCredentialProvider) ListCredentials(ctx context.Context, subjectID string) ([]*core.ExternalCredential, error) {
+	recs, err := s.store.Index("by_subject").GetAll(ctx, nil, subjectID)
+	if err != nil {
+		return nil, fmt.Errorf("list tokens: %w", err)
+	}
+	return s.recordsToTokens(recs)
+}
+
+func (s *LocalExternalCredentialProvider) ListCredentialsForProvider(ctx context.Context, subjectID, integration string) ([]*core.ExternalCredential, error) {
+	recs, err := s.store.Index("by_subject_integration").GetAll(ctx, nil, subjectID, integration)
+	if err != nil {
+		return nil, fmt.Errorf("list tokens for integration: %w", err)
+	}
+	return s.recordsToTokens(recs)
+}
+
+func (s *LocalExternalCredentialProvider) ListCredentialsForConnection(ctx context.Context, subjectID, integration, connection string) ([]*core.ExternalCredential, error) {
+	recs, err := s.store.Index("by_subject_connection").GetAll(ctx, nil, subjectID, integration, connection)
+	if err != nil {
+		return nil, fmt.Errorf("list tokens for connection: %w", err)
+	}
+	return s.recordsToTokens(recs)
+}
+
+func (s *LocalExternalCredentialProvider) DeleteCredential(ctx context.Context, id string) error {
+	if id == "" {
+		return s.store.Delete(ctx, id)
+	}
+	_, err := s.store.Get(ctx, id)
+	if err != nil {
+		if err == indexeddb.ErrNotFound {
+			return nil
+		}
+		return err
+	}
+	if err := s.store.Delete(ctx, id); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *LocalExternalCredentialProvider) StoreToken(ctx context.Context, token *core.IntegrationToken) error {
 	return s.storeToken(ctx, token, false)
 }
 
-func (s *TokenService) RestoreToken(ctx context.Context, token *core.IntegrationToken) error {
+func (s *LocalExternalCredentialProvider) RestoreToken(ctx context.Context, token *core.IntegrationToken) error {
 	return s.storeToken(ctx, token, true)
 }
 
-func (s *TokenService) storeToken(ctx context.Context, token *core.IntegrationToken, preserveTimestamps bool) error {
+func (s *LocalExternalCredentialProvider) storeToken(ctx context.Context, token *core.IntegrationToken, preserveTimestamps bool) error {
 	token.SubjectID = strings.TrimSpace(token.SubjectID)
 
 	accessEnc, refreshEnc, err := s.enc.EncryptTokenPair(token.AccessToken, token.RefreshToken)
@@ -110,56 +175,27 @@ func tokenUpdatedAt(token *core.IntegrationToken, fallback time.Time, preserve b
 	return fallback
 }
 
-func (s *TokenService) Token(ctx context.Context, subjectID, integration, connection, instance string) (*core.IntegrationToken, error) {
-	rec, err := s.tokenRecord(ctx, subjectID, integration, connection, instance)
-	if err != nil {
-		return nil, err
-	}
-	return s.recordToToken(rec)
+func (s *LocalExternalCredentialProvider) Token(ctx context.Context, subjectID, integration, connection, instance string) (*core.IntegrationToken, error) {
+	return s.GetCredential(ctx, subjectID, integration, connection, instance)
 }
 
-func (s *TokenService) ListTokens(ctx context.Context, subjectID string) ([]*core.IntegrationToken, error) {
-	recs, err := s.store.Index("by_subject").GetAll(ctx, nil, subjectID)
-	if err != nil {
-		return nil, fmt.Errorf("list tokens: %w", err)
-	}
-	return s.recordsToTokens(recs)
+func (s *LocalExternalCredentialProvider) ListTokens(ctx context.Context, subjectID string) ([]*core.IntegrationToken, error) {
+	return s.ListCredentials(ctx, subjectID)
 }
 
-func (s *TokenService) ListTokensForIntegration(ctx context.Context, subjectID, integration string) ([]*core.IntegrationToken, error) {
-	recs, err := s.store.Index("by_subject_integration").GetAll(ctx, nil, subjectID, integration)
-	if err != nil {
-		return nil, fmt.Errorf("list tokens for integration: %w", err)
-	}
-	return s.recordsToTokens(recs)
+func (s *LocalExternalCredentialProvider) ListTokensForIntegration(ctx context.Context, subjectID, integration string) ([]*core.IntegrationToken, error) {
+	return s.ListCredentialsForProvider(ctx, subjectID, integration)
 }
 
-func (s *TokenService) ListTokensForConnection(ctx context.Context, subjectID, integration, connection string) ([]*core.IntegrationToken, error) {
-	recs, err := s.store.Index("by_subject_connection").GetAll(ctx, nil, subjectID, integration, connection)
-	if err != nil {
-		return nil, fmt.Errorf("list tokens for connection: %w", err)
-	}
-	return s.recordsToTokens(recs)
+func (s *LocalExternalCredentialProvider) ListTokensForConnection(ctx context.Context, subjectID, integration, connection string) ([]*core.IntegrationToken, error) {
+	return s.ListCredentialsForConnection(ctx, subjectID, integration, connection)
 }
 
-func (s *TokenService) DeleteToken(ctx context.Context, id string) error {
-	if id == "" {
-		return s.store.Delete(ctx, id)
-	}
-	_, err := s.store.Get(ctx, id)
-	if err != nil {
-		if err == indexeddb.ErrNotFound {
-			return nil
-		}
-		return err
-	}
-	if err := s.store.Delete(ctx, id); err != nil {
-		return err
-	}
-	return nil
+func (s *LocalExternalCredentialProvider) DeleteToken(ctx context.Context, id string) error {
+	return s.DeleteCredential(ctx, id)
 }
 
-func (s *TokenService) recordToToken(rec indexeddb.Record) (*core.IntegrationToken, error) {
+func (s *LocalExternalCredentialProvider) recordToToken(rec indexeddb.Record) (*core.IntegrationToken, error) {
 	access, refresh, err := s.enc.DecryptTokenPair(
 		recString(rec, "access_token_encrypted"),
 		recString(rec, "refresh_token_encrypted"),
@@ -185,7 +221,7 @@ func (s *TokenService) recordToToken(rec indexeddb.Record) (*core.IntegrationTok
 	}, nil
 }
 
-func (s *TokenService) recordsToTokens(recs []indexeddb.Record) ([]*core.IntegrationToken, error) {
+func (s *LocalExternalCredentialProvider) recordsToTokens(recs []indexeddb.Record) ([]*core.IntegrationToken, error) {
 	recs = dedupeTokenRecords(recs)
 	out := make([]*core.IntegrationToken, 0, len(recs))
 	for _, rec := range recs {
@@ -198,7 +234,7 @@ func (s *TokenService) recordsToTokens(recs []indexeddb.Record) ([]*core.Integra
 	return out, nil
 }
 
-func (s *TokenService) tokenRecord(ctx context.Context, subjectID, integration, connection, instance string) (indexeddb.Record, error) {
+func (s *LocalExternalCredentialProvider) tokenRecord(ctx context.Context, subjectID, integration, connection, instance string) (indexeddb.Record, error) {
 	recs, err := s.store.Index("by_lookup").GetAll(ctx, nil, subjectID, integration, connection, instance)
 	if err != nil {
 		return nil, fmt.Errorf("get token: %w", err)
@@ -210,7 +246,7 @@ func (s *TokenService) tokenRecord(ctx context.Context, subjectID, integration, 
 	return recs[0], nil
 }
 
-func (s *TokenService) deleteDuplicateLookupRecords(ctx context.Context, keepID, subjectID, integration, connection, instance string) error {
+func (s *LocalExternalCredentialProvider) deleteDuplicateLookupRecords(ctx context.Context, keepID, subjectID, integration, connection, instance string) error {
 	recs, err := s.store.Index("by_lookup").GetAll(ctx, nil, subjectID, integration, connection, instance)
 	if err != nil {
 		return fmt.Errorf("list duplicate tokens: %w", err)

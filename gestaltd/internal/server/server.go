@@ -82,7 +82,7 @@ type Server struct {
 	serverAuthProvider     string
 	auditSink              core.AuditSink
 	users                  *coredata.UserService
-	tokens                 *coredata.TokenService
+	externalCredentials    core.ExternalCredentialProvider
 	apiTokens              *coredata.APITokenService
 	identities             *coredata.IdentityService
 	identityGrants         *coredata.IdentityManagementGrantService
@@ -233,7 +233,7 @@ func New(cfg Config) (*Server, error) {
 	}
 
 	users := cfg.Services.Users
-	tokens := cfg.Services.Tokens
+	externalCredentials := coredata.EffectiveExternalCredentialProvider(cfg.Services)
 	apiTokens := cfg.Services.APITokens
 	identities := cfg.Services.Identities
 	identityGrants := cfg.Services.IdentityManagementGrants
@@ -282,7 +282,7 @@ func New(cfg Config) (*Server, error) {
 		serverAuthProvider:     serverAuthProvider,
 		auditSink:              cfg.AuditSink,
 		users:                  users,
-		tokens:                 tokens,
+		externalCredentials:    externalCredentials,
 		apiTokens:              apiTokens,
 		identities:             identities,
 		identityGrants:         identityGrants,

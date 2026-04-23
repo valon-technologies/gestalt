@@ -121,13 +121,68 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 		brokerOpts = append(brokerOpts, invocation.WithAuthorizer(cfg.Authorizer))
 	}
 	if cfg.Invoker == nil {
-		cfg.Invoker = invocation.NewBroker(cfg.Providers, cfg.Services.Users, cfg.Services.Tokens, brokerOpts...)
+		externalCredentials := coredata.EffectiveExternalCredentialProvider(cfg.Services)
+		cfg.Invoker = invocation.NewBroker(cfg.Providers, cfg.Services.Users, externalCredentials, brokerOpts...)
 	}
 	srv, err := server.New(cfg)
 	if err != nil {
 		t.Fatalf("creating server: %v", err)
 	}
 	return srv
+}
+
+type recordingExternalCredentialProvider struct {
+	inner                  core.ExternalCredentialProvider
+	getCredentialCalls     atomic.Int64
+	listCredentialsCalls   atomic.Int64
+	listForProviderCalls   atomic.Int64
+	listForConnectionCalls atomic.Int64
+	putCredentialCalls     atomic.Int64
+	restoreCredentialCalls atomic.Int64
+	deleteCredentialCalls  atomic.Int64
+}
+
+func newRecordingExternalCredentialProvider(inner core.ExternalCredentialProvider) *recordingExternalCredentialProvider {
+	return &recordingExternalCredentialProvider{inner: inner}
+}
+
+func (r *recordingExternalCredentialProvider) PutCredential(ctx context.Context, credential *core.ExternalCredential) error {
+	r.putCredentialCalls.Add(1)
+	return r.inner.PutCredential(ctx, credential)
+}
+
+func (r *recordingExternalCredentialProvider) RestoreCredential(ctx context.Context, credential *core.ExternalCredential) error {
+	r.restoreCredentialCalls.Add(1)
+	return r.inner.RestoreCredential(ctx, credential)
+}
+
+func (r *recordingExternalCredentialProvider) GetCredential(ctx context.Context, subjectID, integration, connection, instance string) (*core.ExternalCredential, error) {
+	r.getCredentialCalls.Add(1)
+	return r.inner.GetCredential(ctx, subjectID, integration, connection, instance)
+}
+
+func (r *recordingExternalCredentialProvider) ListCredentials(ctx context.Context, subjectID string) ([]*core.ExternalCredential, error) {
+	r.listCredentialsCalls.Add(1)
+	return r.inner.ListCredentials(ctx, subjectID)
+}
+
+func (r *recordingExternalCredentialProvider) ListCredentialsForProvider(ctx context.Context, subjectID, integration string) ([]*core.ExternalCredential, error) {
+	r.listForProviderCalls.Add(1)
+	return r.inner.ListCredentialsForProvider(ctx, subjectID, integration)
+}
+
+func (r *recordingExternalCredentialProvider) ListCredentialsForConnection(ctx context.Context, subjectID, integration, connection string) ([]*core.ExternalCredential, error) {
+	r.listForConnectionCalls.Add(1)
+	return r.inner.ListCredentialsForConnection(ctx, subjectID, integration, connection)
+}
+
+func (r *recordingExternalCredentialProvider) DeleteCredential(ctx context.Context, id string) error {
+	r.deleteCredentialCalls.Add(1)
+	return r.inner.DeleteCredential(ctx, id)
+}
+
+func (r *recordingExternalCredentialProvider) lookupCalls() int64 {
+	return r.getCredentialCalls.Load() + r.listCredentialsCalls.Load() + r.listForProviderCalls.Load() + r.listForConnectionCalls.Load()
 }
 
 type staticRuntimeInspector struct {
@@ -7669,6 +7724,8 @@ func TestDisconnectIntegration(t *testing.T) {
 		t.Parallel()
 
 		svc := coretesting.NewStubServices(t)
+		recordingCreds := newRecordingExternalCredentialProvider(svc.Tokens)
+		svc.ExternalCredentials = recordingCreds
 		u := seedUser(t, svc, "anonymous@gestalt")
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
@@ -7726,6 +7783,12 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 		if len(tokens) != 0 {
 			t.Fatalf("expected 0 tokens after disconnect, got %d", len(tokens))
+		}
+		if recordingCreds.listForProviderCalls.Load() == 0 {
+			t.Fatal("expected disconnect to list credentials through ExternalCredentialProvider")
+		}
+		if recordingCreds.deleteCredentialCalls.Load() == 0 {
+			t.Fatal("expected disconnect to delete credentials through ExternalCredentialProvider")
 		}
 		respAuthz, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
 			Relation: authorization.ProviderExternalIdentityRelationAssume,
@@ -11649,6 +11712,8 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 
 		var auditBuf bytes.Buffer
 		svc := coretesting.NewStubServices(t)
+		recordingCreds := newRecordingExternalCredentialProvider(svc.Tokens)
+		svc.ExternalCredentials = recordingCreds
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
 		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{}, nil, nil)
@@ -11760,6 +11825,12 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 		if stored.AccessToken != "slack-token" {
 			t.Fatalf("stored access token = %q, want %q", stored.AccessToken, "slack-token")
+		}
+		if recordingCreds.getCredentialCalls.Load() == 0 {
+			t.Fatal("expected oauth callback to load credentials through ExternalCredentialProvider")
+		}
+		if recordingCreds.putCredentialCalls.Load() == 0 {
+			t.Fatal("expected oauth callback to store credentials through ExternalCredentialProvider")
 		}
 		var metadata map[string]string
 		if err := json.Unmarshal([]byte(stored.MetadataJSON), &metadata); err != nil {
@@ -14189,6 +14260,8 @@ func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
+	recordingCreds := newRecordingExternalCredentialProvider(svc.Tokens)
+	svc.ExternalCredentials = recordingCreds
 	u := seedUser(t, svc, "anonymous@gestalt")
 	expired := time.Now().Add(-1 * time.Hour)
 	seedToken(t, svc, &core.IntegrationToken{
@@ -14237,6 +14310,12 @@ func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 	}
 	if refreshedToken != "fresh-access-token" {
 		t.Fatalf("expected operation to use refreshed token, got %q", refreshedToken)
+	}
+	if recordingCreds.lookupCalls() == 0 {
+		t.Fatal("expected broker to resolve credentials through ExternalCredentialProvider")
+	}
+	if recordingCreds.putCredentialCalls.Load() == 0 {
+		t.Fatal("expected broker to persist refreshed credentials through ExternalCredentialProvider")
 	}
 }
 
@@ -14989,6 +15068,8 @@ func TestConnectManual(t *testing.T) {
 
 		var auditBuf bytes.Buffer
 		svc := coretesting.NewStubServices(t)
+		recordingCreds := newRecordingExternalCredentialProvider(svc.Tokens)
+		svc.ExternalCredentials = recordingCreds
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
 				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
@@ -15031,6 +15112,12 @@ func TestConnectManual(t *testing.T) {
 		}
 		if stored.AccessToken != "my-api-key" {
 			t.Fatalf("expected credential my-api-key, got %q", stored.AccessToken)
+		}
+		if recordingCreds.getCredentialCalls.Load() == 0 {
+			t.Fatal("expected manual connect to load credentials through ExternalCredentialProvider")
+		}
+		if recordingCreds.putCredentialCalls.Load() == 0 {
+			t.Fatal("expected manual connect to store credentials through ExternalCredentialProvider")
 		}
 
 		var auditRecord map[string]any
