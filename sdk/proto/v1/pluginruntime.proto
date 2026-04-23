@@ -38,11 +38,6 @@ message PluginRuntimeSupport {
   PluginRuntimeExecutionTarget execution_target = 5;
 }
 
-message GetPluginRuntimeCapabilitiesResponse {
-  reserved 1;
-  PluginRuntimeSupport support = 2;
-}
-
 message PluginRuntimeSession {
   string id = 1;
   string state = 2;
@@ -107,7 +102,7 @@ message HostedPlugin {
 }
 
 service PluginRuntimeProvider {
-  rpc GetCapabilities(google.protobuf.Empty) returns (GetPluginRuntimeCapabilitiesResponse);
+  rpc GetSupport(google.protobuf.Empty) returns (PluginRuntimeSupport);
   rpc StartSession(StartPluginRuntimeSessionRequest) returns (PluginRuntimeSession);
   rpc GetSession(GetPluginRuntimeSessionRequest) returns (PluginRuntimeSession);
   rpc StopSession(StopPluginRuntimeSessionRequest) returns (google.protobuf.Empty);

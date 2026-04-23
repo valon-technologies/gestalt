@@ -20,7 +20,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PluginRuntimeProvider_GetCapabilities_FullMethodName = "/gestalt.provider.v1.PluginRuntimeProvider/GetCapabilities"
+	PluginRuntimeProvider_GetSupport_FullMethodName      = "/gestalt.provider.v1.PluginRuntimeProvider/GetSupport"
 	PluginRuntimeProvider_StartSession_FullMethodName    = "/gestalt.provider.v1.PluginRuntimeProvider/StartSession"
 	PluginRuntimeProvider_GetSession_FullMethodName      = "/gestalt.provider.v1.PluginRuntimeProvider/GetSession"
 	PluginRuntimeProvider_StopSession_FullMethodName     = "/gestalt.provider.v1.PluginRuntimeProvider/StopSession"
@@ -32,7 +32,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PluginRuntimeProviderClient interface {
-	GetCapabilities(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetPluginRuntimeCapabilitiesResponse, error)
+	GetSupport(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*PluginRuntimeSupport, error)
 	StartSession(ctx context.Context, in *StartPluginRuntimeSessionRequest, opts ...grpc.CallOption) (*PluginRuntimeSession, error)
 	GetSession(ctx context.Context, in *GetPluginRuntimeSessionRequest, opts ...grpc.CallOption) (*PluginRuntimeSession, error)
 	StopSession(ctx context.Context, in *StopPluginRuntimeSessionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -48,10 +48,10 @@ func NewPluginRuntimeProviderClient(cc grpc.ClientConnInterface) PluginRuntimePr
 	return &pluginRuntimeProviderClient{cc}
 }
 
-func (c *pluginRuntimeProviderClient) GetCapabilities(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetPluginRuntimeCapabilitiesResponse, error) {
+func (c *pluginRuntimeProviderClient) GetSupport(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*PluginRuntimeSupport, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetPluginRuntimeCapabilitiesResponse)
-	err := c.cc.Invoke(ctx, PluginRuntimeProvider_GetCapabilities_FullMethodName, in, out, cOpts...)
+	out := new(PluginRuntimeSupport)
+	err := c.cc.Invoke(ctx, PluginRuntimeProvider_GetSupport_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (c *pluginRuntimeProviderClient) StartPlugin(ctx context.Context, in *Start
 // All implementations must embed UnimplementedPluginRuntimeProviderServer
 // for forward compatibility.
 type PluginRuntimeProviderServer interface {
-	GetCapabilities(context.Context, *emptypb.Empty) (*GetPluginRuntimeCapabilitiesResponse, error)
+	GetSupport(context.Context, *emptypb.Empty) (*PluginRuntimeSupport, error)
 	StartSession(context.Context, *StartPluginRuntimeSessionRequest) (*PluginRuntimeSession, error)
 	GetSession(context.Context, *GetPluginRuntimeSessionRequest) (*PluginRuntimeSession, error)
 	StopSession(context.Context, *StopPluginRuntimeSessionRequest) (*emptypb.Empty, error)
@@ -128,8 +128,8 @@ type PluginRuntimeProviderServer interface {
 // pointer dereference when methods are called.
 type UnimplementedPluginRuntimeProviderServer struct{}
 
-func (UnimplementedPluginRuntimeProviderServer) GetCapabilities(context.Context, *emptypb.Empty) (*GetPluginRuntimeCapabilitiesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetCapabilities not implemented")
+func (UnimplementedPluginRuntimeProviderServer) GetSupport(context.Context, *emptypb.Empty) (*PluginRuntimeSupport, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSupport not implemented")
 }
 func (UnimplementedPluginRuntimeProviderServer) StartSession(context.Context, *StartPluginRuntimeSessionRequest) (*PluginRuntimeSession, error) {
 	return nil, status.Error(codes.Unimplemented, "method StartSession not implemented")
@@ -167,20 +167,20 @@ func RegisterPluginRuntimeProviderServer(s grpc.ServiceRegistrar, srv PluginRunt
 	s.RegisterService(&PluginRuntimeProvider_ServiceDesc, srv)
 }
 
-func _PluginRuntimeProvider_GetCapabilities_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PluginRuntimeProvider_GetSupport_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PluginRuntimeProviderServer).GetCapabilities(ctx, in)
+		return srv.(PluginRuntimeProviderServer).GetSupport(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: PluginRuntimeProvider_GetCapabilities_FullMethodName,
+		FullMethod: PluginRuntimeProvider_GetSupport_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginRuntimeProviderServer).GetCapabilities(ctx, req.(*emptypb.Empty))
+		return srv.(PluginRuntimeProviderServer).GetSupport(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -283,8 +283,8 @@ var PluginRuntimeProvider_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*PluginRuntimeProviderServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "GetCapabilities",
-			Handler:    _PluginRuntimeProvider_GetCapabilities_Handler,
+			MethodName: "GetSupport",
+			Handler:    _PluginRuntimeProvider_GetSupport_Handler,
 		},
 		{
 			MethodName: "StartSession",
