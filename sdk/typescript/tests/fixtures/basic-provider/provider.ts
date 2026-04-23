@@ -33,6 +33,13 @@ export const plugin = definePlugin({
       ],
     };
   },
+  postConnect(token) {
+    return {
+      "gestalt.external_identity.type": "fixture_identity",
+      "gestalt.external_identity.id": `${token.connection}:${token.instance}:${token.subjectId}`,
+      configured_connection: token.connection,
+    };
+  },
   operations: [
     {
       id: "  hello  ",

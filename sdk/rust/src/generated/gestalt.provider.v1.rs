@@ -2255,6 +2255,8 @@ pub struct IntegrationToken {
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(message, optional, tag = "13")]
     pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(string, tag = "14")]
+    pub connection: ::prost::alloc::string::String,
 }
 /// SubjectContext identifies the caller that initiated an operation.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

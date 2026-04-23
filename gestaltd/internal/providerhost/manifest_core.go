@@ -17,6 +17,7 @@ func ConnectionParamDefsFromManifest(defs map[string]providermanifestv1.Provider
 			Required:    def.Required,
 			Description: def.Description,
 			From:        def.From,
+			Field:       def.Field,
 		}
 	}
 	return out

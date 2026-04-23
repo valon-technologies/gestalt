@@ -26,6 +26,7 @@ func NewProviderServer(provider core.Provider) *ProviderServer {
 func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*proto.ProviderMetadata, error) {
 	return &proto.ProviderMetadata{
 		SupportsSessionCatalog: core.SupportsSessionCatalog(s.provider),
+		SupportsPostConnect:    core.SupportsPostConnect(s.provider),
 	}, nil
 }
 
@@ -61,6 +62,17 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSe
 		return nil, status.Errorf(codes.Unknown, "session catalog: %v", err)
 	}
 	return &proto.GetSessionCatalogResponse{Catalog: catalogToProto(cat)}, nil
+}
+
+func (s *ProviderServer) PostConnect(ctx context.Context, req *proto.PostConnectRequest) (*proto.PostConnectResponse, error) {
+	if !core.SupportsPostConnect(s.provider) {
+		return nil, status.Error(codes.Unimplemented, "provider does not support post connect")
+	}
+	metadata, _, err := core.PostConnect(ctx, s.provider, integrationTokenFromProto(req.GetToken()))
+	if err != nil {
+		return nil, status.Errorf(codes.Unknown, "post connect: %v", err)
+	}
+	return &proto.PostConnectResponse{Metadata: metadata}, nil
 }
 
 func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) context.Context {
@@ -125,6 +137,39 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 		return &principal.Principal{}
 	}
 	return p
+}
+
+func integrationTokenFromProto(token *proto.IntegrationToken) *core.IntegrationToken {
+	if token == nil {
+		return nil
+	}
+	out := &core.IntegrationToken{
+		ID:                token.GetId(),
+		SubjectID:         token.GetUserId(),
+		Integration:       token.GetIntegration(),
+		Connection:        token.GetConnection(),
+		Instance:          token.GetInstance(),
+		AccessToken:       token.GetAccessToken(),
+		RefreshToken:      token.GetRefreshToken(),
+		Scopes:            token.GetScopes(),
+		RefreshErrorCount: int(token.GetRefreshErrorCount()),
+		MetadataJSON:      token.GetMetadataJson(),
+	}
+	if ts := token.GetExpiresAt(); ts != nil {
+		value := ts.AsTime()
+		out.ExpiresAt = &value
+	}
+	if ts := token.GetLastRefreshedAt(); ts != nil {
+		value := ts.AsTime()
+		out.LastRefreshedAt = &value
+	}
+	if ts := token.GetCreatedAt(); ts != nil {
+		out.CreatedAt = ts.AsTime()
+	}
+	if ts := token.GetUpdatedAt(); ts != nil {
+		out.UpdatedAt = ts.AsTime()
+	}
+	return out
 }
 
 func sourceFromString(raw string) principal.Source {

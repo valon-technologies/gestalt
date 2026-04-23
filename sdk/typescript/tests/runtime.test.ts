@@ -33,6 +33,7 @@ import {
   ExecuteRequestSchema,
   GetSessionCatalogRequestSchema,
   HTTPSubjectRequestSchema,
+  PostConnectRequestSchema,
   RequestContextSchema,
   ResolveHTTPSubjectRequestSchema,
   StartProviderRequestSchema,
@@ -490,6 +491,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
   const metadata = await (service.getMetadata as any)();
   expect(metadata.name).toBe("basic-provider");
   expect(metadata.supportsSessionCatalog).toBe(true);
+  expect(metadata.supportsPostConnect).toBe(true);
   expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   expect(
@@ -613,6 +615,28 @@ test("integration provider service exposes metadata, configure, execute, and ses
   expect(sessionCatalog.catalog?.operations[0].title).toBe(
     "Session Hello ops user:user-123 identity viewer",
   );
+
+  const postConnect = await (service.postConnect as any)(
+    create(PostConnectRequestSchema, {
+      token: {
+        id: "tok-123",
+        userId: "user:user-123",
+        integration: "basic-provider",
+        connection: "workspace",
+        instance: "__default__",
+        accessToken: "access-token",
+        metadataJson: JSON.stringify({
+          team_id: "T123",
+          user_id: "U456",
+        }),
+      },
+    }),
+  );
+  expect(postConnect.metadata).toEqual({
+    "gestalt.external_identity.type": "fixture_identity",
+    "gestalt.external_identity.id": "workspace:__default__:user:user-123",
+    configured_connection: "workspace",
+  });
 });
 
 test("integration provider service resolves hosted HTTP subjects through the plugin hook", async () => {

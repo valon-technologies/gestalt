@@ -15,7 +15,6 @@ const (
 	auditTargetKindAPIToken              = "api_token"
 	auditTargetKindAPITokenCollection    = "api_token_collection"
 	auditTargetKindConnection            = "connection"
-	auditTargetKindExternalIdentity      = "external_identity"
 	auditTargetKindManagedIdentity       = "managed_identity"
 	auditTargetKindManagedIdentityMember = "managed_identity_member"
 	auditTargetKindManagedIdentityGrant  = "managed_identity_grant"
@@ -157,24 +156,6 @@ func connectionAuditTarget(provider, connection, instance string) auditTarget {
 		ID:   strings.Join(idParts, "/"),
 		Kind: auditTargetKindConnection,
 		Name: connection + "/" + instance,
-	}
-}
-
-func externalIdentityAuditTarget(identityType, identityID string) auditTarget {
-	identityType = strings.TrimSpace(identityType)
-	identityID = strings.TrimSpace(identityID)
-	id := identityID
-	if identityType != "" && identityID != "" {
-		id = identityType + "/" + identityID
-	}
-	name := identityID
-	if identityType != "" && identityID != "" {
-		name = identityType + ":" + identityID
-	}
-	return auditTarget{
-		ID:   id,
-		Kind: auditTargetKindExternalIdentity,
-		Name: name,
 	}
 }
 
