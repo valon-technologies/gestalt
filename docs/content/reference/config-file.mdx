@@ -1099,7 +1099,7 @@ connections:
       type: mcp_oauth
 ```
 
-Connection `mode` determines how credentials are managed: `none` requires no credentials, and `user` stores credentials for the caller's effective subject. For humans that is typically `user:<id>`; for workloads it is `workload:<id>`; for managed identities it is the managed identity subject. All connections in a single plugin must share the same mode.
+Connection `mode` determines how credentials are managed: `none` requires no credentials, and `user` stores credentials for the caller's effective subject. For humans that is typically `user:<id>`; for workloads it is `workload:<id>`. All connections in a single plugin must share the same mode.
 
 #### Authentication Shapes
 

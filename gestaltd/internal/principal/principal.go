@@ -18,8 +18,6 @@ const (
 	SourceEnv
 )
 
-const managedIdentitySubjectPrefix = "managed_identity:"
-
 type Kind string
 
 const (
@@ -129,20 +127,6 @@ func EffectiveCredentialSubjectID(p *Principal) string {
 		return UserSubjectID(userID)
 	}
 	return ""
-}
-
-func ManagedIdentitySubjectID(identityID string) string {
-	if identityID == "" {
-		return ""
-	}
-	return managedIdentitySubjectPrefix + identityID
-}
-
-func ManagedIdentityIDFromSubjectID(subjectID string) string {
-	if !strings.HasPrefix(subjectID, managedIdentitySubjectPrefix) {
-		return ""
-	}
-	return strings.TrimPrefix(subjectID, managedIdentitySubjectPrefix)
 }
 
 func CompilePermissions(perms []core.AccessPermission) PermissionSet {
@@ -269,27 +253,6 @@ func PermissionPlugins(set PermissionSet) []string {
 	return plugins
 }
 
-func CompileManagedIdentityGrants(grants []*core.ManagedIdentityGrant) PermissionSet {
-	if len(grants) == 0 {
-		return PermissionSet{}
-	}
-	perms := make([]core.AccessPermission, 0, len(grants))
-	for _, grant := range grants {
-		if grant == nil {
-			continue
-		}
-		perms = append(perms, core.AccessPermission{
-			Plugin:     grant.Plugin,
-			Operations: append([]string(nil), grant.Operations...),
-		})
-	}
-	compiled := CompilePermissions(perms)
-	if compiled == nil {
-		return PermissionSet{}
-	}
-	return compiled
-}
-
 func AllowsProviderPermission(p *Principal, provider string) bool {
 	if p == nil {
 		return false
@@ -370,9 +333,7 @@ func Canonicalize(p *Principal) *Principal {
 		}
 	}
 	if p.Kind == "" {
-		switch {
-		case strings.HasPrefix(p.SubjectID, string(KindWorkload)+":"),
-			ManagedIdentityIDFromSubjectID(p.SubjectID) != "":
+		if strings.HasPrefix(p.SubjectID, string(KindWorkload)+":") {
 			p.Kind = KindWorkload
 		}
 	}

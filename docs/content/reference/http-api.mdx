@@ -89,25 +89,6 @@ returns `412`.
 | `DELETE` | `/api/v1/tokens/{id}` | Revoke an API token. |
 | `DELETE` | `/api/v1/tokens` | Revoke all API tokens for the current user. |
 
-### Managed Identities
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/v1/identities` | List managed identities where the current user is a member. |
-| `POST` | `/api/v1/identities` | Create a managed identity. The creator is seeded as an `admin` member. |
-| `GET` | `/api/v1/identities/{identityID}` | Get one managed identity when the caller has identity membership. |
-| `PATCH` | `/api/v1/identities/{identityID}` | Update the managed identity display name. Requires `admin` membership. |
-| `DELETE` | `/api/v1/identities/{identityID}` | Delete a managed identity and its child state. Requires `admin` membership. |
-| `GET` | `/api/v1/identities/{identityID}/members` | List managed identity membership rows. Responses use canonical user `subjectId` plus `email` metadata. |
-| `PUT` | `/api/v1/identities/{identityID}/members` | Upsert one managed identity membership row by `email` alias and role. Gestalt resolves the email to the canonical user `subjectId` before persisting membership state. |
-| `DELETE` | `/api/v1/identities/{identityID}/members/{email}` | Remove one managed identity membership row by email alias. Gestalt resolves the email to the canonical user `subjectId` before deleting membership state. |
-| `GET` | `/api/v1/identities/{identityID}/grants` | List plugin grants for one managed identity. |
-| `PUT` | `/api/v1/identities/{identityID}/grants/{plugin}` | Upsert plugin grant operations for one managed identity. |
-| `DELETE` | `/api/v1/identities/{identityID}/grants/{plugin}` | Remove one plugin grant from a managed identity. |
-| `GET` | `/api/v1/identities/{identityID}/tokens` | List API tokens owned by one managed identity. Requires `viewer` membership or higher. |
-| `POST` | `/api/v1/identities/{identityID}/tokens` | Create an API token for one managed identity. Requires `viewer` membership or higher. |
-| `DELETE` | `/api/v1/identities/{identityID}/tokens/{id}` | Revoke one API token owned by a managed identity. Requires `editor` membership or higher. |
-
 ### Operator Surfaces
 
 | Method | Path | Purpose |

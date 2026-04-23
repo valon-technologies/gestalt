@@ -35,6 +35,9 @@ func (s *APITokenService) StoreAPIToken(ctx context.Context, token *core.APIToke
 	if ownerKind == "" || ownerID == "" {
 		return fmt.Errorf("store api token: owner_kind and owner_id are required")
 	}
+	if ownerKind != core.APITokenOwnerKindUser {
+		return fmt.Errorf("store api token: unsupported owner_kind %q", ownerKind)
+	}
 	if token.CredentialSubjectID == "" && ownerKind == core.APITokenOwnerKindUser {
 		token.CredentialSubjectID = apiTokenUserSubjectID(ownerID)
 	}
@@ -240,10 +243,7 @@ func recordToAPIToken(rec indexeddb.Record) *core.APIToken {
 		UpdatedAt:           recTime(rec, "updated_at"),
 	}
 	if token.IdentityID == "" {
-		switch token.OwnerKind {
-		case core.APITokenOwnerKindManagedIdentity:
-			token.IdentityID = token.OwnerID
-		case core.APITokenOwnerKindUser:
+		if token.OwnerKind == core.APITokenOwnerKindUser {
 			token.IdentityID = token.OwnerID
 		}
 	}
@@ -264,15 +264,13 @@ func recordToAPIToken(rec indexeddb.Record) *core.APIToken {
 
 func (s *APITokenService) identityIDForOwner(ctx context.Context, ownerKind, ownerID string) (string, error) {
 	switch ownerKind {
-	case core.APITokenOwnerKindManagedIdentity:
-		return ownerID, nil
 	case core.APITokenOwnerKindUser:
 		if s.users == nil {
 			return ownerID, nil
 		}
 		return s.users.CanonicalIdentityIDForUser(ctx, ownerID)
 	default:
-		return ownerID, nil
+		return "", fmt.Errorf("store api token: unsupported owner_kind %q", ownerKind)
 	}
 }
 

@@ -52,40 +52,12 @@ type APIToken struct {
 }
 
 const (
-	APITokenOwnerKindUser            = "user"
-	APITokenOwnerKindManagedIdentity = "managed_identity"
+	APITokenOwnerKindUser = "user"
 )
 
 const (
 	APITokenKindAPI = "api"
 )
-
-type ManagedIdentity struct {
-	ID                  string
-	DisplayName         string
-	CreatedByIdentityID string
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
-}
-
-type ManagedIdentityMembership struct {
-	ID         string
-	IdentityID string
-	SubjectID  string
-	Email      string
-	Role       string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-}
-
-type ManagedIdentityGrant struct {
-	ID         string
-	IdentityID string
-	Plugin     string
-	Operations []string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-}
 
 type Identity struct {
 	ID                  string

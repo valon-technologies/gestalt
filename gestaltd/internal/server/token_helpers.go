@@ -26,16 +26,6 @@ func (s *Server) issueAPIToken(ctx context.Context, userID, name, scopes string,
 	}, nonExpiring)
 }
 
-func (s *Server) issueManagedIdentityAPIToken(ctx context.Context, identityID, credentialSubjectID, name string, permissions []core.AccessPermission, nonExpiring bool) (*core.APIToken, string, error) {
-	return s.issueOwnedAPIToken(ctx, &core.APIToken{
-		OwnerKind:           core.APITokenOwnerKindManagedIdentity,
-		OwnerID:             identityID,
-		CredentialSubjectID: credentialSubjectID,
-		Name:                name,
-		Permissions:         append([]core.AccessPermission(nil), permissions...),
-	}, nonExpiring)
-}
-
 func (s *Server) issueOwnedAPIToken(ctx context.Context, apiToken *core.APIToken, nonExpiring bool) (*core.APIToken, string, error) {
 	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {

@@ -135,7 +135,7 @@ stores credentials per subject.
 | Mode | Behavior |
 | --- | --- |
 | `none` | No upstream credential is required |
-| `user` | The calling subject stores its own credential (`user:<id>`, `workload:<id>`, or a managed identity subject) |
+| `user` | The calling subject stores its own credential (`user:<id>` or `workload:<id>`) |
 
 Common auth types are `oauth2`, `mcp_oauth`, `bearer`, `manual`, and `none`.
 Operator-supplied app credentials such as `clientId` and `clientSecret` go in
