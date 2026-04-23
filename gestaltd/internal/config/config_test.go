@@ -3311,6 +3311,52 @@ server:
 		}
 	})
 
+	t.Run("agent provider accepts indexeddb bindings", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      indexeddb:
+        provider: agent_state
+        db: agent_simple
+        objectStores:
+          - runs
+          - run_idempotency
+  indexeddb:
+    agent_state:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: agent_state
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		want := &PluginIndexedDBConfig{
+			Provider:     "agent_state",
+			DB:           "agent_simple",
+			ObjectStores: []string{"runs", "run_idempotency"},
+		}
+		if got := cfg.Providers.Agent["simple"].IndexedDB; !reflect.DeepEqual(got, want) {
+			t.Fatalf("Providers.Agent[simple].IndexedDB = %#v, want %#v", got, want)
+		}
+		effective, err := cfg.EffectiveAgentIndexedDB("simple", cfg.Providers.Agent["simple"])
+		if err != nil {
+			t.Fatalf("EffectiveAgentIndexedDB: %v", err)
+		}
+		if effective.ProviderName != "agent_state" || effective.DB != "agent_simple" {
+			t.Fatalf("effective = %#v", effective)
+		}
+	})
+
 	t.Run("rejects unknown indexeddb bindings on workflow providers", func(t *testing.T) {
 		t.Parallel()
 
@@ -3337,6 +3383,36 @@ server:
 			t.Fatal("Load: expected error, got nil")
 		}
 		if !strings.Contains(err.Error(), `providers.workflow.basic.indexeddb.provider references unknown indexeddb "missing"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects unknown indexeddb bindings on agent providers", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      indexeddb:
+        provider: missing
+  indexeddb:
+    agent_state:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: agent_state
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `providers.agent.simple.indexeddb.provider references unknown indexeddb "missing"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

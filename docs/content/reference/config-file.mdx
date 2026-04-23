@@ -482,6 +482,12 @@ providers:
     openai:
       source: ./providers/agent/openai/manifest.yaml
       default: true
+      indexeddb:
+        provider: default
+        db: agent_openai
+        objectStores:
+          - runs
+          - run_idempotency
       config:
         model: gpt-5.4
         baseURL: https://api.openai.com/v1
@@ -502,15 +508,16 @@ providers:
 
 Agent providers receive neutral run requests with `messages`, optional
 resolved `tools`, optional `responseSchema`, optional `sessionRef`, and
-provider-specific `config`. In V1 there is no standardized host IndexedDB or
-other storage binding for agent providers. If an agent backend needs durable
-state, define that in the provider's own `config` schema.
+provider-specific `config`. Agent providers that need durable state can opt
+into a host IndexedDB binding with `indexeddb`; the provider process then uses
+the SDK IndexedDB helper against `GESTALT_INDEXEDDB_SOCKET`.
 
 | Field | Description |
 | --- | --- |
 | `default` | Marks this named agent entry as the default selection when a run request omits `provider`. |
 | `source` | Either a local provider manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
 | `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
+| `indexeddb` | Optional agent IndexedDB config. `indexeddb.provider` selects the named `providers.indexeddb` entry backing the agent's single IndexedDB SDK socket; unlike plugins, agents do not inherit the selected/default host IndexedDB automatically. `indexeddb.db` overrides the provider-visible database name and defaults to the agent provider key. `indexeddb.objectStores` optionally allowlists logical object stores the agent may use. |
 | `config` | Provider-specific config passed into the agent provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable providers, this is only a complete boundary when a supported sandboxed runtime is active. |

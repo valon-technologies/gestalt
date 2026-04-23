@@ -649,7 +649,14 @@ func validateAgentConfig(cfg *Config) error {
 		if entry.Default {
 			defaults = append(defaults, name)
 		}
-		if err := validateAgentProviderFields(name, entry); err != nil {
+		if entry.IndexedDB != nil {
+			entry.IndexedDB.Provider = strings.TrimSpace(entry.IndexedDB.Provider)
+			entry.IndexedDB.DB = strings.TrimSpace(entry.IndexedDB.DB)
+			for i, store := range entry.IndexedDB.ObjectStores {
+				entry.IndexedDB.ObjectStores[i] = strings.TrimSpace(store)
+			}
+		}
+		if err := validateAgentProviderFields(cfg, name, entry); err != nil {
 			return err
 		}
 		if err := validateProviderEntrySource("agent", name, entry, sourceSyntax); err != nil {
@@ -663,7 +670,7 @@ func validateAgentConfig(cfg *Config) error {
 	return nil
 }
 
-func validateAgentProviderFields(name string, entry *ProviderEntry) error {
+func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
 	}
@@ -676,9 +683,6 @@ func validateAgentProviderFields(name string, entry *ProviderEntry) error {
 	}
 	if strings.TrimSpace(entry.UI) != "" {
 		return fmt.Errorf("config validation: %s.ui is only supported on plugins.*", subject)
-	}
-	if entry.IndexedDB != nil {
-		return fmt.Errorf("config validation: %s.indexeddb is not supported", subject)
 	}
 	if len(entry.Cache) > 0 {
 		return fmt.Errorf("config validation: %s.cache is only supported on plugins.*", subject)
@@ -697,6 +701,23 @@ func validateAgentProviderFields(name string, entry *ProviderEntry) error {
 	}
 	if entry.AuthorizationPolicy != "" {
 		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on plugins.* and ui.*", subject)
+	}
+	if entry.IndexedDB == nil {
+		return nil
+	}
+
+	seenStores := make(map[string]struct{}, len(entry.IndexedDB.ObjectStores))
+	for i, store := range entry.IndexedDB.ObjectStores {
+		if store == "" {
+			return fmt.Errorf("config validation: %s.indexeddb.objectStores[%d] is required", subject, i)
+		}
+		if _, exists := seenStores[store]; exists {
+			return fmt.Errorf("config validation: %s.indexeddb.objectStores[%d] duplicates %q", subject, i, store)
+		}
+		seenStores[store] = struct{}{}
+	}
+	if _, err := cfg.EffectiveAgentIndexedDB(name, entry); err != nil {
+		return err
 	}
 	return nil
 }

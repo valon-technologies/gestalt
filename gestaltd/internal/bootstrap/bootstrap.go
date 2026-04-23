@@ -361,6 +361,24 @@ func (p *workflowProviderWithCleanup) Close() error {
 	return errors.Join(errs...)
 }
 
+type agentProviderWithCleanup struct {
+	coreagent.Provider
+	cleanup func()
+}
+
+func (p *agentProviderWithCleanup) Close() error {
+	var errs []error
+	if p != nil && p.Provider != nil {
+		if err := p.Provider.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if p != nil && p.cleanup != nil {
+		p.cleanup()
+	}
+	return errors.Join(errs...)
+}
+
 type agentProviderWithTracking struct {
 	delegate     coreagent.Provider
 	providerName string
@@ -1424,13 +1442,40 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 			proto.RegisterAgentHostServer(srv, providerhost.NewAgentHostServer(name, deps.AgentRuntime.ExecuteTool))
 		},
 	}}
+	var cleanup func()
+	defer func() {
+		if cleanup != nil {
+			cleanup()
+		}
+	}()
+	effectiveIndexedDB, err := config.ResolveEffectiveAgentIndexedDB(name, entry, deps.IndexedDBDefs)
+	if err != nil {
+		return nil, fmt.Errorf("agent provider: %w", err)
+	}
+	if effectiveIndexedDB.Enabled {
+		indexedDBHostServices, indexedDBCleanup, err := buildAgentIndexedDBHostServices(name, effectiveIndexedDB, deps)
+		if err != nil {
+			return nil, fmt.Errorf("agent provider: %w", err)
+		}
+		hostServices = append(hostServices, indexedDBHostServices...)
+		cleanup = chainCleanup(cleanup, indexedDBCleanup)
+	}
 	provider, err := factories.Agent(ctx, name, node, hostServices, deps)
 	if err != nil {
 		return nil, fmt.Errorf("agent provider: %w", err)
 	}
-	return &agentProviderWithTracking{
+	tracked := &agentProviderWithTracking{
 		delegate:     provider,
 		providerName: name,
 		runtime:      deps.AgentRuntime,
-	}, nil
+	}
+	if cleanup != nil {
+		provider := &agentProviderWithCleanup{
+			Provider: tracked,
+			cleanup:  cleanup,
+		}
+		cleanup = nil
+		return provider, nil
+	}
+	return tracked, nil
 }
