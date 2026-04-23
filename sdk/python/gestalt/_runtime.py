@@ -20,7 +20,9 @@ from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
 from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
 from ._operations import INTERNAL_ERROR_MESSAGE
+from ._optional_imports import is_optional_provider_import_error
 from ._plugin import ConnectedToken, Plugin, _module_plugin
+from ._serialization import json_body
 
 if TYPE_CHECKING:
     from ._providers import (
@@ -61,7 +63,10 @@ else:
             WarningsProvider,
             WorkflowProvider,
         )
-    except ModuleNotFoundError:
+    except ModuleNotFoundError as exc:
+        if not is_optional_provider_import_error(exc):
+            raise
+
         class ProviderKind(str, Enum):
             INTEGRATION = "integration"
             AUTHENTICATION = "authentication"
@@ -172,7 +177,6 @@ else:
         class WarningsProvider:
             def warnings(self) -> list[str]:
                 raise NotImplementedError
-from ._serialization import json_body
 
 json_format: Any = cast(Any, None)
 try:
@@ -640,6 +644,7 @@ def _register_cache_services(server: Any, provider: PluginProvider) -> None:
 
 def _provider_servicer(*, plugin: Plugin) -> Any:
     _ensure_grpc_runtime()
+
     class ProviderServicer(plugin_pb2_grpc.IntegrationProviderServicer):
         def GetMetadata(self, _request: Any, _context: Any) -> Any:
             return plugin_pb2.ProviderMetadata(
@@ -762,6 +767,7 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
 
 def _runtime_servicer(*, provider: PluginProvider, kind: ProviderKind) -> Any:
     _ensure_grpc_runtime()
+
     class RuntimeServicer(runtime_pb2_grpc.ProviderLifecycleServicer):
         def GetProviderIdentity(self, _request: Any, _context: Any) -> Any:
             metadata = _provider_metadata(provider=provider, kind=kind)
@@ -809,7 +815,9 @@ def _authentication_servicer(*, provider: PluginProvider) -> Any:
     _ensure_grpc_runtime()
     auth_provider = cast(AuthenticationProvider, provider)
 
-    class AuthenticationServicer(authentication_pb2_grpc.AuthenticationProviderServicer):
+    class AuthenticationServicer(
+        authentication_pb2_grpc.AuthenticationProviderServicer
+    ):
         @_grpc_handler("begin login")
         def BeginLogin(self, request: Any, context: Any) -> Any:
             response = auth_provider.begin_login(request)
@@ -900,7 +908,9 @@ def _cache_servicer(*, provider: PluginProvider) -> Any:
             for key in request.keys:
                 value = values.get(key)
                 if value is None:
-                    entries.append(cache_pb2.CacheResult(key=key, found=False, value=b""))
+                    entries.append(
+                        cache_pb2.CacheResult(key=key, found=False, value=b"")
+                    )
                 else:
                     entries.append(
                         cache_pb2.CacheResult(key=key, found=True, value=bytes(value))
@@ -919,7 +929,10 @@ def _cache_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("cache set_many")
         def SetMany(self, request: Any, _context: Any) -> Any:
             cache_provider.set_many(
-                [CacheEntry(key=entry.key, value=bytes(entry.value)) for entry in request.entries],
+                [
+                    CacheEntry(key=entry.key, value=bytes(entry.value))
+                    for entry in request.entries
+                ],
                 _duration_to_timedelta(request.ttl),
             )
             return empty_pb2.Empty()
@@ -1034,7 +1047,9 @@ def _access_from_proto(request_context: Any) -> Access:
 def _workflow_from_proto(request_context: Any) -> dict[str, Any]:
     if request_context is None:
         return {}
-    if hasattr(request_context, "HasField") and not request_context.HasField("workflow"):
+    if hasattr(request_context, "HasField") and not request_context.HasField(
+        "workflow"
+    ):
         return {}
     workflow = getattr(request_context, "workflow", None)
     if workflow is None:
@@ -1143,7 +1158,9 @@ def _connected_token(token: Any) -> ConnectedToken:
         refresh_token=getattr(token, "refresh_token", ""),
         scopes=getattr(token, "scopes", ""),
         expires_at=_timestamp_to_datetime(getattr(token, "expires_at", None)),
-        last_refreshed_at=_timestamp_to_datetime(getattr(token, "last_refreshed_at", None)),
+        last_refreshed_at=_timestamp_to_datetime(
+            getattr(token, "last_refreshed_at", None)
+        ),
         refresh_error_count=int(getattr(token, "refresh_error_count", 0) or 0),
         metadata_json=metadata_json,
         metadata=metadata,

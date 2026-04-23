@@ -36,9 +36,10 @@ const (
 	PreparedAuditDir         = ".gestaltd/audit"
 	PreparedCacheDir         = ".gestaltd/cache"
 	PreparedWorkflowDir      = ".gestaltd/workflow"
+	PreparedAgentDir         = ".gestaltd/agent"
 	PreparedRuntimeDir       = ".gestaltd/runtime"
 	PreparedUIDir            = ".gestaltd/ui"
-	LockVersion              = 9
+	LockVersion              = 10
 
 	platformKeyGeneric = "generic"
 )
@@ -53,6 +54,7 @@ type Lockfile struct {
 	Caches         map[string]LockEntry         `json:"cache,omitempty"`
 	S3             map[string]LockEntry         `json:"s3,omitempty"`
 	Workflows      map[string]LockEntry         `json:"workflow,omitempty"`
+	Agents         map[string]LockEntry         `json:"agent,omitempty"`
 	Runtimes       map[string]LockEntry         `json:"runtime,omitempty"`
 	Secrets        map[string]LockEntry         `json:"secrets,omitempty"`
 	Telemetry      map[string]LockEntry         `json:"telemetry,omitempty"`
@@ -182,7 +184,7 @@ func (l *Lifecycle) initAtPaths(configPaths []string, state StatePaths) (*Lockfi
 		return nil, nil, initPaths{}, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "authentication", len(lock.Authentication), "authorization", len(lock.Authorization), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "s3", len(lock.S3), "workflow", len(lock.Workflows), "runtime", len(lock.Runtimes), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "authentication", len(lock.Authentication), "authorization", len(lock.Authorization), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "s3", len(lock.S3), "workflow", len(lock.Workflows), "agent", len(lock.Agents), "runtime", len(lock.Runtimes), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, paths, nil
 }
@@ -624,6 +626,7 @@ type initPaths struct {
 	auditDir         string
 	cacheDir         string
 	workflowDir      string
+	agentDir         string
 	runtimeDir       string
 	uiDir            string
 }
@@ -693,6 +696,7 @@ func hostProviderCollections(cfg *config.Config) []struct {
 		{config.HostProviderKindAudit, cfg.Providers.Audit},
 		{config.HostProviderKindCache, cfg.Providers.Cache},
 		{config.HostProviderKindWorkflow, cfg.Providers.Workflow},
+		{config.HostProviderKindAgent, cfg.Providers.Agent},
 	}
 }
 
@@ -717,6 +721,8 @@ func lockEntriesForKind(lock *Lockfile, kind config.HostProviderKind) map[string
 		return lock.IndexedDBs
 	case config.HostProviderKindWorkflow:
 		return lock.Workflows
+	case config.HostProviderKindAgent:
+		return lock.Agents
 	case config.HostProviderKindRuntime:
 		return lock.Runtimes
 	default:
@@ -886,6 +892,7 @@ func resolveInitPaths(configPaths []string, cfg *config.Config, state StatePaths
 		auditDir:         filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuditDir)),
 		cacheDir:         filepath.Join(artifactsDir, filepath.FromSlash(PreparedCacheDir)),
 		workflowDir:      filepath.Join(artifactsDir, filepath.FromSlash(PreparedWorkflowDir)),
+		agentDir:         filepath.Join(artifactsDir, filepath.FromSlash(PreparedAgentDir)),
 		runtimeDir:       filepath.Join(artifactsDir, filepath.FromSlash(PreparedRuntimeDir)),
 		uiDir:            filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
 	}
@@ -931,6 +938,10 @@ func workflowDestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.workflowDir, name)
 }
 
+func agentDestDir(paths initPaths, name string) string {
+	return filepath.Join(paths.agentDir, name)
+}
+
 func runtimeDestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.runtimeDir, name)
 }
@@ -961,6 +972,8 @@ func componentDestDir(paths initPaths, kind config.HostProviderKind, name string
 		return indexeddbDestDir(paths, name)
 	case config.HostProviderKindWorkflow:
 		return workflowDestDir(paths, name)
+	case config.HostProviderKindAgent:
+		return agentDestDir(paths, name)
 	case config.HostProviderKindRuntime:
 		return runtimeDestDir(paths, name)
 	default:
@@ -1017,6 +1030,8 @@ func providerManifestKind(kind config.HostProviderKind) string {
 		return providermanifestv1.KindIndexedDB
 	case config.HostProviderKindWorkflow:
 		return providermanifestv1.KindWorkflow
+	case config.HostProviderKindAgent:
+		return providermanifestv1.KindAgent
 	case config.HostProviderKindRuntime:
 		return providermanifestv1.KindRuntime
 	default:

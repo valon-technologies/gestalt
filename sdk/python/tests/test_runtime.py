@@ -34,6 +34,7 @@ from gestalt import (
     _bootstrap,
     _runtime,
 )
+from gestalt._optional_imports import is_optional_provider_import_error
 from gestalt.gen.v1 import authentication_pb2 as _authentication_pb2
 from gestalt.gen.v1 import cache_pb2 as _cache_pb2
 from gestalt.gen.v1 import plugin_pb2 as _plugin_pb2
@@ -165,6 +166,45 @@ class DurationConversionTests(unittest.TestCase):
         self.assertEqual(
             _runtime._duration_to_timedelta(duration_pb2.Duration(nanos=5_999)),
             dt.timedelta(microseconds=5),
+        )
+
+
+class OptionalProviderImportErrorTests(unittest.TestCase):
+    def test_allows_optional_dependency_roots(self) -> None:
+        self.assertTrue(
+            is_optional_provider_import_error(
+                ModuleNotFoundError("No module named 'grpc'", name="grpc")
+            )
+        )
+        self.assertTrue(
+            is_optional_provider_import_error(
+                ModuleNotFoundError("No module named 'google'", name="google")
+            )
+        )
+
+    def test_allows_optional_dependency_submodules(self) -> None:
+        self.assertTrue(
+            is_optional_provider_import_error(
+                ModuleNotFoundError(
+                    "No module named 'google.protobuf'",
+                    name="google.protobuf",
+                )
+            )
+        )
+        self.assertTrue(
+            is_optional_provider_import_error(
+                ModuleNotFoundError(
+                    "No module named 'grpc.aio'",
+                    name="grpc.aio",
+                )
+            )
+        )
+
+    def test_rejects_unrelated_missing_dependencies(self) -> None:
+        self.assertFalse(
+            is_optional_provider_import_error(
+                ModuleNotFoundError("No module named 'redis'", name="redis")
+            )
         )
 
 

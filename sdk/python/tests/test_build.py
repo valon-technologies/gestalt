@@ -23,15 +23,29 @@ class CapturedBuildRun:
 class BuildTests(unittest.TestCase):
     """Build entrypoint tests."""
 
-    def test_build_plugin_binary_writes_bundle_config_and_uses_target_platform_settings(self) -> None:
+    def test_build_plugin_binary_writes_bundle_config_and_uses_target_platform_settings(
+        self,
+    ) -> None:
         """Build mode should package runtime metadata alongside the frozen entrypoint."""
         cases = [
             ("linux", "linux", "amd64", "provider-bin", "provider-bin", None),
             ("linux", "windows", "amd64", "provider.exe", "provider", None),
             ("darwin", "darwin", "amd64", "provider-bin", "provider-bin", "x86_64"),
         ]
-        for platform, target_goos, target_goarch, output_name, expected_binary_name, expected_target_arch in cases:
-            with self.subTest(platform=platform, target_goos=target_goos, target_goarch=target_goarch, output_name=output_name):
+        for (
+            platform,
+            target_goos,
+            target_goarch,
+            output_name,
+            expected_binary_name,
+            expected_target_arch,
+        ) in cases:
+            with self.subTest(
+                platform=platform,
+                target_goos=target_goos,
+                target_goarch=target_goarch,
+                output_name=output_name,
+            ):
                 with tempfile.TemporaryDirectory() as tmpdir:
                     root = pathlib.Path(tmpdir) / "plugin"
                     output = root / "dist" / output_name
@@ -55,15 +69,22 @@ class BuildTests(unittest.TestCase):
                             check=check,
                             env=env,
                             binary_name=command[command.index("--name") + 1],
-                            target_arch=command[command.index("--target-arch") + 1] if "--target-arch" in command else None,
+                            target_arch=command[command.index("--target-arch") + 1]
+                            if "--target-arch" in command
+                            else None,
                             destination=destination,
-                            bundle_config=json.loads(pathlib.Path(source).read_text(encoding="utf-8")),
+                            bundle_config=json.loads(
+                                pathlib.Path(source).read_text(encoding="utf-8")
+                            ),
                         )
 
-                    with mock.patch.object(_build.sys, "platform", platform), mock.patch.object(
-                        _build.subprocess,
-                        "run",
-                        side_effect=fake_run,
+                    with (
+                        mock.patch.object(_build.sys, "platform", platform),
+                        mock.patch.object(
+                            _build.subprocess,
+                            "run",
+                            side_effect=fake_run,
+                        ),
                     ):
                         _build.build_plugin_binary(
                             _build.BuildArgs(
@@ -85,7 +106,10 @@ class BuildTests(unittest.TestCase):
                 self.assertEqual(captured.binary_name, expected_binary_name)
                 self.assertEqual(captured.target_arch, expected_target_arch)
                 self.assertEqual(captured.destination, ".")
-                self.assertEqual(pathlib.Path(captured.env["PYINSTALLER_CONFIG_DIR"]).name, "pyinstaller-config")
+                self.assertEqual(
+                    pathlib.Path(captured.env["PYINSTALLER_CONFIG_DIR"]).name,
+                    "pyinstaller-config",
+                )
                 self.assertEqual(captured.env["SOURCE_DATE_EPOCH"], "0")
                 self.assertEqual(
                     captured.bundle_config,
@@ -100,12 +124,110 @@ class BuildTests(unittest.TestCase):
                     captured.command,
                 )
 
+    def test_build_plugin_binary_applies_pyinstaller_config(self) -> None:
+        """Providers can request additional PyInstaller collection settings."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = pathlib.Path(tmpdir) / "plugin"
+            output = root / "dist" / "provider-bin"
+            root.mkdir()
+            (root / "pyproject.toml").write_text(
+                """
+[tool.gestalt.pyinstaller]
+collect-data = ["litellm"]
+collect-submodules = ["pkg.dynamic"]
+collect-binaries = ["nativepkg"]
+collect-all = ["heavy"]
+copy-metadata = ["distmeta"]
+recursive-copy-metadata = ["distmetadeps"]
+hidden-imports = ["provider.extra"]
+exclude-modules = ["unused"]
+additional-hooks-dir = ["hooks"]
+""".lstrip(),
+                encoding="utf-8",
+            )
+            captured: CapturedBuildRun | None = None
+
+            def fake_run(
+                command: list[str],
+                cwd: pathlib.Path,
+                env: dict[str, str],
+                check: bool,
+            ) -> None:
+                nonlocal captured
+
+                add_data = command[command.index("--add-data") + 1]
+                separator = _build.os.pathsep
+                source, destination = add_data.split(separator, 1)
+                captured = CapturedBuildRun(
+                    command=command,
+                    cwd=cwd,
+                    check=check,
+                    env=env,
+                    binary_name=command[command.index("--name") + 1],
+                    target_arch=None,
+                    destination=destination,
+                    bundle_config=json.loads(
+                        pathlib.Path(source).read_text(encoding="utf-8")
+                    ),
+                )
+
+            with mock.patch.object(_build.subprocess, "run", side_effect=fake_run):
+                _build.build_plugin_binary(
+                    _build.BuildArgs(
+                        root=root,
+                        target="provider",
+                        output_path=output,
+                        plugin_name="released-plugin",
+                        runtime_kind="integration",
+                        goos="linux",
+                        goarch="amd64",
+                    )
+                )
+
+        self.assertIsNotNone(captured)
+        assert captured is not None
+        self.assertEqual(
+            captured.command[captured.command.index("--collect-data") + 1], "litellm"
+        )
+        self.assertEqual(
+            captured.command[captured.command.index("--collect-submodules") + 1],
+            "pkg.dynamic",
+        )
+        self.assertEqual(
+            captured.command[captured.command.index("--collect-binaries") + 1],
+            "nativepkg",
+        )
+        self.assertEqual(
+            captured.command[captured.command.index("--collect-all") + 1], "heavy"
+        )
+        self.assertEqual(
+            captured.command[captured.command.index("--copy-metadata") + 1], "distmeta"
+        )
+        self.assertEqual(
+            captured.command[captured.command.index("--recursive-copy-metadata") + 1],
+            "distmetadeps",
+        )
+        self.assertIn(
+            ["--hidden-import", "provider.extra"], _argument_pairs(captured.command)
+        )
+        self.assertEqual(
+            captured.command[captured.command.index("--exclude-module") + 1], "unused"
+        )
+        self.assertEqual(
+            pathlib.Path(
+                captured.command[captured.command.index("--additional-hooks-dir") + 1]
+            ),
+            root.resolve() / "hooks",
+        )
+
     def test_parse_build_args_rejects_wrong_count(self) -> None:
         """Build arg parser should reject incorrect argument counts."""
         self.assertIsNone(_build._parse_build_args([]))
         self.assertIsNone(_build._parse_build_args(["one"]))
         self.assertIsNone(_build._parse_build_args(["one", "two", "three"]))
-        self.assertIsNone(_build._parse_build_args(["one", "two", "three", "four", "five"]))
+        self.assertIsNone(
+            _build._parse_build_args(["one", "two", "three", "four", "five"])
+        )
         self.assertIsNone(
             _build._parse_build_args(["one", "two", "three", "four", "five", "six"])
         )
@@ -133,6 +255,10 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(result.runtime_kind, "integration")
         self.assertEqual(result.goos, "linux")
         self.assertEqual(result.goarch, "amd64")
+
+
+def _argument_pairs(command: list[str]) -> list[list[str]]:
+    return [command[index : index + 2] for index in range(len(command) - 1)]
 
 
 if __name__ == "__main__":

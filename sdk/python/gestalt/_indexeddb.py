@@ -9,17 +9,32 @@ from dataclasses import dataclass, field
 from typing import Any, Iterator, Protocol, cast
 from urllib import parse as _urlparse
 
-import grpc
-from google.protobuf import struct_pb2 as _struct_pb2
-from google.protobuf import timestamp_pb2 as _timestamp_pb2
+from ._optional_imports import is_optional_provider_import_error
 
-from .gen.v1 import datastore_pb2 as _pb
-from .gen.v1 import datastore_pb2_grpc as _pb_grpc
+try:
+    import grpc as _grpc
+    from google.protobuf import struct_pb2 as _struct_pb2
+    from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
-pb: Any = _pb
-pb_grpc: Any = _pb_grpc
-struct_pb2: Any = _struct_pb2
-timestamp_pb2: Any = _timestamp_pb2
+    from .gen.v1 import datastore_pb2 as _pb
+    from .gen.v1 import datastore_pb2_grpc as _pb_grpc
+except ModuleNotFoundError as exc:
+    if not is_optional_provider_import_error(exc):
+        raise
+    _IMPORT_ERROR: ModuleNotFoundError | None = exc
+    _grpc: Any = None
+    _pb: Any = None
+    _pb_grpc: Any = None
+    _struct_pb2: Any = None
+    _timestamp_pb2: Any = None
+else:
+    _IMPORT_ERROR = None
+
+grpc: Any = cast(Any, _grpc)
+pb: Any = cast(Any, _pb)
+pb_grpc: Any = cast(Any, _pb_grpc)
+struct_pb2: Any = cast(Any, _struct_pb2)
+timestamp_pb2: Any = cast(Any, _timestamp_pb2)
 
 ENV_INDEXEDDB_SOCKET = "GESTALT_INDEXEDDB_SOCKET"
 _INDEXEDDB_SOCKET_TOKEN_SUFFIX = "_TOKEN"
@@ -49,6 +64,13 @@ def indexeddb_socket_token_env(name: str | None = None) -> str:
     """Return the environment variable name for an IndexedDB relay token."""
 
     return f"{indexeddb_socket_env(name)}{_INDEXEDDB_SOCKET_TOKEN_SUFFIX}"
+
+
+def _ensure_indexeddb_runtime() -> None:
+    if _IMPORT_ERROR is not None:
+        raise RuntimeError(
+            "IndexedDB requires grpcio and protobuf runtime dependencies"
+        ) from _IMPORT_ERROR
 
 
 class NotFoundError(Exception):
@@ -93,6 +115,7 @@ class IndexedDB:
     """Client for a host-provided IndexedDB-compatible store."""
 
     def __init__(self, name: str | None = None) -> None:
+        _ensure_indexeddb_runtime()
         env_name = indexeddb_socket_env(name)
         target = os.environ.get(env_name, "")
         if not target:
@@ -106,16 +129,23 @@ class IndexedDB:
 
         self._channel.close()
 
-    def create_object_store(self, name: str, schema: ObjectStoreSchema | None = None) -> None:
+    def create_object_store(
+        self, name: str, schema: ObjectStoreSchema | None = None
+    ) -> None:
         """Create an object store with an optional schema."""
 
         pb_schema = pb.ObjectStoreSchema()
         if schema:
             for idx in schema.indexes:
                 pb_schema.indexes.append(
-                    pb.IndexSchema(name=idx.name, key_path=idx.key_path, unique=idx.unique)
+                    pb.IndexSchema(
+                        name=idx.name, key_path=idx.key_path, unique=idx.unique
+                    )
                 )
-        _grpc_call(self._stub.CreateObjectStore, pb.CreateObjectStoreRequest(name=name, schema=pb_schema))
+        _grpc_call(
+            self._stub.CreateObjectStore,
+            pb.CreateObjectStoreRequest(name=name, schema=pb_schema),
+        )
 
     def delete_object_store(self, name: str) -> None:
         """Delete an object store by name."""
@@ -148,24 +178,34 @@ class ObjectStore:
     def get(self, id: str) -> dict[str, Any]:
         """Fetch a record by primary key."""
 
-        resp = _grpc_call(self._stub.Get, pb.ObjectStoreRequest(store=self._store, id=id))
+        resp = _grpc_call(
+            self._stub.Get, pb.ObjectStoreRequest(store=self._store, id=id)
+        )
         return _record_to_dict(resp.record)
 
     def get_key(self, id: str) -> str:
         """Return the canonical key for a primary key lookup."""
 
-        resp = _grpc_call(self._stub.GetKey, pb.ObjectStoreRequest(store=self._store, id=id))
+        resp = _grpc_call(
+            self._stub.GetKey, pb.ObjectStoreRequest(store=self._store, id=id)
+        )
         return resp.key
 
     def add(self, record: dict[str, Any]) -> None:
         """Insert a new record."""
 
-        _grpc_call(self._stub.Add, pb.RecordRequest(store=self._store, record=_dict_to_record(record)))
+        _grpc_call(
+            self._stub.Add,
+            pb.RecordRequest(store=self._store, record=_dict_to_record(record)),
+        )
 
     def put(self, record: dict[str, Any]) -> None:
         """Insert or replace a record."""
 
-        _grpc_call(self._stub.Put, pb.RecordRequest(store=self._store, record=_dict_to_record(record)))
+        _grpc_call(
+            self._stub.Put,
+            pb.RecordRequest(store=self._store, record=_dict_to_record(record)),
+        )
 
     def delete(self, id: str) -> None:
         """Delete a record by primary key."""
@@ -182,7 +222,9 @@ class ObjectStore:
 
         resp = _grpc_call(
             self._stub.GetAll,
-            pb.ObjectStoreRangeRequest(store=self._store, range=_kr_to_proto(key_range)),
+            pb.ObjectStoreRangeRequest(
+                store=self._store, range=_kr_to_proto(key_range)
+            ),
         )
         return [_record_to_dict(r) for r in resp.records]
 
@@ -191,7 +233,9 @@ class ObjectStore:
 
         resp = _grpc_call(
             self._stub.GetAllKeys,
-            pb.ObjectStoreRangeRequest(store=self._store, range=_kr_to_proto(key_range)),
+            pb.ObjectStoreRangeRequest(
+                store=self._store, range=_kr_to_proto(key_range)
+            ),
         )
         return list(resp.keys)
 
@@ -200,7 +244,9 @@ class ObjectStore:
 
         resp = _grpc_call(
             self._stub.Count,
-            pb.ObjectStoreRangeRequest(store=self._store, range=_kr_to_proto(key_range)),
+            pb.ObjectStoreRangeRequest(
+                store=self._store, range=_kr_to_proto(key_range)
+            ),
         )
         return resp.count
 
@@ -209,7 +255,9 @@ class ObjectStore:
 
         resp = _grpc_call(
             self._stub.DeleteRange,
-            pb.ObjectStoreRangeRequest(store=self._store, range=_kr_to_proto(key_range)),
+            pb.ObjectStoreRangeRequest(
+                store=self._store, range=_kr_to_proto(key_range)
+            ),
         )
         return resp.deleted
 
@@ -230,7 +278,11 @@ class ObjectStore:
         """Open a key-only cursor over the store."""
 
         return Cursor(
-            self._stub, self._store, key_range=key_range, direction=direction, keys_only=True
+            self._stub,
+            self._store,
+            key_range=key_range,
+            direction=direction,
+            keys_only=True,
         )
 
     def index(self, name: str) -> Index:
@@ -259,13 +311,17 @@ class Index:
         resp = _grpc_call(self._stub.IndexGetKey, self._req(values))
         return resp.key
 
-    def get_all(self, *values: Any, key_range: KeyRange | None = None) -> list[dict[str, Any]]:
+    def get_all(
+        self, *values: Any, key_range: KeyRange | None = None
+    ) -> list[dict[str, Any]]:
         """Return all records matching the indexed values and key range."""
 
         resp = _grpc_call(self._stub.IndexGetAll, self._req(values, key_range))
         return [_record_to_dict(r) for r in resp.records]
 
-    def get_all_keys(self, *values: Any, key_range: KeyRange | None = None) -> list[str]:
+    def get_all_keys(
+        self, *values: Any, key_range: KeyRange | None = None
+    ) -> list[str]:
         """Return all primary keys matching the indexed values and key range."""
 
         resp = _grpc_call(self._stub.IndexGetAllKeys, self._req(values, key_range))
@@ -318,9 +374,7 @@ class Index:
             values=values,
         )
 
-    def _req(
-        self, values: tuple[Any, ...], key_range: KeyRange | None = None
-    ) -> Any:
+    def _req(self, values: tuple[Any, ...], key_range: KeyRange | None = None) -> Any:
         return pb.IndexQueryRequest(
             store=self._store,
             index=self._index,
@@ -336,20 +390,31 @@ def _indexeddb_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
     if target.startswith("tcp://"):
         address = target[len("tcp://") :].strip()
         if not address:
-            raise RuntimeError(f"IndexedDB tcp target {raw_target!r} is missing host:port")
-        return _with_indexeddb_relay_token(grpc.insecure_channel(f"dns:///{address}"), token)
+            raise RuntimeError(
+                f"IndexedDB tcp target {raw_target!r} is missing host:port"
+            )
+        return _with_indexeddb_relay_token(
+            grpc.insecure_channel(f"dns:///{address}"), token
+        )
     if target.startswith("tls://"):
         address = target[len("tls://") :].strip()
         if not address:
-            raise RuntimeError(f"IndexedDB tls target {raw_target!r} is missing host:port")
+            raise RuntimeError(
+                f"IndexedDB tls target {raw_target!r} is missing host:port"
+            )
         return _with_indexeddb_relay_token(
-            grpc.secure_channel(f"dns:///{address}", grpc.ssl_channel_credentials()), token
+            grpc.secure_channel(f"dns:///{address}", grpc.ssl_channel_credentials()),
+            token,
         )
     if target.startswith("unix://"):
         socket_path = target[len("unix://") :].strip()
         if not socket_path:
-            raise RuntimeError(f"IndexedDB unix target {raw_target!r} is missing a socket path")
-        return _with_indexeddb_relay_token(grpc.insecure_channel(f"unix:{socket_path}"), token)
+            raise RuntimeError(
+                f"IndexedDB unix target {raw_target!r} is missing a socket path"
+            )
+        return _with_indexeddb_relay_token(
+            grpc.insecure_channel(f"unix:{socket_path}"), token
+        )
     if "://" in target:
         parsed = _urlparse.urlparse(target)
         raise RuntimeError(f"unsupported IndexedDB target scheme {parsed.scheme!r}")
@@ -360,26 +425,63 @@ def _with_indexeddb_relay_token(channel: grpc.Channel, token: str) -> grpc.Chann
     token = token.strip()
     if not token:
         return channel
-    interceptor = _RelayTokenInterceptor(token)
-    return grpc.intercept_channel(channel, interceptor)
 
+    class _ClientCallDetails(grpc.ClientCallDetails):
+        def __init__(
+            self,
+            method: str,
+            timeout: float | None,
+            metadata: Any,
+            credentials: Any,
+            wait_for_ready: bool | None,
+            compression: Any,
+        ) -> None:
+            self.method = method
+            self.timeout = timeout
+            self.metadata = metadata
+            self.credentials = credentials
+            self.wait_for_ready = wait_for_ready
+            self.compression = compression
 
-class _ClientCallDetails(grpc.ClientCallDetails):
-    def __init__(
-        self,
-        method: str,
-        timeout: float | None,
-        metadata: Any,
-        credentials: Any,
-        wait_for_ready: bool | None,
-        compression: Any,
-    ) -> None:
-        self.method = method
-        self.timeout = timeout
-        self.metadata = metadata
-        self.credentials = credentials
-        self.wait_for_ready = wait_for_ready
-        self.compression = compression
+    class _RelayTokenInterceptor(
+        grpc.UnaryUnaryClientInterceptor,
+        grpc.StreamStreamClientInterceptor,
+    ):
+        def __init__(self, token: str) -> None:
+            self._token = token
+
+        def _details(
+            self, client_call_details: grpc.ClientCallDetails
+        ) -> grpc.ClientCallDetails:
+            details = cast(_ClientCallDetailsFields, client_call_details)
+            metadata = list(details.metadata or [])
+            metadata.append((_INDEXEDDB_RELAY_TOKEN_HEADER, self._token))
+            return _ClientCallDetails(
+                details.method,
+                details.timeout,
+                metadata,
+                details.credentials,
+                details.wait_for_ready,
+                details.compression,
+            )
+
+        def intercept_unary_unary(
+            self,
+            continuation: Any,
+            client_call_details: grpc.ClientCallDetails,
+            request: Any,
+        ) -> Any:
+            return continuation(self._details(client_call_details), request)
+
+        def intercept_stream_stream(
+            self,
+            continuation: Any,
+            client_call_details: grpc.ClientCallDetails,
+            request_iterator: Any,
+        ) -> Any:
+            return continuation(self._details(client_call_details), request_iterator)
+
+    return grpc.intercept_channel(channel, _RelayTokenInterceptor(token))
 
 
 class _ClientCallDetailsFields(Protocol):
@@ -389,43 +491,6 @@ class _ClientCallDetailsFields(Protocol):
     credentials: Any
     wait_for_ready: bool | None
     compression: Any
-
-
-class _RelayTokenInterceptor(
-    grpc.UnaryUnaryClientInterceptor,
-    grpc.StreamStreamClientInterceptor,
-):
-    def __init__(self, token: str) -> None:
-        self._token = token
-
-    def _details(self, client_call_details: grpc.ClientCallDetails) -> grpc.ClientCallDetails:
-        details = cast(_ClientCallDetailsFields, client_call_details)
-        metadata = list(details.metadata or [])
-        metadata.append((_INDEXEDDB_RELAY_TOKEN_HEADER, self._token))
-        return _ClientCallDetails(
-            details.method,
-            details.timeout,
-            metadata,
-            details.credentials,
-            details.wait_for_ready,
-            details.compression,
-        )
-
-    def intercept_unary_unary(
-        self,
-        continuation: Any,
-        client_call_details: grpc.ClientCallDetails,
-        request: Any,
-    ) -> Any:
-        return continuation(self._details(client_call_details), request)
-
-    def intercept_stream_stream(
-        self,
-        continuation: Any,
-        client_call_details: grpc.ClientCallDetails,
-        request_iterator: Any,
-    ) -> Any:
-        return continuation(self._details(client_call_details), request_iterator)
 
 
 class _RequestIterator:
@@ -489,8 +554,8 @@ class Cursor:
         except grpc.RpcError as e:
             self._closed = True
             self._request_iter.close()
-            code = e.code()  # ty: ignore[unresolved-attribute]
-            details = e.details()  # ty: ignore[unresolved-attribute]
+            code = e.code()
+            details = e.details()
             if code == grpc.StatusCode.NOT_FOUND:
                 raise NotFoundError(details) from e
             if code == grpc.StatusCode.ALREADY_EXISTS:
@@ -511,8 +576,8 @@ class Cursor:
         except grpc.RpcError as e:
             self._closed = True
             self._request_iter.close()
-            code = e.code()  # ty: ignore[unresolved-attribute]
-            details = e.details()  # ty: ignore[unresolved-attribute]
+            code = e.code()
+            details = e.details()
             if code == grpc.StatusCode.NOT_FOUND:
                 raise NotFoundError(details) from e
             if code == grpc.StatusCode.ALREADY_EXISTS:
@@ -612,8 +677,8 @@ class Cursor:
         except grpc.RpcError as e:
             self._closed = True
             self._request_iter.close()
-            code = e.code()  # ty: ignore[unresolved-attribute]
-            details = e.details()  # ty: ignore[unresolved-attribute]
+            code = e.code()
+            details = e.details()
             if code == grpc.StatusCode.NOT_FOUND:
                 raise NotFoundError(details) from e
             if code == grpc.StatusCode.ALREADY_EXISTS:
@@ -673,8 +738,8 @@ def _grpc_call(method: Any, request: Any) -> Any:
     try:
         return method(request)
     except grpc.RpcError as e:
-        code = e.code()  # ty: ignore[unresolved-attribute]
-        details = e.details()  # ty: ignore[unresolved-attribute]
+        code = e.code()
+        details = e.details()
         if code == grpc.StatusCode.NOT_FOUND:
             raise NotFoundError(details) from e
         if code == grpc.StatusCode.ALREADY_EXISTS:
@@ -777,7 +842,10 @@ def _json_value_to_python(v: Any) -> Any:
     if kind == "bool_value":
         return v.bool_value
     if kind == "struct_value":
-        return {key: _json_value_to_python(value) for key, value in v.struct_value.fields.items()}
+        return {
+            key: _json_value_to_python(value)
+            for key, value in v.struct_value.fields.items()
+        }
     if kind == "list_value":
         return [_json_value_to_python(value) for value in v.list_value.values]
     raise TypeError(f"unsupported JSON value kind: {kind}")
@@ -794,7 +862,9 @@ def _key_value_to_python(kv: Any) -> Any:
 
 def _python_to_key_value(v: Any) -> Any:
     if isinstance(v, (list, tuple)):
-        return pb.KeyValue(array=pb.KeyValueArray(elements=[_python_to_key_value(elem) for elem in v]))
+        return pb.KeyValue(
+            array=pb.KeyValueArray(elements=[_python_to_key_value(elem) for elem in v])
+        )
     return pb.KeyValue(scalar=_to_typed_value(v))
 
 
