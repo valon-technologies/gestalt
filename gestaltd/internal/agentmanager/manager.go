@@ -30,6 +30,7 @@ var (
 	ErrAgentRunMetadataNotConfigured = errors.New("agent run metadata is not configured")
 	ErrAgentRunEventsNotConfigured   = errors.New("agent run events are not configured")
 	ErrAgentSubjectRequired          = errors.New("agent subject is required")
+	ErrAgentMessagesRequired         = errors.New("messages must contain at least one entry")
 	ErrAgentCallerPluginRequired     = errors.New("agent caller plugin is required for inherited tools")
 	ErrAgentInheritedSurfaceTool     = errors.New("agent inherited surface tools are not supported")
 	ErrAgentRunCreationInProgress    = errors.New("agent run creation is already in progress for this idempotency key")
@@ -135,6 +136,9 @@ func (m *Manager) Run(ctx context.Context, p *principal.Principal, req coreagent
 	subjectID := strings.TrimSpace(principalSubjectID(p))
 	if subjectID == "" {
 		return nil, ErrAgentSubjectRequired
+	}
+	if len(req.Messages) == 0 {
+		return nil, ErrAgentMessagesRequired
 	}
 	providerName, provider, err := m.resolveProviderSelection(req.ProviderName)
 	if err != nil {

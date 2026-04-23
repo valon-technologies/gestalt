@@ -59,6 +59,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
 )
@@ -471,6 +472,10 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 					Method: http.MethodPost,
 				},
 				{
+					ID:     "agent_manager_validation_error",
+					Method: http.MethodPost,
+				},
+				{
 					ID:     "authorization_roundtrip",
 					Method: http.MethodPost,
 				},
@@ -566,6 +571,16 @@ func (r *capturingBundlePluginRuntime) startFakeHostedPlugin(req pluginruntime.S
 				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 			case "agent_manager_roundtrip":
 				record, err := fakeHostedAgentManagerRoundTrip(providerhost.InvocationTokenFromContext(ctx), env)
+				if err != nil {
+					return nil, err
+				}
+				body, err := json.Marshal(record)
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			case "agent_manager_validation_error":
+				record, err := fakeHostedAgentManagerValidationError(providerhost.InvocationTokenFromContext(ctx), env)
 				if err != nil {
 					return nil, err
 				}
@@ -1076,6 +1091,58 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 		"provider_name": created.GetProviderName(),
 		"run_id":        runID,
 		"status":        fetched.GetRun().GetStatus().String(),
+	}, nil
+}
+
+func fakeHostedAgentManagerValidationError(invocationToken string, env map[string]string) (map[string]any, error) {
+	target := strings.TrimSpace(env[providerhost.DefaultAgentManagerSocketEnv])
+	if target == "" {
+		return nil, fmt.Errorf("missing agent manager relay target in %s", providerhost.DefaultAgentManagerSocketEnv)
+	}
+	token := strings.TrimSpace(env[providerhost.AgentManagerSocketTokenEnv()])
+	if token == "" {
+		return nil, fmt.Errorf("missing agent manager relay token in %s", providerhost.AgentManagerSocketTokenEnv())
+	}
+	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
+	if address == "" || address == target {
+		return nil, fmt.Errorf("unsupported agent manager relay target %q", target)
+	}
+
+	conn, err := grpc.NewClient(
+		address,
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true,
+			MinVersion:         tls.VersionTLS12,
+			NextProtos:         []string{"h2"},
+		})),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("connect agent manager relay: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
+
+	client := proto.NewAgentManagerHostClient(conn)
+	_, err = client.Run(ctx, &proto.AgentManagerRunRequest{
+		InvocationToken: invocationToken,
+		ProviderName:    "managed",
+		IdempotencyKey:  "plugin-agent-run-empty",
+		ToolSource:      proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_INHERIT_INVOKES,
+	})
+	if err == nil {
+		return nil, fmt.Errorf("expected agent manager validation error")
+	}
+	st, ok := grpcstatus.FromError(err)
+	if !ok {
+		return nil, fmt.Errorf("agent manager validation returned non-gRPC error: %w", err)
+	}
+
+	return map[string]any{
+		"code":    st.Code().String(),
+		"message": st.Message(),
 	}, nil
 }
 
@@ -3276,6 +3343,7 @@ func TestPluginAgentManagerRunUsesInheritedInvokesAndRequestContext(t *testing.T
 		Name: "echoext",
 		Operations: []catalog.CatalogOperation{
 			{ID: "agent_manager_roundtrip", Method: http.MethodPost},
+			{ID: "agent_manager_validation_error", Method: http.MethodPost},
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Agent manager run roundtrip")
@@ -3431,6 +3499,29 @@ func TestPluginAgentManagerRunUsesInheritedInvokesAndRequestContext(t *testing.T
 	}
 	if startReq.Tools[0].Target.PluginName != "roadmap" || startReq.Tools[0].Target.Operation != "sync" {
 		t.Fatalf("StartRun tool target = %#v", startReq.Tools[0].Target)
+	}
+
+	result, err = prov.Execute(ctx, "agent_manager_validation_error", nil, "")
+	if err != nil {
+		t.Fatalf("Execute(agent_manager_validation_error): %v", err)
+	}
+
+	var validation struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &validation); err != nil {
+		t.Fatalf("json.Unmarshal validation: %v", err)
+	}
+	if validation.Code != codes.InvalidArgument.String() || validation.Message != agentmanager.ErrAgentMessagesRequired.Error() {
+		t.Fatalf("agent validation result = %+v", validation)
+	}
+
+	agentProvider.mu.Lock()
+	finalStartRunCount := len(agentProvider.startRunRequests)
+	agentProvider.mu.Unlock()
+	if finalStartRunCount != 1 {
+		t.Fatalf("StartRun count after validation error = %d, want 1", finalStartRunCount)
 	}
 }
 
