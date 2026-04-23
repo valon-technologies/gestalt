@@ -26,6 +26,12 @@ type dialedHostedPluginConn struct {
 	plugin    proto.IntegrationProviderClient
 }
 
+type dialedHostedAgentConn struct {
+	conn      *grpc.ClientConn
+	lifecycle proto.ProviderLifecycleClient
+	agent     proto.AgentProviderClient
+}
+
 type DialOption func(*dialConfig)
 
 type dialConfig struct {
@@ -73,6 +79,30 @@ func WithTracerProvider(provider trace.TracerProvider) DialOption {
 }
 
 func DialHostedPlugin(ctx context.Context, target string, opts ...DialOption) (HostedPluginConn, error) {
+	conn, err := dialHostedConn(ctx, target, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &dialedHostedPluginConn{
+		conn:      conn,
+		lifecycle: proto.NewProviderLifecycleClient(conn),
+		plugin:    proto.NewIntegrationProviderClient(conn),
+	}, nil
+}
+
+func DialHostedAgent(ctx context.Context, target string, opts ...DialOption) (HostedAgentConn, error) {
+	conn, err := dialHostedConn(ctx, target, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &dialedHostedAgentConn{
+		conn:      conn,
+		lifecycle: proto.NewProviderLifecycleClient(conn),
+		agent:     proto.NewAgentProviderClient(conn),
+	}, nil
+}
+
+func dialHostedConn(ctx context.Context, target string, opts ...DialOption) (*grpc.ClientConn, error) {
 	var cfg dialConfig
 	for _, opt := range opts {
 		if opt != nil {
@@ -98,11 +128,7 @@ func DialHostedPlugin(ctx context.Context, target string, opts ...DialOption) (H
 	if err != nil {
 		return nil, err
 	}
-	return &dialedHostedPluginConn{
-		conn:      conn,
-		lifecycle: proto.NewProviderLifecycleClient(conn),
-		plugin:    proto.NewIntegrationProviderClient(conn),
-	}, nil
+	return conn, nil
 }
 
 func (c *dialedHostedPluginConn) Lifecycle() proto.ProviderLifecycleClient {
@@ -120,6 +146,27 @@ func (c *dialedHostedPluginConn) Integration() proto.IntegrationProviderClient {
 }
 
 func (c *dialedHostedPluginConn) Close() error {
+	if c == nil || c.conn == nil {
+		return nil
+	}
+	return c.conn.Close()
+}
+
+func (c *dialedHostedAgentConn) Lifecycle() proto.ProviderLifecycleClient {
+	if c == nil {
+		return nil
+	}
+	return c.lifecycle
+}
+
+func (c *dialedHostedAgentConn) Agent() proto.AgentProviderClient {
+	if c == nil {
+		return nil
+	}
+	return c.agent
+}
+
+func (c *dialedHostedAgentConn) Close() error {
 	if c == nil || c.conn == nil {
 		return nil
 	}

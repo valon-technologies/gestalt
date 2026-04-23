@@ -2,6 +2,7 @@ package providerhost
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -31,6 +32,14 @@ type remoteAgent struct {
 	closer  io.Closer
 }
 
+type RemoteAgentConfig struct {
+	Client  proto.AgentProviderClient
+	Runtime proto.ProviderLifecycleClient
+	Closer  io.Closer
+	Config  map[string]any
+	Name    string
+}
+
 func NewExecutableAgent(ctx context.Context, cfg AgentExecConfig) (coreagent.Provider, error) {
 	execCfg := ExecConfig{
 		Command:       cfg.Command,
@@ -49,13 +58,29 @@ func NewExecutableAgent(ctx context.Context, cfg AgentExecConfig) (coreagent.Pro
 		return nil, err
 	}
 
-	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
-	agentClient := proto.NewAgentProviderClient(proc.conn)
-	if _, err := ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_AGENT, cfg.Name, cfg.Config); err != nil {
-		_ = proc.Close()
+	return NewRemoteAgent(ctx, RemoteAgentConfig{
+		Client:  proto.NewAgentProviderClient(proc.conn),
+		Runtime: proto.NewProviderLifecycleClient(proc.conn),
+		Closer:  proc,
+		Config:  cfg.Config,
+		Name:    cfg.Name,
+	})
+}
+
+func NewRemoteAgent(ctx context.Context, cfg RemoteAgentConfig) (coreagent.Provider, error) {
+	if cfg.Client == nil {
+		return nil, fmt.Errorf("agent provider client is required")
+	}
+	if cfg.Runtime == nil {
+		return nil, fmt.Errorf("agent provider lifecycle client is required")
+	}
+	if _, err := ConfigureRuntimeProvider(ctx, cfg.Runtime, proto.ProviderKind_PROVIDER_KIND_AGENT, cfg.Name, cfg.Config); err != nil {
+		if cfg.Closer != nil {
+			_ = cfg.Closer.Close()
+		}
 		return nil, err
 	}
-	return &remoteAgent{client: agentClient, runtime: runtimeClient, closer: proc}, nil
+	return &remoteAgent{client: cfg.Client, runtime: cfg.Runtime, closer: cfg.Closer}, nil
 }
 
 func (r *remoteAgent) StartRun(ctx context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {

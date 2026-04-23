@@ -128,7 +128,7 @@ type EffectiveAgentIndexedDB struct {
 	ObjectStores []string
 }
 
-type EffectivePluginRuntime struct {
+type EffectiveHostedRuntime struct {
 	Enabled      bool
 	ProviderName string
 	Provider     *RuntimeProviderEntry
@@ -183,12 +183,12 @@ func (c *Config) EffectiveAgentIndexedDB(name string, entry *ProviderEntry) (Eff
 	return ResolveEffectiveAgentIndexedDB(name, entry, c.Providers.IndexedDB)
 }
 
-func (c *Config) EffectivePluginRuntime(pluginName string, entry *ProviderEntry) (EffectivePluginRuntime, error) {
+func (c *Config) EffectiveHostedRuntime(configPath string, entry *ProviderEntry) (EffectiveHostedRuntime, error) {
 	selectedName, _, err := c.SelectedRuntimeProvider()
 	if err != nil {
-		return EffectivePluginRuntime{}, err
+		return EffectiveHostedRuntime{}, err
 	}
-	return ResolveEffectivePluginRuntime(pluginName, entry, selectedName, c.Runtime.Providers)
+	return ResolveEffectiveHostedRuntime(configPath, entry, selectedName, c.Runtime.Providers)
 }
 
 func ResolveEffectivePluginIndexedDB(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*ProviderEntry) (EffectivePluginIndexedDB, error) {
@@ -292,9 +292,9 @@ func ResolveEffectiveAgentIndexedDB(name string, entry *ProviderEntry, entries m
 	}, nil
 }
 
-func ResolveEffectivePluginRuntime(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*RuntimeProviderEntry) (EffectivePluginRuntime, error) {
+func ResolveEffectiveHostedRuntime(configPath string, entry *ProviderEntry, selectedName string, entries map[string]*RuntimeProviderEntry) (EffectiveHostedRuntime, error) {
 	if entry == nil || entry.Runtime == nil {
-		return EffectivePluginRuntime{}, nil
+		return EffectiveHostedRuntime{}, nil
 	}
 
 	providerName := strings.TrimSpace(entry.Runtime.Provider)
@@ -307,11 +307,11 @@ func ResolveEffectivePluginRuntime(pluginName string, entry *ProviderEntry, sele
 		var ok bool
 		provider, ok = entries[providerName]
 		if !ok || provider == nil {
-			return EffectivePluginRuntime{}, fmt.Errorf("config validation: plugins.%s.runtime.provider references unknown runtime %q", pluginName, providerName)
+			return EffectiveHostedRuntime{}, fmt.Errorf("config validation: %s.runtime.provider references unknown runtime %q", configPath, providerName)
 		}
 	}
 
-	runtime := EffectivePluginRuntime{
+	runtime := EffectiveHostedRuntime{
 		Enabled:      true,
 		ProviderName: providerName,
 		Provider:     provider,

@@ -31,28 +31,36 @@ func newPluginRuntimeRegistry(cfg *config.Config, factory RuntimeFactory, deps D
 	}
 }
 
-func (r *pluginRuntimeRegistry) Resolve(ctx context.Context, pluginName string, entry *config.ProviderEntry) (config.EffectivePluginRuntime, pluginruntime.Provider, error) {
+func (r *pluginRuntimeRegistry) Resolve(ctx context.Context, configPath string, entry *config.ProviderEntry) (config.EffectiveHostedRuntime, pluginruntime.Provider, error) {
 	if r == nil || r.cfg == nil {
-		return config.EffectivePluginRuntime{}, nil, nil
+		return config.EffectiveHostedRuntime{}, nil, nil
 	}
 
-	effective, err := r.cfg.EffectivePluginRuntime(pluginName, entry)
+	effective, err := r.cfg.EffectiveHostedRuntime(configPath, entry)
 	if err != nil {
-		return config.EffectivePluginRuntime{}, nil, err
+		return config.EffectiveHostedRuntime{}, nil, err
 	}
 	if !effective.Enabled || effective.ProviderName == "" || effective.Provider == nil {
 		return effective, nil, nil
 	}
 
+	provider, err := r.resolveConfigured(ctx, effective)
+	return effective, provider, err
+}
+
+func (r *pluginRuntimeRegistry) resolveConfigured(ctx context.Context, effective config.EffectiveHostedRuntime) (pluginruntime.Provider, error) {
+	if r == nil {
+		return nil, fmt.Errorf("plugin runtime registry is not configured")
+	}
 	providerName := effective.ProviderName
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
-		return config.EffectivePluginRuntime{}, nil, fmt.Errorf("plugin runtime registry is closed")
+		return nil, fmt.Errorf("plugin runtime registry is closed")
 	}
 	if provider, ok := r.providers[providerName]; ok && provider != nil {
 		r.mu.Unlock()
-		return effective, provider, nil
+		return provider, nil
 	}
 	factory := r.factory
 	r.mu.Unlock()
@@ -62,26 +70,27 @@ func (r *pluginRuntimeRegistry) Resolve(ctx context.Context, pluginName string, 
 		provider = pluginruntime.NewLocalProvider(pluginruntime.WithLocalTelemetry(r.deps.Telemetry))
 	default:
 		if factory == nil {
-			return config.EffectivePluginRuntime{}, nil, fmt.Errorf("runtime provider %q is not registered", providerName)
+			return nil, fmt.Errorf("runtime provider %q is not registered", providerName)
 		}
+		var err error
 		provider, err = factory(ctx, providerName, effective.Provider, r.deps)
-	}
-	if err != nil {
-		return config.EffectivePluginRuntime{}, nil, fmt.Errorf("build runtime provider %q: %w", providerName, err)
+		if err != nil {
+			return nil, fmt.Errorf("build runtime provider %q: %w", providerName, err)
+		}
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
 		_ = provider.Close()
-		return config.EffectivePluginRuntime{}, nil, fmt.Errorf("plugin runtime registry is closed")
+		return nil, fmt.Errorf("plugin runtime registry is closed")
 	}
 	if existing, ok := r.providers[providerName]; ok && existing != nil {
 		_ = provider.Close()
-		return effective, existing, nil
+		return existing, nil
 	}
 	r.providers[providerName] = provider
-	return effective, provider, nil
+	return provider, nil
 }
 
 func (r *pluginRuntimeRegistry) Close() error {

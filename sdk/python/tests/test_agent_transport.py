@@ -14,6 +14,7 @@ from google.protobuf import struct_pb2 as _struct_pb2
 
 from gestalt import (
     ENV_AGENT_HOST_SOCKET,
+    ENV_AGENT_HOST_SOCKET_TOKEN,
     ENV_AGENT_MANAGER_SOCKET,
     ENV_AGENT_MANAGER_SOCKET_TOKEN,
     AgentHost,
@@ -47,6 +48,7 @@ _manager_socket: str = ""
 _previous_envs: dict[str, str | None] = {}
 _provider: "_AgentRuntimeProvider"
 _host_events: list[dict[str, Any]] = []
+_host_relay_tokens: list[str] = []
 _manager_requests: list[dict[str, str]] = []
 _manager_relay_tokens: list[str] = []
 
@@ -84,12 +86,14 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
 
 class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
     def ExecuteTool(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _record_host_relay_tokens(context)
         return agent_pb2.ExecuteAgentToolResponse(
             status=207,
             body=f"{request.run_id}:{request.tool_call_id}:{request.tool_id}",
         )
 
     def EmitEvent(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _record_host_relay_tokens(context)
         _host_events.append(
             {
                 "run_id": request.run_id,
@@ -201,6 +205,14 @@ def _record_relay_tokens(context: grpc.ServicerContext) -> None:
     )
 
 
+def _record_host_relay_tokens(context: grpc.ServicerContext) -> None:
+    _host_relay_tokens.extend(
+        value
+        for key, value in context.invocation_metadata()
+        if key == "x-gestalt-host-service-relay-token"
+    )
+
+
 def _fresh_socket(name: str) -> str:
     path = os.path.join(tempfile.gettempdir(), f"{name}-{os.getpid()}.sock")
     if os.path.exists(path):
@@ -238,6 +250,7 @@ def setUpModule() -> None:
 
     for env_name, value in (
         (ENV_AGENT_HOST_SOCKET, _host_socket),
+        (ENV_AGENT_HOST_SOCKET_TOKEN, "relay-token-py"),
         (ENV_AGENT_MANAGER_SOCKET, _manager_socket),
         (ENV_AGENT_MANAGER_SOCKET_TOKEN, "relay-token-py"),
     ):
@@ -263,6 +276,7 @@ class AgentTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _provider.configured.clear()
         _host_events.clear()
+        _host_relay_tokens.clear()
         _manager_requests.clear()
         _manager_relay_tokens.clear()
 
@@ -349,6 +363,7 @@ class AgentTransportTests(unittest.TestCase):
                 }
             ],
         )
+        self.assertEqual(_host_relay_tokens, ["relay-token-py"] * 2)
 
     def test_agent_manager_roundtrip(self) -> None:
         with AgentManager("token-123") as manager:

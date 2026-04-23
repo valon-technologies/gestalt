@@ -9,6 +9,7 @@ import (
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -20,17 +21,28 @@ type agentHostTransportHarness struct {
 	mu            sync.Mutex
 	toolRequests  []*proto.ExecuteAgentToolRequest
 	eventRequests []*proto.EmitAgentEventRequest
+	tokens        []string
 }
 
 func (h *agentHostTransportHarness) ExecuteTool(ctx context.Context, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+
 	h.mu.Lock()
+	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
+		h.tokens = append(h.tokens, values...)
+	}
 	h.toolRequests = append(h.toolRequests, gproto.Clone(req).(*proto.ExecuteAgentToolRequest))
 	h.mu.Unlock()
 	return &proto.ExecuteAgentToolResponse{Status: 207, Body: `{"ok":true}`}, nil
 }
 
 func (h *agentHostTransportHarness) EmitEvent(ctx context.Context, req *proto.EmitAgentEventRequest) (*emptypb.Empty, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+
 	h.mu.Lock()
+	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
+		h.tokens = append(h.tokens, values...)
+	}
 	h.eventRequests = append(h.eventRequests, gproto.Clone(req).(*proto.EmitAgentEventRequest))
 	h.mu.Unlock()
 	return &emptypb.Empty{}, nil
@@ -53,6 +65,7 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	t.Cleanup(srv.Stop)
 
 	t.Setenv(gestalt.EnvAgentHostSocket, socketPath)
+	t.Setenv(gestalt.EnvAgentHostSocketToken, "relay-token-go")
 
 	client, err := gestalt.AgentHost()
 	if err != nil {
@@ -94,6 +107,9 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	}
 	if len(harness.eventRequests) != 1 {
 		t.Fatalf("eventRequests len = %d, want 1", len(harness.eventRequests))
+	}
+	if len(harness.tokens) != 2 || harness.tokens[0] != "relay-token-go" || harness.tokens[1] != "relay-token-go" {
+		t.Fatalf("relay tokens = %#v, want [relay-token-go relay-token-go]", harness.tokens)
 	}
 	if harness.eventRequests[0].GetRunId() != "run-1" || harness.eventRequests[0].GetType() != "agent.tool_call.started" || harness.eventRequests[0].GetVisibility() != "public" {
 		t.Fatalf("event request = %#v", harness.eventRequests[0])

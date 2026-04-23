@@ -57,26 +57,29 @@ type RuntimeBehavior struct {
 	ExecutionTarget   RuntimeExecutionTarget
 }
 
-type PluginRuntimePlan struct {
+type HostedRuntimePlan struct {
 	Resolved                  RuntimeBehavior
 	RequiresHostServiceAccess bool
 	RequiresHostnameEgress    bool
 	HostnameEgressDelivery    RuntimeHostnameEgressDelivery
 }
 
-func buildPluginRuntimePlan(pluginName string, entry *config.ProviderEntry, deps Deps, support pluginruntime.Support) (PluginRuntimePlan, error) {
-	advertised := runtimeAdvertisedBehavior(support)
-	resolved := runtimeResolvedBehavior(advertised, deps)
-	requiresHostServiceAccess, requiresHostnameEgress, err := pluginRuntimeRequirementsForPlugin(pluginName, entry, deps)
-	if err != nil {
-		return PluginRuntimePlan{}, err
-	}
-	return PluginRuntimePlan{
+func buildHostedRuntimePlan(support pluginruntime.Support, deps Deps, requiresHostServiceAccess, requiresHostnameEgress bool) HostedRuntimePlan {
+	resolved := runtimeResolvedBehavior(runtimeAdvertisedBehavior(support), deps)
+	return HostedRuntimePlan{
 		Resolved:                  resolved,
 		RequiresHostServiceAccess: requiresHostServiceAccess,
 		RequiresHostnameEgress:    requiresHostnameEgress,
 		HostnameEgressDelivery:    runtimeHostnameEgressDelivery(requiresHostnameEgress, resolved),
-	}, nil
+	}
+}
+
+func buildPluginRuntimePlan(pluginName string, entry *config.ProviderEntry, deps Deps, support pluginruntime.Support) (HostedRuntimePlan, error) {
+	requiresHostServiceAccess, requiresHostnameEgress, err := pluginRuntimeRequirementsForPlugin(pluginName, entry, deps)
+	if err != nil {
+		return HostedRuntimePlan{}, err
+	}
+	return buildHostedRuntimePlan(support, deps, requiresHostServiceAccess, requiresHostnameEgress), nil
 }
 
 func runtimeAdvertisedBehavior(support pluginruntime.Support) RuntimeBehavior {
@@ -158,21 +161,31 @@ func pluginRuntimeRequirementsForPlugin(name string, entry *config.ProviderEntry
 	return requiresHostServiceAccess, len(entry.AllowedHosts) > 0 || deps.Egress.DefaultAction == egress.PolicyDeny, nil
 }
 
-func (p PluginRuntimePlan) Validate(label string) error {
+func agentRuntimeRequirementsForProvider(name string, entry *config.ProviderEntry, deps Deps) (bool, bool, error) {
+	if entry == nil {
+		return false, false, nil
+	}
+	if _, err := config.ResolveEffectiveAgentIndexedDB(name, entry, deps.IndexedDBDefs); err != nil {
+		return false, false, err
+	}
+	return true, len(entry.AllowedHosts) > 0 || deps.Egress.DefaultAction == egress.PolicyDeny, nil
+}
+
+func (p HostedRuntimePlan) Validate(label string) error {
 	if label == "" {
-		label = "plugin runtime"
+		label = "hosted runtime"
 	}
 	if !p.Resolved.CanHostPlugins {
-		return fmt.Errorf("%s cannot host executable plugins in a host-reachable session", label)
+		return fmt.Errorf("%s cannot host executable providers in a host-reachable session", label)
 	}
 	if p.RequiresHostServiceAccess && p.Resolved.HostServiceAccess == RuntimeHostServiceAccessNone {
-		return fmt.Errorf("%s cannot provide host service access required by this plugin", label)
+		return fmt.Errorf("%s cannot provide host service access required by this provider", label)
 	}
 	if p.RequiresHostnameEgress && p.Resolved.EgressMode != RuntimeEgressModeHostname {
-		return fmt.Errorf("%s cannot preserve hostname-based egress required by this plugin", label)
+		return fmt.Errorf("%s cannot preserve hostname-based egress required by this provider", label)
 	}
 	if p.Resolved.LaunchMode == RuntimeLaunchModeBundle && !p.Resolved.ExecutionTarget.IsSet() {
-		return fmt.Errorf("%s cannot stage hosted plugin bundles because it does not declare an execution target", label)
+		return fmt.Errorf("%s cannot stage hosted bundles because it does not declare an execution target", label)
 	}
 	return nil
 }

@@ -329,7 +329,7 @@ type ProviderEntry struct {
 	IndexedDB         *PluginIndexedDBConfig        `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
 	S3                []string                      `yaml:"s3,omitempty"`
-	Runtime           *PluginRuntimeConfig          `yaml:"runtime,omitempty"`
+	Runtime           *HostedRuntimeConfig          `yaml:"runtime,omitempty"`
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 	MCP               bool                          `yaml:"mcp,omitempty"`
 
@@ -407,7 +407,7 @@ type PluginIndexedDBConfig struct {
 	ObjectStores []string `yaml:"objectStores,omitempty"`
 }
 
-type PluginRuntimeConfig struct {
+type HostedRuntimeConfig struct {
 	Provider string            `yaml:"provider,omitempty"`
 	Template string            `yaml:"template,omitempty"`
 	Image    string            `yaml:"image,omitempty"`

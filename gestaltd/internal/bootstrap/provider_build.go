@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
 	"net"
@@ -27,6 +28,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -760,7 +762,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
 		}
-		return nil, fmt.Errorf("query %s support: %w", pluginRuntimeLabel(runtimeConfig), err)
+		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
 	}
 	runtimePlan, err := buildPluginRuntimePlan(name, entry, deps, runtimeSupport)
 	if err != nil {
@@ -769,7 +771,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		}
 		return nil, err
 	}
-	if err := runtimePlan.Validate(pluginRuntimeLabel(runtimeConfig)); err != nil {
+	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig)); err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
 		}
@@ -813,7 +815,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	if command == "" && runtimePlan.Resolved.LaunchMode != RuntimeLaunchModeHostPath {
 		args = nil
 	}
-	launch, err := preparePluginRuntimeLaunch(name, entry, command, args, cleanup, runtimePlan.Resolved)
+	launch, err := prepareHostedRuntimeLaunch(providermanifestv1.KindPlugin, name, entry, command, args, cleanup, runtimePlan.Resolved)
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -823,7 +825,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	command = launch.command
 	args = launch.args
 	cleanup = launch.cleanup
-	session, err := runtimeProvider.StartSession(ctx, buildPluginRuntimeStartSessionRequest(name, runtimeConfig))
+	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindPlugin, name, runtimeConfig))
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -866,7 +868,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	startEnv := maps.Clone(env)
 	allowedHosts := slices.Clone(entry.AllowedHosts)
 	for _, hostService := range startedHostServices.Bindings() {
-		bindingReq, bindingEnv, relayHost, err := buildPluginRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect)
+		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect)
 		if err != nil {
 			return nil, err
 		}
@@ -882,7 +884,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
 	}
 	if runtimePlan.HostnameEgressDelivery == RuntimeHostnameEgressDeliveryPublicProxy {
-		proxyEnv, err := buildPluginRuntimePublicEgressProxy(name, sessionID, entry.AllowedHosts, deps.Egress.DefaultAction, deps)
+		proxyEnv, err := buildHostedRuntimePublicEgressProxy(name, sessionID, entry.AllowedHosts, deps.Egress.DefaultAction, deps)
 		if err != nil {
 			return nil, err
 		}
@@ -915,7 +917,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	if err != nil {
 		return nil, fmt.Errorf("dial hosted plugin: %w", err)
 	}
-	opts := []providerhost.RemoteProviderOption{providerhost.WithCloser(&runtimeBackedPluginCloser{
+	opts := []providerhost.RemoteProviderOption{providerhost.WithCloser(&runtimeBackedHostedCloser{
 		conn:         conn,
 		runtime:      runtimeProvider,
 		sessionID:    sessionID,
@@ -938,20 +940,198 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	return prov, nil
 }
 
-func effectivePluginRuntime(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (config.EffectivePluginRuntime, pluginruntime.Provider, bool, error) {
-	if deps.PluginRuntime != nil {
-		runtimeConfig := config.EffectivePluginRuntime{}
-		if entry != nil && entry.Runtime != nil {
-			runtimeConfig.Template = strings.TrimSpace(entry.Runtime.Template)
-			runtimeConfig.Image = strings.TrimSpace(entry.Runtime.Image)
-			runtimeConfig.Metadata = maps.Clone(entry.Runtime.Metadata)
+func buildHostedAgentProvider(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, hostServices []providerhost.HostService, deps Deps) (coreagent.Provider, error) {
+	runtimeConfig, runtimeProvider, runtimeOwned, err := effectiveConfiguredHostedRuntime(ctx, "providers.agent."+name, entry, deps)
+	if err != nil {
+		return nil, err
+	}
+	if runtimeProvider == nil {
+		return nil, fmt.Errorf("agent provider: runtime is required")
+	}
+	runtimeSupport, err := runtimeProvider.Support(ctx)
+	if err != nil {
+		if runtimeOwned {
+			_ = runtimeProvider.Close()
 		}
-		return runtimeConfig, deps.PluginRuntime, false, nil
+		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
+	}
+	requiresHostServiceAccess, requiresHostnameEgress, err := agentRuntimeRequirementsForProvider(name, entry, deps)
+	if err != nil {
+		if runtimeOwned {
+			_ = runtimeProvider.Close()
+		}
+		return nil, err
+	}
+	runtimePlan := buildHostedRuntimePlan(runtimeSupport, deps, requiresHostServiceAccess, requiresHostnameEgress)
+	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig)); err != nil {
+		if runtimeOwned {
+			_ = runtimeProvider.Close()
+		}
+		return nil, err
+	}
+
+	cfg, err := componentprovider.DecodeYAMLConfig(node, "agent provider")
+	if err != nil {
+		if runtimeOwned {
+			_ = runtimeProvider.Close()
+		}
+		return nil, err
+	}
+	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
+		Kind:                 providermanifestv1.KindAgent,
+		Subject:              "agent provider",
+		SourceMissingMessage: "no Go, Rust, Python, or TypeScript agent provider source package found",
+		Config:               cfg,
+	})
+	if err != nil {
+		if runtimeOwned {
+			_ = runtimeProvider.Close()
+		}
+		return nil, err
+	}
+	cfg = prepared.YAMLConfig
+	cleanup := prepared.Cleanup
+	defer func() {
+		if cleanup != nil {
+			cleanup()
+		}
+	}()
+
+	launch, err := prepareHostedRuntimeLaunch(providermanifestv1.KindAgent, name, entry, cfg.Command, cfg.Args, cleanup, runtimePlan.Resolved)
+	if err != nil {
+		if runtimeOwned {
+			_ = runtimeProvider.Close()
+		}
+		return nil, err
+	}
+	cleanup = launch.cleanup
+
+	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindAgent, name, runtimeConfig))
+	if err != nil {
+		if runtimeOwned {
+			_ = runtimeProvider.Close()
+		}
+		return nil, fmt.Errorf("start agent runtime session: %w", err)
+	}
+	sessionID := session.ID
+	stopSession := true
+	defer func() {
+		if !stopSession {
+			return
+		}
+		_ = stopPluginRuntimeSession(runtimeProvider, sessionID)
+		if runtimeOwned {
+			_ = runtimeProvider.Close()
+		}
+	}()
+	if err := waitForPluginRuntimeSessionReady(ctx, runtimeProvider, sessionID); err != nil {
+		return nil, fmt.Errorf("wait for hosted agent runtime session %q ready: %w", sessionID, err)
+	}
+
+	startedHostServices, err := providerhost.StartHostServices(
+		hostServices,
+		providerhost.WithHostServicesProviderName(name),
+		providerhost.WithHostServicesTelemetry(deps.Telemetry),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("start agent runtime host services: %w", err)
+	}
+	cleanup = chainCleanup(cleanup, func() {
+		_ = startedHostServices.Close()
+	})
+
+	startEnv := maps.Clone(cfg.Env)
+	allowedHosts := slices.Clone(cfg.AllowedHosts)
+	for _, hostService := range startedHostServices.Bindings() {
+		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := runtimeProvider.BindHostService(ctx, bindingReq); err != nil {
+			return nil, fmt.Errorf("bind host service %q: %w", hostService.EnvVar, err)
+		}
+		if len(bindingEnv) > 0 {
+			if startEnv == nil {
+				startEnv = make(map[string]string, len(bindingEnv))
+			}
+			maps.Copy(startEnv, bindingEnv)
+		}
+		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
+	}
+	if runtimePlan.HostnameEgressDelivery == RuntimeHostnameEgressDeliveryPublicProxy {
+		proxyEnv, err := buildHostedRuntimePublicEgressProxy(name, sessionID, cfg.AllowedHosts, deps.Egress.DefaultAction, deps)
+		if err != nil {
+			return nil, err
+		}
+		if len(proxyEnv) > 0 {
+			if startEnv == nil {
+				startEnv = make(map[string]string, len(proxyEnv))
+			}
+			maps.Copy(startEnv, proxyEnv)
+		}
+	}
+
+	hostedPlugin, err := runtimeProvider.StartPlugin(ctx, pluginruntime.StartPluginRequest{
+		SessionID:     sessionID,
+		PluginName:    name,
+		Command:       launch.command,
+		Args:          launch.args,
+		Env:           startEnv,
+		BundleDir:     launch.bundleDir,
+		AllowedHosts:  allowedHosts,
+		DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
+		HostBinary:    cfg.HostBinary,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("start hosted agent provider: %w", err)
+	}
+	conn, err := pluginruntime.DialHostedAgent(ctx, hostedPlugin.DialTarget,
+		pluginruntime.WithProviderName(name),
+		pluginruntime.WithTelemetry(deps.Telemetry),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("dial hosted agent provider: %w", err)
+	}
+	provider, err := providerhost.NewRemoteAgent(ctx, providerhost.RemoteAgentConfig{
+		Client:  conn.Agent(),
+		Runtime: conn.Lifecycle(),
+		Closer: &runtimeBackedHostedCloser{
+			conn:         conn,
+			runtime:      runtimeProvider,
+			sessionID:    sessionID,
+			closeRuntime: runtimeOwned,
+			cleanup:      cleanup,
+		},
+		Config: cfg.Config,
+		Name:   name,
+	})
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+
+	stopSession = false
+	cleanup = nil
+	return provider, nil
+}
+
+func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, entry *config.ProviderEntry, deps Deps) (config.EffectiveHostedRuntime, pluginruntime.Provider, bool, error) {
+	if entry == nil || entry.Runtime == nil {
+		return config.EffectiveHostedRuntime{}, nil, false, nil
+	}
+	if deps.PluginRuntime != nil {
+		return config.EffectiveHostedRuntime{
+			Enabled:      true,
+			ProviderName: strings.TrimSpace(entry.Runtime.Provider),
+			Template:     strings.TrimSpace(entry.Runtime.Template),
+			Image:        strings.TrimSpace(entry.Runtime.Image),
+			Metadata:     maps.Clone(entry.Runtime.Metadata),
+		}, deps.PluginRuntime, false, nil
 	}
 	if deps.PluginRuntimeRegistry != nil {
-		runtimeConfig, runtimeProvider, err := deps.PluginRuntimeRegistry.Resolve(ctx, name, entry)
+		runtimeConfig, runtimeProvider, err := deps.PluginRuntimeRegistry.Resolve(ctx, configPath, entry)
 		if err != nil {
-			return config.EffectivePluginRuntime{}, nil, false, err
+			return config.EffectiveHostedRuntime{}, nil, false, err
 		}
 		if runtimeProvider != nil {
 			return runtimeConfig, runtimeProvider, false, nil
@@ -960,7 +1140,38 @@ func effectivePluginRuntime(ctx context.Context, name string, entry *config.Prov
 			return runtimeConfig, pluginruntime.NewLocalProvider(pluginruntime.WithLocalTelemetry(deps.Telemetry)), true, nil
 		}
 	}
-	return config.EffectivePluginRuntime{}, pluginruntime.NewLocalProvider(pluginruntime.WithLocalTelemetry(deps.Telemetry)), true, nil
+	return config.EffectiveHostedRuntime{
+		Enabled:      true,
+		ProviderName: strings.TrimSpace(entry.Runtime.Provider),
+		Template:     strings.TrimSpace(entry.Runtime.Template),
+		Image:        strings.TrimSpace(entry.Runtime.Image),
+		Metadata:     maps.Clone(entry.Runtime.Metadata),
+	}, pluginruntime.NewLocalProvider(pluginruntime.WithLocalTelemetry(deps.Telemetry)), true, nil
+}
+
+func effectivePluginRuntime(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (config.EffectiveHostedRuntime, pluginruntime.Provider, bool, error) {
+	if deps.PluginRuntime != nil {
+		runtimeConfig := config.EffectiveHostedRuntime{}
+		if entry != nil && entry.Runtime != nil {
+			runtimeConfig.Template = strings.TrimSpace(entry.Runtime.Template)
+			runtimeConfig.Image = strings.TrimSpace(entry.Runtime.Image)
+			runtimeConfig.Metadata = maps.Clone(entry.Runtime.Metadata)
+		}
+		return runtimeConfig, deps.PluginRuntime, false, nil
+	}
+	if deps.PluginRuntimeRegistry != nil {
+		runtimeConfig, runtimeProvider, err := deps.PluginRuntimeRegistry.Resolve(ctx, "plugins."+name, entry)
+		if err != nil {
+			return config.EffectiveHostedRuntime{}, nil, false, err
+		}
+		if runtimeProvider != nil {
+			return runtimeConfig, runtimeProvider, false, nil
+		}
+		if runtimeConfig.Enabled {
+			return runtimeConfig, pluginruntime.NewLocalProvider(pluginruntime.WithLocalTelemetry(deps.Telemetry)), true, nil
+		}
+	}
+	return config.EffectiveHostedRuntime{}, pluginruntime.NewLocalProvider(pluginruntime.WithLocalTelemetry(deps.Telemetry)), true, nil
 }
 
 const (
@@ -968,20 +1179,23 @@ const (
 	pluginRuntimeEgressProxyTokenTTL      = 30 * 24 * time.Hour
 )
 
-func pluginRuntimeLabel(runtimeConfig config.EffectivePluginRuntime) string {
+func hostedRuntimeLabel(runtimeConfig config.EffectiveHostedRuntime) string {
 	if name := strings.TrimSpace(runtimeConfig.ProviderName); name != "" {
 		return fmt.Sprintf("runtime provider %q", name)
 	}
-	return "plugin runtime"
+	return "hosted runtime"
 }
 
-func buildPluginRuntimeStartSessionRequest(name string, runtimeConfig config.EffectivePluginRuntime) pluginruntime.StartSessionRequest {
+func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig config.EffectiveHostedRuntime) pluginruntime.StartSessionRequest {
 	metadata := maps.Clone(runtimeConfig.Metadata)
 	if metadata == nil {
 		metadata = map[string]string{}
 	}
+	if kind != "" {
+		metadata["provider_kind"] = kind
+	}
 	if name != "" {
-		metadata["plugin"] = name
+		metadata["provider_name"] = name
 	}
 	return pluginruntime.StartSessionRequest{
 		PluginName: name,
@@ -993,15 +1207,15 @@ func buildPluginRuntimeStartSessionRequest(name string, runtimeConfig config.Eff
 
 const pluginRuntimeStopTimeout = 3 * time.Second
 
-type runtimeBackedPluginCloser struct {
-	conn         pluginruntime.HostedPluginConn
+type runtimeBackedHostedCloser struct {
+	conn         io.Closer
 	runtime      pluginruntime.Provider
 	sessionID    string
 	closeRuntime bool
 	cleanup      func()
 }
 
-func (c *runtimeBackedPluginCloser) Close() error {
+func (c *runtimeBackedHostedCloser) Close() error {
 	if c == nil {
 		return nil
 	}
@@ -1136,7 +1350,7 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 	return hostServices, invTokens, cleanup, nil
 }
 
-func buildPluginRuntimeHostServiceBinding(pluginName, sessionID string, hostService providerhost.StartedHostService, deps Deps, allowUnixRelay bool) (pluginruntime.BindHostServiceRequest, map[string]string, string, error) {
+func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostService providerhost.StartedHostService, deps Deps, allowUnixRelay bool) (pluginruntime.BindHostServiceRequest, map[string]string, string, error) {
 	if !allowUnixRelay {
 		var (
 			serviceKey   string
@@ -1160,6 +1374,10 @@ func buildPluginRuntimeHostServiceBinding(pluginName, sessionID string, hostServ
 			serviceKey = "workflow_manager"
 			serviceLabel = "workflow manager"
 			methodPrefix = "/" + proto.WorkflowManagerHost_ServiceDesc.ServiceName + "/"
+		case hostService.EnvVar == providerhost.DefaultAgentHostSocketEnv:
+			serviceKey = "agent_host"
+			serviceLabel = "agent host"
+			methodPrefix = "/" + proto.AgentHost_ServiceDesc.ServiceName + "/"
 		case hostService.EnvVar == providerhost.DefaultAgentManagerSocketEnv:
 			serviceKey = "agent_manager"
 			serviceLabel = "agent manager"
@@ -1175,12 +1393,12 @@ func buildPluginRuntimeHostServiceBinding(pluginName, sessionID string, hostServ
 		default:
 			return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("host service %q requires host service tunnels", hostService.EnvVar)
 		}
-		relay, relayEnv, relayHost, ok, err := buildPluginRuntimePublicHostServiceRelay(pluginName, sessionID, hostService, deps, serviceKey, serviceLabel, methodPrefix)
+		relay, relayEnv, relayHost, ok, err := buildHostedRuntimePublicHostServiceRelay(providerName, sessionID, hostService, deps, serviceKey, serviceLabel, methodPrefix)
 		if err != nil {
 			return pluginruntime.BindHostServiceRequest{}, nil, "", err
 		}
 		if !ok {
-			return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("plugin %q requires server.baseURL and server.encryptionKey to relay %s without host service tunnels", pluginName, serviceLabel)
+			return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to relay %s without host service tunnels", providerName, serviceLabel)
 		}
 		return pluginruntime.BindHostServiceRequest{
 			SessionID: sessionID,
@@ -1197,9 +1415,9 @@ func buildPluginRuntimeHostServiceBinding(pluginName, sessionID string, hostServ
 	}, nil, "", nil
 }
 
-func buildPluginRuntimePublicEgressProxy(pluginName, sessionID string, allowedHosts []string, defaultAction egress.PolicyAction, deps Deps) (map[string]string, error) {
+func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowedHosts []string, defaultAction egress.PolicyAction, deps Deps) (map[string]string, error) {
 	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
-		return nil, fmt.Errorf("plugin %q requires server.baseURL and server.encryptionKey to enforce hostname-based egress on hosted runtimes without host service tunnels", pluginName)
+		return nil, fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to enforce hostname-based egress on hosted runtimes without host service tunnels", providerName)
 	}
 	proxyBaseURL, _, err := pluginRuntimePublicProxyBaseURL(deps.BaseURL)
 	if err != nil {
@@ -1210,7 +1428,7 @@ func buildPluginRuntimePublicEgressProxy(pluginName, sessionID string, allowedHo
 		return nil, fmt.Errorf("init egress proxy tokens: %w", err)
 	}
 	token, err := tokenManager.MintToken(providerhost.EgressProxyTokenRequest{
-		PluginName:    pluginName,
+		PluginName:    providerName,
 		SessionID:     sessionID,
 		AllowedHosts:  slices.Clone(allowedHosts),
 		DefaultAction: defaultAction,
@@ -1227,7 +1445,7 @@ func buildPluginRuntimePublicEgressProxy(pluginName, sessionID string, allowedHo
 	}, nil
 }
 
-func buildPluginRuntimePublicHostServiceRelay(pluginName, sessionID string, hostService providerhost.StartedHostService, deps Deps, serviceKey, serviceLabel, methodPrefix string) (pluginruntime.HostServiceRelay, map[string]string, string, bool, error) {
+func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, hostService providerhost.StartedHostService, deps Deps, serviceKey, serviceLabel, methodPrefix string) (pluginruntime.HostServiceRelay, map[string]string, string, bool, error) {
 	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
 		return pluginruntime.HostServiceRelay{}, nil, "", false, nil
 	}
@@ -1240,7 +1458,7 @@ func buildPluginRuntimePublicHostServiceRelay(pluginName, sessionID string, host
 		return pluginruntime.HostServiceRelay{}, nil, "", false, fmt.Errorf("init host service relay tokens: %w", err)
 	}
 	token, err := tokenManager.MintToken(providerhost.HostServiceRelayTokenRequest{
-		PluginName:   pluginName,
+		PluginName:   providerName,
 		SessionID:    sessionID,
 		Service:      serviceKey,
 		SocketPath:   hostService.SocketPath,
