@@ -24,9 +24,14 @@ type loginRequest struct {
 }
 
 type authInfoResponse struct {
-	Provider       string `json:"provider"`
-	DisplayName    string `json:"displayName"`
-	LoginSupported bool   `json:"loginSupported"`
+	Provider       string                   `json:"provider"`
+	DisplayName    string                   `json:"displayName"`
+	LoginSupported bool                     `json:"loginSupported"`
+	Features       authInfoFeaturesResponse `json:"features"`
+}
+
+type authInfoFeaturesResponse struct {
+	Agent bool `json:"agent"`
 }
 
 func (s *Server) authProviderName() string {
@@ -43,6 +48,10 @@ func (s *Server) authEnabled() bool {
 	return s.auth != nil && !s.noAuth
 }
 
+func (s *Server) agentFeatureAvailable() bool {
+	return s != nil && s.agentRuns != nil && s.agentRuns.Available()
+}
+
 func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
 	provider := s.authProviderName()
 	displayName := provider
@@ -55,6 +64,9 @@ func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
 		Provider:       provider,
 		DisplayName:    displayName,
 		LoginSupported: s.authEnabled(),
+		Features: authInfoFeaturesResponse{
+			Agent: s.agentFeatureAvailable(),
+		},
 	})
 }
 

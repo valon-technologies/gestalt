@@ -25,6 +25,14 @@ func (l *lazyAgentManager) SetTarget(target agentmanager.Service) {
 	l.target = target
 }
 
+func (l *lazyAgentManager) Available() bool {
+	target, err := l.current()
+	if err != nil {
+		return false
+	}
+	return target.Available()
+}
+
 func (l *lazyAgentManager) Run(ctx context.Context, p *principal.Principal, req coreagent.ManagerRunRequest) (*coreagent.ManagedRun, error) {
 	target, err := l.current()
 	if err != nil {

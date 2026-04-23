@@ -58,7 +58,7 @@ func TestDefaultLocalSourceConfigIncludesRootUI(t *testing.T) {
 	if rootUI == nil {
 		t.Fatal(`Providers.UI["root"] = nil`)
 	}
-	wantPath := filepath.Join(providersDir, "web", "default", "manifest.yaml")
+	wantPath := filepath.Join(providersDir, "ui", "default", "manifest.yaml")
 	if got := rootUI.SourcePath(); got != wantPath {
 		t.Fatalf(`Providers.UI["root"].Source.Path = %q, want %q`, got, wantPath)
 	}

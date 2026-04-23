@@ -172,5 +172,5 @@ providers:
   secrets:
     env:
       source: env
-`, encryptionKey, filepath.Join(providersDir, "indexeddb", "relationaldb", "manifest.yaml"), "sqlite://"+dbPath, filepath.Join(providersDir, "web", "default", "manifest.yaml"))
+`, encryptionKey, filepath.Join(providersDir, "indexeddb", "relationaldb", "manifest.yaml"), "sqlite://"+dbPath, filepath.Join(providersDir, "ui", "default", "manifest.yaml"))
 }
