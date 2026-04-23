@@ -152,6 +152,36 @@ pub struct ExecuteAgentToolResponse {
     pub body: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentRunEvent {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub run_id: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub seq: i64,
+    #[prost(string, tag = "4")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub source: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub visibility: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "7")]
+    pub data: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "8")]
+    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EmitAgentEventRequest {
+    #[prost(string, tag = "1")]
+    pub run_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub r#type: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub visibility: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub data: ::core::option::Option<::prost_types::Struct>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ManagedAgentRun {
     #[prost(string, tag = "1")]
     pub provider_name: ::prost::alloc::string::String,
@@ -850,6 +880,23 @@ pub mod agent_host_client {
             ));
             self.inner.unary(req, path, codec).await
         }
+        pub async fn emit_event(
+            &mut self,
+            request: impl tonic::IntoRequest<super::EmitAgentEventRequest>,
+        ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AgentHost/EmitEvent");
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentHost",
+                "EmitEvent",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
     }
 }
 /// Generated server implementations.
@@ -869,6 +916,10 @@ pub mod agent_host_server {
             &self,
             request: tonic::Request<super::ExecuteAgentToolRequest>,
         ) -> std::result::Result<tonic::Response<super::ExecuteAgentToolResponse>, tonic::Status>;
+        async fn emit_event(
+            &self,
+            request: tonic::Request<super::EmitAgentEventRequest>,
+        ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct AgentHostServer<T> {
@@ -969,6 +1020,44 @@ pub mod agent_host_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = ExecuteToolSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentHost/EmitEvent" => {
+                    #[allow(non_camel_case_types)]
+                    struct EmitEventSvc<T: AgentHost>(pub Arc<T>);
+                    impl<T: AgentHost> tonic::server::UnaryService<super::EmitAgentEventRequest> for EmitEventSvc<T> {
+                        type Response = ();
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::EmitAgentEventRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut =
+                                async move { <T as AgentHost>::emit_event(&inner, request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = EmitEventSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

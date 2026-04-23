@@ -21,6 +21,7 @@ type Services struct {
 	APITokenAccess           *APITokenAccessService
 	WorkflowExecutionRefs    *WorkflowExecutionRefService
 	AgentRunMetadata         *AgentRunMetadataService
+	AgentRunEvents           *AgentRunEventService
 	DB                       indexeddb.IndexedDB
 }
 
@@ -65,6 +66,9 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := ds.CreateObjectStore(ctx, StoreAgentRunIdempotency, AgentRunIdempotencySchema); err != nil {
 		return nil, fmt.Errorf("create agent_run_idempotency store: %w", err)
 	}
+	if err := ds.CreateObjectStore(ctx, StoreAgentRunEvents, AgentRunEventsSchema); err != nil {
+		return nil, fmt.Errorf("create agent_run_events store: %w", err)
+	}
 
 	identities := NewIdentityService(ds)
 	authBindings := NewIdentityAuthBindingService(ds)
@@ -75,6 +79,7 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	apiTokenAccess := NewAPITokenAccessService(ds)
 	workflowExecutionRefs := NewWorkflowExecutionRefService(ds)
 	agentRunMetadata := NewAgentRunMetadataService(ds)
+	agentRunEvents := NewAgentRunEventService(ds)
 
 	users := NewUserService(ds, identities, authBindings)
 	if err := users.BackfillNormalizedEmails(ctx); err != nil {
@@ -105,6 +110,7 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 		APITokenAccess:           apiTokenAccess,
 		WorkflowExecutionRefs:    workflowExecutionRefs,
 		AgentRunMetadata:         agentRunMetadata,
+		AgentRunEvents:           agentRunEvents,
 		DB:                       ds,
 	}, nil
 }

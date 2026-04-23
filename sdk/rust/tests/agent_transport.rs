@@ -28,7 +28,9 @@ struct TestAgentProvider {
 }
 
 #[derive(Default, Clone)]
-struct TestAgentHostService;
+struct TestAgentHostService {
+    events: Arc<Mutex<Vec<String>>>,
+}
 
 #[gestalt::async_trait]
 impl AgentProvider for TestAgentProvider {
@@ -114,6 +116,18 @@ impl AgentHostRpc for TestAgentHostService {
                 request.run_id, request.tool_call_id, request.tool_id
             ),
         }))
+    }
+
+    async fn emit_event(
+        &self,
+        request: GrpcRequest<pb::EmitAgentEventRequest>,
+    ) -> std::result::Result<GrpcResponse<()>, Status> {
+        let request = request.into_inner();
+        self.events.lock().expect("events lock").push(format!(
+            "{}:{}:{}",
+            request.run_id, request.r#type, request.visibility
+        ));
+        Ok(GrpcResponse::new(()))
     }
 }
 
@@ -225,12 +239,14 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     let host_socket = helpers::temp_socket("gestalt-rust-agent-host.sock");
     let _agent_host_env =
         helpers::EnvGuard::set(gestalt::ENV_AGENT_HOST_SOCKET, host_socket.as_os_str());
+    let host_service = TestAgentHostService::default();
+    let events = Arc::clone(&host_service.events);
 
     let host_socket_for_task = host_socket.clone();
     let host_task = tokio::spawn(async move {
         let listener = UnixListener::bind(&host_socket_for_task).expect("bind agent host socket");
         Server::builder()
-            .add_service(AgentHostGrpcServer::new(TestAgentHostService))
+            .add_service(AgentHostGrpcServer::new(host_service))
             .serve_with_incoming(UnixListenerStream::new(listener))
             .await
             .expect("serve agent host");
@@ -252,6 +268,22 @@ async fn agent_host_client_round_trip_over_unix_socket() {
         .expect("execute tool");
     assert_eq!(invoked.status, 207);
     assert_eq!(invoked.body, "run-42:call-7:lookup");
+
+    host.emit_event(pb::EmitAgentEventRequest {
+        run_id: "run-42".to_string(),
+        r#type: "agent.tool_call.started".to_string(),
+        visibility: "public".to_string(),
+        data: Some(helpers::struct_from_json(serde_json::json!({
+            "phase": "tool_call",
+            "attempt": 1
+        }))),
+    })
+    .await
+    .expect("emit event");
+    assert_eq!(
+        *events.lock().expect("events lock"),
+        vec!["run-42:agent.tool_call.started:public".to_string()]
+    );
 
     host_task.abort();
     let _ = host_task.await;

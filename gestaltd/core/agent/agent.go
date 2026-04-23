@@ -117,6 +117,25 @@ type ExecuteToolResponse struct {
 	Body   string
 }
 
+type RunEvent struct {
+	ID         string
+	RunID      string
+	Seq        int64
+	Type       string
+	Source     string
+	Visibility string
+	Data       map[string]any
+	CreatedAt  *time.Time
+}
+
+type EmitEventRequest struct {
+	ProviderName string
+	RunID        string
+	Type         string
+	Visibility   string
+	Data         map[string]any
+}
+
 type ManagedRun struct {
 	ProviderName string
 	Run          *Run
@@ -170,4 +189,5 @@ type Provider interface {
 
 type Host interface {
 	ExecuteTool(ctx context.Context, req ExecuteToolRequest) (*ExecuteToolResponse, error)
+	EmitEvent(ctx context.Context, req EmitEventRequest) (*RunEvent, error)
 }

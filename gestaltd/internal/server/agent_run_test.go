@@ -1,10 +1,12 @@
 package server_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"maps"
 	"net/http"
 	"slices"
@@ -12,13 +14,16 @@ import (
 	"testing"
 	"time"
 
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type stubAgentControl struct {
@@ -178,6 +183,16 @@ type agentRunResponse struct {
 	ExecutionRef string                    `json:"executionRef"`
 }
 
+type agentRunEventResponse struct {
+	ID         string         `json:"id"`
+	RunID      string         `json:"runId"`
+	Seq        int64          `json:"seq"`
+	Type       string         `json:"type"`
+	Source     string         `json:"source"`
+	Visibility string         `json:"visibility"`
+	Data       map[string]any `json:"data"`
+}
+
 func TestGlobalAgentRunLifecycleSupportsCreateListGetAndCancel(t *testing.T) {
 	t.Parallel()
 
@@ -188,6 +203,7 @@ func TestGlobalAgentRunLifecycleSupportsCreateListGetAndCancel(t *testing.T) {
 		Providers:   testutil.NewProviderRegistry(t),
 		Agent:       &stubAgentControl{defaultProviderName: "managed", provider: provider},
 		RunMetadata: services.AgentRunMetadata,
+		RunEvents:   services.AgentRunEvents,
 	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -204,6 +220,15 @@ func TestGlobalAgentRunLifecycleSupportsCreateListGetAndCancel(t *testing.T) {
 		cfg.AgentManager = manager
 	})
 	testutil.CloseOnCleanup(t, ts)
+	host := providerhost.NewAgentHostServer("managed", nil, func(ctx context.Context, req coreagent.EmitEventRequest) (*coreagent.RunEvent, error) {
+		return services.AgentRunEvents.Append(ctx, coreagent.RunEvent{
+			RunID:      req.RunID,
+			Type:       req.Type,
+			Source:     req.ProviderName,
+			Visibility: req.Visibility,
+			Data:       req.Data,
+		})
+	})
 
 	createBody := []byte(`{
 		"provider":"managed",
@@ -243,6 +268,84 @@ func TestGlobalAgentRunLifecycleSupportsCreateListGetAndCancel(t *testing.T) {
 	}
 	if got := provider.startRunRequests[0].IdempotencyKey; got != "agent-http-create-1" {
 		t.Fatalf("StartRun idempotency key = %q, want %q", got, "agent-http-create-1")
+	}
+	startedData, err := structpb.NewStruct(map[string]any{"status": "running"})
+	if err != nil {
+		t.Fatalf("started event data: %v", err)
+	}
+	if _, err := host.EmitEvent(context.Background(), &proto.EmitAgentEventRequest{
+		RunId:      created.ID,
+		Type:       "agent.run.started",
+		Visibility: "public",
+		Data:       startedData,
+	}); err != nil {
+		t.Fatalf("emit started event: %v", err)
+	}
+	if _, err := services.AgentRunEvents.Append(context.Background(), coreagent.RunEvent{
+		RunID:      created.ID,
+		Type:       "agent.message.delta",
+		Source:     "managed",
+		Visibility: "public",
+		Data:       map[string]any{"text": "risk is dependency churn"},
+	}); err != nil {
+		t.Fatalf("append delta event: %v", err)
+	}
+
+	eventsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/runs/"+created.ID+"/events?after=0&limit=10", nil)
+	eventsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	eventsResp, err := http.DefaultClient.Do(eventsReq)
+	if err != nil {
+		t.Fatalf("events request: %v", err)
+	}
+	defer func() { _ = eventsResp.Body.Close() }()
+	if eventsResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", eventsResp.StatusCode)
+	}
+	var events []agentRunEventResponse
+	if err := json.NewDecoder(eventsResp.Body).Decode(&events); err != nil {
+		t.Fatalf("decode events response: %v", err)
+	}
+	if len(events) != 2 || events[0].Seq != 1 || events[1].Seq != 2 {
+		t.Fatalf("events = %#v", events)
+	}
+	if events[0].Source != "managed" || events[0].Data["status"] != "running" {
+		t.Fatalf("started event = %#v", events[0])
+	}
+	if events[1].Type != "agent.message.delta" || events[1].Data["text"] != "risk is dependency churn" {
+		t.Fatalf("delta event = %#v", events[1])
+	}
+
+	streamCtx, streamCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer streamCancel()
+	streamReq, _ := http.NewRequestWithContext(streamCtx, http.MethodGet, ts.URL+"/api/v1/agent/runs/"+created.ID+"/events/stream?after=2&limit=1", nil)
+	streamReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	streamResp, err := http.DefaultClient.Do(streamReq)
+	if err != nil {
+		t.Fatalf("stream request: %v", err)
+	}
+	defer func() { _ = streamResp.Body.Close() }()
+	if streamResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", streamResp.StatusCode)
+	}
+	appendErr := make(chan error, 1)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		_, err := services.AgentRunEvents.Append(context.Background(), coreagent.RunEvent{
+			RunID:      created.ID,
+			Type:       "agent.run.completed",
+			Source:     "managed",
+			Visibility: "public",
+			Data:       map[string]any{"status": "succeeded"},
+		})
+		appendErr <- err
+	}()
+	streamText := readSSEFrame(t, streamResp.Body)
+	streamCancel()
+	if err := <-appendErr; err != nil {
+		t.Fatalf("append stream event: %v", err)
+	}
+	if !strings.Contains(streamText, "id: 3") || !strings.Contains(streamText, "event: agent.run.completed") || !strings.Contains(streamText, `"status":"succeeded"`) {
+		t.Fatalf("stream body = %q", streamText)
 	}
 
 	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/runs/?provider=managed&status=running", nil)
@@ -301,6 +404,46 @@ func TestGlobalAgentRunLifecycleSupportsCreateListGetAndCancel(t *testing.T) {
 	}
 	if len(provider.cancelRequests) != 1 || provider.cancelRequests[0].Reason != "stop now" {
 		t.Fatalf("cancel requests = %#v", provider.cancelRequests)
+	}
+	ref, err := services.AgentRunMetadata.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("metadata after cancel: %v", err)
+	}
+	if ref.RevokedAt == nil || ref.RevokedAt.IsZero() {
+		t.Fatalf("metadata revoked_at = %#v, want set", ref.RevokedAt)
+	}
+	eventsAfterCancelReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/runs/"+created.ID+"/events?after=0&limit=10", nil)
+	eventsAfterCancelReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	eventsAfterCancelResp, err := http.DefaultClient.Do(eventsAfterCancelReq)
+	if err != nil {
+		t.Fatalf("events after cancel request: %v", err)
+	}
+	defer func() { _ = eventsAfterCancelResp.Body.Close() }()
+	if eventsAfterCancelResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", eventsAfterCancelResp.StatusCode)
+	}
+	var eventsAfterCancel []agentRunEventResponse
+	if err := json.NewDecoder(eventsAfterCancelResp.Body).Decode(&eventsAfterCancel); err != nil {
+		t.Fatalf("decode events after cancel response: %v", err)
+	}
+	if len(eventsAfterCancel) != 3 || eventsAfterCancel[0].ID != events[0].ID {
+		t.Fatalf("events after cancel = %#v", eventsAfterCancel)
+	}
+}
+
+func readSSEFrame(t *testing.T, body io.Reader) string {
+	t.Helper()
+	reader := bufio.NewReader(body)
+	var frame strings.Builder
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read SSE frame: %v", err)
+		}
+		frame.WriteString(line)
+		if strings.TrimSpace(line) == "" {
+			return frame.String()
+		}
 	}
 }
 

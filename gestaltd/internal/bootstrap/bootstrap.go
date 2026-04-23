@@ -460,7 +460,7 @@ func (p *agentProviderWithTracking) CancelRun(ctx context.Context, req coreagent
 			runID = strings.TrimSpace(run.ID)
 		}
 		if runID != "" {
-			_ = p.runtime.DeleteTrackedRun(context.Background(), runID)
+			_ = p.runtime.RevokeTrackedRun(context.Background(), runID)
 		}
 	}
 	return run, nil
@@ -882,6 +882,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}
 	prepared.Deps.WorkflowRuntime.SetExecutionRefs(prepared.Services.WorkflowExecutionRefs)
 	prepared.Deps.AgentRuntime.SetRunMetadata(prepared.Services.AgentRunMetadata)
+	prepared.Deps.AgentRuntime.SetRunEvents(prepared.Services.AgentRunEvents)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.Tokens,
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
@@ -903,6 +904,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Providers:         providers,
 		Agent:             prepared.Deps.AgentRuntime,
 		RunMetadata:       prepared.Services.AgentRunMetadata,
+		RunEvents:         prepared.Services.AgentRunEvents,
 		Invoker:           sharedInvoker,
 		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,
@@ -1444,7 +1446,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		Name:   "agent_host",
 		EnvVar: providerhost.DefaultAgentHostSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAgentHostServer(srv, providerhost.NewAgentHostServer(name, deps.AgentRuntime.ExecuteTool))
+			proto.RegisterAgentHostServer(srv, providerhost.NewAgentHostServer(name, deps.AgentRuntime.ExecuteTool, deps.AgentRuntime.EmitEvent))
 		},
 	}}
 	var cleanup func()

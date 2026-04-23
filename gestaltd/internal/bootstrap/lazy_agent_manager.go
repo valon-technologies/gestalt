@@ -65,6 +65,14 @@ func (l *lazyAgentManager) CancelRun(ctx context.Context, p *principal.Principal
 	return target.CancelRun(ctx, p, runID, reason)
 }
 
+func (l *lazyAgentManager) ListRunEvents(ctx context.Context, p *principal.Principal, runID string, afterSeq int64, limit int) ([]*coreagent.RunEvent, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ListRunEvents(ctx, p, runID, afterSeq, limit)
+}
+
 func (l *lazyAgentManager) current() (agentmanager.Service, error) {
 	l.mu.RLock()
 	target := l.target

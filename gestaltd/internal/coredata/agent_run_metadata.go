@@ -110,6 +110,26 @@ func (s *AgentRunMetadataService) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+func (s *AgentRunMetadataService) Revoke(ctx context.Context, id string, revokedAt time.Time) (*coreagent.ExecutionReference, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, indexeddb.ErrNotFound
+	}
+	ref, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if ref.RevokedAt != nil && !ref.RevokedAt.IsZero() {
+		return ref, nil
+	}
+	if revokedAt.IsZero() {
+		revokedAt = time.Now()
+	}
+	revokedAt = revokedAt.UTC().Truncate(time.Second)
+	ref.RevokedAt = &revokedAt
+	return s.Put(ctx, ref)
+}
+
 func (s *AgentRunMetadataService) ListBySubject(ctx context.Context, subjectID string) ([]*coreagent.ExecutionReference, error) {
 	recs, err := s.store.Index("by_subject").GetAll(ctx, nil, strings.TrimSpace(subjectID))
 	if err != nil {

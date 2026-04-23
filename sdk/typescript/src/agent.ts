@@ -24,6 +24,7 @@ import {
   type BoundAgentRun,
   type BoundAgentToolTarget,
   type CancelAgentProviderRunRequest,
+  type EmitAgentEventRequest,
   type ExecuteAgentToolRequest,
   type ExecuteAgentToolResponse,
   type GetAgentProviderRunRequest,
@@ -43,6 +44,7 @@ export type {
   BoundAgentRun,
   BoundAgentToolTarget,
   CancelAgentProviderRunRequest,
+  EmitAgentEventRequest,
   ExecuteAgentToolRequest,
   ExecuteAgentToolResponse,
   GetAgentProviderRunRequest,
@@ -147,6 +149,10 @@ export class AgentHost {
     request: ExecuteAgentToolRequest,
   ): Promise<ExecuteAgentToolResponse> {
     return await this.client.executeTool(request);
+  }
+
+  async emitEvent(request: EmitAgentEventRequest): Promise<void> {
+    await this.client.emitEvent(request);
   }
 }
 

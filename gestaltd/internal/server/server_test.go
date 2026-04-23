@@ -129,11 +129,6 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	return srv
 }
 
-type stubResolver struct {
-	token string
-	err   error
-}
-
 type staticRuntimeInspector struct {
 	snapshots []bootstrap.RuntimeProviderSnapshot
 	err       error
@@ -592,13 +587,6 @@ func mustEgressProxyURL(t *testing.T, baseURL string, secret []byte, req provide
 	return parsed
 }
 
-func (s *stubResolver) ResolveToken(ctx context.Context, _ *principal.Principal, _ string, _ string, _ string) (context.Context, string, error) {
-	if s == nil {
-		return ctx, "", nil
-	}
-	return ctx, s.token, s.err
-}
-
 type memoryAuthorizationProvider struct {
 	name string
 
@@ -881,157 +869,6 @@ func (s *putFailingObjectStore) Put(ctx context.Context, record indexeddb.Record
 		return fmt.Errorf("forced users put failure")
 	}
 	return s.ObjectStore.Put(ctx, record)
-}
-
-type addFailingIndexedDB struct {
-	indexeddb.IndexedDB
-	failStoreAdds    map[string]*atomic.Bool
-	failStorePuts    map[string]*deleteFailureRule
-	failStoreDeletes map[string]*deleteFailureRule
-}
-
-func (d *addFailingIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
-	store := d.IndexedDB.ObjectStore(name)
-	failAdd := d.failStoreAdds[name]
-	failPut := d.failStorePuts[name]
-	failDelete := d.failStoreDeletes[name]
-	if failAdd == nil && failPut == nil && failDelete == nil {
-		return store
-	}
-	return &addFailingObjectStore{
-		ObjectStore: store,
-		storeName:   name,
-		failAdd:     failAdd,
-		failPut:     failPut,
-		failDelete:  failDelete,
-	}
-}
-
-type addFailingObjectStore struct {
-	indexeddb.ObjectStore
-	storeName  string
-	failAdd    *atomic.Bool
-	failPut    *deleteFailureRule
-	failDelete *deleteFailureRule
-}
-
-func (s *addFailingObjectStore) Add(ctx context.Context, record indexeddb.Record) error {
-	if s.failAdd != nil && s.failAdd.Load() {
-		return fmt.Errorf("forced add failure")
-	}
-	return s.ObjectStore.Add(ctx, record)
-}
-
-func (s *addFailingObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
-	if s.failPut.shouldFail() {
-		return fmt.Errorf("forced %s put failure", s.storeName)
-	}
-	return s.ObjectStore.Put(ctx, record)
-}
-
-func (s *addFailingObjectStore) Delete(ctx context.Context, id string) error {
-	if s.failDelete.shouldFail() {
-		return fmt.Errorf("forced %s delete failure", s.storeName)
-	}
-	return s.ObjectStore.Delete(ctx, id)
-}
-
-type deleteFailingIndexedDB struct {
-	indexeddb.IndexedDB
-	failStoreDeletes map[string]*deleteFailureRule
-	failIndexDeletes map[string]*deleteFailureRule
-	failStorePuts    map[string]*deleteFailureRule
-}
-
-func (d *deleteFailingIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
-	store := d.IndexedDB.ObjectStore(name)
-	return &deleteFailingObjectStore{
-		ObjectStore:      store,
-		storeName:        name,
-		failDelete:       d.failStoreDeletes[name],
-		failIndexDeletes: d.failIndexDeletes,
-		failPut:          d.failStorePuts[name],
-	}
-}
-
-type deleteFailingObjectStore struct {
-	indexeddb.ObjectStore
-	storeName        string
-	failDelete       *deleteFailureRule
-	failIndexDeletes map[string]*deleteFailureRule
-	failPut          *deleteFailureRule
-}
-
-func (s *deleteFailingObjectStore) Delete(ctx context.Context, id string) error {
-	if s.failDelete.shouldFail() {
-		return fmt.Errorf("forced %s delete failure", s.storeName)
-	}
-	return s.ObjectStore.Delete(ctx, id)
-}
-
-func (s *deleteFailingObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
-	if s.failPut.shouldFail() {
-		return fmt.Errorf("forced %s put failure", s.storeName)
-	}
-	return s.ObjectStore.Put(ctx, record)
-}
-
-func (s *deleteFailingObjectStore) Index(name string) indexeddb.Index {
-	idx := s.ObjectStore.Index(name)
-	failDelete := s.failIndexDeletes[s.storeName+"/"+name]
-	if failDelete == nil {
-		return idx
-	}
-	return &deleteFailingIndex{Index: idx, name: s.storeName + "/" + name, failDelete: failDelete}
-}
-
-type deleteFailingIndex struct {
-	indexeddb.Index
-	name       string
-	failDelete *deleteFailureRule
-}
-
-func (i *deleteFailingIndex) Delete(ctx context.Context, values ...any) (int64, error) {
-	if i.failDelete.shouldFail() {
-		return 0, fmt.Errorf("forced %s delete failure", i.name)
-	}
-	return i.Index.Delete(ctx, values...)
-}
-
-type deleteFailureRule struct {
-	failAfter int64
-	enabled   atomic.Bool
-	calls     atomic.Int64
-}
-
-func newDeleteFailureRule(failAfter int64) *deleteFailureRule {
-	if failAfter < 1 {
-		failAfter = 1
-	}
-	return &deleteFailureRule{failAfter: failAfter}
-}
-
-func (r *deleteFailureRule) Enable() {
-	if r == nil {
-		return
-	}
-	r.calls.Store(0)
-	r.enabled.Store(true)
-}
-
-func (r *deleteFailureRule) Disable() {
-	if r == nil {
-		return
-	}
-	r.enabled.Store(false)
-	r.calls.Store(0)
-}
-
-func (r *deleteFailureRule) shouldFail() bool {
-	if r == nil || !r.enabled.Load() {
-		return false
-	}
-	return r.calls.Add(1) == r.failAfter
 }
 
 func newTestServicesWithUsersPutFailure(t *testing.T) (*coredata.Services, *atomic.Bool) {

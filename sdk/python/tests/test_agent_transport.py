@@ -46,6 +46,7 @@ _host_socket: str = ""
 _manager_socket: str = ""
 _previous_envs: dict[str, str | None] = {}
 _provider: "_AgentRuntimeProvider"
+_host_events: list[dict[str, Any]] = []
 _manager_requests: list[dict[str, str]] = []
 _manager_relay_tokens: list[str] = []
 
@@ -87,6 +88,17 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
             status=207,
             body=f"{request.run_id}:{request.tool_call_id}:{request.tool_id}",
         )
+
+    def EmitEvent(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _host_events.append(
+            {
+                "run_id": request.run_id,
+                "type": request.type,
+                "visibility": request.visibility,
+                "data": json_format.MessageToDict(request.data),
+            }
+        )
+        return empty_pb2.Empty()
 
 
 class _AgentManagerServicer(agent_pb2_grpc.AgentManagerHostServicer):
@@ -250,6 +262,7 @@ def tearDownModule() -> None:
 class AgentTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _provider.configured.clear()
+        _host_events.clear()
         _manager_requests.clear()
         _manager_relay_tokens.clear()
 
@@ -312,9 +325,30 @@ class AgentTransportTests(unittest.TestCase):
                     arguments=arguments,
                 )
             )
+            data = struct_pb2.Struct()
+            data.update({"phase": "tool_call", "attempt": 1})
+            host.emit_event(
+                agent_pb2.EmitAgentEventRequest(
+                    run_id="run-42",
+                    type="agent.tool_call.started",
+                    visibility="public",
+                    data=data,
+                )
+            )
 
         self.assertEqual(response.status, 207)
         self.assertEqual(response.body, "run-42:call-7:lookup")
+        self.assertEqual(
+            _host_events,
+            [
+                {
+                    "run_id": "run-42",
+                    "type": "agent.tool_call.started",
+                    "visibility": "public",
+                    "data": {"phase": "tool_call", "attempt": 1.0},
+                }
+            ],
+        )
 
     def test_agent_manager_roundtrip(self) -> None:
         with AgentManager("token-123") as manager:
