@@ -1,6 +1,8 @@
 import datetime as dt
+import importlib
 import json
 import pathlib
+import sys
 import tempfile
 import unittest
 from typing import Any, cast
@@ -34,7 +36,6 @@ from gestalt import (
     _bootstrap,
     _runtime,
 )
-from gestalt._optional_imports import is_optional_provider_import_error
 from gestalt.gen.v1 import authentication_pb2 as _authentication_pb2
 from gestalt.gen.v1 import cache_pb2 as _cache_pb2
 from gestalt.gen.v1 import plugin_pb2 as _plugin_pb2
@@ -169,43 +170,16 @@ class DurationConversionTests(unittest.TestCase):
         )
 
 
-class OptionalProviderImportErrorTests(unittest.TestCase):
-    def test_allows_optional_dependency_roots(self) -> None:
-        self.assertTrue(
-            is_optional_provider_import_error(
-                ModuleNotFoundError("No module named 'grpc'", name="grpc")
-            )
-        )
-        self.assertTrue(
-            is_optional_provider_import_error(
-                ModuleNotFoundError("No module named 'google'", name="google")
-            )
-        )
+class PublicImportTests(unittest.TestCase):
+    def test_indexeddb_stays_lazy_until_requested(self) -> None:
+        sys.modules.pop("gestalt._indexeddb", None)
 
-    def test_allows_optional_dependency_submodules(self) -> None:
-        self.assertTrue(
-            is_optional_provider_import_error(
-                ModuleNotFoundError(
-                    "No module named 'google.protobuf'",
-                    name="google.protobuf",
-                )
-            )
-        )
-        self.assertTrue(
-            is_optional_provider_import_error(
-                ModuleNotFoundError(
-                    "No module named 'grpc.aio'",
-                    name="grpc.aio",
-                )
-            )
-        )
+        gestalt_module = importlib.import_module("gestalt")
+        gestalt_module.__dict__.pop("IndexedDB", None)
 
-    def test_rejects_unrelated_missing_dependencies(self) -> None:
-        self.assertFalse(
-            is_optional_provider_import_error(
-                ModuleNotFoundError("No module named 'redis'", name="redis")
-            )
-        )
+        self.assertNotIn("gestalt._indexeddb", sys.modules)
+        self.assertEqual(gestalt_module.IndexedDB.__module__, "gestalt._indexeddb")
+        self.assertIn("gestalt._indexeddb", sys.modules)
 
 
 class ManifestNameTests(unittest.TestCase):
@@ -1048,7 +1022,11 @@ class S3RuntimeTests(unittest.TestCase):
         server = mock.Mock()
         with mock.patch.object(s3_pb2_grpc, "add_S3Servicer_to_server") as add_s3:
             adapter.register_services(server, provider)
-        add_s3.assert_called_once_with(provider, server)
+        add_s3.assert_called_once()
+        wrapped, registered_server = add_s3.call_args.args
+        self.assertIsNot(wrapped, provider)
+        self.assertIs(getattr(wrapped, "_provider"), provider)
+        self.assertIs(registered_server, server)
 
     def test_servable_target_wraps_s3_provider(self) -> None:
         provider = self.StubS3Provider()
@@ -1109,7 +1087,11 @@ class WorkflowRuntimeTests(unittest.TestCase):
             "add_WorkflowProviderServicer_to_server",
         ) as add_workflow:
             adapter.register_services(server, provider)
-        add_workflow.assert_called_once_with(provider, server)
+        add_workflow.assert_called_once()
+        wrapped, registered_server = add_workflow.call_args.args
+        self.assertIsNot(wrapped, provider)
+        self.assertIs(getattr(wrapped, "_provider"), provider)
+        self.assertIs(registered_server, server)
 
     def test_servable_target_wraps_workflow_provider(self) -> None:
         provider = self.StubWorkflowProvider()

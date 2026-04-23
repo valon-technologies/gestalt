@@ -20,25 +20,6 @@ For non-host targets, configure a matching Python build interpreter with
 `GESTALT_PYTHON_<GOOS>_<GOARCH>` or a target-specific virtualenv such as
 `.venv-<goos>-<goarch>/`.
 
-## PyInstaller Packaging
-
-Executable providers can extend the SDK's PyInstaller command from
-`pyproject.toml` when a dependency uses package data, dynamic imports, or
-additional hooks:
-
-```toml
-[tool.gestalt.pyinstaller]
-collect-data = ["litellm"]
-hidden-imports = ["my_provider.dynamic_module"]
-additional-hooks-dir = ["pyinstaller-hooks"]
-```
-
-Supported keys mirror PyInstaller's collection options:
-`collect-data`, `collect-submodules`, `collect-binaries`, `collect-all`,
-`copy-metadata`, `recursive-copy-metadata`, `hidden-imports`,
-`exclude-modules`, and `additional-hooks-dir`. Hook directories are resolved
-relative to the provider root unless absolute.
-
 ## Regenerating Protobuf Stubs
 
 The checked-in Python protobuf stubs live in `gestalt/gen/v1`.
