@@ -311,8 +311,11 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // Hosted public-relay startup is serialized to avoid Linux CI contention.
 func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
-	t.Parallel()
+	// This exercises the hosted agent startup path over the public relay and is
+	// sensitive to Linux CI contention when it runs alongside the other hosted
+	// runtime bootstrap tests.
 
 	bin := buildAgentProviderBinary(t)
 	secret := []byte("0123456789abcdef0123456789abcdef")

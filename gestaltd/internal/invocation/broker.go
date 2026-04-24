@@ -102,7 +102,7 @@ type RefresherResolver func() map[string]map[string]OAuthRefresher
 type Broker struct {
 	providers      *registry.ProviderMap[core.Provider]
 	users          *coredata.UserService
-	tokens         *coredata.TokenService
+	externalCreds  core.ExternalCredentialProvider
 	authorizer     authorization.RuntimeAuthorizer
 	connMapper     ConnectionMapper
 	mcpMapper      ConnectionMapper
@@ -128,8 +128,8 @@ func WithAuthorizer(a authorization.RuntimeAuthorizer) BrokerOption {
 	return func(b *Broker) { b.authorizer = a }
 }
 
-func NewBroker(providers *registry.ProviderMap[core.Provider], users *coredata.UserService, tokens *coredata.TokenService, opts ...BrokerOption) *Broker {
-	b := &Broker{providers: providers, users: users, tokens: tokens}
+func NewBroker(providers *registry.ProviderMap[core.Provider], users *coredata.UserService, externalCreds core.ExternalCredentialProvider, opts ...BrokerOption) *Broker {
+	b := &Broker{providers: providers, users: users, externalCreds: externalCreds}
 	for _, o := range opts {
 		o(b)
 	}
@@ -707,7 +707,7 @@ func (b *Broker) resolveSubjectToken(ctx context.Context, prov core.Provider, su
 	var err error
 
 	if instance != "" {
-		storedToken, err = b.tokens.Token(ctx, subjectID, providerName, connection, instance)
+		storedToken, err = b.externalCreds.GetCredential(ctx, subjectID, providerName, connection, instance)
 		if err != nil {
 			if errors.Is(err, core.ErrNotFound) {
 				return ctx, "", fmt.Errorf("%w: no token stored for integration %q instance %q", ErrNoToken, providerName, instance)
@@ -715,7 +715,7 @@ func (b *Broker) resolveSubjectToken(ctx context.Context, prov core.Provider, su
 			return ctx, "", fmt.Errorf("%w: retrieving integration token: %v", ErrInternal, err)
 		}
 	} else {
-		tokens, listErr := b.tokens.ListTokensForConnection(ctx, subjectID, providerName, connection)
+		tokens, listErr := b.externalCreds.ListCredentialsForConnection(ctx, subjectID, providerName, connection)
 		if listErr != nil {
 			return ctx, "", fmt.Errorf("%w: listing tokens: %v", ErrInternal, listErr)
 		}
@@ -791,13 +791,13 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 		return resp, err
 	})
 	if err != nil {
-		fresh, fetchErr := b.tokens.Token(ctx, token.SubjectID, token.Integration, token.Connection, token.Instance)
+		fresh, fetchErr := b.externalCreds.GetCredential(ctx, token.SubjectID, token.Integration, token.Connection, token.Instance)
 		if fetchErr == nil && fresh != nil && fresh.AccessToken != token.AccessToken {
 			return fresh.AccessToken, nil
 		}
 		token.RefreshErrorCount++
 		token.UpdatedAt = time.Now()
-		if storeErr := b.tokens.StoreToken(ctx, token); storeErr != nil {
+		if storeErr := b.externalCreds.PutCredential(ctx, token); storeErr != nil {
 			slog.WarnContext(ctx, "failed to persist refresh error count", "provider", providerName, "error", storeErr)
 		}
 		if time.Now().Before(*token.ExpiresAt) {
@@ -822,7 +822,7 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 	token.RefreshErrorCount = 0
 	token.UpdatedAt = now
 
-	if err := b.tokens.StoreToken(ctx, token); err != nil {
+	if err := b.externalCreds.PutCredential(ctx, token); err != nil {
 		return "", fmt.Errorf("persisting refreshed token: %w", err)
 	}
 	return token.AccessToken, nil

@@ -13,7 +13,7 @@ type User struct {
 	UpdatedAt   time.Time
 }
 
-type IntegrationToken struct {
+type ExternalCredential struct {
 	ID                string
 	SubjectID         string
 	Integration       string
@@ -29,6 +29,8 @@ type IntegrationToken struct {
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }
+
+type IntegrationToken = ExternalCredential
 
 type AccessPermission struct {
 	Plugin     string   `json:"plugin"`

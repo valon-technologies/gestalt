@@ -882,7 +882,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}
 	prepared.Deps.AgentRuntime.SetRunMetadata(prepared.Services.AgentRunMetadata)
 	prepared.Deps.AgentRuntime.SetRunEvents(prepared.Services.AgentRunEvents)
-	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.Tokens,
+	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, coredata.EffectiveExternalCredentialProvider(prepared.Services),
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),

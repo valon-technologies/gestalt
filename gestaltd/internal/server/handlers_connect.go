@@ -264,7 +264,7 @@ type discoveryCandidateInfo struct {
 
 func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (*core.IntegrationToken, error) {
 	now := s.now().UTC().Truncate(time.Second)
-	previous, err := s.tokens.Token(ctx, tm.SubjectID, tm.Integration, tm.Connection, tm.Instance)
+	previous, err := s.externalCredentials.GetCredential(ctx, tm.SubjectID, tm.Integration, tm.Connection, tm.Instance)
 	if err != nil && !errors.Is(err, core.ErrNotFound) {
 		return nil, err
 	}
@@ -285,7 +285,7 @@ func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
-	if err := s.tokens.StoreToken(ctx, tok); err != nil {
+	if err := s.externalCredentials.PutCredential(ctx, tok); err != nil {
 		return nil, err
 	}
 	if err := s.syncStoredTokenAuthorization(ctx, tok); err != nil {
@@ -308,9 +308,9 @@ func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (
 
 func (s *Server) rollbackStoredToken(ctx context.Context, previous *core.IntegrationToken, tokenID string) error {
 	if previous != nil {
-		return s.tokens.RestoreToken(ctx, previous)
+		return s.externalCredentials.RestoreCredential(ctx, previous)
 	}
-	return s.tokens.DeleteToken(ctx, tokenID)
+	return s.externalCredentials.DeleteCredential(ctx, tokenID)
 }
 
 func (s *Server) unlinkReplacedTokenAuthorization(ctx context.Context, previous, current *core.IntegrationToken) error {

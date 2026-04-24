@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
 type Services struct {
 	Users                    *UserService
+	ExternalCredentials      core.ExternalCredentialProvider
 	Tokens                   *TokenService
 	APITokens                *APITokenService
 	Identities               *IdentityService
@@ -93,6 +95,7 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 		return nil, fmt.Errorf("backfill canonical api token access: %w", err)
 	}
 	return &Services{
+		ExternalCredentials:      tokens,
 		Users:                    users,
 		Tokens:                   tokens,
 		APITokens:                apiTokens,

@@ -170,7 +170,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 					case core.ConnectionModeNone:
 						info.Connected = true
 					case core.ConnectionModeUser:
-						_, err := s.tokens.Token(r.Context(), binding.CredentialSubjectID, name, binding.Connection, binding.Instance)
+						_, err := s.externalCredentials.GetCredential(r.Context(), binding.CredentialSubjectID, name, binding.Connection, binding.Instance)
 						switch {
 						case err == nil:
 							info.Connected = true
@@ -220,7 +220,7 @@ func (s *Server) userConnectedIntegrations(r *http.Request) (map[string][]instan
 		}
 		userID = dbUser.ID
 	}
-	tokens, err := s.tokens.ListTokens(r.Context(), principal.UserSubjectID(userID))
+	tokens, err := s.externalCredentials.ListCredentials(r.Context(), principal.UserSubjectID(userID))
 	if err != nil {
 		return nil, fmt.Errorf("listing tokens: %w", err)
 	}
@@ -277,7 +277,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		auditTarget = connectionAuditTarget(name, requestedConnection, requestedInstance)
 	}
 
-	tokens, err := s.tokens.ListTokensForIntegration(r.Context(), subjectID, name)
+	tokens, err := s.externalCredentials.ListCredentialsForProvider(r.Context(), subjectID, name)
 	if err != nil {
 		auditErr = errors.New("failed to list tokens")
 		writeError(w, http.StatusInternalServerError, "failed to list tokens")
@@ -335,14 +335,14 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.tokens.DeleteToken(r.Context(), tokenID); err != nil {
+	if err := s.externalCredentials.DeleteCredential(r.Context(), tokenID); err != nil {
 		auditErr = errors.New("failed to disconnect integration")
 		writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
 		return
 	}
 
 	if err := s.unlinkStoredTokenAuthorization(r.Context(), matched[0]); err != nil {
-		if restoreErr := s.tokens.RestoreToken(r.Context(), matched[0]); restoreErr != nil {
+		if restoreErr := s.externalCredentials.RestoreCredential(r.Context(), matched[0]); restoreErr != nil {
 			slog.Error("restore disconnected integration after authz unlink failure", "integration", name, "connection", matched[0].Connection, "instance", matched[0].Instance, "token_id", matched[0].ID, "error", restoreErr)
 		}
 		auditErr = errors.New("failed to disconnect integration")
