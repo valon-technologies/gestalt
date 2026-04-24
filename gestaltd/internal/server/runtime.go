@@ -17,6 +17,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 const runtimeShutdownTimeout = 15 * time.Second
@@ -272,7 +274,7 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 func newHTTPServer(addr string, handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:              addr,
-		Handler:           handler,
+		Handler:           h2c.NewHandler(handler, &http2.Server{}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20,
