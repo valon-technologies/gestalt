@@ -65,11 +65,8 @@ pub enum Commands {
         command: WorkflowCommands,
     },
 
-    /// Manage global agent sessions and turns
-    Agent {
-        #[command(subcommand)]
-        command: AgentCommands,
-    },
+    /// Run an interactive agent session or inspect agent resources
+    Agent(AgentArgs),
 }
 
 #[derive(Subcommand)]
@@ -217,6 +214,36 @@ pub enum WorkflowCommands {
         #[command(subcommand)]
         command: WorkflowRunCommands,
     },
+}
+
+#[derive(Args)]
+pub struct AgentArgs {
+    #[command(subcommand)]
+    pub command: Option<AgentCommands>,
+
+    /// Resume an existing agent session
+    #[arg(long)]
+    pub session: Option<String>,
+
+    /// Agent provider name for a new session
+    #[arg(long)]
+    pub provider: Option<String>,
+
+    /// Model name override
+    #[arg(long)]
+    pub model: Option<String>,
+
+    /// Add a system message to the first turn created in this CLI session
+    #[arg(long = "system")]
+    pub system: Vec<String>,
+
+    /// Start with one or more user messages before entering the prompt loop
+    #[arg(long = "message")]
+    pub messages: Vec<String>,
+
+    /// Add a tool in plugin:operation form to each turn
+    #[arg(long = "tool", value_parser = AgentToolArg::parse)]
+    pub tools: Vec<AgentToolArg>,
 }
 
 #[derive(Subcommand)]

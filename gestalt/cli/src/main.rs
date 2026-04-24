@@ -124,55 +124,55 @@ fn run() -> anyhow::Result<()> {
                 },
             }
         }
-        Commands::Agent { command } => {
+        Commands::Agent(args) => {
             let client = ApiClient::from_env(url)?;
-            match command {
-                AgentCommands::Sessions { command } => match command {
-                    AgentSessionCommands::Create(args) => {
-                        commands::agents::create_session(&client, &args, format)
-                    }
-                    AgentSessionCommands::List { provider, state } => {
-                        commands::agents::list_sessions(
-                            &client,
-                            provider.as_deref(),
-                            state.as_deref(),
-                            format,
-                        )
-                    }
-                    AgentSessionCommands::Get { id } => {
-                        commands::agents::get_session(&client, &id, format)
-                    }
-                    AgentSessionCommands::Update(args) => {
-                        commands::agents::update_session(&client, &args, format)
-                    }
-                },
-                AgentCommands::Turns { command } => match command {
-                    AgentTurnCommands::Create(args) => {
-                        commands::agents::create_turn(&client, &args, format)
-                    }
-                    AgentTurnCommands::List { session_id, status } => commands::agents::list_turns(
-                        &client,
-                        &session_id,
-                        status.as_deref(),
-                        format,
-                    ),
-                    AgentTurnCommands::Get { id } => {
-                        commands::agents::get_turn(&client, &id, format)
-                    }
-                    AgentTurnCommands::Cancel { id, reason } => {
-                        commands::agents::cancel_turn(&client, &id, reason.as_deref(), format)
-                    }
-                    AgentTurnCommands::Events { command } => match command {
-                        AgentTurnEventCommands::List(args) => {
-                            commands::agents::list_turn_events(&client, &args, format)
-                        }
-                        AgentTurnEventCommands::Stream(args) => {
-                            commands::agents::stream_turn_events(&client, &args)
-                        }
-                    },
-                },
+            match args.command {
+                Some(command) => dispatch_agent_command(&client, command, format),
+                None => commands::agents::run_interactive(&client, &args),
             }
         }
+    }
+}
+
+fn dispatch_agent_command(
+    client: &ApiClient,
+    command: AgentCommands,
+    format: gestalt::output::Format,
+) -> anyhow::Result<()> {
+    match command {
+        AgentCommands::Sessions { command } => match command {
+            AgentSessionCommands::Create(args) => {
+                commands::agents::create_session(client, &args, format)
+            }
+            AgentSessionCommands::List { provider, state } => commands::agents::list_sessions(
+                client,
+                provider.as_deref(),
+                state.as_deref(),
+                format,
+            ),
+            AgentSessionCommands::Get { id } => commands::agents::get_session(client, &id, format),
+            AgentSessionCommands::Update(args) => {
+                commands::agents::update_session(client, &args, format)
+            }
+        },
+        AgentCommands::Turns { command } => match command {
+            AgentTurnCommands::Create(args) => commands::agents::create_turn(client, &args, format),
+            AgentTurnCommands::List { session_id, status } => {
+                commands::agents::list_turns(client, &session_id, status.as_deref(), format)
+            }
+            AgentTurnCommands::Get { id } => commands::agents::get_turn(client, &id, format),
+            AgentTurnCommands::Cancel { id, reason } => {
+                commands::agents::cancel_turn(client, &id, reason.as_deref(), format)
+            }
+            AgentTurnCommands::Events { command } => match command {
+                AgentTurnEventCommands::List(args) => {
+                    commands::agents::list_turn_events(client, &args, format)
+                }
+                AgentTurnEventCommands::Stream(args) => {
+                    commands::agents::stream_turn_events(client, &args)
+                }
+            },
+        },
     }
 }
 
