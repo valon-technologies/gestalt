@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	stdpath "path"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -157,6 +158,73 @@ func resolveBuiltinAdminUI(opts BuiltinAdminUIOptions) (http.Handler, error) {
 		return nil, fmt.Errorf("embedded admin ui assets not found")
 	}
 	return handler, nil
+}
+
+func resolveConfiguredAdminUI(opts BuiltinAdminUIOptions, providerName string, entries map[string]*config.UIEntry) (http.Handler, error) {
+	entry, resolvedName, err := selectAdminUIProviderEntry(strings.TrimSpace(providerName), entries)
+	if err != nil {
+		return nil, err
+	}
+	if entry == nil {
+		return nil, nil
+	}
+
+	adminDir := filepath.Join(entry.ResolvedAssetRoot, "admin")
+	if _, err := os.Stat(filepath.Join(adminDir, "index.html")); err != nil {
+		return nil, fmt.Errorf("ui.%s admin assets not found at %s: %w", resolvedName, adminDir, err)
+	}
+
+	handler, err := adminui.DirHandler(adminDir, adminui.Options{
+		BrandHref: opts.BrandHref,
+		LoginBase: opts.LoginBase,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ui.%s admin assets: %w", resolvedName, err)
+	}
+	return handler, nil
+}
+
+func selectAdminUIProviderEntry(providerName string, entries map[string]*config.UIEntry) (*config.UIEntry, string, error) {
+	if len(entries) == 0 {
+		if providerName != "" {
+			return nil, "", fmt.Errorf("server.admin.ui %q not found", providerName)
+		}
+		return nil, "", nil
+	}
+
+	if providerName != "" {
+		entry := entries[providerName]
+		if entry == nil {
+			return nil, "", fmt.Errorf("server.admin.ui %q not found", providerName)
+		}
+		return entry, providerName, nil
+	}
+
+	names := make([]string, 0, len(entries))
+	for name := range entries {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	for _, name := range names {
+		entry := entries[name]
+		if entry == nil || strings.TrimSpace(entry.Path) != "/" {
+			continue
+		}
+		if uiEntryHasAdminShell(entry) {
+			return entry, name, nil
+		}
+	}
+
+	return nil, "", nil
+}
+
+func uiEntryHasAdminShell(entry *config.UIEntry) bool {
+	if entry == nil || strings.TrimSpace(entry.ResolvedAssetRoot) == "" {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(entry.ResolvedAssetRoot, "admin", "index.html"))
+	return err == nil && !info.IsDir()
 }
 
 func normalizeMountedUIs(mounted []MountedUI) ([]MountedUI, error) {

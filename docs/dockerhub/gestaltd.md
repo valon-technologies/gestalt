@@ -122,13 +122,15 @@ for the full config model and structured secret-ref support.
 - `GET /health` for liveness
 - `GET /ready` for readiness
 
-The built-in admin UI is served at `/admin`. If you configure
+The admin UI is served at `/admin`. Gestalt uses `server.admin.ui` when set,
+otherwise auto-discovers `admin/index.html` from the root `providers.ui`
+bundle before falling back to the built-in shell. If you configure
 `server.management`, health and admin endpoints move to the management
 listener. If you also set `server.admin.authorizationPolicy`, Gestalt applies
 browser session authentication and role checks to `/admin`; on split
 public/management deployments, set `server.management.baseUrl` so login can
-return the browser to the management listener's built-in `/admin` route after
-callback. Use the same
+return the browser to the management listener's `/admin` route after callback.
+Use the same
 hostname as `server.baseUrl`, and keep it on `https` whenever
 `server.baseUrl` is `https`, so the session cookie is reusable across both
 listeners. See the

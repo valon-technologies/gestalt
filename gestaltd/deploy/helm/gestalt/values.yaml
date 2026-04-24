@@ -83,6 +83,11 @@ config:
     # management:
     #   host: 0.0.0.0
     #   port: 9090
+    # Optionally pin /admin to a specific providers.ui entry. When omitted,
+    # gestaltd auto-discovers admin assets from the root UI bundle if it ships
+    # admin/index.html, then falls back to the built-in admin shell.
+    # admin:
+    #   ui: root
     # Dev-only default so the default chart profile can boot. Override this with
     # a secret value before production use.
     encryptionKey: "dev-only-insecure-key-change-me"
@@ -101,6 +106,7 @@ config:
         config:
           dsn: "sqlite:///data/gestalt.db"
     # Add providers.ui.<name> entries when you want to mount public static UI bundles.
+    # A root UI bundle may also contribute provider-owned /admin assets.
 
 # Extra environment variables for the container. These are only required
 # when your config uses ${VAR} placeholders for auth, baseUrl, or
