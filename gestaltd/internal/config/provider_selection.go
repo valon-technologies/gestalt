@@ -14,6 +14,8 @@ func (s ServerProvidersConfig) Selection(kind HostProviderKind) string {
 		return s.Authentication
 	case HostProviderKindAuthorization:
 		return s.Authorization
+	case HostProviderKindExternalCredentials:
+		return s.ExternalCredentials
 	case HostProviderKindSecrets:
 		return s.Secrets
 	case HostProviderKindTelemetry:
@@ -42,6 +44,8 @@ func (c *Config) HostProviderEntries(kind HostProviderKind) map[string]*Provider
 		return c.Providers.Authentication
 	case HostProviderKindAuthorization:
 		return c.Providers.Authorization
+	case HostProviderKindExternalCredentials:
+		return c.Providers.ExternalCredentials
 	case HostProviderKindSecrets:
 		return c.Providers.Secrets
 	case HostProviderKindTelemetry:
@@ -71,6 +75,10 @@ func (c *Config) SelectedAuthenticationProvider() (string, *ProviderEntry, error
 
 func (c *Config) SelectedAuthorizationProvider() (string, *ProviderEntry, error) {
 	return c.SelectedHostProvider(HostProviderKindAuthorization)
+}
+
+func (c *Config) SelectedExternalCredentialsProvider() (string, *ProviderEntry, error) {
+	return c.SelectedHostProvider(HostProviderKindExternalCredentials)
 }
 
 func (c *Config) SelectedSecretsProvider() (string, *ProviderEntry, error) {

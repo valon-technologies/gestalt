@@ -30,6 +30,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
@@ -158,6 +159,7 @@ type Deps struct {
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
 type AuthorizationFactory func(node yaml.Node, hostServices []providerhost.HostService, deps Deps) (core.AuthorizationProvider, error)
+type ExternalCredentialFactory func(ctx context.Context, name string, node yaml.Node, hostServices []providerhost.HostService, deps Deps) (core.ExternalCredentialProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
 type CacheFactory func(node yaml.Node) (corecache.Cache, error)
@@ -169,18 +171,19 @@ type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
 type FactoryRegistry struct {
-	Auth          AuthFactory
-	Authorization AuthorizationFactory
-	Secrets       map[string]SecretManagerFactory
-	IndexedDB     IndexedDBFactory
-	Cache         CacheFactory
-	Runtime       RuntimeFactory
-	S3            S3Factory
-	Workflow      WorkflowFactory
-	Agent         AgentFactory
-	Telemetry     map[string]TelemetryFactory
-	Audit         AuditFactory
-	Builtins      []core.Provider
+	Auth                AuthFactory
+	Authorization       AuthorizationFactory
+	ExternalCredentials ExternalCredentialFactory
+	Secrets             map[string]SecretManagerFactory
+	IndexedDB           IndexedDBFactory
+	Cache               CacheFactory
+	Runtime             RuntimeFactory
+	S3                  S3Factory
+	Workflow            WorkflowFactory
+	Agent               AgentFactory
+	Telemetry           map[string]TelemetryFactory
+	Audit               AuditFactory
+	Builtins            []core.Provider
 }
 
 func NewFactoryRegistry() *FactoryRegistry {
@@ -261,10 +264,12 @@ func (r *Result) Close(ctx context.Context) error {
 	if len(r.AuthProviders) != 0 {
 		authCloseErr = closeAuthProviders(r.AuthProviders)
 	}
+	externalCredentialsCloseErr := closeExternalCredentialProviderCandidate(r.Services)
 	errs = append(errs,
 		closeAuthorizer(r.Authorizer),
 		authCloseErr,
 		closeAuthorizationProvider(r.AuthorizationProvider),
+		externalCredentialsCloseErr,
 		CloseProviders(r.Providers),
 		r.Services.Close(),
 		closeIndexedDBs(r.ExtraIndexedDBs...),
@@ -769,6 +774,18 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.CacheDefs = cfg.Providers.Cache
 	deps.CacheFactory = factories.Cache
 	deps.S3 = hostS3s
+	closeExternalCredentialsOnError := true
+	defer func() {
+		if closeExternalCredentialsOnError {
+			_ = closeExternalCredentialProviderCandidate(svc)
+		}
+	}()
+	externalCredentials, err := buildExternalCredentialsProvider(ctx, cfg, factories, deps)
+	if err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, err
+	}
+	svc.ExternalCredentials = externalCredentials
 
 	authzProvider, err = buildAuthorization(cfg, factories, deps)
 	if err != nil {
@@ -784,6 +801,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	closeSvc = false
 	closeExtraStores = false
 	closeExtraS3s = false
+	closeExternalCredentialsOnError = false
 	closeAuthorizationOnError = false
 	return &preparedCore{
 		Auth:                  auth,
@@ -810,9 +828,11 @@ func (p *preparedCore) Close(ctx context.Context) error {
 	if len(p.AuthProviders) != 0 {
 		authCloseErr = closeAuthProviders(p.AuthProviders)
 	}
+	externalCredentialsCloseErr := closeExternalCredentialProviderCandidate(p.Services)
 	errs = append(errs,
 		authCloseErr,
 		closeAuthorizationProvider(p.AuthorizationProvider),
+		externalCredentialsCloseErr,
 		p.Services.Close(),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
 		closeS3s(p.ExtraS3s...),
@@ -1158,6 +1178,79 @@ func buildNamedSecretManager(name string, secrets *config.ProviderEntry, factori
 	return sm, nil
 }
 
+func buildExternalCredentialsProvider(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.ExternalCredentialProvider, error) {
+	name, entry, err := cfg.SelectedExternalCredentialsProvider()
+	if err != nil {
+		return nil, err
+	}
+	if entry == nil {
+		provider := coredata.EffectiveExternalCredentialProvider(deps.Services)
+		if coredata.ExternalCredentialProviderMissing(provider) {
+			return nil, fmt.Errorf("bootstrap: external credentials provider is not available")
+		}
+		return provider, nil
+	}
+	return buildNamedExternalCredentialsProvider(ctx, name, entry, factories, deps)
+}
+
+func buildNamedExternalCredentialsProvider(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.ExternalCredentialProvider, error) {
+	logicalName := strings.TrimSpace(name)
+	if logicalName == "" {
+		logicalName = "external-credentials"
+	}
+	if entry == nil {
+		provider := coredata.EffectiveExternalCredentialProvider(deps.Services)
+		if coredata.ExternalCredentialProviderMissing(provider) {
+			return nil, fmt.Errorf("bootstrap: external credentials provider %q: local provider is not available", logicalName)
+		}
+		return provider, nil
+	}
+	if entry.Source.IsBuiltin() || (!entry.HasRemoteSource() && !entry.HasLocalSource() && !entry.HasLocalReleaseSource()) {
+		builtin := strings.TrimSpace(entry.Source.Builtin)
+		if builtin != "" && builtin != "local" {
+			return nil, fmt.Errorf("bootstrap: external credentials provider %q: unknown builtin %q", logicalName, builtin)
+		}
+		provider := coredata.EffectiveExternalCredentialProvider(deps.Services)
+		if coredata.ExternalCredentialProviderMissing(provider) {
+			return nil, fmt.Errorf("bootstrap: external credentials provider %q: local provider is not available", logicalName)
+		}
+		return provider, nil
+	}
+	if factories.ExternalCredentials == nil {
+		return nil, fmt.Errorf("bootstrap: external credentials provider factory is not registered")
+	}
+	node := entry.Config
+	if !config.IsComponentRuntimeConfigNode(node) {
+		var buildErr error
+		node, buildErr = config.BuildComponentRuntimeConfigNode(logicalName, providermanifestv1.KindExternalCredentials, entry, entry.Config)
+		if buildErr != nil {
+			return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, buildErr)
+		}
+	}
+	hostServices, err := buildExternalCredentialsHostServices(logicalName, deps)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
+	}
+	provider, err := factories.ExternalCredentials(ctx, logicalName, node, hostServices, deps)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
+	}
+	return provider, nil
+}
+
+func buildExternalCredentialsHostServices(name string, deps Deps) ([]providerhost.HostService, error) {
+	if deps.Services == nil || deps.Services.Tokens == nil {
+		return nil, fmt.Errorf("local external credentials provider is not available")
+	}
+	return []providerhost.HostService{{
+		Name:   "external-credentials",
+		EnvVar: providerhost.DefaultExternalCredentialSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterExternalCredentialProviderServer(srv, providerhost.NewExternalCredentialProviderServer(deps.Services.Tokens))
+		},
+	}}, nil
+}
+
 func closeAuth(provider core.AuthenticationProvider) error {
 	closer, ok := provider.(interface{ Close() error })
 	if !ok {
@@ -1188,6 +1281,24 @@ func closeAuthorizer(authorizer authorization.RuntimeAuthorizer) error {
 }
 
 func closeAuthorizationProvider(provider core.AuthorizationProvider) error {
+	closer, ok := provider.(interface{ Close() error })
+	if !ok {
+		return nil
+	}
+	return closer.Close()
+}
+
+func closeExternalCredentialProviderCandidate(services *coredata.Services) error {
+	if services == nil || coredata.ExternalCredentialProviderMissing(services.ExternalCredentials) {
+		return nil
+	}
+	if services.Tokens != nil && services.ExternalCredentials == services.Tokens {
+		return nil
+	}
+	return closeExternalCredentialProvider(services.ExternalCredentials)
+}
+
+func closeExternalCredentialProvider(provider core.ExternalCredentialProvider) error {
 	closer, ok := provider.(interface{ Close() error })
 	if !ok {
 		return nil

@@ -68,17 +68,18 @@ type Config struct {
 }
 
 type ProvidersConfig struct {
-	Authentication map[string]*ProviderEntry `yaml:"authentication,omitempty"`
-	Authorization  map[string]*ProviderEntry `yaml:"authorization,omitempty"`
-	Secrets        map[string]*ProviderEntry `yaml:"secrets,omitempty"`
-	Telemetry      map[string]*ProviderEntry `yaml:"telemetry,omitempty"`
-	Audit          map[string]*ProviderEntry `yaml:"audit,omitempty"`
-	UI             map[string]*UIEntry       `yaml:"ui,omitempty"`
-	IndexedDB      map[string]*ProviderEntry `yaml:"indexeddb,omitempty"`
-	Cache          map[string]*ProviderEntry `yaml:"cache,omitempty"`
-	S3             map[string]*ProviderEntry `yaml:"s3,omitempty"`
-	Workflow       map[string]*ProviderEntry `yaml:"workflow,omitempty"`
-	Agent          map[string]*ProviderEntry `yaml:"agent,omitempty"`
+	Authentication      map[string]*ProviderEntry `yaml:"authentication,omitempty"`
+	Authorization       map[string]*ProviderEntry `yaml:"authorization,omitempty"`
+	ExternalCredentials map[string]*ProviderEntry `yaml:"externalCredentials,omitempty"`
+	Secrets             map[string]*ProviderEntry `yaml:"secrets,omitempty"`
+	Telemetry           map[string]*ProviderEntry `yaml:"telemetry,omitempty"`
+	Audit               map[string]*ProviderEntry `yaml:"audit,omitempty"`
+	UI                  map[string]*UIEntry       `yaml:"ui,omitempty"`
+	IndexedDB           map[string]*ProviderEntry `yaml:"indexeddb,omitempty"`
+	Cache               map[string]*ProviderEntry `yaml:"cache,omitempty"`
+	S3                  map[string]*ProviderEntry `yaml:"s3,omitempty"`
+	Workflow            map[string]*ProviderEntry `yaml:"workflow,omitempty"`
+	Agent               map[string]*ProviderEntry `yaml:"agent,omitempty"`
 }
 
 type RuntimeConfig struct {
@@ -97,25 +98,27 @@ type RuntimeProviderEntry struct {
 type HostProviderKind string
 
 const (
-	HostProviderKindAuthentication HostProviderKind = "authentication"
-	HostProviderKindAuthorization  HostProviderKind = "authorization"
-	HostProviderKindSecrets        HostProviderKind = "secrets"
-	HostProviderKindTelemetry      HostProviderKind = "telemetry"
-	HostProviderKindAudit          HostProviderKind = "audit"
-	HostProviderKindIndexedDB      HostProviderKind = "indexeddb"
-	HostProviderKindCache          HostProviderKind = "cache"
-	HostProviderKindWorkflow       HostProviderKind = "workflow"
-	HostProviderKindAgent          HostProviderKind = "agent"
-	HostProviderKindRuntime        HostProviderKind = "runtime"
+	HostProviderKindAuthentication      HostProviderKind = "authentication"
+	HostProviderKindAuthorization       HostProviderKind = "authorization"
+	HostProviderKindExternalCredentials HostProviderKind = "externalCredentials"
+	HostProviderKindSecrets             HostProviderKind = "secrets"
+	HostProviderKindTelemetry           HostProviderKind = "telemetry"
+	HostProviderKindAudit               HostProviderKind = "audit"
+	HostProviderKindIndexedDB           HostProviderKind = "indexeddb"
+	HostProviderKindCache               HostProviderKind = "cache"
+	HostProviderKindWorkflow            HostProviderKind = "workflow"
+	HostProviderKindAgent               HostProviderKind = "agent"
+	HostProviderKindRuntime             HostProviderKind = "runtime"
 )
 
 type ServerProvidersConfig struct {
-	Authentication string `yaml:"authentication,omitempty"`
-	Authorization  string `yaml:"authorization,omitempty"`
-	Secrets        string `yaml:"secrets,omitempty"`
-	Telemetry      string `yaml:"telemetry,omitempty"`
-	Audit          string `yaml:"audit,omitempty"`
-	IndexedDB      string `yaml:"indexeddb,omitempty"`
+	Authentication      string `yaml:"authentication,omitempty"`
+	Authorization       string `yaml:"authorization,omitempty"`
+	ExternalCredentials string `yaml:"externalCredentials,omitempty"`
+	Secrets             string `yaml:"secrets,omitempty"`
+	Telemetry           string `yaml:"telemetry,omitempty"`
+	Audit               string `yaml:"audit,omitempty"`
+	IndexedDB           string `yaml:"indexeddb,omitempty"`
 }
 
 // ProviderSource supports handwritten config in three forms via custom
@@ -1403,6 +1406,7 @@ func OverlayRemotePluginConfigPaths(paths []string, cfg *Config) error {
 	}{
 		{HostProviderKindAuthentication, cfg.Providers.Authentication},
 		{HostProviderKindAuthorization, cfg.Providers.Authorization},
+		{HostProviderKindExternalCredentials, cfg.Providers.ExternalCredentials},
 		{HostProviderKindSecrets, cfg.Providers.Secrets},
 		{HostProviderKindTelemetry, cfg.Providers.Telemetry},
 		{HostProviderKindAudit, cfg.Providers.Audit},
@@ -2140,6 +2144,7 @@ func normalizeProviderSourceShapes(cfg *Config) {
 	}{
 		{providermanifestv1.KindAuthentication, cfg.Providers.Authentication},
 		{providermanifestv1.KindAuthorization, cfg.Providers.Authorization},
+		{providermanifestv1.KindExternalCredentials, cfg.Providers.ExternalCredentials},
 		{providermanifestv1.KindSecrets, cfg.Providers.Secrets},
 		{string(HostProviderKindTelemetry), cfg.Providers.Telemetry},
 		{string(HostProviderKindAudit), cfg.Providers.Audit},
@@ -2208,6 +2213,8 @@ func normalizeProviderSource(kind string, source *ProviderSource, sourceSyntax p
 
 func isBuiltinScalarSource(kind, source string) bool {
 	switch kind {
+	case providermanifestv1.KindExternalCredentials:
+		return source == "local"
 	case providermanifestv1.KindSecrets:
 		switch source {
 		case "env", "file":

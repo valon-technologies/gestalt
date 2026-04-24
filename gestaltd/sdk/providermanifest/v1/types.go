@@ -13,21 +13,24 @@ import (
 )
 
 const (
-	KindPlugin         = "plugin"
-	KindAuthentication = "authentication"
-	KindAuthorization  = "authorization"
-	KindIndexedDB      = "indexeddb"
-	KindCache          = "cache"
-	KindS3             = "s3"
-	KindWorkflow       = "workflow"
-	KindAgent          = "agent"
-	KindSecrets        = "secrets"
-	KindUI             = "ui"
-	KindRuntime        = "runtime"
+	KindPlugin              = "plugin"
+	KindAuthentication      = "authentication"
+	KindAuthorization       = "authorization"
+	KindExternalCredentials = "external_credentials"
+	KindIndexedDB           = "indexeddb"
+	KindCache               = "cache"
+	KindS3                  = "s3"
+	KindWorkflow            = "workflow"
+	KindAgent               = "agent"
+	KindSecrets             = "secrets"
+	KindUI                  = "ui"
+	KindRuntime             = "runtime"
 )
 
 func NormalizeKind(kind string) string {
 	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case "externalcredentials", "external_credentials", "external-credentials":
+		return KindExternalCredentials
 	case "auth":
 		return KindAuthentication
 	case KindAuthentication:

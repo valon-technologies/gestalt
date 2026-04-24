@@ -117,6 +117,9 @@ func operationErrorBody(message string) string {
 var (
 	// ErrSecretNotFound indicates that a named secret does not exist.
 	ErrSecretNotFound = errors.New("secret not found")
+	// ErrExternalCredentialNotFound indicates that the requested external
+	// credential does not exist.
+	ErrExternalCredentialNotFound = errors.New("external credential not found")
 	// ErrExternalTokenValidationUnsupported indicates that the authentication provider
 	// does not implement external token validation.
 	ErrExternalTokenValidationUnsupported = errors.New("authentication provider does not support external token validation")
@@ -131,6 +134,8 @@ func providerRPCError(operation string, err error) error {
 	}
 	switch {
 	case errors.Is(err, ErrSecretNotFound):
+		return status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, ErrExternalCredentialNotFound):
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, ErrExternalTokenValidationUnsupported),
 		errors.Is(err, ErrOAuthRegistrationStoreUnsupported):

@@ -27,39 +27,41 @@ import (
 )
 
 const (
-	InitLockfileName         = "gestalt.lock.json"
-	PreparedProvidersDir     = ".gestaltd/providers"
-	PreparedAuthDir          = ".gestaltd/auth"
-	PreparedAuthorizationDir = ".gestaltd/authorization"
-	PreparedSecretsDir       = ".gestaltd/secrets"
-	PreparedTelemetryDir     = ".gestaltd/telemetry"
-	PreparedAuditDir         = ".gestaltd/audit"
-	PreparedCacheDir         = ".gestaltd/cache"
-	PreparedWorkflowDir      = ".gestaltd/workflow"
-	PreparedAgentDir         = ".gestaltd/agent"
-	PreparedRuntimeDir       = ".gestaltd/runtime"
-	PreparedUIDir            = ".gestaltd/ui"
-	LockVersion              = 10
+	InitLockfileName               = "gestalt.lock.json"
+	PreparedProvidersDir           = ".gestaltd/providers"
+	PreparedAuthDir                = ".gestaltd/auth"
+	PreparedAuthorizationDir       = ".gestaltd/authorization"
+	PreparedExternalCredentialsDir = ".gestaltd/external-credentials"
+	PreparedSecretsDir             = ".gestaltd/secrets"
+	PreparedTelemetryDir           = ".gestaltd/telemetry"
+	PreparedAuditDir               = ".gestaltd/audit"
+	PreparedCacheDir               = ".gestaltd/cache"
+	PreparedWorkflowDir            = ".gestaltd/workflow"
+	PreparedAgentDir               = ".gestaltd/agent"
+	PreparedRuntimeDir             = ".gestaltd/runtime"
+	PreparedUIDir                  = ".gestaltd/ui"
+	LockVersion                    = 10
 
 	platformKeyGeneric = "generic"
 )
 
 type Lockfile struct {
-	Version        int                          `json:"version"`
-	Providers      map[string]LockProviderEntry `json:"providers"`
-	Authentication map[string]LockEntry         `json:"authentication,omitempty"`
-	LegacyAuth     map[string]LockEntry         `json:"auth,omitempty"`
-	Authorization  map[string]LockEntry         `json:"authorization,omitempty"`
-	IndexedDBs     map[string]LockEntry         `json:"indexeddbs,omitempty"`
-	Caches         map[string]LockEntry         `json:"cache,omitempty"`
-	S3             map[string]LockEntry         `json:"s3,omitempty"`
-	Workflows      map[string]LockEntry         `json:"workflow,omitempty"`
-	Agents         map[string]LockEntry         `json:"agent,omitempty"`
-	Runtimes       map[string]LockEntry         `json:"runtime,omitempty"`
-	Secrets        map[string]LockEntry         `json:"secrets,omitempty"`
-	Telemetry      map[string]LockEntry         `json:"telemetry,omitempty"`
-	Audit          map[string]LockEntry         `json:"audit,omitempty"`
-	UIs            map[string]LockUIEntry       `json:"ui,omitempty"`
+	Version             int                          `json:"version"`
+	Providers           map[string]LockProviderEntry `json:"providers"`
+	Authentication      map[string]LockEntry         `json:"authentication,omitempty"`
+	LegacyAuth          map[string]LockEntry         `json:"auth,omitempty"`
+	Authorization       map[string]LockEntry         `json:"authorization,omitempty"`
+	ExternalCredentials map[string]LockEntry         `json:"externalCredentials,omitempty"`
+	IndexedDBs          map[string]LockEntry         `json:"indexeddbs,omitempty"`
+	Caches              map[string]LockEntry         `json:"cache,omitempty"`
+	S3                  map[string]LockEntry         `json:"s3,omitempty"`
+	Workflows           map[string]LockEntry         `json:"workflow,omitempty"`
+	Agents              map[string]LockEntry         `json:"agent,omitempty"`
+	Runtimes            map[string]LockEntry         `json:"runtime,omitempty"`
+	Secrets             map[string]LockEntry         `json:"secrets,omitempty"`
+	Telemetry           map[string]LockEntry         `json:"telemetry,omitempty"`
+	Audit               map[string]LockEntry         `json:"audit,omitempty"`
+	UIs                 map[string]LockUIEntry       `json:"ui,omitempty"`
 }
 
 // LockArchive records a platform-specific archive URL and optional integrity hash.
@@ -612,23 +614,24 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 }
 
 type initPaths struct {
-	configPaths      []string
-	configFlags      string
-	configPath       string
-	configDir        string
-	artifactsDir     string
-	lockfilePath     string
-	providersDir     string
-	authDir          string
-	authorizationDir string
-	secretsDir       string
-	telemetryDir     string
-	auditDir         string
-	cacheDir         string
-	workflowDir      string
-	agentDir         string
-	runtimeDir       string
-	uiDir            string
+	configPaths            []string
+	configFlags            string
+	configPath             string
+	configDir              string
+	artifactsDir           string
+	lockfilePath           string
+	providersDir           string
+	authDir                string
+	authorizationDir       string
+	externalCredentialsDir string
+	secretsDir             string
+	telemetryDir           string
+	auditDir               string
+	cacheDir               string
+	workflowDir            string
+	agentDir               string
+	runtimeDir             string
+	uiDir                  string
 }
 
 func primaryConfigPath(paths []string) string {
@@ -691,6 +694,7 @@ func hostProviderCollections(cfg *config.Config) []struct {
 	}{
 		{config.HostProviderKindAuthentication, cfg.Providers.Authentication},
 		{config.HostProviderKindAuthorization, cfg.Providers.Authorization},
+		{config.HostProviderKindExternalCredentials, cfg.Providers.ExternalCredentials},
 		{config.HostProviderKindSecrets, cfg.Providers.Secrets},
 		{config.HostProviderKindTelemetry, cfg.Providers.Telemetry},
 		{config.HostProviderKindAudit, cfg.Providers.Audit},
@@ -709,6 +713,8 @@ func lockEntriesForKind(lock *Lockfile, kind config.HostProviderKind) map[string
 		return lock.Authentication
 	case config.HostProviderKindAuthorization:
 		return lock.Authorization
+	case config.HostProviderKindExternalCredentials:
+		return lock.ExternalCredentials
 	case config.HostProviderKindSecrets:
 		return lock.Secrets
 	case config.HostProviderKindTelemetry:
@@ -878,23 +884,24 @@ func resolveInitPaths(configPaths []string, cfg *config.Config, state StatePaths
 	artifactsDir := resolveArtifactsDir(configPath, cfg, state.ArtifactsDir)
 	lockfilePath := resolveLockfilePath(configPath, state.LockfilePath)
 	return initPaths{
-		configPaths:      append([]string(nil), configPaths...),
-		configFlags:      formatInitFlags(configPaths, state),
-		configPath:       configPath,
-		configDir:        configDir,
-		artifactsDir:     artifactsDir,
-		lockfilePath:     lockfilePath,
-		providersDir:     filepath.Join(artifactsDir, filepath.FromSlash(PreparedProvidersDir)),
-		authDir:          filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuthDir)),
-		authorizationDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuthorizationDir)),
-		secretsDir:       filepath.Join(artifactsDir, filepath.FromSlash(PreparedSecretsDir)),
-		telemetryDir:     filepath.Join(artifactsDir, filepath.FromSlash(PreparedTelemetryDir)),
-		auditDir:         filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuditDir)),
-		cacheDir:         filepath.Join(artifactsDir, filepath.FromSlash(PreparedCacheDir)),
-		workflowDir:      filepath.Join(artifactsDir, filepath.FromSlash(PreparedWorkflowDir)),
-		agentDir:         filepath.Join(artifactsDir, filepath.FromSlash(PreparedAgentDir)),
-		runtimeDir:       filepath.Join(artifactsDir, filepath.FromSlash(PreparedRuntimeDir)),
-		uiDir:            filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
+		configPaths:            append([]string(nil), configPaths...),
+		configFlags:            formatInitFlags(configPaths, state),
+		configPath:             configPath,
+		configDir:              configDir,
+		artifactsDir:           artifactsDir,
+		lockfilePath:           lockfilePath,
+		providersDir:           filepath.Join(artifactsDir, filepath.FromSlash(PreparedProvidersDir)),
+		authDir:                filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuthDir)),
+		authorizationDir:       filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuthorizationDir)),
+		externalCredentialsDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedExternalCredentialsDir)),
+		secretsDir:             filepath.Join(artifactsDir, filepath.FromSlash(PreparedSecretsDir)),
+		telemetryDir:           filepath.Join(artifactsDir, filepath.FromSlash(PreparedTelemetryDir)),
+		auditDir:               filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuditDir)),
+		cacheDir:               filepath.Join(artifactsDir, filepath.FromSlash(PreparedCacheDir)),
+		workflowDir:            filepath.Join(artifactsDir, filepath.FromSlash(PreparedWorkflowDir)),
+		agentDir:               filepath.Join(artifactsDir, filepath.FromSlash(PreparedAgentDir)),
+		runtimeDir:             filepath.Join(artifactsDir, filepath.FromSlash(PreparedRuntimeDir)),
+		uiDir:                  filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
 	}
 }
 
@@ -916,6 +923,10 @@ func authDestDir(paths initPaths, name string) string {
 
 func authorizationDestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.authorizationDir, name)
+}
+
+func externalCredentialsDestDir(paths initPaths, name string) string {
+	return filepath.Join(paths.externalCredentialsDir, name)
 }
 
 func secretsDestDir(paths initPaths, name string) string {
@@ -960,6 +971,8 @@ func componentDestDir(paths initPaths, kind config.HostProviderKind, name string
 		return authDestDir(paths, name)
 	case config.HostProviderKindAuthorization:
 		return authorizationDestDir(paths, name)
+	case config.HostProviderKindExternalCredentials:
+		return externalCredentialsDestDir(paths, name)
 	case config.HostProviderKindSecrets:
 		return secretsDestDir(paths, name)
 	case config.HostProviderKindTelemetry:
@@ -1020,6 +1033,8 @@ func providerManifestKind(kind config.HostProviderKind) string {
 		return providermanifestv1.KindAuthentication
 	case config.HostProviderKindAuthorization:
 		return providermanifestv1.KindAuthorization
+	case config.HostProviderKindExternalCredentials:
+		return providermanifestv1.KindExternalCredentials
 	case config.HostProviderKindSecrets:
 		return providermanifestv1.KindSecrets
 	case config.HostProviderKindTelemetry, config.HostProviderKindAudit:

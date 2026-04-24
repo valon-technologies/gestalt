@@ -428,6 +428,45 @@ func (p *closableAuthorizationProvider) Close() error {
 	return nil
 }
 
+type closableExternalCredentialProvider struct {
+	closed *atomic.Int32
+}
+
+func (*closableExternalCredentialProvider) PutCredential(context.Context, *core.ExternalCredential) error {
+	return nil
+}
+
+func (*closableExternalCredentialProvider) RestoreCredential(context.Context, *core.ExternalCredential) error {
+	return nil
+}
+
+func (*closableExternalCredentialProvider) GetCredential(context.Context, string, string, string, string) (*core.ExternalCredential, error) {
+	return nil, core.ErrNotFound
+}
+
+func (*closableExternalCredentialProvider) ListCredentials(context.Context, string) ([]*core.ExternalCredential, error) {
+	return nil, nil
+}
+
+func (*closableExternalCredentialProvider) ListCredentialsForProvider(context.Context, string, string) ([]*core.ExternalCredential, error) {
+	return nil, nil
+}
+
+func (*closableExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string, string) ([]*core.ExternalCredential, error) {
+	return nil, nil
+}
+
+func (*closableExternalCredentialProvider) DeleteCredential(context.Context, string) error {
+	return nil
+}
+
+func (p *closableExternalCredentialProvider) Close() error {
+	if p != nil && p.closed != nil {
+		p.closed.Add(1)
+	}
+	return nil
+}
+
 func stubIndexedDBFactory() bootstrap.IndexedDBFactory {
 	return func(yaml.Node) (indexeddb.IndexedDB, error) {
 		return &coretesting.StubIndexedDB{}, nil
@@ -5384,6 +5423,40 @@ func TestBootstrapFactoryError(t *testing.T) {
 				t.Fatal("expected error, got nil")
 			}
 		})
+	}
+}
+
+func TestBootstrapClosesExternalCredentialsProviderWhenAuthorizationBuildFails(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.ExternalCredentials = map[string]*config.ProviderEntry{
+		"remote": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Server.Providers.ExternalCredentials = "remote"
+	cfg.Providers.Authorization = map[string]*config.ProviderEntry{
+		"remote": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Server.Providers.Authorization = "remote"
+
+	closed := &atomic.Int32{}
+	factories := validFactories()
+	factories.ExternalCredentials = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (core.ExternalCredentialProvider, error) {
+		return &closableExternalCredentialProvider{closed: closed}, nil
+	}
+	factories.Authorization = func(yaml.Node, []providerhost.HostService, bootstrap.Deps) (core.AuthorizationProvider, error) {
+		return nil, fmt.Errorf("authorization broke")
+	}
+
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil {
+		t.Fatal("expected authorization build error, got nil")
+	}
+	if !strings.Contains(err.Error(), "authorization broke") {
+		t.Fatalf("Bootstrap error = %v, want authorization failure", err)
+	}
+	if got := closed.Load(); got != 1 {
+		t.Fatalf("external credential provider close count = %d, want 1", got)
 	}
 }
 

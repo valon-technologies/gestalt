@@ -114,7 +114,7 @@ func (s *StartedHostServices) Close() error {
 	s.closeOnce.Do(func() {
 		var errs []error
 		for _, hostSrv := range s.hostSrvs {
-			hostSrv.Stop()
+			stopGRPCServer(hostSrv, hostServiceShutdownTimeout)
 		}
 		for _, hostLis := range s.hostLiss {
 			if err := hostLis.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
