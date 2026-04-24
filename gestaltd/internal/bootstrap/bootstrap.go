@@ -385,6 +385,14 @@ func (p *agentProviderWithCleanup) Close() error {
 	return errors.Join(errs...)
 }
 
+func (p *agentProviderWithCleanup) ManagesResumeRunInteractions() bool {
+	if p == nil || p.Provider == nil {
+		return false
+	}
+	manager, ok := p.Provider.(agentmanager.ResumeRunInteractionManagingProvider)
+	return ok && manager.ManagesResumeRunInteractions()
+}
+
 type agentProviderWithTracking struct {
 	delegate     coreagent.Provider
 	providerName string
@@ -466,9 +474,42 @@ func (p *agentProviderWithTracking) CancelRun(ctx context.Context, req coreagent
 		}
 		if runID != "" {
 			_ = p.runtime.RevokeTrackedRun(context.Background(), runID)
+			_ = p.runtime.CancelInteractions(context.Background(), runID)
 		}
 	}
 	return run, nil
+}
+
+func (p *agentProviderWithTracking) GetCapabilities(ctx context.Context, req coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	if p == nil || p.delegate == nil {
+		return nil, fmt.Errorf("agent provider is not configured")
+	}
+	return p.delegate.GetCapabilities(ctx, req)
+}
+
+func (p *agentProviderWithTracking) ResumeRun(ctx context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
+	if p == nil || p.delegate == nil {
+		return nil, fmt.Errorf("agent provider is not configured")
+	}
+	if p.runtime != nil {
+		if _, err := p.runtime.ValidateInteraction(ctx, p.providerName, req.RunID, req.InteractionID); err != nil {
+			return nil, err
+		}
+	}
+	run, err := p.delegate.ResumeRun(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if p.runtime != nil {
+		if _, err := p.runtime.ResolveInteraction(ctx, req.InteractionID, req.Resolution); err != nil && !errors.Is(err, core.ErrNotFound) {
+			return nil, err
+		}
+	}
+	return run, nil
+}
+
+func (p *agentProviderWithTracking) ManagesResumeRunInteractions() bool {
+	return p != nil && p.runtime != nil
 }
 
 func (p *agentProviderWithTracking) Ping(ctx context.Context) error {
@@ -902,6 +943,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	}
 	prepared.Deps.AgentRuntime.SetRunMetadata(prepared.Services.AgentRunMetadata)
 	prepared.Deps.AgentRuntime.SetRunEvents(prepared.Services.AgentRunEvents)
+	prepared.Deps.AgentRuntime.SetRunInteractions(prepared.Services.AgentRunInteractions)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, coredata.EffectiveExternalCredentialProvider(prepared.Services),
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
@@ -924,6 +966,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		RunMetadata:       prepared.Services.AgentRunMetadata,
 		RunEvents:         prepared.Services.AgentRunEvents,
 		Tokens:            prepared.Services.Tokens,
+		RunInteractions:   prepared.Services.AgentRunInteractions,
 		Invoker:           sharedInvoker,
 		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,
@@ -1553,7 +1596,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		Name:   "agent_host",
 		EnvVar: providerhost.DefaultAgentHostSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAgentHostServer(srv, providerhost.NewAgentHostServer(name, deps.AgentRuntime.ExecuteTool, deps.AgentRuntime.EmitEvent))
+			proto.RegisterAgentHostServer(srv, providerhost.NewAgentHostServer(name, deps.AgentRuntime.ExecuteTool, deps.AgentRuntime.EmitEvent, deps.AgentRuntime.RequestInteraction))
 		},
 	}}
 	var cleanup func()

@@ -10,8 +10,9 @@ use gestalt::proto::v1::agent_provider_client::AgentProviderClient;
 use gestalt::proto::v1::agent_provider_server::AgentProvider as AgentProviderGrpc;
 use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use gestalt::proto::v1::{
-    self as pb, AgentMessage, AgentRunStatus, BoundAgentRun, ConfigureProviderRequest,
-    ProviderKind, StartAgentProviderRunRequest,
+    self as pb, AgentInteractionState, AgentInteractionType, AgentMessage, AgentMessagePart,
+    AgentMessagePartType, AgentRunStatus, BoundAgentRun, ConfigureProviderRequest, ProviderKind,
+    StartAgentProviderRunRequest,
 };
 use gestalt::{AgentHost, AgentProvider, RuntimeMetadata};
 use hyper_util::rt::tokio::TokioIo;
@@ -30,6 +31,7 @@ struct TestAgentProvider {
 #[derive(Default, Clone)]
 struct TestAgentHostService {
     events: Arc<Mutex<Vec<String>>>,
+    interactions: Arc<Mutex<Vec<String>>>,
 }
 
 #[gestalt::async_trait]
@@ -72,7 +74,7 @@ impl AgentProviderGrpc for TestAgentProvider {
             },
             provider_name: request.provider_name,
             model: request.model,
-            status: AgentRunStatus::Pending as i32,
+            status: AgentRunStatus::WaitingForInput as i32,
             messages: request.messages,
             session_ref: request.session_ref,
             execution_ref: request.execution_ref,
@@ -99,6 +101,35 @@ impl AgentProviderGrpc for TestAgentProvider {
         _request: GrpcRequest<pb::CancelAgentProviderRunRequest>,
     ) -> std::result::Result<GrpcResponse<BoundAgentRun>, Status> {
         Err(Status::unimplemented("not used"))
+    }
+
+    async fn get_capabilities(
+        &self,
+        _request: GrpcRequest<pb::GetAgentProviderCapabilitiesRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentProviderCapabilities>, Status> {
+        Ok(GrpcResponse::new(pb::AgentProviderCapabilities {
+            streaming_text: true,
+            tool_calls: true,
+            parallel_tool_calls: false,
+            structured_output: true,
+            session_continuation: true,
+            approvals: true,
+            resumable_runs: true,
+            reasoning_summaries: false,
+        }))
+    }
+
+    async fn resume_run(
+        &self,
+        request: GrpcRequest<pb::ResumeAgentProviderRunRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundAgentRun>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(BoundAgentRun {
+            id: request.run_id,
+            status: AgentRunStatus::Succeeded as i32,
+            status_message: request.interaction_id,
+            ..Default::default()
+        }))
     }
 }
 
@@ -128,6 +159,30 @@ impl AgentHostRpc for TestAgentHostService {
             request.run_id, request.r#type, request.visibility
         ));
         Ok(GrpcResponse::new(()))
+    }
+
+    async fn request_interaction(
+        &self,
+        request: GrpcRequest<pb::RequestAgentInteractionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentInteraction>, Status> {
+        let request = request.into_inner();
+        self.interactions
+            .lock()
+            .expect("interactions lock")
+            .push(format!(
+                "{}:{}:{}",
+                request.run_id, request.r#type, request.title
+            ));
+        Ok(GrpcResponse::new(pb::AgentInteraction {
+            id: "interaction-1".to_string(),
+            run_id: request.run_id,
+            r#type: request.r#type,
+            state: AgentInteractionState::Pending as i32,
+            title: request.title,
+            prompt: request.prompt,
+            request: request.request,
+            ..Default::default()
+        }))
     }
 }
 
@@ -193,6 +248,14 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
             messages: vec![AgentMessage {
                 role: "user".to_string(),
                 text: "Plan it".to_string(),
+                parts: vec![AgentMessagePart {
+                    r#type: AgentMessagePartType::Text as i32,
+                    text: "Plan it".to_string(),
+                    ..Default::default()
+                }],
+                metadata: Some(helpers::struct_from_json(serde_json::json!({
+                    "priority": "high"
+                }))),
             }],
             session_ref: "sess-1".to_string(),
             execution_ref: "exec-1".to_string(),
@@ -209,17 +272,53 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
         AgentRunStatus::try_from(started.status)
             .expect("valid agent run status")
             .as_str_name(),
-        "AGENT_RUN_STATUS_PENDING"
+        "AGENT_RUN_STATUS_WAITING_FOR_INPUT"
     );
     assert_eq!(
         started.messages,
         vec![AgentMessage {
             role: "user".to_string(),
             text: "Plan it".to_string(),
+            parts: vec![AgentMessagePart {
+                r#type: AgentMessagePartType::Text as i32,
+                text: "Plan it".to_string(),
+                ..Default::default()
+            }],
+            metadata: Some(helpers::struct_from_json(serde_json::json!({
+                "priority": "high"
+            }))),
         }]
     );
     assert_eq!(started.session_ref, "sess-1");
     assert_eq!(started.execution_ref, "exec-1");
+
+    let capabilities = client
+        .get_capabilities(pb::GetAgentProviderCapabilitiesRequest {})
+        .await
+        .expect("get capabilities")
+        .into_inner();
+    assert!(capabilities.streaming_text);
+    assert!(capabilities.tool_calls);
+    assert!(capabilities.approvals);
+
+    let resumed = client
+        .resume_run(pb::ResumeAgentProviderRunRequest {
+            run_id: "run-42".to_string(),
+            interaction_id: "interaction-1".to_string(),
+            resolution: Some(helpers::struct_from_json(serde_json::json!({
+                "approved": true
+            }))),
+        })
+        .await
+        .expect("resume run")
+        .into_inner();
+    assert_eq!(
+        AgentRunStatus::try_from(resumed.status)
+            .expect("valid resumed run status")
+            .as_str_name(),
+        "AGENT_RUN_STATUS_SUCCEEDED"
+    );
+    assert_eq!(resumed.status_message, "interaction-1");
 
     assert_eq!(
         *provider
@@ -241,6 +340,7 @@ async fn agent_host_client_round_trip_over_unix_socket() {
         helpers::EnvGuard::set(gestalt::ENV_AGENT_HOST_SOCKET, host_socket.as_os_str());
     let host_service = TestAgentHostService::default();
     let events = Arc::clone(&host_service.events);
+    let interactions = Arc::clone(&host_service.interactions);
 
     let host_socket_for_task = host_socket.clone();
     let host_task = tokio::spawn(async move {
@@ -280,9 +380,37 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     })
     .await
     .expect("emit event");
+    let interaction = host
+        .request_interaction(pb::RequestAgentInteractionRequest {
+            run_id: "run-42".to_string(),
+            r#type: AgentInteractionType::Approval as i32,
+            title: "Approve command".to_string(),
+            prompt: "Run git status?".to_string(),
+            request: Some(helpers::struct_from_json(serde_json::json!({
+                "command": ["git", "status"]
+            }))),
+        })
+        .await
+        .expect("request interaction");
+    assert_eq!(interaction.id, "interaction-1");
+    assert_eq!(
+        AgentInteractionState::try_from(interaction.state)
+            .expect("valid interaction state")
+            .as_str_name(),
+        "AGENT_INTERACTION_STATE_PENDING"
+    );
     assert_eq!(
         *events.lock().expect("events lock"),
         vec!["run-42:agent.tool_call.started:public".to_string()]
+    );
+    assert_eq!(
+        *interactions.lock().expect("interactions lock"),
+        vec![format!(
+            "{}:{}:{}",
+            "run-42",
+            AgentInteractionType::Approval as i32,
+            "Approve command"
+        )]
     );
 
     host_task.abort();

@@ -115,6 +115,21 @@ class WorkflowProviderStub(object):
                 request_serializer=v1_dot_workflow__pb2.ResumeWorkflowProviderEventTriggerRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.BoundWorkflowEventTrigger.FromString,
                 _registered_method=True)
+        self.PutExecutionReference = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowProvider/PutExecutionReference',
+                request_serializer=v1_dot_workflow__pb2.PutWorkflowExecutionReferenceRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.WorkflowExecutionReference.FromString,
+                _registered_method=True)
+        self.GetExecutionReference = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowProvider/GetExecutionReference',
+                request_serializer=v1_dot_workflow__pb2.GetWorkflowExecutionReferenceRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.WorkflowExecutionReference.FromString,
+                _registered_method=True)
+        self.ListExecutionReferences = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowProvider/ListExecutionReferences',
+                request_serializer=v1_dot_workflow__pb2.ListWorkflowExecutionReferencesRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.ListWorkflowExecutionReferencesResponse.FromString,
+                _registered_method=True)
         self.PublishEvent = channel.unary_unary(
                 '/gestalt.provider.v1.WorkflowProvider/PublishEvent',
                 request_serializer=v1_dot_workflow__pb2.PublishWorkflowProviderEventRequest.SerializeToString,
@@ -221,6 +236,24 @@ class WorkflowProviderServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def PutExecutionReference(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetExecutionReference(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListExecutionReferences(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def PublishEvent(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -309,6 +342,21 @@ def add_WorkflowProviderServicer_to_server(servicer, server):
                     servicer.ResumeEventTrigger,
                     request_deserializer=v1_dot_workflow__pb2.ResumeWorkflowProviderEventTriggerRequest.FromString,
                     response_serializer=v1_dot_workflow__pb2.BoundWorkflowEventTrigger.SerializeToString,
+            ),
+            'PutExecutionReference': grpc.unary_unary_rpc_method_handler(
+                    servicer.PutExecutionReference,
+                    request_deserializer=v1_dot_workflow__pb2.PutWorkflowExecutionReferenceRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.WorkflowExecutionReference.SerializeToString,
+            ),
+            'GetExecutionReference': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetExecutionReference,
+                    request_deserializer=v1_dot_workflow__pb2.GetWorkflowExecutionReferenceRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.WorkflowExecutionReference.SerializeToString,
+            ),
+            'ListExecutionReferences': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListExecutionReferences,
+                    request_deserializer=v1_dot_workflow__pb2.ListWorkflowExecutionReferencesRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.ListWorkflowExecutionReferencesResponse.SerializeToString,
             ),
             'PublishEvent': grpc.unary_unary_rpc_method_handler(
                     servicer.PublishEvent,
@@ -748,6 +796,87 @@ class WorkflowProvider(object):
             '/gestalt.provider.v1.WorkflowProvider/ResumeEventTrigger',
             v1_dot_workflow__pb2.ResumeWorkflowProviderEventTriggerRequest.SerializeToString,
             v1_dot_workflow__pb2.BoundWorkflowEventTrigger.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def PutExecutionReference(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.WorkflowProvider/PutExecutionReference',
+            v1_dot_workflow__pb2.PutWorkflowExecutionReferenceRequest.SerializeToString,
+            v1_dot_workflow__pb2.WorkflowExecutionReference.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetExecutionReference(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.WorkflowProvider/GetExecutionReference',
+            v1_dot_workflow__pb2.GetWorkflowExecutionReferenceRequest.SerializeToString,
+            v1_dot_workflow__pb2.WorkflowExecutionReference.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListExecutionReferences(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.WorkflowProvider/ListExecutionReferences',
+            v1_dot_workflow__pb2.ListWorkflowExecutionReferencesRequest.SerializeToString,
+            v1_dot_workflow__pb2.ListWorkflowExecutionReferencesResponse.FromString,
             options,
             channel_credentials,
             insecure,

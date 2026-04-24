@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"maps"
 	"net/http"
@@ -99,6 +100,8 @@ type memoryAgentProvider struct {
 	cancelRequests   []coreagent.CancelRunRequest
 	runs             map[string]*coreagent.Run
 	startRunErr      error
+	interactions     *coredata.AgentRunInteractionService
+	capabilities     *coreagent.ProviderCapabilities
 	getRunErr        error
 	listRunsErr      error
 	cancelRunErr     error
@@ -108,7 +111,7 @@ func newMemoryAgentProvider() *memoryAgentProvider {
 	return &memoryAgentProvider{runs: map[string]*coreagent.Run{}}
 }
 
-func (p *memoryAgentProvider) StartRun(_ context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
+func (p *memoryAgentProvider) StartRun(ctx context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
 	p.startRunRequests = append(p.startRunRequests, req)
 	if p.startRunErr != nil {
 		return nil, p.startRunErr
@@ -125,6 +128,22 @@ func (p *memoryAgentProvider) StartRun(_ context.Context, req coreagent.StartRun
 		CreatedAt:    &now,
 		StartedAt:    &now,
 		ExecutionRef: req.ExecutionRef,
+	}
+	if p.interactions != nil {
+		if requireInteraction, _ := req.Metadata["requireInteraction"].(bool); requireInteraction {
+			if _, err := p.interactions.Create(ctx, coreagent.Interaction{
+				RunID:   req.RunID,
+				Type:    coreagent.InteractionTypeApproval,
+				State:   coreagent.InteractionStatePending,
+				Title:   "Approve response",
+				Prompt:  "Allow this run to continue?",
+				Request: map[string]any{"ticket": "RD-42"},
+			}); err != nil {
+				return nil, err
+			}
+			run.Status = coreagent.RunStatusWaitingForInput
+			run.StatusMessage = "waiting for input"
+		}
 	}
 	p.runs[req.RunID] = run
 	return cloneAgentRun(run), nil
@@ -170,6 +189,31 @@ func (p *memoryAgentProvider) CancelRun(_ context.Context, req coreagent.CancelR
 	return cloneAgentRun(run), nil
 }
 
+func (p *memoryAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	if p.capabilities != nil {
+		value := *p.capabilities
+		return &value, nil
+	}
+	return &coreagent.ProviderCapabilities{
+		StreamingText:       true,
+		ToolCalls:           true,
+		StructuredOutput:    true,
+		SessionContinuation: true,
+		Approvals:           true,
+		ResumableRuns:       true,
+	}, nil
+}
+
+func (p *memoryAgentProvider) ResumeRun(_ context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
+	run, ok := p.runs[req.RunID]
+	if !ok || run == nil {
+		return nil, core.ErrNotFound
+	}
+	cloned := cloneAgentRun(run)
+	cloned.Status = coreagent.RunStatusSucceeded
+	return cloned, nil
+}
+
 func (p *memoryAgentProvider) Ping(context.Context) error { return nil }
 func (p *memoryAgentProvider) Close() error               { return nil }
 
@@ -195,13 +239,47 @@ func cloneAgentRun(run *coreagent.Run) *coreagent.Run {
 		return nil
 	}
 	cloned := *run
-	cloned.Messages = append([]coreagent.Message(nil), run.Messages...)
+	cloned.Messages = make([]coreagent.Message, 0, len(run.Messages))
+	for _, message := range run.Messages {
+		copied := message
+		copied.Metadata = maps.Clone(message.Metadata)
+		if len(message.Parts) > 0 {
+			copied.Parts = make([]coreagent.MessagePart, 0, len(message.Parts))
+			for _, part := range message.Parts {
+				partCopy := part
+				partCopy.JSON = maps.Clone(part.JSON)
+				if part.ToolCall != nil {
+					value := *part.ToolCall
+					value.Arguments = maps.Clone(part.ToolCall.Arguments)
+					partCopy.ToolCall = &value
+				}
+				if part.ToolResult != nil {
+					value := *part.ToolResult
+					value.Output = maps.Clone(part.ToolResult.Output)
+					partCopy.ToolResult = &value
+				}
+				if part.ImageRef != nil {
+					value := *part.ImageRef
+					partCopy.ImageRef = &value
+				}
+				copied.Parts = append(copied.Parts, partCopy)
+			}
+		}
+		cloned.Messages = append(cloned.Messages, copied)
+	}
 	cloned.StructuredOutput = maps.Clone(run.StructuredOutput)
 	return &cloned
 }
 
 type agentRunMessageResponse struct {
-	Role string `json:"role"`
+	Role     string              `json:"role"`
+	Text     string              `json:"text"`
+	Parts    []agentRunPartEntry `json:"parts"`
+	Metadata map[string]any      `json:"metadata"`
+}
+
+type agentRunPartEntry struct {
+	Type string `json:"type"`
 	Text string `json:"text"`
 }
 
@@ -222,6 +300,17 @@ type agentRunEventResponse struct {
 	Source     string         `json:"source"`
 	Visibility string         `json:"visibility"`
 	Data       map[string]any `json:"data"`
+}
+
+type agentInteractionResponse struct {
+	ID         string         `json:"id"`
+	RunID      string         `json:"runId"`
+	Type       string         `json:"type"`
+	State      string         `json:"state"`
+	Title      string         `json:"title"`
+	Prompt     string         `json:"prompt"`
+	Request    map[string]any `json:"request"`
+	Resolution map[string]any `json:"resolution"`
 }
 
 func TestGlobalAgentRunLifecycleSupportsCreateListGetAndCancel(t *testing.T) {
@@ -254,11 +343,12 @@ func TestGlobalAgentRunLifecycleSupportsCreateListGetAndCancel(t *testing.T) {
 		},
 	}
 	manager := agentmanager.New(agentmanager.Config{
-		Providers:   testutil.NewProviderRegistry(t, roadmapProvider, slackProvider),
-		Agent:       &stubAgentControl{defaultProviderName: "managed", provider: provider},
-		Invoker:     &stubAgentToolInvoker{tokens: map[string]string{"roadmap": "roadmap-token"}},
-		RunMetadata: services.AgentRunMetadata,
-		RunEvents:   services.AgentRunEvents,
+		Providers:       testutil.NewProviderRegistry(t, roadmapProvider, slackProvider),
+		Agent:           &stubAgentControl{defaultProviderName: "managed", provider: provider},
+		Invoker:         &stubAgentToolInvoker{tokens: map[string]string{"roadmap": "roadmap-token"}},
+		RunMetadata:     services.AgentRunMetadata,
+		RunEvents:       services.AgentRunEvents,
+		RunInteractions: services.AgentRunInteractions,
 	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -283,14 +373,19 @@ func TestGlobalAgentRunLifecycleSupportsCreateListGetAndCancel(t *testing.T) {
 			Visibility: req.Visibility,
 			Data:       req.Data,
 		})
-	})
+	}, nil)
 
 	createBody := []byte(`{
 		"provider":"managed",
 		"model":"gpt-5.4",
 		"messages":[
 			{"role":"system","text":"Be concise."},
-			{"role":"user","text":"Summarize the roadmap risk."}
+			{
+				"role":"user",
+				"text":"Summarize the roadmap risk.",
+				"parts":[{"type":"text","text":"Summarize the roadmap risk."}],
+				"metadata":{"priority":"high"}
+			}
 		]
 	}`)
 	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/", bytes.NewReader(createBody))
@@ -314,6 +409,9 @@ func TestGlobalAgentRunLifecycleSupportsCreateListGetAndCancel(t *testing.T) {
 	}
 	if len(created.Messages) != 2 || created.Messages[1].Text != "Summarize the roadmap risk." {
 		t.Fatalf("created messages = %#v", created.Messages)
+	}
+	if len(created.Messages[1].Parts) != 1 || created.Messages[1].Parts[0].Type != "text" || created.Messages[1].Metadata["priority"] != "high" {
+		t.Fatalf("created message details = %#v", created.Messages[1])
 	}
 	if created.ExecutionRef != created.ID {
 		t.Fatalf("execution ref = %q, want %q", created.ExecutionRef, created.ID)
@@ -491,6 +589,380 @@ func TestGlobalAgentRunLifecycleSupportsCreateListGetAndCancel(t *testing.T) {
 	}
 }
 
+func TestGlobalAgentRunInteractionsCanListAndResume(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryAgentProvider()
+	provider.interactions = services.AgentRunInteractions
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:       testutil.NewProviderRegistry(t),
+		Agent:           &stubAgentControl{defaultProviderName: "managed", provider: provider},
+		RunMetadata:     services.AgentRunMetadata,
+		RunEvents:       services.AgentRunEvents,
+		RunInteractions: services.AgentRunInteractions,
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.AgentManager = manager
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createBody := []byte(`{
+		"provider":"managed",
+		"model":"gpt-5.4",
+		"messages":[{"role":"user","text":"Need approval"}],
+		"metadata":{"requireInteraction":true}
+	}`)
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/", bytes.NewReader(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createResp.StatusCode)
+	}
+	var created agentRunResponse
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.Status != string(coreagent.RunStatusWaitingForInput) {
+		t.Fatalf("created status = %q, want %q", created.Status, coreagent.RunStatusWaitingForInput)
+	}
+
+	listInteractionsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/runs/"+created.ID+"/interactions", nil)
+	listInteractionsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	listInteractionsResp, err := http.DefaultClient.Do(listInteractionsReq)
+	if err != nil {
+		t.Fatalf("list interactions request: %v", err)
+	}
+	defer func() { _ = listInteractionsResp.Body.Close() }()
+	if listInteractionsResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", listInteractionsResp.StatusCode)
+	}
+	var interactions []agentInteractionResponse
+	if err := json.NewDecoder(listInteractionsResp.Body).Decode(&interactions); err != nil {
+		t.Fatalf("decode interactions response: %v", err)
+	}
+	if len(interactions) != 1 {
+		t.Fatalf("interactions = %#v, want one", interactions)
+	}
+	if interactions[0].State != string(coreagent.InteractionStatePending) || interactions[0].Type != string(coreagent.InteractionTypeApproval) {
+		t.Fatalf("interaction = %#v", interactions[0])
+	}
+
+	resumeBody := []byte(fmt.Sprintf(`{
+		"interactionId":%q,
+		"resolution":{"approved":true}
+	}`, interactions[0].ID))
+	resumeReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/"+created.ID+"/resume", bytes.NewReader(resumeBody))
+	resumeReq.Header.Set("Content-Type", "application/json")
+	resumeReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	resumeResp, err := http.DefaultClient.Do(resumeReq)
+	if err != nil {
+		t.Fatalf("resume request: %v", err)
+	}
+	defer func() { _ = resumeResp.Body.Close() }()
+	if resumeResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resumeResp.Body)
+		t.Fatalf("expected 200, got %d: %s", resumeResp.StatusCode, body)
+	}
+	var resumed agentRunResponse
+	if err := json.NewDecoder(resumeResp.Body).Decode(&resumed); err != nil {
+		t.Fatalf("decode resume response: %v", err)
+	}
+	if resumed.Status != string(coreagent.RunStatusSucceeded) {
+		t.Fatalf("resumed status = %q, want %q", resumed.Status, coreagent.RunStatusSucceeded)
+	}
+
+	listResolvedReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/runs/"+created.ID+"/interactions", nil)
+	listResolvedReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	listResolvedResp, err := http.DefaultClient.Do(listResolvedReq)
+	if err != nil {
+		t.Fatalf("list resolved interactions request: %v", err)
+	}
+	defer func() { _ = listResolvedResp.Body.Close() }()
+	if listResolvedResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", listResolvedResp.StatusCode)
+	}
+	interactions = nil
+	if err := json.NewDecoder(listResolvedResp.Body).Decode(&interactions); err != nil {
+		t.Fatalf("decode resolved interactions response: %v", err)
+	}
+	if len(interactions) != 1 || interactions[0].State != string(coreagent.InteractionStateResolved) || interactions[0].Resolution["approved"] != true {
+		t.Fatalf("resolved interactions = %#v", interactions)
+	}
+}
+
+func TestGlobalAgentRunResumeRequiresProviderSupport(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryAgentProvider()
+	provider.interactions = services.AgentRunInteractions
+	provider.capabilities = &coreagent.ProviderCapabilities{StreamingText: true, ToolCalls: true}
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:       testutil.NewProviderRegistry(t),
+		Agent:           &stubAgentControl{defaultProviderName: "managed", provider: provider},
+		RunMetadata:     services.AgentRunMetadata,
+		RunEvents:       services.AgentRunEvents,
+		RunInteractions: services.AgentRunInteractions,
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.AgentManager = manager
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/", bytes.NewBufferString(`{
+		"provider":"managed",
+		"model":"gpt-5.4",
+		"messages":[{"role":"user","text":"Need approval"}],
+		"metadata":{"requireInteraction":true}
+	}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createResp.StatusCode)
+	}
+	var created agentRunResponse
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/runs/"+created.ID+"/interactions", nil)
+	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list interactions request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", listResp.StatusCode)
+	}
+	var interactions []agentInteractionResponse
+	if err := json.NewDecoder(listResp.Body).Decode(&interactions); err != nil {
+		t.Fatalf("decode interactions response: %v", err)
+	}
+	if len(interactions) != 1 {
+		t.Fatalf("interactions = %#v, want one", interactions)
+	}
+
+	resumeReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/"+created.ID+"/resume", bytes.NewBufferString(fmt.Sprintf(`{
+		"interactionId":%q,
+		"resolution":{"approved":true}
+	}`, interactions[0].ID)))
+	resumeReq.Header.Set("Content-Type", "application/json")
+	resumeReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	resumeResp, err := http.DefaultClient.Do(resumeReq)
+	if err != nil {
+		t.Fatalf("resume request: %v", err)
+	}
+	defer func() { _ = resumeResp.Body.Close() }()
+	if resumeResp.StatusCode != http.StatusPreconditionFailed {
+		body, _ := io.ReadAll(resumeResp.Body)
+		t.Fatalf("expected 412, got %d: %s", resumeResp.StatusCode, body)
+	}
+	var payload map[string]string
+	if err := json.NewDecoder(resumeResp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode resume error: %v", err)
+	}
+	if payload["error"] != agentmanager.ErrAgentRunResumeNotSupported.Error() {
+		t.Fatalf("resume error = %q, want %q", payload["error"], agentmanager.ErrAgentRunResumeNotSupported.Error())
+	}
+}
+
+func TestGlobalAgentRunResumeValidatesInteractionBeforeProviderResolution(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryAgentProvider()
+	provider.interactions = services.AgentRunInteractions
+	control := &stubAgentControl{
+		defaultProviderName: "managed",
+		provider:            provider,
+	}
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:       testutil.NewProviderRegistry(t),
+		Agent:           control,
+		RunMetadata:     services.AgentRunMetadata,
+		RunEvents:       services.AgentRunEvents,
+		RunInteractions: services.AgentRunInteractions,
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.AgentManager = manager
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/", bytes.NewBufferString(`{
+		"provider":"managed",
+		"model":"gpt-5.4",
+		"messages":[{"role":"user","text":"Need approval"}],
+		"metadata":{"requireInteraction":true}
+	}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createResp.StatusCode)
+	}
+	var created agentRunResponse
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+
+	control.providerErr = agentmanager.NewAgentProviderNotAvailableError("managed")
+
+	resumeReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/"+created.ID+"/resume", bytes.NewBufferString(`{}`))
+	resumeReq.Header.Set("Content-Type", "application/json")
+	resumeReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	resumeResp, err := http.DefaultClient.Do(resumeReq)
+	if err != nil {
+		t.Fatalf("resume request: %v", err)
+	}
+	defer func() { _ = resumeResp.Body.Close() }()
+	if resumeResp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resumeResp.Body)
+		t.Fatalf("expected 400, got %d: %s", resumeResp.StatusCode, body)
+	}
+	var payload map[string]string
+	if err := json.NewDecoder(resumeResp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode resume error: %v", err)
+	}
+	if payload["error"] != agentmanager.ErrAgentInteractionRequired.Error() {
+		t.Fatalf("resume error = %q, want %q", payload["error"], agentmanager.ErrAgentInteractionRequired.Error())
+	}
+}
+
+func TestGlobalAgentRunCancelMarksPendingInteractionsCanceled(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryAgentProvider()
+	provider.interactions = services.AgentRunInteractions
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:       testutil.NewProviderRegistry(t),
+		Agent:           &stubAgentControl{defaultProviderName: "managed", provider: provider},
+		RunMetadata:     services.AgentRunMetadata,
+		RunEvents:       services.AgentRunEvents,
+		RunInteractions: services.AgentRunInteractions,
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.AgentManager = manager
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/", bytes.NewBufferString(`{
+		"provider":"managed",
+		"model":"gpt-5.4",
+		"messages":[{"role":"user","text":"Need approval"}],
+		"metadata":{"requireInteraction":true}
+	}`))
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createResp.StatusCode)
+	}
+	var created agentRunResponse
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+
+	cancelReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/"+created.ID+"/cancel", bytes.NewBufferString(`{"reason":"operator requested"}`))
+	cancelReq.Header.Set("Content-Type", "application/json")
+	cancelReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	cancelResp, err := http.DefaultClient.Do(cancelReq)
+	if err != nil {
+		t.Fatalf("cancel request: %v", err)
+	}
+	defer func() { _ = cancelResp.Body.Close() }()
+	if cancelResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(cancelResp.Body)
+		t.Fatalf("expected 200, got %d: %s", cancelResp.StatusCode, body)
+	}
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/runs/"+created.ID+"/interactions", nil)
+	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list interactions request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", listResp.StatusCode)
+	}
+	var interactions []agentInteractionResponse
+	if err := json.NewDecoder(listResp.Body).Decode(&interactions); err != nil {
+		t.Fatalf("decode interactions response: %v", err)
+	}
+	if len(interactions) != 1 || interactions[0].State != string(coreagent.InteractionStateCanceled) {
+		t.Fatalf("interactions after cancel = %#v, want one canceled interaction", interactions)
+	}
+}
+
 func readSSEFrame(t *testing.T, body io.Reader) string {
 	t.Helper()
 	reader := bufio.NewReader(body)
@@ -530,10 +1002,11 @@ func TestGlobalAgentRunProviderAvailabilityFailuresArePreconditionFailures(t *te
 		t.Fatalf("Append agent run event: %v", err)
 	}
 	manager := agentmanager.New(agentmanager.Config{
-		Providers:   testutil.NewProviderRegistry(t),
-		Agent:       &stubAgentControl{providers: map[string]coreagent.Provider{}},
-		RunMetadata: services.AgentRunMetadata,
-		RunEvents:   services.AgentRunEvents,
+		Providers:       testutil.NewProviderRegistry(t),
+		Agent:           &stubAgentControl{providers: map[string]coreagent.Provider{}},
+		RunMetadata:     services.AgentRunMetadata,
+		RunEvents:       services.AgentRunEvents,
+		RunInteractions: services.AgentRunInteractions,
 	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -1088,7 +1561,8 @@ func TestGlobalAgentRunListProviderFilterAvoidsUnhealthyProviders(t *testing.T) 
 				"broken":  brokenProvider,
 			},
 		},
-		RunMetadata: services.AgentRunMetadata,
+		RunMetadata:     services.AgentRunMetadata,
+		RunInteractions: services.AgentRunInteractions,
 	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -1132,9 +1606,10 @@ func TestGlobalAgentRunCreateRejectsMismatchedIdempotencyKeySources(t *testing.T
 	user := seedUser(t, services, "ada@example.test")
 	provider := newMemoryAgentProvider()
 	manager := agentmanager.New(agentmanager.Config{
-		Providers:   testutil.NewProviderRegistry(t),
-		Agent:       &stubAgentControl{defaultProviderName: "managed", provider: provider},
-		RunMetadata: services.AgentRunMetadata,
+		Providers:       testutil.NewProviderRegistry(t),
+		Agent:           &stubAgentControl{defaultProviderName: "managed", provider: provider},
+		RunMetadata:     services.AgentRunMetadata,
+		RunInteractions: services.AgentRunInteractions,
 	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -1227,9 +1702,10 @@ func TestGlobalAgentRunCreateReturnsConflictWhileIdempotentRunIsInitializing(t *
 	user := seedUser(t, services, "ada@example.test")
 	provider := newMemoryAgentProvider()
 	manager := agentmanager.New(agentmanager.Config{
-		Providers:   testutil.NewProviderRegistry(t),
-		Agent:       &stubAgentControl{defaultProviderName: "managed", provider: provider},
-		RunMetadata: services.AgentRunMetadata,
+		Providers:       testutil.NewProviderRegistry(t),
+		Agent:           &stubAgentControl{defaultProviderName: "managed", provider: provider},
+		RunMetadata:     services.AgentRunMetadata,
+		RunInteractions: services.AgentRunInteractions,
 	})
 
 	subjectID := principal.UserSubjectID(user.ID)

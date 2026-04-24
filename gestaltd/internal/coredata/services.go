@@ -23,6 +23,7 @@ type Services struct {
 	APITokenAccess           *APITokenAccessService
 	AgentRunMetadata         *AgentRunMetadataService
 	AgentRunEvents           *AgentRunEventService
+	AgentRunInteractions     *AgentRunInteractionService
 	DB                       indexeddb.IndexedDB
 }
 
@@ -67,6 +68,9 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := ds.CreateObjectStore(ctx, StoreAgentRunEvents, AgentRunEventsSchema); err != nil {
 		return nil, fmt.Errorf("create agent_run_events store: %w", err)
 	}
+	if err := ds.CreateObjectStore(ctx, StoreAgentRunInteractions, AgentRunInteractionsSchema); err != nil {
+		return nil, fmt.Errorf("create agent_run_interactions store: %w", err)
+	}
 
 	identities := NewIdentityService(ds)
 	authBindings := NewIdentityAuthBindingService(ds)
@@ -77,6 +81,7 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	apiTokenAccess := NewAPITokenAccessService(ds)
 	agentRunMetadata := NewAgentRunMetadataService(ds)
 	agentRunEvents := NewAgentRunEventService(ds)
+	agentRunInteractions := NewAgentRunInteractionService(ds)
 
 	users := NewUserService(ds, identities, authBindings)
 	if err := users.BackfillNormalizedEmails(ctx); err != nil {
@@ -108,6 +113,7 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 		APITokenAccess:           apiTokenAccess,
 		AgentRunMetadata:         agentRunMetadata,
 		AgentRunEvents:           agentRunEvents,
+		AgentRunInteractions:     agentRunInteractions,
 		DB:                       ds,
 	}, nil
 }

@@ -15,19 +15,22 @@ import (
 
 type agentExecuteToolFunc func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error)
 type agentEmitEventFunc func(context.Context, coreagent.EmitEventRequest) (*coreagent.RunEvent, error)
+type agentRequestInteractionFunc func(context.Context, coreagent.RequestInteractionRequest) (*coreagent.Interaction, error)
 
 type AgentHostServer struct {
 	proto.UnimplementedAgentHostServer
-	providerName string
-	executeTool  agentExecuteToolFunc
-	emitEvent    agentEmitEventFunc
+	providerName       string
+	executeTool        agentExecuteToolFunc
+	emitEvent          agentEmitEventFunc
+	requestInteraction agentRequestInteractionFunc
 }
 
-func NewAgentHostServer(providerName string, executeTool agentExecuteToolFunc, emitEvent agentEmitEventFunc) *AgentHostServer {
+func NewAgentHostServer(providerName string, executeTool agentExecuteToolFunc, emitEvent agentEmitEventFunc, requestInteraction agentRequestInteractionFunc) *AgentHostServer {
 	return &AgentHostServer{
-		providerName: providerName,
-		executeTool:  executeTool,
-		emitEvent:    emitEvent,
+		providerName:       providerName,
+		executeTool:        executeTool,
+		emitEvent:          emitEvent,
+		requestInteraction: requestInteraction,
 	}
 }
 
@@ -90,6 +93,39 @@ func (s *AgentHostServer) EmitEvent(ctx context.Context, req *proto.EmitAgentEve
 		return nil, status.Errorf(agentHostErrorCode(err), "agent emit event: %v", err)
 	}
 	return &emptypb.Empty{}, nil
+}
+
+func (s *AgentHostServer) RequestInteraction(ctx context.Context, req *proto.RequestAgentInteractionRequest) (*proto.AgentInteraction, error) {
+	if s == nil || s.requestInteraction == nil {
+		return nil, status.Error(codes.FailedPrecondition, "agent host interaction requester is not configured")
+	}
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	runID := strings.TrimSpace(req.GetRunId())
+	if runID == "" {
+		return nil, status.Error(codes.InvalidArgument, "run_id is required")
+	}
+	interactionType, err := agentInteractionTypeFromProto(req.GetType())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "interaction type: %v", err)
+	}
+	interaction, err := s.requestInteraction(ctx, coreagent.RequestInteractionRequest{
+		ProviderName: strings.TrimSpace(s.providerName),
+		RunID:        runID,
+		Type:         interactionType,
+		Title:        strings.TrimSpace(req.GetTitle()),
+		Prompt:       strings.TrimSpace(req.GetPrompt()),
+		Request:      mapFromStruct(req.GetRequest()),
+	})
+	if err != nil {
+		return nil, status.Errorf(agentHostErrorCode(err), "agent request interaction: %v", err)
+	}
+	resp, err := agentInteractionToProto(interaction)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode interaction: %v", err)
+	}
+	return resp, nil
 }
 
 func agentHostErrorCode(err error) codes.Code {

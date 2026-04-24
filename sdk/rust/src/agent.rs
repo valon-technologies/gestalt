@@ -53,6 +53,13 @@ impl AgentHost {
         self.client.emit_event(request).await?;
         Ok(())
     }
+
+    pub async fn request_interaction(
+        &mut self,
+        request: pb::RequestAgentInteractionRequest,
+    ) -> std::result::Result<pb::AgentInteraction, AgentHostError> {
+        Ok(self.client.request_interaction(request).await?.into_inner())
+    }
 }
 
 async fn connect_unix(
@@ -135,5 +142,19 @@ where
         request: GrpcRequest<pb::CancelAgentProviderRunRequest>,
     ) -> std::result::Result<GrpcResponse<pb::BoundAgentRun>, Status> {
         self.provider.cancel_run(request).await
+    }
+
+    async fn get_capabilities(
+        &self,
+        request: GrpcRequest<pb::GetAgentProviderCapabilitiesRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentProviderCapabilities>, Status> {
+        self.provider.get_capabilities(request).await
+    }
+
+    async fn resume_run(
+        &self,
+        request: GrpcRequest<pb::ResumeAgentProviderRunRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::BoundAgentRun>, Status> {
+        self.provider.resume_run(request).await
     }
 }

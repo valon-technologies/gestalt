@@ -1,7 +1,6 @@
 import { connect } from "node:net";
 
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
-import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import {
   Code,
   ConnectError,
@@ -13,12 +12,23 @@ import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
   AgentHost as AgentHostService,
+  AgentInteractionState,
+  AgentInteractionType,
+  AgentMessagePartType,
+  AgentInteractionSchema,
+  AgentProviderCapabilitiesSchema,
   AgentProvider as AgentProviderService,
   AgentRunStatus,
   AgentToolSourceMode,
   BoundAgentRunSchema,
+  GetAgentProviderCapabilitiesRequestSchema,
   ListAgentProviderRunsResponseSchema,
   type AgentActor,
+  type AgentMessagePart,
+  type AgentMessagePartImageRef,
+  type AgentMessagePartToolCall,
+  type AgentMessagePartToolResult,
+  type AgentInteraction,
   type AgentMessage,
   type AgentToolRef,
   type BoundAgentRun,
@@ -27,9 +37,12 @@ import {
   type EmitAgentEventRequest,
   type ExecuteAgentToolRequest,
   type ExecuteAgentToolResponse,
+  type GetAgentProviderCapabilitiesRequest,
   type GetAgentProviderRunRequest,
   type ListAgentProviderRunsRequest,
+  type RequestAgentInteractionRequest,
   type ResolvedAgentTool,
+  type ResumeAgentProviderRunRequest,
   type StartAgentProviderRunRequest,
 } from "../gen/v1/agent_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
@@ -39,6 +52,11 @@ export const ENV_AGENT_HOST_SOCKET = "GESTALT_AGENT_HOST_SOCKET";
 
 export type {
   AgentActor,
+  AgentInteraction,
+  AgentMessagePart,
+  AgentMessagePartImageRef,
+  AgentMessagePartToolCall,
+  AgentMessagePartToolResult,
   AgentMessage,
   AgentToolRef,
   BoundAgentRun,
@@ -49,10 +67,18 @@ export type {
   ExecuteAgentToolResponse,
   GetAgentProviderRunRequest,
   ListAgentProviderRunsRequest,
+  RequestAgentInteractionRequest,
   ResolvedAgentTool,
+  ResumeAgentProviderRunRequest,
   StartAgentProviderRunRequest,
 };
-export { AgentRunStatus, AgentToolSourceMode };
+export {
+  AgentInteractionState,
+  AgentInteractionType,
+  AgentMessagePartType,
+  AgentRunStatus,
+  AgentToolSourceMode,
+};
 
 export interface AgentProviderOptions extends RuntimeProviderOptions {
   startRun: (
@@ -67,6 +93,12 @@ export interface AgentProviderOptions extends RuntimeProviderOptions {
   cancelRun: (
     request: CancelAgentProviderRunRequest,
   ) => MaybePromise<MessageInitShape<typeof BoundAgentRunSchema>>;
+  getCapabilities?: (
+    request: GetAgentProviderCapabilitiesRequest,
+  ) => MaybePromise<MessageInitShape<typeof AgentProviderCapabilitiesSchema>>;
+  resumeRun?: (
+    request: ResumeAgentProviderRunRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundAgentRunSchema>>;
 }
 
 export class AgentProvider extends RuntimeProvider {
@@ -76,6 +108,8 @@ export class AgentProvider extends RuntimeProvider {
   private readonly getRunHandler: AgentProviderOptions["getRun"];
   private readonly listRunsHandler: AgentProviderOptions["listRuns"];
   private readonly cancelRunHandler: AgentProviderOptions["cancelRun"];
+  private readonly getCapabilitiesHandler: AgentProviderOptions["getCapabilities"];
+  private readonly resumeRunHandler: AgentProviderOptions["resumeRun"];
 
   constructor(options: AgentProviderOptions) {
     super(options);
@@ -83,6 +117,8 @@ export class AgentProvider extends RuntimeProvider {
     this.getRunHandler = options.getRun;
     this.listRunsHandler = options.listRuns;
     this.cancelRunHandler = options.cancelRun;
+    this.getCapabilitiesHandler = options.getCapabilities;
+    this.resumeRunHandler = options.resumeRun;
   }
 
   async startRun(
@@ -107,6 +143,22 @@ export class AgentProvider extends RuntimeProvider {
     request: CancelAgentProviderRunRequest,
   ): Promise<MessageInitShape<typeof BoundAgentRunSchema>> {
     return await this.cancelRunHandler(request);
+  }
+
+  async getCapabilities(): Promise<MessageInitShape<typeof AgentProviderCapabilitiesSchema>> {
+    if (!this.getCapabilitiesHandler) {
+      throw new ConnectError("agent provider get capabilities is not implemented", Code.Unimplemented);
+    }
+    return await this.getCapabilitiesHandler(create(GetAgentProviderCapabilitiesRequestSchema, {}));
+  }
+
+  async resumeRun(
+    request: ResumeAgentProviderRunRequest,
+  ): Promise<MessageInitShape<typeof BoundAgentRunSchema>> {
+    if (!this.resumeRunHandler) {
+      throw new ConnectError("agent provider resume run is not implemented", Code.Unimplemented);
+    }
+    return await this.resumeRunHandler(request);
   }
 }
 
@@ -154,6 +206,12 @@ export class AgentHost {
   async emitEvent(request: EmitAgentEventRequest): Promise<void> {
     await this.client.emitEvent(request);
   }
+
+  async requestInteraction(
+    request: RequestAgentInteractionRequest,
+  ): Promise<AgentInteraction> {
+    return await this.client.requestInteraction(request);
+  }
 }
 
 export function createAgentProviderService(
@@ -181,6 +239,18 @@ export function createAgentProviderService(
       return create(
         BoundAgentRunSchema,
         await invokeAgentProvider("cancel run", () => provider.cancelRun(request)),
+      );
+    },
+    async getCapabilities() {
+      return create(
+        AgentProviderCapabilitiesSchema,
+        await invokeAgentProvider("get capabilities", () => provider.getCapabilities()),
+      );
+    },
+    async resumeRun(request) {
+      return create(
+        BoundAgentRunSchema,
+        await invokeAgentProvider("resume run", () => provider.resumeRun(request)),
       );
     },
   };

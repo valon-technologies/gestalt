@@ -8,8 +8,12 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { expect, test } from "bun:test";
 
 import {
+  AgentInteractionType,
+  AgentMessagePartType,
+  AgentRunStatus,
   CancelAgentProviderRunRequestSchema,
   ListAgentProviderRunsRequestSchema,
+  ResumeAgentProviderRunRequestSchema,
   StartAgentProviderRunRequestSchema,
 } from "../gen/v1/agent_pb.ts";
 import {
@@ -70,7 +74,6 @@ import {
   parseRuntimeArgs,
 } from "../src/runtime.ts";
 import {
-  AgentRunStatus,
   httpSubjectError,
   PresignMethod,
   S3,
@@ -1427,6 +1430,15 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
         {
           role: "user",
           text: "Summarize deployment status",
+          parts: [
+            {
+              type: AgentMessagePartType.TEXT,
+              text: "Summarize deployment status",
+            },
+          ],
+          metadata: {
+            priority: "high",
+          },
         },
       ],
       createdBy: {
@@ -1445,11 +1457,31 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
   expect(run.status).toBe(AgentRunStatus.PENDING);
   expect(run.outputText).toBe("echo:Summarize deployment status");
   expect(run.createdBy?.subjectId).toBe("user:user-123");
+  expect(run.messages[0]?.parts[0]?.type).toBe(AgentMessagePartType.TEXT);
+  expect(run.messages[0]?.metadata).toEqual({ priority: "high" });
+
+  const capabilities = await (agent.getCapabilities as any)({});
+  expect(capabilities.streamingText).toBe(true);
+  expect(capabilities.toolCalls).toBe(true);
+  expect(capabilities.approvals).toBe(true);
 
   const listed = await (agent.listRuns as any)(
     create(ListAgentProviderRunsRequestSchema, {}),
   );
   expect(listed.runs.map((entry: any) => entry.id)).toEqual(["run-123"]);
+
+  const resumed = await (agent.resumeRun as any)(
+    create(ResumeAgentProviderRunRequestSchema, {
+      runId: "run-123",
+      interactionId: "interaction-1",
+      resolution: {
+        approved: true,
+        type: AgentInteractionType.APPROVAL,
+      },
+    }),
+  );
+  expect(resumed.status).toBe(AgentRunStatus.SUCCEEDED);
+  expect(resumed.statusMessage).toBe("interaction-1");
 
   const canceled = await (agent.cancelRun as any)(
     create(CancelAgentProviderRunRequestSchema, {

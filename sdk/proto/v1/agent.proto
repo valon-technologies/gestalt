@@ -11,6 +11,44 @@ import "google/protobuf/timestamp.proto";
 message AgentMessage {
   string role = 1;
   string text = 2;
+  repeated AgentMessagePart parts = 3;
+  google.protobuf.Struct metadata = 4;
+}
+
+enum AgentMessagePartType {
+  AGENT_MESSAGE_PART_TYPE_UNSPECIFIED = 0;
+  AGENT_MESSAGE_PART_TYPE_TEXT = 1;
+  AGENT_MESSAGE_PART_TYPE_JSON = 2;
+  AGENT_MESSAGE_PART_TYPE_TOOL_CALL = 3;
+  AGENT_MESSAGE_PART_TYPE_TOOL_RESULT = 4;
+  AGENT_MESSAGE_PART_TYPE_IMAGE_REF = 5;
+}
+
+message AgentMessagePartToolCall {
+  string id = 1;
+  string tool_id = 2;
+  google.protobuf.Struct arguments = 3;
+}
+
+message AgentMessagePartToolResult {
+  string tool_call_id = 1;
+  int32 status = 2;
+  string content = 3;
+  google.protobuf.Struct output = 4;
+}
+
+message AgentMessagePartImageRef {
+  string uri = 1;
+  string mime_type = 2;
+}
+
+message AgentMessagePart {
+  AgentMessagePartType type = 1;
+  string text = 2;
+  google.protobuf.Struct json = 3;
+  AgentMessagePartToolCall tool_call = 4;
+  AgentMessagePartToolResult tool_result = 5;
+  AgentMessagePartImageRef image_ref = 6;
 }
 
 message AgentActor {
@@ -57,6 +95,61 @@ enum AgentRunStatus {
   AGENT_RUN_STATUS_SUCCEEDED = 3;
   AGENT_RUN_STATUS_FAILED = 4;
   AGENT_RUN_STATUS_CANCELED = 5;
+  AGENT_RUN_STATUS_WAITING_FOR_INPUT = 6;
+}
+
+enum AgentInteractionType {
+  AGENT_INTERACTION_TYPE_UNSPECIFIED = 0;
+  AGENT_INTERACTION_TYPE_APPROVAL = 1;
+  AGENT_INTERACTION_TYPE_CLARIFICATION = 2;
+  AGENT_INTERACTION_TYPE_INPUT = 3;
+}
+
+enum AgentInteractionState {
+  AGENT_INTERACTION_STATE_UNSPECIFIED = 0;
+  AGENT_INTERACTION_STATE_PENDING = 1;
+  AGENT_INTERACTION_STATE_RESOLVED = 2;
+  AGENT_INTERACTION_STATE_CANCELED = 3;
+}
+
+message AgentProviderCapabilities {
+  bool streaming_text = 1;
+  bool tool_calls = 2;
+  bool parallel_tool_calls = 3;
+  bool structured_output = 4;
+  bool session_continuation = 5;
+  bool approvals = 6;
+  bool resumable_runs = 7;
+  bool reasoning_summaries = 8;
+}
+
+message GetAgentProviderCapabilitiesRequest {}
+
+message ResumeAgentProviderRunRequest {
+  string run_id = 1;
+  string interaction_id = 2;
+  google.protobuf.Struct resolution = 3;
+}
+
+message RequestAgentInteractionRequest {
+  string run_id = 1;
+  AgentInteractionType type = 2;
+  string title = 3;
+  string prompt = 4;
+  google.protobuf.Struct request = 5;
+}
+
+message AgentInteraction {
+  string id = 1;
+  string run_id = 2;
+  AgentInteractionType type = 3;
+  AgentInteractionState state = 4;
+  string title = 5;
+  string prompt = 6;
+  google.protobuf.Struct request = 7;
+  google.protobuf.Struct resolution = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp resolved_at = 10;
 }
 
 message BoundAgentRun {
@@ -187,11 +280,14 @@ service AgentProvider {
   rpc GetRun(GetAgentProviderRunRequest) returns (BoundAgentRun);
   rpc ListRuns(ListAgentProviderRunsRequest) returns (ListAgentProviderRunsResponse);
   rpc CancelRun(CancelAgentProviderRunRequest) returns (BoundAgentRun);
+  rpc GetCapabilities(GetAgentProviderCapabilitiesRequest) returns (AgentProviderCapabilities);
+  rpc ResumeRun(ResumeAgentProviderRunRequest) returns (BoundAgentRun);
 }
 
 service AgentHost {
   rpc ExecuteTool(ExecuteAgentToolRequest) returns (ExecuteAgentToolResponse);
   rpc EmitEvent(EmitAgentEventRequest) returns (google.protobuf.Empty);
+  rpc RequestInteraction(RequestAgentInteractionRequest) returns (AgentInteraction);
 }
 
 service AgentManagerHost {

@@ -24,6 +24,64 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type AgentMessagePartType int32
+
+const (
+	AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED AgentMessagePartType = 0
+	AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT        AgentMessagePartType = 1
+	AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_JSON        AgentMessagePartType = 2
+	AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_CALL   AgentMessagePartType = 3
+	AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_RESULT AgentMessagePartType = 4
+	AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_IMAGE_REF   AgentMessagePartType = 5
+)
+
+// Enum value maps for AgentMessagePartType.
+var (
+	AgentMessagePartType_name = map[int32]string{
+		0: "AGENT_MESSAGE_PART_TYPE_UNSPECIFIED",
+		1: "AGENT_MESSAGE_PART_TYPE_TEXT",
+		2: "AGENT_MESSAGE_PART_TYPE_JSON",
+		3: "AGENT_MESSAGE_PART_TYPE_TOOL_CALL",
+		4: "AGENT_MESSAGE_PART_TYPE_TOOL_RESULT",
+		5: "AGENT_MESSAGE_PART_TYPE_IMAGE_REF",
+	}
+	AgentMessagePartType_value = map[string]int32{
+		"AGENT_MESSAGE_PART_TYPE_UNSPECIFIED": 0,
+		"AGENT_MESSAGE_PART_TYPE_TEXT":        1,
+		"AGENT_MESSAGE_PART_TYPE_JSON":        2,
+		"AGENT_MESSAGE_PART_TYPE_TOOL_CALL":   3,
+		"AGENT_MESSAGE_PART_TYPE_TOOL_RESULT": 4,
+		"AGENT_MESSAGE_PART_TYPE_IMAGE_REF":   5,
+	}
+)
+
+func (x AgentMessagePartType) Enum() *AgentMessagePartType {
+	p := new(AgentMessagePartType)
+	*p = x
+	return p
+}
+
+func (x AgentMessagePartType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AgentMessagePartType) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_agent_proto_enumTypes[0].Descriptor()
+}
+
+func (AgentMessagePartType) Type() protoreflect.EnumType {
+	return &file_v1_agent_proto_enumTypes[0]
+}
+
+func (x AgentMessagePartType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AgentMessagePartType.Descriptor instead.
+func (AgentMessagePartType) EnumDescriptor() ([]byte, []int) {
+	return file_v1_agent_proto_rawDescGZIP(), []int{0}
+}
+
 type AgentToolSourceMode int32
 
 const (
@@ -57,11 +115,11 @@ func (x AgentToolSourceMode) String() string {
 }
 
 func (AgentToolSourceMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_agent_proto_enumTypes[0].Descriptor()
+	return file_v1_agent_proto_enumTypes[1].Descriptor()
 }
 
 func (AgentToolSourceMode) Type() protoreflect.EnumType {
-	return &file_v1_agent_proto_enumTypes[0]
+	return &file_v1_agent_proto_enumTypes[1]
 }
 
 func (x AgentToolSourceMode) Number() protoreflect.EnumNumber {
@@ -70,18 +128,19 @@ func (x AgentToolSourceMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AgentToolSourceMode.Descriptor instead.
 func (AgentToolSourceMode) EnumDescriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{0}
+	return file_v1_agent_proto_rawDescGZIP(), []int{1}
 }
 
 type AgentRunStatus int32
 
 const (
-	AgentRunStatus_AGENT_RUN_STATUS_UNSPECIFIED AgentRunStatus = 0
-	AgentRunStatus_AGENT_RUN_STATUS_PENDING     AgentRunStatus = 1
-	AgentRunStatus_AGENT_RUN_STATUS_RUNNING     AgentRunStatus = 2
-	AgentRunStatus_AGENT_RUN_STATUS_SUCCEEDED   AgentRunStatus = 3
-	AgentRunStatus_AGENT_RUN_STATUS_FAILED      AgentRunStatus = 4
-	AgentRunStatus_AGENT_RUN_STATUS_CANCELED    AgentRunStatus = 5
+	AgentRunStatus_AGENT_RUN_STATUS_UNSPECIFIED       AgentRunStatus = 0
+	AgentRunStatus_AGENT_RUN_STATUS_PENDING           AgentRunStatus = 1
+	AgentRunStatus_AGENT_RUN_STATUS_RUNNING           AgentRunStatus = 2
+	AgentRunStatus_AGENT_RUN_STATUS_SUCCEEDED         AgentRunStatus = 3
+	AgentRunStatus_AGENT_RUN_STATUS_FAILED            AgentRunStatus = 4
+	AgentRunStatus_AGENT_RUN_STATUS_CANCELED          AgentRunStatus = 5
+	AgentRunStatus_AGENT_RUN_STATUS_WAITING_FOR_INPUT AgentRunStatus = 6
 )
 
 // Enum value maps for AgentRunStatus.
@@ -93,14 +152,16 @@ var (
 		3: "AGENT_RUN_STATUS_SUCCEEDED",
 		4: "AGENT_RUN_STATUS_FAILED",
 		5: "AGENT_RUN_STATUS_CANCELED",
+		6: "AGENT_RUN_STATUS_WAITING_FOR_INPUT",
 	}
 	AgentRunStatus_value = map[string]int32{
-		"AGENT_RUN_STATUS_UNSPECIFIED": 0,
-		"AGENT_RUN_STATUS_PENDING":     1,
-		"AGENT_RUN_STATUS_RUNNING":     2,
-		"AGENT_RUN_STATUS_SUCCEEDED":   3,
-		"AGENT_RUN_STATUS_FAILED":      4,
-		"AGENT_RUN_STATUS_CANCELED":    5,
+		"AGENT_RUN_STATUS_UNSPECIFIED":       0,
+		"AGENT_RUN_STATUS_PENDING":           1,
+		"AGENT_RUN_STATUS_RUNNING":           2,
+		"AGENT_RUN_STATUS_SUCCEEDED":         3,
+		"AGENT_RUN_STATUS_FAILED":            4,
+		"AGENT_RUN_STATUS_CANCELED":          5,
+		"AGENT_RUN_STATUS_WAITING_FOR_INPUT": 6,
 	}
 )
 
@@ -115,11 +176,11 @@ func (x AgentRunStatus) String() string {
 }
 
 func (AgentRunStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_agent_proto_enumTypes[1].Descriptor()
+	return file_v1_agent_proto_enumTypes[2].Descriptor()
 }
 
 func (AgentRunStatus) Type() protoreflect.EnumType {
-	return &file_v1_agent_proto_enumTypes[1]
+	return &file_v1_agent_proto_enumTypes[2]
 }
 
 func (x AgentRunStatus) Number() protoreflect.EnumNumber {
@@ -128,13 +189,119 @@ func (x AgentRunStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AgentRunStatus.Descriptor instead.
 func (AgentRunStatus) EnumDescriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{1}
+	return file_v1_agent_proto_rawDescGZIP(), []int{2}
+}
+
+type AgentInteractionType int32
+
+const (
+	AgentInteractionType_AGENT_INTERACTION_TYPE_UNSPECIFIED   AgentInteractionType = 0
+	AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL      AgentInteractionType = 1
+	AgentInteractionType_AGENT_INTERACTION_TYPE_CLARIFICATION AgentInteractionType = 2
+	AgentInteractionType_AGENT_INTERACTION_TYPE_INPUT         AgentInteractionType = 3
+)
+
+// Enum value maps for AgentInteractionType.
+var (
+	AgentInteractionType_name = map[int32]string{
+		0: "AGENT_INTERACTION_TYPE_UNSPECIFIED",
+		1: "AGENT_INTERACTION_TYPE_APPROVAL",
+		2: "AGENT_INTERACTION_TYPE_CLARIFICATION",
+		3: "AGENT_INTERACTION_TYPE_INPUT",
+	}
+	AgentInteractionType_value = map[string]int32{
+		"AGENT_INTERACTION_TYPE_UNSPECIFIED":   0,
+		"AGENT_INTERACTION_TYPE_APPROVAL":      1,
+		"AGENT_INTERACTION_TYPE_CLARIFICATION": 2,
+		"AGENT_INTERACTION_TYPE_INPUT":         3,
+	}
+)
+
+func (x AgentInteractionType) Enum() *AgentInteractionType {
+	p := new(AgentInteractionType)
+	*p = x
+	return p
+}
+
+func (x AgentInteractionType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AgentInteractionType) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_agent_proto_enumTypes[3].Descriptor()
+}
+
+func (AgentInteractionType) Type() protoreflect.EnumType {
+	return &file_v1_agent_proto_enumTypes[3]
+}
+
+func (x AgentInteractionType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AgentInteractionType.Descriptor instead.
+func (AgentInteractionType) EnumDescriptor() ([]byte, []int) {
+	return file_v1_agent_proto_rawDescGZIP(), []int{3}
+}
+
+type AgentInteractionState int32
+
+const (
+	AgentInteractionState_AGENT_INTERACTION_STATE_UNSPECIFIED AgentInteractionState = 0
+	AgentInteractionState_AGENT_INTERACTION_STATE_PENDING     AgentInteractionState = 1
+	AgentInteractionState_AGENT_INTERACTION_STATE_RESOLVED    AgentInteractionState = 2
+	AgentInteractionState_AGENT_INTERACTION_STATE_CANCELED    AgentInteractionState = 3
+)
+
+// Enum value maps for AgentInteractionState.
+var (
+	AgentInteractionState_name = map[int32]string{
+		0: "AGENT_INTERACTION_STATE_UNSPECIFIED",
+		1: "AGENT_INTERACTION_STATE_PENDING",
+		2: "AGENT_INTERACTION_STATE_RESOLVED",
+		3: "AGENT_INTERACTION_STATE_CANCELED",
+	}
+	AgentInteractionState_value = map[string]int32{
+		"AGENT_INTERACTION_STATE_UNSPECIFIED": 0,
+		"AGENT_INTERACTION_STATE_PENDING":     1,
+		"AGENT_INTERACTION_STATE_RESOLVED":    2,
+		"AGENT_INTERACTION_STATE_CANCELED":    3,
+	}
+)
+
+func (x AgentInteractionState) Enum() *AgentInteractionState {
+	p := new(AgentInteractionState)
+	*p = x
+	return p
+}
+
+func (x AgentInteractionState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AgentInteractionState) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_agent_proto_enumTypes[4].Descriptor()
+}
+
+func (AgentInteractionState) Type() protoreflect.EnumType {
+	return &file_v1_agent_proto_enumTypes[4]
+}
+
+func (x AgentInteractionState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AgentInteractionState.Descriptor instead.
+func (AgentInteractionState) EnumDescriptor() ([]byte, []int) {
+	return file_v1_agent_proto_rawDescGZIP(), []int{4}
 }
 
 type AgentMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Role          string                 `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
 	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	Parts         []*AgentMessagePart    `protobuf:"bytes,3,rep,name=parts,proto3" json:"parts,omitempty"`
+	Metadata      *structpb.Struct       `protobuf:"bytes,4,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -183,6 +350,284 @@ func (x *AgentMessage) GetText() string {
 	return ""
 }
 
+func (x *AgentMessage) GetParts() []*AgentMessagePart {
+	if x != nil {
+		return x.Parts
+	}
+	return nil
+}
+
+func (x *AgentMessage) GetMetadata() *structpb.Struct {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+type AgentMessagePartToolCall struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ToolId        string                 `protobuf:"bytes,2,opt,name=tool_id,json=toolId,proto3" json:"tool_id,omitempty"`
+	Arguments     *structpb.Struct       `protobuf:"bytes,3,opt,name=arguments,proto3" json:"arguments,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentMessagePartToolCall) Reset() {
+	*x = AgentMessagePartToolCall{}
+	mi := &file_v1_agent_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentMessagePartToolCall) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentMessagePartToolCall) ProtoMessage() {}
+
+func (x *AgentMessagePartToolCall) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_agent_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentMessagePartToolCall.ProtoReflect.Descriptor instead.
+func (*AgentMessagePartToolCall) Descriptor() ([]byte, []int) {
+	return file_v1_agent_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *AgentMessagePartToolCall) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AgentMessagePartToolCall) GetToolId() string {
+	if x != nil {
+		return x.ToolId
+	}
+	return ""
+}
+
+func (x *AgentMessagePartToolCall) GetArguments() *structpb.Struct {
+	if x != nil {
+		return x.Arguments
+	}
+	return nil
+}
+
+type AgentMessagePartToolResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ToolCallId    string                 `protobuf:"bytes,1,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
+	Status        int32                  `protobuf:"varint,2,opt,name=status,proto3" json:"status,omitempty"`
+	Content       string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
+	Output        *structpb.Struct       `protobuf:"bytes,4,opt,name=output,proto3" json:"output,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentMessagePartToolResult) Reset() {
+	*x = AgentMessagePartToolResult{}
+	mi := &file_v1_agent_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentMessagePartToolResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentMessagePartToolResult) ProtoMessage() {}
+
+func (x *AgentMessagePartToolResult) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_agent_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentMessagePartToolResult.ProtoReflect.Descriptor instead.
+func (*AgentMessagePartToolResult) Descriptor() ([]byte, []int) {
+	return file_v1_agent_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *AgentMessagePartToolResult) GetToolCallId() string {
+	if x != nil {
+		return x.ToolCallId
+	}
+	return ""
+}
+
+func (x *AgentMessagePartToolResult) GetStatus() int32 {
+	if x != nil {
+		return x.Status
+	}
+	return 0
+}
+
+func (x *AgentMessagePartToolResult) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *AgentMessagePartToolResult) GetOutput() *structpb.Struct {
+	if x != nil {
+		return x.Output
+	}
+	return nil
+}
+
+type AgentMessagePartImageRef struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Uri           string                 `protobuf:"bytes,1,opt,name=uri,proto3" json:"uri,omitempty"`
+	MimeType      string                 `protobuf:"bytes,2,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentMessagePartImageRef) Reset() {
+	*x = AgentMessagePartImageRef{}
+	mi := &file_v1_agent_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentMessagePartImageRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentMessagePartImageRef) ProtoMessage() {}
+
+func (x *AgentMessagePartImageRef) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_agent_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentMessagePartImageRef.ProtoReflect.Descriptor instead.
+func (*AgentMessagePartImageRef) Descriptor() ([]byte, []int) {
+	return file_v1_agent_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *AgentMessagePartImageRef) GetUri() string {
+	if x != nil {
+		return x.Uri
+	}
+	return ""
+}
+
+func (x *AgentMessagePartImageRef) GetMimeType() string {
+	if x != nil {
+		return x.MimeType
+	}
+	return ""
+}
+
+type AgentMessagePart struct {
+	state         protoimpl.MessageState      `protogen:"open.v1"`
+	Type          AgentMessagePartType        `protobuf:"varint,1,opt,name=type,proto3,enum=gestalt.provider.v1.AgentMessagePartType" json:"type,omitempty"`
+	Text          string                      `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	Json          *structpb.Struct            `protobuf:"bytes,3,opt,name=json,proto3" json:"json,omitempty"`
+	ToolCall      *AgentMessagePartToolCall   `protobuf:"bytes,4,opt,name=tool_call,json=toolCall,proto3" json:"tool_call,omitempty"`
+	ToolResult    *AgentMessagePartToolResult `protobuf:"bytes,5,opt,name=tool_result,json=toolResult,proto3" json:"tool_result,omitempty"`
+	ImageRef      *AgentMessagePartImageRef   `protobuf:"bytes,6,opt,name=image_ref,json=imageRef,proto3" json:"image_ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentMessagePart) Reset() {
+	*x = AgentMessagePart{}
+	mi := &file_v1_agent_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentMessagePart) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentMessagePart) ProtoMessage() {}
+
+func (x *AgentMessagePart) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_agent_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentMessagePart.ProtoReflect.Descriptor instead.
+func (*AgentMessagePart) Descriptor() ([]byte, []int) {
+	return file_v1_agent_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *AgentMessagePart) GetType() AgentMessagePartType {
+	if x != nil {
+		return x.Type
+	}
+	return AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
+}
+
+func (x *AgentMessagePart) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *AgentMessagePart) GetJson() *structpb.Struct {
+	if x != nil {
+		return x.Json
+	}
+	return nil
+}
+
+func (x *AgentMessagePart) GetToolCall() *AgentMessagePartToolCall {
+	if x != nil {
+		return x.ToolCall
+	}
+	return nil
+}
+
+func (x *AgentMessagePart) GetToolResult() *AgentMessagePartToolResult {
+	if x != nil {
+		return x.ToolResult
+	}
+	return nil
+}
+
+func (x *AgentMessagePart) GetImageRef() *AgentMessagePartImageRef {
+	if x != nil {
+		return x.ImageRef
+	}
+	return nil
+}
+
 type AgentActor struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SubjectId     string                 `protobuf:"bytes,1,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
@@ -195,7 +640,7 @@ type AgentActor struct {
 
 func (x *AgentActor) Reset() {
 	*x = AgentActor{}
-	mi := &file_v1_agent_proto_msgTypes[1]
+	mi := &file_v1_agent_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -207,7 +652,7 @@ func (x *AgentActor) String() string {
 func (*AgentActor) ProtoMessage() {}
 
 func (x *AgentActor) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[1]
+	mi := &file_v1_agent_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -220,7 +665,7 @@ func (x *AgentActor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentActor.ProtoReflect.Descriptor instead.
 func (*AgentActor) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{1}
+	return file_v1_agent_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *AgentActor) GetSubjectId() string {
@@ -263,7 +708,7 @@ type BoundAgentToolTarget struct {
 
 func (x *BoundAgentToolTarget) Reset() {
 	*x = BoundAgentToolTarget{}
-	mi := &file_v1_agent_proto_msgTypes[2]
+	mi := &file_v1_agent_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -275,7 +720,7 @@ func (x *BoundAgentToolTarget) String() string {
 func (*BoundAgentToolTarget) ProtoMessage() {}
 
 func (x *BoundAgentToolTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[2]
+	mi := &file_v1_agent_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -288,7 +733,7 @@ func (x *BoundAgentToolTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BoundAgentToolTarget.ProtoReflect.Descriptor instead.
 func (*BoundAgentToolTarget) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{2}
+	return file_v1_agent_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *BoundAgentToolTarget) GetPluginName() string {
@@ -332,7 +777,7 @@ type ResolvedAgentTool struct {
 
 func (x *ResolvedAgentTool) Reset() {
 	*x = ResolvedAgentTool{}
-	mi := &file_v1_agent_proto_msgTypes[3]
+	mi := &file_v1_agent_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -344,7 +789,7 @@ func (x *ResolvedAgentTool) String() string {
 func (*ResolvedAgentTool) ProtoMessage() {}
 
 func (x *ResolvedAgentTool) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[3]
+	mi := &file_v1_agent_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -357,7 +802,7 @@ func (x *ResolvedAgentTool) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolvedAgentTool.ProtoReflect.Descriptor instead.
 func (*ResolvedAgentTool) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{3}
+	return file_v1_agent_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ResolvedAgentTool) GetId() string {
@@ -409,7 +854,7 @@ type AgentToolRef struct {
 
 func (x *AgentToolRef) Reset() {
 	*x = AgentToolRef{}
-	mi := &file_v1_agent_proto_msgTypes[4]
+	mi := &file_v1_agent_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -421,7 +866,7 @@ func (x *AgentToolRef) String() string {
 func (*AgentToolRef) ProtoMessage() {}
 
 func (x *AgentToolRef) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[4]
+	mi := &file_v1_agent_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -434,7 +879,7 @@ func (x *AgentToolRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentToolRef.ProtoReflect.Descriptor instead.
 func (*AgentToolRef) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{4}
+	return file_v1_agent_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AgentToolRef) GetPluginName() string {
@@ -479,6 +924,394 @@ func (x *AgentToolRef) GetDescription() string {
 	return ""
 }
 
+type AgentProviderCapabilities struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	StreamingText       bool                   `protobuf:"varint,1,opt,name=streaming_text,json=streamingText,proto3" json:"streaming_text,omitempty"`
+	ToolCalls           bool                   `protobuf:"varint,2,opt,name=tool_calls,json=toolCalls,proto3" json:"tool_calls,omitempty"`
+	ParallelToolCalls   bool                   `protobuf:"varint,3,opt,name=parallel_tool_calls,json=parallelToolCalls,proto3" json:"parallel_tool_calls,omitempty"`
+	StructuredOutput    bool                   `protobuf:"varint,4,opt,name=structured_output,json=structuredOutput,proto3" json:"structured_output,omitempty"`
+	SessionContinuation bool                   `protobuf:"varint,5,opt,name=session_continuation,json=sessionContinuation,proto3" json:"session_continuation,omitempty"`
+	Approvals           bool                   `protobuf:"varint,6,opt,name=approvals,proto3" json:"approvals,omitempty"`
+	ResumableRuns       bool                   `protobuf:"varint,7,opt,name=resumable_runs,json=resumableRuns,proto3" json:"resumable_runs,omitempty"`
+	ReasoningSummaries  bool                   `protobuf:"varint,8,opt,name=reasoning_summaries,json=reasoningSummaries,proto3" json:"reasoning_summaries,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *AgentProviderCapabilities) Reset() {
+	*x = AgentProviderCapabilities{}
+	mi := &file_v1_agent_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentProviderCapabilities) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentProviderCapabilities) ProtoMessage() {}
+
+func (x *AgentProviderCapabilities) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_agent_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentProviderCapabilities.ProtoReflect.Descriptor instead.
+func (*AgentProviderCapabilities) Descriptor() ([]byte, []int) {
+	return file_v1_agent_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *AgentProviderCapabilities) GetStreamingText() bool {
+	if x != nil {
+		return x.StreamingText
+	}
+	return false
+}
+
+func (x *AgentProviderCapabilities) GetToolCalls() bool {
+	if x != nil {
+		return x.ToolCalls
+	}
+	return false
+}
+
+func (x *AgentProviderCapabilities) GetParallelToolCalls() bool {
+	if x != nil {
+		return x.ParallelToolCalls
+	}
+	return false
+}
+
+func (x *AgentProviderCapabilities) GetStructuredOutput() bool {
+	if x != nil {
+		return x.StructuredOutput
+	}
+	return false
+}
+
+func (x *AgentProviderCapabilities) GetSessionContinuation() bool {
+	if x != nil {
+		return x.SessionContinuation
+	}
+	return false
+}
+
+func (x *AgentProviderCapabilities) GetApprovals() bool {
+	if x != nil {
+		return x.Approvals
+	}
+	return false
+}
+
+func (x *AgentProviderCapabilities) GetResumableRuns() bool {
+	if x != nil {
+		return x.ResumableRuns
+	}
+	return false
+}
+
+func (x *AgentProviderCapabilities) GetReasoningSummaries() bool {
+	if x != nil {
+		return x.ReasoningSummaries
+	}
+	return false
+}
+
+type GetAgentProviderCapabilitiesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAgentProviderCapabilitiesRequest) Reset() {
+	*x = GetAgentProviderCapabilitiesRequest{}
+	mi := &file_v1_agent_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAgentProviderCapabilitiesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAgentProviderCapabilitiesRequest) ProtoMessage() {}
+
+func (x *GetAgentProviderCapabilitiesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_agent_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAgentProviderCapabilitiesRequest.ProtoReflect.Descriptor instead.
+func (*GetAgentProviderCapabilitiesRequest) Descriptor() ([]byte, []int) {
+	return file_v1_agent_proto_rawDescGZIP(), []int{10}
+}
+
+type ResumeAgentProviderRunRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	InteractionId string                 `protobuf:"bytes,2,opt,name=interaction_id,json=interactionId,proto3" json:"interaction_id,omitempty"`
+	Resolution    *structpb.Struct       `protobuf:"bytes,3,opt,name=resolution,proto3" json:"resolution,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResumeAgentProviderRunRequest) Reset() {
+	*x = ResumeAgentProviderRunRequest{}
+	mi := &file_v1_agent_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResumeAgentProviderRunRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResumeAgentProviderRunRequest) ProtoMessage() {}
+
+func (x *ResumeAgentProviderRunRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_agent_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResumeAgentProviderRunRequest.ProtoReflect.Descriptor instead.
+func (*ResumeAgentProviderRunRequest) Descriptor() ([]byte, []int) {
+	return file_v1_agent_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ResumeAgentProviderRunRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *ResumeAgentProviderRunRequest) GetInteractionId() string {
+	if x != nil {
+		return x.InteractionId
+	}
+	return ""
+}
+
+func (x *ResumeAgentProviderRunRequest) GetResolution() *structpb.Struct {
+	if x != nil {
+		return x.Resolution
+	}
+	return nil
+}
+
+type RequestAgentInteractionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Type          AgentInteractionType   `protobuf:"varint,2,opt,name=type,proto3,enum=gestalt.provider.v1.AgentInteractionType" json:"type,omitempty"`
+	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	Prompt        string                 `protobuf:"bytes,4,opt,name=prompt,proto3" json:"prompt,omitempty"`
+	Request       *structpb.Struct       `protobuf:"bytes,5,opt,name=request,proto3" json:"request,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestAgentInteractionRequest) Reset() {
+	*x = RequestAgentInteractionRequest{}
+	mi := &file_v1_agent_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestAgentInteractionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestAgentInteractionRequest) ProtoMessage() {}
+
+func (x *RequestAgentInteractionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_agent_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestAgentInteractionRequest.ProtoReflect.Descriptor instead.
+func (*RequestAgentInteractionRequest) Descriptor() ([]byte, []int) {
+	return file_v1_agent_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *RequestAgentInteractionRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *RequestAgentInteractionRequest) GetType() AgentInteractionType {
+	if x != nil {
+		return x.Type
+	}
+	return AgentInteractionType_AGENT_INTERACTION_TYPE_UNSPECIFIED
+}
+
+func (x *RequestAgentInteractionRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *RequestAgentInteractionRequest) GetPrompt() string {
+	if x != nil {
+		return x.Prompt
+	}
+	return ""
+}
+
+func (x *RequestAgentInteractionRequest) GetRequest() *structpb.Struct {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+type AgentInteraction struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	RunId         string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Type          AgentInteractionType   `protobuf:"varint,3,opt,name=type,proto3,enum=gestalt.provider.v1.AgentInteractionType" json:"type,omitempty"`
+	State         AgentInteractionState  `protobuf:"varint,4,opt,name=state,proto3,enum=gestalt.provider.v1.AgentInteractionState" json:"state,omitempty"`
+	Title         string                 `protobuf:"bytes,5,opt,name=title,proto3" json:"title,omitempty"`
+	Prompt        string                 `protobuf:"bytes,6,opt,name=prompt,proto3" json:"prompt,omitempty"`
+	Request       *structpb.Struct       `protobuf:"bytes,7,opt,name=request,proto3" json:"request,omitempty"`
+	Resolution    *structpb.Struct       `protobuf:"bytes,8,opt,name=resolution,proto3" json:"resolution,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	ResolvedAt    *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=resolved_at,json=resolvedAt,proto3" json:"resolved_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentInteraction) Reset() {
+	*x = AgentInteraction{}
+	mi := &file_v1_agent_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentInteraction) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentInteraction) ProtoMessage() {}
+
+func (x *AgentInteraction) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_agent_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentInteraction.ProtoReflect.Descriptor instead.
+func (*AgentInteraction) Descriptor() ([]byte, []int) {
+	return file_v1_agent_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *AgentInteraction) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *AgentInteraction) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *AgentInteraction) GetType() AgentInteractionType {
+	if x != nil {
+		return x.Type
+	}
+	return AgentInteractionType_AGENT_INTERACTION_TYPE_UNSPECIFIED
+}
+
+func (x *AgentInteraction) GetState() AgentInteractionState {
+	if x != nil {
+		return x.State
+	}
+	return AgentInteractionState_AGENT_INTERACTION_STATE_UNSPECIFIED
+}
+
+func (x *AgentInteraction) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *AgentInteraction) GetPrompt() string {
+	if x != nil {
+		return x.Prompt
+	}
+	return ""
+}
+
+func (x *AgentInteraction) GetRequest() *structpb.Struct {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+func (x *AgentInteraction) GetResolution() *structpb.Struct {
+	if x != nil {
+		return x.Resolution
+	}
+	return nil
+}
+
+func (x *AgentInteraction) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *AgentInteraction) GetResolvedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ResolvedAt
+	}
+	return nil
+}
+
 type BoundAgentRun struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -501,7 +1334,7 @@ type BoundAgentRun struct {
 
 func (x *BoundAgentRun) Reset() {
 	*x = BoundAgentRun{}
-	mi := &file_v1_agent_proto_msgTypes[5]
+	mi := &file_v1_agent_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -513,7 +1346,7 @@ func (x *BoundAgentRun) String() string {
 func (*BoundAgentRun) ProtoMessage() {}
 
 func (x *BoundAgentRun) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[5]
+	mi := &file_v1_agent_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -526,7 +1359,7 @@ func (x *BoundAgentRun) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BoundAgentRun.ProtoReflect.Descriptor instead.
 func (*BoundAgentRun) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{5}
+	return file_v1_agent_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *BoundAgentRun) GetId() string {
@@ -647,7 +1480,7 @@ type StartAgentProviderRunRequest struct {
 
 func (x *StartAgentProviderRunRequest) Reset() {
 	*x = StartAgentProviderRunRequest{}
-	mi := &file_v1_agent_proto_msgTypes[6]
+	mi := &file_v1_agent_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -659,7 +1492,7 @@ func (x *StartAgentProviderRunRequest) String() string {
 func (*StartAgentProviderRunRequest) ProtoMessage() {}
 
 func (x *StartAgentProviderRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[6]
+	mi := &file_v1_agent_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -672,7 +1505,7 @@ func (x *StartAgentProviderRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartAgentProviderRunRequest.ProtoReflect.Descriptor instead.
 func (*StartAgentProviderRunRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{6}
+	return file_v1_agent_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *StartAgentProviderRunRequest) GetRunId() string {
@@ -768,7 +1601,7 @@ type GetAgentProviderRunRequest struct {
 
 func (x *GetAgentProviderRunRequest) Reset() {
 	*x = GetAgentProviderRunRequest{}
-	mi := &file_v1_agent_proto_msgTypes[7]
+	mi := &file_v1_agent_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -780,7 +1613,7 @@ func (x *GetAgentProviderRunRequest) String() string {
 func (*GetAgentProviderRunRequest) ProtoMessage() {}
 
 func (x *GetAgentProviderRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[7]
+	mi := &file_v1_agent_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -793,7 +1626,7 @@ func (x *GetAgentProviderRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAgentProviderRunRequest.ProtoReflect.Descriptor instead.
 func (*GetAgentProviderRunRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{7}
+	return file_v1_agent_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetAgentProviderRunRequest) GetRunId() string {
@@ -811,7 +1644,7 @@ type ListAgentProviderRunsRequest struct {
 
 func (x *ListAgentProviderRunsRequest) Reset() {
 	*x = ListAgentProviderRunsRequest{}
-	mi := &file_v1_agent_proto_msgTypes[8]
+	mi := &file_v1_agent_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -823,7 +1656,7 @@ func (x *ListAgentProviderRunsRequest) String() string {
 func (*ListAgentProviderRunsRequest) ProtoMessage() {}
 
 func (x *ListAgentProviderRunsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[8]
+	mi := &file_v1_agent_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -836,7 +1669,7 @@ func (x *ListAgentProviderRunsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentProviderRunsRequest.ProtoReflect.Descriptor instead.
 func (*ListAgentProviderRunsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{8}
+	return file_v1_agent_proto_rawDescGZIP(), []int{17}
 }
 
 type ListAgentProviderRunsResponse struct {
@@ -848,7 +1681,7 @@ type ListAgentProviderRunsResponse struct {
 
 func (x *ListAgentProviderRunsResponse) Reset() {
 	*x = ListAgentProviderRunsResponse{}
-	mi := &file_v1_agent_proto_msgTypes[9]
+	mi := &file_v1_agent_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -860,7 +1693,7 @@ func (x *ListAgentProviderRunsResponse) String() string {
 func (*ListAgentProviderRunsResponse) ProtoMessage() {}
 
 func (x *ListAgentProviderRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[9]
+	mi := &file_v1_agent_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -873,7 +1706,7 @@ func (x *ListAgentProviderRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAgentProviderRunsResponse.ProtoReflect.Descriptor instead.
 func (*ListAgentProviderRunsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{9}
+	return file_v1_agent_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ListAgentProviderRunsResponse) GetRuns() []*BoundAgentRun {
@@ -893,7 +1726,7 @@ type CancelAgentProviderRunRequest struct {
 
 func (x *CancelAgentProviderRunRequest) Reset() {
 	*x = CancelAgentProviderRunRequest{}
-	mi := &file_v1_agent_proto_msgTypes[10]
+	mi := &file_v1_agent_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -905,7 +1738,7 @@ func (x *CancelAgentProviderRunRequest) String() string {
 func (*CancelAgentProviderRunRequest) ProtoMessage() {}
 
 func (x *CancelAgentProviderRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[10]
+	mi := &file_v1_agent_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -918,7 +1751,7 @@ func (x *CancelAgentProviderRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelAgentProviderRunRequest.ProtoReflect.Descriptor instead.
 func (*CancelAgentProviderRunRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{10}
+	return file_v1_agent_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CancelAgentProviderRunRequest) GetRunId() string {
@@ -947,7 +1780,7 @@ type ExecuteAgentToolRequest struct {
 
 func (x *ExecuteAgentToolRequest) Reset() {
 	*x = ExecuteAgentToolRequest{}
-	mi := &file_v1_agent_proto_msgTypes[11]
+	mi := &file_v1_agent_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -959,7 +1792,7 @@ func (x *ExecuteAgentToolRequest) String() string {
 func (*ExecuteAgentToolRequest) ProtoMessage() {}
 
 func (x *ExecuteAgentToolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[11]
+	mi := &file_v1_agent_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -972,7 +1805,7 @@ func (x *ExecuteAgentToolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteAgentToolRequest.ProtoReflect.Descriptor instead.
 func (*ExecuteAgentToolRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{11}
+	return file_v1_agent_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ExecuteAgentToolRequest) GetRunId() string {
@@ -1013,7 +1846,7 @@ type ExecuteAgentToolResponse struct {
 
 func (x *ExecuteAgentToolResponse) Reset() {
 	*x = ExecuteAgentToolResponse{}
-	mi := &file_v1_agent_proto_msgTypes[12]
+	mi := &file_v1_agent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1025,7 +1858,7 @@ func (x *ExecuteAgentToolResponse) String() string {
 func (*ExecuteAgentToolResponse) ProtoMessage() {}
 
 func (x *ExecuteAgentToolResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[12]
+	mi := &file_v1_agent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1038,7 +1871,7 @@ func (x *ExecuteAgentToolResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteAgentToolResponse.ProtoReflect.Descriptor instead.
 func (*ExecuteAgentToolResponse) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{12}
+	return file_v1_agent_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ExecuteAgentToolResponse) GetStatus() int32 {
@@ -1071,7 +1904,7 @@ type AgentRunEvent struct {
 
 func (x *AgentRunEvent) Reset() {
 	*x = AgentRunEvent{}
-	mi := &file_v1_agent_proto_msgTypes[13]
+	mi := &file_v1_agent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1083,7 +1916,7 @@ func (x *AgentRunEvent) String() string {
 func (*AgentRunEvent) ProtoMessage() {}
 
 func (x *AgentRunEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[13]
+	mi := &file_v1_agent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1096,7 +1929,7 @@ func (x *AgentRunEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentRunEvent.ProtoReflect.Descriptor instead.
 func (*AgentRunEvent) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{13}
+	return file_v1_agent_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *AgentRunEvent) GetId() string {
@@ -1167,7 +2000,7 @@ type EmitAgentEventRequest struct {
 
 func (x *EmitAgentEventRequest) Reset() {
 	*x = EmitAgentEventRequest{}
-	mi := &file_v1_agent_proto_msgTypes[14]
+	mi := &file_v1_agent_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1179,7 +2012,7 @@ func (x *EmitAgentEventRequest) String() string {
 func (*EmitAgentEventRequest) ProtoMessage() {}
 
 func (x *EmitAgentEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[14]
+	mi := &file_v1_agent_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1192,7 +2025,7 @@ func (x *EmitAgentEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EmitAgentEventRequest.ProtoReflect.Descriptor instead.
 func (*EmitAgentEventRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{14}
+	return file_v1_agent_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *EmitAgentEventRequest) GetRunId() string {
@@ -1233,7 +2066,7 @@ type ManagedAgentRun struct {
 
 func (x *ManagedAgentRun) Reset() {
 	*x = ManagedAgentRun{}
-	mi := &file_v1_agent_proto_msgTypes[15]
+	mi := &file_v1_agent_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1245,7 +2078,7 @@ func (x *ManagedAgentRun) String() string {
 func (*ManagedAgentRun) ProtoMessage() {}
 
 func (x *ManagedAgentRun) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[15]
+	mi := &file_v1_agent_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1258,7 +2091,7 @@ func (x *ManagedAgentRun) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManagedAgentRun.ProtoReflect.Descriptor instead.
 func (*ManagedAgentRun) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{15}
+	return file_v1_agent_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ManagedAgentRun) GetProviderName() string {
@@ -1294,7 +2127,7 @@ type AgentManagerRunRequest struct {
 
 func (x *AgentManagerRunRequest) Reset() {
 	*x = AgentManagerRunRequest{}
-	mi := &file_v1_agent_proto_msgTypes[16]
+	mi := &file_v1_agent_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1306,7 +2139,7 @@ func (x *AgentManagerRunRequest) String() string {
 func (*AgentManagerRunRequest) ProtoMessage() {}
 
 func (x *AgentManagerRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[16]
+	mi := &file_v1_agent_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1319,7 +2152,7 @@ func (x *AgentManagerRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentManagerRunRequest.ProtoReflect.Descriptor instead.
 func (*AgentManagerRunRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{16}
+	return file_v1_agent_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *AgentManagerRunRequest) GetProviderName() string {
@@ -1409,7 +2242,7 @@ type AgentManagerGetRunRequest struct {
 
 func (x *AgentManagerGetRunRequest) Reset() {
 	*x = AgentManagerGetRunRequest{}
-	mi := &file_v1_agent_proto_msgTypes[17]
+	mi := &file_v1_agent_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1421,7 +2254,7 @@ func (x *AgentManagerGetRunRequest) String() string {
 func (*AgentManagerGetRunRequest) ProtoMessage() {}
 
 func (x *AgentManagerGetRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[17]
+	mi := &file_v1_agent_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1434,7 +2267,7 @@ func (x *AgentManagerGetRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentManagerGetRunRequest.ProtoReflect.Descriptor instead.
 func (*AgentManagerGetRunRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{17}
+	return file_v1_agent_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *AgentManagerGetRunRequest) GetRunId() string {
@@ -1460,7 +2293,7 @@ type AgentManagerListRunsRequest struct {
 
 func (x *AgentManagerListRunsRequest) Reset() {
 	*x = AgentManagerListRunsRequest{}
-	mi := &file_v1_agent_proto_msgTypes[18]
+	mi := &file_v1_agent_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1472,7 +2305,7 @@ func (x *AgentManagerListRunsRequest) String() string {
 func (*AgentManagerListRunsRequest) ProtoMessage() {}
 
 func (x *AgentManagerListRunsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[18]
+	mi := &file_v1_agent_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1485,7 +2318,7 @@ func (x *AgentManagerListRunsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentManagerListRunsRequest.ProtoReflect.Descriptor instead.
 func (*AgentManagerListRunsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{18}
+	return file_v1_agent_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *AgentManagerListRunsRequest) GetInvocationToken() string {
@@ -1504,7 +2337,7 @@ type AgentManagerListRunsResponse struct {
 
 func (x *AgentManagerListRunsResponse) Reset() {
 	*x = AgentManagerListRunsResponse{}
-	mi := &file_v1_agent_proto_msgTypes[19]
+	mi := &file_v1_agent_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1516,7 +2349,7 @@ func (x *AgentManagerListRunsResponse) String() string {
 func (*AgentManagerListRunsResponse) ProtoMessage() {}
 
 func (x *AgentManagerListRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[19]
+	mi := &file_v1_agent_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1529,7 +2362,7 @@ func (x *AgentManagerListRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentManagerListRunsResponse.ProtoReflect.Descriptor instead.
 func (*AgentManagerListRunsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{19}
+	return file_v1_agent_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *AgentManagerListRunsResponse) GetRuns() []*ManagedAgentRun {
@@ -1550,7 +2383,7 @@ type AgentManagerCancelRunRequest struct {
 
 func (x *AgentManagerCancelRunRequest) Reset() {
 	*x = AgentManagerCancelRunRequest{}
-	mi := &file_v1_agent_proto_msgTypes[20]
+	mi := &file_v1_agent_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1562,7 +2395,7 @@ func (x *AgentManagerCancelRunRequest) String() string {
 func (*AgentManagerCancelRunRequest) ProtoMessage() {}
 
 func (x *AgentManagerCancelRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[20]
+	mi := &file_v1_agent_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1575,7 +2408,7 @@ func (x *AgentManagerCancelRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentManagerCancelRunRequest.ProtoReflect.Descriptor instead.
 func (*AgentManagerCancelRunRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{20}
+	return file_v1_agent_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *AgentManagerCancelRunRequest) GetRunId() string {
@@ -1603,10 +2436,33 @@ var File_v1_agent_proto protoreflect.FileDescriptor
 
 const file_v1_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x0ev1/agent.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"6\n" +
+	"\x0ev1/agent.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa8\x01\n" +
 	"\fAgentMessage\x12\x12\n" +
 	"\x04role\x18\x01 \x01(\tR\x04role\x12\x12\n" +
-	"\x04text\x18\x02 \x01(\tR\x04text\"\x92\x01\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\x12;\n" +
+	"\x05parts\x18\x03 \x03(\v2%.gestalt.provider.v1.AgentMessagePartR\x05parts\x123\n" +
+	"\bmetadata\x18\x04 \x01(\v2\x17.google.protobuf.StructR\bmetadata\"z\n" +
+	"\x18AgentMessagePartToolCall\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
+	"\atool_id\x18\x02 \x01(\tR\x06toolId\x125\n" +
+	"\targuments\x18\x03 \x01(\v2\x17.google.protobuf.StructR\targuments\"\xa1\x01\n" +
+	"\x1aAgentMessagePartToolResult\x12 \n" +
+	"\ftool_call_id\x18\x01 \x01(\tR\n" +
+	"toolCallId\x12\x16\n" +
+	"\x06status\x18\x02 \x01(\x05R\x06status\x12\x18\n" +
+	"\acontent\x18\x03 \x01(\tR\acontent\x12/\n" +
+	"\x06output\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x06output\"I\n" +
+	"\x18AgentMessagePartImageRef\x12\x10\n" +
+	"\x03uri\x18\x01 \x01(\tR\x03uri\x12\x1b\n" +
+	"\tmime_type\x18\x02 \x01(\tR\bmimeType\"\xfc\x02\n" +
+	"\x10AgentMessagePart\x12=\n" +
+	"\x04type\x18\x01 \x01(\x0e2).gestalt.provider.v1.AgentMessagePartTypeR\x04type\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\x12+\n" +
+	"\x04json\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x04json\x12J\n" +
+	"\ttool_call\x18\x04 \x01(\v2-.gestalt.provider.v1.AgentMessagePartToolCallR\btoolCall\x12P\n" +
+	"\vtool_result\x18\x05 \x01(\v2/.gestalt.provider.v1.AgentMessagePartToolResultR\n" +
+	"toolResult\x12J\n" +
+	"\timage_ref\x18\x06 \x01(\v2-.gestalt.provider.v1.AgentMessagePartImageRefR\bimageRef\"\x92\x01\n" +
 	"\n" +
 	"AgentActor\x12\x1d\n" +
 	"\n" +
@@ -1638,7 +2494,46 @@ const file_v1_agent_proto_rawDesc = "" +
 	"connection\x12\x1a\n" +
 	"\binstance\x18\x04 \x01(\tR\binstance\x12\x14\n" +
 	"\x05title\x18\x05 \x01(\tR\x05title\x12 \n" +
-	"\vdescription\x18\x06 \x01(\tR\vdescription\"\x9f\x05\n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\"\xe7\x02\n" +
+	"\x19AgentProviderCapabilities\x12%\n" +
+	"\x0estreaming_text\x18\x01 \x01(\bR\rstreamingText\x12\x1d\n" +
+	"\n" +
+	"tool_calls\x18\x02 \x01(\bR\ttoolCalls\x12.\n" +
+	"\x13parallel_tool_calls\x18\x03 \x01(\bR\x11parallelToolCalls\x12+\n" +
+	"\x11structured_output\x18\x04 \x01(\bR\x10structuredOutput\x121\n" +
+	"\x14session_continuation\x18\x05 \x01(\bR\x13sessionContinuation\x12\x1c\n" +
+	"\tapprovals\x18\x06 \x01(\bR\tapprovals\x12%\n" +
+	"\x0eresumable_runs\x18\a \x01(\bR\rresumableRuns\x12/\n" +
+	"\x13reasoning_summaries\x18\b \x01(\bR\x12reasoningSummaries\"%\n" +
+	"#GetAgentProviderCapabilitiesRequest\"\x96\x01\n" +
+	"\x1dResumeAgentProviderRunRequest\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12%\n" +
+	"\x0einteraction_id\x18\x02 \x01(\tR\rinteractionId\x127\n" +
+	"\n" +
+	"resolution\x18\x03 \x01(\v2\x17.google.protobuf.StructR\n" +
+	"resolution\"\xd7\x01\n" +
+	"\x1eRequestAgentInteractionRequest\x12\x15\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12=\n" +
+	"\x04type\x18\x02 \x01(\x0e2).gestalt.provider.v1.AgentInteractionTypeR\x04type\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x16\n" +
+	"\x06prompt\x18\x04 \x01(\tR\x06prompt\x121\n" +
+	"\arequest\x18\x05 \x01(\v2\x17.google.protobuf.StructR\arequest\"\xcc\x03\n" +
+	"\x10AgentInteraction\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
+	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12=\n" +
+	"\x04type\x18\x03 \x01(\x0e2).gestalt.provider.v1.AgentInteractionTypeR\x04type\x12@\n" +
+	"\x05state\x18\x04 \x01(\x0e2*.gestalt.provider.v1.AgentInteractionStateR\x05state\x12\x14\n" +
+	"\x05title\x18\x05 \x01(\tR\x05title\x12\x16\n" +
+	"\x06prompt\x18\x06 \x01(\tR\x06prompt\x121\n" +
+	"\arequest\x18\a \x01(\v2\x17.google.protobuf.StructR\arequest\x127\n" +
+	"\n" +
+	"resolution\x18\b \x01(\v2\x17.google.protobuf.StructR\n" +
+	"resolution\x129\n" +
+	"\n" +
+	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12;\n" +
+	"\vresolved_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"resolvedAt\"\x9f\x05\n" +
 	"\rBoundAgentRun\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rprovider_name\x18\x02 \x01(\tR\fproviderName\x12\x14\n" +
@@ -1740,26 +2635,47 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x1cAgentManagerCancelRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12)\n" +
-	"\x10invocation_token\x18\x04 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle*\x8e\x01\n" +
+	"\x10invocation_token\x18\x04 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle*\xfa\x01\n" +
+	"\x14AgentMessagePartType\x12'\n" +
+	"#AGENT_MESSAGE_PART_TYPE_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cAGENT_MESSAGE_PART_TYPE_TEXT\x10\x01\x12 \n" +
+	"\x1cAGENT_MESSAGE_PART_TYPE_JSON\x10\x02\x12%\n" +
+	"!AGENT_MESSAGE_PART_TYPE_TOOL_CALL\x10\x03\x12'\n" +
+	"#AGENT_MESSAGE_PART_TYPE_TOOL_RESULT\x10\x04\x12%\n" +
+	"!AGENT_MESSAGE_PART_TYPE_IMAGE_REF\x10\x05*\x8e\x01\n" +
 	"\x13AgentToolSourceMode\x12&\n" +
 	"\"AGENT_TOOL_SOURCE_MODE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fAGENT_TOOL_SOURCE_MODE_EXPLICIT\x10\x01\x12*\n" +
-	"&AGENT_TOOL_SOURCE_MODE_INHERIT_INVOKES\x10\x02*\xca\x01\n" +
+	"&AGENT_TOOL_SOURCE_MODE_INHERIT_INVOKES\x10\x02*\xf2\x01\n" +
 	"\x0eAgentRunStatus\x12 \n" +
 	"\x1cAGENT_RUN_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18AGENT_RUN_STATUS_PENDING\x10\x01\x12\x1c\n" +
 	"\x18AGENT_RUN_STATUS_RUNNING\x10\x02\x12\x1e\n" +
 	"\x1aAGENT_RUN_STATUS_SUCCEEDED\x10\x03\x12\x1b\n" +
 	"\x17AGENT_RUN_STATUS_FAILED\x10\x04\x12\x1d\n" +
-	"\x19AGENT_RUN_STATUS_CANCELED\x10\x052\xa9\x03\n" +
+	"\x19AGENT_RUN_STATUS_CANCELED\x10\x05\x12&\n" +
+	"\"AGENT_RUN_STATUS_WAITING_FOR_INPUT\x10\x06*\xaf\x01\n" +
+	"\x14AgentInteractionType\x12&\n" +
+	"\"AGENT_INTERACTION_TYPE_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fAGENT_INTERACTION_TYPE_APPROVAL\x10\x01\x12(\n" +
+	"$AGENT_INTERACTION_TYPE_CLARIFICATION\x10\x02\x12 \n" +
+	"\x1cAGENT_INTERACTION_TYPE_INPUT\x10\x03*\xb1\x01\n" +
+	"\x15AgentInteractionState\x12'\n" +
+	"#AGENT_INTERACTION_STATE_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fAGENT_INTERACTION_STATE_PENDING\x10\x01\x12$\n" +
+	" AGENT_INTERACTION_STATE_RESOLVED\x10\x02\x12$\n" +
+	" AGENT_INTERACTION_STATE_CANCELED\x10\x032\x8b\x05\n" +
 	"\rAgentProvider\x12a\n" +
 	"\bStartRun\x121.gestalt.provider.v1.StartAgentProviderRunRequest\x1a\".gestalt.provider.v1.BoundAgentRun\x12]\n" +
 	"\x06GetRun\x12/.gestalt.provider.v1.GetAgentProviderRunRequest\x1a\".gestalt.provider.v1.BoundAgentRun\x12q\n" +
 	"\bListRuns\x121.gestalt.provider.v1.ListAgentProviderRunsRequest\x1a2.gestalt.provider.v1.ListAgentProviderRunsResponse\x12c\n" +
-	"\tCancelRun\x122.gestalt.provider.v1.CancelAgentProviderRunRequest\x1a\".gestalt.provider.v1.BoundAgentRun2\xc8\x01\n" +
+	"\tCancelRun\x122.gestalt.provider.v1.CancelAgentProviderRunRequest\x1a\".gestalt.provider.v1.BoundAgentRun\x12{\n" +
+	"\x0fGetCapabilities\x128.gestalt.provider.v1.GetAgentProviderCapabilitiesRequest\x1a..gestalt.provider.v1.AgentProviderCapabilities\x12c\n" +
+	"\tResumeRun\x122.gestalt.provider.v1.ResumeAgentProviderRunRequest\x1a\".gestalt.provider.v1.BoundAgentRun2\xba\x02\n" +
 	"\tAgentHost\x12j\n" +
 	"\vExecuteTool\x12,.gestalt.provider.v1.ExecuteAgentToolRequest\x1a-.gestalt.provider.v1.ExecuteAgentToolResponse\x12O\n" +
-	"\tEmitEvent\x12*.gestalt.provider.v1.EmitAgentEventRequest\x1a\x16.google.protobuf.Empty2\xa3\x03\n" +
+	"\tEmitEvent\x12*.gestalt.provider.v1.EmitAgentEventRequest\x1a\x16.google.protobuf.Empty\x12p\n" +
+	"\x12RequestInteraction\x123.gestalt.provider.v1.RequestAgentInteractionRequest\x1a%.gestalt.provider.v1.AgentInteraction2\xa3\x03\n" +
 	"\x10AgentManagerHost\x12X\n" +
 	"\x03Run\x12+.gestalt.provider.v1.AgentManagerRunRequest\x1a$.gestalt.provider.v1.ManagedAgentRun\x12^\n" +
 	"\x06GetRun\x12..gestalt.provider.v1.AgentManagerGetRunRequest\x1a$.gestalt.provider.v1.ManagedAgentRun\x12o\n" +
@@ -1780,90 +2696,126 @@ func file_v1_agent_proto_rawDescGZIP() []byte {
 	return file_v1_agent_proto_rawDescData
 }
 
-var file_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_v1_agent_proto_goTypes = []any{
-	(AgentToolSourceMode)(0),              // 0: gestalt.provider.v1.AgentToolSourceMode
-	(AgentRunStatus)(0),                   // 1: gestalt.provider.v1.AgentRunStatus
-	(*AgentMessage)(nil),                  // 2: gestalt.provider.v1.AgentMessage
-	(*AgentActor)(nil),                    // 3: gestalt.provider.v1.AgentActor
-	(*BoundAgentToolTarget)(nil),          // 4: gestalt.provider.v1.BoundAgentToolTarget
-	(*ResolvedAgentTool)(nil),             // 5: gestalt.provider.v1.ResolvedAgentTool
-	(*AgentToolRef)(nil),                  // 6: gestalt.provider.v1.AgentToolRef
-	(*BoundAgentRun)(nil),                 // 7: gestalt.provider.v1.BoundAgentRun
-	(*StartAgentProviderRunRequest)(nil),  // 8: gestalt.provider.v1.StartAgentProviderRunRequest
-	(*GetAgentProviderRunRequest)(nil),    // 9: gestalt.provider.v1.GetAgentProviderRunRequest
-	(*ListAgentProviderRunsRequest)(nil),  // 10: gestalt.provider.v1.ListAgentProviderRunsRequest
-	(*ListAgentProviderRunsResponse)(nil), // 11: gestalt.provider.v1.ListAgentProviderRunsResponse
-	(*CancelAgentProviderRunRequest)(nil), // 12: gestalt.provider.v1.CancelAgentProviderRunRequest
-	(*ExecuteAgentToolRequest)(nil),       // 13: gestalt.provider.v1.ExecuteAgentToolRequest
-	(*ExecuteAgentToolResponse)(nil),      // 14: gestalt.provider.v1.ExecuteAgentToolResponse
-	(*AgentRunEvent)(nil),                 // 15: gestalt.provider.v1.AgentRunEvent
-	(*EmitAgentEventRequest)(nil),         // 16: gestalt.provider.v1.EmitAgentEventRequest
-	(*ManagedAgentRun)(nil),               // 17: gestalt.provider.v1.ManagedAgentRun
-	(*AgentManagerRunRequest)(nil),        // 18: gestalt.provider.v1.AgentManagerRunRequest
-	(*AgentManagerGetRunRequest)(nil),     // 19: gestalt.provider.v1.AgentManagerGetRunRequest
-	(*AgentManagerListRunsRequest)(nil),   // 20: gestalt.provider.v1.AgentManagerListRunsRequest
-	(*AgentManagerListRunsResponse)(nil),  // 21: gestalt.provider.v1.AgentManagerListRunsResponse
-	(*AgentManagerCancelRunRequest)(nil),  // 22: gestalt.provider.v1.AgentManagerCancelRunRequest
-	(*structpb.Struct)(nil),               // 23: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),         // 24: google.protobuf.Timestamp
-	(*emptypb.Empty)(nil),                 // 25: google.protobuf.Empty
+	(AgentMessagePartType)(0),                   // 0: gestalt.provider.v1.AgentMessagePartType
+	(AgentToolSourceMode)(0),                    // 1: gestalt.provider.v1.AgentToolSourceMode
+	(AgentRunStatus)(0),                         // 2: gestalt.provider.v1.AgentRunStatus
+	(AgentInteractionType)(0),                   // 3: gestalt.provider.v1.AgentInteractionType
+	(AgentInteractionState)(0),                  // 4: gestalt.provider.v1.AgentInteractionState
+	(*AgentMessage)(nil),                        // 5: gestalt.provider.v1.AgentMessage
+	(*AgentMessagePartToolCall)(nil),            // 6: gestalt.provider.v1.AgentMessagePartToolCall
+	(*AgentMessagePartToolResult)(nil),          // 7: gestalt.provider.v1.AgentMessagePartToolResult
+	(*AgentMessagePartImageRef)(nil),            // 8: gestalt.provider.v1.AgentMessagePartImageRef
+	(*AgentMessagePart)(nil),                    // 9: gestalt.provider.v1.AgentMessagePart
+	(*AgentActor)(nil),                          // 10: gestalt.provider.v1.AgentActor
+	(*BoundAgentToolTarget)(nil),                // 11: gestalt.provider.v1.BoundAgentToolTarget
+	(*ResolvedAgentTool)(nil),                   // 12: gestalt.provider.v1.ResolvedAgentTool
+	(*AgentToolRef)(nil),                        // 13: gestalt.provider.v1.AgentToolRef
+	(*AgentProviderCapabilities)(nil),           // 14: gestalt.provider.v1.AgentProviderCapabilities
+	(*GetAgentProviderCapabilitiesRequest)(nil), // 15: gestalt.provider.v1.GetAgentProviderCapabilitiesRequest
+	(*ResumeAgentProviderRunRequest)(nil),       // 16: gestalt.provider.v1.ResumeAgentProviderRunRequest
+	(*RequestAgentInteractionRequest)(nil),      // 17: gestalt.provider.v1.RequestAgentInteractionRequest
+	(*AgentInteraction)(nil),                    // 18: gestalt.provider.v1.AgentInteraction
+	(*BoundAgentRun)(nil),                       // 19: gestalt.provider.v1.BoundAgentRun
+	(*StartAgentProviderRunRequest)(nil),        // 20: gestalt.provider.v1.StartAgentProviderRunRequest
+	(*GetAgentProviderRunRequest)(nil),          // 21: gestalt.provider.v1.GetAgentProviderRunRequest
+	(*ListAgentProviderRunsRequest)(nil),        // 22: gestalt.provider.v1.ListAgentProviderRunsRequest
+	(*ListAgentProviderRunsResponse)(nil),       // 23: gestalt.provider.v1.ListAgentProviderRunsResponse
+	(*CancelAgentProviderRunRequest)(nil),       // 24: gestalt.provider.v1.CancelAgentProviderRunRequest
+	(*ExecuteAgentToolRequest)(nil),             // 25: gestalt.provider.v1.ExecuteAgentToolRequest
+	(*ExecuteAgentToolResponse)(nil),            // 26: gestalt.provider.v1.ExecuteAgentToolResponse
+	(*AgentRunEvent)(nil),                       // 27: gestalt.provider.v1.AgentRunEvent
+	(*EmitAgentEventRequest)(nil),               // 28: gestalt.provider.v1.EmitAgentEventRequest
+	(*ManagedAgentRun)(nil),                     // 29: gestalt.provider.v1.ManagedAgentRun
+	(*AgentManagerRunRequest)(nil),              // 30: gestalt.provider.v1.AgentManagerRunRequest
+	(*AgentManagerGetRunRequest)(nil),           // 31: gestalt.provider.v1.AgentManagerGetRunRequest
+	(*AgentManagerListRunsRequest)(nil),         // 32: gestalt.provider.v1.AgentManagerListRunsRequest
+	(*AgentManagerListRunsResponse)(nil),        // 33: gestalt.provider.v1.AgentManagerListRunsResponse
+	(*AgentManagerCancelRunRequest)(nil),        // 34: gestalt.provider.v1.AgentManagerCancelRunRequest
+	(*structpb.Struct)(nil),                     // 35: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),               // 36: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),                       // 37: google.protobuf.Empty
 }
 var file_v1_agent_proto_depIdxs = []int32{
-	4,  // 0: gestalt.provider.v1.ResolvedAgentTool.target:type_name -> gestalt.provider.v1.BoundAgentToolTarget
-	23, // 1: gestalt.provider.v1.ResolvedAgentTool.parameters_schema:type_name -> google.protobuf.Struct
-	1,  // 2: gestalt.provider.v1.BoundAgentRun.status:type_name -> gestalt.provider.v1.AgentRunStatus
-	2,  // 3: gestalt.provider.v1.BoundAgentRun.messages:type_name -> gestalt.provider.v1.AgentMessage
-	23, // 4: gestalt.provider.v1.BoundAgentRun.structured_output:type_name -> google.protobuf.Struct
-	3,  // 5: gestalt.provider.v1.BoundAgentRun.created_by:type_name -> gestalt.provider.v1.AgentActor
-	24, // 6: gestalt.provider.v1.BoundAgentRun.created_at:type_name -> google.protobuf.Timestamp
-	24, // 7: gestalt.provider.v1.BoundAgentRun.started_at:type_name -> google.protobuf.Timestamp
-	24, // 8: gestalt.provider.v1.BoundAgentRun.completed_at:type_name -> google.protobuf.Timestamp
-	2,  // 9: gestalt.provider.v1.StartAgentProviderRunRequest.messages:type_name -> gestalt.provider.v1.AgentMessage
-	5,  // 10: gestalt.provider.v1.StartAgentProviderRunRequest.tools:type_name -> gestalt.provider.v1.ResolvedAgentTool
-	23, // 11: gestalt.provider.v1.StartAgentProviderRunRequest.response_schema:type_name -> google.protobuf.Struct
-	23, // 12: gestalt.provider.v1.StartAgentProviderRunRequest.metadata:type_name -> google.protobuf.Struct
-	23, // 13: gestalt.provider.v1.StartAgentProviderRunRequest.provider_options:type_name -> google.protobuf.Struct
-	3,  // 14: gestalt.provider.v1.StartAgentProviderRunRequest.created_by:type_name -> gestalt.provider.v1.AgentActor
-	7,  // 15: gestalt.provider.v1.ListAgentProviderRunsResponse.runs:type_name -> gestalt.provider.v1.BoundAgentRun
-	23, // 16: gestalt.provider.v1.ExecuteAgentToolRequest.arguments:type_name -> google.protobuf.Struct
-	23, // 17: gestalt.provider.v1.AgentRunEvent.data:type_name -> google.protobuf.Struct
-	24, // 18: gestalt.provider.v1.AgentRunEvent.created_at:type_name -> google.protobuf.Timestamp
-	23, // 19: gestalt.provider.v1.EmitAgentEventRequest.data:type_name -> google.protobuf.Struct
-	7,  // 20: gestalt.provider.v1.ManagedAgentRun.run:type_name -> gestalt.provider.v1.BoundAgentRun
-	2,  // 21: gestalt.provider.v1.AgentManagerRunRequest.messages:type_name -> gestalt.provider.v1.AgentMessage
-	6,  // 22: gestalt.provider.v1.AgentManagerRunRequest.tool_refs:type_name -> gestalt.provider.v1.AgentToolRef
-	0,  // 23: gestalt.provider.v1.AgentManagerRunRequest.tool_source:type_name -> gestalt.provider.v1.AgentToolSourceMode
-	23, // 24: gestalt.provider.v1.AgentManagerRunRequest.response_schema:type_name -> google.protobuf.Struct
-	23, // 25: gestalt.provider.v1.AgentManagerRunRequest.metadata:type_name -> google.protobuf.Struct
-	23, // 26: gestalt.provider.v1.AgentManagerRunRequest.provider_options:type_name -> google.protobuf.Struct
-	17, // 27: gestalt.provider.v1.AgentManagerListRunsResponse.runs:type_name -> gestalt.provider.v1.ManagedAgentRun
-	8,  // 28: gestalt.provider.v1.AgentProvider.StartRun:input_type -> gestalt.provider.v1.StartAgentProviderRunRequest
-	9,  // 29: gestalt.provider.v1.AgentProvider.GetRun:input_type -> gestalt.provider.v1.GetAgentProviderRunRequest
-	10, // 30: gestalt.provider.v1.AgentProvider.ListRuns:input_type -> gestalt.provider.v1.ListAgentProviderRunsRequest
-	12, // 31: gestalt.provider.v1.AgentProvider.CancelRun:input_type -> gestalt.provider.v1.CancelAgentProviderRunRequest
-	13, // 32: gestalt.provider.v1.AgentHost.ExecuteTool:input_type -> gestalt.provider.v1.ExecuteAgentToolRequest
-	16, // 33: gestalt.provider.v1.AgentHost.EmitEvent:input_type -> gestalt.provider.v1.EmitAgentEventRequest
-	18, // 34: gestalt.provider.v1.AgentManagerHost.Run:input_type -> gestalt.provider.v1.AgentManagerRunRequest
-	19, // 35: gestalt.provider.v1.AgentManagerHost.GetRun:input_type -> gestalt.provider.v1.AgentManagerGetRunRequest
-	20, // 36: gestalt.provider.v1.AgentManagerHost.ListRuns:input_type -> gestalt.provider.v1.AgentManagerListRunsRequest
-	22, // 37: gestalt.provider.v1.AgentManagerHost.CancelRun:input_type -> gestalt.provider.v1.AgentManagerCancelRunRequest
-	7,  // 38: gestalt.provider.v1.AgentProvider.StartRun:output_type -> gestalt.provider.v1.BoundAgentRun
-	7,  // 39: gestalt.provider.v1.AgentProvider.GetRun:output_type -> gestalt.provider.v1.BoundAgentRun
-	11, // 40: gestalt.provider.v1.AgentProvider.ListRuns:output_type -> gestalt.provider.v1.ListAgentProviderRunsResponse
-	7,  // 41: gestalt.provider.v1.AgentProvider.CancelRun:output_type -> gestalt.provider.v1.BoundAgentRun
-	14, // 42: gestalt.provider.v1.AgentHost.ExecuteTool:output_type -> gestalt.provider.v1.ExecuteAgentToolResponse
-	25, // 43: gestalt.provider.v1.AgentHost.EmitEvent:output_type -> google.protobuf.Empty
-	17, // 44: gestalt.provider.v1.AgentManagerHost.Run:output_type -> gestalt.provider.v1.ManagedAgentRun
-	17, // 45: gestalt.provider.v1.AgentManagerHost.GetRun:output_type -> gestalt.provider.v1.ManagedAgentRun
-	21, // 46: gestalt.provider.v1.AgentManagerHost.ListRuns:output_type -> gestalt.provider.v1.AgentManagerListRunsResponse
-	17, // 47: gestalt.provider.v1.AgentManagerHost.CancelRun:output_type -> gestalt.provider.v1.ManagedAgentRun
-	38, // [38:48] is the sub-list for method output_type
-	28, // [28:38] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	9,  // 0: gestalt.provider.v1.AgentMessage.parts:type_name -> gestalt.provider.v1.AgentMessagePart
+	35, // 1: gestalt.provider.v1.AgentMessage.metadata:type_name -> google.protobuf.Struct
+	35, // 2: gestalt.provider.v1.AgentMessagePartToolCall.arguments:type_name -> google.protobuf.Struct
+	35, // 3: gestalt.provider.v1.AgentMessagePartToolResult.output:type_name -> google.protobuf.Struct
+	0,  // 4: gestalt.provider.v1.AgentMessagePart.type:type_name -> gestalt.provider.v1.AgentMessagePartType
+	35, // 5: gestalt.provider.v1.AgentMessagePart.json:type_name -> google.protobuf.Struct
+	6,  // 6: gestalt.provider.v1.AgentMessagePart.tool_call:type_name -> gestalt.provider.v1.AgentMessagePartToolCall
+	7,  // 7: gestalt.provider.v1.AgentMessagePart.tool_result:type_name -> gestalt.provider.v1.AgentMessagePartToolResult
+	8,  // 8: gestalt.provider.v1.AgentMessagePart.image_ref:type_name -> gestalt.provider.v1.AgentMessagePartImageRef
+	11, // 9: gestalt.provider.v1.ResolvedAgentTool.target:type_name -> gestalt.provider.v1.BoundAgentToolTarget
+	35, // 10: gestalt.provider.v1.ResolvedAgentTool.parameters_schema:type_name -> google.protobuf.Struct
+	35, // 11: gestalt.provider.v1.ResumeAgentProviderRunRequest.resolution:type_name -> google.protobuf.Struct
+	3,  // 12: gestalt.provider.v1.RequestAgentInteractionRequest.type:type_name -> gestalt.provider.v1.AgentInteractionType
+	35, // 13: gestalt.provider.v1.RequestAgentInteractionRequest.request:type_name -> google.protobuf.Struct
+	3,  // 14: gestalt.provider.v1.AgentInteraction.type:type_name -> gestalt.provider.v1.AgentInteractionType
+	4,  // 15: gestalt.provider.v1.AgentInteraction.state:type_name -> gestalt.provider.v1.AgentInteractionState
+	35, // 16: gestalt.provider.v1.AgentInteraction.request:type_name -> google.protobuf.Struct
+	35, // 17: gestalt.provider.v1.AgentInteraction.resolution:type_name -> google.protobuf.Struct
+	36, // 18: gestalt.provider.v1.AgentInteraction.created_at:type_name -> google.protobuf.Timestamp
+	36, // 19: gestalt.provider.v1.AgentInteraction.resolved_at:type_name -> google.protobuf.Timestamp
+	2,  // 20: gestalt.provider.v1.BoundAgentRun.status:type_name -> gestalt.provider.v1.AgentRunStatus
+	5,  // 21: gestalt.provider.v1.BoundAgentRun.messages:type_name -> gestalt.provider.v1.AgentMessage
+	35, // 22: gestalt.provider.v1.BoundAgentRun.structured_output:type_name -> google.protobuf.Struct
+	10, // 23: gestalt.provider.v1.BoundAgentRun.created_by:type_name -> gestalt.provider.v1.AgentActor
+	36, // 24: gestalt.provider.v1.BoundAgentRun.created_at:type_name -> google.protobuf.Timestamp
+	36, // 25: gestalt.provider.v1.BoundAgentRun.started_at:type_name -> google.protobuf.Timestamp
+	36, // 26: gestalt.provider.v1.BoundAgentRun.completed_at:type_name -> google.protobuf.Timestamp
+	5,  // 27: gestalt.provider.v1.StartAgentProviderRunRequest.messages:type_name -> gestalt.provider.v1.AgentMessage
+	12, // 28: gestalt.provider.v1.StartAgentProviderRunRequest.tools:type_name -> gestalt.provider.v1.ResolvedAgentTool
+	35, // 29: gestalt.provider.v1.StartAgentProviderRunRequest.response_schema:type_name -> google.protobuf.Struct
+	35, // 30: gestalt.provider.v1.StartAgentProviderRunRequest.metadata:type_name -> google.protobuf.Struct
+	35, // 31: gestalt.provider.v1.StartAgentProviderRunRequest.provider_options:type_name -> google.protobuf.Struct
+	10, // 32: gestalt.provider.v1.StartAgentProviderRunRequest.created_by:type_name -> gestalt.provider.v1.AgentActor
+	19, // 33: gestalt.provider.v1.ListAgentProviderRunsResponse.runs:type_name -> gestalt.provider.v1.BoundAgentRun
+	35, // 34: gestalt.provider.v1.ExecuteAgentToolRequest.arguments:type_name -> google.protobuf.Struct
+	35, // 35: gestalt.provider.v1.AgentRunEvent.data:type_name -> google.protobuf.Struct
+	36, // 36: gestalt.provider.v1.AgentRunEvent.created_at:type_name -> google.protobuf.Timestamp
+	35, // 37: gestalt.provider.v1.EmitAgentEventRequest.data:type_name -> google.protobuf.Struct
+	19, // 38: gestalt.provider.v1.ManagedAgentRun.run:type_name -> gestalt.provider.v1.BoundAgentRun
+	5,  // 39: gestalt.provider.v1.AgentManagerRunRequest.messages:type_name -> gestalt.provider.v1.AgentMessage
+	13, // 40: gestalt.provider.v1.AgentManagerRunRequest.tool_refs:type_name -> gestalt.provider.v1.AgentToolRef
+	1,  // 41: gestalt.provider.v1.AgentManagerRunRequest.tool_source:type_name -> gestalt.provider.v1.AgentToolSourceMode
+	35, // 42: gestalt.provider.v1.AgentManagerRunRequest.response_schema:type_name -> google.protobuf.Struct
+	35, // 43: gestalt.provider.v1.AgentManagerRunRequest.metadata:type_name -> google.protobuf.Struct
+	35, // 44: gestalt.provider.v1.AgentManagerRunRequest.provider_options:type_name -> google.protobuf.Struct
+	29, // 45: gestalt.provider.v1.AgentManagerListRunsResponse.runs:type_name -> gestalt.provider.v1.ManagedAgentRun
+	20, // 46: gestalt.provider.v1.AgentProvider.StartRun:input_type -> gestalt.provider.v1.StartAgentProviderRunRequest
+	21, // 47: gestalt.provider.v1.AgentProvider.GetRun:input_type -> gestalt.provider.v1.GetAgentProviderRunRequest
+	22, // 48: gestalt.provider.v1.AgentProvider.ListRuns:input_type -> gestalt.provider.v1.ListAgentProviderRunsRequest
+	24, // 49: gestalt.provider.v1.AgentProvider.CancelRun:input_type -> gestalt.provider.v1.CancelAgentProviderRunRequest
+	15, // 50: gestalt.provider.v1.AgentProvider.GetCapabilities:input_type -> gestalt.provider.v1.GetAgentProviderCapabilitiesRequest
+	16, // 51: gestalt.provider.v1.AgentProvider.ResumeRun:input_type -> gestalt.provider.v1.ResumeAgentProviderRunRequest
+	25, // 52: gestalt.provider.v1.AgentHost.ExecuteTool:input_type -> gestalt.provider.v1.ExecuteAgentToolRequest
+	28, // 53: gestalt.provider.v1.AgentHost.EmitEvent:input_type -> gestalt.provider.v1.EmitAgentEventRequest
+	17, // 54: gestalt.provider.v1.AgentHost.RequestInteraction:input_type -> gestalt.provider.v1.RequestAgentInteractionRequest
+	30, // 55: gestalt.provider.v1.AgentManagerHost.Run:input_type -> gestalt.provider.v1.AgentManagerRunRequest
+	31, // 56: gestalt.provider.v1.AgentManagerHost.GetRun:input_type -> gestalt.provider.v1.AgentManagerGetRunRequest
+	32, // 57: gestalt.provider.v1.AgentManagerHost.ListRuns:input_type -> gestalt.provider.v1.AgentManagerListRunsRequest
+	34, // 58: gestalt.provider.v1.AgentManagerHost.CancelRun:input_type -> gestalt.provider.v1.AgentManagerCancelRunRequest
+	19, // 59: gestalt.provider.v1.AgentProvider.StartRun:output_type -> gestalt.provider.v1.BoundAgentRun
+	19, // 60: gestalt.provider.v1.AgentProvider.GetRun:output_type -> gestalt.provider.v1.BoundAgentRun
+	23, // 61: gestalt.provider.v1.AgentProvider.ListRuns:output_type -> gestalt.provider.v1.ListAgentProviderRunsResponse
+	19, // 62: gestalt.provider.v1.AgentProvider.CancelRun:output_type -> gestalt.provider.v1.BoundAgentRun
+	14, // 63: gestalt.provider.v1.AgentProvider.GetCapabilities:output_type -> gestalt.provider.v1.AgentProviderCapabilities
+	19, // 64: gestalt.provider.v1.AgentProvider.ResumeRun:output_type -> gestalt.provider.v1.BoundAgentRun
+	26, // 65: gestalt.provider.v1.AgentHost.ExecuteTool:output_type -> gestalt.provider.v1.ExecuteAgentToolResponse
+	37, // 66: gestalt.provider.v1.AgentHost.EmitEvent:output_type -> google.protobuf.Empty
+	18, // 67: gestalt.provider.v1.AgentHost.RequestInteraction:output_type -> gestalt.provider.v1.AgentInteraction
+	29, // 68: gestalt.provider.v1.AgentManagerHost.Run:output_type -> gestalt.provider.v1.ManagedAgentRun
+	29, // 69: gestalt.provider.v1.AgentManagerHost.GetRun:output_type -> gestalt.provider.v1.ManagedAgentRun
+	33, // 70: gestalt.provider.v1.AgentManagerHost.ListRuns:output_type -> gestalt.provider.v1.AgentManagerListRunsResponse
+	29, // 71: gestalt.provider.v1.AgentManagerHost.CancelRun:output_type -> gestalt.provider.v1.ManagedAgentRun
+	59, // [59:72] is the sub-list for method output_type
+	46, // [46:59] is the sub-list for method input_type
+	46, // [46:46] is the sub-list for extension type_name
+	46, // [46:46] is the sub-list for extension extendee
+	0,  // [0:46] is the sub-list for field type_name
 }
 
 func init() { file_v1_agent_proto_init() }
@@ -1876,8 +2828,8 @@ func file_v1_agent_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_agent_proto_rawDesc), len(file_v1_agent_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   21,
+			NumEnums:      5,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

@@ -5,7 +5,9 @@ import { Callout } from 'nextra/components'
 Gestalt agents are a standalone global provider primitive for run-based
 reasoning. An agent provider accepts messages, optional tools, optional
 structured-output contracts, and optional session continuation state, then
-returns a run object you can inspect or cancel later.
+returns a run object you can inspect or cancel later. Providers can also
+advertise optional capabilities and pause on canonical human interactions
+without changing the caller-facing run shape.
 
 <Callout type="info">
   Agent providers are global, not plugin-scoped. A run either selects a named
@@ -22,8 +24,11 @@ HTTP client.
 - `providers.agent.<name>` defines the backend pool.
 - The provider owns the agent-side run lifecycle and any provider-specific
   session continuation state.
+- The provider can advertise capabilities such as streaming text, structured
+  output, resumable runs, and approvals through the shared provider contract.
 - Gestalt can pass resolved tool definitions into the provider and receive tool
-  callbacks back through the host agent socket.
+  callbacks, run events, and interaction requests back through the host agent
+  socket.
 - The same provider pool is used by the global agent runs surfaces and by
   plugins calling the host agent manager.
 
@@ -101,8 +106,23 @@ The neutral agent run shape is intentionally small:
   "provider": "openai",
   "model": "gpt-5.4",
   "messages": [
-    { "role": "system", "text": "Be concise." },
-    { "role": "user", "text": "Summarize the roadmap risk." }
+    {
+      "role": "system",
+      "text": "Be concise.",
+      "parts": [
+        { "type": "text", "text": "Be concise." }
+      ]
+    },
+    {
+      "role": "user",
+      "text": "Summarize the roadmap risk.",
+      "parts": [
+        { "type": "text", "text": "Summarize the roadmap risk." }
+      ],
+      "metadata": {
+        "ticket": "RD-42"
+      }
+    }
   ],
   "responseSchema": {
     "type": "object",
@@ -118,6 +138,23 @@ The neutral agent run shape is intentionally small:
 For global runs, omitting `toolRefs` lets Gestalt attach the caller's
 authorized safe tools by default. Add `toolRefs` to extend that set, or set
 `toolSource: "explicit"` when you need explicit-only tools.
+
+`messages[].text` remains supported for simple callers. `messages[].parts` and
+`messages[].metadata` are optional extensions for richer transcript items and
+message-scoped annotations.
+
+Providers may also report capabilities such as:
+
+```json
+{
+  "streamingText": true,
+  "toolCalls": true,
+  "structuredOutput": true,
+  "sessionContinuation": true,
+  "approvals": true,
+  "resumableRuns": true
+}
+```
 
 ## First-party agent providers
 

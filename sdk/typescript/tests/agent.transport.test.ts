@@ -10,9 +10,12 @@ import { expect, test } from "bun:test";
 
 import {
   AgentHost as AgentHostService,
+  AgentInteractionState,
+  AgentInteractionType,
   EmitAgentEventRequestSchema,
   ExecuteAgentToolRequestSchema,
   ExecuteAgentToolResponseSchema,
+  RequestAgentInteractionRequestSchema,
 } from "../gen/v1/agent_pb.ts";
 import { AgentHost, ENV_AGENT_HOST_SOCKET } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
@@ -23,6 +26,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
   const previousSocket = process.env[ENV_AGENT_HOST_SOCKET];
   const calls: Array<{ runId: string; toolCallId: string; toolId: string }> = [];
   const events: Array<{ runId: string; type: string; visibility: string; data: unknown }> = [];
+  const interactions: Array<{ runId: string; type: number; title: string }> = [];
 
   const handler = connectNodeAdapter({
     grpc: true,
@@ -52,6 +56,22 @@ test("AgentHost executes tools through the configured unix socket", async () => 
             data: input.data,
           });
           return {};
+        },
+        async requestInteraction(input) {
+          interactions.push({
+            runId: input.runId,
+            type: input.type,
+            title: input.title,
+          });
+          return {
+            id: "interaction-1",
+            runId: input.runId,
+            type: AgentInteractionType.APPROVAL,
+            state: AgentInteractionState.PENDING,
+            title: input.title,
+            prompt: input.prompt,
+            request: input.request,
+          };
         },
       } satisfies Partial<ServiceImpl<typeof AgentHostService>>);
     },
@@ -100,6 +120,20 @@ test("AgentHost executes tools through the configured unix socket", async () => 
         },
       }),
     );
+    const interaction = await host.requestInteraction(
+      create(RequestAgentInteractionRequestSchema, {
+        runId: "run-123",
+        type: AgentInteractionType.APPROVAL,
+        title: "Approve command",
+        prompt: "Run git status?",
+        request: {
+          command: ["git", "status"],
+        },
+      }),
+    );
+
+    expect(interaction.id).toBe("interaction-1");
+    expect(interaction.state).toBe(AgentInteractionState.PENDING);
 
     expect(calls).toEqual([
       {
@@ -117,6 +151,13 @@ test("AgentHost executes tools through the configured unix socket", async () => 
           phase: "tool_call",
           attempt: 1,
         },
+      },
+    ]);
+    expect(interactions).toEqual([
+      {
+        runId: "run-123",
+        type: AgentInteractionType.APPROVAL,
+        title: "Approve command",
       },
     ]);
   } finally {

@@ -8,6 +8,8 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -86,6 +88,10 @@ func NewRemoteAgent(ctx context.Context, cfg RemoteAgentConfig) (coreagent.Provi
 func (r *remoteAgent) StartRun(ctx context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
+	messages, err := agentMessagesToProto(req.Messages)
+	if err != nil {
+		return nil, err
+	}
 	tools, err := agentToolsToProto(req.Tools)
 	if err != nil {
 		return nil, err
@@ -107,7 +113,7 @@ func (r *remoteAgent) StartRun(ctx context.Context, req coreagent.StartRunReques
 		IdempotencyKey:  req.IdempotencyKey,
 		ProviderName:    req.ProviderName,
 		Model:           req.Model,
-		Messages:        agentMessagesToProto(req.Messages),
+		Messages:        messages,
 		Tools:           tools,
 		ResponseSchema:  responseSchema,
 		SessionRef:      req.SessionRef,
@@ -156,6 +162,37 @@ func (r *remoteAgent) CancelRun(ctx context.Context, req coreagent.CancelRunRequ
 	resp, err := r.client.CancelRun(ctx, &proto.CancelAgentProviderRunRequest{
 		RunId:  req.RunID,
 		Reason: req.Reason,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return agentRunFromProto(resp)
+}
+
+func (r *remoteAgent) GetCapabilities(ctx context.Context, req coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resp, err := r.client.GetCapabilities(ctx, &proto.GetAgentProviderCapabilitiesRequest{})
+	if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			return &coreagent.ProviderCapabilities{}, nil
+		}
+		return nil, err
+	}
+	return agentProviderCapabilitiesFromProto(resp), nil
+}
+
+func (r *remoteAgent) ResumeRun(ctx context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resolution, err := structFromMap(req.Resolution)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.client.ResumeRun(ctx, &proto.ResumeAgentProviderRunRequest{
+		RunId:         req.RunID,
+		InteractionId: req.InteractionID,
+		Resolution:    resolution,
 	})
 	if err != nil {
 		return nil, err

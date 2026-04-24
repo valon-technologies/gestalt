@@ -55,6 +55,16 @@ class AgentProviderStub(object):
                 request_serializer=v1_dot_agent__pb2.CancelAgentProviderRunRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.BoundAgentRun.FromString,
                 _registered_method=True)
+        self.GetCapabilities = channel.unary_unary(
+                '/gestalt.provider.v1.AgentProvider/GetCapabilities',
+                request_serializer=v1_dot_agent__pb2.GetAgentProviderCapabilitiesRequest.SerializeToString,
+                response_deserializer=v1_dot_agent__pb2.AgentProviderCapabilities.FromString,
+                _registered_method=True)
+        self.ResumeRun = channel.unary_unary(
+                '/gestalt.provider.v1.AgentProvider/ResumeRun',
+                request_serializer=v1_dot_agent__pb2.ResumeAgentProviderRunRequest.SerializeToString,
+                response_deserializer=v1_dot_agent__pb2.BoundAgentRun.FromString,
+                _registered_method=True)
 
 
 class AgentProviderServicer(object):
@@ -84,6 +94,18 @@ class AgentProviderServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetCapabilities(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ResumeRun(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AgentProviderServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -105,6 +127,16 @@ def add_AgentProviderServicer_to_server(servicer, server):
             'CancelRun': grpc.unary_unary_rpc_method_handler(
                     servicer.CancelRun,
                     request_deserializer=v1_dot_agent__pb2.CancelAgentProviderRunRequest.FromString,
+                    response_serializer=v1_dot_agent__pb2.BoundAgentRun.SerializeToString,
+            ),
+            'GetCapabilities': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetCapabilities,
+                    request_deserializer=v1_dot_agent__pb2.GetAgentProviderCapabilitiesRequest.FromString,
+                    response_serializer=v1_dot_agent__pb2.AgentProviderCapabilities.SerializeToString,
+            ),
+            'ResumeRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResumeRun,
+                    request_deserializer=v1_dot_agent__pb2.ResumeAgentProviderRunRequest.FromString,
                     response_serializer=v1_dot_agent__pb2.BoundAgentRun.SerializeToString,
             ),
     }
@@ -226,6 +258,60 @@ class AgentProvider(object):
             metadata,
             _registered_method=True)
 
+    @staticmethod
+    def GetCapabilities(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.AgentProvider/GetCapabilities',
+            v1_dot_agent__pb2.GetAgentProviderCapabilitiesRequest.SerializeToString,
+            v1_dot_agent__pb2.AgentProviderCapabilities.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResumeRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.AgentProvider/ResumeRun',
+            v1_dot_agent__pb2.ResumeAgentProviderRunRequest.SerializeToString,
+            v1_dot_agent__pb2.BoundAgentRun.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
 
 class AgentHostStub(object):
     """Missing associated documentation comment in .proto file."""
@@ -246,6 +332,11 @@ class AgentHostStub(object):
                 request_serializer=v1_dot_agent__pb2.EmitAgentEventRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
+        self.RequestInteraction = channel.unary_unary(
+                '/gestalt.provider.v1.AgentHost/RequestInteraction',
+                request_serializer=v1_dot_agent__pb2.RequestAgentInteractionRequest.SerializeToString,
+                response_deserializer=v1_dot_agent__pb2.AgentInteraction.FromString,
+                _registered_method=True)
 
 
 class AgentHostServicer(object):
@@ -263,6 +354,12 @@ class AgentHostServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def RequestInteraction(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AgentHostServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -275,6 +372,11 @@ def add_AgentHostServicer_to_server(servicer, server):
                     servicer.EmitEvent,
                     request_deserializer=v1_dot_agent__pb2.EmitAgentEventRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            ),
+            'RequestInteraction': grpc.unary_unary_rpc_method_handler(
+                    servicer.RequestInteraction,
+                    request_deserializer=v1_dot_agent__pb2.RequestAgentInteractionRequest.FromString,
+                    response_serializer=v1_dot_agent__pb2.AgentInteraction.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -331,6 +433,33 @@ class AgentHost(object):
             '/gestalt.provider.v1.AgentHost/EmitEvent',
             v1_dot_agent__pb2.EmitAgentEventRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RequestInteraction(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.AgentHost/RequestInteraction',
+            v1_dot_agent__pb2.RequestAgentInteractionRequest.SerializeToString,
+            v1_dot_agent__pb2.AgentInteraction.FromString,
             options,
             channel_credentials,
             insecure,

@@ -28,8 +28,37 @@ const defaultAgentRunEventLimit = 100
 const maxAgentRunEventLimit = 1000
 
 type agentMessageRequest struct {
-	Role string `json:"role,omitempty"`
-	Text string `json:"text,omitempty"`
+	Role     string                    `json:"role,omitempty"`
+	Text     string                    `json:"text,omitempty"`
+	Parts    []agentMessagePartRequest `json:"parts,omitempty"`
+	Metadata map[string]any            `json:"metadata,omitempty"`
+}
+
+type agentMessagePartRequest struct {
+	Type       string                             `json:"type,omitempty"`
+	Text       string                             `json:"text,omitempty"`
+	JSON       map[string]any                     `json:"json,omitempty"`
+	ToolCall   *agentMessagePartToolCallRequest   `json:"toolCall,omitempty"`
+	ToolResult *agentMessagePartToolResultRequest `json:"toolResult,omitempty"`
+	ImageRef   *agentMessagePartImageRefRequest   `json:"imageRef,omitempty"`
+}
+
+type agentMessagePartToolCallRequest struct {
+	ID        string         `json:"id,omitempty"`
+	ToolID    string         `json:"toolId,omitempty"`
+	Arguments map[string]any `json:"arguments,omitempty"`
+}
+
+type agentMessagePartToolResultRequest struct {
+	ToolCallID string         `json:"toolCallId,omitempty"`
+	Status     int            `json:"status,omitempty"`
+	Content    string         `json:"content,omitempty"`
+	Output     map[string]any `json:"output,omitempty"`
+}
+
+type agentMessagePartImageRefRequest struct {
+	URI      string `json:"uri,omitempty"`
+	MIMEType string `json:"mimeType,omitempty"`
 }
 
 type agentToolRefRequest struct {
@@ -58,6 +87,11 @@ type agentRunCancelRequest struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+type agentRunResumeRequest struct {
+	InteractionID string         `json:"interactionId,omitempty"`
+	Resolution    map[string]any `json:"resolution,omitempty"`
+}
+
 type agentRunInfo struct {
 	ID               string                `json:"id"`
 	Provider         string                `json:"provider"`
@@ -84,6 +118,19 @@ type agentRunEventInfo struct {
 	Visibility string         `json:"visibility"`
 	Data       map[string]any `json:"data"`
 	CreatedAt  *time.Time     `json:"createdAt"`
+}
+
+type agentInteractionInfo struct {
+	ID         string         `json:"id"`
+	RunID      string         `json:"runId"`
+	Type       string         `json:"type"`
+	State      string         `json:"state"`
+	Title      string         `json:"title,omitempty"`
+	Prompt     string         `json:"prompt,omitempty"`
+	Request    map[string]any `json:"request,omitempty"`
+	Resolution map[string]any `json:"resolution,omitempty"`
+	CreatedAt  *time.Time     `json:"createdAt,omitempty"`
+	ResolvedAt *time.Time     `json:"resolvedAt,omitempty"`
 }
 
 func (s *Server) createGlobalAgentRun(w http.ResponseWriter, r *http.Request) {
@@ -229,6 +276,54 @@ func (s *Server) listGlobalAgentRunEvents(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusOK, events)
+}
+
+func (s *Server) listGlobalAgentRunInteractions(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentRunActor(w, r)
+	if !ok {
+		return
+	}
+	if s == nil || s.agentRuns == nil {
+		writeError(w, http.StatusPreconditionFailed, agentmanager.ErrAgentNotConfigured.Error())
+		return
+	}
+	runID := chi.URLParam(r, "runID")
+	interactions, err := s.agentRuns.ListRunInteractions(r.Context(), p, runID)
+	if err != nil {
+		s.writeAgentRunManagerError(w, r, runID, agentRunCreateRequest{}, err)
+		return
+	}
+	out := make([]agentInteractionInfo, 0, len(interactions))
+	for _, interaction := range interactions {
+		out = append(out, agentInteractionInfoFromCore(interaction))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) resumeGlobalAgentRun(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentRunActor(w, r)
+	if !ok {
+		return
+	}
+	if s == nil || s.agentRuns == nil {
+		writeError(w, http.StatusPreconditionFailed, agentmanager.ErrAgentNotConfigured.Error())
+		return
+	}
+	var req agentRunResumeRequest
+	if r.Body != nil {
+		defer func() { _ = r.Body.Close() }()
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+	}
+	runID := chi.URLParam(r, "runID")
+	managed, err := s.agentRuns.ResumeRun(r.Context(), p, runID, req.InteractionID, maps.Clone(req.Resolution))
+	if err != nil {
+		s.writeAgentRunManagerError(w, r, runID, agentRunCreateRequest{}, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, agentRunInfoFromManaged(managed))
 }
 
 func (s *Server) streamGlobalAgentRunEvents(w http.ResponseWriter, r *http.Request) {
@@ -420,8 +515,52 @@ func agentMessagesFromRequest(messages []agentMessageRequest) []coreagent.Messag
 	out := make([]coreagent.Message, 0, len(messages))
 	for _, message := range messages {
 		out = append(out, coreagent.Message{
-			Role: strings.TrimSpace(message.Role),
-			Text: message.Text,
+			Role:     strings.TrimSpace(message.Role),
+			Text:     message.Text,
+			Parts:    agentMessagePartsFromRequest(message.Parts),
+			Metadata: maps.Clone(message.Metadata),
+		})
+	}
+	return out
+}
+
+func agentMessagePartsFromRequest(parts []agentMessagePartRequest) []coreagent.MessagePart {
+	if len(parts) == 0 {
+		return nil
+	}
+	out := make([]coreagent.MessagePart, 0, len(parts))
+	for _, part := range parts {
+		var toolCall *coreagent.ToolCallPart
+		if part.ToolCall != nil {
+			toolCall = &coreagent.ToolCallPart{
+				ID:        strings.TrimSpace(part.ToolCall.ID),
+				ToolID:    strings.TrimSpace(part.ToolCall.ToolID),
+				Arguments: maps.Clone(part.ToolCall.Arguments),
+			}
+		}
+		var toolResult *coreagent.ToolResultPart
+		if part.ToolResult != nil {
+			toolResult = &coreagent.ToolResultPart{
+				ToolCallID: strings.TrimSpace(part.ToolResult.ToolCallID),
+				Status:     part.ToolResult.Status,
+				Content:    part.ToolResult.Content,
+				Output:     maps.Clone(part.ToolResult.Output),
+			}
+		}
+		var imageRef *coreagent.ImageRefPart
+		if part.ImageRef != nil {
+			imageRef = &coreagent.ImageRefPart{
+				URI:      strings.TrimSpace(part.ImageRef.URI),
+				MIMEType: strings.TrimSpace(part.ImageRef.MIMEType),
+			}
+		}
+		out = append(out, coreagent.MessagePart{
+			Type:       coreagent.MessagePartType(strings.TrimSpace(part.Type)),
+			Text:       part.Text,
+			JSON:       maps.Clone(part.JSON),
+			ToolCall:   toolCall,
+			ToolResult: toolResult,
+			ImageRef:   imageRef,
 		})
 	}
 	return out
@@ -525,8 +664,52 @@ func agentMessageInfoFromCore(messages []coreagent.Message) []agentMessageReques
 	out := make([]agentMessageRequest, 0, len(messages))
 	for _, message := range messages {
 		out = append(out, agentMessageRequest{
-			Role: strings.TrimSpace(message.Role),
-			Text: message.Text,
+			Role:     strings.TrimSpace(message.Role),
+			Text:     message.Text,
+			Parts:    agentMessagePartsFromCore(message.Parts),
+			Metadata: maps.Clone(message.Metadata),
+		})
+	}
+	return out
+}
+
+func agentMessagePartsFromCore(parts []coreagent.MessagePart) []agentMessagePartRequest {
+	if len(parts) == 0 {
+		return nil
+	}
+	out := make([]agentMessagePartRequest, 0, len(parts))
+	for _, part := range parts {
+		var toolCall *agentMessagePartToolCallRequest
+		if part.ToolCall != nil {
+			toolCall = &agentMessagePartToolCallRequest{
+				ID:        strings.TrimSpace(part.ToolCall.ID),
+				ToolID:    strings.TrimSpace(part.ToolCall.ToolID),
+				Arguments: maps.Clone(part.ToolCall.Arguments),
+			}
+		}
+		var toolResult *agentMessagePartToolResultRequest
+		if part.ToolResult != nil {
+			toolResult = &agentMessagePartToolResultRequest{
+				ToolCallID: strings.TrimSpace(part.ToolResult.ToolCallID),
+				Status:     part.ToolResult.Status,
+				Content:    part.ToolResult.Content,
+				Output:     maps.Clone(part.ToolResult.Output),
+			}
+		}
+		var imageRef *agentMessagePartImageRefRequest
+		if part.ImageRef != nil {
+			imageRef = &agentMessagePartImageRefRequest{
+				URI:      strings.TrimSpace(part.ImageRef.URI),
+				MIMEType: strings.TrimSpace(part.ImageRef.MIMEType),
+			}
+		}
+		out = append(out, agentMessagePartRequest{
+			Type:       strings.TrimSpace(string(part.Type)),
+			Text:       part.Text,
+			JSON:       maps.Clone(part.JSON),
+			ToolCall:   toolCall,
+			ToolResult: toolResult,
+			ImageRef:   imageRef,
 		})
 	}
 	return out
@@ -544,6 +727,24 @@ func agentActorInfoFromCore(actor coreagent.Actor) *workflowActorInfo {
 	}
 }
 
+func agentInteractionInfoFromCore(interaction *coreagent.Interaction) agentInteractionInfo {
+	if interaction == nil {
+		return agentInteractionInfo{}
+	}
+	return agentInteractionInfo{
+		ID:         strings.TrimSpace(interaction.ID),
+		RunID:      strings.TrimSpace(interaction.RunID),
+		Type:       strings.TrimSpace(string(interaction.Type)),
+		State:      strings.TrimSpace(string(interaction.State)),
+		Title:      strings.TrimSpace(interaction.Title),
+		Prompt:     strings.TrimSpace(interaction.Prompt),
+		Request:    maps.Clone(interaction.Request),
+		Resolution: maps.Clone(interaction.Resolution),
+		CreatedAt:  interaction.CreatedAt,
+		ResolvedAt: interaction.ResolvedAt,
+	}
+}
+
 func (s *Server) writeAgentRunManagerError(w http.ResponseWriter, r *http.Request, runID string, req agentRunCreateRequest, err error) {
 	pluginName, operation := firstAgentToolTarget(req.ToolRefs)
 	switch {
@@ -551,15 +752,22 @@ func (s *Server) writeAgentRunManagerError(w http.ResponseWriter, r *http.Reques
 		errors.Is(err, agentmanager.ErrAgentProviderRequired),
 		errors.Is(err, agentmanager.ErrAgentProviderNotAvailable),
 		errors.Is(err, agentmanager.ErrAgentRunMetadataNotConfigured),
-		errors.Is(err, agentmanager.ErrAgentRunEventsNotConfigured):
+		errors.Is(err, agentmanager.ErrAgentRunEventsNotConfigured),
+		errors.Is(err, agentmanager.ErrAgentRunInteractionsNotConfigured),
+		errors.Is(err, agentmanager.ErrAgentRunResumeNotSupported):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentSubjectRequired):
 		writeError(w, http.StatusUnauthorized, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentRunCreationInProgress):
 		writeError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, agentmanager.ErrAgentInteractionNotPending):
+		writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentCallerPluginRequired),
-		errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool):
+		errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool),
+		errors.Is(err, agentmanager.ErrAgentInteractionRequired):
 		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, agentmanager.ErrAgentInteractionNotFound):
+		writeError(w, http.StatusNotFound, "agent interaction not found")
 	case errors.Is(err, invocation.ErrProviderNotFound),
 		errors.Is(err, invocation.ErrOperationNotFound),
 		errors.Is(err, invocation.ErrNotAuthenticated),

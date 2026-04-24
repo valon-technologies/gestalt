@@ -1596,6 +1596,23 @@ func (p *stubAgentRunManagerProvider) CancelRun(_ context.Context, req coreagent
 	return &cloned, nil
 }
 
+func (p *stubAgentRunManagerProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	return &coreagent.ProviderCapabilities{StreamingText: true, ToolCalls: true}, nil
+}
+
+func (p *stubAgentRunManagerProvider) ResumeRun(_ context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	run, ok := p.runs[req.RunID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	cloned := *run
+	cloned.Status = coreagent.RunStatusSucceeded
+	p.runs[req.RunID] = &cloned
+	return &cloned, nil
+}
+
 func (p *stubAgentRunManagerProvider) Ping(context.Context) error { return nil }
 func (p *stubAgentRunManagerProvider) Close() error               { return nil }
 
