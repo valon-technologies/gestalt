@@ -57,9 +57,6 @@ fn test_cli_creates_agent_run() {
                 "messages":[
                     {"role":"system","text":"Be concise."},
                     {"role":"user","text":"Summarize the roadmap risk."}
-                ],
-                "toolRefs":[
-                    {"pluginName":"roadmap","operation":"sync"}
                 ]
             }"#
         .to_string(),
@@ -81,8 +78,6 @@ fn test_cli_creates_agent_run() {
             "Be concise.",
             "--message",
             "Summarize the roadmap risk.",
-            "--tool",
-            "roadmap:sync",
             "--idempotency-key",
             "agent-create-1",
         ])
@@ -93,7 +88,7 @@ fn test_cli_creates_agent_run() {
 }
 
 #[test]
-fn test_cli_creates_agent_run_from_request_file() {
+fn test_cli_creates_agent_run_from_input() {
     let request_json = r#"{
         "provider":"managed",
         "model":"gpt-5.4",
@@ -141,7 +136,7 @@ fn test_cli_creates_agent_run_from_request_file() {
             "agent",
             "runs",
             "create",
-            "--request-file",
+            "--input",
             request_path.to_str().unwrap(),
         ])
         .assert()

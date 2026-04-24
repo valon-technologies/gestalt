@@ -17,8 +17,11 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
+	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/server"
@@ -168,6 +171,23 @@ func (p *memoryAgentProvider) CancelRun(_ context.Context, req coreagent.CancelR
 func (p *memoryAgentProvider) Ping(context.Context) error { return nil }
 func (p *memoryAgentProvider) Close() error               { return nil }
 
+type stubAgentToolInvoker struct {
+	tokens map[string]string
+}
+
+func (s *stubAgentToolInvoker) Invoke(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+	return nil, nil
+}
+
+func (s *stubAgentToolInvoker) ResolveToken(ctx context.Context, _ *principal.Principal, providerName, _, _ string) (context.Context, string, error) {
+	if s != nil && s.tokens != nil {
+		if token, ok := s.tokens[providerName]; ok {
+			return ctx, token, nil
+		}
+	}
+	return ctx, "", core.ErrNotFound
+}
+
 func cloneAgentRun(run *coreagent.Run) *coreagent.Run {
 	if run == nil {
 		return nil
@@ -208,9 +228,33 @@ func TestGlobalAgentRunLifecycleSupportsCreateListGetAndCancel(t *testing.T) {
 	services := coretesting.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
 	provider := newMemoryAgentProvider()
+	roadmapProvider := &coretesting.StubIntegration{
+		N:        "roadmap",
+		DN:       "Roadmap",
+		ConnMode: core.ConnectionModeUser,
+		CatalogVal: &catalog.Catalog{
+			Name: "roadmap",
+			Operations: []catalog.CatalogOperation{
+				{ID: "sync", Method: http.MethodGet, Path: "/sync"},
+				{ID: "push", Method: http.MethodPost, Path: "/push"},
+			},
+		},
+	}
+	slackProvider := &coretesting.StubIntegration{
+		N:        "slack",
+		DN:       "Slack",
+		ConnMode: core.ConnectionModeUser,
+		CatalogVal: &catalog.Catalog{
+			Name: "slack",
+			Operations: []catalog.CatalogOperation{
+				{ID: "users.profile.get", Method: http.MethodGet, Path: "/users.profile.get"},
+			},
+		},
+	}
 	manager := agentmanager.New(agentmanager.Config{
-		Providers:   testutil.NewProviderRegistry(t),
+		Providers:   testutil.NewProviderRegistry(t, roadmapProvider, slackProvider),
 		Agent:       &stubAgentControl{defaultProviderName: "managed", provider: provider},
+		Invoker:     &stubAgentToolInvoker{tokens: map[string]string{"roadmap": "roadmap-token"}},
 		RunMetadata: services.AgentRunMetadata,
 		RunEvents:   services.AgentRunEvents,
 	})
@@ -277,6 +321,11 @@ func TestGlobalAgentRunLifecycleSupportsCreateListGetAndCancel(t *testing.T) {
 	}
 	if got := provider.startRunRequests[0].IdempotencyKey; got != "agent-http-create-1" {
 		t.Fatalf("StartRun idempotency key = %q, want %q", got, "agent-http-create-1")
+	}
+	if got := provider.startRunRequests[0].Tools; len(got) != 1 {
+		t.Fatalf("StartRun tools = %#v, want one default safe tool", got)
+	} else if got[0].Target.PluginName != "roadmap" || got[0].Target.Operation != "sync" {
+		t.Fatalf("StartRun default tool = %#v, want roadmap.sync", got[0])
 	}
 	startedData, err := structpb.NewStruct(map[string]any{"status": "running"})
 	if err != nil {
@@ -571,6 +620,180 @@ func TestGlobalAgentRunProviderAvailabilityFailuresArePreconditionFailures(t *te
 	}
 	if len(events) != 1 || events[0].RunID != "run-managed" || events[0].Source != "managed" {
 		t.Fatalf("events = %#v, want stored managed event", events)
+	}
+}
+
+func TestGlobalAgentRunDefaultToolsUseAccessScopedSessionCatalog(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "viewer-user@test.local")
+	seedToken(t, services, &core.IntegrationToken{
+		ID:          "tok-cat-human",
+		SubjectID:   principal.UserSubjectID(user.ID),
+		Integration: "test-int",
+		Connection:  testCatalogConnection,
+		Instance:    "default",
+		AccessToken: testCatalogToken,
+	})
+
+	var seenAccess invocation.AccessContext
+	provider := newMemoryAgentProvider()
+	sessionProvider := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+		},
+		catalog: &catalog.Catalog{Name: "test-int"},
+		catalogForRequestFn: func(ctx context.Context, token string) (*catalog.Catalog, error) {
+			if token != testCatalogToken {
+				return nil, errors.New("unexpected token")
+			}
+			seenAccess = invocation.AccessContextFromContext(ctx)
+			switch seenAccess.Role {
+			case "viewer":
+				return &catalog.Catalog{
+					Name: "test-int",
+					Operations: []catalog.CatalogOperation{
+						{ID: "viewer_session", Method: http.MethodGet, Path: "/viewer", AllowedRoles: []string{"viewer"}},
+					},
+				}, nil
+			default:
+				return &catalog.Catalog{
+					Name: "test-int",
+					Operations: []catalog.CatalogOperation{
+						{ID: "public_session", Method: http.MethodGet, Path: "/public"},
+					},
+				}, nil
+			}
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, sessionProvider)
+	pluginDefs := map[string]*config.ProviderEntry{
+		"test-int": {AuthorizationPolicy: "sample_policy"},
+	}
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(user.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, providers, pluginDefs, map[string]string{"test-int": testCatalogConnection})
+	broker := invocation.NewBroker(providers, services.Users, services.Tokens, invocation.WithAuthorizer(authz))
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:         providers,
+		Agent:             &stubAgentControl{defaultProviderName: "managed", provider: provider},
+		Invoker:           broker,
+		Authorizer:        authz,
+		CatalogConnection: map[string]string{"test-int": testCatalogConnection},
+		RunMetadata:       services.AgentRunMetadata,
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "viewer-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Viewer"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.AgentManager = manager
+		cfg.Authorizer = authz
+		cfg.PluginDefs = pluginDefs
+		cfg.CatalogConnection = map[string]string{"test-int": testCatalogConnection}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/", bytes.NewBufferString(`{
+		"messages":[{"role":"user","text":"Summarize the roadmap risk."}]
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+	if len(provider.startRunRequests) != 1 {
+		t.Fatalf("StartRun count = %d, want 1", len(provider.startRunRequests))
+	}
+	if got := provider.startRunRequests[0].Tools; len(got) != 1 {
+		t.Fatalf("StartRun tools = %#v, want one access-scoped default tool", got)
+	} else if got[0].Target.PluginName != "test-int" || got[0].Target.Operation != "viewer_session" {
+		t.Fatalf("StartRun default tool = %#v, want test-int.viewer_session", got[0])
+	}
+	if seenAccess.Policy != "sample_policy" || seenAccess.Role != "viewer" {
+		t.Fatalf("session catalog access context = %+v, want sample_policy/viewer", seenAccess)
+	}
+}
+
+func TestGlobalAgentRunCreateExplicitToolSourceSkipsDefaultTools(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryAgentProvider()
+	roadmapProvider := &coretesting.StubIntegration{
+		N:        "roadmap",
+		DN:       "Roadmap",
+		ConnMode: core.ConnectionModeUser,
+		CatalogVal: &catalog.Catalog{
+			Name: "roadmap",
+			Operations: []catalog.CatalogOperation{
+				{ID: "sync", Method: http.MethodGet, Path: "/sync"},
+			},
+		},
+	}
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:   testutil.NewProviderRegistry(t, roadmapProvider),
+		Agent:       &stubAgentControl{defaultProviderName: "managed", provider: provider},
+		Invoker:     &stubAgentToolInvoker{tokens: map[string]string{"roadmap": "roadmap-token"}},
+		RunMetadata: services.AgentRunMetadata,
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.AgentManager = manager
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/", bytes.NewBufferString(`{
+		"messages":[{"role":"user","text":"Summarize the roadmap risk."}],
+		"toolSource":"explicit"
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+	if len(provider.startRunRequests) != 1 {
+		t.Fatalf("StartRun count = %d, want 1", len(provider.startRunRequests))
+	}
+	if got := provider.startRunRequests[0].Tools; len(got) != 0 {
+		t.Fatalf("StartRun tools = %#v, want none in explicit mode", got)
 	}
 }
 

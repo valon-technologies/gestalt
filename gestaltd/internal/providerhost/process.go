@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	processStartupTimeout  = 20 * time.Second
+	processStartupTimeout  = 45 * time.Second
 	processShutdownTimeout = 2 * time.Second
 	processStartRetryCount = 5
 	processStartRetryDelay = 100 * time.Millisecond
