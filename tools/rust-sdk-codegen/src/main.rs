@@ -7,6 +7,7 @@ const PROTO_FILES: &[&str] = &[
     "agent.proto",
     "authentication.proto",
     "plugin.proto",
+    "pluginruntime.proto",
     "runtime.proto",
     "cache.proto",
     "secrets.proto",

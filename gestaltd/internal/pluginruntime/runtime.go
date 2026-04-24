@@ -2,6 +2,8 @@ package pluginruntime
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -10,12 +12,20 @@ import (
 type SessionState string
 
 const (
-	HostedPluginBundleRoot              = gestalt.HostedPluginBundleRoot
-	SessionStatePending    SessionState = "pending"
-	SessionStateReady      SessionState = "ready"
-	SessionStateRunning    SessionState = "running"
-	SessionStateStopped    SessionState = "stopped"
-	SessionStateFailed     SessionState = "failed"
+	HostedPluginBundleRoot                            = gestalt.HostedPluginBundleRoot
+	DefaultSessionDiagnosticsTailEntries              = 200
+	MaxSessionDiagnosticsTailEntries                  = 1000
+	SessionStatePending                  SessionState = "pending"
+	SessionStateReady                    SessionState = "ready"
+	SessionStateRunning                  SessionState = "running"
+	SessionStateStopped                  SessionState = "stopped"
+	SessionStateFailed                   SessionState = "failed"
+)
+
+var (
+	ErrProviderUnavailable    = errors.New("plugin runtime provider unavailable")
+	ErrSessionUnavailable     = errors.New("plugin runtime session unavailable")
+	ErrDiagnosticsUnavailable = errors.New("plugin runtime diagnostics unavailable")
 )
 
 // PolicyAction mirrors the host egress default for runtime-launched plugins.
@@ -69,6 +79,26 @@ type Session struct {
 	Metadata map[string]string
 }
 
+type LogStream string
+
+const (
+	LogStreamStdout  LogStream = "stdout"
+	LogStreamStderr  LogStream = "stderr"
+	LogStreamRuntime LogStream = "runtime"
+)
+
+type LogEntry struct {
+	Stream     LogStream
+	Message    string
+	ObservedAt time.Time
+}
+
+type SessionDiagnostics struct {
+	Session   Session
+	Logs      []LogEntry
+	Truncated bool
+}
+
 type StartSessionRequest struct {
 	PluginName string
 	Template   string
@@ -78,6 +108,11 @@ type StartSessionRequest struct {
 
 type GetSessionRequest struct {
 	SessionID string
+}
+
+type GetSessionDiagnosticsRequest struct {
+	SessionID   string
+	TailEntries int
 }
 
 type StopSessionRequest struct {
@@ -141,8 +176,19 @@ type Provider interface {
 	ListSessions(ctx context.Context) ([]Session, error)
 	StartSession(ctx context.Context, req StartSessionRequest) (*Session, error)
 	GetSession(ctx context.Context, req GetSessionRequest) (*Session, error)
+	GetSessionDiagnostics(ctx context.Context, req GetSessionDiagnosticsRequest) (*SessionDiagnostics, error)
 	StopSession(ctx context.Context, req StopSessionRequest) error
 	BindHostService(ctx context.Context, req BindHostServiceRequest) (*HostServiceBinding, error)
 	StartPlugin(ctx context.Context, req StartPluginRequest) (*HostedPlugin, error)
 	Close() error
+}
+
+func normalizeSessionDiagnosticsTailEntries(tailEntries int) int {
+	if tailEntries <= 0 {
+		return DefaultSessionDiagnosticsTailEntries
+	}
+	if tailEntries > MaxSessionDiagnosticsTailEntries {
+		return MaxSessionDiagnosticsTailEntries
+	}
+	return tailEntries
 }

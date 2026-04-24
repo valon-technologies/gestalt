@@ -139,6 +139,10 @@ func (r *capturingHostedAgentRuntime) GetSession(ctx context.Context, req plugin
 	return r.provider.GetSession(ctx, req)
 }
 
+func (r *capturingHostedAgentRuntime) GetSessionDiagnostics(ctx context.Context, req pluginruntime.GetSessionDiagnosticsRequest) (*pluginruntime.SessionDiagnostics, error) {
+	return r.provider.GetSessionDiagnostics(ctx, req)
+}
+
 func (r *capturingHostedAgentRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
 	r.cleanupFakeHostedAgent(req.SessionID)
 	return r.provider.StopSession(ctx, req)

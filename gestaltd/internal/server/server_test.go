@@ -186,8 +186,10 @@ func (r *recordingExternalCredentialProvider) lookupCalls() int64 {
 }
 
 type staticRuntimeInspector struct {
-	snapshots []bootstrap.RuntimeProviderSnapshot
-	err       error
+	snapshots   []bootstrap.RuntimeProviderSnapshot
+	diagnostics map[string]map[string]*pluginruntime.SessionDiagnostics
+	err         error
+	diagErr     error
 }
 
 func (s *staticRuntimeInspector) SnapshotPluginRuntimes(context.Context) ([]bootstrap.RuntimeProviderSnapshot, error) {
@@ -211,6 +213,41 @@ func (s *staticRuntimeInspector) SnapshotPluginRuntimes(context.Context) ([]boot
 		out = append(out, cloned)
 	}
 	return out, nil
+}
+
+func (s *staticRuntimeInspector) GetPluginRuntimeSessionDiagnostics(_ context.Context, providerName, sessionID string, tailEntries int) (*pluginruntime.SessionDiagnostics, error) {
+	if s == nil {
+		return nil, nil
+	}
+	if s.diagErr != nil {
+		return nil, s.diagErr
+	}
+	if len(s.diagnostics) > 0 {
+		if _, ok := s.diagnostics[providerName]; !ok {
+			return nil, fmt.Errorf("%w: runtime provider %q is not available", pluginruntime.ErrProviderUnavailable, providerName)
+		}
+	}
+	if sessions := s.diagnostics[providerName]; sessions != nil {
+		if diagnostics := sessions[sessionID]; diagnostics != nil {
+			logs := append([]pluginruntime.LogEntry(nil), diagnostics.Logs...)
+			truncated := diagnostics.Truncated
+			if tailEntries > 0 && tailEntries < len(logs) {
+				logs = logs[len(logs)-tailEntries:]
+				truncated = true
+			}
+			cloned := &pluginruntime.SessionDiagnostics{
+				Session: pluginruntime.Session{
+					ID:       diagnostics.Session.ID,
+					State:    diagnostics.Session.State,
+					Metadata: maps.Clone(diagnostics.Session.Metadata),
+				},
+				Logs:      logs,
+				Truncated: truncated,
+			}
+			return cloned, nil
+		}
+	}
+	return nil, fmt.Errorf("%w: runtime session %q is not available", pluginruntime.ErrSessionUnavailable, sessionID)
 }
 
 type relayTestCacheServer struct {
@@ -2828,6 +2865,154 @@ func TestAdminAPI_RuntimeProviderSessions(t *testing.T) {
 	}
 	if _, ok := sessions[0]["metadata"]; ok {
 		t.Fatalf("runtime provider sessions[0].metadata unexpectedly present: %#v", sessions[0]["metadata"])
+	}
+}
+
+func TestAdminAPI_RuntimeProviderSessionDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	logTime := time.Date(2026, time.April, 23, 21, 4, 5, 0, time.UTC)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.PluginRuntimes = &staticRuntimeInspector{
+			snapshots: []bootstrap.RuntimeProviderSnapshot{{
+				Name:   "modal",
+				Driver: config.RuntimeProviderDriver("modal"),
+				Loaded: true,
+				Sessions: []pluginruntime.Session{{
+					ID:    "session-1",
+					State: pluginruntime.SessionStateFailed,
+					Metadata: map[string]string{
+						"plugin": "support",
+					},
+				}},
+			}},
+			diagnostics: map[string]map[string]*pluginruntime.SessionDiagnostics{
+				"modal": {
+					"session-1": {
+						Session: pluginruntime.Session{
+							ID:    "session-1",
+							State: pluginruntime.SessionStateFailed,
+							Metadata: map[string]string{
+								"plugin": "support",
+							},
+						},
+						Logs: []pluginruntime.LogEntry{
+							{
+								Stream:     pluginruntime.LogStreamRuntime,
+								Message:    "launch failed",
+								ObservedAt: logTime.Add(-time.Second),
+							},
+							{
+								Stream:     pluginruntime.LogStreamStderr,
+								Message:    "Traceback: boom",
+								ObservedAt: logTime,
+							},
+						},
+					},
+				},
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/admin/api/v1/runtime/providers/modal/sessions/session-1/diagnostics?tailEntries=1")
+	if err != nil {
+		t.Fatalf("GET runtime session diagnostics: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("runtime session diagnostics status = %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	var body struct {
+		Session map[string]any `json:"session"`
+		Logs    []struct {
+			Stream     string    `json:"stream"`
+			Message    string    `json:"message"`
+			ObservedAt time.Time `json:"observedAt"`
+		} `json:"logs"`
+		Truncated bool `json:"truncated"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding runtime session diagnostics: %v", err)
+	}
+	if got := body.Session["id"]; got != "session-1" {
+		t.Fatalf("runtime session diagnostics.session.id = %v, want session-1", got)
+	}
+	if got := body.Session["plugin"]; got != "support" {
+		t.Fatalf("runtime session diagnostics.session.plugin = %v, want support", got)
+	}
+	if !body.Truncated {
+		t.Fatal("runtime session diagnostics.truncated = false, want true")
+	}
+	if len(body.Logs) != 1 {
+		t.Fatalf("runtime session diagnostics logs len = %d, want 1", len(body.Logs))
+	}
+	if got := body.Logs[0].Stream; got != "stderr" {
+		t.Fatalf("runtime session diagnostics logs[0].stream = %q, want stderr", got)
+	}
+	if got := body.Logs[0].Message; got != "Traceback: boom" {
+		t.Fatalf("runtime session diagnostics logs[0].message = %q, want Traceback: boom", got)
+	}
+	if !body.Logs[0].ObservedAt.Equal(logTime) {
+		t.Fatalf("runtime session diagnostics logs[0].observedAt = %s, want %s", body.Logs[0].ObservedAt, logTime)
+	}
+}
+
+func TestAdminAPI_RuntimeProviderSessionDiagnostics_MissingSessionOrProvider(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.PluginRuntimes = &staticRuntimeInspector{
+			diagnostics: map[string]map[string]*pluginruntime.SessionDiagnostics{
+				"modal": {
+					"session-1": {
+						Session: pluginruntime.Session{ID: "session-1", State: pluginruntime.SessionStateFailed},
+					},
+				},
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/admin/api/v1/runtime/providers/modal/sessions/missing/diagnostics")
+	if err != nil {
+		t.Fatalf("GET missing runtime session diagnostics: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("missing runtime session diagnostics status = %d, want 404: %s", resp.StatusCode, body)
+	}
+
+	resp, err = http.Get(ts.URL + "/admin/api/v1/runtime/providers/unknown/sessions/session-1/diagnostics")
+	if err != nil {
+		t.Fatalf("GET unknown runtime provider diagnostics: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("unknown runtime provider diagnostics status = %d, want 404: %s", resp.StatusCode, body)
+	}
+}
+
+func TestAdminAPI_RuntimeProviderSessionDiagnostics_RejectsTooLargeTailEntries(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.PluginRuntimes = &staticRuntimeInspector{}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/admin/api/v1/runtime/providers/modal/sessions/session-1/diagnostics?tailEntries=1001")
+	if err != nil {
+		t.Fatalf("GET runtime session diagnostics with large tailEntries: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("large tailEntries diagnostics status = %d, want 400: %s", resp.StatusCode, body)
 	}
 }
 

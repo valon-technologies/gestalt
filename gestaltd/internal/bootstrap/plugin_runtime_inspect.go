@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
@@ -11,6 +12,7 @@ import (
 
 type RuntimeInspector interface {
 	SnapshotPluginRuntimes(ctx context.Context) ([]RuntimeProviderSnapshot, error)
+	GetPluginRuntimeSessionDiagnostics(ctx context.Context, providerName, sessionID string, tailEntries int) (*pluginruntime.SessionDiagnostics, error)
 }
 
 type RuntimeProviderSnapshot struct {
@@ -93,4 +95,33 @@ func (r *pluginRuntimeRegistry) SnapshotPluginRuntimes(ctx context.Context) ([]R
 		out = append(out, snapshot)
 	}
 	return out, nil
+}
+
+func (r *pluginRuntimeRegistry) GetPluginRuntimeSessionDiagnostics(ctx context.Context, providerName, sessionID string, tailEntries int) (*pluginruntime.SessionDiagnostics, error) {
+	if r == nil || r.cfg == nil {
+		return nil, fmt.Errorf("plugin runtime registry is not configured")
+	}
+	providerName = strings.TrimSpace(providerName)
+	sessionID = strings.TrimSpace(sessionID)
+	if providerName == "" {
+		return nil, fmt.Errorf("runtime provider name is required")
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("runtime session id is required")
+	}
+
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("plugin runtime registry is closed")
+	}
+	provider := r.providers[providerName]
+	r.mu.Unlock()
+	if provider == nil {
+		return nil, fmt.Errorf("%w: runtime provider %q is not loaded", pluginruntime.ErrProviderUnavailable, providerName)
+	}
+	return provider.GetSessionDiagnostics(ctx, pluginruntime.GetSessionDiagnosticsRequest{
+		SessionID:   sessionID,
+		TailEntries: tailEntries,
+	})
 }

@@ -3973,6 +3973,950 @@ pub mod plugin_invoker_server {
         const NAME: &'static str = SERVICE_NAME;
     }
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PluginRuntimeExecutionTarget {
+    #[prost(string, tag = "1")]
+    pub goos: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub goarch: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PluginRuntimeSupport {
+    #[prost(bool, tag = "1")]
+    pub can_host_plugins: bool,
+    #[prost(enumeration = "PluginRuntimeHostServiceAccess", tag = "2")]
+    pub host_service_access: i32,
+    #[prost(enumeration = "PluginRuntimeEgressMode", tag = "3")]
+    pub egress_mode: i32,
+    #[prost(enumeration = "PluginRuntimeLaunchMode", tag = "4")]
+    pub launch_mode: i32,
+    #[prost(message, optional, tag = "5")]
+    pub execution_target: ::core::option::Option<PluginRuntimeExecutionTarget>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PluginRuntimeSession {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub state: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, string", tag = "3")]
+    pub metadata: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StartPluginRuntimeSessionRequest {
+    #[prost(string, tag = "1")]
+    pub plugin_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub template: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub image: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, string", tag = "4")]
+    pub metadata: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetPluginRuntimeSessionRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct StopPluginRuntimeSessionRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PluginRuntimeHostServiceRelay {
+    #[prost(string, tag = "1")]
+    pub dial_target: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct BindPluginRuntimeHostServiceRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub env_var: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub relay: ::core::option::Option<PluginRuntimeHostServiceRelay>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PluginRuntimeHostServiceBinding {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub env_var: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "5")]
+    pub relay: ::core::option::Option<PluginRuntimeHostServiceRelay>,
+}
+/// StartHostedPluginRequest describes the plugin process to launch inside a
+/// runtime session. The runtime backend owns allocation and injection of the
+/// plugin's listener endpoint and returns a host-reachable dial target in the
+/// HostedPlugin response.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StartHostedPluginRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub plugin_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub command: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "4")]
+    pub args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(btree_map = "string, string", tag = "5")]
+    pub env: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+    #[prost(string, tag = "6")]
+    pub bundle_dir: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "7")]
+    pub allowed_hosts: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, tag = "8")]
+    pub default_action: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub host_binary: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct HostedPlugin {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub plugin_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub dial_target: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct PluginRuntimeLogEntry {
+    #[prost(enumeration = "PluginRuntimeLogStream", tag = "1")]
+    pub stream: i32,
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub observed_at: ::core::option::Option<::prost_types::Timestamp>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetPluginRuntimeSessionDiagnosticsRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(int32, tag = "2")]
+    pub tail_entries: i32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PluginRuntimeSessionDiagnostics {
+    #[prost(message, optional, tag = "1")]
+    pub session: ::core::option::Option<PluginRuntimeSession>,
+    #[prost(message, repeated, tag = "2")]
+    pub logs: ::prost::alloc::vec::Vec<PluginRuntimeLogEntry>,
+    #[prost(bool, tag = "3")]
+    pub truncated: bool,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PluginRuntimeHostServiceAccess {
+    Unspecified = 0,
+    None = 1,
+    Direct = 2,
+}
+impl PluginRuntimeHostServiceAccess {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_UNSPECIFIED",
+            Self::None => "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_NONE",
+            Self::Direct => "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_UNSPECIFIED" => Some(Self::Unspecified),
+            "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_NONE" => Some(Self::None),
+            "PLUGIN_RUNTIME_HOST_SERVICE_ACCESS_DIRECT" => Some(Self::Direct),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PluginRuntimeEgressMode {
+    Unspecified = 0,
+    None = 1,
+    Cidr = 2,
+    Hostname = 3,
+}
+impl PluginRuntimeEgressMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "PLUGIN_RUNTIME_EGRESS_MODE_UNSPECIFIED",
+            Self::None => "PLUGIN_RUNTIME_EGRESS_MODE_NONE",
+            Self::Cidr => "PLUGIN_RUNTIME_EGRESS_MODE_CIDR",
+            Self::Hostname => "PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PLUGIN_RUNTIME_EGRESS_MODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "PLUGIN_RUNTIME_EGRESS_MODE_NONE" => Some(Self::None),
+            "PLUGIN_RUNTIME_EGRESS_MODE_CIDR" => Some(Self::Cidr),
+            "PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME" => Some(Self::Hostname),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PluginRuntimeLaunchMode {
+    Unspecified = 0,
+    Bundle = 1,
+    HostPath = 2,
+}
+impl PluginRuntimeLaunchMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "PLUGIN_RUNTIME_LAUNCH_MODE_UNSPECIFIED",
+            Self::Bundle => "PLUGIN_RUNTIME_LAUNCH_MODE_BUNDLE",
+            Self::HostPath => "PLUGIN_RUNTIME_LAUNCH_MODE_HOST_PATH",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PLUGIN_RUNTIME_LAUNCH_MODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "PLUGIN_RUNTIME_LAUNCH_MODE_BUNDLE" => Some(Self::Bundle),
+            "PLUGIN_RUNTIME_LAUNCH_MODE_HOST_PATH" => Some(Self::HostPath),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PluginRuntimeLogStream {
+    Unspecified = 0,
+    Stdout = 1,
+    Stderr = 2,
+    Runtime = 3,
+}
+impl PluginRuntimeLogStream {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "PLUGIN_RUNTIME_LOG_STREAM_UNSPECIFIED",
+            Self::Stdout => "PLUGIN_RUNTIME_LOG_STREAM_STDOUT",
+            Self::Stderr => "PLUGIN_RUNTIME_LOG_STREAM_STDERR",
+            Self::Runtime => "PLUGIN_RUNTIME_LOG_STREAM_RUNTIME",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PLUGIN_RUNTIME_LOG_STREAM_UNSPECIFIED" => Some(Self::Unspecified),
+            "PLUGIN_RUNTIME_LOG_STREAM_STDOUT" => Some(Self::Stdout),
+            "PLUGIN_RUNTIME_LOG_STREAM_STDERR" => Some(Self::Stderr),
+            "PLUGIN_RUNTIME_LOG_STREAM_RUNTIME" => Some(Self::Runtime),
+            _ => None,
+        }
+    }
+}
+/// Generated client implementations.
+pub mod plugin_runtime_provider_client {
+    #![allow(
+        unused_variables,
+        dead_code,
+        missing_docs,
+        clippy::wildcard_imports,
+        clippy::let_unit_value
+    )]
+    use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
+    #[derive(Debug, Clone)]
+    pub struct PluginRuntimeProviderClient<T> {
+        inner: tonic::client::Grpc<T>,
+    }
+    impl PluginRuntimeProviderClient<tonic::transport::Channel> {
+        /// Attempt to create a new client by connecting to a given endpoint.
+        pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
+        where
+            D: TryInto<tonic::transport::Endpoint>,
+            D::Error: Into<StdError>,
+        {
+            let conn = tonic::transport::Endpoint::new(dst)?.connect().await?;
+            Ok(Self::new(conn))
+        }
+    }
+    impl<T> PluginRuntimeProviderClient<T>
+    where
+        T: tonic::client::GrpcService<tonic::body::Body>,
+        T::Error: Into<StdError>,
+        T::ResponseBody: Body<Data = Bytes> + std::marker::Send + 'static,
+        <T::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
+    {
+        pub fn new(inner: T) -> Self {
+            let inner = tonic::client::Grpc::new(inner);
+            Self { inner }
+        }
+        pub fn with_origin(inner: T, origin: Uri) -> Self {
+            let inner = tonic::client::Grpc::with_origin(inner, origin);
+            Self { inner }
+        }
+        pub fn with_interceptor<F>(
+            inner: T,
+            interceptor: F,
+        ) -> PluginRuntimeProviderClient<InterceptedService<T, F>>
+        where
+            F: tonic::service::Interceptor,
+            T::ResponseBody: Default,
+            T: tonic::codegen::Service<
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
+                >,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
+        {
+            PluginRuntimeProviderClient::new(InterceptedService::new(inner, interceptor))
+        }
+        /// Compress requests with the given encoding.
+        ///
+        /// This requires the server to support it otherwise it might respond with an
+        /// error.
+        #[must_use]
+        pub fn send_compressed(mut self, encoding: CompressionEncoding) -> Self {
+            self.inner = self.inner.send_compressed(encoding);
+            self
+        }
+        /// Enable decompressing responses.
+        #[must_use]
+        pub fn accept_compressed(mut self, encoding: CompressionEncoding) -> Self {
+            self.inner = self.inner.accept_compressed(encoding);
+            self
+        }
+        /// Limits the maximum size of a decoded message.
+        ///
+        /// Default: `4MB`
+        #[must_use]
+        pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
+            self.inner = self.inner.max_decoding_message_size(limit);
+            self
+        }
+        /// Limits the maximum size of an encoded message.
+        ///
+        /// Default: `usize::MAX`
+        #[must_use]
+        pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
+            self.inner = self.inner.max_encoding_message_size(limit);
+            self
+        }
+        pub async fn get_support(
+            &mut self,
+            request: impl tonic::IntoRequest<()>,
+        ) -> std::result::Result<tonic::Response<super::PluginRuntimeSupport>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.PluginRuntimeProvider/GetSupport",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.PluginRuntimeProvider",
+                "GetSupport",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn start_session(
+            &mut self,
+            request: impl tonic::IntoRequest<super::StartPluginRuntimeSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::PluginRuntimeSession>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.PluginRuntimeProvider/StartSession",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.PluginRuntimeProvider",
+                "StartSession",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn get_session(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetPluginRuntimeSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::PluginRuntimeSession>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.PluginRuntimeProvider/GetSession",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.PluginRuntimeProvider",
+                "GetSession",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn get_session_diagnostics(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetPluginRuntimeSessionDiagnosticsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::PluginRuntimeSessionDiagnostics>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.PluginRuntimeProvider/GetSessionDiagnostics",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.PluginRuntimeProvider",
+                "GetSessionDiagnostics",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn stop_session(
+            &mut self,
+            request: impl tonic::IntoRequest<super::StopPluginRuntimeSessionRequest>,
+        ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.PluginRuntimeProvider/StopSession",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.PluginRuntimeProvider",
+                "StopSession",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn bind_host_service(
+            &mut self,
+            request: impl tonic::IntoRequest<super::BindPluginRuntimeHostServiceRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::PluginRuntimeHostServiceBinding>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.PluginRuntimeProvider/BindHostService",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.PluginRuntimeProvider",
+                "BindHostService",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn start_plugin(
+            &mut self,
+            request: impl tonic::IntoRequest<super::StartHostedPluginRequest>,
+        ) -> std::result::Result<tonic::Response<super::HostedPlugin>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.PluginRuntimeProvider/StartPlugin",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.PluginRuntimeProvider",
+                "StartPlugin",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+    }
+}
+/// Generated server implementations.
+pub mod plugin_runtime_provider_server {
+    #![allow(
+        unused_variables,
+        dead_code,
+        missing_docs,
+        clippy::wildcard_imports,
+        clippy::let_unit_value
+    )]
+    use tonic::codegen::*;
+    /// Generated trait containing gRPC methods that should be implemented for use with PluginRuntimeProviderServer.
+    #[async_trait]
+    pub trait PluginRuntimeProvider: std::marker::Send + std::marker::Sync + 'static {
+        async fn get_support(
+            &self,
+            request: tonic::Request<()>,
+        ) -> std::result::Result<tonic::Response<super::PluginRuntimeSupport>, tonic::Status>;
+        async fn start_session(
+            &self,
+            request: tonic::Request<super::StartPluginRuntimeSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::PluginRuntimeSession>, tonic::Status>;
+        async fn get_session(
+            &self,
+            request: tonic::Request<super::GetPluginRuntimeSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::PluginRuntimeSession>, tonic::Status>;
+        async fn get_session_diagnostics(
+            &self,
+            request: tonic::Request<super::GetPluginRuntimeSessionDiagnosticsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::PluginRuntimeSessionDiagnostics>,
+            tonic::Status,
+        >;
+        async fn stop_session(
+            &self,
+            request: tonic::Request<super::StopPluginRuntimeSessionRequest>,
+        ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
+        async fn bind_host_service(
+            &self,
+            request: tonic::Request<super::BindPluginRuntimeHostServiceRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::PluginRuntimeHostServiceBinding>,
+            tonic::Status,
+        >;
+        async fn start_plugin(
+            &self,
+            request: tonic::Request<super::StartHostedPluginRequest>,
+        ) -> std::result::Result<tonic::Response<super::HostedPlugin>, tonic::Status>;
+    }
+    #[derive(Debug)]
+    pub struct PluginRuntimeProviderServer<T> {
+        inner: Arc<T>,
+        accept_compression_encodings: EnabledCompressionEncodings,
+        send_compression_encodings: EnabledCompressionEncodings,
+        max_decoding_message_size: Option<usize>,
+        max_encoding_message_size: Option<usize>,
+    }
+    impl<T> PluginRuntimeProviderServer<T> {
+        pub fn new(inner: T) -> Self {
+            Self::from_arc(Arc::new(inner))
+        }
+        pub fn from_arc(inner: Arc<T>) -> Self {
+            Self {
+                inner,
+                accept_compression_encodings: Default::default(),
+                send_compression_encodings: Default::default(),
+                max_decoding_message_size: None,
+                max_encoding_message_size: None,
+            }
+        }
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
+        where
+            F: tonic::service::Interceptor,
+        {
+            InterceptedService::new(Self::new(inner), interceptor)
+        }
+        /// Enable decompressing requests with the given encoding.
+        #[must_use]
+        pub fn accept_compressed(mut self, encoding: CompressionEncoding) -> Self {
+            self.accept_compression_encodings.enable(encoding);
+            self
+        }
+        /// Compress responses with the given encoding, if the client supports it.
+        #[must_use]
+        pub fn send_compressed(mut self, encoding: CompressionEncoding) -> Self {
+            self.send_compression_encodings.enable(encoding);
+            self
+        }
+        /// Limits the maximum size of a decoded message.
+        ///
+        /// Default: `4MB`
+        #[must_use]
+        pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
+            self.max_decoding_message_size = Some(limit);
+            self
+        }
+        /// Limits the maximum size of an encoded message.
+        ///
+        /// Default: `usize::MAX`
+        #[must_use]
+        pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
+            self.max_encoding_message_size = Some(limit);
+            self
+        }
+    }
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for PluginRuntimeProviderServer<T>
+    where
+        T: PluginRuntimeProvider,
+        B: Body + std::marker::Send + 'static,
+        B::Error: Into<StdError> + std::marker::Send + 'static,
+    {
+        type Response = http::Response<tonic::body::Body>;
+        type Error = std::convert::Infallible;
+        type Future = BoxFuture<Self::Response, Self::Error>;
+        fn poll_ready(
+            &mut self,
+            _cx: &mut Context<'_>,
+        ) -> Poll<std::result::Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+        fn call(&mut self, req: http::Request<B>) -> Self::Future {
+            match req.uri().path() {
+                "/gestalt.provider.v1.PluginRuntimeProvider/GetSupport" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetSupportSvc<T: PluginRuntimeProvider>(pub Arc<T>);
+                    impl<T: PluginRuntimeProvider> tonic::server::UnaryService<()> for GetSupportSvc<T> {
+                        type Response = super::PluginRuntimeSupport;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PluginRuntimeProvider>::get_support(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetSupportSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.PluginRuntimeProvider/StartSession" => {
+                    #[allow(non_camel_case_types)]
+                    struct StartSessionSvc<T: PluginRuntimeProvider>(pub Arc<T>);
+                    impl<T: PluginRuntimeProvider>
+                        tonic::server::UnaryService<super::StartPluginRuntimeSessionRequest>
+                        for StartSessionSvc<T>
+                    {
+                        type Response = super::PluginRuntimeSession;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::StartPluginRuntimeSessionRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PluginRuntimeProvider>::start_session(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = StartSessionSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.PluginRuntimeProvider/GetSession" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetSessionSvc<T: PluginRuntimeProvider>(pub Arc<T>);
+                    impl<T: PluginRuntimeProvider>
+                        tonic::server::UnaryService<super::GetPluginRuntimeSessionRequest>
+                        for GetSessionSvc<T>
+                    {
+                        type Response = super::PluginRuntimeSession;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetPluginRuntimeSessionRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PluginRuntimeProvider>::get_session(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetSessionSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.PluginRuntimeProvider/GetSessionDiagnostics" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetSessionDiagnosticsSvc<T: PluginRuntimeProvider>(pub Arc<T>);
+                    impl<T: PluginRuntimeProvider>
+                        tonic::server::UnaryService<
+                            super::GetPluginRuntimeSessionDiagnosticsRequest,
+                        > for GetSessionDiagnosticsSvc<T>
+                    {
+                        type Response = super::PluginRuntimeSessionDiagnostics;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::GetPluginRuntimeSessionDiagnosticsRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PluginRuntimeProvider>::get_session_diagnostics(
+                                    &inner, request,
+                                )
+                                .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetSessionDiagnosticsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.PluginRuntimeProvider/StopSession" => {
+                    #[allow(non_camel_case_types)]
+                    struct StopSessionSvc<T: PluginRuntimeProvider>(pub Arc<T>);
+                    impl<T: PluginRuntimeProvider>
+                        tonic::server::UnaryService<super::StopPluginRuntimeSessionRequest>
+                        for StopSessionSvc<T>
+                    {
+                        type Response = ();
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::StopPluginRuntimeSessionRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PluginRuntimeProvider>::stop_session(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = StopSessionSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.PluginRuntimeProvider/BindHostService" => {
+                    #[allow(non_camel_case_types)]
+                    struct BindHostServiceSvc<T: PluginRuntimeProvider>(pub Arc<T>);
+                    impl<T: PluginRuntimeProvider>
+                        tonic::server::UnaryService<super::BindPluginRuntimeHostServiceRequest>
+                        for BindHostServiceSvc<T>
+                    {
+                        type Response = super::PluginRuntimeHostServiceBinding;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::BindPluginRuntimeHostServiceRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PluginRuntimeProvider>::bind_host_service(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = BindHostServiceSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.PluginRuntimeProvider/StartPlugin" => {
+                    #[allow(non_camel_case_types)]
+                    struct StartPluginSvc<T: PluginRuntimeProvider>(pub Arc<T>);
+                    impl<T: PluginRuntimeProvider>
+                        tonic::server::UnaryService<super::StartHostedPluginRequest>
+                        for StartPluginSvc<T>
+                    {
+                        type Response = super::HostedPlugin;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::StartHostedPluginRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as PluginRuntimeProvider>::start_plugin(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = StartPluginSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
+            }
+        }
+    }
+    impl<T> Clone for PluginRuntimeProviderServer<T> {
+        fn clone(&self) -> Self {
+            let inner = self.inner.clone();
+            Self {
+                inner,
+                accept_compression_encodings: self.accept_compression_encodings,
+                send_compression_encodings: self.send_compression_encodings,
+                max_decoding_message_size: self.max_decoding_message_size,
+                max_encoding_message_size: self.max_encoding_message_size,
+            }
+        }
+    }
+    /// Generated gRPC service name
+    pub const SERVICE_NAME: &str = "gestalt.provider.v1.PluginRuntimeProvider";
+    impl<T> tonic::server::NamedService for PluginRuntimeProviderServer<T> {
+        const NAME: &'static str = SERVICE_NAME;
+    }
+}
 /// ProviderIdentity describes a provider surface and the protocol versions it
 /// supports.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

@@ -3,6 +3,7 @@ syntax = "proto3";
 package gestalt.provider.v1;
 
 import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 
@@ -23,6 +24,13 @@ enum PluginRuntimeLaunchMode {
   PLUGIN_RUNTIME_LAUNCH_MODE_UNSPECIFIED = 0;
   PLUGIN_RUNTIME_LAUNCH_MODE_BUNDLE = 1;
   PLUGIN_RUNTIME_LAUNCH_MODE_HOST_PATH = 2;
+}
+
+enum PluginRuntimeLogStream {
+  PLUGIN_RUNTIME_LOG_STREAM_UNSPECIFIED = 0;
+  PLUGIN_RUNTIME_LOG_STREAM_STDOUT = 1;
+  PLUGIN_RUNTIME_LOG_STREAM_STDERR = 2;
+  PLUGIN_RUNTIME_LOG_STREAM_RUNTIME = 3;
 }
 
 message PluginRuntimeExecutionTarget {
@@ -101,10 +109,28 @@ message HostedPlugin {
   string dial_target = 4;
 }
 
+message PluginRuntimeLogEntry {
+  PluginRuntimeLogStream stream = 1;
+  string message = 2;
+  google.protobuf.Timestamp observed_at = 3;
+}
+
+message GetPluginRuntimeSessionDiagnosticsRequest {
+  string session_id = 1;
+  int32 tail_entries = 2;
+}
+
+message PluginRuntimeSessionDiagnostics {
+  PluginRuntimeSession session = 1;
+  repeated PluginRuntimeLogEntry logs = 2;
+  bool truncated = 3;
+}
+
 service PluginRuntimeProvider {
   rpc GetSupport(google.protobuf.Empty) returns (PluginRuntimeSupport);
   rpc StartSession(StartPluginRuntimeSessionRequest) returns (PluginRuntimeSession);
   rpc GetSession(GetPluginRuntimeSessionRequest) returns (PluginRuntimeSession);
+  rpc GetSessionDiagnostics(GetPluginRuntimeSessionDiagnosticsRequest) returns (PluginRuntimeSessionDiagnostics);
   rpc StopSession(StopPluginRuntimeSessionRequest) returns (google.protobuf.Empty);
   rpc BindHostService(BindPluginRuntimeHostServiceRequest) returns (PluginRuntimeHostServiceBinding);
   rpc StartPlugin(StartHostedPluginRequest) returns (HostedPlugin);

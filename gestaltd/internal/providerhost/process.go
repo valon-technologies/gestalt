@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -43,6 +44,8 @@ type ProcessConfig struct {
 	SocketDir     string
 	ProviderName  string
 	Telemetry     metricutil.TelemetryProviders
+	Stdout        io.Writer
+	Stderr        io.Writer
 }
 
 type ExecConfig struct {
@@ -302,8 +305,8 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 		cmd, cleanup, err := startCommandWithRetry(ctx, func() (*exec.Cmd, func(), error) {
 			cmd := exec.Command(cfg.Command, cfg.Args...)
 			cmd.Env = buildPluginEnv(env, sandboxActive)
-			cmd.Stdout = os.Stderr
-			cmd.Stderr = os.Stderr
+			cmd.Stdout = processOutputWriter(cfg.Stdout)
+			cmd.Stderr = processOutputWriter(cfg.Stderr)
 			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 			wrapped, cleanup, err := sandbox.Wrap(policy, cmd)
@@ -322,8 +325,8 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 		cmd, _, err := startCommandWithRetry(ctx, func() (*exec.Cmd, func(), error) {
 			cmd := exec.Command(cfg.Command, cfg.Args...)
 			cmd.Env = append(safeBaseEnv(), envSlice(env)...)
-			cmd.Stdout = os.Stderr
-			cmd.Stderr = os.Stderr
+			cmd.Stdout = processOutputWriter(cfg.Stdout)
+			cmd.Stderr = processOutputWriter(cfg.Stderr)
 			return cmd, nil, nil
 		})
 		if err != nil {
@@ -582,6 +585,13 @@ func firstNonBlank(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func processOutputWriter(writer io.Writer) io.Writer {
+	if writer != nil {
+		return writer
+	}
+	return os.Stderr
 }
 
 var safeEnvKeys = []string{

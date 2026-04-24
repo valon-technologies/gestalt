@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
@@ -32,6 +33,7 @@ type localSession struct {
 	metadata map[string]string
 	bindings []localBinding
 	plugin   *localPlugin
+	logs     *sessionLogBuffer
 }
 
 type localBinding struct {
@@ -102,6 +104,7 @@ func (p *LocalProvider) StartSession(_ context.Context, req StartSessionRequest)
 		rootDir:  rootDir,
 		state:    SessionStateReady,
 		metadata: cloneStringMap(req.Metadata),
+		logs:     newSessionLogBuffer(0),
 	}
 	if session.metadata == nil {
 		session.metadata = map[string]string{}
@@ -147,9 +150,34 @@ func (p *LocalProvider) GetSession(_ context.Context, req GetSessionRequest) (*S
 	defer p.mu.Unlock()
 	session, err := p.sessionLocked(req.SessionID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrSessionUnavailable, err)
 	}
 	return cloneSession(session), nil
+}
+
+func (p *LocalProvider) GetSessionDiagnostics(_ context.Context, req GetSessionDiagnosticsRequest) (*SessionDiagnostics, error) {
+	if p == nil {
+		return nil, fmt.Errorf("plugin runtime is not configured")
+	}
+
+	tailEntries := normalizeSessionDiagnosticsTailEntries(req.TailEntries)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	session, err := p.sessionLocked(req.SessionID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrSessionUnavailable, err)
+	}
+	cloned := cloneSession(session)
+	if cloned == nil {
+		return nil, fmt.Errorf("%w: runtime session %q is not available", ErrSessionUnavailable, req.SessionID)
+	}
+	logs, truncated := session.logs.snapshot(tailEntries)
+	return &SessionDiagnostics{
+		Session:   *cloned,
+		Logs:      logs,
+		Truncated: truncated,
+	}, nil
 }
 
 func (p *LocalProvider) StopSession(_ context.Context, req StopSessionRequest) error {
@@ -243,6 +271,7 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 	}
 	session.state = SessionStateRunning
 	rootDir := session.rootDir
+	logs := session.logs
 	p.mu.Unlock()
 
 	env := cloneStringMap(req.Env)
@@ -263,11 +292,14 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 		SocketDir:     rootDir,
 		ProviderName:  req.PluginName,
 		Telemetry:     p.telemetry,
+		Stdout:        logs.writer(LogStreamStdout, os.Stderr),
+		Stderr:        logs.writer(LogStreamStderr, os.Stderr),
 	})
 	if err != nil {
 		p.mu.Lock()
 		if session, ok := p.sessions[req.SessionID]; ok {
 			session.state = SessionStateFailed
+			session.logs.add(LogStreamRuntime, fmt.Sprintf("start plugin process: %v", err), time.Now())
 		}
 		p.mu.Unlock()
 		return nil, err
@@ -288,6 +320,7 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 	}
 	session.plugin = plugin
 	session.state = SessionStateRunning
+	session.logs.add(LogStreamRuntime, fmt.Sprintf("plugin %q started", req.PluginName), time.Now())
 	return &HostedPlugin{
 		ID:         plugin.id,
 		SessionID:  session.id,

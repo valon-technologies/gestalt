@@ -15,6 +15,8 @@ __all__ = [
     "datastore_pb2_grpc",
     "plugin_pb2",
     "plugin_pb2_grpc",
+    "pluginruntime_pb2",
+    "pluginruntime_pb2_grpc",
     "runtime_pb2",
     "runtime_pb2_grpc",
     "s3_pb2",

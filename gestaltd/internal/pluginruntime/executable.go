@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
@@ -13,6 +14,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+)
+
+const (
+	startPluginDiagnosticsTailEntries = 40
+	startPluginDiagnosticsTimeout     = 2 * time.Second
 )
 
 type ExecutableConfig struct {
@@ -147,6 +153,41 @@ func (p *executableProvider) GetSession(ctx context.Context, req GetSessionReque
 	return session, nil
 }
 
+func (p *executableProvider) GetSessionDiagnostics(ctx context.Context, req GetSessionDiagnosticsRequest) (*SessionDiagnostics, error) {
+	if p == nil {
+		return nil, fmt.Errorf("plugin runtime is not configured")
+	}
+	tailEntries := normalizeSessionDiagnosticsTailEntries(req.TailEntries)
+
+	resp, err := p.runtime.GetSessionDiagnostics(ctx, &proto.GetPluginRuntimeSessionDiagnosticsRequest{
+		SessionId:   req.SessionID,
+		TailEntries: int32(tailEntries),
+	})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, fmt.Errorf("%w: runtime session %q is not available", ErrSessionUnavailable, req.SessionID)
+		}
+		if status.Code(err) == codes.Unimplemented {
+			session, sessionErr := p.GetSession(ctx, GetSessionRequest{SessionID: req.SessionID})
+			if sessionErr != nil {
+				if status.Code(sessionErr) == codes.NotFound {
+					return nil, fmt.Errorf("%w: runtime session %q is not available", ErrSessionUnavailable, req.SessionID)
+				}
+				return nil, fmt.Errorf("%w: %v", ErrDiagnosticsUnavailable, sessionErr)
+			}
+			return &SessionDiagnostics{Session: *session}, nil
+		}
+		return nil, fmt.Errorf("%w: %v", ErrDiagnosticsUnavailable, err)
+	}
+
+	session := sessionFromProto(resp.GetSession())
+	if session == nil {
+		return nil, fmt.Errorf("%w: runtime session %q is not available", ErrSessionUnavailable, req.SessionID)
+	}
+	p.trackSession(session)
+	return diagnosticsFromProto(resp), nil
+}
+
 func (p *executableProvider) StopSession(ctx context.Context, req StopSessionRequest) error {
 	_, err := p.runtime.StopSession(ctx, &proto.StopPluginRuntimeSessionRequest{
 		SessionId: req.SessionID,
@@ -191,7 +232,7 @@ func (p *executableProvider) StartPlugin(ctx context.Context, req StartPluginReq
 		HostBinary:    req.HostBinary,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("start hosted plugin: %w", err)
+		return nil, fmt.Errorf("start hosted plugin: %w", p.enrichStartPluginError(req.SessionID, err))
 	}
 	p.mu.Lock()
 	if session, ok := p.sessions[req.SessionID]; ok && session != nil {
@@ -227,6 +268,47 @@ func supportFromProto(src *proto.PluginRuntimeSupport) Support {
 		LaunchMode:        launchModeFromProto(src.GetLaunchMode()),
 		ExecutionTarget:   executionTargetFromProto(src.GetExecutionTarget()),
 	}
+}
+
+func (p *executableProvider) enrichStartPluginError(sessionID string, err error) error {
+	if p == nil || strings.TrimSpace(sessionID) == "" || err == nil {
+		return err
+	}
+	diagCtx, cancel := context.WithTimeout(context.Background(), startPluginDiagnosticsTimeout)
+	defer cancel()
+	diagnostics, diagErr := p.GetSessionDiagnostics(diagCtx, GetSessionDiagnosticsRequest{
+		SessionID:   sessionID,
+		TailEntries: startPluginDiagnosticsTailEntries,
+	})
+	if diagErr != nil || diagnostics == nil || len(diagnostics.Logs) == 0 {
+		return err
+	}
+	return enrichErrorWithDiagnostics(err, diagnostics)
+}
+
+func enrichErrorWithDiagnostics(err error, diagnostics *SessionDiagnostics) error {
+	if err == nil || diagnostics == nil {
+		return err
+	}
+	lines := make([]string, 0, len(diagnostics.Logs)+1)
+	for _, entry := range diagnostics.Logs {
+		stream := strings.TrimSpace(string(entry.Stream))
+		if stream == "" {
+			stream = "runtime"
+		}
+		message := strings.TrimSpace(entry.Message)
+		if message == "" {
+			continue
+		}
+		lines = append(lines, "["+stream+"] "+message)
+	}
+	if diagnostics.Truncated {
+		lines = append(lines, "[truncated]")
+	}
+	if len(lines) == 0 {
+		return err
+	}
+	return fmt.Errorf("%w; recent runtime logs:\n%s", err, strings.Join(lines, "\n"))
 }
 
 func hostServiceAccessFromProto(src proto.PluginRuntimeHostServiceAccess) HostServiceAccess {
@@ -276,6 +358,43 @@ func sessionFromProto(src *proto.PluginRuntimeSession) *Session {
 		ID:       src.GetId(),
 		State:    SessionState(src.GetState()),
 		Metadata: cloneStringMap(src.GetMetadata()),
+	}
+}
+
+func diagnosticsFromProto(src *proto.PluginRuntimeSessionDiagnostics) *SessionDiagnostics {
+	if src == nil {
+		return nil
+	}
+	session := sessionFromProto(src.GetSession())
+	if session == nil {
+		return nil
+	}
+	logs := make([]LogEntry, 0, len(src.GetLogs()))
+	for _, entry := range src.GetLogs() {
+		if entry == nil {
+			continue
+		}
+		logs = append(logs, LogEntry{
+			Stream:     logStreamFromProto(entry.GetStream()),
+			Message:    entry.GetMessage(),
+			ObservedAt: entry.GetObservedAt().AsTime(),
+		})
+	}
+	return &SessionDiagnostics{
+		Session:   *session,
+		Logs:      logs,
+		Truncated: src.GetTruncated(),
+	}
+}
+
+func logStreamFromProto(src proto.PluginRuntimeLogStream) LogStream {
+	switch src {
+	case proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDOUT:
+		return LogStreamStdout
+	case proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR:
+		return LogStreamStderr
+	default:
+		return LogStreamRuntime
 	}
 }
 

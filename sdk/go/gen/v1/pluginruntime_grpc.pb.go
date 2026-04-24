@@ -20,12 +20,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PluginRuntimeProvider_GetSupport_FullMethodName      = "/gestalt.provider.v1.PluginRuntimeProvider/GetSupport"
-	PluginRuntimeProvider_StartSession_FullMethodName    = "/gestalt.provider.v1.PluginRuntimeProvider/StartSession"
-	PluginRuntimeProvider_GetSession_FullMethodName      = "/gestalt.provider.v1.PluginRuntimeProvider/GetSession"
-	PluginRuntimeProvider_StopSession_FullMethodName     = "/gestalt.provider.v1.PluginRuntimeProvider/StopSession"
-	PluginRuntimeProvider_BindHostService_FullMethodName = "/gestalt.provider.v1.PluginRuntimeProvider/BindHostService"
-	PluginRuntimeProvider_StartPlugin_FullMethodName     = "/gestalt.provider.v1.PluginRuntimeProvider/StartPlugin"
+	PluginRuntimeProvider_GetSupport_FullMethodName            = "/gestalt.provider.v1.PluginRuntimeProvider/GetSupport"
+	PluginRuntimeProvider_StartSession_FullMethodName          = "/gestalt.provider.v1.PluginRuntimeProvider/StartSession"
+	PluginRuntimeProvider_GetSession_FullMethodName            = "/gestalt.provider.v1.PluginRuntimeProvider/GetSession"
+	PluginRuntimeProvider_GetSessionDiagnostics_FullMethodName = "/gestalt.provider.v1.PluginRuntimeProvider/GetSessionDiagnostics"
+	PluginRuntimeProvider_StopSession_FullMethodName           = "/gestalt.provider.v1.PluginRuntimeProvider/StopSession"
+	PluginRuntimeProvider_BindHostService_FullMethodName       = "/gestalt.provider.v1.PluginRuntimeProvider/BindHostService"
+	PluginRuntimeProvider_StartPlugin_FullMethodName           = "/gestalt.provider.v1.PluginRuntimeProvider/StartPlugin"
 )
 
 // PluginRuntimeProviderClient is the client API for PluginRuntimeProvider service.
@@ -35,6 +36,7 @@ type PluginRuntimeProviderClient interface {
 	GetSupport(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*PluginRuntimeSupport, error)
 	StartSession(ctx context.Context, in *StartPluginRuntimeSessionRequest, opts ...grpc.CallOption) (*PluginRuntimeSession, error)
 	GetSession(ctx context.Context, in *GetPluginRuntimeSessionRequest, opts ...grpc.CallOption) (*PluginRuntimeSession, error)
+	GetSessionDiagnostics(ctx context.Context, in *GetPluginRuntimeSessionDiagnosticsRequest, opts ...grpc.CallOption) (*PluginRuntimeSessionDiagnostics, error)
 	StopSession(ctx context.Context, in *StopPluginRuntimeSessionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	BindHostService(ctx context.Context, in *BindPluginRuntimeHostServiceRequest, opts ...grpc.CallOption) (*PluginRuntimeHostServiceBinding, error)
 	StartPlugin(ctx context.Context, in *StartHostedPluginRequest, opts ...grpc.CallOption) (*HostedPlugin, error)
@@ -78,6 +80,16 @@ func (c *pluginRuntimeProviderClient) GetSession(ctx context.Context, in *GetPlu
 	return out, nil
 }
 
+func (c *pluginRuntimeProviderClient) GetSessionDiagnostics(ctx context.Context, in *GetPluginRuntimeSessionDiagnosticsRequest, opts ...grpc.CallOption) (*PluginRuntimeSessionDiagnostics, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PluginRuntimeSessionDiagnostics)
+	err := c.cc.Invoke(ctx, PluginRuntimeProvider_GetSessionDiagnostics_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pluginRuntimeProviderClient) StopSession(ctx context.Context, in *StopPluginRuntimeSessionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
@@ -115,6 +127,7 @@ type PluginRuntimeProviderServer interface {
 	GetSupport(context.Context, *emptypb.Empty) (*PluginRuntimeSupport, error)
 	StartSession(context.Context, *StartPluginRuntimeSessionRequest) (*PluginRuntimeSession, error)
 	GetSession(context.Context, *GetPluginRuntimeSessionRequest) (*PluginRuntimeSession, error)
+	GetSessionDiagnostics(context.Context, *GetPluginRuntimeSessionDiagnosticsRequest) (*PluginRuntimeSessionDiagnostics, error)
 	StopSession(context.Context, *StopPluginRuntimeSessionRequest) (*emptypb.Empty, error)
 	BindHostService(context.Context, *BindPluginRuntimeHostServiceRequest) (*PluginRuntimeHostServiceBinding, error)
 	StartPlugin(context.Context, *StartHostedPluginRequest) (*HostedPlugin, error)
@@ -136,6 +149,9 @@ func (UnimplementedPluginRuntimeProviderServer) StartSession(context.Context, *S
 }
 func (UnimplementedPluginRuntimeProviderServer) GetSession(context.Context, *GetPluginRuntimeSessionRequest) (*PluginRuntimeSession, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSession not implemented")
+}
+func (UnimplementedPluginRuntimeProviderServer) GetSessionDiagnostics(context.Context, *GetPluginRuntimeSessionDiagnosticsRequest) (*PluginRuntimeSessionDiagnostics, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSessionDiagnostics not implemented")
 }
 func (UnimplementedPluginRuntimeProviderServer) StopSession(context.Context, *StopPluginRuntimeSessionRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method StopSession not implemented")
@@ -221,6 +237,24 @@ func _PluginRuntimeProvider_GetSession_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginRuntimeProvider_GetSessionDiagnostics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPluginRuntimeSessionDiagnosticsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginRuntimeProviderServer).GetSessionDiagnostics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginRuntimeProvider_GetSessionDiagnostics_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginRuntimeProviderServer).GetSessionDiagnostics(ctx, req.(*GetPluginRuntimeSessionDiagnosticsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PluginRuntimeProvider_StopSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(StopPluginRuntimeSessionRequest)
 	if err := dec(in); err != nil {
@@ -293,6 +327,10 @@ var PluginRuntimeProvider_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSession",
 			Handler:    _PluginRuntimeProvider_GetSession_Handler,
+		},
+		{
+			MethodName: "GetSessionDiagnostics",
+			Handler:    _PluginRuntimeProvider_GetSessionDiagnostics_Handler,
 		},
 		{
 			MethodName: "StopSession",

@@ -10,6 +10,7 @@ PROTO_MODULES = (
     "cache",
     "datastore",
     "plugin",
+    "pluginruntime",
     "runtime",
     "s3",
     "secrets",

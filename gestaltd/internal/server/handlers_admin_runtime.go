@@ -1,11 +1,16 @@
 package server
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
+	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 )
 
 type adminRuntimeProviderInfo struct {
@@ -42,9 +47,22 @@ type adminRuntimeSessionInfo struct {
 	Plugin string `json:"plugin,omitempty"`
 }
 
+type adminRuntimeSessionDiagnostics struct {
+	Session   adminRuntimeSessionInfo `json:"session"`
+	Logs      []adminRuntimeLogEntry  `json:"logs,omitempty"`
+	Truncated bool                    `json:"truncated"`
+}
+
+type adminRuntimeLogEntry struct {
+	Stream     string    `json:"stream"`
+	Message    string    `json:"message"`
+	ObservedAt time.Time `json:"observedAt"`
+}
+
 func (s *Server) mountAdminRuntimeRoutes(r chi.Router) {
 	r.Get("/runtime/providers", s.listAdminRuntimeProviders)
 	r.Get("/runtime/providers/{provider}/sessions", s.listAdminRuntimeProviderSessions)
+	r.Get("/runtime/providers/{provider}/sessions/{session}/diagnostics", s.getAdminRuntimeSessionDiagnostics)
 }
 
 func (s *Server) listAdminRuntimeProviders(w http.ResponseWriter, r *http.Request) {
@@ -99,17 +117,79 @@ func (s *Server) listAdminRuntimeProviderSessions(w http.ResponseWriter, r *http
 		}
 		out := make([]adminRuntimeSessionInfo, 0, len(snapshot.Sessions))
 		for _, session := range snapshot.Sessions {
-			out = append(out, adminRuntimeSessionInfo{
-				ID:     strings.TrimSpace(session.ID),
-				State:  strings.TrimSpace(string(session.State)),
-				Plugin: strings.TrimSpace(session.Metadata["plugin"]),
-			})
+			out = append(out, adminRuntimeSessionInfoFromRuntime(session))
 		}
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
 
 	writeError(w, http.StatusNotFound, "runtime provider not found")
+}
+
+func (s *Server) getAdminRuntimeSessionDiagnostics(w http.ResponseWriter, r *http.Request) {
+	providerName := strings.TrimSpace(chi.URLParam(r, "provider"))
+	if providerName == "" {
+		writeError(w, http.StatusBadRequest, "provider is required")
+		return
+	}
+	sessionID := strings.TrimSpace(chi.URLParam(r, "session"))
+	if sessionID == "" {
+		writeError(w, http.StatusBadRequest, "session is required")
+		return
+	}
+
+	tailEntries := pluginruntime.DefaultSessionDiagnosticsTailEntries
+	if raw := strings.TrimSpace(r.URL.Query().Get("tailEntries")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 {
+			writeError(w, http.StatusBadRequest, "tailEntries must be a non-negative integer")
+			return
+		}
+		if value > pluginruntime.MaxSessionDiagnosticsTailEntries {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("tailEntries must be less than or equal to %d", pluginruntime.MaxSessionDiagnosticsTailEntries))
+			return
+		}
+		tailEntries = value
+	}
+
+	if s.pluginRuntimes == nil {
+		writeError(w, http.StatusNotFound, "runtime provider not found")
+		return
+	}
+	diagnostics, err := s.pluginRuntimes.GetPluginRuntimeSessionDiagnostics(r.Context(), providerName, sessionID, tailEntries)
+	if err != nil {
+		switch {
+		case errors.Is(err, pluginruntime.ErrProviderUnavailable):
+			writeError(w, http.StatusNotFound, "runtime provider not found")
+		case errors.Is(err, pluginruntime.ErrSessionUnavailable):
+			writeError(w, http.StatusNotFound, "runtime session not found")
+		case errors.Is(err, pluginruntime.ErrDiagnosticsUnavailable):
+			writeError(w, http.StatusServiceUnavailable, "runtime session diagnostics are unavailable")
+		default:
+			writeError(w, http.StatusServiceUnavailable, "runtime session diagnostics are unavailable")
+		}
+		return
+	}
+	if diagnostics == nil {
+		writeError(w, http.StatusNotFound, "runtime session not found")
+		return
+	}
+
+	out := adminRuntimeSessionDiagnostics{
+		Session:   adminRuntimeSessionInfoFromRuntime(diagnostics.Session),
+		Truncated: diagnostics.Truncated,
+	}
+	if len(diagnostics.Logs) > 0 {
+		out.Logs = make([]adminRuntimeLogEntry, 0, len(diagnostics.Logs))
+		for _, entry := range diagnostics.Logs {
+			out.Logs = append(out.Logs, adminRuntimeLogEntry{
+				Stream:     strings.TrimSpace(string(entry.Stream)),
+				Message:    entry.Message,
+				ObservedAt: entry.ObservedAt,
+			})
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) adminRuntimeSnapshots(r *http.Request) ([]bootstrap.RuntimeProviderSnapshot, error) {
@@ -140,4 +220,12 @@ func adminRuntimeProfileFromBootstrap(behavior bootstrap.RuntimeBehavior) adminR
 		}
 	}
 	return out
+}
+
+func adminRuntimeSessionInfoFromRuntime(session pluginruntime.Session) adminRuntimeSessionInfo {
+	return adminRuntimeSessionInfo{
+		ID:     strings.TrimSpace(session.ID),
+		State:  strings.TrimSpace(string(session.State)),
+		Plugin: strings.TrimSpace(session.Metadata["plugin"]),
+	}
 }

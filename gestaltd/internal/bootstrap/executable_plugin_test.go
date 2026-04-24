@@ -230,6 +230,10 @@ func (r *capturingPluginRuntime) GetSession(ctx context.Context, req pluginrunti
 	return r.provider.GetSession(ctx, req)
 }
 
+func (r *capturingPluginRuntime) GetSessionDiagnostics(ctx context.Context, req pluginruntime.GetSessionDiagnosticsRequest) (*pluginruntime.SessionDiagnostics, error) {
+	return r.provider.GetSessionDiagnostics(ctx, req)
+}
+
 func (r *capturingPluginRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
 	r.stopCount.Add(1)
 	return r.provider.StopSession(ctx, req)
@@ -322,6 +326,10 @@ func (r *capturingBundlePluginRuntime) ListSessions(ctx context.Context) ([]plug
 
 func (r *capturingBundlePluginRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
 	return r.provider.GetSession(ctx, req)
+}
+
+func (r *capturingBundlePluginRuntime) GetSessionDiagnostics(ctx context.Context, req pluginruntime.GetSessionDiagnosticsRequest) (*pluginruntime.SessionDiagnostics, error) {
+	return r.provider.GetSessionDiagnostics(ctx, req)
 }
 
 func (r *capturingBundlePluginRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
@@ -1223,6 +1231,10 @@ func (r *slowStopPluginRuntime) GetSession(ctx context.Context, req pluginruntim
 	return r.inner.GetSession(ctx, req)
 }
 
+func (r *slowStopPluginRuntime) GetSessionDiagnostics(ctx context.Context, req pluginruntime.GetSessionDiagnosticsRequest) (*pluginruntime.SessionDiagnostics, error) {
+	return r.inner.GetSessionDiagnostics(ctx, req)
+}
+
 func (r *slowStopPluginRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
 	r.stopCount.Add(1)
 	<-ctx.Done()
@@ -1269,6 +1281,10 @@ func (r *staticCapabilityPluginRuntime) ListSessions(ctx context.Context) ([]plu
 
 func (r *staticCapabilityPluginRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
 	return r.inner.GetSession(ctx, req)
+}
+
+func (r *staticCapabilityPluginRuntime) GetSessionDiagnostics(ctx context.Context, req pluginruntime.GetSessionDiagnosticsRequest) (*pluginruntime.SessionDiagnostics, error) {
+	return r.inner.GetSessionDiagnostics(ctx, req)
 }
 
 func (r *staticCapabilityPluginRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
