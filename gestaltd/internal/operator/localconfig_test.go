@@ -35,6 +35,15 @@ func TestDefaultManagedConfigIncludesRootUI(t *testing.T) {
 	if got := rootUI.Path; got != "/" {
 		t.Fatalf(`Providers.UI["root"].Path = %q, want %q`, got, "/")
 	}
+
+	indexedDB := cfg.Providers.IndexedDB["main"]
+	if indexedDB == nil {
+		t.Fatal(`Providers.IndexedDB["main"] = nil`)
+	}
+	wantIndexedDBURL := defaultProviderMetadataURL(config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion)
+	if got := indexedDB.SourceMetadataURL(); got != wantIndexedDBURL {
+		t.Fatalf(`Providers.IndexedDB["main"].SourceMetadataURL() = %q, want %q`, got, wantIndexedDBURL)
+	}
 }
 
 func TestDefaultLocalSourceConfigIncludesRootUI(t *testing.T) {

@@ -69,7 +69,7 @@ server:
 providers:
   indexeddb:
     main:
-      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml
       config:
         dsn: sqlite:///data/gestalt.db
 

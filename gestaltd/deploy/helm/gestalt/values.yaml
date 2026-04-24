@@ -102,7 +102,7 @@ config:
       main:
         # SQLite is appropriate for local development or single-instance
         # deployments with mounted persistent storage at /data.
-        source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+        source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml
         config:
           dsn: "sqlite:///data/gestalt.db"
     # Add providers.ui.<name> entries when you want to mount public static UI bundles.
