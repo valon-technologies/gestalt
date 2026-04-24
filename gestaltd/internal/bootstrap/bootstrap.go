@@ -903,6 +903,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Agent:             prepared.Deps.AgentRuntime,
 		RunMetadata:       prepared.Services.AgentRunMetadata,
 		RunEvents:         prepared.Services.AgentRunEvents,
+		Tokens:            prepared.Services.Tokens,
 		Invoker:           sharedInvoker,
 		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,

@@ -76,6 +76,7 @@ type Config struct {
 	Agent             AgentControl
 	RunMetadata       *coredata.AgentRunMetadataService
 	RunEvents         *coredata.AgentRunEventService
+	Tokens            *coredata.TokenService
 	Invoker           invocation.Invoker
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
@@ -89,6 +90,7 @@ type Manager struct {
 	agent             AgentControl
 	runMetadata       *coredata.AgentRunMetadataService
 	runEvents         *coredata.AgentRunEventService
+	tokens            *coredata.TokenService
 	invoker           invocation.Invoker
 	authorizer        authorization.RuntimeAuthorizer
 	defaultConnection map[string]string
@@ -111,6 +113,7 @@ func New(cfg Config) *Manager {
 		agent:             cfg.Agent,
 		runMetadata:       cfg.RunMetadata,
 		runEvents:         cfg.RunEvents,
+		tokens:            cfg.Tokens,
 		invoker:           cfg.Invoker,
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
@@ -593,10 +596,7 @@ func (m *Manager) resolveDefaultTools(ctx context.Context, p *principal.Principa
 		return nil
 	}
 	out := make([]coreagent.Tool, 0, 8)
-	for _, providerName := range m.providers.List() {
-		if !m.allowProvider(ctx, p, providerName) {
-			continue
-		}
+	for _, providerName := range m.defaultToolProviders(ctx, p) {
 		providerTools, err := m.resolveDefaultToolsForProvider(ctx, p, providerName)
 		if err != nil {
 			continue
@@ -604,6 +604,118 @@ func (m *Manager) resolveDefaultTools(ctx context.Context, p *principal.Principa
 		out = append(out, providerTools...)
 	}
 	return out
+}
+
+func (m *Manager) defaultToolProviders(ctx context.Context, p *principal.Principal) []string {
+	if m == nil || m.providers == nil {
+		return nil
+	}
+	providerNames := m.providers.List()
+	if len(providerNames) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(providerNames))
+	credentialAvailability := make(map[string]bool, len(providerNames))
+	for _, providerName := range providerNames {
+		if !m.allowProvider(ctx, p, providerName) {
+			continue
+		}
+		prov, err := m.providers.Get(providerName)
+		if err != nil {
+			continue
+		}
+		if core.NormalizeConnectionMode(prov.ConnectionMode()) == core.ConnectionModeNone {
+			out = append(out, providerName)
+			continue
+		}
+		if !m.hasDefaultToolCredential(ctx, p, providerName, credentialAvailability) {
+			continue
+		}
+		out = append(out, providerName)
+	}
+	return out
+}
+
+func (m *Manager) hasDefaultToolCredential(ctx context.Context, p *principal.Principal, providerName string, credentialAvailability map[string]bool) bool {
+	if m == nil || m.tokens == nil {
+		return true
+	}
+
+	bindingResolver, _ := m.invoker.(invocation.EffectiveCredentialBindingResolver)
+	targets := m.catalogSelectorConfig().BoundSessionCatalogTargets(providerName, p, "", "")
+	if len(targets) == 0 {
+		targets = []invocation.CatalogResolutionTarget{{}}
+	}
+	for _, target := range targets {
+		subjectID := m.defaultToolCredentialSubjectID(p, providerName)
+		connection := strings.TrimSpace(target.Connection)
+		instance := strings.TrimSpace(target.Instance)
+		if bindingResolver != nil {
+			boundCredential, err := bindingResolver.ResolveEffectiveCredentialBinding(p, providerName, connection, instance)
+			if err != nil {
+				continue
+			}
+			if subject := strings.TrimSpace(boundCredential.CredentialSubjectID); subject != "" {
+				subjectID = subject
+			}
+			if conn := strings.TrimSpace(boundCredential.Connection); conn != "" {
+				connection = conn
+			}
+			if inst := strings.TrimSpace(boundCredential.Instance); inst != "" {
+				instance = inst
+			}
+		}
+		if subjectID == "" {
+			continue
+		}
+
+		cacheKey := subjectID + "\x00" + providerName + "\x00" + connection + "\x00" + instance
+		if ok, found := credentialAvailability[cacheKey]; found {
+			if ok {
+				return true
+			}
+			continue
+		}
+
+		ok := m.hasStoredDefaultToolCredential(ctx, subjectID, providerName, connection, instance)
+		credentialAvailability[cacheKey] = ok
+		if ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manager) defaultToolCredentialSubjectID(p *principal.Principal, providerName string) string {
+	if m != nil && m.authorizer != nil {
+		boundCredential, err := invocation.ResolveEffectiveCredentialBinding(m.authorizer, p, providerName, "", "")
+		if err == nil && boundCredential.HasBinding {
+			if subjectID := strings.TrimSpace(boundCredential.CredentialSubjectID); subjectID != "" {
+				return subjectID
+			}
+		}
+	}
+	return principal.EffectiveCredentialSubjectID(p)
+}
+
+func (m *Manager) hasStoredDefaultToolCredential(ctx context.Context, subjectID, providerName, connection, instance string) bool {
+	if m == nil || m.tokens == nil {
+		return false
+	}
+	subjectID = strings.TrimSpace(subjectID)
+	providerName = strings.TrimSpace(providerName)
+	connection = strings.TrimSpace(connection)
+	instance = strings.TrimSpace(instance)
+	if subjectID == "" || providerName == "" {
+		return false
+	}
+	if instance != "" {
+		_, err := m.tokens.Token(ctx, subjectID, providerName, connection, instance)
+		return err == nil
+	}
+	tokens, err := m.tokens.ListTokensForConnection(ctx, subjectID, providerName, connection)
+	return err == nil && len(tokens) > 0
 }
 
 func (m *Manager) resolveDefaultToolsForProvider(ctx context.Context, p *principal.Principal, providerName string) ([]coreagent.Tool, error) {

@@ -18,9 +18,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
@@ -733,6 +735,241 @@ func TestGlobalAgentRunDefaultToolsUseAccessScopedSessionCatalog(t *testing.T) {
 	}
 	if seenAccess.Policy != "sample_policy" || seenAccess.Role != "viewer" {
 		t.Fatalf("session catalog access context = %+v, want sample_policy/viewer", seenAccess)
+	}
+}
+
+func TestGlobalAgentRunDefaultToolsSkipCredentialedProvidersWithoutStoredTokens(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "viewer-user@test.local")
+	seedToken(t, services, &core.IntegrationToken{
+		ID:          "tok-cat-connected",
+		SubjectID:   principal.UserSubjectID(user.ID),
+		Integration: "connected",
+		Connection:  testCatalogConnection,
+		Instance:    "default",
+		AccessToken: testCatalogToken,
+	})
+	now := time.Now().UTC()
+	if err := services.DB.ObjectStore(coredata.StoreIntegrationTokens).Put(context.Background(), indexeddb.Record{
+		"id":                      "tok-corrupt-other-connection",
+		"subject_id":              principal.UserSubjectID(user.ID),
+		"integration":             "connected",
+		"connection":              "other",
+		"instance":                "default",
+		"access_token_encrypted":  "not-valid-ciphertext",
+		"refresh_token_encrypted": "not-valid-ciphertext",
+		"created_at":              now,
+		"updated_at":              now,
+	}); err != nil {
+		t.Fatalf("seed corrupt token: %v", err)
+	}
+
+	provider := newMemoryAgentProvider()
+	connectedCatalogCalls := 0
+	missingCatalogCalls := 0
+	connectedProvider := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "connected", ConnMode: core.ConnectionModeUser},
+		},
+		catalog: &catalog.Catalog{Name: "connected"},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			connectedCatalogCalls++
+			if token != testCatalogToken {
+				return nil, errors.New("unexpected connected token")
+			}
+			return &catalog.Catalog{
+				Name: "connected",
+				Operations: []catalog.CatalogOperation{
+					{ID: "read", Method: http.MethodGet, Path: "/read", ReadOnly: true},
+				},
+			}, nil
+		},
+	}
+	missingProvider := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "missing", ConnMode: core.ConnectionModeUser},
+		},
+		catalog: &catalog.Catalog{Name: "missing"},
+		catalogForRequestFn: func(_ context.Context, _ string) (*catalog.Catalog, error) {
+			missingCatalogCalls++
+			return &catalog.Catalog{
+				Name: "missing",
+				Operations: []catalog.CatalogOperation{
+					{ID: "should_not_appear", Method: http.MethodGet, Path: "/missing", ReadOnly: true},
+				},
+			}, nil
+		},
+	}
+	weatherProvider := &coretesting.StubIntegration{
+		N:        "weather",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "weather",
+			Operations: []catalog.CatalogOperation{
+				{ID: "forecast", Method: http.MethodGet, Path: "/forecast", ReadOnly: true},
+			},
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, connectedProvider, missingProvider, weatherProvider)
+	broker := invocation.NewBroker(providers, services.Users, services.Tokens)
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:         providers,
+		Agent:             &stubAgentControl{defaultProviderName: "managed", provider: provider},
+		Invoker:           broker,
+		Tokens:            services.Tokens,
+		CatalogConnection: map[string]string{"connected": testCatalogConnection, "missing": testCatalogConnection},
+		RunMetadata:       services.AgentRunMetadata,
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "viewer-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Viewer"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.AgentManager = manager
+		cfg.CatalogConnection = map[string]string{"connected": testCatalogConnection, "missing": testCatalogConnection}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/", bytes.NewBufferString(`{
+		"messages":[{"role":"user","text":"Summarize the roadmap risk."}]
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+	if len(provider.startRunRequests) != 1 {
+		t.Fatalf("StartRun count = %d, want 1", len(provider.startRunRequests))
+	}
+
+	gotTools := provider.startRunRequests[0].Tools
+	gotTargets := make([]string, 0, len(gotTools))
+	for _, tool := range gotTools {
+		gotTargets = append(gotTargets, tool.Target.PluginName+"."+tool.Target.Operation)
+	}
+	slices.Sort(gotTargets)
+	if !slices.Equal(gotTargets, []string{"connected.read", "weather.forecast"}) {
+		t.Fatalf("StartRun tools = %#v, want connected.read and weather.forecast", gotTargets)
+	}
+	if connectedCatalogCalls == 0 {
+		t.Fatal("connected catalog calls = 0, want at least one session catalog resolution")
+	}
+	if missingCatalogCalls != 0 {
+		t.Fatalf("missing catalog calls = %d, want 0", missingCatalogCalls)
+	}
+}
+
+func TestGlobalAgentRunDefaultToolsUseAPITokenCredentialSubject(t *testing.T) {
+	t.Parallel()
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	services := coretesting.NewStubServices(t)
+	owner := seedUser(t, services, "api-owner@test.local")
+	credentialUser := seedUser(t, services, "credential-user@test.local")
+	expiresAt := time.Now().UTC().Add(time.Hour)
+	if err := services.APITokens.StoreAPIToken(context.Background(), &core.APIToken{
+		ID:                  "api-token-bound-credential-subject",
+		OwnerKind:           core.APITokenOwnerKindUser,
+		OwnerID:             owner.ID,
+		CredentialSubjectID: principal.UserSubjectID(credentialUser.ID),
+		Name:                "bound-credential-subject",
+		HashedToken:         hashed,
+		ExpiresAt:           &expiresAt,
+	}); err != nil {
+		t.Fatalf("StoreAPIToken: %v", err)
+	}
+
+	seedToken(t, services, &core.IntegrationToken{
+		ID:          "tok-cat-credential-subject",
+		SubjectID:   principal.UserSubjectID(credentialUser.ID),
+		Integration: "connected",
+		Connection:  testCatalogConnection,
+		Instance:    "default",
+		AccessToken: testCatalogToken,
+	})
+
+	provider := newMemoryAgentProvider()
+	connectedProvider := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "connected", ConnMode: core.ConnectionModeUser},
+		},
+		catalog: &catalog.Catalog{Name: "connected"},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != testCatalogToken {
+				return nil, errors.New("unexpected connected token")
+			}
+			return &catalog.Catalog{
+				Name: "connected",
+				Operations: []catalog.CatalogOperation{
+					{ID: "read", Method: http.MethodGet, Path: "/read", ReadOnly: true},
+				},
+			}, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, connectedProvider)
+	broker := invocation.NewBroker(providers, services.Users, services.Tokens)
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:         providers,
+		Agent:             &stubAgentControl{defaultProviderName: "managed", provider: provider},
+		Invoker:           broker,
+		Tokens:            services.Tokens,
+		CatalogConnection: map[string]string{"connected": testCatalogConnection},
+		RunMetadata:       services.AgentRunMetadata,
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
+				return nil, core.ErrNotFound
+			},
+		}
+		cfg.Services = services
+		cfg.AgentManager = manager
+		cfg.CatalogConnection = map[string]string{"connected": testCatalogConnection}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/runs/", bytes.NewBufferString(`{
+		"messages":[{"role":"user","text":"Summarize the roadmap risk."}]
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+	if len(provider.startRunRequests) != 1 {
+		t.Fatalf("StartRun count = %d, want 1", len(provider.startRunRequests))
+	}
+	if got := provider.startRunRequests[0].Tools; len(got) != 1 {
+		t.Fatalf("StartRun tools = %#v, want one default tool from credential subject", got)
+	} else if got[0].Target.PluginName != "connected" || got[0].Target.Operation != "read" {
+		t.Fatalf("StartRun default tool = %#v, want connected.read", got[0])
 	}
 }
 
