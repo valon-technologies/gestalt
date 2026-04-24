@@ -5763,6 +5763,51 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
+	t.Run("resolves config secret ref in runtime provider config", func(t *testing.T) {
+		t.Parallel()
+
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"modal-token-id": "ak-test", "modal-token-secret": "as-test"},
+			}, nil
+		}
+
+		cfg := validConfig()
+		cfg.Runtime.Providers = map[string]*config.RuntimeProviderEntry{
+			"modal": {
+				ProviderEntry: config.ProviderEntry{
+					Config: yaml.Node{
+						Kind: yaml.MappingNode,
+						Content: []*yaml.Node{
+							{Kind: yaml.ScalarNode, Value: "app", Tag: "!!str"},
+							{Kind: yaml.ScalarNode, Value: "gestalt-runtime", Tag: "!!str"},
+							{Kind: yaml.ScalarNode, Value: "tokenId", Tag: "!!str"},
+							{Kind: yaml.ScalarNode, Value: transportSecretRef("modal-token-id"), Tag: "!!str"},
+							{Kind: yaml.ScalarNode, Value: "tokenSecret", Tag: "!!str"},
+							{Kind: yaml.ScalarNode, Value: transportSecretRef("modal-token-secret"), Tag: "!!str"},
+						},
+					},
+				},
+			},
+		}
+
+		if err := bootstrap.ResolveConfigSecrets(ctx, cfg, factories); err != nil {
+			t.Fatalf("ResolveConfigSecrets: %v", err)
+		}
+
+		var decoded map[string]string
+		if err := cfg.Runtime.Providers["modal"].Config.Decode(&decoded); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if decoded["tokenId"] != "ak-test" {
+			t.Errorf("tokenId: got %q, want %q", decoded["tokenId"], "ak-test")
+		}
+		if decoded["tokenSecret"] != "as-test" {
+			t.Errorf("tokenSecret: got %q, want %q", decoded["tokenSecret"], "as-test")
+		}
+	})
+
 	t.Run("resolves config secret ref in workload tokens", func(t *testing.T) {
 		t.Parallel()
 
