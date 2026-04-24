@@ -255,6 +255,30 @@ func TestE2EProviderValidateIsolatedSourcePlugin(t *testing.T) {
 	}
 }
 
+func TestE2EProviderValidateSourceUI(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	providersDir := setupDefaultLocalProvidersDir(t, dir)
+	mountedUI := setupMountedUIDir(t, dir)
+
+	cmd := exec.Command(gestaltdBin, "provider", "validate", "--path", mountedUI.ManifestPath)
+	cmd.Env = append(os.Environ(),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
+		"GOTELEMETRY=off",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd provider validate failed: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(string(out), "config ok") {
+		t.Fatalf("expected validate success, got: %s", out)
+	}
+	if !strings.Contains(string(out), "ui=roadmap_review") {
+		t.Fatalf("expected ui validation summary, got: %s", out)
+	}
+}
+
 func TestE2EProviderValidateReusesConfiguredPluginKey(t *testing.T) {
 	t.Parallel()
 
@@ -294,7 +318,7 @@ func TestE2EProviderValidateRejectsNonPluginManifest(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected gestaltd provider validate to fail for non-plugin manifest\n%s", out)
 	}
-	if !strings.Contains(string(out), "only support kind: plugin in v1") {
+	if !strings.Contains(string(out), "only support kind: plugin or ui in v1") {
 		t.Fatalf("expected plugin-only error, got: %s", out)
 	}
 }
@@ -1240,7 +1264,12 @@ func attachOwnedUIToPluginSource(t *testing.T, pluginDir, uiManifestPath string)
 func setupMountedUIDirWithRoutes(t *testing.T, baseDir string, routes []providermanifestv1.UIRoute) *mountedUITestConfig {
 	t.Helper()
 
-	uiDir := filepath.Join(baseDir, "mounted-ui")
+	return setupMountedUIDirAt(t, filepath.Join(baseDir, "mounted-ui"), routes)
+}
+
+func setupMountedUIDirAt(t *testing.T, uiDir string, routes []providermanifestv1.UIRoute) *mountedUITestConfig {
+	t.Helper()
+
 	distDir := filepath.Join(uiDir, "dist")
 	assetsDir := filepath.Join(distDir, "assets")
 	if err := os.MkdirAll(assetsDir, 0o755); err != nil {
@@ -1710,6 +1739,80 @@ func TestE2EProviderDevAutoMountsOwnedUI(t *testing.T) {
 		}
 	}
 	t.Fatalf(`integration "provider" mountedPath missing from response: %s`, integrationsBody)
+}
+
+func TestE2EProviderDevServesSourceUI(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping provider dev ui test in short mode")
+	}
+
+	dir := t.TempDir()
+	providersDir := setupDefaultLocalProvidersDir(t, dir)
+	mountedUI := setupMountedUIDir(t, dir)
+	port, holder := reservePort(t)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	_ = holder.Close()
+
+	cmd := exec.Command(gestaltdBin, "provider", "dev", "--path", mountedUI.ManifestPath, "--port", fmt.Sprintf("%d", port))
+	cmd.Env = append(os.Environ(),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
+		"GOTELEMETRY=off",
+	)
+	startCommandAndWaitReady(t, cmd, baseURL)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	uiResp, err := client.Get(baseURL + "/roadmap_review/sync")
+	if err != nil {
+		t.Fatalf("GET /roadmap_review/sync: %v", err)
+	}
+	defer func() { _ = uiResp.Body.Close() }()
+	uiBody, _ := io.ReadAll(uiResp.Body)
+	if uiResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /roadmap_review/sync 200, got %d: %s", uiResp.StatusCode, uiBody)
+	}
+	if !strings.Contains(string(uiBody), "Roadmap Review UI") {
+		t.Fatalf("expected direct ui body marker, got: %s", uiBody)
+	}
+}
+
+func TestE2EProviderDevAutoMountsSiblingUIForPlugin(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping provider dev sibling-ui test in short mode")
+	}
+
+	dir := t.TempDir()
+	providersDir := setupDefaultLocalProvidersDir(t, dir)
+	rootDir := filepath.Join(dir, "package")
+	pluginDir := setupPluginDir(t, filepath.Join(rootDir, "plugin"))
+	_ = setupMountedUIDirAt(t, filepath.Join(rootDir, "ui"), nil)
+	port, holder := reservePort(t)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	_ = holder.Close()
+
+	cmd := exec.Command(gestaltdBin, "provider", "dev", "--path", componentProviderManifestPath(t, pluginDir), "--port", fmt.Sprintf("%d", port))
+	cmd.Env = append(os.Environ(),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
+		"GOTELEMETRY=off",
+	)
+	startCommandAndWaitReady(t, cmd, baseURL)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	uiResp, err := client.Get(baseURL + "/provider/sync")
+	if err != nil {
+		t.Fatalf("GET /provider/sync: %v", err)
+	}
+	defer func() { _ = uiResp.Body.Close() }()
+	uiBody, _ := io.ReadAll(uiResp.Body)
+	if uiResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /provider/sync 200, got %d: %s", uiResp.StatusCode, uiBody)
+	}
+	if !strings.Contains(string(uiBody), "Roadmap Review UI") {
+		t.Fatalf("expected sibling ui body marker, got: %s", uiBody)
+	}
 }
 
 //nolint:paralleltest // Uses the default 8080 startup path intentionally.
