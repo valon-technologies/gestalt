@@ -2476,14 +2476,11 @@ func TestBuiltInAdminRoute_HumanAuthorizationOnManagementProfile(t *testing.T) {
 func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-admin-shell</html>"), 0o644); err != nil {
-		t.Fatalf("WriteFile index.html: %v", err)
-	}
-	handler, err := testutilUIHandler(dir)
-	if err != nil {
-		t.Fatalf("ui handler: %v", err)
-	}
+	const loginBasePath = "/api/v1/auth/login"
+
+	uiDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(uiDir, "index.html"), "<html>root-ui-shell</html>")
+	writeTestAdminShell(t, uiDir, "protected-admin-shell")
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	auth := &stubHostIssuedSessionAuth{secret: secret}
@@ -2524,6 +2521,18 @@ func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing
 		cfg.Admin = server.AdminRouteConfig{
 			AuthorizationPolicy: "admin_policy",
 		}
+		cfg.ProviderUIs = map[string]*config.UIEntry{
+			"root": {
+				Path: "/",
+				ProviderEntry: config.ProviderEntry{
+					ResolvedAssetRoot: uiDir,
+				},
+			},
+		}
+		cfg.BuiltinAdminUI = &server.BuiltinAdminUIOptions{
+			BrandHref: "/",
+			LoginBase: loginBasePath,
+		}
 	}))
 	publicTS.Listener = publicListener
 	publicTS.StartTLS()
@@ -2540,7 +2549,18 @@ func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing
 		cfg.Admin = server.AdminRouteConfig{
 			AuthorizationPolicy: "admin_policy",
 		}
-		cfg.AdminUI = handler
+		cfg.ProviderUIs = map[string]*config.UIEntry{
+			"root": {
+				Path: "/",
+				ProviderEntry: config.ProviderEntry{
+					ResolvedAssetRoot: uiDir,
+				},
+			},
+		}
+		cfg.BuiltinAdminUI = &server.BuiltinAdminUIOptions{
+			BrandHref: "/admin/",
+			LoginBase: publicURL + loginBasePath,
+		}
 	}))
 	managementTS.Listener = managementListener
 	managementTS.StartTLS()
@@ -2602,8 +2622,12 @@ func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing
 	if finalResp.StatusCode != http.StatusOK {
 		t.Fatalf("final admin status = %d, want 200", finalResp.StatusCode)
 	}
-	if !strings.Contains(string(body), "protected-admin-shell") {
+	text := string(body)
+	if !strings.Contains(text, "protected-admin-shell") {
 		t.Fatalf("body = %q, want protected admin shell", body)
+	}
+	if !strings.Contains(text, fmt.Sprintf(`window.__gestaltAdminShell.loginBase = %q;`, publicURL+loginBasePath)) {
+		t.Fatalf("body = %q, want injected management login base", body)
 	}
 }
 
@@ -2648,6 +2672,212 @@ func TestBuiltInAdminRoute_EmbeddedAdminUIIncludesAuthorizationWorkspace(t *test
 		if !strings.Contains(text, want) {
 			t.Fatalf("embedded admin ui body missing %q", want)
 		}
+	}
+}
+
+func TestBuiltInAdminRoute_ProviderBackedAdminUIAutoDiscoversRootUI(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html>root-ui-shell</html>")
+	writeTestAdminShell(t, rootDir, "provider-admin-shell")
+	writeTestUIAsset(t, filepath.Join(rootDir, "admin", "theme.css"), "body{background:#123456;}")
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.ProviderUIs = map[string]*config.UIEntry{
+			"root": {
+				Path: "/",
+				ProviderEntry: config.ProviderEntry{
+					ResolvedAssetRoot: rootDir,
+				},
+			},
+		}
+		cfg.BuiltinAdminUI = &server.BuiltinAdminUIOptions{
+			BrandHref: "/workplace/",
+			LoginBase: "https://login.example.test/start",
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	rootResp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET root ui: %v", err)
+	}
+	rootBody, err := io.ReadAll(rootResp.Body)
+	_ = rootResp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll root ui: %v", err)
+	}
+	if rootResp.StatusCode != http.StatusOK {
+		t.Fatalf("root ui status = %d, want 200", rootResp.StatusCode)
+	}
+	if !strings.Contains(string(rootBody), "root-ui-shell") {
+		t.Fatalf("root ui body = %q, want root ui shell", rootBody)
+	}
+
+	adminResp, err := http.Get(ts.URL + "/admin/?tab=members")
+	if err != nil {
+		t.Fatalf("GET provider-backed admin ui: %v", err)
+	}
+	adminBody, err := io.ReadAll(adminResp.Body)
+	_ = adminResp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll provider-backed admin ui: %v", err)
+	}
+	if adminResp.StatusCode != http.StatusOK {
+		t.Fatalf("provider-backed admin ui status = %d, want 200", adminResp.StatusCode)
+	}
+
+	text := string(adminBody)
+	for _, want := range []string{
+		"provider-admin-shell",
+		`<a class="brand" href="/workplace/">Gestalt</a>`,
+		`window.__gestaltAdminShell.loginBase = "https://login.example.test/start";`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("provider-backed admin ui body missing %q", want)
+		}
+	}
+	if strings.Contains(text, `<a href="/">Client UI</a>`) {
+		t.Fatalf("provider-backed admin ui body still contains client ui link")
+	}
+
+	assetResp, err := http.Get(ts.URL + "/admin/theme.css")
+	if err != nil {
+		t.Fatalf("GET provider-backed admin asset: %v", err)
+	}
+	assetBody, err := io.ReadAll(assetResp.Body)
+	_ = assetResp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll provider-backed admin asset: %v", err)
+	}
+	if assetResp.StatusCode != http.StatusOK {
+		t.Fatalf("provider-backed admin asset status = %d, want 200", assetResp.StatusCode)
+	}
+	if !strings.Contains(string(assetBody), "background:#123456") {
+		t.Fatalf("provider-backed admin asset body = %q, want provider stylesheet", assetBody)
+	}
+}
+
+func TestBuiltInAdminRoute_ProviderBackedAdminUIUsesExplicitProvider(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html>root-ui-shell</html>")
+
+	adminProviderDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(adminProviderDir, "index.html"), "<html>admin-provider-root</html>")
+	writeTestAdminShell(t, adminProviderDir, "explicit-provider-admin-shell")
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.ProviderUIs = map[string]*config.UIEntry{
+			"root": {
+				Path: "/",
+				ProviderEntry: config.ProviderEntry{
+					ResolvedAssetRoot: rootDir,
+				},
+			},
+			"admin": {
+				ProviderEntry: config.ProviderEntry{
+					ResolvedAssetRoot: adminProviderDir,
+				},
+			},
+		}
+		cfg.AdminUIProvider = "admin"
+		cfg.BuiltinAdminUI = &server.BuiltinAdminUIOptions{
+			BrandHref: "/",
+			LoginBase: "/api/v1/auth/login",
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	rootResp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET root ui: %v", err)
+	}
+	rootBody, err := io.ReadAll(rootResp.Body)
+	_ = rootResp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll root ui: %v", err)
+	}
+	if rootResp.StatusCode != http.StatusOK {
+		t.Fatalf("root ui status = %d, want 200", rootResp.StatusCode)
+	}
+	if !strings.Contains(string(rootBody), "root-ui-shell") {
+		t.Fatalf("root ui body = %q, want root ui shell", rootBody)
+	}
+
+	adminResp, err := http.Get(ts.URL + "/admin/")
+	if err != nil {
+		t.Fatalf("GET explicit provider admin ui: %v", err)
+	}
+	adminBody, err := io.ReadAll(adminResp.Body)
+	_ = adminResp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll explicit provider admin ui: %v", err)
+	}
+	if adminResp.StatusCode != http.StatusOK {
+		t.Fatalf("explicit provider admin ui status = %d, want 200", adminResp.StatusCode)
+	}
+	text := string(adminBody)
+	if !strings.Contains(text, "explicit-provider-admin-shell") {
+		t.Fatalf("explicit provider admin ui body = %q, want explicit provider shell", adminBody)
+	}
+	if strings.Contains(text, "root-ui-shell") {
+		t.Fatalf("explicit provider admin ui body = %q, should not use root ui shell", adminBody)
+	}
+}
+
+func TestBuiltInAdminRoute_ProviderBackedAdminUIDoesNotAutoDiscoverNonRootUI(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html>root-ui-shell</html>")
+
+	portalDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(portalDir, "index.html"), "<html>portal-ui-shell</html>")
+	writeTestAdminShell(t, portalDir, "portal-admin-shell")
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.ProviderUIs = map[string]*config.UIEntry{
+			"root": {
+				Path: "/",
+				ProviderEntry: config.ProviderEntry{
+					ResolvedAssetRoot: rootDir,
+				},
+			},
+			"portal": {
+				Path: "/portal",
+				ProviderEntry: config.ProviderEntry{
+					ResolvedAssetRoot: portalDir,
+				},
+			},
+		}
+		cfg.BuiltinAdminUI = &server.BuiltinAdminUIOptions{
+			BrandHref: "/",
+			LoginBase: "/api/v1/auth/login",
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/admin/?tab=members")
+	if err != nil {
+		t.Fatalf("GET admin ui fallback: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll admin ui fallback: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("admin ui fallback status = %d, want 200", resp.StatusCode)
+	}
+	text := string(body)
+	if strings.Contains(text, "portal-admin-shell") {
+		t.Fatalf("admin ui fallback body = %q, should not auto-discover non-root ui", body)
+	}
+	if !strings.Contains(text, "Control surface") {
+		t.Fatalf("admin ui fallback body = %q, want built-in admin shell", body)
 	}
 }
 
@@ -5337,6 +5567,38 @@ func TestMountedRootUIRoutesHiddenOnManagementProfile(t *testing.T) {
 
 func testutilUIHandler(dir string) (http.Handler, error) {
 	return ui.DirHandler(dir)
+}
+
+func writeTestUIAsset(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("WriteFile %s: %v", path, err)
+	}
+}
+
+func writeTestAdminShell(t *testing.T, rootDir, marker string) {
+	t.Helper()
+	writeTestUIAsset(t, filepath.Join(rootDir, "admin", "index.html"), fmt.Sprintf(`<!doctype html>
+<html>
+  <body>
+    <a class="brand" href="/">Gestalt</a>
+    <a href="/">Client UI</a>
+    <section>%s</section>
+    <script>
+      window.__gestaltAdminShell = window.__gestaltAdminShell || {};
+      (function () {
+        try {
+          window.__gestaltAdminShell.loginBase = __GESTALT_ADMIN_LOGIN_BASE__;
+        } catch (error) {
+          window.__gestaltAdminShell.loginBase = "/api/v1/auth/login";
+        }
+      })();
+    </script>
+  </body>
+</html>`, marker))
 }
 
 func TestSecurityHeaders(t *testing.T) {

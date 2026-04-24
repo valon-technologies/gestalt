@@ -868,6 +868,11 @@ func validateAdminConfig(cfg *Config) error {
 	}
 	admin := cfg.Server.Admin
 	policy := strings.TrimSpace(admin.AuthorizationPolicy)
+	if adminUI := strings.TrimSpace(admin.UI); adminUI != "" {
+		if cfg.Providers.UI == nil || cfg.Providers.UI[adminUI] == nil {
+			return fmt.Errorf("config validation: server.admin.ui references unknown ui %q", adminUI)
+		}
+	}
 	if policy == "" {
 		if len(admin.AllowedRoles) > 0 {
 			return fmt.Errorf("config validation: server.admin.allowedRoles requires server.admin.authorizationPolicy")

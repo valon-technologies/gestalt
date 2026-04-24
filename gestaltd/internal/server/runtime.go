@@ -104,6 +104,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
 		},
+		AdminUIProvider: strings.TrimSpace(cfg.Server.Admin.UI),
 	}
 
 	if err := result.Start(ctx); err != nil {
@@ -148,6 +149,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 
 		managementConfig := baseConfig
 		managementConfig.RouteProfile = RouteProfileManagement
+		managementConfig.ProviderUIs = cfg.Providers.UI
 		managementLoginBase := browserLoginPath
 		if baseURL := strings.TrimRight(cfg.Server.BaseURL, "/"); baseURL != "" {
 			managementLoginBase = baseURL + browserLoginPath

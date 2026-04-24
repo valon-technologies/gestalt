@@ -158,6 +158,8 @@ authorization:
 
 `admin.authorizationPolicy` binds the built-in `/admin` route to one shared human access policy from `authorization.policies`. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
 
+`admin.ui` optionally pins `/admin` to one named `providers.ui.<name>` bundle. The selected bundle must ship `admin/index.html` inside its prepared asset root. When `admin.ui` is omitted, Gestalt first auto-discovers admin assets from the root-mounted UI bundle (`path: /`) when that bundle contains `admin/index.html`, then falls back to the built-in admin shell.
+
 `authorization.policies` configures shared human access policies. Each policy resolves a caller to exactly one role by matching canonical `subjectID` values, then applies a `default` fallback (`allow` or `deny`) when no member matches. Plugins opt into a policy explicitly through `authorizationPolicy`.
 
 Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `authorizationPolicy`, operators can manage additional dynamic members for that plugin from the built-in admin UI at `/admin/?tab=members` or through `/admin/api/v1/authorization/...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for users who already have static authorization on that plugin.
@@ -179,6 +181,7 @@ Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `a
 | `runtime.provider` | | Default runtime-provider selector for plugins that opt into `plugins.<name>.runtime`. This does not move plugins into hosted runtimes by itself. |
 | `admin.authorizationPolicy` | | Shared human access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
+| `admin.ui` | | Optional named `providers.ui` bundle whose `admin/` assets should back `/admin`. When omitted, Gestalt auto-discovers `admin/` assets from the root UI bundle before using the built-in fallback. |
 | `authorization.policies` | | Shared human access policies resolved by canonical `subjectID`. |
 | `authorization.workloads` | | Workload bearer tokens, per-provider allowlists, and workload-owned credential bindings. |
 
@@ -1282,7 +1285,7 @@ providers:
         brandName: Acme
 ```
 
-`providers.ui` is a map of `ui` bundles. Entries may mount directly by setting `path`, or they may act as named UI bundles that `plugins.<name>.ui` binds to `plugins.<name>.mountPath`. When a plugin manifest declares `spec.ui`, `plugins.<name>.ui` may be omitted entirely and Gestalt synthesizes the mounted UI entry from the plugin-owned reference. The built-in admin UI remains available at `/admin`. Omit `providers.ui` entirely to run headless with no public UI bundles.
+`providers.ui` is a map of `ui` bundles. Entries may mount directly by setting `path`, or they may act as named UI bundles that `plugins.<name>.ui` binds to `plugins.<name>.mountPath`. When a plugin manifest declares `spec.ui`, `plugins.<name>.ui` may be omitted entirely and Gestalt synthesizes the mounted UI entry from the plugin-owned reference. `/admin` remains available regardless. A selected `server.admin.ui` bundle, or the root-mounted UI bundle when it contains `admin/index.html`, may also supply the static admin shell while Gestalt keeps the existing `/admin` auth and API semantics. Omit `providers.ui` entirely to run headless with no public UI bundles.
 
 Plugin-backed mounted UIs inherit the owning plugin's dynamic authorization grants when that plugin sets `authorizationPolicy`. Direct `providers.ui.<name>.authorizationPolicy` bindings remain static-only.
 
@@ -1317,6 +1320,8 @@ Only `connections.default` may define `params` or `discovery`. All connections i
 Each `providers.ui.<name>` entry must set `source` to exactly one loading mode: a local UI manifest path or a published `provider-release.yaml` metadata URL. `providers.ui.<name>.config` is only allowed when `providers.ui.<name>.source` is set.
 
 Each `plugins.<name>` entry may set `mountPath` to publish a plugin-backed UI. When `plugins.<name>.ui` is set, it must reference an existing UI bundle. When `plugins.<name>.ui` is omitted and `plugins.<name>.mountPath` is set, the plugin manifest must declare `spec.ui`. A given UI may be bound by at most one plugin entry. `plugins.<name>.mountPath` must use the same path rules as a directly mounted UI.
+
+When `server.admin.ui` is set, it must reference an existing `providers.ui.<name>` entry. Runtime startup then requires that entry's prepared asset root to include `admin/index.html`.
 
 Each name in `plugins.<name>.s3` must reference an existing enabled
 `providers.s3.<name>` entry.

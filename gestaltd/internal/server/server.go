@@ -163,6 +163,7 @@ type Config struct {
 	MCPHandler            http.Handler
 	MountedUIs            []MountedUI
 	Admin                 AdminRouteConfig
+	AdminUIProvider       string
 	AdminUI               http.Handler
 	BuiltinAdminUI        *BuiltinAdminUIOptions
 	RouteProfile          RouteProfile
@@ -225,6 +226,16 @@ func New(cfg Config) (*Server, error) {
 		return nil, err
 	}
 	adminUI := cfg.AdminUI
+	if adminUI == nil {
+		adminUIOpts := BuiltinAdminUIOptions{}
+		if cfg.BuiltinAdminUI != nil {
+			adminUIOpts = *cfg.BuiltinAdminUI
+		}
+		adminUI, err = resolveConfiguredAdminUI(adminUIOpts, cfg.AdminUIProvider, cfg.ProviderUIs)
+		if err != nil {
+			return nil, fmt.Errorf("resolve configured admin ui: %w", err)
+		}
+	}
 	if adminUI == nil && cfg.BuiltinAdminUI != nil {
 		adminUI, err = resolveBuiltinAdminUI(*cfg.BuiltinAdminUI)
 		if err != nil {
