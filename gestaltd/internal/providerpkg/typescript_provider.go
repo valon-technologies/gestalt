@@ -20,6 +20,7 @@ const (
 	typeScriptRuntimeBin   = "gestalt-ts-runtime"
 	typeScriptBuildBin     = "gestalt-ts-build"
 	typeScriptBunEnvVar    = "GESTALT_BUN"
+	typeScriptSDKDirEnvVar = "GESTALT_TYPESCRIPT_SDK_DIR"
 	typeScriptProviderKey  = "provider"
 	typeScriptPluginKey    = "plugin"
 	typeScriptAuthKey      = "auth"
@@ -82,9 +83,13 @@ func typeScriptExecutionCommand(root, target string) (string, []string, func(), 
 	if err != nil {
 		return "", nil, nil, err
 	}
-	if sdkPath := localTypeScriptSDKPath(); sdkPath != "" {
+	sdkPath, err := prepareLocalTypeScriptSDK(bunPath)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	if sdkPath != "" {
 		return bunPath, []string{
-			"--cwd", root,
+			"--cwd", sdkPath,
 			filepath.Join(sdkPath, "src", "runtime.ts"),
 			"--",
 			root,
@@ -119,9 +124,13 @@ func buildTypeScriptBinary(sourceDir, binaryPath, pluginName, target, goos, goar
 	}
 
 	var args []string
-	if sdkPath := localTypeScriptSDKPath(); sdkPath != "" {
+	sdkPath, err := prepareLocalTypeScriptSDK(bunPath)
+	if err != nil {
+		return "", fmt.Errorf("prepare local TypeScript SDK: %w", err)
+	}
+	if sdkPath != "" {
 		args = []string{
-			"--cwd", sourceDir,
+			"--cwd", sdkPath,
 			filepath.Join(sdkPath, "src", "build.ts"),
 			"--",
 			sourceDir,
@@ -207,7 +216,54 @@ func bunExecutableCandidates() []string {
 	return candidates
 }
 
+func prepareLocalTypeScriptSDK(bunPath string) (string, error) {
+	sdkPath := localTypeScriptSDKPath()
+	if sdkPath == "" {
+		return "", nil
+	}
+	if err := ensureLocalTypeScriptSDKDependencies(bunPath, sdkPath); err != nil {
+		return "", err
+	}
+	return sdkPath, nil
+}
+
+func ensureLocalTypeScriptSDKDependencies(bunPath, sdkPath string) error {
+	nodeModulesPath := filepath.Join(sdkPath, "node_modules")
+	if info, err := os.Stat(nodeModulesPath); err == nil {
+		if info.IsDir() {
+			return nil
+		}
+		return fmt.Errorf("local TypeScript SDK node_modules path %q is not a directory", nodeModulesPath)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("stat local TypeScript SDK node_modules: %w", err)
+	}
+
+	args := []string{"install", "--cwd", sdkPath}
+	lockfilePath := filepath.Join(sdkPath, "bun.lock")
+	if _, err := os.Stat(lockfilePath); err == nil {
+		args = append(args, "--frozen-lockfile")
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("stat local TypeScript SDK bun.lock: %w", err)
+	}
+
+	cmd := exec.Command(bunPath, args...)
+	cmd.Dir = sdkPath
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("bun install for local TypeScript SDK: %w", err)
+	}
+	return nil
+}
+
 func localTypeScriptSDKPath() string {
+	if override := strings.TrimSpace(os.Getenv(typeScriptSDKDirEnvVar)); override != "" {
+		path := filepath.Clean(override)
+		if _, err := os.Stat(filepath.Join(path, "package.json")); err == nil {
+			return path
+		}
+		return ""
+	}
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		return ""

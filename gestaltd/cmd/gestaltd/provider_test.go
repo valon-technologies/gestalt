@@ -393,9 +393,10 @@ func TestRun_ProviderReleaseBuildsTypeScriptSourcePluginForCurrentPlatform(t *te
 	}
 
 	pluginDir := newTypeScriptSourceReleaseFixture(t, t.TempDir())
+	sdkDir := writeFakeTypeScriptReleaseSDKDir(t, t.TempDir())
+	t.Setenv("GESTALT_TYPESCRIPT_SDK_DIR", sdkDir)
 	bunPath := writeFakeTypeScriptProviderReleaseBun(
 		t,
-		filepath.Join(pluginDir, "fake-bun"),
 		typeScriptReleasePluginName,
 		typeScriptReleaseTarget,
 		runtime.GOOS,
@@ -576,10 +577,11 @@ func TestRun_ProviderReleaseBuildsRequestedPlatformSets(t *testing.T) {
 
 		builtBinary := buildGoSourceAuthBinary(t)
 		pluginDir := newTypeScriptSourceAuthReleaseFixture(t, t.TempDir())
+		sdkDir := writeFakeTypeScriptReleaseSDKDir(t, t.TempDir())
+		t.Setenv("GESTALT_TYPESCRIPT_SDK_DIR", sdkDir)
 		defaultPlatforms := defaultReleasePlatformsForTest(t)
 		bunPath := writeFakeTypeScriptComponentReleaseBunForPlatforms(
 			t,
-			filepath.Join(pluginDir, "fake-bun"),
 			authReleaseTypeScriptTarget,
 			authReleasePluginName,
 			defaultPlatforms,
@@ -1450,7 +1452,9 @@ func TestRun_ProviderReleaseBuildsExecutableAuthProviders(t *testing.T) {
 
 				builtBinary := buildGoSourceAuthBinary(t)
 				pluginDir := newTypeScriptSourceAuthReleaseFixture(t, t.TempDir())
-				bunPath := writeFakeTypeScriptComponentReleaseBun(t, filepath.Join(pluginDir, "fake-bun"), authReleaseTypeScriptTarget, authReleasePluginName, runtime.GOOS, runtime.GOARCH, builtBinary)
+				sdkDir := writeFakeTypeScriptReleaseSDKDir(t, t.TempDir())
+				t.Setenv("GESTALT_TYPESCRIPT_SDK_DIR", sdkDir)
+				bunPath := writeFakeTypeScriptComponentReleaseBun(t, authReleaseTypeScriptTarget, authReleasePluginName, runtime.GOOS, runtime.GOARCH, builtBinary)
 				t.Setenv("PATH", pathWithoutGo(t))
 				t.Setenv("GESTALT_BUN", bunPath)
 				return pluginDir
@@ -2572,15 +2576,15 @@ authentication = "provider:auth_provider"
 	return pluginDir
 }
 
-func writeFakeTypeScriptComponentReleaseBun(t *testing.T, path, expectedTarget, expectedPluginName, expectedGOOS, expectedGOARCH, builtBinaryPath string) string {
+func writeFakeTypeScriptComponentReleaseBun(t *testing.T, expectedTarget, expectedPluginName, expectedGOOS, expectedGOARCH, builtBinaryPath string) string {
 	t.Helper()
-	return writeFakeTypeScriptComponentReleaseBunForPlatforms(t, path, expectedTarget, expectedPluginName, []releasePlatform{{
+	return writeFakeTypeScriptComponentReleaseBunForPlatforms(t, expectedTarget, expectedPluginName, []releasePlatform{{
 		GOOS:   expectedGOOS,
 		GOARCH: expectedGOARCH,
 	}}, builtBinaryPath)
 }
 
-func writeFakeTypeScriptComponentReleaseBunForPlatforms(t *testing.T, path, expectedTarget, expectedPluginName string, expectedPlatforms []releasePlatform, builtBinaryPath string) string {
+func writeFakeTypeScriptComponentReleaseBunForPlatforms(t *testing.T, expectedTarget, expectedPluginName string, expectedPlatforms []releasePlatform, builtBinaryPath string) string {
 	t.Helper()
 
 	allowedPlatforms := make([]fakebun.Platform, 0, len(expectedPlatforms))
@@ -2590,15 +2594,20 @@ func writeFakeTypeScriptComponentReleaseBunForPlatforms(t *testing.T, path, expe
 			GOARCH: platform.GOARCH,
 		})
 	}
-	sdkPath := fakebun.LocalTypeScriptSDKPath()
+
+	sdkPath := strings.TrimSpace(os.Getenv("GESTALT_TYPESCRIPT_SDK_DIR"))
 	if sdkPath == "" {
-		t.Fatal("local TypeScript SDK not found")
+		t.Fatal("GESTALT_TYPESCRIPT_SDK_DIR must be set for TypeScript release tests")
 	}
 
 	sourceDir := "."
 	return fakebun.NewExecutable(t, fakebun.Config{
+		Install: &fakebun.InstallConfig{
+			ExpectedCwd:           sdkPath,
+			RequireFrozenLockfile: true,
+		},
 		Build: &fakebun.BuildConfig{
-			ExpectedCwd:        sourceDir,
+			ExpectedCwd:        sdkPath,
 			ExpectedEntry:      filepath.Join(sdkPath, "src", "build.ts"),
 			ExpectedSourceDir:  sourceDir,
 			ExpectedTarget:     expectedTarget,
@@ -2609,18 +2618,35 @@ func writeFakeTypeScriptComponentReleaseBunForPlatforms(t *testing.T, path, expe
 	})
 }
 
-func writeFakeTypeScriptProviderReleaseBun(t *testing.T, path, expectedPluginName, expectedTarget, expectedGOOS, expectedGOARCH string) string {
+func writeFakeTypeScriptReleaseSDKDir(t *testing.T, root string) string {
+	t.Helper()
+	writeTestFile(t, root, "package.json", []byte(`{
+  "name": "@valon-technologies/gestalt",
+  "version": "0.0.1-alpha.test"
+}
+`), 0o644)
+	writeTestFile(t, root, "bun.lock", []byte("{}\n"), 0o644)
+	writeTestFile(t, filepath.Join(root, "src"), "runtime.ts", []byte("export {};\n"), 0o644)
+	writeTestFile(t, filepath.Join(root, "src"), "build.ts", []byte("export {};\n"), 0o644)
+	return root
+}
+
+func writeFakeTypeScriptProviderReleaseBun(t *testing.T, expectedPluginName, expectedTarget, expectedGOOS, expectedGOARCH string) string {
 	t.Helper()
 
-	sdkPath := fakebun.LocalTypeScriptSDKPath()
+	sdkPath := strings.TrimSpace(os.Getenv("GESTALT_TYPESCRIPT_SDK_DIR"))
 	if sdkPath == "" {
-		t.Fatal("local TypeScript SDK not found")
+		t.Fatal("GESTALT_TYPESCRIPT_SDK_DIR must be set for TypeScript release tests")
 	}
 
 	sourceDir := "."
 	return fakebun.NewExecutable(t, fakebun.Config{
+		Install: &fakebun.InstallConfig{
+			ExpectedCwd:           sdkPath,
+			RequireFrozenLockfile: true,
+		},
 		Runtime: &fakebun.RuntimeConfig{
-			ExpectedCwd:      sourceDir,
+			ExpectedCwd:      sdkPath,
 			ExpectedEntry:    filepath.Join(sdkPath, "src", "runtime.ts"),
 			ExpectedRoot:     sourceDir,
 			ExpectedTarget:   expectedTarget,
@@ -2657,7 +2683,7 @@ http:
 `,
 		},
 		Build: &fakebun.BuildConfig{
-			ExpectedCwd:        sourceDir,
+			ExpectedCwd:        sdkPath,
 			ExpectedEntry:      filepath.Join(sdkPath, "src", "build.ts"),
 			ExpectedSourceDir:  sourceDir,
 			ExpectedTarget:     expectedTarget,

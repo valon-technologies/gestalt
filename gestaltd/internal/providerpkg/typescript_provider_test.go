@@ -310,7 +310,7 @@ func TestHasSourceComponentPackage_TypeScript(t *testing.T) {
 
 func TestDetectBunExecutable_UsesEnvironmentOverride(t *testing.T) {
 	root := t.TempDir()
-	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH)
+	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH, root)
 	t.Setenv(typeScriptBunEnvVar, bunPath)
 	t.Setenv("PATH", "")
 	t.Setenv("HOME", filepath.Join(root, "home"))
@@ -327,8 +327,10 @@ func TestDetectBunExecutable_UsesEnvironmentOverride(t *testing.T) {
 func TestSourceProviderExecutionCommand_TypeScript(t *testing.T) {
 	root := t.TempDir()
 	mustWriteTypeScriptProviderPackage(t, root, typeScriptTestPluginTarget)
-	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH)
+	sdkDir := writeFakeTypeScriptSDKDir(t, t.TempDir())
+	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH, sdkDir)
 	t.Setenv(typeScriptBunEnvVar, bunPath)
+	t.Setenv(typeScriptSDKDirEnvVar, sdkDir)
 
 	command, args, cleanup, err := SourceProviderExecutionCommand(root, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
@@ -343,8 +345,8 @@ func TestSourceProviderExecutionCommand_TypeScript(t *testing.T) {
 	if len(args) != 6 {
 		t.Fatalf("args len = %d, want 6 (%v)", len(args), args)
 	}
-	if args[0] != "--cwd" || args[1] != root {
-		t.Fatalf("args prefix = %v, want [--cwd %s ...]", args[:2], root)
+	if args[0] != "--cwd" || args[1] != sdkDir {
+		t.Fatalf("args prefix = %v, want [--cwd %s ...]", args[:2], sdkDir)
 	}
 	if args[3] != "--" {
 		t.Fatalf("args[3] = %q, want --", args[3])
@@ -355,6 +357,32 @@ func TestSourceProviderExecutionCommand_TypeScript(t *testing.T) {
 
 	if got := filepath.Base(args[2]); got != "runtime.ts" {
 		t.Fatalf("runtime entry = %q, want local runtime.ts path", args[2])
+	}
+}
+
+func TestSourceProviderExecutionCommand_TypeScriptInstallsLocalSDKDeps(t *testing.T) {
+	root := t.TempDir()
+	mustWriteTypeScriptProviderPackage(t, root, typeScriptTestPluginTarget)
+	sdkDir := writeFakeTypeScriptSDKDir(t, t.TempDir())
+	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH, sdkDir)
+	t.Setenv(typeScriptBunEnvVar, bunPath)
+	t.Setenv(typeScriptSDKDirEnvVar, sdkDir)
+
+	command, args, cleanup, err := SourceProviderExecutionCommand(root, runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		t.Fatalf("SourceProviderExecutionCommand: %v", err)
+	}
+	if cleanup != nil {
+		t.Fatal("cleanup should be nil for TypeScript source providers")
+	}
+	if command != bunPath {
+		t.Fatalf("command = %q, want %q", command, bunPath)
+	}
+	if _, err := os.Stat(filepath.Join(sdkDir, "node_modules", ".installed")); err != nil {
+		t.Fatalf("expected bun install marker in fake SDK node_modules: %v", err)
+	}
+	if got := filepath.Dir(args[2]); got != filepath.Join(sdkDir, "src") {
+		t.Fatalf("runtime entry dir = %q, want %q", got, filepath.Join(sdkDir, "src"))
 	}
 }
 
@@ -385,8 +413,10 @@ func TestSourceComponentExecutionCommand_TypeScript(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
 			mustWriteTypeScriptComponentPackage(t, root, tt.kind, tt.target)
-			bunPath := writeFakeTypeScriptBun(t, root, "ts-release", tt.target, runtime.GOOS, runtime.GOARCH)
+			sdkDir := writeFakeTypeScriptSDKDir(t, t.TempDir())
+			bunPath := writeFakeTypeScriptBun(t, root, "ts-release", tt.target, runtime.GOOS, runtime.GOARCH, sdkDir)
 			t.Setenv(typeScriptBunEnvVar, bunPath)
+			t.Setenv(typeScriptSDKDirEnvVar, sdkDir)
 
 			command, args, cleanup, err := SourceComponentExecutionCommand(root, tt.kind, runtime.GOOS, runtime.GOARCH)
 			if err != nil {
@@ -415,8 +445,10 @@ func TestPrepareSourceManifest_GeneratesTypeScriptStaticCatalog(t *testing.T) {
 	root := t.TempDir()
 	manifestPath := mustWriteTypeScriptSourceManifest(t, root, "ts-release")
 	mustWriteTypeScriptProviderPackage(t, root, typeScriptTestPluginTarget)
-	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH)
+	sdkDir := writeFakeTypeScriptSDKDir(t, t.TempDir())
+	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH, sdkDir)
 	t.Setenv(typeScriptBunEnvVar, bunPath)
+	t.Setenv(typeScriptSDKDirEnvVar, sdkDir)
 
 	_, manifest, err := PrepareSourceManifest(manifestPath)
 	if err != nil {
@@ -470,8 +502,10 @@ func TestPrepareSourceManifest_MergesGeneratedTypeScriptManifestMetadata(t *test
 	manifestPath := filepath.Join(root, "manifest.yaml")
 	mustWriteFile(t, manifestPath, data, 0o644)
 	mustWriteTypeScriptProviderPackage(t, root, typeScriptTestPluginTarget)
-	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH)
+	sdkDir := writeFakeTypeScriptSDKDir(t, t.TempDir())
+	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH, sdkDir)
 	t.Setenv(typeScriptBunEnvVar, bunPath)
+	t.Setenv(typeScriptSDKDirEnvVar, sdkDir)
 
 	preparedData, preparedManifest, err := PrepareSourceManifest(manifestPath)
 	if err != nil {
@@ -540,7 +574,11 @@ func TestPrepareSourceManifest_MergesGeneratedTypeScriptManifestMetadata(t *test
 func TestValidateSourceProviderRelease_TypeScript(t *testing.T) {
 	root := t.TempDir()
 	mustWriteTypeScriptProviderPackage(t, root, typeScriptTestPluginTarget)
-	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH)
+	expectedCWD := localTypeScriptSDKPath()
+	if expectedCWD == "" {
+		expectedCWD = root
+	}
+	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH, expectedCWD)
 	t.Setenv(typeScriptBunEnvVar, bunPath)
 
 	if err := ValidateSourceProviderRelease(root, runtime.GOOS, runtime.GOARCH); err != nil {
@@ -575,7 +613,11 @@ func TestValidateSourceComponentRelease_TypeScript(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
 			mustWriteTypeScriptComponentPackage(t, root, tt.kind, tt.target)
-			bunPath := writeFakeTypeScriptBun(t, root, "ts-release", tt.target, runtime.GOOS, runtime.GOARCH)
+			expectedCWD := localTypeScriptSDKPath()
+			if expectedCWD == "" {
+				expectedCWD = root
+			}
+			bunPath := writeFakeTypeScriptBun(t, root, "ts-release", tt.target, runtime.GOOS, runtime.GOARCH, expectedCWD)
 			t.Setenv(typeScriptBunEnvVar, bunPath)
 
 			if err := ValidateSourceComponentRelease(root, tt.kind, runtime.GOOS, runtime.GOARCH); err != nil {
@@ -588,8 +630,10 @@ func TestValidateSourceComponentRelease_TypeScript(t *testing.T) {
 func TestBuildSourceProviderReleaseBinary_TypeScript(t *testing.T) {
 	root := t.TempDir()
 	mustWriteTypeScriptProviderPackage(t, root, typeScriptTestPluginTarget)
-	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH)
+	sdkDir := writeFakeTypeScriptSDKDir(t, t.TempDir())
+	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH, sdkDir)
 	t.Setenv(typeScriptBunEnvVar, bunPath)
+	t.Setenv(typeScriptSDKDirEnvVar, sdkDir)
 
 	outputPath := filepath.Join(t.TempDir(), "gestalt-plugin-ts-release")
 	libc, err := BuildSourceProviderReleaseBinary(root, outputPath, "ts-release", runtime.GOOS, runtime.GOARCH)
@@ -611,6 +655,23 @@ func TestBuildSourceProviderReleaseBinary_TypeScript(t *testing.T) {
 	}
 	if libc != wantLibC {
 		t.Fatalf("libc = %q, want %q", libc, wantLibC)
+	}
+}
+
+func TestBuildSourceProviderReleaseBinary_TypeScriptInstallsLocalSDKDeps(t *testing.T) {
+	root := t.TempDir()
+	mustWriteTypeScriptProviderPackage(t, root, typeScriptTestPluginTarget)
+	sdkDir := writeFakeTypeScriptSDKDir(t, t.TempDir())
+	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH, sdkDir)
+	t.Setenv(typeScriptBunEnvVar, bunPath)
+	t.Setenv(typeScriptSDKDirEnvVar, sdkDir)
+
+	outputPath := filepath.Join(t.TempDir(), "gestalt-plugin-ts-release")
+	if _, err := BuildSourceProviderReleaseBinary(root, outputPath, "ts-release", runtime.GOOS, runtime.GOARCH); err != nil {
+		t.Fatalf("BuildSourceProviderReleaseBinary: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sdkDir, "node_modules", ".installed")); err != nil {
+		t.Fatalf("expected bun install marker in fake SDK node_modules: %v", err)
 	}
 }
 
@@ -646,8 +707,10 @@ func TestBuildSourceComponentReleaseBinary_TypeScript(t *testing.T) {
 			root := t.TempDir()
 			mustWriteTypeScriptComponentPackage(t, root, tt.kind, tt.target)
 			mustWriteTypeScriptSourceComponentManifest(t, root, tt.pluginName, tt.kind)
-			bunPath := writeFakeTypeScriptBun(t, root, tt.pluginName, tt.target, runtime.GOOS, runtime.GOARCH)
+			sdkDir := writeFakeTypeScriptSDKDir(t, t.TempDir())
+			bunPath := writeFakeTypeScriptBun(t, root, tt.pluginName, tt.target, runtime.GOOS, runtime.GOARCH, sdkDir)
 			t.Setenv(typeScriptBunEnvVar, bunPath)
+			t.Setenv(typeScriptSDKDirEnvVar, sdkDir)
 
 			outputPath := filepath.Join(t.TempDir(), "gestalt-plugin-"+tt.pluginName)
 			libc, err := BuildSourceComponentReleaseBinary(root, outputPath, tt.kind, runtime.GOOS, runtime.GOARCH)
@@ -785,17 +848,32 @@ func mustWriteTypeScriptSourceComponentManifest(t *testing.T, root, pluginName, 
 	return path
 }
 
-func writeFakeTypeScriptBun(t *testing.T, root, pluginName, expectedTarget, expectedGOOS, expectedGOARCH string) string {
+func writeFakeTypeScriptBun(t *testing.T, root, pluginName, expectedTarget, expectedGOOS, expectedGOARCH, expectedCWD string) string {
 	t.Helper()
 
-	sdkPath := fakebun.LocalTypeScriptSDKPath()
+	sdkPath := ""
+	if expectedCWD != "" {
+		if _, err := os.Stat(filepath.Join(expectedCWD, "package.json")); err == nil {
+			sdkPath = expectedCWD
+		}
+	}
+	if sdkPath == "" {
+		sdkPath = strings.TrimSpace(os.Getenv(typeScriptSDKDirEnvVar))
+	}
+	if sdkPath == "" {
+		sdkPath = fakebun.LocalTypeScriptSDKPath()
+	}
 	if sdkPath == "" {
 		t.Fatal("local TypeScript SDK not found")
 	}
 
 	return fakebun.NewExecutable(t, fakebun.Config{
+		Install: &fakebun.InstallConfig{
+			ExpectedCwd:           sdkPath,
+			RequireFrozenLockfile: true,
+		},
 		Runtime: &fakebun.RuntimeConfig{
-			ExpectedCwd:    root,
+			ExpectedCwd:    expectedCWD,
 			ExpectedEntry:  filepath.Join(sdkPath, "src", "runtime.ts"),
 			ExpectedRoot:   root,
 			ExpectedTarget: expectedTarget,
@@ -828,7 +906,7 @@ http:
 `,
 		},
 		Build: &fakebun.BuildConfig{
-			ExpectedCwd:        root,
+			ExpectedCwd:        expectedCWD,
 			ExpectedEntry:      filepath.Join(sdkPath, "src", "build.ts"),
 			ExpectedSourceDir:  root,
 			ExpectedTarget:     expectedTarget,
@@ -840,4 +918,18 @@ http:
 			BinaryContent: "#!/bin/sh\n# fake ts release binary\nexit 0\n",
 		},
 	})
+}
+
+func writeFakeTypeScriptSDKDir(t *testing.T, root string) string {
+	t.Helper()
+
+	mustWriteFile(t, filepath.Join(root, "package.json"), []byte(`{
+  "name": "@valon-technologies/gestalt",
+  "version": "0.0.1-alpha.test"
+}
+`), 0o644)
+	mustWriteFile(t, filepath.Join(root, "bun.lock"), []byte("{}\n"), 0o644)
+	mustWriteFile(t, filepath.Join(root, "src", "runtime.ts"), []byte("export {};\n"), 0o644)
+	mustWriteFile(t, filepath.Join(root, "src", "build.ts"), []byte("export {};\n"), 0o644)
+	return root
 }

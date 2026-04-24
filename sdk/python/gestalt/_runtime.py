@@ -9,6 +9,7 @@ import pathlib
 import signal
 import sys
 import traceback
+import urllib.parse as _urlparse
 from concurrent import futures
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -180,15 +181,18 @@ def serve(
     runtime_kind: ProviderKind | str | None = None,
 ) -> None:
     _ensure_grpc_runtime()
-    socket_path = _socket_path_from_env()
-    _remove_stale_socket(socket_path)
+    scheme, address = _provider_socket_target_from_env()
+    bind_target = address
+    if scheme == "unix":
+        _remove_stale_socket(pathlib.Path(address))
+        bind_target = f"unix:{address}"
 
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=GRPC_SERVER_MAX_WORKERS)
     )
     servable = _servable_target(target, runtime_kind=runtime_kind)
     _register_services(server=server, servable=servable)
-    server.add_insecure_port(f"unix:{socket_path}")
+    server.add_insecure_port(bind_target)
     close_provider = _close_once_callable(servable)
     server.start()
     _register_shutdown_handlers(server, close_provider)
@@ -309,11 +313,37 @@ def _module_target(
     return None
 
 
-def _socket_path_from_env() -> pathlib.Path:
-    socket_path = os.environ.get(ENV_PROVIDER_SOCKET)
-    if not socket_path:
+def _provider_socket_target_from_env() -> tuple[str, str]:
+    raw_target = os.environ.get(ENV_PROVIDER_SOCKET)
+    if not raw_target:
         raise RuntimeError(f"{ENV_PROVIDER_SOCKET} is required")
-    return pathlib.Path(socket_path)
+    return _parse_provider_socket_target(raw_target)
+
+
+def _parse_provider_socket_target(raw: str) -> tuple[str, str]:
+    target = raw.strip()
+    if not target:
+        raise RuntimeError("provider socket target is required")
+    if target.startswith("tcp://"):
+        address = target.removeprefix("tcp://").strip()
+        if not address:
+            raise RuntimeError(
+                f"provider tcp target {raw!r} is missing host:port"
+            )
+        return "tcp", address
+    if target.startswith("unix://"):
+        address = target.removeprefix("unix://").strip()
+        if not address:
+            raise RuntimeError(
+                f"provider unix target {raw!r} is missing a socket path"
+            )
+        return "unix", address
+    if "://" in target:
+        parsed = _urlparse.urlparse(target)
+        raise RuntimeError(
+            f"unsupported provider socket target scheme {parsed.scheme!r}"
+        )
+    return "unix", target
 
 
 def _remove_stale_socket(socket_path: pathlib.Path) -> None:

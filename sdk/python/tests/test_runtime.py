@@ -2,14 +2,17 @@ import datetime as dt
 import importlib
 import json
 import pathlib
+import socket
 import sys
 import tempfile
+import threading
 import unittest
 from typing import Any, cast
 from unittest import mock
 
 import grpc
 from google.protobuf import duration_pb2 as _duration_pb2
+from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import json_format
 from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
@@ -39,6 +42,7 @@ from gestalt import (
 from gestalt.gen.v1 import authentication_pb2 as _authentication_pb2
 from gestalt.gen.v1 import cache_pb2 as _cache_pb2
 from gestalt.gen.v1 import plugin_pb2 as _plugin_pb2
+from gestalt.gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
 from gestalt.gen.v1 import runtime_pb2 as _runtime_pb2
 from gestalt.gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 from gestalt.gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
@@ -46,7 +50,9 @@ from gestalt.gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 authentication_pb2: Any = _authentication_pb2
 cache_pb2: Any = _cache_pb2
 duration_pb2: Any = _duration_pb2
+empty_pb2: Any = _empty_pb2
 plugin_pb2: Any = _plugin_pb2
+plugin_pb2_grpc: Any = _plugin_pb2_grpc
 runtime_pb2: Any = _runtime_pb2
 s3_pb2_grpc: Any = _s3_pb2_grpc
 struct_pb2: Any = _struct_pb2
@@ -168,6 +174,112 @@ class DurationConversionTests(unittest.TestCase):
             _runtime._duration_to_timedelta(duration_pb2.Duration(nanos=5_999)),
             dt.timedelta(microseconds=5),
         )
+
+
+class ProviderSocketTargetTests(unittest.TestCase):
+    def test_parse_provider_socket_target_defaults_plain_paths_to_unix(self) -> None:
+        self.assertEqual(
+            _runtime._parse_provider_socket_target("/tmp/provider.sock"),
+            ("unix", "/tmp/provider.sock"),
+        )
+
+    def test_parse_provider_socket_target_accepts_unix_and_tcp_targets(self) -> None:
+        self.assertEqual(
+            _runtime._parse_provider_socket_target("unix:///tmp/provider.sock"),
+            ("unix", "/tmp/provider.sock"),
+        )
+        self.assertEqual(
+            _runtime._parse_provider_socket_target("tcp://127.0.0.1:50051"),
+            ("tcp", "127.0.0.1:50051"),
+        )
+
+    def test_parse_provider_socket_target_rejects_unsupported_schemes(self) -> None:
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "unsupported provider socket target scheme 'tls'",
+        ):
+            _runtime._parse_provider_socket_target("tls://127.0.0.1:50051")
+
+
+class RuntimeServeTransportTests(unittest.TestCase):
+    def test_runtime_serve_supports_tcp_provider_sockets(self) -> None:
+        plugin = Plugin("tcp-runtime")
+
+        @plugin.operation
+        def ping() -> str:
+            return "pong"
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            host, port = sock.getsockname()
+        address = f"{host}:{port}"
+        server_holder: dict[str, grpc.Server] = {}
+        ready = threading.Event()
+        failures: list[BaseException] = []
+
+        def capture_shutdown(server: grpc.Server, _close_provider: Any) -> None:
+            server_holder["server"] = server
+            ready.set()
+
+        def run_server() -> None:
+            try:
+                with mock.patch.object(
+                    _runtime,
+                    "_register_shutdown_handlers",
+                    side_effect=capture_shutdown,
+                ):
+                    _runtime.serve(plugin)
+            except BaseException as exc:  # pragma: no cover - surfaced via assertions
+                failures.append(exc)
+                ready.set()
+
+        with mock.patch.dict(
+            _runtime.os.environ,
+            {_runtime.ENV_PROVIDER_SOCKET: f"tcp://{address}"},
+            clear=False,
+        ):
+            thread = threading.Thread(target=run_server, daemon=True)
+            thread.start()
+            self.assertTrue(ready.wait(timeout=5))
+            self.assertEqual(failures, [])
+            self.assertIn("server", server_holder)
+
+            channel = grpc.insecure_channel(address)
+            self.addCleanup(channel.close)
+            grpc.channel_ready_future(channel).result(timeout=5)
+            stub = plugin_pb2_grpc.IntegrationProviderStub(channel)
+
+            metadata = stub.GetMetadata(empty_pb2.Empty(), timeout=5)
+            started = stub.StartProvider(
+                plugin_pb2.StartProviderRequest(
+                    name="tcp-runtime",
+                    protocol_version=_runtime.CURRENT_PROTOCOL_VERSION,
+                ),
+                timeout=5,
+            )
+            result = stub.Execute(
+                plugin_pb2.ExecuteRequest(operation="ping"),
+                timeout=5,
+            )
+
+            self.assertEqual(
+                metadata.min_protocol_version,
+                _runtime.CURRENT_PROTOCOL_VERSION,
+            )
+            self.assertEqual(
+                metadata.max_protocol_version,
+                _runtime.CURRENT_PROTOCOL_VERSION,
+            )
+            self.assertEqual(
+                started.protocol_version,
+                _runtime.CURRENT_PROTOCOL_VERSION,
+            )
+            self.assertEqual(json.loads(result.body), "pong")
+
+            server_holder["server"].stop(grace=0).wait()
+            thread.join(timeout=5)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(failures, [])
 
 
 class PublicImportTests(unittest.TestCase):
