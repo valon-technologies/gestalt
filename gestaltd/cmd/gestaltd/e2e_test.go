@@ -231,6 +231,150 @@ func TestE2EValidateRejectsInvalidConfigInput(t *testing.T) {
 	}
 }
 
+func TestE2EProviderValidateIsolatedSourcePlugin(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	providersDir := setupDefaultLocalProvidersDir(t, dir)
+	pluginDir := setupPluginDir(t, dir)
+
+	cmd := exec.Command(gestaltdBin, "provider", "validate", "--path", pluginDir)
+	cmd.Env = append(os.Environ(),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
+		"GOTELEMETRY=off",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd provider validate failed: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(string(out), "config ok") {
+		t.Fatalf("expected validate success, got: %s", out)
+	}
+	if !strings.Contains(string(out), "provider validated") {
+		t.Fatalf("expected provider validation summary, got: %s", out)
+	}
+}
+
+func TestE2EProviderValidateReusesConfiguredPluginKey(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	providersDir := setupDefaultLocalProvidersDir(t, dir)
+	pluginDir := setupPluginDir(t, dir)
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := `plugins:
+  provider_go:
+    source: https://example.test/provider-release.yaml
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cmd := exec.Command(gestaltdBin, "provider", "validate", "--path", pluginDir, "--config", cfgPath, "--name", "provider_go")
+	cmd.Env = append(os.Environ(),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
+		"GOTELEMETRY=off",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd provider validate failed: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(string(out), "plugin=provider_go") {
+		t.Fatalf("expected configured plugin key in output, got: %s", out)
+	}
+}
+
+func TestE2EProviderValidateRejectsNonPluginManifest(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+
+	out, err := exec.Command(gestaltdBin, "provider", "validate", "--path", manifestPath).CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected gestaltd provider validate to fail for non-plugin manifest\n%s", out)
+	}
+	if !strings.Contains(string(out), "only support kind: plugin in v1") {
+		t.Fatalf("expected plugin-only error, got: %s", out)
+	}
+}
+
+func TestE2EProviderValidateLayeredConfigSupportsNullDeletion(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	providersDir := setupDefaultLocalProvidersDir(t, dir)
+	targetDir := setupPluginDir(t, filepath.Join(dir, "target"))
+	supportDir := setupPrebuiltPluginDir(t, filepath.Join(dir, "support"))
+	mountedUI := setupMountedUIDir(t, dir)
+	attachOwnedUIToPluginSource(t, targetDir, mountedUI.ManifestPath)
+
+	supportManifest := componentProviderManifestPath(t, supportDir)
+	supportRel, err := filepath.Rel(dir, supportManifest)
+	if err != nil {
+		t.Fatalf("filepath.Rel(support): %v", err)
+	}
+	uiRel, err := filepath.Rel(dir, mountedUI.ManifestPath)
+	if err != nil {
+		t.Fatalf("filepath.Rel(ui): %v", err)
+	}
+
+	baseCfgPath := filepath.Join(dir, "support.yaml")
+	baseCfg := fmt.Sprintf(`providers:
+  ui:
+    roadmap:
+      source:
+        path: %s
+      path: /provider
+plugins:
+  support:
+    source:
+      path: %s
+    ui: roadmap
+    mountPath: /provider
+`, filepath.ToSlash(uiRel), filepath.ToSlash(supportRel))
+	if err := os.WriteFile(baseCfgPath, []byte(baseCfg), 0o644); err != nil {
+		t.Fatalf("write support config: %v", err)
+	}
+
+	overrideCfgPath := filepath.Join(dir, "support-override.yaml")
+	overrideCfg := `providers:
+  ui:
+    roadmap: null
+plugins:
+  support: null
+`
+	if err := os.WriteFile(overrideCfgPath, []byte(overrideCfg), 0o644); err != nil {
+		t.Fatalf("write support override: %v", err)
+	}
+
+	failingCmd := exec.Command(gestaltdBin, "provider", "validate", "--path", targetDir, "--config", baseCfgPath)
+	failingCmd.Env = append(os.Environ(),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
+		"GOTELEMETRY=off",
+	)
+	failingOut, err := failingCmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected provider validate without null deletion to fail\n%s", failingOut)
+	}
+	if !strings.Contains(string(failingOut), `collides with providers.ui.roadmap`) {
+		t.Fatalf("expected mount collision error, got: %s", failingOut)
+	}
+
+	successCmd := exec.Command(gestaltdBin, "provider", "validate", "--path", targetDir, "--config", baseCfgPath, "--config", overrideCfgPath)
+	successCmd.Env = append(os.Environ(),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
+		"GOTELEMETRY=off",
+	)
+	successOut, err := successCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd provider validate with null deletion failed: %v\noutput: %s", err, successOut)
+	}
+	if !strings.Contains(string(successOut), "config ok") {
+		t.Fatalf("expected validate success with null deletion, got: %s", successOut)
+	}
+}
+
 func TestE2EValidateConfigPathPrecedence(t *testing.T) {
 	t.Parallel()
 
@@ -1074,6 +1218,25 @@ func setupMountedUIDir(t *testing.T, baseDir string) *mountedUITestConfig {
 	return setupMountedUIDirWithRoutes(t, baseDir, nil)
 }
 
+func attachOwnedUIToPluginSource(t *testing.T, pluginDir, uiManifestPath string) {
+	t.Helper()
+
+	manifestPath := componentProviderManifestPath(t, pluginDir)
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile(%s): %v", manifestPath, err)
+	}
+	if manifest.Spec == nil {
+		manifest.Spec = &providermanifestv1.Spec{}
+	}
+	relativeUIPath, err := filepath.Rel(pluginDir, uiManifestPath)
+	if err != nil {
+		t.Fatalf("filepath.Rel(%s, %s): %v", pluginDir, uiManifestPath, err)
+	}
+	manifest.Spec.UI = &providermanifestv1.OwnedUI{Path: filepath.ToSlash(relativeUIPath)}
+	writeManifestFile(t, pluginDir, manifest)
+}
+
 func setupMountedUIDirWithRoutes(t *testing.T, baseDir string, routes []providermanifestv1.UIRoute) *mountedUITestConfig {
 	t.Helper()
 
@@ -1443,6 +1606,110 @@ func TestE2EServeAndHealthCheck(t *testing.T) {
 	if len(integrations) == 0 {
 		t.Fatal("expected at least one integration from the example plugin")
 	}
+}
+
+func TestE2EProviderDevServesAdminWithoutInjectingRootUI(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping provider dev serve test in short mode")
+	}
+
+	dir := t.TempDir()
+	providersDir := setupDefaultLocalProvidersDir(t, dir)
+	pluginDir := setupPluginDir(t, dir)
+	port, holder := reservePort(t)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	_ = holder.Close()
+
+	cmd := exec.Command(gestaltdBin, "provider", "dev", "--path", pluginDir, "--port", fmt.Sprintf("%d", port))
+	cmd.Env = append(os.Environ(),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
+		"GOTELEMETRY=off",
+	)
+	startCommandAndWaitReady(t, cmd, baseURL)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	adminResp, err := client.Get(baseURL + "/admin/")
+	if err != nil {
+		t.Fatalf("GET /admin/: %v", err)
+	}
+	defer func() { _ = adminResp.Body.Close() }()
+	adminBody, _ := io.ReadAll(adminResp.Body)
+	if adminResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /admin/ 200, got %d: %s", adminResp.StatusCode, adminBody)
+	}
+
+	rootResp, err := client.Get(baseURL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer func() { _ = rootResp.Body.Close() }()
+	if rootResp.StatusCode == http.StatusOK {
+		body, _ := io.ReadAll(rootResp.Body)
+		t.Fatalf("expected root path to stay unmounted without a public UI, got 200: %s", body)
+	}
+}
+
+func TestE2EProviderDevAutoMountsOwnedUI(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping provider dev owned-ui test in short mode")
+	}
+
+	dir := t.TempDir()
+	providersDir := setupDefaultLocalProvidersDir(t, dir)
+	pluginDir := setupPluginDir(t, dir)
+	mountedUI := setupMountedUIDir(t, dir)
+	attachOwnedUIToPluginSource(t, pluginDir, mountedUI.ManifestPath)
+	port, holder := reservePort(t)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	_ = holder.Close()
+
+	cmd := exec.Command(gestaltdBin, "provider", "dev", "--path", componentProviderManifestPath(t, pluginDir), "--port", fmt.Sprintf("%d", port))
+	cmd.Env = append(os.Environ(),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
+		"GOTELEMETRY=off",
+	)
+	startCommandAndWaitReady(t, cmd, baseURL)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	uiResp, err := client.Get(baseURL + "/provider/sync")
+	if err != nil {
+		t.Fatalf("GET /provider/sync: %v", err)
+	}
+	defer func() { _ = uiResp.Body.Close() }()
+	uiBody, _ := io.ReadAll(uiResp.Body)
+	if uiResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /provider/sync 200, got %d: %s", uiResp.StatusCode, uiBody)
+	}
+	if !strings.Contains(string(uiBody), "Roadmap Review UI") {
+		t.Fatalf("expected owned ui body marker, got: %s", uiBody)
+	}
+
+	integrationsResp, err := client.Get(baseURL + "/api/v1/integrations")
+	if err != nil {
+		t.Fatalf("GET /api/v1/integrations: %v", err)
+	}
+	defer func() { _ = integrationsResp.Body.Close() }()
+	integrationsBody, _ := io.ReadAll(integrationsResp.Body)
+	if integrationsResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", integrationsResp.StatusCode, integrationsBody)
+	}
+	var integrations []struct {
+		Name        string `json:"name"`
+		MountedPath string `json:"mountedPath"`
+	}
+	if err := json.Unmarshal(integrationsBody, &integrations); err != nil {
+		t.Fatalf("json.Unmarshal integrations: %v (body: %s)", err, integrationsBody)
+	}
+	for _, integration := range integrations {
+		if integration.Name == "provider" && integration.MountedPath == "/provider" {
+			return
+		}
+	}
+	t.Fatalf(`integration "provider" mountedPath missing from response: %s`, integrationsBody)
 }
 
 //nolint:paralleltest // Uses the default 8080 startup path intentionally.

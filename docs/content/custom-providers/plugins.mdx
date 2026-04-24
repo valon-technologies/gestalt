@@ -639,15 +639,34 @@ A Slack plugin could use this to check which Slack workspace the caller is conne
 
 ## Testing locally
 
-Point a local config at the source plugin. Gestalt synthesizes the executable wrapper, materializes the catalog, and merges any code-defined hosted HTTP metadata (`securitySchemes` / `http`) automatically:
+Use the provider-local commands when you are iterating on a source plugin.
+`gestaltd provider dev` and `gestaltd provider validate` synthesize a local
+Gestalt config around the target plugin instead of requiring a hand-written
+temp config.
 
-```yaml
-plugins:
-  slack:
-    source: ./slack/manifest.yaml
-    allowedHosts:
-      - slack.com
+Validate the plugin in isolation:
+
+```sh
+gestaltd provider validate --path ./slack
 ```
+
+Run the plugin locally with browser-facing UI available:
+
+```sh
+gestaltd provider dev --path ./slack
+```
+
+When the plugin needs supporting providers, extra plugins, or explicit mounted
+UIs, layer real config overlays on top of the synthesized baseline:
+
+```sh
+gestaltd provider validate --path ./slack --config ./dev/support.yaml
+gestaltd provider dev --path ./slack --config ./dev/support.yaml
+```
+
+Repeated `--config` flags merge left-to-right, and `null` deletes inherited
+entries. That makes it possible to boot some supporting providers while
+suppressing others for a local session.
 
 Hosted HTTP bindings stay layered on top of operations. A plugin can define an
 operation like `handle_command` in code, then attach `/command` with generated
@@ -657,11 +676,7 @@ Hand-authored manifest `spec.securitySchemes` / `spec.http` entries are still
 valid, but source-generated metadata is merged first and manifest values then
 override populated fields rather than replacing the generated binding wholesale.
 
-Start the server and invoke an operation:
-
-```sh
-gestaltd serve --config ./config.yaml
-```
+Once the local server is running, invoke an operation:
 
 ```sh
 gestalt plugin invoke slack conversations.getMessage -p channel=C01ABC23DEF -p ts=1712161829.000300

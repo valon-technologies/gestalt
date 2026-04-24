@@ -34,7 +34,17 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "provider",
 			args:      []string{"provider", "--help"},
-			wantParts: []string{"gestaltd provider <command> [flags]"},
+			wantParts: []string{"gestaltd provider <command> [flags]", "dev", "validate", "release"},
+		},
+		{
+			name:      "provider validate",
+			args:      []string{"provider", "validate", "--help"},
+			wantParts: []string{"gestaltd provider validate", "v1 supports kind: plugin manifests only", "--config PATH"},
+		},
+		{
+			name:      "provider dev",
+			args:      []string{"provider", "dev", "--help"},
+			wantParts: []string{"gestaltd provider dev", "The built-in admin UI remains available at /admin", "--port PORT"},
 		},
 	}
 
@@ -93,6 +103,16 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 			name:     "missing validate config",
 			args:     []string{"validate", "--config", "nonexistent.yaml"},
 			wantPart: "nonexistent.yaml",
+		},
+		{
+			name:     "provider validate trailing args",
+			args:     []string{"provider", "validate", "--path", ".", "extra"},
+			wantPart: "unexpected arguments: extra",
+		},
+		{
+			name:     "provider dev trailing args",
+			args:     []string{"provider", "dev", "--path", ".", "extra"},
+			wantPart: "unexpected arguments: extra",
 		},
 	}
 
