@@ -11,6 +11,7 @@ import (
 
 type Services struct {
 	Users                    *UserService
+	LocalExternalCredentials core.ExternalCredentialProvider
 	ExternalCredentials      core.ExternalCredentialProvider
 	Tokens                   *TokenService
 	APITokens                *APITokenService
@@ -30,9 +31,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	ctx := context.Background()
 	if err := ds.CreateObjectStore(ctx, StoreUsers, UsersSchema); err != nil {
 		return nil, fmt.Errorf("create users store: %w", err)
-	}
-	if err := ds.CreateObjectStore(ctx, StoreIntegrationTokens, IntegrationTokensSchema); err != nil {
-		return nil, fmt.Errorf("create integration_tokens store: %w", err)
 	}
 	if err := ds.CreateObjectStore(ctx, StoreAPITokens, APITokensSchema); err != nil {
 		return nil, fmt.Errorf("create api_tokens store: %w", err)
@@ -83,7 +81,11 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 		return nil, fmt.Errorf("backfill users store: %w", err)
 	}
 	apiTokens := NewAPITokenService(ds, apiTokenAccess, users)
-	tokens := NewTokenService(ds, enc)
+	localExternalCredentials, err := NewLocalExternalCredentialProvider(ds, enc)
+	if err != nil {
+		return nil, fmt.Errorf("create local external credentials provider: %w", err)
+	}
+	tokens := NewTokenService(localExternalCredentials)
 
 	if err := rebuildCanonicalIdentityGraph(ctx, identities, authBindings, identityManagementGrants, workspaceRoles, identityPluginAccess, apiTokenAccess); err != nil {
 		return nil, err
@@ -95,7 +97,8 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 		return nil, fmt.Errorf("backfill canonical api token access: %w", err)
 	}
 	return &Services{
-		ExternalCredentials:      tokens,
+		LocalExternalCredentials: localExternalCredentials,
+		ExternalCredentials:      localExternalCredentials,
 		Users:                    users,
 		Tokens:                   tokens,
 		APITokens:                apiTokens,

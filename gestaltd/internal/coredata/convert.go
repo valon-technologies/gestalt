@@ -21,23 +21,6 @@ func recString(rec indexeddb.Record, key string) string {
 	}
 }
 
-func recInt(rec indexeddb.Record, key string) int {
-	v, ok := rec[key]
-	if !ok || v == nil {
-		return 0
-	}
-	switch n := v.(type) {
-	case int:
-		return n
-	case int64:
-		return int(n)
-	case float64:
-		return int(n)
-	default:
-		return 0
-	}
-}
-
 func recInt64(rec indexeddb.Record, key string) int64 {
 	v, ok := rec[key]
 	if !ok || v == nil {

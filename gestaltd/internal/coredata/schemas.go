@@ -1,10 +1,16 @@
 package coredata
 
-import "github.com/valon-technologies/gestalt/server/core/indexeddb"
+import (
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	"github.com/valon-technologies/gestalt/server/internal/externalcredentials"
+)
 
 const (
-	StoreUsers                    = "users"
+	StoreUsers = "users"
+	// StoreIntegrationTokens is kept only as a legacy table name for
+	// deployment-managed migrations. New runtime writes use StoreExternalCredentials.
 	StoreIntegrationTokens        = "integration_tokens"
+	StoreExternalCredentials      = externalcredentials.StoreName
 	StoreAPITokens                = "api_tokens"
 	StoreIdentities               = "identities"
 	StoreIdentityAuthBindings     = "identity_auth_bindings"
@@ -33,30 +39,11 @@ var UsersSchema = indexeddb.ObjectStoreSchema{
 	},
 }
 
-var IntegrationTokensSchema = indexeddb.ObjectStoreSchema{
-	Indexes: []indexeddb.IndexSchema{
-		{Name: "by_subject", KeyPath: []string{"subject_id"}},
-		{Name: "by_subject_integration", KeyPath: []string{"subject_id", "integration"}},
-		{Name: "by_subject_connection", KeyPath: []string{"subject_id", "integration", "connection"}},
-		{Name: "by_lookup", KeyPath: []string{"subject_id", "integration", "connection", "instance"}, Unique: true},
-	},
-	Columns: []indexeddb.ColumnDef{
-		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-		{Name: "subject_id", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "integration", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "connection", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "instance", Type: indexeddb.TypeString},
-		{Name: "access_token_encrypted", Type: indexeddb.TypeString},
-		{Name: "refresh_token_encrypted", Type: indexeddb.TypeString},
-		{Name: "scopes", Type: indexeddb.TypeString},
-		{Name: "expires_at", Type: indexeddb.TypeTime},
-		{Name: "last_refreshed_at", Type: indexeddb.TypeTime},
-		{Name: "refresh_error_count", Type: indexeddb.TypeInt},
-		{Name: "metadata_json", Type: indexeddb.TypeString},
-		{Name: "created_at", Type: indexeddb.TypeTime},
-		{Name: "updated_at", Type: indexeddb.TypeTime},
-	},
-}
+var ExternalCredentialsSchema = externalcredentials.Schema
+
+// IntegrationTokensSchema is kept only as a legacy schema alias for
+// deployment-managed migrations. New runtime writes use ExternalCredentialsSchema.
+var IntegrationTokensSchema = externalcredentials.Schema
 
 var APITokensSchema = indexeddb.ObjectStoreSchema{
 	Indexes: []indexeddb.IndexSchema{

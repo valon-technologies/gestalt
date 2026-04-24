@@ -1240,14 +1240,15 @@ func buildNamedExternalCredentialsProvider(ctx context.Context, name string, ent
 }
 
 func buildExternalCredentialsHostServices(name string, deps Deps) ([]providerhost.HostService, error) {
-	if deps.Services == nil || deps.Services.Tokens == nil {
+	provider := coredata.LocalExternalCredentialProvider(deps.Services)
+	if coredata.ExternalCredentialProviderMissing(provider) {
 		return nil, fmt.Errorf("local external credentials provider is not available")
 	}
 	return []providerhost.HostService{{
 		Name:   "external-credentials",
 		EnvVar: providerhost.DefaultExternalCredentialSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterExternalCredentialProviderServer(srv, providerhost.NewExternalCredentialProviderServer(deps.Services.Tokens))
+			proto.RegisterExternalCredentialProviderServer(srv, providerhost.NewExternalCredentialProviderServer(provider))
 		},
 	}}, nil
 }
@@ -1293,7 +1294,7 @@ func closeExternalCredentialProviderCandidate(services *coredata.Services) error
 	if services == nil || coredata.ExternalCredentialProviderMissing(services.ExternalCredentials) {
 		return nil
 	}
-	if services.Tokens != nil && services.ExternalCredentials == services.Tokens {
+	if coredata.SameExternalCredentialProvider(services.ExternalCredentials, coredata.LocalExternalCredentialProvider(services)) {
 		return nil
 	}
 	return closeExternalCredentialProvider(services.ExternalCredentials)
