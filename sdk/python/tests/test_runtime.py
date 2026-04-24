@@ -723,6 +723,21 @@ class MainEntrypointTests(unittest.TestCase):
             "provider does not support post connect",
         )
 
+    def test_provider_servicer_labels_metadata_failures(self) -> None:
+        class BrokenMetadataPlugin(Plugin):
+            def supports_post_connect(self) -> bool:
+                raise RuntimeError("metadata exploded")
+
+        plugin = BrokenMetadataPlugin("source-name")
+        servicer = _runtime._provider_servicer(plugin=plugin)
+        context = AbortContext()
+
+        with self.assertRaisesRegex(AbortCalled, "provider metadata: metadata exploded"):
+            servicer.GetMetadata(mock.Mock(), context)
+
+        self.assertEqual(context.code(), grpc.StatusCode.UNKNOWN)
+        self.assertEqual(context.details, "provider metadata: metadata exploded")
+
 
 class AuthenticationRuntimeTests(unittest.TestCase):
     class StubAuthenticationProvider(
@@ -1094,6 +1109,40 @@ class CacheRuntimeTests(unittest.TestCase):
                 "b": b"two",
             },
         )
+
+    def test_runtime_servicer_labels_provider_identity_failures(self) -> None:
+        class BrokenWarningsProvider(CacheProvider, WarningsProvider):
+            def warnings(self) -> list[str]:
+                raise RuntimeError("identity exploded")
+
+            def get(self, key: str) -> bytes | None:
+                return None
+
+            def set(
+                self,
+                key: str,
+                value: bytes,
+                ttl: dt.timedelta | None = None,
+            ) -> None:
+                return None
+
+            def delete(self, key: str) -> bool:
+                return False
+
+            def touch(self, key: str, ttl: dt.timedelta) -> bool:
+                return False
+
+        runtime_servicer = _runtime._runtime_servicer(
+            provider=BrokenWarningsProvider(),
+            kind=ProviderKind.CACHE,
+        )
+        context = AbortContext()
+
+        with self.assertRaisesRegex(AbortCalled, "provider identity: identity exploded"):
+            runtime_servicer.GetProviderIdentity(mock.Mock(), context)
+
+        self.assertEqual(context.code(), grpc.StatusCode.UNKNOWN)
+        self.assertEqual(context.details, "provider identity: identity exploded")
 
 
 class S3RuntimeTests(unittest.TestCase):

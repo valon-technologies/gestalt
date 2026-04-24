@@ -624,6 +624,7 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
     _ensure_grpc_runtime()
 
     class ProviderServicer(plugin_pb2_grpc.IntegrationProviderServicer):
+        @_grpc_handler("provider metadata")
         def GetMetadata(self, _request: Any, _context: Any) -> Any:
             return plugin_pb2.ProviderMetadata(
                 supports_session_catalog=plugin.supports_session_catalog(),
@@ -747,6 +748,7 @@ def _runtime_servicer(*, provider: PluginProvider, kind: ProviderKind) -> Any:
     _ensure_grpc_runtime()
 
     class RuntimeServicer(runtime_pb2_grpc.ProviderLifecycleServicer):
+        @_grpc_handler("provider identity")
         def GetProviderIdentity(self, _request: Any, _context: Any) -> Any:
             metadata = _provider_metadata(provider=provider, kind=kind)
             return runtime_pb2.ProviderIdentity(
