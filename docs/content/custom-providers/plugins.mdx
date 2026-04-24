@@ -642,7 +642,10 @@ A Slack plugin could use this to check which Slack workspace the caller is conne
 Use the provider-local commands when you are iterating on a source plugin.
 `gestaltd provider dev` and `gestaltd provider validate` synthesize a local
 Gestalt config around the target plugin instead of requiring a hand-written
-temp config.
+temp config. If the plugin manifest declares `spec.ui.path`, Gestalt mounts
+that owned UI automatically. For the common `plugin/` + sibling `ui/` layout,
+the local commands also detect `../ui/manifest.yaml` and wire it in
+automatically during local development.
 
 Validate the plugin in isolation:
 
@@ -654,6 +657,14 @@ Run the plugin locally with browser-facing UI available:
 
 ```sh
 gestaltd provider dev --path ./slack
+```
+
+Validate or serve the UI bundle directly when you are working on the frontend
+itself:
+
+```sh
+gestaltd provider validate --path ./ui
+gestaltd provider dev --path ./ui
 ```
 
 When the plugin needs supporting providers, extra plugins, or explicit mounted

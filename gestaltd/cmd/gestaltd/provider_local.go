@@ -28,6 +28,8 @@ import (
 const (
 	providerDevHost          = "127.0.0.1"
 	providerDevIndexedDBName = "main"
+	providerLocalPluginDir   = "plugin"
+	providerLocalSiblingUI   = "ui"
 )
 
 type providerLocalCommandOptions struct {
@@ -39,8 +41,9 @@ type providerLocalCommandOptions struct {
 
 type providerLocalSession struct {
 	Dir               string
+	Kind              string
 	ManifestPath      string
-	PluginKey         string
+	TargetKey         string
 	ConfigPaths       []string
 	State             operator.StatePaths
 	PublicURL         string
@@ -55,7 +58,7 @@ func runProviderValidate(args []string) error {
 	var configPaths repeatedStringFlag
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	pathFlag := fs.String("path", "", "provider manifest path or directory (defaults to current working directory)")
-	nameFlag := fs.String("name", "", "plugin key override")
+	nameFlag := fs.String("name", "", "provider key override")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -94,7 +97,7 @@ func runProviderDev(args []string) error {
 	var configPaths repeatedStringFlag
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	pathFlag := fs.String("path", "", "provider manifest path or directory (defaults to current working directory)")
-	nameFlag := fs.String("name", "", "plugin key override")
+	nameFlag := fs.String("name", "", "provider key override")
 	portFlag := fs.Int("port", 0, "public port (defaults to a free localhost port)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -165,8 +168,8 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 	if err != nil {
 		return nil, err
 	}
-	if kind != providermanifestv1.KindPlugin {
-		return nil, fmt.Errorf("gestaltd provider dev and validate only support kind: plugin in v1 (got %q)", kind)
+	if kind != providermanifestv1.KindPlugin && kind != providermanifestv1.KindUI {
+		return nil, fmt.Errorf("gestaltd provider dev and validate only support kind: plugin or ui in v1 (got %q)", kind)
 	}
 
 	targetManifestPath, err := canonicalPath(manifestPath)
@@ -190,15 +193,35 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 	if err := writeProviderLocalBaseConfig(baseConfigPath, dbPath); err != nil {
 		return nil, err
 	}
+	state := operator.StatePaths{
+		ArtifactsDir: filepath.Join(sessionDir, "artifacts"),
+		LockfilePath: filepath.Join(sessionDir, "gestalt.lock.json"),
+	}
 
+	var session *providerLocalSession
+	switch kind {
+	case providermanifestv1.KindPlugin:
+		session, err = preparePluginLocalSession(sessionDir, baseConfigPath, state, opts, targetManifestPath, manifest)
+	case providermanifestv1.KindUI:
+		session, err = prepareUILocalSession(sessionDir, baseConfigPath, state, opts, targetManifestPath, manifest)
+	default:
+		err = fmt.Errorf("unsupported provider local target kind %q", kind)
+	}
+	if err != nil {
+		return nil, err
+	}
+	cleanupSessionDir = false
+	return session, nil
+}
+
+func preparePluginLocalSession(sessionDir, baseConfigPath string, state operator.StatePaths, opts providerLocalCommandOptions, targetManifestPath string, manifest *providermanifestv1.Manifest) (*providerLocalSession, error) {
 	resolvedKey, err := resolveProviderLocalPluginKey(opts.ConfigPaths, targetManifestPath, manifest, opts.Name)
 	if err != nil {
 		return nil, err
 	}
 
 	overlayConfigPath := filepath.Join(sessionDir, "provider-target.yaml")
-	autoMountPath := ""
-	if err := writeProviderLocalOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, ""); err != nil {
+	if err := writeProviderLocalPluginOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, "", "", ""); err != nil {
 		return nil, err
 	}
 
@@ -210,19 +233,43 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 		return nil, fmt.Errorf("loading provider dev config: %w", err)
 	}
 
-	if shouldAutoMountOwnedUI(loadedCfg, resolvedKey, manifest) {
+	autoMountPath := ""
+	siblingUIManifestPath, err := findSiblingUIManifestPath(targetManifestPath, manifest)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case shouldAutoMountOwnedUI(loadedCfg, resolvedKey, manifest):
 		autoMountPath = "/" + resolvedKey
 		if err := ensureNoPublicUIPathCollision(loadedCfg, resolvedKey, autoMountPath); err != nil {
 			return nil, err
 		}
-		if err := writeProviderLocalOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath); err != nil {
+		if err := writeProviderLocalPluginOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath, "", ""); err != nil {
 			return nil, err
 		}
-		configPaths[len(configPaths)-1] = overlayConfigPath
-		loadedCfg, err = config.LoadPaths(configPaths)
-		if err != nil {
-			return nil, fmt.Errorf("loading provider dev config with auto-mounted ui: %w", err)
+	case siblingUIManifestPath != "":
+		var uiName string
+		if entry := loadedCfg.Plugins[resolvedKey]; entry != nil {
+			uiName = strings.TrimSpace(entry.UI)
+			autoMountPath = strings.TrimSpace(entry.MountPath)
 		}
+		if uiName == "" {
+			uiName = resolvedKey
+		}
+		if autoMountPath == "" {
+			autoMountPath = "/" + resolvedKey
+			if err := ensureNoPublicUIPathCollision(loadedCfg, resolvedKey, autoMountPath); err != nil {
+				return nil, err
+			}
+		}
+		if err := writeProviderLocalPluginOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath, uiName, siblingUIManifestPath); err != nil {
+			return nil, err
+		}
+	}
+
+	loadedCfg, err = config.LoadPaths(configPaths)
+	if err != nil {
+		return nil, fmt.Errorf("loading provider dev config with mounted ui: %w", err)
 	}
 
 	publicURL := providerLocalPublicURL(loadedCfg)
@@ -231,13 +278,61 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 		publicUIPaths = append(publicUIPaths, autoMountPath)
 		slices.Sort(publicUIPaths)
 	}
-	cleanupSessionDir = false
+
 	return &providerLocalSession{
 		Dir:               sessionDir,
+		Kind:              providermanifestv1.KindPlugin,
 		ManifestPath:      targetManifestPath,
-		PluginKey:         resolvedKey,
+		TargetKey:         resolvedKey,
 		ConfigPaths:       configPaths,
-		State:             operator.StatePaths{ArtifactsDir: filepath.Join(sessionDir, "artifacts"), LockfilePath: filepath.Join(sessionDir, "gestalt.lock.json")},
+		State:             state,
+		PublicURL:         publicURL,
+		AdminURL:          strings.TrimRight(publicURL, "/") + "/admin/",
+		PublicUIPaths:     publicUIPaths,
+		AutoMountedUIPath: autoMountPath,
+	}, nil
+}
+
+func prepareUILocalSession(sessionDir, baseConfigPath string, state operator.StatePaths, opts providerLocalCommandOptions, targetManifestPath string, manifest *providermanifestv1.Manifest) (*providerLocalSession, error) {
+	resolvedKey, err := resolveProviderLocalUIKey(opts.ConfigPaths, targetManifestPath, manifest, opts.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	autoMountPath := "/" + resolvedKey
+	if configuredUIs, err := loadConfiguredUIs(opts.ConfigPaths); err == nil {
+		if entry := configuredUIs[resolvedKey]; entry != nil && strings.TrimSpace(entry.Path) != "" {
+			autoMountPath = strings.TrimSpace(entry.Path)
+		}
+	}
+
+	overlayConfigPath := filepath.Join(sessionDir, "provider-target.yaml")
+	if err := writeProviderLocalUIOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath); err != nil {
+		return nil, err
+	}
+
+	configPaths := append([]string{baseConfigPath}, opts.ConfigPaths...)
+	configPaths = append(configPaths, overlayConfigPath)
+
+	loadedCfg, err := config.LoadPaths(configPaths)
+	if err != nil {
+		return nil, fmt.Errorf("loading provider dev config: %w", err)
+	}
+
+	publicURL := providerLocalPublicURL(loadedCfg)
+	publicUIPaths := mountedPublicUIPaths(loadedCfg)
+	if autoMountPath != "" && !slices.Contains(publicUIPaths, autoMountPath) {
+		publicUIPaths = append(publicUIPaths, autoMountPath)
+		slices.Sort(publicUIPaths)
+	}
+
+	return &providerLocalSession{
+		Dir:               sessionDir,
+		Kind:              providermanifestv1.KindUI,
+		ManifestPath:      targetManifestPath,
+		TargetKey:         resolvedKey,
+		ConfigPaths:       configPaths,
+		State:             state,
 		PublicURL:         publicURL,
 		AdminURL:          strings.TrimRight(publicURL, "/") + "/admin/",
 		PublicUIPaths:     publicUIPaths,
@@ -343,15 +438,16 @@ func writeProviderLocalBaseConfig(path, dbPath string) error {
 	return writeYAMLFile(path, cfg)
 }
 
-func writeProviderLocalOverlayConfig(path, pluginKey, manifestPath string, port int, mountPath string) error {
+func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string, port int, mountPath, uiName, uiManifestPath string) error {
 	pluginEntry := map[string]any{
-		"source": map[string]any{
-			"path": manifestPath,
-		},
+		"source":  providerLocalSourceOverride(manifestPath),
 		"runtime": nil,
 	}
 	if mountPath != "" {
 		pluginEntry["mountPath"] = mountPath
+	}
+	if uiName != "" {
+		pluginEntry["ui"] = uiName
 	}
 
 	cfg := map[string]any{
@@ -365,7 +461,49 @@ func writeProviderLocalOverlayConfig(path, pluginKey, manifestPath string, port 
 			pluginKey: pluginEntry,
 		},
 	}
+	if uiName != "" && uiManifestPath != "" {
+		cfg["providers"] = map[string]any{
+			"ui": map[string]any{
+				uiName: map[string]any{
+					"source": providerLocalSourceOverride(uiManifestPath),
+				},
+			},
+		}
+	}
 	return writeYAMLFile(path, cfg)
+}
+
+func writeProviderLocalUIOverlayConfig(path, uiKey, manifestPath string, port int, mountPath string) error {
+	uiEntry := map[string]any{
+		"source": providerLocalSourceOverride(manifestPath),
+	}
+	if mountPath != "" {
+		uiEntry["path"] = mountPath
+	}
+
+	cfg := map[string]any{
+		"server": map[string]any{
+			"public": map[string]any{
+				"host": providerDevHost,
+				"port": port,
+			},
+		},
+		"providers": map[string]any{
+			"ui": map[string]any{
+				uiKey: uiEntry,
+			},
+		},
+	}
+	return writeYAMLFile(path, cfg)
+}
+
+func providerLocalSourceOverride(manifestPath string) map[string]any {
+	return map[string]any{
+		"path":          manifestPath,
+		"url":           nil,
+		"githubRelease": nil,
+		"auth":          nil,
+	}
 }
 
 func shouldAutoMountOwnedUI(cfg *config.Config, pluginKey string, manifest *providermanifestv1.Manifest) bool {
@@ -404,6 +542,54 @@ func ensureNoPublicUIPathCollision(cfg *config.Config, pluginKey, mountPath stri
 		}
 	}
 	return nil
+}
+
+func findSiblingUIManifestPath(pluginManifestPath string, manifest *providermanifestv1.Manifest) (string, error) {
+	if manifest == nil || manifest.Spec == nil || manifest.Spec.UI != nil {
+		return "", nil
+	}
+	pluginDir := filepath.Dir(pluginManifestPath)
+	for filepath.Base(pluginDir) != providerLocalPluginDir {
+		parentDir := filepath.Dir(pluginDir)
+		if parentDir == pluginDir {
+			return "", nil
+		}
+		pluginDir = parentDir
+	}
+
+	uiDir := filepath.Join(filepath.Dir(pluginDir), providerLocalSiblingUI)
+	info, err := os.Stat(uiDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		return "", fmt.Errorf("stat sibling ui dir %s: %w", uiDir, err)
+	}
+	if !info.IsDir() {
+		return "", nil
+	}
+
+	uiManifestPath, err := providerpkg.FindManifestFile(uiDir)
+	if err != nil {
+		return "", fmt.Errorf("find sibling ui manifest: %w", err)
+	}
+	uiManifestPath, err = canonicalPath(uiManifestPath)
+	if err != nil {
+		return "", err
+	}
+
+	_, uiManifest, err := providerpkg.ReadSourceManifestFile(uiManifestPath)
+	if err != nil {
+		return "", err
+	}
+	kind, err := providerpkg.ManifestKind(uiManifest)
+	if err != nil {
+		return "", err
+	}
+	if kind != providermanifestv1.KindUI {
+		return "", fmt.Errorf("sibling ui manifest %q must have kind %q (got %q)", uiManifestPath, providermanifestv1.KindUI, kind)
+	}
+	return uiManifestPath, nil
 }
 
 func providerLocalIndexedDBSourceConfig() any {
@@ -454,15 +640,22 @@ func logProviderLocalSummary(message string, session *providerLocalSession) {
 	if len(publicUIPaths) == 0 {
 		publicUIPaths = nil
 	}
-	slog.Info(message,
-		"plugin", session.PluginKey,
+	args := []any{
+		"kind", session.Kind,
 		"manifest", session.ManifestPath,
 		"public_url", session.PublicURL,
 		"admin_url", session.AdminURL,
 		"mounted_ui_paths", publicUIPaths,
 		"auto_mounted_ui_path", session.AutoMountedUIPath,
 		"config_files", session.ConfigPaths,
-	)
+	}
+	switch session.Kind {
+	case providermanifestv1.KindUI:
+		args = append(args, "ui", session.TargetKey)
+	default:
+		args = append(args, "plugin", session.TargetKey)
+	}
+	slog.Info(message, args...)
 }
 
 func reserveLocalPort() (int, error) {
@@ -562,6 +755,20 @@ func loadConfiguredPlugins(configPaths []string) (map[string]*config.ProviderEnt
 	return cfg.Plugins, nil
 }
 
+func loadConfiguredUIs(configPaths []string) (map[string]*config.UIEntry, error) {
+	if len(configPaths) == 0 {
+		return map[string]*config.UIEntry{}, nil
+	}
+	cfg, err := config.LoadPaths(configPaths)
+	if err != nil {
+		return nil, fmt.Errorf("load provider overlay config: %w", err)
+	}
+	if cfg.Providers.UI == nil {
+		return map[string]*config.UIEntry{}, nil
+	}
+	return cfg.Providers.UI, nil
+}
+
 func matchingPluginKeys(plugins map[string]*config.ProviderEntry, targetManifestPath string) ([]string, error) {
 	targetCanonical, err := canonicalPath(targetManifestPath)
 	if err != nil {
@@ -579,7 +786,75 @@ func matchingPluginKeys(plugins map[string]*config.ProviderEntry, targetManifest
 	return matches, nil
 }
 
+func resolveProviderLocalUIKey(configPaths []string, targetManifestPath string, manifest *providermanifestv1.Manifest, explicitName string) (string, error) {
+	uis, err := loadConfiguredUIs(configPaths)
+	if err != nil {
+		return "", err
+	}
+	matchingKeys, err := matchingUIKeys(uis, targetManifestPath)
+	if err != nil {
+		return "", err
+	}
+
+	if explicitName != "" {
+		if !isValidExplicitPluginKey(explicitName) {
+			return "", fmt.Errorf("invalid --name %q: use only letters, numbers, and underscores", explicitName)
+		}
+		if len(matchingKeys) == 1 && matchingKeys[0] != explicitName {
+			return "", fmt.Errorf("target manifest is already configured as providers.ui.%s; pass --name %q or remove the conflicting config entry", matchingKeys[0], matchingKeys[0])
+		}
+		if len(matchingKeys) > 1 && !slices.Contains(matchingKeys, explicitName) {
+			return "", fmt.Errorf("target manifest is configured by multiple ui keys (%s); remove the ambiguity before using --name", strings.Join(matchingKeys, ", "))
+		}
+		return explicitName, nil
+	}
+
+	if len(matchingKeys) == 1 {
+		return matchingKeys[0], nil
+	}
+	if len(matchingKeys) > 1 {
+		return "", fmt.Errorf("target manifest is configured by multiple ui keys (%s); pass --name to choose the target key", strings.Join(matchingKeys, ", "))
+	}
+
+	if name := derivedPluginKey(manifest, targetManifestPath); name != "" {
+		return name, nil
+	}
+	return "", fmt.Errorf("unable to derive a ui key for %s; pass --name", targetManifestPath)
+}
+
+func matchingUIKeys(entries map[string]*config.UIEntry, targetManifestPath string) ([]string, error) {
+	targetCanonical, err := canonicalPath(targetManifestPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var matches []string
+	for name, entry := range entries {
+		if !uiEntryMatchesTarget(entry, targetCanonical) {
+			continue
+		}
+		matches = append(matches, name)
+	}
+	slices.Sort(matches)
+	return matches, nil
+}
+
 func providerEntryMatchesTarget(entry *config.ProviderEntry, targetManifestPath string) bool {
+	if entry == nil || !entry.HasLocalSource() {
+		return false
+	}
+	canonicalSource, err := canonicalPath(entry.SourcePath())
+	if err != nil {
+		return false
+	}
+	targetCanonical, err := canonicalPath(targetManifestPath)
+	if err != nil {
+		return false
+	}
+	return canonicalSource == targetCanonical
+}
+
+func uiEntryMatchesTarget(entry *config.UIEntry, targetManifestPath string) bool {
 	if entry == nil || !entry.HasLocalSource() {
 		return false
 	}
@@ -609,28 +884,28 @@ func printProviderValidateUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd provider validate [--path PATH] [--config PATH]... [--name NAME]")
 	writeUsageLine(w, "")
-	writeUsageLine(w, "Validate a local source plugin inside a synthesized Gestalt config.")
-	writeUsageLine(w, "v1 supports kind: plugin manifests only.")
+	writeUsageLine(w, "Validate a local source plugin or ui inside a synthesized Gestalt config.")
+	writeUsageLine(w, "v1 supports kind: plugin and kind: ui manifests.")
 	writeUsageLine(w, "Repeated --config flags merge left-to-right using the normal Gestalt rules.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --path     Provider manifest path or directory (default: current working directory)")
 	writeUsageLine(w, "  --config   Additional config file to merge; repeat to add support providers or null deletions")
-	writeUsageLine(w, "  --name     Plugin key override when the target key is ambiguous")
+	writeUsageLine(w, "  --name     Provider key override when the target key is ambiguous")
 }
 
 func printProviderDevUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd provider dev [--path PATH] [--config PATH]... [--name NAME] [--port PORT]")
 	writeUsageLine(w, "")
-	writeUsageLine(w, "Run a local source plugin inside a synthesized Gestalt config.")
-	writeUsageLine(w, "v1 supports kind: plugin manifests only.")
-	writeUsageLine(w, "The built-in admin UI remains available at /admin; configured or owned public UIs")
+	writeUsageLine(w, "Run a local source plugin or ui inside a synthesized Gestalt config.")
+	writeUsageLine(w, "v1 supports kind: plugin and kind: ui manifests.")
+	writeUsageLine(w, "The built-in admin UI remains available at /admin; configured, owned, or sibling public UIs")
 	writeUsageLine(w, "are mounted when present.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --path     Provider manifest path or directory (default: current working directory)")
 	writeUsageLine(w, "  --config   Additional config file to merge; repeat to add support providers or null deletions")
-	writeUsageLine(w, "  --name     Plugin key override when the target key is ambiguous")
+	writeUsageLine(w, "  --name     Provider key override when the target key is ambiguous")
 	writeUsageLine(w, "  --port     Public port (default: auto-selected free localhost port)")
 }

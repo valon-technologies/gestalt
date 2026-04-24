@@ -39,12 +39,12 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "provider validate",
 			args:      []string{"provider", "validate", "--help"},
-			wantParts: []string{"gestaltd provider validate", "v1 supports kind: plugin manifests only", "--config PATH"},
+			wantParts: []string{"gestaltd provider validate", "v1 supports kind: plugin and kind: ui manifests", "--config PATH"},
 		},
 		{
 			name:      "provider dev",
 			args:      []string{"provider", "dev", "--help"},
-			wantParts: []string{"gestaltd provider dev", "The built-in admin UI remains available at /admin", "--port PORT"},
+			wantParts: []string{"gestaltd provider dev", "The built-in admin UI remains available at /admin", "sibling public UIs", "--port PORT"},
 		},
 	}
 
