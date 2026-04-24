@@ -279,6 +279,31 @@ func TestE2EProviderValidateSourceUI(t *testing.T) {
 	}
 }
 
+func TestE2EProviderValidateIgnoresSiblingUIDirWithoutManifest(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	providersDir := setupDefaultLocalProvidersDir(t, dir)
+	rootDir := filepath.Join(dir, "package")
+	pluginDir := setupPluginDir(t, filepath.Join(rootDir, "plugin"))
+	if err := os.MkdirAll(filepath.Join(rootDir, "ui"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(sibling ui): %v", err)
+	}
+
+	cmd := exec.Command(gestaltdBin, "provider", "validate", "--path", componentProviderManifestPath(t, pluginDir))
+	cmd.Env = append(os.Environ(),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
+		"GOTELEMETRY=off",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd provider validate failed: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(string(out), "config ok") {
+		t.Fatalf("expected validate success, got: %s", out)
+	}
+}
+
 func TestE2EProviderValidateReusesConfiguredPluginKey(t *testing.T) {
 	t.Parallel()
 
@@ -1264,10 +1289,16 @@ func attachOwnedUIToPluginSource(t *testing.T, pluginDir, uiManifestPath string)
 func setupMountedUIDirWithRoutes(t *testing.T, baseDir string, routes []providermanifestv1.UIRoute) *mountedUITestConfig {
 	t.Helper()
 
-	return setupMountedUIDirAt(t, filepath.Join(baseDir, "mounted-ui"), routes)
+	return setupMountedUIDirNamedAt(t, filepath.Join(baseDir, "mounted-ui"), "roadmap_review", "/create-customer-roadmap-review", "github.com/test/ui/roadmap-review", "Roadmap Review UI", "Roadmap Review UI", routes)
 }
 
 func setupMountedUIDirAt(t *testing.T, uiDir string, routes []providermanifestv1.UIRoute) *mountedUITestConfig {
+	t.Helper()
+
+	return setupMountedUIDirNamedAt(t, uiDir, "roadmap_review", "/create-customer-roadmap-review", "github.com/test/ui/roadmap-review", "Roadmap Review UI", "Roadmap Review UI", routes)
+}
+
+func setupMountedUIDirNamedAt(t *testing.T, uiDir, name, pathPrefix, source, displayName, bodyMarker string, routes []providermanifestv1.UIRoute) *mountedUITestConfig {
 	t.Helper()
 
 	distDir := filepath.Join(uiDir, "dist")
@@ -1276,25 +1307,25 @@ func setupMountedUIDirAt(t *testing.T, uiDir string, routes []providermanifestv1
 		t.Fatalf("MkdirAll(%s): %v", assetsDir, err)
 	}
 
-	writeTestFile(t, uiDir, filepath.Join("dist", "index.html"), []byte(`<!doctype html>
+	writeTestFile(t, uiDir, filepath.Join("dist", "index.html"), []byte(fmt.Sprintf(`<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Roadmap Review UI</title>
+    <title>%s</title>
   </head>
   <body>
-    <div id="app">Roadmap Review UI</div>
+    <div id="app">%s</div>
     <script type="module" src="assets/app.js"></script>
   </body>
 </html>
-`), 0o644)
+`, displayName, bodyMarker)), 0o644)
 	writeTestFile(t, uiDir, filepath.Join("dist", "assets", "app.js"), []byte(`window.__ROADMAP_REVIEW_UI__ = "ready";
 `), 0o644)
 	writeManifestFile(t, uiDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindUI,
-		Source:      "github.com/test/ui/roadmap-review",
+		Source:      source,
 		Version:     "0.0.1-alpha.1",
-		DisplayName: "Roadmap Review UI",
+		DisplayName: displayName,
 		Spec: &providermanifestv1.Spec{
 			AssetRoot: "dist",
 			Routes:    routes,
@@ -1302,8 +1333,8 @@ func setupMountedUIDirAt(t *testing.T, uiDir string, routes []providermanifestv1
 	})
 
 	return &mountedUITestConfig{
-		Name:         "roadmap_review",
-		Path:         "/create-customer-roadmap-review",
+		Name:         name,
+		Path:         pathPrefix,
 		ManifestPath: filepath.Join(uiDir, "manifest.yaml"),
 	}
 }
@@ -1812,6 +1843,73 @@ func TestE2EProviderDevAutoMountsSiblingUIForPlugin(t *testing.T) {
 	}
 	if !strings.Contains(string(uiBody), "Roadmap Review UI") {
 		t.Fatalf("expected sibling ui body marker, got: %s", uiBody)
+	}
+}
+
+func TestE2EProviderDevPrefersExplicitUIBindingOverSiblingAutoDetection(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping provider dev explicit-ui precedence test in short mode")
+	}
+
+	dir := t.TempDir()
+	providersDir := setupDefaultLocalProvidersDir(t, dir)
+	rootDir := filepath.Join(dir, "package")
+	pluginDir := setupPluginDir(t, filepath.Join(rootDir, "plugin"))
+	_ = setupMountedUIDirAt(t, filepath.Join(rootDir, "ui"), nil)
+	explicitUI := setupMountedUIDirNamedAt(t, filepath.Join(dir, "explicit-ui"), "explicit", "/configured", "github.com/test/ui/explicit", "Explicit Config UI", "Explicit Config UI", nil)
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`providers:
+  ui:
+    explicit:
+      source:
+        path: %q
+      path: /configured
+plugins:
+  provider:
+    source: https://example.test/provider-release.yaml
+    ui: explicit
+    mountPath: /configured
+`, explicitUI.ManifestPath)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	port, holder := reservePort(t)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	_ = holder.Close()
+
+	cmd := exec.Command(gestaltdBin, "provider", "dev", "--path", componentProviderManifestPath(t, pluginDir), "--config", cfgPath, "--port", fmt.Sprintf("%d", port))
+	cmd.Env = append(os.Environ(),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
+		"GOTELEMETRY=off",
+	)
+	startCommandAndWaitReady(t, cmd, baseURL)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	uiResp, err := client.Get(baseURL + "/configured/sync")
+	if err != nil {
+		t.Fatalf("GET /configured/sync: %v", err)
+	}
+	defer func() { _ = uiResp.Body.Close() }()
+	uiBody, _ := io.ReadAll(uiResp.Body)
+	if uiResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected /configured/sync 200, got %d: %s", uiResp.StatusCode, uiBody)
+	}
+	if !strings.Contains(string(uiBody), "Explicit Config UI") {
+		t.Fatalf("expected explicit ui body marker, got: %s", uiBody)
+	}
+
+	siblingResp, err := client.Get(baseURL + "/provider/sync")
+	if err != nil {
+		t.Fatalf("GET /provider/sync: %v", err)
+	}
+	defer func() { _ = siblingResp.Body.Close() }()
+	if siblingResp.StatusCode == http.StatusOK {
+		body, _ := io.ReadAll(siblingResp.Body)
+		t.Fatalf("expected sibling ui auto-mount to stay disabled, got 200: %s", body)
 	}
 }
 

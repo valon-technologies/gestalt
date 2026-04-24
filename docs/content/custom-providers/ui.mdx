@@ -20,7 +20,8 @@ gestaltd provider dev --path ./ui
 
 When the UI is part of a `plugin/` + sibling `ui/` package layout, running
 `gestaltd provider dev` from the plugin side also picks up that sibling UI
-automatically for the local session.
+automatically for the local session when the plugin is not already bound to a
+configured UI.
 
 A UI bundle is not a plugin in the executable sense. It contains no server-side
 code. Gestalt simply serves the static files from the asset root directory. The
