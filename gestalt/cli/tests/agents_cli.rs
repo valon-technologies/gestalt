@@ -384,6 +384,147 @@ fn test_cli_runs_interactive_agent_session() {
 }
 
 #[test]
+fn test_cli_resumes_existing_agent_session_and_resolves_input_interaction() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/sessions/session-2",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"session-2",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "state":"active"
+            }"#,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-2/turns",
+            r#"{"messages":[{"role":"user","text":"need incident context"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-input",
+                "sessionId":"session-2",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-input/events?after=0&limit=100",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"[
+                {"seq":1,"type":"turn.started","data":{"status":"running"}},
+                {"seq":2,"type":"interaction.requested","data":{"interaction_id":"interaction-2"}}
+            ]"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-input",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-input",
+                "sessionId":"session-2",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"waiting_for_input",
+                "statusMessage":"waiting for input"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-input/interactions",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"[
+                {
+                    "id":"interaction-2",
+                    "turnId":"turn-input",
+                    "type":"input",
+                    "state":"pending",
+                    "title":"Incident ID",
+                    "prompt":"Provide the incident identifier to summarize.",
+                    "request":{"default":"INC-42","required":true}
+                }
+            ]"#,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/turns/turn-input/interactions/interaction-2/resolve",
+            r#"{"resolution":{"response":"INC-42"}}"#,
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"interaction-2",
+                "turnId":"turn-input",
+                "type":"input",
+                "state":"resolved",
+                "resolution":{"response":"INC-42"}
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-input/events?after=2&limit=100",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"[
+                {"seq":3,"type":"interaction.resolved","data":{"interaction_id":"interaction-2"}},
+                {"seq":4,"type":"assistant.completed","data":{"text":"incident INC-42 summarized"}},
+                {"seq":5,"type":"turn.completed","data":{"status":"succeeded"}}
+            ]"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-input",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-input",
+                "sessionId":"session-2",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"incident INC-42 summarized"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command(home.path())
+        .env("GESTALT_API_KEY", TEST_TOKEN)
+        .arg("--url")
+        .arg(server.url())
+        .args(["agent", "--session", "session-2"])
+        .write_stdin("need incident context\n\n/quit\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "interaction> requested (interaction-2)",
+        ))
+        .stdout(predicate::str::contains(
+            "interaction> resolved (interaction-2)",
+        ))
+        .stdout(predicate::str::contains(
+            "assistant> incident INC-42 summarized",
+        ))
+        .stderr(predicate::str::contains(
+            "Session session-2 [managed / gpt-5.4]",
+        ))
+        .stderr(predicate::str::contains("Incident ID"))
+        .stderr(predicate::str::contains(
+            "Provide the incident identifier to summarize.",
+        ))
+        .stderr(predicate::str::contains("Value [INC-42]:"));
+
+    server.assert_finished();
+}
+
+#[test]
 fn test_cli_resolves_agent_interaction_in_interactive_mode() {
     let server = ScriptedServer::spawn(vec![
         ExpectedRequest::json(

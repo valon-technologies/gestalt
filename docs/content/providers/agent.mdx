@@ -2,126 +2,121 @@ import { Callout } from 'nextra/components'
 
 # Agent
 
-Gestalt agents are a standalone global provider primitive for run-based
-reasoning. An agent provider accepts messages, optional tools, optional
-structured-output contracts, and optional session continuation state, then
-returns a run object you can inspect or cancel later. Providers can also
-advertise optional capabilities and pause on canonical human interactions
-without changing the caller-facing run shape.
+Gestalt agent providers are global backends that own canonical agent state:
+sessions, turns, interactions, and turn events. Callers create a session,
+submit turns into that session, then inspect or stream the resulting turn
+state through the shared Gestalt HTTP API, CLI, or SDKs.
 
 <Callout type="info">
-  Agent providers are global, not plugin-scoped. A run either selects a named
-  `providers.agent` entry explicitly or inherits the sole/default provider when
-  it omits `provider`.
+  Agent providers are global, not plugin-scoped. A session either selects a
+  named `providers.agent` entry explicitly or inherits the sole/default
+  provider when it omits `provider`.
 </Callout>
 
 ## Mental model
 
-Use an agent provider when you want a neutral backend that can reason over
-messages and tools without baking a specific vendor SDK into every plugin or
-HTTP client.
+Use an agent provider when you want one portable interface for:
 
-- `providers.agent.<name>` defines the backend pool.
-- The provider owns the agent-side run lifecycle and any provider-specific
-  session continuation state.
-- The provider can advertise capabilities such as streaming text, structured
-  output, resumable runs, and approvals through the shared provider contract.
-- Gestalt can pass resolved tool definitions into the provider and receive tool
-  callbacks, run events, and interaction requests back through the host agent
-  socket.
-- The same provider pool is used by the global agent runs surfaces and by
-  plugins calling the host agent manager.
+- multi-turn sessions
+- asynchronous turns
+- tool execution through Gestalt plugin operations
+- provider-owned approvals, clarifications, and other interactions
+- stored event history for rendering or replay
 
 This is intentionally different from `runtime`, which decides where executable
-plugins run, and from `workflow`, which decides when a target runs.
+providers run, and from `workflow`, which decides when a target runs.
 
 ## Configuring `providers.agent`
 
 ```yaml
 providers:
+  indexeddb:
+    main:
+      source: ./providers/indexeddb/relationaldb/manifest.yaml
+      config:
+        dsn: sqlite:///tmp/gestalt.db
+
   agent:
-    openai:
-      source: ./providers/agent/openai/manifest.yaml
+    simple:
+      source: ./providers/agent/simple/manifest.yaml
       default: true
       indexeddb:
-        provider: default
-        db: agent_openai
-        objectStores:
-          - runs
-          - run_idempotency
+        provider: main
+        db: simple_agent
       config:
-        model: gpt-5.4
-        baseURL: https://api.openai.com/v1
-        apiKey:
-          secret:
-            provider: default
-            name: openai-api-key
-
-    claude:
-      source: ./providers/agent/claude/manifest.yaml
-      config:
-        model: claude-sonnet
-        apiKey:
-          secret:
-            provider: default
-            name: anthropic-api-key
+        runStore: runs
+        idempotencyStore: run_idempotency
+        defaultModel: fast
+        aliases:
+          fast: openai/gpt-4.1-mini
+          deep: anthropic/claude-sonnet-4-20250514
+        maxSteps: 8
+        timeoutSeconds: 120
 ```
 
 If exactly one agent provider is configured, or one is marked `default: true`,
-then run requests may omit `provider`.
+session creation may omit `provider`.
 
 If an agent provider needs durable state, configure `indexeddb` on that
 provider entry. Gestalt exposes the selected store to the provider process as
-the standard SDK `GESTALT_INDEXEDDB_SOCKET`; the provider still owns its run
-record schema and object-store names.
+the standard SDK `GESTALT_INDEXEDDB_SOCKET`, but the provider still owns the
+canonical session, turn, interaction, and event records stored there.
 
-If you want the agent provider to run in a hosted sandbox instead of directly
-on the `gestaltd` host, add a `runtime` block to that same
-`providers.agent.<name>` entry:
+If you want the provider to run in a hosted sandbox instead of directly on the
+`gestaltd` host, add a `runtime` block to that same `providers.agent.<name>`
+entry:
 
 ```yaml
 providers:
   agent:
-    openai:
-      source: ./providers/agent/openai/manifest.yaml
+    simple:
+      source: ./providers/agent/simple/manifest.yaml
       runtime:
         provider: modal
         image: ghcr.io/valon/gestalt-python-runtime:latest
       allowedHosts:
         - api.openai.com
+        - api.anthropic.com
       config:
-        model: gpt-5.4
+        defaultModel: fast
 ```
 
-This keeps the agent interface the same for callers. The run request still
-targets `provider: openai`. The only difference is where the provider process
-executes and how `gestaltd` enforces host-service access and egress.
+This keeps the caller interface the same. The request still targets
+`provider: simple`. The only difference is where the provider executes and how
+`gestaltd` enforces host-service access and egress.
 
-## Request shape
+## Session and turn shape
 
-The neutral agent run shape is intentionally small:
+The caller-facing contract is split into two steps:
+
+1. Create or look up a session.
+2. Create turns inside that session.
+
+Example session request:
 
 ```json
 {
-  "provider": "openai",
-  "model": "gpt-5.4",
+  "provider": "simple",
+  "model": "fast",
+  "clientRef": "roadmap-risk"
+}
+```
+
+Example turn request:
+
+```json
+{
+  "model": "fast",
   "messages": [
     {
-      "role": "system",
-      "text": "Be concise.",
-      "parts": [
-        { "type": "text", "text": "Be concise." }
-      ]
-    },
-    {
       "role": "user",
-      "text": "Summarize the roadmap risk.",
-      "parts": [
-        { "type": "text", "text": "Summarize the roadmap risk." }
-      ],
-      "metadata": {
-        "ticket": "RD-42"
-      }
+      "text": "Summarize the roadmap risk."
+    }
+  ],
+  "toolRefs": [
+    {
+      "pluginName": "roadmap",
+      "operation": "sync"
     }
   ],
   "responseSchema": {
@@ -130,41 +125,44 @@ The neutral agent run shape is intentionally small:
       "summary": { "type": "string" }
     },
     "required": ["summary"]
-  },
-  "sessionRef": "session-123"
+  }
 }
 ```
 
-For global runs, omitting `toolRefs` lets Gestalt attach the caller's
+For user-created turns, omitting `toolRefs` lets Gestalt attach the caller's
 authorized safe tools by default. Add `toolRefs` to extend that set, or set
 `toolSource: "explicit"` when you need explicit-only tools.
 
-`messages[].text` remains supported for simple callers. `messages[].parts` and
-`messages[].metadata` are optional extensions for richer transcript items and
-message-scoped annotations.
+Each `messages[]` entry accepts `role`, optional `text`, optional `parts`, and
+optional `metadata`. `parts[]` supports `type: text | json | tool_call |
+tool_result | image_ref`.
 
-Providers may also report capabilities such as:
+Providers may also advertise capabilities such as:
 
 ```json
 {
   "streamingText": true,
   "toolCalls": true,
+  "parallelToolCalls": false,
   "structuredOutput": true,
-  "sessionContinuation": true,
-  "approvals": true,
-  "resumableRuns": true
+  "interactions": true,
+  "resumableTurns": true
 }
 ```
 
-## First-party agent providers
+## First-party provider
 
-There is not yet a first-party agent provider published from
-`valon-technologies/gestalt-providers`. If you need one today, implement a
-custom provider against the neutral protocol or deploy a local source-backed
-provider under `providers.agent`.
+The current first-party provider is `agent/simple` from
+`valon-technologies/gestalt-providers`. It is intentionally small:
+
+- text-in, text-out agent loop
+- OpenAI and Anthropic model backends
+- Gestalt plugin operations as tools
+- provider-owned IndexedDB persistence
+- asynchronous turns plus turn event history
 
 ## What to read next
 
 - [Custom Providers > Agent](/custom-providers/agent): implementing your own agent backend
-- [HTTP API](/reference/http-api): global agent runs routes
-- [CLI](/client/cli): `gestalt agent runs ...`
+- [HTTP API](/reference/http-api): session, turn, interaction, and event routes
+- [CLI](/client/cli): `gestalt agent`, `gestalt agent sessions`, and `gestalt agent turns`

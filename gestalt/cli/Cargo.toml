@@ -1,6 +1,6 @@
 [package]
 name = "gestalt"
-description = "CLI for Gestalt API - authentication, integration management, and operation invocation"
+description = "CLI for the Gestalt API: authentication, integrations, workflows, and interactive agents"
 version.workspace = true
 edition.workspace = true
 

@@ -39,12 +39,30 @@ import gestalt
 
 
 class ExampleAgent(gestalt.AgentProvider):
-    def StartRun(self, request, context):
-        return gestalt.pb.BoundAgentRun(
-            id=request.run_id,
-            provider_name=request.provider_name,
+    def CreateSession(self, request, context):
+        return gestalt.pb.AgentSession(
+            id=request.session_id,
+            provider_name="example",
             model=request.model,
-            status=gestalt.pb.AGENT_RUN_STATUS_PENDING,
+            state=gestalt.pb.AGENT_SESSION_STATE_ACTIVE,
+        )
+
+    def CreateTurn(self, request, context):
+        return gestalt.pb.AgentTurn(
+            id=request.turn_id,
+            session_id=request.session_id,
+            provider_name="example",
+            model=request.model,
+            status=gestalt.pb.AGENT_EXECUTION_STATUS_RUNNING,
             messages=request.messages,
+            execution_ref=request.execution_ref,
+        )
+
+    def GetCapabilities(self, request, context):
+        return gestalt.pb.AgentProviderCapabilities(
+            streaming_text=True,
+            tool_calls=True,
+            interactions=True,
+            resumable_turns=True,
         )
 ```

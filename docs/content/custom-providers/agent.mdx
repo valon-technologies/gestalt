@@ -2,19 +2,13 @@ import { Tabs } from 'nextra/components'
 
 # Agent
 
-This page covers building custom agent providers. If you only need to
+This page covers building custom `kind: agent` providers. If you only need to
 configure an agent backend for a deployment, use
 [Providers > Agent](/providers/agent).
 
-Agent providers implement a neutral run lifecycle over messages, tools, and
-optional session continuation state. They are a good fit when you want Gestalt
-to select between OpenAI-, Anthropic-, or custom-backed agent engines without
-hard-coding those SDKs into every caller.
-
-Whether the provider runs directly on the `gestaltd` host or inside a hosted
-runtime is an operator decision, not an authoring change. A provider that
-implements `kind: agent` can be launched locally or through
-`providers.agent.<name>.runtime` without changing its protocol surface.
+Agent providers are canonical backends for agent state. A provider owns its
+sessions, turns, interactions, capabilities, and turn events. Gestalt owns the
+public HTTP/CLI/SDK facade and the host tool-callback surface.
 
 ## Manifest
 
@@ -25,73 +19,63 @@ kind: agent
 source: github.com/your-org/agent/example
 version: 0.0.1
 displayName: Example Agent
-description: Neutral agent provider that queues runs onto a vendor backend.
+description: Minimal session-and-turn agent provider
 spec:
   configSchemaPath: ./agent_config.json
 ```
 
+Use `source: ./manifest.yaml` during development. For production, publish a
+provider release archive and reference the resulting metadata URL.
+
 ## Provider interface
 
-The agent service now includes six provider methods:
+The agent provider service now exposes the canonical lifecycle directly:
 
 | Method | Purpose |
 | --- | --- |
-| `StartRun` | Create or queue a run from messages, resolved tools, and optional session state |
-| `GetRun` | Inspect one run by `run_id` |
-| `ListRuns` | Return currently known runs for this provider |
-| `CancelRun` | Request cancellation for one run |
-| `GetCapabilities` | Advertise which optional agent features the provider actually supports |
-| `ResumeRun` | Continue a run after Gestalt resolves a pending interaction |
+| `CreateSession` | Create a new provider-owned session |
+| `GetSession` | Inspect one session by `session_id` |
+| `ListSessions` | Return sessions currently known to this provider |
+| `UpdateSession` | Update session state, metadata, or `client_ref` |
+| `CreateTurn` | Persist and start a new turn within a session |
+| `GetTurn` | Inspect one turn by `turn_id` |
+| `ListTurns` | List turns for a session |
+| `CancelTurn` | Request cancellation for one turn |
+| `ListTurnEvents` | Return stored events for a turn after a sequence cursor |
+| `GetInteraction` | Inspect one interaction |
+| `ListInteractions` | List interactions for a turn |
+| `ResolveInteraction` | Apply a caller-provided resolution to a pending interaction |
+| `GetCapabilities` | Advertise which optional agent features the provider supports |
 
-Providers can also call back into Gestalt through the host service:
+Providers can call back into Gestalt through the host service:
 
 | Host method | Purpose |
 | --- | --- |
-| `ExecuteTool` | Ask Gestalt to execute a bound plugin operation during a run |
-| `EmitEvent` | Append a run event to Gestalt-managed run storage |
-| `RequestInteraction` | Pause for human approval or clarification through a canonical host callback |
+| `ExecuteTool` | Ask Gestalt to execute a bound plugin operation during a turn |
 
-These callbacks work the same way when the provider is launched inside a hosted
-runtime.
+These callbacks work the same way when the provider runs directly on the
+`gestaltd` host or inside a hosted runtime.
 
-## Run shape
+## Canonical objects
 
-```json
-{
-  "runId": "run-123",
-  "providerName": "openai",
-  "model": "gpt-5.4",
-  "messages": [
-    {
-      "role": "system",
-      "text": "Be concise.",
-      "parts": [
-        { "type": "text", "text": "Be concise." }
-      ]
-    },
-    {
-      "role": "user",
-      "text": "Summarize the roadmap risk.",
-      "parts": [
-        { "type": "text", "text": "Summarize the roadmap risk." }
-      ],
-      "metadata": {
-        "ticket": "RD-42"
-      }
-    }
-  ],
-  "tools": [
-    {
-      "id": "roadmap/sync",
-      "name": "sync_roadmap",
-      "description": "Sync the roadmap plugin operation",
-      "target": { "pluginName": "roadmap", "operation": "sync" }
-    }
-  ],
-  "sessionRef": "session-123",
-  "executionRef": "run-123"
-}
-```
+Provider methods exchange canonical objects rather than vendor-native payloads:
+
+- `AgentSession`
+- `AgentTurn`
+- `AgentInteraction`
+- `AgentTurnEvent`
+
+Key fields:
+
+- sessions carry `id`, `provider_name`, `model`, `client_ref`, `state`, and timestamps
+- turns carry `id`, `session_id`, `status`, `messages`, `output_text`, optional `structured_output`, and timestamps
+- interactions carry `id`, `turn_id`, `session_id`, `type`, `state`, `request`, and `resolution`
+- turn events carry `turn_id`, monotonically increasing `seq`, canonical `type`, `source`, `visibility`, and structured `data`
+
+Providers should return canonical IDs exactly as persisted. Gestalt does not
+rewrite session or turn IDs on the provider's behalf.
+
+## Go example
 
 <Tabs items={['Go', 'TypeScript']}>
   <Tabs.Tab>
@@ -99,74 +83,137 @@ runtime.
     package main
 
     import (
-    	"context"
-    	"log"
+      "context"
+      "log"
 
-    	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-    	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+      proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+      "google.golang.org/protobuf/types/known/timestamppb"
     )
 
     type provider struct {
-    	proto.UnimplementedAgentProviderServer
+      proto.UnimplementedAgentProviderServer
     }
 
-    func (p *provider) StartRun(ctx context.Context, req *proto.StartAgentProviderRunRequest) (*proto.BoundAgentRun, error) {
-    	return &proto.BoundAgentRun{
-    		Id:           req.GetRunId(),
-    		ProviderName: req.GetProviderName(),
-    		Model:        req.GetModel(),
-    		Status:       proto.AgentRunStatus_AGENT_RUN_STATUS_PENDING,
-    		Messages:     req.GetMessages(),
-    		SessionRef:   req.GetSessionRef(),
-    		ExecutionRef: req.GetExecutionRef(),
-    	}, nil
+    func (p *provider) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
+      return &proto.AgentSession{
+        Id:           req.GetSessionId(),
+        ProviderName: "example",
+        Model:        req.GetModel(),
+        ClientRef:    req.GetClientRef(),
+        State:        proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
+        CreatedAt:    timestamppb.Now(),
+        UpdatedAt:    timestamppb.Now(),
+      }, nil
+    }
+
+    func (p *provider) GetSession(_ context.Context, req *proto.GetAgentProviderSessionRequest) (*proto.AgentSession, error) {
+      return &proto.AgentSession{
+        Id:           req.GetSessionId(),
+        ProviderName: "example",
+        State:        proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
+      }, nil
+    }
+
+    func (p *provider) ListSessions(context.Context, *proto.ListAgentProviderSessionsRequest) (*proto.ListAgentProviderSessionsResponse, error) {
+      return &proto.ListAgentProviderSessionsResponse{}, nil
+    }
+
+    func (p *provider) UpdateSession(_ context.Context, req *proto.UpdateAgentProviderSessionRequest) (*proto.AgentSession, error) {
+      return &proto.AgentSession{
+        Id:           req.GetSessionId(),
+        ProviderName: "example",
+        ClientRef:    req.GetClientRef(),
+        State:        req.GetState(),
+        UpdatedAt:    timestamppb.Now(),
+      }, nil
+    }
+
+    func (p *provider) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+      return &proto.AgentTurn{
+        Id:           req.GetTurnId(),
+        SessionId:    req.GetSessionId(),
+        ProviderName: "example",
+        Model:        req.GetModel(),
+        Status:       proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING,
+        Messages:     req.GetMessages(),
+        CreatedAt:    timestamppb.Now(),
+        StartedAt:    timestamppb.Now(),
+        ExecutionRef: req.GetExecutionRef(),
+      }, nil
+    }
+
+    func (p *provider) GetTurn(_ context.Context, req *proto.GetAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+      return &proto.AgentTurn{
+        Id:           req.GetTurnId(),
+        SessionId:    "session-1",
+        ProviderName: "example",
+        Status:       proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED,
+        OutputText:   "done",
+        CompletedAt:  timestamppb.Now(),
+      }, nil
+    }
+
+    func (p *provider) ListTurns(context.Context, *proto.ListAgentProviderTurnsRequest) (*proto.ListAgentProviderTurnsResponse, error) {
+      return &proto.ListAgentProviderTurnsResponse{}, nil
+    }
+
+    func (p *provider) CancelTurn(_ context.Context, req *proto.CancelAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+      return &proto.AgentTurn{
+        Id:            req.GetTurnId(),
+        SessionId:     "session-1",
+        ProviderName:  "example",
+        Status:        proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED,
+        StatusMessage: "operator requested",
+        CompletedAt:   timestamppb.Now(),
+      }, nil
+    }
+
+    func (p *provider) ListTurnEvents(context.Context, *proto.ListAgentProviderTurnEventsRequest) (*proto.ListAgentProviderTurnEventsResponse, error) {
+      return &proto.ListAgentProviderTurnEventsResponse{}, nil
+    }
+
+    func (p *provider) GetInteraction(_ context.Context, req *proto.GetAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
+      return &proto.AgentInteraction{Id: req.GetInteractionId()}, nil
+    }
+
+    func (p *provider) ListInteractions(context.Context, *proto.ListAgentProviderInteractionsRequest) (*proto.ListAgentProviderInteractionsResponse, error) {
+      return &proto.ListAgentProviderInteractionsResponse{}, nil
+    }
+
+    func (p *provider) ResolveInteraction(_ context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
+      return &proto.AgentInteraction{
+        Id:         req.GetInteractionId(),
+        State:      proto.AgentInteractionState_AGENT_INTERACTION_STATE_RESOLVED,
+        Resolution: req.GetResolution(),
+        ResolvedAt: timestamppb.Now(),
+      }, nil
     }
 
     func (p *provider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
       return &proto.AgentProviderCapabilities{
-        StreamingText:       true,
-        ToolCalls:           true,
-        StructuredOutput:    true,
-        SessionContinuation: true,
-        Approvals:           true,
-        ResumableRuns:       true,
-      }, nil
-    }
-
-    func (p *provider) GetRun(_ context.Context, req *proto.GetAgentProviderRunRequest) (*proto.BoundAgentRun, error) {
-    	return &proto.BoundAgentRun{Id: req.GetRunId()}, nil
-    }
-
-    func (p *provider) ListRuns(context.Context, *proto.ListAgentProviderRunsRequest) (*proto.ListAgentProviderRunsResponse, error) {
-    	return &proto.ListAgentProviderRunsResponse{}, nil
-    }
-
-    func (p *provider) CancelRun(_ context.Context, req *proto.CancelAgentProviderRunRequest) (*proto.BoundAgentRun, error) {
-    	return &proto.BoundAgentRun{
-    		Id:     req.GetRunId(),
-    		Status: proto.AgentRunStatus_AGENT_RUN_STATUS_CANCELED,
-    	}, nil
-    }
-
-    func (p *provider) ResumeRun(_ context.Context, req *proto.ResumeAgentProviderRunRequest) (*proto.BoundAgentRun, error) {
-      return &proto.BoundAgentRun{
-        Id:     req.GetRunId(),
-        Status: proto.AgentRunStatus_AGENT_RUN_STATUS_RUNNING,
+        StreamingText:    true,
+        ToolCalls:        true,
+        StructuredOutput: true,
+        Interactions:     true,
+        ResumableTurns:   true,
       }, nil
     }
 
     func main() {
-    	if err := gestalt.ServeAgentProvider(context.Background(), &provider{}); err != nil {
-    		log.Fatal(err)
-    	}
+      if err := gestalt.ServeAgentProvider(context.Background(), &provider{}); err != nil {
+        log.Fatal(err)
+      }
     }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
     import {
+      AgentExecutionStatus,
       AgentHost,
-      AgentRunStatus,
+      AgentInteractionState,
+      AgentSessionState,
       defineAgentProvider,
     } from "@valon-technologies/gestalt";
 
@@ -174,134 +221,135 @@ runtime.
 
     export const provider = defineAgentProvider({
       displayName: "Example Agent",
-      description: "Neutral run-based agent provider",
-      async startRun(request) {
+      description: "Minimal session-and-turn agent provider",
+
+      async createSession(request) {
+        return {
+          id: request.sessionId,
+          providerName: "example",
+          model: request.model,
+          clientRef: request.clientRef,
+          state: AgentSessionState.ACTIVE,
+        };
+      },
+
+      async getSession(request) {
+        return {
+          id: request.sessionId,
+          providerName: "example",
+          state: AgentSessionState.ACTIVE,
+        };
+      },
+
+      async listSessions() {
+        return [];
+      },
+
+      async updateSession(request) {
+        return {
+          id: request.sessionId,
+          providerName: "example",
+          clientRef: request.clientRef,
+          state: request.state,
+        };
+      },
+
+      async createTurn(request) {
         if (request.tools.length > 0) {
           await host.executeTool({
-            runId: request.runId,
+            sessionId: request.sessionId,
+            turnId: request.turnId,
             toolCallId: "call-1",
             toolId: request.tools[0].id,
             arguments: { taskId: "task-123" },
           });
         }
 
-        if (request.metadata?.requireApproval === true) {
-          await host.requestInteraction({
-            runId: request.runId,
-            type: "approval",
-            title: "Approve external call",
-            prompt: "Allow this provider to call the vendor backend?",
-            request: { host: "api.openai.com" },
-          });
-        }
-
         return {
-          id: request.runId,
-          providerName: request.providerName || "example",
+          id: request.turnId,
+          sessionId: request.sessionId,
+          providerName: "example",
           model: request.model,
-          status: AgentRunStatus.PENDING,
+          status: AgentExecutionStatus.RUNNING,
           messages: request.messages,
-          sessionRef: request.sessionRef,
           executionRef: request.executionRef,
         };
       },
-      async getRun(request) {
-        return { id: request.runId, providerName: "example", status: AgentRunStatus.RUNNING };
+
+      async getTurn(request) {
+        return {
+          id: request.turnId,
+          sessionId: "session-1",
+          providerName: "example",
+          status: AgentExecutionStatus.SUCCEEDED,
+          outputText: "done",
+        };
       },
-      async listRuns() {
+
+      async listTurns() {
         return [];
       },
-      async cancelRun(request) {
-        return { id: request.runId, providerName: "example", status: AgentRunStatus.CANCELED };
+
+      async cancelTurn(request) {
+        return {
+          id: request.turnId,
+          sessionId: "session-1",
+          providerName: "example",
+          status: AgentExecutionStatus.CANCELED,
+          statusMessage: "operator requested",
+        };
       },
+
+      async listTurnEvents() {
+        return [];
+      },
+
+      async getInteraction(request) {
+        return {
+          id: request.interactionId,
+          state: AgentInteractionState.PENDING,
+        };
+      },
+
+      async listInteractions() {
+        return [];
+      },
+
+      async resolveInteraction(request) {
+        return {
+          id: request.interactionId,
+          state: AgentInteractionState.RESOLVED,
+          resolution: request.resolution,
+        };
+      },
+
       async getCapabilities() {
         return {
           streamingText: true,
           toolCalls: true,
           structuredOutput: true,
-          sessionContinuation: true,
-          approvals: true,
-          resumableRuns: true,
+          interactions: true,
+          resumableTurns: true,
         };
-      },
-      async resumeRun(request) {
-        return { id: request.runId, providerName: "example", status: AgentRunStatus.RUNNING };
       },
     });
     ```
   </Tabs.Tab>
 </Tabs>
 
-## Tool callbacks
+## Execution model
 
-When the provider wants Gestalt to execute a bound plugin operation, it calls
-`AgentHost.ExecuteTool`:
+`CreateTurn` should persist the turn and return quickly, usually in
+`RUNNING` or `PENDING`. Long-running model/tool work should continue in the
+background. Callers then use `GetTurn`, `ListTurnEvents`, and
+`ListInteractions` to observe progress or resolve pending human input.
 
-```json
-{
-  "runId": "run-123",
-  "toolCallId": "call-1",
-  "toolId": "roadmap/sync",
-  "arguments": {
-    "taskId": "task-123"
-  }
-}
-```
-
-Gestalt returns an HTTP-like envelope:
-
-```json
-{
-  "status": 200,
-  "body": "{\"ok\":true,\"taskId\":\"task-123\",\"synced\":true}"
-}
-```
-
-## Interactions
-
-When the provider needs human input, it can request a persisted interaction:
-
-```json
-{
-  "runId": "run-123",
-  "type": "approval",
-  "title": "Approve external call",
-  "prompt": "Allow this provider to call the vendor backend?",
-  "request": {
-    "host": "api.openai.com"
-  }
-}
-```
-
-Gestalt returns an interaction record that the provider can later resume from:
-
-```json
-{
-  "id": "interaction-123",
-  "runId": "run-123",
-  "type": "approval",
-  "state": "pending",
-  "title": "Approve external call",
-  "prompt": "Allow this provider to call the vendor backend?",
-  "request": {
-    "host": "api.openai.com"
-  }
-}
-```
-
-The user-facing HTTP surface can then list those records at
-`GET /api/v1/agent/runs/{runID}/interactions` and resume the paused run through
-`POST /api/v1/agent/runs/{runID}/resume`.
-
-## IndexedDB binding
-
-Agent providers do have a standard IndexedDB binding. If you configure
-`providers.agent.<name>.indexeddb`, Gestalt exposes the selected store to the
-provider through the SDK `GESTALT_INDEXEDDB_SOCKET`, just like other hosted
-surfaces. The provider still owns its own object-store schema and durable-state
-model.
+If your provider needs durable state, configure `providers.agent.<name>.indexeddb`
+and store your canonical records there. Gestalt does not persist session or
+turn content for you.
 
 ## What to read next
 
-- [Providers > Agent](/providers/agent): operator-facing configuration model
-- [Custom Providers > Releasing](/custom-providers/releasing): packaging and publishing provider releases
+- [Providers > Agent](/providers/agent): deployment-side configuration
+- [HTTP API](/reference/http-api): caller-facing session and turn routes
+- [Reference > Config File](/reference/config-file#providersagent): `providers.agent` YAML

@@ -52,11 +52,11 @@ jobs:
       path-filters: |
         gestalt
       component-summary: |
-        Command-line client for authenticating with Gestalt, connecting integrations, invoking operations, and managing API tokens from the terminal.
+        Command-line client for authenticating with Gestalt, working with integrations and workflows, and running interactive agent sessions from the terminal.
       install-markdown: |
         - Homebrew: `brew upgrade valon-technologies/gestalt/gestalt`
         - Docker: `docker pull valontechnologies/gestalt:${version}`
-        - Docs: [CLI reference](https://gestaltd.ai/reference/cli)
+        - Docs: [CLI guide](https://gestaltd.ai/client/cli)
       exclude-subject-patterns: |
         ^Update gestalt formula to v
       download-artifact-pattern: 'gestalt-*'
@@ -71,7 +71,7 @@ jobs:
       image-url: https://hub.docker.com/r/valontechnologies/gestalt
       dockerfile: gestalt/Dockerfile
       version-prefix: 'gestalt/v'
-      short-description: CLI client for managing Gestalt integrations, authentication, and operations.
+      short-description: CLI client for Gestalt authentication, integrations, workflows, and interactive agents.
       readme-filepath: docs/dockerhub/gestalt.md
       download-artifact-pattern: 'gestalt-linux-*'
       platforms: 'linux/amd64,linux/arm64,linux/arm/v7'

@@ -61,12 +61,33 @@ type Agent struct {
 	proto.UnimplementedAgentProviderServer
 }
 
-func (a *Agent) StartRun(_ context.Context, req *proto.StartAgentProviderRunRequest) (*proto.BoundAgentRun, error) {
-	return &proto.BoundAgentRun{
-		Id:           req.GetRunId(),
-		ProviderName: req.GetProviderName(),
+func (a *Agent) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
+	return &proto.AgentSession{
+		Id:           req.GetSessionId(),
+		ProviderName: "example",
 		Model:        req.GetModel(),
-		Status:       proto.AgentRunStatus_AGENT_RUN_STATUS_PENDING,
+		State:        proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
+	}, nil
+}
+
+func (a *Agent) CreateTurn(_ context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+	return &proto.AgentTurn{
+		Id:           req.GetTurnId(),
+		SessionId:    req.GetSessionId(),
+		ProviderName: "example",
+		Model:        req.GetModel(),
+		Status:       proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING,
+		Messages:     req.GetMessages(),
+		ExecutionRef: req.GetExecutionRef(),
+	}, nil
+}
+
+func (a *Agent) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
+	return &proto.AgentProviderCapabilities{
+		StreamingText:  true,
+		ToolCalls:      true,
+		Interactions:   true,
+		ResumableTurns: true,
 	}, nil
 }
 

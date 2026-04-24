@@ -539,45 +539,34 @@ triggers are reconciled into the provider at startup. See
 ## Configuring agent providers
 
 The `providers.agent` block declares the global pool of agent backends. There
-is no `server.providers.agent`: a run request either names a provider
+is no `server.providers.agent`: a session request either names a provider
 explicitly or inherits the sole/default `providers.agent` entry when it omits
 `provider`.
 
 ```yaml
 providers:
   agent:
-    openai:
-      source: ./providers/agent/openai/manifest.yaml
+    simple:
+      source: ./providers/agent/simple/manifest.yaml
       default: true
       indexeddb:
         provider: default
-        db: agent_openai
-        objectStores:
-          - runs
-          - run_idempotency
+        db: simple_agent
       config:
-        model: gpt-5.4
-        apiKey:
-          secret:
-            provider: default
-            name: openai-api-key
-
-    claude:
-      source: ./providers/agent/claude/manifest.yaml
-      config:
-        model: claude-sonnet
-        apiKey:
-          secret:
-            provider: default
-            name: anthropic-api-key
+        runStore: runs
+        idempotencyStore: run_idempotency
+        defaultModel: fast
+        aliases:
+          fast: openai/gpt-4.1-mini
+          deep: anthropic/claude-sonnet-4-20250514
 ```
 
-Agent providers receive neutral run requests with `messages`, optional tools,
-optional structured-output schema, and optional `sessionRef`. The same
-provider pool is used by the global agent runs API/CLI and by plugins that use
-the host agent manager surface. Providers that need durable state can opt into
-a host IndexedDB binding with `indexeddb` and use the SDK IndexedDB helper
-against `GESTALT_INDEXEDDB_SOCKET`.
+Agent providers receive canonical session and turn requests with `messages`,
+optional tools, and optional structured-output schema. The same provider pool
+is used by the global agent API/CLI and by plugins that use the host agent
+manager surface. Providers that need durable state can opt into a host
+IndexedDB binding with `indexeddb` and use the SDK IndexedDB helper against
+`GESTALT_INDEXEDDB_SOCKET`.
 
 See [Agent](/providers/agent) for the provider model and
 [Custom Providers > Agent](/custom-providers/agent) if you need to implement

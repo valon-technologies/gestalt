@@ -2,8 +2,8 @@
 
 `gestalt` is a CLI client for the Gestalt API. It connects to a running
 `gestaltd` server and provides commands for authenticating, listing plugins,
-invoking integration operations, managing workflow and agent runs, and managing
-credentials.
+invoking integration operations, managing workflows, running interactive agent
+sessions, and managing credentials.
 
 > **Alpha.** Gestalt is under active development. Images are tagged
 > with alpha versions and may introduce breaking changes. See the
@@ -77,7 +77,9 @@ jobs:
 | `plugin disconnect NAME` | Disconnect a plugin |
 | `plugin invoke NAME OP` | Execute a plugin operation |
 | `workflow ...` | Manage workflow schedules, triggers, events, and runs |
-| `agent runs ...` | Create, list, inspect, cancel, and stream agent runs |
+| `agent` | Start or resume an interactive agent session |
+| `agent sessions ...` | Create, list, inspect, and update agent sessions |
+| `agent turns ...` | Create, list, inspect, cancel, and stream agent turns |
 | `tokens create/list/revoke` | Manage API tokens |
 
 Use `--format json` or `--format table` to control output format. See the
