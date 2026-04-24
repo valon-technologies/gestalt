@@ -208,7 +208,6 @@ gestalt agent runs create \
   --model gpt-5.4 \
   --system "Be concise." \
   --message "Summarize the roadmap risk." \
-  --tool roadmap:sync \
   --idempotency-key agent-run-1
 
 gestalt agent runs list --provider managed --status running
@@ -217,12 +216,20 @@ gestalt agent runs cancel <run-id> --reason "operator requested"
 gestalt agent runs events list <run-id> --after 0 --limit 100
 gestalt agent runs events stream <run-id> --after 100
 
-# advanced fields such as responseSchema, metadata, or providerOptions
-# go through --request-file, which also accepts "-" for stdin:
-cat <<'JSON' | gestalt --format json agent runs create --request-file -
+# by default, global agent runs get the caller's authorized safe tool set.
+# use --tool to add a specific tool beyond that default:
+gestalt agent runs create \
+  --provider managed \
+  --message "Summarize the roadmap risk." \
+  --tool roadmap:push
+
+# advanced fields such as responseSchema, metadata, or explicit-only tool mode
+# go through --input, which also accepts "-" for stdin:
+cat <<'JSON' | gestalt --format json agent runs create --input -
 {
   "provider": "managed",
   "model": "gpt-5.4",
+  "toolSource": "explicit",
   "sessionRef": "session-1",
   "messages": [
     {"role": "user", "text": "Summarize the roadmap risk."}
@@ -243,8 +250,9 @@ JSON
 
 `gestalt agent runs create` supports repeated `--system`, repeated `--message`,
 repeated `--tool plugin:operation`, `--session-ref`, `--idempotency-key`, and
-`--request-file`. Use `--format json` when you want the raw HTTP response shape
-instead of the default table view.
+`--input`. When you omit `--tool`, global runs attach the caller's authorized
+safe tool set by default. Use `--format json` when you want the raw HTTP
+response shape instead of the default table view.
 
 `gestalt agent runs events list` reads stored events from
 `GET /api/v1/agent/runs/{runID}/events`. `--after` is an event sequence cursor

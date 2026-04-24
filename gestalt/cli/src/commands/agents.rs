@@ -80,7 +80,7 @@ pub fn stream_run_events(client: &ApiClient, args: &AgentRunEventStreamArgs) -> 
 }
 
 fn build_create_body(args: &AgentRunCreateArgs) -> Result<Value> {
-    let mut body = match args.request_file.as_deref() {
+    let mut body = match args.input.as_deref() {
         Some(path) => params::load_input_file(path)?,
         None => Map::new(),
     };
@@ -126,7 +126,7 @@ fn validate_create_body(body: &Map<String, Value>) -> Result<()> {
         .is_some_and(|messages| !messages.is_empty());
     if !has_messages {
         bail!(
-            "agent runs create requires at least one message; pass --message, --system, or --request-file with a non-empty messages array"
+            "agent runs create requires at least one message; pass --message, --system, or --input with a non-empty messages array"
         );
     }
     Ok(())

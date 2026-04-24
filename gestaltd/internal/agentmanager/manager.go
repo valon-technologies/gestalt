@@ -449,23 +449,18 @@ func (m *Manager) resolveTools(ctx context.Context, p *principal.Principal, call
 			})
 		}
 	}
-	if len(refs) == 0 {
-		return nil, nil
+	explicitTools, err := m.resolveExplicitTools(ctx, p, refs)
+	if err != nil {
+		return nil, err
 	}
-	out := make([]coreagent.Tool, 0, len(refs))
-	seen := make(map[string]struct{}, len(refs))
-	for _, ref := range refs {
-		tool, err := m.resolveTool(ctx, p, ref)
-		if err != nil {
-			return nil, err
-		}
-		if _, ok := seen[tool.ID]; ok {
-			continue
-		}
-		seen[tool.ID] = struct{}{}
-		out = append(out, tool)
+	if source != coreagent.ToolSourceModeUnspecified || strings.TrimSpace(callerPluginName) != "" {
+		return explicitTools, nil
 	}
-	return out, nil
+	defaultTools := m.resolveDefaultTools(ctx, p)
+	if len(defaultTools) == 0 {
+		return explicitTools, nil
+	}
+	return mergeTools(explicitTools, defaultTools), nil
 }
 
 func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error) {
@@ -571,6 +566,174 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 			Instance:   sessionInstance,
 		},
 	}, nil
+}
+
+func (m *Manager) resolveExplicitTools(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) ([]coreagent.Tool, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	out := make([]coreagent.Tool, 0, len(refs))
+	seen := make(map[string]struct{}, len(refs))
+	for _, ref := range refs {
+		tool, err := m.resolveTool(ctx, p, ref)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := seen[tool.ID]; ok {
+			continue
+		}
+		seen[tool.ID] = struct{}{}
+		out = append(out, tool)
+	}
+	return out, nil
+}
+
+func (m *Manager) resolveDefaultTools(ctx context.Context, p *principal.Principal) []coreagent.Tool {
+	if m == nil || m.providers == nil {
+		return nil
+	}
+	out := make([]coreagent.Tool, 0, 8)
+	for _, providerName := range m.providers.List() {
+		if !m.allowProvider(ctx, p, providerName) {
+			continue
+		}
+		providerTools, err := m.resolveDefaultToolsForProvider(ctx, p, providerName)
+		if err != nil {
+			continue
+		}
+		out = append(out, providerTools...)
+	}
+	return out
+}
+
+func (m *Manager) resolveDefaultToolsForProvider(ctx context.Context, p *principal.Principal, providerName string) ([]coreagent.Tool, error) {
+	prov, err := m.providers.Get(providerName)
+	if err != nil {
+		return nil, err
+	}
+	connection, instance, cat, ok := m.resolveDefaultToolCatalog(ctx, p, providerName, prov)
+	if !ok || cat == nil {
+		return nil, nil
+	}
+
+	out := make([]coreagent.Tool, 0, len(cat.Operations))
+	for i := range cat.Operations {
+		op := &cat.Operations[i]
+		if !defaultToolAllowed(*op) {
+			continue
+		}
+		if !m.allowOperation(ctx, p, providerName, op.ID) {
+			continue
+		}
+		if !principal.AllowsOperationPermission(p, providerName, op.ID) {
+			continue
+		}
+		if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, providerName, *op) {
+			continue
+		}
+
+		tool, err := m.resolveTool(ctx, p, coreagent.ToolRef{
+			PluginName: providerName,
+			Operation:  op.ID,
+			Connection: connection,
+			Instance:   instance,
+		})
+		if err != nil {
+			continue
+		}
+		out = append(out, tool)
+	}
+	return out, nil
+}
+
+func (m *Manager) resolveDefaultToolCatalog(ctx context.Context, p *principal.Principal, providerName string, prov core.Provider) (string, string, *catalog.Catalog, bool) {
+	ctx = invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, providerName))
+	resolver, _ := m.invoker.(invocation.TokenResolver)
+	bindingResolver, _ := m.invoker.(invocation.EffectiveCredentialBindingResolver)
+	requiresCredential := core.NormalizeConnectionMode(prov.ConnectionMode()) != core.ConnectionModeNone
+	targets := m.catalogSelectorConfig().BoundSessionCatalogTargets(providerName, p, "", "")
+	if len(targets) == 0 {
+		targets = []invocation.CatalogResolutionTarget{{}}
+	}
+	for _, target := range targets {
+		connection := strings.TrimSpace(target.Connection)
+		instance := strings.TrimSpace(target.Instance)
+		boundCredential := invocation.CredentialBindingResolution{}
+		if bindingResolver != nil {
+			resolvedBinding, err := bindingResolver.ResolveEffectiveCredentialBinding(p, providerName, connection, instance)
+			if err != nil {
+				continue
+			}
+			boundCredential = resolvedBinding
+		}
+
+		catalogCtx := ctx
+		if requiresCredential {
+			if resolver == nil {
+				continue
+			}
+			resolvedCtx, _, err := invocation.ResolveTokenForBinding(ctx, resolver, p, providerName, connection, instance, boundCredential)
+			if err != nil {
+				continue
+			}
+			cred := invocation.CredentialContextFromContext(resolvedCtx)
+			if cred.Connection != "" {
+				connection = cred.Connection
+			}
+			if cred.Instance != "" {
+				instance = cred.Instance
+			}
+			catalogCtx = resolvedCtx
+		}
+
+		var cat *catalog.Catalog
+		var err error
+		if requiresCredential {
+			cat, _, err = invocation.ResolveCatalogStrictWithMetadata(catalogCtx, prov, providerName, resolver, p, connection, instance)
+		} else {
+			cat, _, err = invocation.ResolveCatalogWithMetadata(catalogCtx, prov, providerName, resolver, p, connection, instance)
+		}
+		if err != nil || cat == nil {
+			continue
+		}
+		return connection, instance, cat, true
+	}
+	return "", "", nil, false
+}
+
+func defaultToolAllowed(op catalog.CatalogOperation) bool {
+	if op.Visible != nil && !*op.Visible {
+		return false
+	}
+	if op.Annotations.DestructiveHint != nil && *op.Annotations.DestructiveHint {
+		return false
+	}
+	if op.ReadOnly {
+		return true
+	}
+	return op.Annotations.ReadOnlyHint != nil && *op.Annotations.ReadOnlyHint
+}
+
+func mergeTools(groups ...[]coreagent.Tool) []coreagent.Tool {
+	total := 0
+	for _, group := range groups {
+		total += len(group)
+	}
+	if total == 0 {
+		return nil
+	}
+	out := make([]coreagent.Tool, 0, total)
+	seen := make(map[string]struct{}, total)
+	for _, group := range groups {
+		for _, tool := range group {
+			if _, ok := seen[tool.ID]; ok {
+				continue
+			}
+			seen[tool.ID] = struct{}{}
+			out = append(out, tool)
+		}
+	}
+	return out
 }
 
 func (m *Manager) allowProvider(ctx context.Context, p *principal.Principal, provider string) bool {

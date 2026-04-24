@@ -458,7 +458,7 @@ pub struct AgentRunCreateArgs {
     #[arg(long = "message")]
     pub messages: Vec<String>,
 
-    /// Attach a tool reference in plugin:operation form
+    /// Add a tool beyond the default safe tool set in plugin:operation form
     #[arg(long = "tool", value_parser = AgentToolArg::parse)]
     pub tools: Vec<AgentToolArg>,
 
@@ -471,8 +471,8 @@ pub struct AgentRunCreateArgs {
     pub idempotency_key: Option<String>,
 
     /// Load the JSON request body from a file (use "-" for stdin)
-    #[arg(long = "request-file")]
-    pub request_file: Option<String>,
+    #[arg(long = "input", alias = "request-file")]
+    pub input: Option<String>,
 }
 
 #[derive(Args)]

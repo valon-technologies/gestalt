@@ -104,9 +104,6 @@ The neutral agent run shape is intentionally small:
     { "role": "system", "text": "Be concise." },
     { "role": "user", "text": "Summarize the roadmap risk." }
   ],
-  "toolRefs": [
-    { "pluginName": "roadmap", "operation": "sync" }
-  ],
   "responseSchema": {
     "type": "object",
     "properties": {
@@ -117,6 +114,10 @@ The neutral agent run shape is intentionally small:
   "sessionRef": "session-123"
 }
 ```
+
+For global runs, omitting `toolRefs` lets Gestalt attach the caller's
+authorized safe tools by default. Add `toolRefs` to extend that set, or set
+`toolSource: "explicit"` when you need explicit-only tools.
 
 ## First-party agent providers
 
