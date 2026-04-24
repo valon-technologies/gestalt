@@ -11,7 +11,11 @@ import grpc
 from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import json_format
 
-from ._grpc_transport import insecure_internal_channel, secure_internal_channel
+from ._grpc_transport import (
+    insecure_internal_channel,
+    internal_channel_target,
+    secure_internal_channel,
+)
 from .gen.v1 import authorization_pb2 as _authorization_pb2
 from .gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
 
@@ -191,7 +195,7 @@ def _authorization_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
                 f"authorization: tcp target {raw_target!r} is missing host:port"
             )
         return _with_authorization_relay_token(
-            insecure_internal_channel(f"dns:///{address}"),
+            insecure_internal_channel(internal_channel_target("tcp", address)),
             token,
         )
     if target.startswith("tls://"):
@@ -201,7 +205,7 @@ def _authorization_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
                 f"authorization: tls target {raw_target!r} is missing host:port"
             )
         return _with_authorization_relay_token(
-            secure_internal_channel(f"dns:///{address}"),
+            secure_internal_channel(internal_channel_target("tls", address)),
             token,
         )
     if target.startswith("unix://"):
@@ -211,7 +215,7 @@ def _authorization_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
                 f"authorization: unix target {raw_target!r} is missing a socket path"
             )
         return _with_authorization_relay_token(
-            insecure_internal_channel(f"unix:{socket_path}"),
+            insecure_internal_channel(internal_channel_target("unix", socket_path)),
             token,
         )
     if "://" in target:
@@ -220,7 +224,7 @@ def _authorization_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
             f"authorization: unsupported target scheme {parsed.scheme!r}"
         )
     return _with_authorization_relay_token(
-        insecure_internal_channel(f"unix:{target}"),
+        insecure_internal_channel(internal_channel_target("unix", target)),
         token,
     )
 
