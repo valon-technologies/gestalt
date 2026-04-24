@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/internal/testutil/fakebun"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -787,56 +788,24 @@ func mustWriteTypeScriptSourceComponentManifest(t *testing.T, root, pluginName, 
 func writeFakeTypeScriptBun(t *testing.T, root, pluginName, expectedTarget, expectedGOOS, expectedGOARCH string) string {
 	t.Helper()
 
-	path := filepath.Join(root, "bin", "bun")
-	script := `#!/bin/sh
-set -eu
+	sdkPath := fakebun.LocalTypeScriptSDKPath()
+	if sdkPath == "" {
+		t.Fatal("local TypeScript SDK not found")
+	}
 
-if [ "$#" -lt 4 ] || [ "$1" != "--cwd" ]; then
-  echo "unexpected fake bun args: $*" >&2
-  exit 1
-fi
-
-cwd="$2"
-shift 2
-
-entry="$1"
-shift
-
-if [ "$#" -gt 0 ] && [ "$1" = "--" ]; then
-  shift
-fi
-
-entry_base="${entry##*/}"
-
-case "$entry_base" in
-  gestalt-ts-runtime|runtime.ts)
-    if [ "$#" -ne 2 ]; then
-      echo "unexpected runtime args: $*" >&2
-      exit 1
-    fi
-    root="$1"
-    target="$2"
-    if [ "$cwd" != "$root" ]; then
-      echo "unexpected runtime cwd: $cwd != $root" >&2
-      exit 1
-    fi
-    if [ "$target" != "` + expectedTarget + `" ]; then
-      echo "unexpected runtime target: $target" >&2
-      exit 1
-    fi
-    if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
-      echo "missing GESTALT_PLUGIN_WRITE_CATALOG" >&2
-      exit 1
-    fi
-    cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
-name: ` + pluginName + `
+	return fakebun.NewExecutable(t, fakebun.Config{
+		Runtime: &fakebun.RuntimeConfig{
+			ExpectedCwd:    root,
+			ExpectedEntry:  filepath.Join(sdkPath, "src", "runtime.ts"),
+			ExpectedRoot:   root,
+			ExpectedTarget: expectedTarget,
+			RequireCatalog: true,
+			Catalog: fmt.Sprintf(`name: %s
 operations:
   - id: greet
     method: GET
-EOF
-    if [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
-      cat > "$GESTALT_PLUGIN_WRITE_MANIFEST_METADATA" <<'EOF'
-securitySchemes:
+`, pluginName),
+			ManifestMetadata: `securitySchemes:
   signed:
     type: hmac
     secret:
@@ -856,51 +825,19 @@ http:
       required: true
       content:
         application/x-www-form-urlencoded: {}
-EOF
-    fi
-    exit 0
-    ;;
-  gestalt-ts-build|build.ts)
-    if [ "$#" -ne 6 ]; then
-      echo "unexpected build args: $*" >&2
-      exit 1
-    fi
-    source_dir="$1"
-    target="$2"
-    output="$3"
-    name="$4"
-    goos="$5"
-    goarch="$6"
-    if [ "$cwd" != "$source_dir" ]; then
-      echo "unexpected build cwd: $cwd != $source_dir" >&2
-      exit 1
-    fi
-    if [ "$target" != "` + expectedTarget + `" ]; then
-      echo "unexpected build target: $target" >&2
-      exit 1
-    fi
-    if [ "$name" != "` + pluginName + `" ]; then
-      echo "unexpected plugin name: $name" >&2
-      exit 1
-    fi
-    if [ "$goos" != "` + expectedGOOS + `" ] || [ "$goarch" != "` + expectedGOARCH + `" ]; then
-      echo "unexpected target platform: $goos/$goarch" >&2
-      exit 1
-    fi
-    output_dir="${output%/*}"
-    if [ "$output_dir" = "$output" ]; then
-      output_dir="."
-    fi
-    mkdir -p "$output_dir"
-    printf '#!/bin/sh\n# fake ts release binary\nexit 0\n' > "$output"
-    chmod +x "$output"
-    exit 0
-    ;;
-esac
-
-echo "unexpected fake bun entry: $entry ($*)" >&2
-exit 1
-`
-	mustWriteFile(t, path, []byte(script), 0o755)
-	return path
+`,
+		},
+		Build: &fakebun.BuildConfig{
+			ExpectedCwd:        root,
+			ExpectedEntry:      filepath.Join(sdkPath, "src", "build.ts"),
+			ExpectedSourceDir:  root,
+			ExpectedTarget:     expectedTarget,
+			ExpectedPluginName: pluginName,
+			AllowedPlatforms: []fakebun.Platform{{
+				GOOS:   expectedGOOS,
+				GOARCH: expectedGOARCH,
+			}},
+			BinaryContent: "#!/bin/sh\n# fake ts release binary\nexit 0\n",
+		},
+	})
 }

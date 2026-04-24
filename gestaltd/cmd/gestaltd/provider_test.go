@@ -28,6 +28,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/fakebun"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
@@ -391,8 +392,6 @@ func TestRun_ProviderReleaseBuildsTypeScriptSourcePluginForCurrentPlatform(t *te
 		t.Skip("fake Bun build fixture is POSIX-only")
 	}
 
-	t.Setenv("PATH", pathWithoutGo(t))
-
 	pluginDir := newTypeScriptSourceReleaseFixture(t, t.TempDir())
 	bunPath := writeFakeTypeScriptProviderReleaseBun(
 		t,
@@ -402,6 +401,7 @@ func TestRun_ProviderReleaseBuildsTypeScriptSourcePluginForCurrentPlatform(t *te
 		runtime.GOOS,
 		runtime.GOARCH,
 	)
+	t.Setenv("PATH", pathWithoutGo(t))
 	t.Setenv("GESTALT_BUN", bunPath)
 
 	outputDir := t.TempDir()
@@ -575,8 +575,6 @@ func TestRun_ProviderReleaseBuildsRequestedPlatformSets(t *testing.T) {
 		}
 
 		builtBinary := buildGoSourceAuthBinary(t)
-		t.Setenv("PATH", pathWithoutGo(t))
-
 		pluginDir := newTypeScriptSourceAuthReleaseFixture(t, t.TempDir())
 		defaultPlatforms := defaultReleasePlatformsForTest(t)
 		bunPath := writeFakeTypeScriptComponentReleaseBunForPlatforms(
@@ -587,6 +585,7 @@ func TestRun_ProviderReleaseBuildsRequestedPlatformSets(t *testing.T) {
 			defaultPlatforms,
 			builtBinary,
 		)
+		t.Setenv("PATH", pathWithoutGo(t))
 		t.Setenv("GESTALT_BUN", bunPath)
 
 		outputDir := t.TempDir()
@@ -1450,9 +1449,9 @@ func TestRun_ProviderReleaseBuildsExecutableAuthProviders(t *testing.T) {
 				t.Helper()
 
 				builtBinary := buildGoSourceAuthBinary(t)
-				t.Setenv("PATH", pathWithoutGo(t))
 				pluginDir := newTypeScriptSourceAuthReleaseFixture(t, t.TempDir())
 				bunPath := writeFakeTypeScriptComponentReleaseBun(t, filepath.Join(pluginDir, "fake-bun"), authReleaseTypeScriptTarget, authReleasePluginName, runtime.GOOS, runtime.GOARCH, builtBinary)
+				t.Setenv("PATH", pathWithoutGo(t))
 				t.Setenv("GESTALT_BUN", bunPath)
 				return pluginDir
 			},
@@ -2584,142 +2583,54 @@ func writeFakeTypeScriptComponentReleaseBun(t *testing.T, path, expectedTarget, 
 func writeFakeTypeScriptComponentReleaseBunForPlatforms(t *testing.T, path, expectedTarget, expectedPluginName string, expectedPlatforms []releasePlatform, builtBinaryPath string) string {
 	t.Helper()
 
-	allowedCases := make([]string, 0, len(expectedPlatforms))
+	allowedPlatforms := make([]fakebun.Platform, 0, len(expectedPlatforms))
 	for _, platform := range expectedPlatforms {
-		allowedCases = append(allowedCases, fmt.Sprintf("%s/%s", platform.GOOS, platform.GOARCH))
+		allowedPlatforms = append(allowedPlatforms, fakebun.Platform{
+			GOOS:   platform.GOOS,
+			GOARCH: platform.GOARCH,
+		})
 	}
-	allowedPlatformCase := strings.Join(allowedCases, "|") + ")"
+	sdkPath := fakebun.LocalTypeScriptSDKPath()
+	if sdkPath == "" {
+		t.Fatal("local TypeScript SDK not found")
+	}
 
-	script := `#!/bin/sh
-set -eu
-
-if [ "$#" -lt 4 ] || [ "$1" != "--cwd" ]; then
-  echo "unexpected fake bun args: $*" >&2
-  exit 1
-fi
-
-cwd="$2"
-shift 2
-
-entry="$1"
-shift
-
-if [ "$#" -gt 0 ] && [ "$1" = "--" ]; then
-  shift
-fi
-
-entry_base="${entry##*/}"
-case "$entry_base" in
-  gestalt-ts-build|build.ts)
-    if [ "$#" -ne 6 ]; then
-      echo "unexpected build args: $*" >&2
-      exit 1
-    fi
-    source_dir="$1"
-    target="$2"
-    output="$3"
-    name="$4"
-    goos="$5"
-    goarch="$6"
-    if [ "$cwd" != "$source_dir" ]; then
-      echo "unexpected build cwd: $cwd != $source_dir" >&2
-      exit 1
-    fi
-    if [ "$target" != "` + authReleaseTypeScriptTarget + `" ]; then
-      echo "unexpected build target: $target" >&2
-      exit 1
-    fi
-    if [ "$target" != "` + expectedTarget + `" ]; then
-      echo "unexpected build target: $target" >&2
-      exit 1
-    fi
-    if [ "$name" != "` + expectedPluginName + `" ]; then
-      echo "unexpected plugin name: $name" >&2
-      exit 1
-    fi
-    case "$goos/$goarch" in
-      ` + allowedPlatformCase + `
-        ;;
-      *)
-        echo "unexpected target platform: $goos/$goarch" >&2
-        exit 1
-        ;;
-    esac
-    output_dir="${output%/*}"
-    if [ "$output_dir" = "$output" ]; then
-      output_dir="."
-    fi
-    mkdir -p "$output_dir"
-    cp "` + builtBinaryPath + `" "$output"
-    chmod +x "$output"
-    exit 0
-    ;;
-esac
-
-echo "unexpected fake bun entry: $entry ($*)" >&2
-exit 1
-`
-	writeTestFile(t, filepath.Dir(path), filepath.Base(path), []byte(script), 0o755)
-	return path
+	sourceDir := "."
+	return fakebun.NewExecutable(t, fakebun.Config{
+		Build: &fakebun.BuildConfig{
+			ExpectedCwd:        sourceDir,
+			ExpectedEntry:      filepath.Join(sdkPath, "src", "build.ts"),
+			ExpectedSourceDir:  sourceDir,
+			ExpectedTarget:     expectedTarget,
+			ExpectedPluginName: expectedPluginName,
+			AllowedPlatforms:   allowedPlatforms,
+			CopyBinaryFrom:     builtBinaryPath,
+		},
+	})
 }
 
 func writeFakeTypeScriptProviderReleaseBun(t *testing.T, path, expectedPluginName, expectedTarget, expectedGOOS, expectedGOARCH string) string {
 	t.Helper()
 
-	script := `#!/bin/sh
-set -eu
+	sdkPath := fakebun.LocalTypeScriptSDKPath()
+	if sdkPath == "" {
+		t.Fatal("local TypeScript SDK not found")
+	}
 
-if [ "$#" -lt 4 ] || [ "$1" != "--cwd" ]; then
-  echo "unexpected fake bun args: $*" >&2
-  exit 1
-fi
-
-cwd="$2"
-shift 2
-
-entry="$1"
-shift
-
-if [ "$#" -gt 0 ] && [ "$1" = "--" ]; then
-  shift
-fi
-
-entry_base="${entry##*/}"
-case "$entry_base" in
-  gestalt-ts-runtime|runtime.ts)
-    if [ "$#" -ne 2 ]; then
-      echo "unexpected runtime args: $*" >&2
-      exit 1
-    fi
-    root="$1"
-    target="$2"
-    if [ "$cwd" != "$root" ]; then
-      echo "unexpected runtime cwd: $cwd != $root" >&2
-      exit 1
-    fi
-    if [ "$target" != "` + typeScriptReleaseTarget + `" ]; then
-      echo "unexpected runtime target: $target" >&2
-      exit 1
-    fi
-    if [ "$target" != "` + expectedTarget + `" ]; then
-      echo "unexpected runtime target: $target" >&2
-      exit 1
-    fi
-    if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ] && [ -z "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
-      echo "missing catalog or manifest metadata export path" >&2
-      exit 1
-    fi
-    if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
-      cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
-name: ` + typeScriptReleasePluginName + `
+	sourceDir := "."
+	return fakebun.NewExecutable(t, fakebun.Config{
+		Runtime: &fakebun.RuntimeConfig{
+			ExpectedCwd:      sourceDir,
+			ExpectedEntry:    filepath.Join(sdkPath, "src", "runtime.ts"),
+			ExpectedRoot:     sourceDir,
+			ExpectedTarget:   expectedTarget,
+			RequireAnyOutput: true,
+			Catalog: `name: ` + typeScriptReleasePluginName + `
 operations:
   - id: greet
     method: GET
-EOF
-    fi
-    if [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
-      cat > "$GESTALT_PLUGIN_WRITE_MANIFEST_METADATA" <<'EOF'
-securitySchemes:
+`,
+			ManifestMetadata: `securitySchemes:
   signed:
     type: hmac
     secret:
@@ -2743,57 +2654,21 @@ http:
       status: 200
       body:
         status: accepted
-EOF
-    fi
-    exit 0
-    ;;
-  gestalt-ts-build|build.ts)
-    if [ "$#" -ne 6 ]; then
-      echo "unexpected build args: $*" >&2
-      exit 1
-    fi
-    source_dir="$1"
-    target="$2"
-    output="$3"
-    name="$4"
-    goos="$5"
-    goarch="$6"
-    if [ "$cwd" != "$source_dir" ]; then
-      echo "unexpected build cwd: $cwd != $source_dir" >&2
-      exit 1
-    fi
-    if [ "$target" != "` + typeScriptReleaseTarget + `" ]; then
-      echo "unexpected build target: $target" >&2
-      exit 1
-    fi
-    if [ "$target" != "` + expectedTarget + `" ]; then
-      echo "unexpected build target: $target" >&2
-      exit 1
-    fi
-    if [ "$name" != "` + expectedPluginName + `" ]; then
-      echo "unexpected plugin name: $name" >&2
-      exit 1
-    fi
-    if [ "$goos" != "` + expectedGOOS + `" ] || [ "$goarch" != "` + expectedGOARCH + `" ]; then
-      echo "unexpected target platform: $goos/$goarch" >&2
-      exit 1
-    fi
-    output_dir="${output%/*}"
-    if [ "$output_dir" = "$output" ]; then
-      output_dir="."
-    fi
-    mkdir -p "$output_dir"
-    printf '#!/bin/sh\n# fake ts release binary\nexit 0\n' > "$output"
-    chmod +x "$output"
-    exit 0
-    ;;
-esac
-
-echo "unexpected fake bun entry: $entry ($*)" >&2
-exit 1
-`
-	writeTestFile(t, filepath.Dir(path), filepath.Base(path), []byte(script), 0o755)
-	return path
+`,
+		},
+		Build: &fakebun.BuildConfig{
+			ExpectedCwd:        sourceDir,
+			ExpectedEntry:      filepath.Join(sdkPath, "src", "build.ts"),
+			ExpectedSourceDir:  sourceDir,
+			ExpectedTarget:     expectedTarget,
+			ExpectedPluginName: expectedPluginName,
+			AllowedPlatforms: []fakebun.Platform{{
+				GOOS:   expectedGOOS,
+				GOARCH: expectedGOARCH,
+			}},
+			BinaryContent: "#!/bin/sh\n# fake ts release binary\nexit 0\n",
+		},
+	})
 }
 
 func writeFakePythonReleaseInterpreter(t *testing.T, path, expectedGOOS, expectedGOARCH string) {
