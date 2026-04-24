@@ -40,7 +40,14 @@ type providerLocalCommandOptions struct {
 type providerLocalSession struct {
 	Dir               string
 	ManifestPath      string
+	PackageDir        string
+	Manifest          *providermanifestv1.Manifest
+	BaseConfigPath    string
+	OverlayConfigPath string
+	NameOverride      string
+	Port              int
 	PluginKey         string
+	UserConfigPaths   []string
 	ConfigPaths       []string
 	State             operator.StatePaths
 	PublicURL         string
@@ -95,6 +102,7 @@ func runProviderDev(args []string) error {
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	pathFlag := fs.String("path", "", "provider manifest path or directory (defaults to current working directory)")
 	nameFlag := fs.String("name", "", "plugin key override")
+	noWatchFlag := fs.Bool("no-watch", false, "disable file watching and run a single local serve session")
 	portFlag := fs.Int("port", 0, "public port (defaults to a free localhost port)")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -122,6 +130,10 @@ func runProviderDev(args []string) error {
 		return err
 	}
 	defer func() { _ = os.RemoveAll(session.Dir) }()
+
+	if !*noWatchFlag {
+		return runProviderDevWatch(session)
+	}
 
 	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.State, false)
 	if err != nil {
@@ -191,37 +203,72 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 		return nil, err
 	}
 
-	resolvedKey, err := resolveProviderLocalPluginKey(opts.ConfigPaths, targetManifestPath, manifest, opts.Name)
-	if err != nil {
-		return nil, err
-	}
-
 	overlayConfigPath := filepath.Join(sessionDir, "provider-target.yaml")
-	autoMountPath := ""
-	if err := writeProviderLocalOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, ""); err != nil {
+	session := &providerLocalSession{
+		Dir:               sessionDir,
+		ManifestPath:      targetManifestPath,
+		PackageDir:        filepath.Dir(targetManifestPath),
+		Manifest:          manifest,
+		BaseConfigPath:    baseConfigPath,
+		OverlayConfigPath: overlayConfigPath,
+		NameOverride:      opts.Name,
+		Port:              opts.Port,
+		UserConfigPaths:   append([]string(nil), opts.ConfigPaths...),
+		State:             operator.StatePaths{ArtifactsDir: filepath.Join(sessionDir, "artifacts"), LockfilePath: filepath.Join(sessionDir, "gestalt.lock.json")},
+	}
+	if err := refreshProviderLocalSession(session); err != nil {
 		return nil, err
 	}
+	cleanupSessionDir = false
+	return session, nil
+}
 
-	configPaths := append([]string{baseConfigPath}, opts.ConfigPaths...)
-	configPaths = append(configPaths, overlayConfigPath)
+func refreshProviderLocalSession(session *providerLocalSession) error {
+	if session == nil {
+		return errors.New("provider local session is required")
+	}
+
+	_, manifest, err := providerpkg.ReadSourceManifestFile(session.ManifestPath)
+	if err != nil {
+		return err
+	}
+	kind, err := providerpkg.ManifestKind(manifest)
+	if err != nil {
+		return err
+	}
+	if kind != providermanifestv1.KindPlugin {
+		return fmt.Errorf("gestaltd provider dev and validate only support kind: plugin in v1 (got %q)", kind)
+	}
+
+	resolvedKey, err := resolveProviderLocalPluginKey(session.UserConfigPaths, session.ManifestPath, manifest, session.NameOverride)
+	if err != nil {
+		return err
+	}
+
+	if err := writeProviderLocalOverlayConfig(session.OverlayConfigPath, resolvedKey, session.ManifestPath, session.Port, ""); err != nil {
+		return err
+	}
+
+	configPaths := append([]string{session.BaseConfigPath}, session.UserConfigPaths...)
+	configPaths = append(configPaths, session.OverlayConfigPath)
 
 	loadedCfg, err := config.LoadPaths(configPaths)
 	if err != nil {
-		return nil, fmt.Errorf("loading provider dev config: %w", err)
+		return fmt.Errorf("loading provider dev config: %w", err)
 	}
 
+	autoMountPath := ""
 	if shouldAutoMountOwnedUI(loadedCfg, resolvedKey, manifest) {
 		autoMountPath = "/" + resolvedKey
 		if err := ensureNoPublicUIPathCollision(loadedCfg, resolvedKey, autoMountPath); err != nil {
-			return nil, err
+			return err
 		}
-		if err := writeProviderLocalOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath); err != nil {
-			return nil, err
+		if err := writeProviderLocalOverlayConfig(session.OverlayConfigPath, resolvedKey, session.ManifestPath, session.Port, autoMountPath); err != nil {
+			return err
 		}
-		configPaths[len(configPaths)-1] = overlayConfigPath
 		loadedCfg, err = config.LoadPaths(configPaths)
 		if err != nil {
-			return nil, fmt.Errorf("loading provider dev config with auto-mounted ui: %w", err)
+			return fmt.Errorf("loading provider dev config with auto-mounted ui: %w", err)
 		}
 	}
 
@@ -231,18 +278,15 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 		publicUIPaths = append(publicUIPaths, autoMountPath)
 		slices.Sort(publicUIPaths)
 	}
-	cleanupSessionDir = false
-	return &providerLocalSession{
-		Dir:               sessionDir,
-		ManifestPath:      targetManifestPath,
-		PluginKey:         resolvedKey,
-		ConfigPaths:       configPaths,
-		State:             operator.StatePaths{ArtifactsDir: filepath.Join(sessionDir, "artifacts"), LockfilePath: filepath.Join(sessionDir, "gestalt.lock.json")},
-		PublicURL:         publicURL,
-		AdminURL:          strings.TrimRight(publicURL, "/") + "/admin/",
-		PublicUIPaths:     publicUIPaths,
-		AutoMountedUIPath: autoMountPath,
-	}, nil
+
+	session.Manifest = manifest
+	session.PluginKey = resolvedKey
+	session.ConfigPaths = configPaths
+	session.PublicURL = publicURL
+	session.AdminURL = strings.TrimRight(publicURL, "/") + "/admin/"
+	session.PublicUIPaths = publicUIPaths
+	session.AutoMountedUIPath = autoMountPath
+	return nil
 }
 
 func resolveProviderTargetManifest(pathFlag string) (string, *providermanifestv1.Manifest, error) {
@@ -621,16 +665,18 @@ func printProviderValidateUsage(w io.Writer) {
 
 func printProviderDevUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd provider dev [--path PATH] [--config PATH]... [--name NAME] [--port PORT]")
+	writeUsageLine(w, "  gestaltd provider dev [--path PATH] [--config PATH]... [--name NAME] [--port PORT] [--no-watch]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Run a local source plugin inside a synthesized Gestalt config.")
 	writeUsageLine(w, "v1 supports kind: plugin manifests only.")
 	writeUsageLine(w, "The built-in admin UI remains available at /admin; configured or owned public UIs")
-	writeUsageLine(w, "are mounted when present.")
+	writeUsageLine(w, "are mounted when present. By default, provider dev watches the plugin package and")
+	writeUsageLine(w, "layered config files and restarts the local server when they change.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --path     Provider manifest path or directory (default: current working directory)")
 	writeUsageLine(w, "  --config   Additional config file to merge; repeat to add support providers or null deletions")
 	writeUsageLine(w, "  --name     Plugin key override when the target key is ambiguous")
 	writeUsageLine(w, "  --port     Public port (default: auto-selected free localhost port)")
+	writeUsageLine(w, "  --no-watch Disable file watching and run a single local serve session")
 }

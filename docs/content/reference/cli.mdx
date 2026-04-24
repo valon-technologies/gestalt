@@ -31,8 +31,9 @@ import { Callout } from 'nextra/components'
 
 | Command | Purpose |
 | --- | --- |
-| `gestaltd provider dev --path PATH` | Run a local source plugin inside a synthesized Gestalt config. Serves `/admin` and any configured or inferred public UIs. |
+| `gestaltd provider dev --path PATH` | Run a local source plugin inside a synthesized Gestalt config. Serves `/admin` and any configured or inferred public UIs, then watches the plugin package and layered config files for restart-on-change by default. |
 | `gestaltd provider dev --config PATH` | Layer supporting providers, plugins, and UI mounts on top of the synthesized local baseline. Repeat `--config` to merge left-to-right. |
+| `gestaltd provider dev --no-watch` | Disable restart-on-change and run a single local serve session. |
 | `gestaltd provider validate --path PATH` | Validate a local source plugin inside the same synthesized Gestalt config used by `provider dev`. |
 | `gestaltd provider validate --config PATH` | Validate the target plugin together with selected supporting providers and `null` deletions from layered config overlays. |
 | `gestaltd provider release --version VERSION` | Build and package a provider release. Go, Python, Rust, and TypeScript source plugins default to the host platform. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
@@ -53,6 +54,7 @@ gestaltd serve --locked --config ./base.yaml --config ./overrides/prod.yaml
 gestaltd provider validate --path ./plugins/support
 gestaltd provider validate --path ./plugins/support --config ./dev/support.yaml --config ./dev/local.yaml
 gestaltd provider dev --path ./plugins/support
+gestaltd provider dev --path ./plugins/support --no-watch
 gestaltd provider dev --path ./plugins/support --config ./dev/support.yaml --port 8080
 gestaltd provider release --version 0.0.1-alpha.1
 gestaltd provider release --version 0.0.1-alpha.1 --platform all

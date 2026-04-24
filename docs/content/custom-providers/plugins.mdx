@@ -656,6 +656,14 @@ Run the plugin locally with browser-facing UI available:
 gestaltd provider dev --path ./slack
 ```
 
+`gestaltd provider dev` watches the plugin package and any layered `--config`
+files by default, then restarts the local server when they change. Pass
+`--no-watch` if you want a single serve session instead:
+
+```sh
+gestaltd provider dev --path ./slack --no-watch
+```
+
 When the plugin needs supporting providers, extra plugins, or explicit mounted
 UIs, layer real config overlays on top of the synthesized baseline:
 

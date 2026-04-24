@@ -1568,6 +1568,68 @@ func startCommandAndWaitReadyAndFile(t *testing.T, cmd *exec.Cmd, baseURL, requi
 	}
 }
 
+func waitForInvokeOutputContains(t *testing.T, baseURL, integration, operation, param, want string) {
+	t.Helper()
+
+	timeout := time.After(90 * time.Second)
+	tick := time.NewTicker(500 * time.Millisecond)
+	defer tick.Stop()
+
+	cliEnv := append(os.Environ(), "GESTALT_URL="+baseURL, "GESTALT_API_KEY=e2e-test-key")
+	args := []string{"invoke", integration, operation, "--format", "json", "--url", baseURL}
+	if param != "" {
+		args = append(args, "-p", param)
+	}
+
+	lastOutput := ""
+	for {
+		select {
+		case <-timeout:
+			t.Fatalf("timed out waiting for %q in invoke output, last output: %s", want, lastOutput)
+		case <-tick.C:
+			cmd := exec.Command(gestaltCLIBin, args...)
+			cmd.Env = cliEnv
+			out, err := cmd.CombinedOutput()
+			lastOutput = string(out)
+			if err == nil && strings.Contains(lastOutput, want) {
+				return
+			}
+		}
+	}
+}
+
+func waitForHTTPResponse(t *testing.T, url string, wantStatus int, wantSubstring string) {
+	t.Helper()
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	timeout := time.After(90 * time.Second)
+	tick := time.NewTicker(500 * time.Millisecond)
+	defer tick.Stop()
+
+	lastStatus := 0
+	lastBody := ""
+	for {
+		select {
+		case <-timeout:
+			t.Fatalf("timed out waiting for %s to return %d with %q, last status=%d body=%s", url, wantStatus, wantSubstring, lastStatus, lastBody)
+		case <-tick.C:
+			resp, err := client.Get(url)
+			if err != nil {
+				lastStatus = 0
+				lastBody = err.Error()
+				continue
+			}
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			lastStatus = resp.StatusCode
+			lastBody = string(body)
+			if resp.StatusCode == wantStatus && (wantSubstring == "" || strings.Contains(lastBody, wantSubstring)) {
+				return
+			}
+		}
+	}
+}
+
 func startGestaltdWithConfig(t *testing.T, cfgPath string) string {
 	t.Helper()
 	return startGestaltdWithConfigs(t, []string{cfgPath}, false)
@@ -1710,6 +1772,145 @@ func TestE2EProviderDevAutoMountsOwnedUI(t *testing.T) {
 		}
 	}
 	t.Fatalf(`integration "provider" mountedPath missing from response: %s`, integrationsBody)
+}
+
+func TestE2EProviderDevRestartsOnOwnedUIChange(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping provider dev owned-ui watch test in short mode")
+	}
+
+	dir := t.TempDir()
+	providersDir := setupDefaultLocalProvidersDir(t, dir)
+	pluginDir := setupPluginDir(t, dir)
+	mountedUI := setupMountedUIDir(t, dir)
+	attachOwnedUIToPluginSource(t, pluginDir, mountedUI.ManifestPath)
+	port, holder := reservePort(t)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	_ = holder.Close()
+
+	cmd := exec.Command(gestaltdBin, "provider", "dev", "--path", componentProviderManifestPath(t, pluginDir), "--port", fmt.Sprintf("%d", port))
+	cmd.Env = append(os.Environ(),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
+		"GOTELEMETRY=off",
+	)
+	startCommandAndWaitReady(t, cmd, baseURL)
+
+	waitForHTTPResponse(t, baseURL+"/provider/sync", http.StatusOK, "Roadmap Review UI")
+
+	indexPath := filepath.Join(filepath.Dir(mountedUI.ManifestPath), "dist", "index.html")
+	indexHTML, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatalf("read owned ui index.html: %v", err)
+	}
+	updatedHTML := strings.Replace(string(indexHTML), "Roadmap Review UI", "Updated Roadmap Review UI", 1)
+	if updatedHTML == string(indexHTML) {
+		t.Fatal(`expected owned ui fixture to contain "Roadmap Review UI"`)
+	}
+	if err := os.WriteFile(indexPath, []byte(updatedHTML), 0o644); err != nil {
+		t.Fatalf("write owned ui index.html: %v", err)
+	}
+
+	waitForHTTPResponse(t, baseURL+"/provider/sync", http.StatusOK, "Updated Roadmap Review UI")
+}
+
+func TestE2EProviderDevRestartsOnSourceChange(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping provider dev watch test in short mode")
+	}
+
+	dir := t.TempDir()
+	providersDir := setupDefaultLocalProvidersDir(t, dir)
+	pluginDir := setupPluginDir(t, dir)
+	port, holder := reservePort(t)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	_ = holder.Close()
+
+	cmd := exec.Command(gestaltdBin, "provider", "dev", "--path", pluginDir, "--port", fmt.Sprintf("%d", port))
+	cmd.Env = append(os.Environ(),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
+		"GOTELEMETRY=off",
+	)
+	startCommandAndWaitReady(t, cmd, baseURL)
+
+	waitForInvokeOutputContains(t, baseURL, "provider", "greet", "name=Watch", "Hello, Watch!")
+
+	providerPath := filepath.Join(pluginDir, "provider.go")
+	providerSource, err := os.ReadFile(providerPath)
+	if err != nil {
+		t.Fatalf("read provider source: %v", err)
+	}
+	updatedSource := strings.Replace(string(providerSource), `greeting = "Hello"`, `greeting = "Howdy"`, 1)
+	if updatedSource == string(providerSource) {
+		t.Fatal(`expected provider fixture source to contain greeting = "Hello"`)
+	}
+	if err := os.WriteFile(providerPath, []byte(updatedSource), 0o644); err != nil {
+		t.Fatalf("write provider source: %v", err)
+	}
+
+	waitForInvokeOutputContains(t, baseURL, "provider", "greet", "name=Watch", "Howdy, Watch!")
+}
+
+func TestE2EProviderDevAppliesWatchedConfigChanges(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping provider dev config watch test in short mode")
+	}
+
+	dir := t.TempDir()
+	providersDir := setupDefaultLocalProvidersDir(t, dir)
+	pluginDir := setupPluginDir(t, dir)
+	mountedUI := setupMountedUIDir(t, dir)
+	attachOwnedUIToPluginSource(t, pluginDir, mountedUI.ManifestPath)
+	configPath := filepath.Join(dir, "watch-config.yaml")
+	if err := os.WriteFile(configPath, []byte("plugins: {}\n"), 0o644); err != nil {
+		t.Fatalf("write watch config: %v", err)
+	}
+	port, holder := reservePort(t)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	_ = holder.Close()
+
+	cmd := exec.Command(gestaltdBin, "provider", "dev", "--path", pluginDir, "--config", configPath, "--port", fmt.Sprintf("%d", port))
+	cmd.Env = append(os.Environ(),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
+		"GOTELEMETRY=off",
+	)
+	startCommandAndWaitReady(t, cmd, baseURL)
+
+	waitForHTTPResponse(t, baseURL+"/provider/sync", http.StatusOK, "Roadmap Review UI")
+
+	updatedConfig := fmt.Sprintf(`providers:
+  ui:
+    provider:
+      source:
+        path: %q
+plugins:
+  provider:
+    source:
+      path: %q
+    ui: provider
+    mountPath: /review
+`, mountedUI.ManifestPath, componentProviderManifestPath(t, pluginDir))
+	if err := os.WriteFile(configPath, []byte(updatedConfig), 0o644); err != nil {
+		t.Fatalf("rewrite watch config: %v", err)
+	}
+
+	waitForHTTPResponse(t, baseURL+"/review/sync", http.StatusOK, "Roadmap Review UI")
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(baseURL + "/provider/sync")
+	if err != nil {
+		t.Fatalf("GET /provider/sync after config change: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected old auto-mounted path to be removed after config change, got 200: %s", body)
+	}
 }
 
 //nolint:paralleltest // Uses the default 8080 startup path intentionally.
