@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -47,6 +48,57 @@ def _build_harness() -> str:
 _harness_bin: str | None = None
 _harness_proc: subprocess.Popen[bytes] | None = None
 _socket_path: str = ""
+
+_TLS_CERT_PEM = """-----BEGIN CERTIFICATE-----
+MIIDJTCCAg2gAwIBAgIUaQujB8wIeckTiFgjFgZbVaxm3EQwDQYJKoZIhvcNAQEL
+BQAwFDESMBAGA1UEAwwJMTI3LjAuMC4xMB4XDTI2MDQyNDE0NDA0MFoXDTM2MDQy
+MTE0NDA0MFowFDESMBAGA1UEAwwJMTI3LjAuMC4xMIIBIjANBgkqhkiG9w0BAQEF
+AAOCAQ8AMIIBCgKCAQEAsDkKPwQrtsaP9/AgIhbEy37Qo04MNGFu58T0HihDs3YF
+yGtJmiUv99dYYzsErAuPBIlITaDJqi3jtIpg8mgQZsokzkqeWtYG14Xy2fejwzIc
+Me4i4nE9Pj5WICJ2ydmERS2cOiDhUMojtaMgGv+kIZFOfF6/TpL6eyRPa2pRfgI0
+cbKltvafs0PGL66IchCGAOd1i+iDRCJcUC7Gle4vYwZyg0a3ojGt8+ufySmNxN1m
+gNHcAXU81xoqwfiuk62sDaz3Ev7kEsXp3nQf6Pv+3LTQjR8tcAh7DuD5QwEW+o66
+N3SmR+hX8KWKXGqa1j4G6hKkkCB5x1sUgRHagyVaRwIDAQABo28wbTAdBgNVHQ4E
+FgQU9PEc5NZcAXX9Hp46kuJT/8OpN0IwHwYDVR0jBBgwFoAU9PEc5NZcAXX9Hp46
+kuJT/8OpN0IwDwYDVR0TAQH/BAUwAwEB/zAaBgNVHREEEzARhwR/AAABgglsb2Nh
+bGhvc3QwDQYJKoZIhvcNAQELBQADggEBAJtCNvqECQmT7PrbErt9VzmwIok5JyFd
+RIkWdSTAYREET5PFK11BdKLcatrjNEedZ94X3M27dOpTDXhGhu2W2n/bg+6QKiEN
+UeZcDja28w50vrkJTSFTYgON96nX6zPd3mtVY8Z2gAE8DWtMnjfzDj26354dldht
+yHJtQIuj/67p6FDgu+nXVz84UtmH1PAoJ6/dSMTjpjMdDSLo0P44EHK80curNKdF
+u67O4clOBfuyR96gqeMXpx2qy6T4y1kOTcIecVjG/U/BD31xgRxqBhf7JXV40QDA
+zqha1yhGmVTSc6eS8FX/oD/QGmqbiQJmdprbop05KLItfi1FAE0yTvs=
+-----END CERTIFICATE-----
+"""
+
+_TLS_KEY_PEM = """-----BEGIN PRIVATE KEY-----
+MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCwOQo/BCu2xo/3
+8CAiFsTLftCjTgw0YW7nxPQeKEOzdgXIa0maJS/311hjOwSsC48EiUhNoMmqLeO0
+imDyaBBmyiTOSp5a1gbXhfLZ96PDMhwx7iLicT0+PlYgInbJ2YRFLZw6IOFQyiO1
+oyAa/6QhkU58Xr9Okvp7JE9ralF+AjRxsqW29p+zQ8YvrohyEIYA53WL6INEIlxQ
+LsaV7i9jBnKDRreiMa3z65/JKY3E3WaA0dwBdTzXGirB+K6TrawNrPcS/uQSxene
+dB/o+/7ctNCNHy1wCHsO4PlDARb6jro3dKZH6FfwpYpcaprWPgbqEqSQIHnHWxSB
+EdqDJVpHAgMBAAECggEACpDo+d1Mp7FhKXsW2iRmWVM5vEjuN2fOKAxpnLNKV+TQ
+NPOl3p2zMheR36VGwvAQe7Olh64H2XHV8NnJNU+jCB6/tTTJKOYjU+HerU4JXidP
+hHjkU5J5mxVOwa9/Utv9b85ryxp0mAz+tiHZR3UjiLW3MILX0qTCawbC0kx2JWlv
+8kDri5JK9Cbe1TpfiDPg+up//Mu9KltPuB8yaBAGgj3JmafdNfQWDNh/UnK0O0VG
+TzFyeQN998RqJc0zXvPds+x5k8BMG955HuX2EA/SjyD01IrT2BtLyrRaw3ovlSCS
+FhWzMf/85mUgOkKzXm3aTqjVnL+C/JHTlx21+ypw3QKBgQDb0V060PbUI1T6vL0d
+jqkN0AO6o/OWikglVUJ0v9nm4N7ueU6ODtx2NNjsyvHPvLodIGTAkplU55+VBhmf
+dz2JG3XLvTOxSyr75k/T4d28FkscrLphefutWx0UY2aTp6YXlMkQ+jzARiEESKmU
+KZgR03p+JxAkZmWb7cGJz45EBQKBgQDNOq203/Nyq8uM7s8ZnGX943ZR5oI716Bs
+X519C5IDwngMoDxySvdncHf2EROSxmciIH/C5i4oJ5yZCtdDOD2rSFR0DvQF2WKk
+ZIsJzZmLxt4wu7R6/HU+JeU4LSp0QRSpXj72fdXhUuRARznNbufnkbccPe12ww09
+XAQNiq6i2wKBgDMljuzNjHEl23MQEWzcMee92/BEj7waZtkQ8oqZzUjUT+rrHOUe
+/hsfBs5qFkPA5Qk77VWFhtnjnxUcuz+Iji/lzM3gMzPwiorcNvzVFDPceBOu+RsP
+OAlJJwYEbuyyWIoqG3Kw1wviBXKquZJ47yJOs7TAwBfIH6Jdeufm/HJFAoGAEQEJ
+n3DmxNuDE/w9YIvaz3xnM0X8CGVHP3N0owWwZWtZcwJbv8SCVym0ZsjnbEPQC73R
+mB5mOKF/khaZ21Hvmh92D9+lTE7Eo4ZJFtjYHgKuKi+DNqVwOWP+Z/cmC1fRFG9g
+nB+09uRdUQ4VtfW4dTFXkJl48Vwb3refBlg1O/0CgYBwKoyGmlcQfQAX0b29835W
+gWukLcKU+Kd99IAuVVbWNsAFwqEp0cm3gtrN6ZcPQ/U095WqsrGe7Bt2qw7xSt5D
+Jpp6kBddjP+CvphxEnoP0AQY71BBvW25NYxecd16Mhk5/g2/h/etwpnyE/XCXbOS
+2Xz7l2ukjglD2aCfiHN+EQ==
+-----END PRIVATE KEY-----
+"""
 
 
 def setUpModule() -> None:
@@ -99,6 +151,42 @@ def _start_tcp_harness(expect_token: str = "") -> tuple[subprocess.Popen[bytes],
         proc.kill()
         raise RuntimeError(f"tcp harness did not print READY, got: {line!r}")
     return proc, f"tcp://{address}"
+
+
+def _start_tls_relay_harness(
+    expect_token: str = "",
+) -> tuple[subprocess.Popen[bytes], str, str, str, str]:
+    harness_bin = _build_harness()
+    address = _reserve_tcp_address()
+    temp_dir = tempfile.mkdtemp(prefix="py-idb-tls-relay-")
+    cert_path = os.path.join(temp_dir, "cert.pem")
+    key_path = os.path.join(temp_dir, "key.pem")
+    with open(cert_path, "w", encoding="utf-8") as cert_file:
+        cert_file.write(_TLS_CERT_PEM)
+    with open(key_path, "w", encoding="utf-8") as key_file:
+        key_file.write(_TLS_KEY_PEM)
+    args = [
+        harness_bin,
+        "--relay-tls",
+        address,
+        "--cert-file",
+        cert_path,
+        "--key-file",
+        key_path,
+    ]
+    if expect_token:
+        args.extend(["--expect-token", expect_token])
+    proc = subprocess.Popen(
+        args,
+        stdout=subprocess.PIPE,
+    )
+    assert proc.stdout is not None
+    line = proc.stdout.readline().decode().strip()
+    proc.stdout.close()
+    if line != "READY":
+        proc.kill()
+        raise RuntimeError(f"tls relay harness did not print READY, got: {line!r}")
+    return proc, f"tls://{address}", cert_path, key_path, temp_dir
 
 
 def _client() -> IndexedDB:
@@ -222,6 +310,50 @@ class TestTCPTarget(unittest.TestCase):
         s.put({"id": "row-1", "value": "proxy-bypass"})
         got = s.get("row-1")
         self.assertEqual(got["value"], "proxy-bypass")
+        c.close()
+
+
+class TestTLSRelayTarget(unittest.TestCase):
+    def test_tls_relay_target_token_roundtrip_ignores_proxy_env(self) -> None:
+        token = "relay-token-python"
+        proc, target, cert_path, _, temp_dir = _start_tls_relay_harness(expect_token=token)
+        self.addCleanup(proc.wait)
+        self.addCleanup(proc.kill)
+        self.addCleanup(shutil.rmtree, temp_dir, True)
+
+        restore_names = [
+            "GESTALT_INDEXEDDB_SOCKET",
+            indexeddb_socket_token_env(),
+            "GRPC_DEFAULT_SSL_ROOTS_FILE_PATH",
+            "http_proxy",
+            "https_proxy",
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+        ]
+        previous_env = {name: os.environ.get(name) for name in restore_names}
+
+        def restore_env() -> None:
+            for name, value in previous_env.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+
+        os.environ["GESTALT_INDEXEDDB_SOCKET"] = target
+        os.environ[indexeddb_socket_token_env()] = token
+        os.environ["GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"] = cert_path
+        os.environ["http_proxy"] = "http://127.0.0.1:1"
+        os.environ["https_proxy"] = "http://127.0.0.1:1"
+        os.environ["HTTP_PROXY"] = "http://127.0.0.1:1"
+        os.environ["HTTPS_PROXY"] = "http://127.0.0.1:1"
+        self.addCleanup(restore_env)
+
+        c = _client()
+        c.create_object_store("tls_relay_target_env")
+        s = c.object_store("tls_relay_target_env")
+        s.put({"id": "row-1", "value": "tls-relay"})
+        got = s.get("row-1")
+        self.assertEqual(got["value"], "tls-relay")
         c.close()
 
 

@@ -13,7 +13,11 @@ import grpc as _grpc
 from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
-from ._grpc_transport import insecure_internal_channel, secure_internal_channel
+from ._grpc_transport import (
+    insecure_internal_channel,
+    internal_channel_target,
+    secure_internal_channel,
+)
 from .gen.v1 import datastore_pb2 as _pb
 from .gen.v1 import datastore_pb2_grpc as _pb_grpc
 
@@ -373,7 +377,7 @@ def _indexeddb_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
                 f"IndexedDB tcp target {raw_target!r} is missing host:port"
             )
         return _with_indexeddb_relay_token(
-            insecure_internal_channel(f"dns:///{address}"),
+            insecure_internal_channel(internal_channel_target("tcp", address)),
             token,
         )
     if target.startswith("tls://"):
@@ -383,7 +387,7 @@ def _indexeddb_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
                 f"IndexedDB tls target {raw_target!r} is missing host:port"
             )
         return _with_indexeddb_relay_token(
-            secure_internal_channel(f"dns:///{address}"),
+            secure_internal_channel(internal_channel_target("tls", address)),
             token,
         )
     if target.startswith("unix://"):
@@ -393,14 +397,14 @@ def _indexeddb_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
                 f"IndexedDB unix target {raw_target!r} is missing a socket path"
             )
         return _with_indexeddb_relay_token(
-            insecure_internal_channel(f"unix:{socket_path}"),
+            insecure_internal_channel(internal_channel_target("unix", socket_path)),
             token,
         )
     if "://" in target:
         parsed = _urlparse.urlparse(target)
         raise RuntimeError(f"unsupported IndexedDB target scheme {parsed.scheme!r}")
     return _with_indexeddb_relay_token(
-        insecure_internal_channel(f"unix:{target}"),
+        insecure_internal_channel(internal_channel_target("unix", target)),
         token,
     )
 
