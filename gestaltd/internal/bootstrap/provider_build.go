@@ -1041,7 +1041,7 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 	})
 
 	startEnv := maps.Clone(cfg.Env)
-	allowedHosts := slices.Clone(cfg.AllowedHosts)
+	allowedHosts := hostedAgentAllowedHosts(cfg.AllowedHosts, runtimePlan)
 	for _, hostService := range startedHostServices.Bindings() {
 		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect)
 		if err != nil {
@@ -1056,7 +1056,9 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 			}
 			maps.Copy(startEnv, bindingEnv)
 		}
-		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
+		if runtimePlan.RequiresHostnameEgress {
+			allowedHosts = appendAllowedHost(allowedHosts, relayHost)
+		}
 	}
 	if runtimePlan.HostnameEgressDelivery == RuntimeHostnameEgressDeliveryPublicProxy {
 		proxyEnv, err := buildHostedRuntimePublicEgressProxy(name, sessionID, cfg.AllowedHosts, deps.Egress.DefaultAction, deps)
@@ -1538,6 +1540,37 @@ func appendAllowedHost(allowedHosts []string, host string) []string {
 		}
 	}
 	return append(allowedHosts, host)
+}
+
+func hostedAgentAllowedHosts(allowedHosts []string, runtimePlan HostedRuntimePlan) []string {
+	cloned := slices.Clone(allowedHosts)
+	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay || runtimePlan.RequiresHostnameEgress {
+		return cloned
+	}
+	// Hosted agent bundles include loopback host allowances for local SDK
+	// transports. Once the agent host is exposed over the public relay, those
+	// loopback hosts are no longer relevant and can spuriously force hosted
+	// runtimes into proxy-enforced egress mode.
+	out := cloned[:0]
+	for _, host := range cloned {
+		if isLoopbackAllowedHost(host) {
+			continue
+		}
+		out = append(out, host)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func isLoopbackAllowedHost(host string) bool {
+	host = strings.TrimSpace(strings.Trim(host, "[]"))
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func buildPluginIndexedDBHostServices(pluginName string, effective config.EffectivePluginIndexedDB, deps Deps) ([]providerhost.HostService, func(), error) {
