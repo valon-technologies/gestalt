@@ -335,3 +335,45 @@ class PluginInvokerTransportTests(unittest.TestCase):
             else:
                 os.environ[ENV_PLUGIN_INVOKER_SOCKET_TOKEN] = previous_token
             tcp_server.stop(grace=0).wait()
+
+    def test_tcp_target_ignores_proxy_env(self) -> None:
+        tcp_server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+        plugin_pb2_grpc.add_PluginInvokerServicer_to_server(
+            _PluginInvokerServicer(),
+            tcp_server,
+        )
+        port = tcp_server.add_insecure_port("127.0.0.1:0")
+        tcp_server.start()
+        previous_socket = os.environ.get(ENV_PLUGIN_INVOKER_SOCKET)
+        previous_token = os.environ.get(ENV_PLUGIN_INVOKER_SOCKET_TOKEN)
+        previous_http_proxy = os.environ.get("http_proxy")
+        previous_https_proxy = os.environ.get("https_proxy")
+        os.environ[ENV_PLUGIN_INVOKER_SOCKET] = f"tcp://127.0.0.1:{port}"
+        os.environ[ENV_PLUGIN_INVOKER_SOCKET_TOKEN] = "relay-token-python"
+        os.environ["http_proxy"] = "http://127.0.0.1:1"
+        os.environ["https_proxy"] = "http://127.0.0.1:1"
+        try:
+            with PluginInvoker("invoke-proxy") as client:
+                response = client.invoke("github", "plain_text")
+
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.body, "plain response")
+            self.assertEqual(_relay_tokens, ["relay-token-python"])
+        finally:
+            if previous_socket is None:
+                os.environ.pop(ENV_PLUGIN_INVOKER_SOCKET, None)
+            else:
+                os.environ[ENV_PLUGIN_INVOKER_SOCKET] = previous_socket
+            if previous_token is None:
+                os.environ.pop(ENV_PLUGIN_INVOKER_SOCKET_TOKEN, None)
+            else:
+                os.environ[ENV_PLUGIN_INVOKER_SOCKET_TOKEN] = previous_token
+            if previous_http_proxy is None:
+                os.environ.pop("http_proxy", None)
+            else:
+                os.environ["http_proxy"] = previous_http_proxy
+            if previous_https_proxy is None:
+                os.environ.pop("https_proxy", None)
+            else:
+                os.environ["https_proxy"] = previous_https_proxy
+            tcp_server.stop(grace=0).wait()

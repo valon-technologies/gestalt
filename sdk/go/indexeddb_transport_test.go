@@ -227,6 +227,10 @@ func TestTransport_TCPTargetTokenEnv(t *testing.T) {
 
 	t.Setenv(gestalt.EnvIndexedDBSocket, target)
 	t.Setenv(gestalt.IndexedDBSocketTokenEnv(""), token)
+	t.Setenv("http_proxy", "http://127.0.0.1:1")
+	t.Setenv("https_proxy", "http://127.0.0.1:1")
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
 	client, err := gestalt.IndexedDB()
 	if err != nil {
 		t.Fatalf("connect tcp indexeddb with token: %v", err)

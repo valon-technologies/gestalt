@@ -179,6 +179,51 @@ class TestTCPTarget(unittest.TestCase):
         self.assertEqual(got["value"], "token")
         c.close()
 
+    def test_tcp_target_ignores_proxy_env(self) -> None:
+        token = "relay-token-python"
+        proc, target = _start_tcp_harness(expect_token=token)
+        self.addCleanup(proc.wait)
+        self.addCleanup(proc.kill)
+
+        target_env = "GESTALT_INDEXEDDB_SOCKET"
+        token_env = indexeddb_socket_token_env()
+        previous_target = os.environ.get(target_env)
+        previous_token = os.environ.get(token_env)
+        previous_http_proxy = os.environ.get("http_proxy")
+        previous_https_proxy = os.environ.get("https_proxy")
+
+        def restore_env() -> None:
+            if previous_target is None:
+                os.environ.pop(target_env, None)
+            else:
+                os.environ[target_env] = previous_target
+            if previous_token is None:
+                os.environ.pop(token_env, None)
+            else:
+                os.environ[token_env] = previous_token
+            if previous_http_proxy is None:
+                os.environ.pop("http_proxy", None)
+            else:
+                os.environ["http_proxy"] = previous_http_proxy
+            if previous_https_proxy is None:
+                os.environ.pop("https_proxy", None)
+            else:
+                os.environ["https_proxy"] = previous_https_proxy
+
+        os.environ[target_env] = target
+        os.environ[token_env] = token
+        os.environ["http_proxy"] = "http://127.0.0.1:1"
+        os.environ["https_proxy"] = "http://127.0.0.1:1"
+        self.addCleanup(restore_env)
+
+        c = _client()
+        c.create_object_store("tcp_target_proxy_env")
+        s = c.object_store("tcp_target_proxy_env")
+        s.put({"id": "row-1", "value": "proxy-bypass"})
+        got = s.get("row-1")
+        self.assertEqual(got["value"], "proxy-bypass")
+        c.close()
+
 
 class TestCursorHappyPath(unittest.TestCase):
     def test_cursor_iterates_all_records(self) -> None:
