@@ -128,6 +128,17 @@ func (p *Provider) DiscoveryConfig() *core.DiscoveryConfig {
 	return p.api.DiscoveryConfig()
 }
 
+func (p *Provider) SupportsPostConnect() bool {
+	return core.SupportsPostConnect(p.api)
+}
+
+func (p *Provider) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+	if pcp, ok := p.api.(core.PostConnectCapable); ok {
+		return pcp.PostConnect(ctx, token)
+	}
+	return nil, core.ErrPostConnectUnsupported
+}
+
 func (p *Provider) Close() error {
 	var firstErr error
 	if err := p.mcp.Close(); err != nil {

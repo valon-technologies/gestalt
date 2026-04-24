@@ -3,6 +3,7 @@ package composite_test
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"testing"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -107,5 +108,52 @@ func TestCompositeExecuteDelegatesDynamicAPISessionOperation(t *testing.T) {
 	}
 	if !dynamicHit {
 		t.Fatal("expected API provider to execute dynamic session-backed viewer operation")
+	}
+}
+
+type fakePostConnectProvider struct {
+	*fakeProvider
+	metadata map[string]string
+}
+
+func (p *fakePostConnectProvider) PostConnect(_ context.Context, _ *core.IntegrationToken) (map[string]string, error) {
+	return p.metadata, nil
+}
+
+func TestCompositePreservesPostConnectCapability(t *testing.T) {
+	t.Parallel()
+
+	api := &fakePostConnectProvider{
+		fakeProvider: &fakeProvider{name: "api"},
+		metadata: map[string]string{
+			"gestalt.external_identity.type": "slack_identity",
+			"gestalt.external_identity.id":   "team:T123:user:U456",
+		},
+	}
+	mcp := &fakeMCPUpstream{
+		fakeSessionProvider: &fakeSessionProvider{
+			fakeProvider: &fakeProvider{name: "mcp", connMode: core.ConnectionModeUser},
+			sessionCat:   &catalog.Catalog{Name: "test"},
+		},
+	}
+
+	prov := composite.New("test", api, mcp)
+	if !core.SupportsPostConnect(prov) {
+		t.Fatal("expected composite provider to expose post-connect support")
+	}
+
+	got, supported, err := core.PostConnect(context.Background(), prov, &core.IntegrationToken{
+		Integration: "slack",
+		Connection:  "default",
+		AccessToken: "tok",
+	})
+	if err != nil {
+		t.Fatalf("PostConnect: %v", err)
+	}
+	if !supported {
+		t.Fatal("expected core.PostConnect to report support")
+	}
+	if !reflect.DeepEqual(got, api.metadata) {
+		t.Fatalf("PostConnect metadata = %#v, want %#v", got, api.metadata)
 	}
 }

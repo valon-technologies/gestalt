@@ -3,6 +3,7 @@ package composite_test
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -220,6 +221,93 @@ func TestMergedSessionCatalogRoutesDynamicOperation(t *testing.T) {
 	}
 	if !dynamicHit {
 		t.Fatal("expected dynamic session-backed provider to execute viewer")
+	}
+}
+
+func TestMergedPreservesPostConnectCapability(t *testing.T) {
+	t.Parallel()
+
+	want := map[string]string{
+		"gestalt.external_identity.type": "slack_identity",
+		"gestalt.external_identity.id":   "team:T123:user:U456",
+	}
+
+	merged, err := composite.NewMergedWithConnections("test", "Test", "desc", "",
+		composite.BoundProvider{Provider: &fakeProvider{name: "rest", ops: []core.Operation{{Name: "status"}}}},
+		composite.BoundProvider{Provider: &fakePostConnectProvider{
+			fakeProvider: &fakeProvider{name: "slack"},
+			metadata:     want,
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !core.SupportsPostConnect(merged) {
+		t.Fatal("expected merged provider to expose post-connect support")
+	}
+
+	got, supported, err := core.PostConnect(context.Background(), merged, &core.IntegrationToken{
+		Integration: "slack",
+		Connection:  "default",
+		AccessToken: "tok",
+	})
+	if err != nil {
+		t.Fatalf("PostConnect: %v", err)
+	}
+	if !supported {
+		t.Fatal("expected core.PostConnect to report support")
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("PostConnect metadata = %#v, want %#v", got, want)
+	}
+}
+
+type falsePositivePostConnectProvider struct {
+	*fakeProvider
+}
+
+func (p *falsePositivePostConnectProvider) SupportsPostConnect() bool {
+	return false
+}
+
+func (p *falsePositivePostConnectProvider) PostConnect(_ context.Context, _ *core.IntegrationToken) (map[string]string, error) {
+	return nil, core.ErrPostConnectUnsupported
+}
+
+func TestMergedPostConnectSkipsProvidersThatAdvertiseNoSupport(t *testing.T) {
+	t.Parallel()
+
+	want := map[string]string{
+		"gestalt.external_identity.type": "slack_identity",
+		"gestalt.external_identity.id":   "team:T123:user:U456",
+	}
+
+	merged, err := composite.NewMergedWithConnections("test", "Test", "desc", "",
+		composite.BoundProvider{Provider: &falsePositivePostConnectProvider{
+			fakeProvider: &fakeProvider{name: "wrapper"},
+		}},
+		composite.BoundProvider{Provider: &fakePostConnectProvider{
+			fakeProvider: &fakeProvider{name: "slack"},
+			metadata:     want,
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, supported, err := core.PostConnect(context.Background(), merged, &core.IntegrationToken{
+		Integration: "slack",
+		Connection:  "default",
+		AccessToken: "tok",
+	})
+	if err != nil {
+		t.Fatalf("PostConnect: %v", err)
+	}
+	if !supported {
+		t.Fatal("expected core.PostConnect to report support")
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("PostConnect metadata = %#v, want %#v", got, want)
 	}
 }
 
