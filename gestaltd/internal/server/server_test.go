@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/hmac"
@@ -626,6 +627,111 @@ func TestEgressProxySupportsHTTPSConnect(t *testing.T) {
 	}
 	if got := string(body); got != "secure-proxied-ok" {
 		t.Fatalf("proxy body = %q, want %q", got, "secure-proxied-ok")
+	}
+}
+
+func TestEgressProxyConnectForwardsBufferedClientBytes(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("relay-test-secret-0123456789abcd")
+	targetListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen target: %v", err)
+	}
+	t.Cleanup(func() { _ = targetListener.Close() })
+
+	payload := []byte("prefetched-client-bytes")
+	reply := []byte("target-acknowledged")
+	targetDone := make(chan error, 1)
+	go func() {
+		conn, err := targetListener.Accept()
+		if err != nil {
+			targetDone <- err
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+		got := make([]byte, len(payload))
+		if _, err := io.ReadFull(conn, got); err != nil {
+			targetDone <- fmt.Errorf("read payload: %w", err)
+			return
+		}
+		if !bytes.Equal(got, payload) {
+			targetDone <- fmt.Errorf("payload = %q, want %q", string(got), string(payload))
+			return
+		}
+		if _, err := conn.Write(reply); err != nil {
+			targetDone <- fmt.Errorf("write reply: %w", err)
+			return
+		}
+		targetDone <- nil
+	}()
+
+	proxy := httptest.NewTLSServer(newTestHandler(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfilePublic
+		cfg.StateSecret = secret
+	}))
+	testutil.CloseOnCleanup(t, proxy)
+
+	tokenManager, err := providerhost.NewEgressProxyTokenManager(secret)
+	if err != nil {
+		t.Fatalf("NewEgressProxyTokenManager: %v", err)
+	}
+	token, err := tokenManager.MintToken(providerhost.EgressProxyTokenRequest{
+		PluginName:   "support",
+		SessionID:    "session-1",
+		AllowedHosts: []string{"127.0.0.1", "localhost"},
+	})
+	if err != nil {
+		t.Fatalf("MintToken: %v", err)
+	}
+
+	proxyURL, err := url.Parse(proxy.URL)
+	if err != nil {
+		t.Fatalf("Parse proxy URL: %v", err)
+	}
+	conn, err := tls.Dial("tcp", proxyURL.Host, &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12})
+	if err != nil {
+		t.Fatalf("Dial proxy: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("gestalt-egress-proxy:"+token))
+	targetAddr := targetListener.Addr().String()
+	request := fmt.Sprintf(
+		"CONNECT %s HTTP/1.1\r\nHost: %s\r\nProxy-Authorization: %s\r\n\r\n%s",
+		targetAddr,
+		targetAddr,
+		authHeader,
+		payload,
+	)
+	if _, err := conn.Write([]byte(request)); err != nil {
+		t.Fatalf("Write CONNECT request: %v", err)
+	}
+
+	reader := bufio.NewReader(conn)
+	resp, err := http.ReadResponse(reader, &http.Request{Method: http.MethodConnect})
+	if err != nil {
+		t.Fatalf("ReadResponse: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("proxy status = %d, want %d (body=%s)", resp.StatusCode, http.StatusOK, string(body))
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(len(reply))))
+	if err != nil {
+		t.Fatalf("ReadAll tunneled reply: %v", err)
+	}
+	if got := string(body); got != string(reply) {
+		t.Fatalf("tunneled reply = %q, want %q", got, string(reply))
+	}
+
+	if err := <-targetDone; err != nil {
+		t.Fatal(err)
 	}
 }
 
