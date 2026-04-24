@@ -171,9 +171,18 @@ func handleEgressProxyConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	clientConn, _, err := hijacker.Hijack()
+	clientConn, clientRW, err := hijacker.Hijack()
 	if err != nil {
+		_ = targetConn.Close()
+		return
+	}
+	if _, err := clientRW.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
+		_ = clientConn.Close()
+		_ = targetConn.Close()
+		return
+	}
+	if err := clientRW.Flush(); err != nil {
+		_ = clientConn.Close()
 		_ = targetConn.Close()
 		return
 	}
@@ -184,7 +193,7 @@ func handleEgressProxyConnect(w http.ResponseWriter, r *http.Request) {
 
 	done := make(chan struct{}, 2)
 	go func() {
-		_, _ = io.Copy(targetConn, clientConn)
+		_, _ = io.Copy(targetConn, clientRW)
 		closeWrite(targetConn)
 		done <- struct{}{}
 	}()
