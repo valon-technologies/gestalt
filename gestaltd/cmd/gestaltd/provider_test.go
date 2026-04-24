@@ -394,6 +394,8 @@ func TestRun_ProviderReleaseBuildsTypeScriptSourcePluginForCurrentPlatform(t *te
 	t.Setenv("PATH", pathWithoutGo(t))
 
 	pluginDir := newTypeScriptSourceReleaseFixture(t, t.TempDir())
+	sdkDir := writeFakeTypeScriptReleaseSDKDir(t, t.TempDir())
+	t.Setenv("GESTALT_TYPESCRIPT_SDK_DIR", sdkDir)
 	bunPath := writeFakeTypeScriptProviderReleaseBun(
 		t,
 		filepath.Join(pluginDir, "fake-bun"),
@@ -578,6 +580,8 @@ func TestRun_ProviderReleaseBuildsRequestedPlatformSets(t *testing.T) {
 		t.Setenv("PATH", pathWithoutGo(t))
 
 		pluginDir := newTypeScriptSourceAuthReleaseFixture(t, t.TempDir())
+		sdkDir := writeFakeTypeScriptReleaseSDKDir(t, t.TempDir())
+		t.Setenv("GESTALT_TYPESCRIPT_SDK_DIR", sdkDir)
 		defaultPlatforms := defaultReleasePlatformsForTest(t)
 		bunPath := writeFakeTypeScriptComponentReleaseBunForPlatforms(
 			t,
@@ -1452,6 +1456,8 @@ func TestRun_ProviderReleaseBuildsExecutableAuthProviders(t *testing.T) {
 				builtBinary := buildGoSourceAuthBinary(t)
 				t.Setenv("PATH", pathWithoutGo(t))
 				pluginDir := newTypeScriptSourceAuthReleaseFixture(t, t.TempDir())
+				sdkDir := writeFakeTypeScriptReleaseSDKDir(t, t.TempDir())
+				t.Setenv("GESTALT_TYPESCRIPT_SDK_DIR", sdkDir)
 				bunPath := writeFakeTypeScriptComponentReleaseBun(t, filepath.Join(pluginDir, "fake-bun"), authReleaseTypeScriptTarget, authReleasePluginName, runtime.GOOS, runtime.GOARCH, builtBinary)
 				t.Setenv("GESTALT_BUN", bunPath)
 				return pluginDir
@@ -2593,6 +2599,36 @@ func writeFakeTypeScriptComponentReleaseBunForPlatforms(t *testing.T, path, expe
 	script := `#!/bin/sh
 set -eu
 
+state_file="` + path + `.install-cwd"
+
+if [ "$#" -gt 0 ] && [ "$1" = "install" ]; then
+  shift
+  cwd=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --cwd)
+        cwd="$2"
+        shift 2
+        ;;
+      --frozen-lockfile)
+        shift
+        ;;
+      *)
+        echo "unexpected bun install args: $*" >&2
+        exit 1
+        ;;
+    esac
+  done
+  if [ -z "$cwd" ]; then
+    echo "missing bun install --cwd" >&2
+    exit 1
+  fi
+  mkdir -p "$cwd/node_modules"
+  : > "$cwd/node_modules/.installed"
+  printf '%s' "$cwd" > "$state_file"
+  exit 0
+fi
+
 if [ "$#" -lt 4 ] || [ "$1" != "--cwd" ]; then
   echo "unexpected fake bun args: $*" >&2
   exit 1
@@ -2608,9 +2644,12 @@ if [ "$#" -gt 0 ] && [ "$1" = "--" ]; then
   shift
 fi
 
-entry_base="${entry##*/}"
-case "$entry_base" in
-  gestalt-ts-build|build.ts)
+case "$entry" in
+  "$cwd"/src/build.ts)
+    if [ -f "$state_file" ] && [ "$(cat "$state_file")" != "$cwd" ]; then
+      echo "unexpected build cwd after install: $cwd != $(cat "$state_file")" >&2
+      exit 1
+    fi
     if [ "$#" -ne 6 ]; then
       echo "unexpected build args: $*" >&2
       exit 1
@@ -2621,10 +2660,6 @@ case "$entry_base" in
     name="$4"
     goos="$5"
     goarch="$6"
-    if [ "$cwd" != "$source_dir" ]; then
-      echo "unexpected build cwd: $cwd != $source_dir" >&2
-      exit 1
-    fi
     if [ "$target" != "` + authReleaseTypeScriptTarget + `" ]; then
       echo "unexpected build target: $target" >&2
       exit 1
@@ -2663,11 +2698,54 @@ exit 1
 	return path
 }
 
+func writeFakeTypeScriptReleaseSDKDir(t *testing.T, root string) string {
+	t.Helper()
+	writeTestFile(t, root, "package.json", []byte(`{
+  "name": "@valon-technologies/gestalt",
+  "version": "0.0.1-alpha.test"
+}
+`), 0o644)
+	writeTestFile(t, root, "bun.lock", []byte("{}\n"), 0o644)
+	writeTestFile(t, filepath.Join(root, "src"), "runtime.ts", []byte("export {};\n"), 0o644)
+	writeTestFile(t, filepath.Join(root, "src"), "build.ts", []byte("export {};\n"), 0o644)
+	return root
+}
+
 func writeFakeTypeScriptProviderReleaseBun(t *testing.T, path, expectedPluginName, expectedTarget, expectedGOOS, expectedGOARCH string) string {
 	t.Helper()
 
 	script := `#!/bin/sh
 set -eu
+
+state_file="` + path + `.install-cwd"
+
+if [ "$#" -gt 0 ] && [ "$1" = "install" ]; then
+  shift
+  cwd=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --cwd)
+        cwd="$2"
+        shift 2
+        ;;
+      --frozen-lockfile)
+        shift
+        ;;
+      *)
+        echo "unexpected bun install args: $*" >&2
+        exit 1
+        ;;
+    esac
+  done
+  if [ -z "$cwd" ]; then
+    echo "missing bun install --cwd" >&2
+    exit 1
+  fi
+  mkdir -p "$cwd/node_modules"
+  : > "$cwd/node_modules/.installed"
+  printf '%s' "$cwd" > "$state_file"
+  exit 0
+fi
 
 if [ "$#" -lt 4 ] || [ "$1" != "--cwd" ]; then
   echo "unexpected fake bun args: $*" >&2
@@ -2684,19 +2762,18 @@ if [ "$#" -gt 0 ] && [ "$1" = "--" ]; then
   shift
 fi
 
-entry_base="${entry##*/}"
-case "$entry_base" in
-  gestalt-ts-runtime|runtime.ts)
+case "$entry" in
+  "$cwd"/src/runtime.ts)
+    if [ -f "$state_file" ] && [ "$(cat "$state_file")" != "$cwd" ]; then
+      echo "unexpected runtime cwd after install: $cwd != $(cat "$state_file")" >&2
+      exit 1
+    fi
     if [ "$#" -ne 2 ]; then
       echo "unexpected runtime args: $*" >&2
       exit 1
     fi
     root="$1"
     target="$2"
-    if [ "$cwd" != "$root" ]; then
-      echo "unexpected runtime cwd: $cwd != $root" >&2
-      exit 1
-    fi
     if [ "$target" != "` + typeScriptReleaseTarget + `" ]; then
       echo "unexpected runtime target: $target" >&2
       exit 1
@@ -2747,7 +2824,11 @@ EOF
     fi
     exit 0
     ;;
-  gestalt-ts-build|build.ts)
+  "$cwd"/src/build.ts)
+    if [ -f "$state_file" ] && [ "$(cat "$state_file")" != "$cwd" ]; then
+      echo "unexpected build cwd after install: $cwd != $(cat "$state_file")" >&2
+      exit 1
+    fi
     if [ "$#" -ne 6 ]; then
       echo "unexpected build args: $*" >&2
       exit 1
@@ -2758,10 +2839,6 @@ EOF
     name="$4"
     goos="$5"
     goarch="$6"
-    if [ "$cwd" != "$source_dir" ]; then
-      echo "unexpected build cwd: $cwd != $source_dir" >&2
-      exit 1
-    fi
     if [ "$target" != "` + typeScriptReleaseTarget + `" ]; then
       echo "unexpected build target: $target" >&2
       exit 1
