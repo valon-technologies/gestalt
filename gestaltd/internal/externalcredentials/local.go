@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	StoreName       = "external_credentials"
-	legacyStoreName = "integration_tokens"
+	StoreName              = "external_credentials"
+	removedLegacyStoreName = "integration_tokens"
 )
 
 var Schema = indexeddb.ObjectStoreSchema{
@@ -47,9 +47,8 @@ var Schema = indexeddb.ObjectStoreSchema{
 var errUnreadableStoredExternalCredential = errors.New("unreadable stored external credential")
 
 type LocalProvider struct {
-	store       indexeddb.ObjectStore
-	legacyStore indexeddb.ObjectStore
-	enc         *corecrypto.AESGCMEncryptor
+	store indexeddb.ObjectStore
+	enc   *corecrypto.AESGCMEncryptor
 }
 
 var _ core.ExternalCredentialProvider = (*LocalProvider)(nil)
@@ -65,10 +64,12 @@ func NewLocalProvider(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (
 	if err := ds.CreateObjectStore(ctx, StoreName, Schema); err != nil {
 		return nil, fmt.Errorf("create %s store: %w", StoreName, err)
 	}
+	if err := failOnLegacyCredentialRows(ctx, ds); err != nil {
+		return nil, err
+	}
 	provider := &LocalProvider{
-		store:       ds.ObjectStore(StoreName),
-		legacyStore: ds.ObjectStore(legacyStoreName),
-		enc:         enc,
+		store: ds.ObjectStore(StoreName),
+		enc:   enc,
 	}
 	return provider, nil
 }
@@ -117,17 +118,9 @@ func (p *LocalProvider) DeleteCredential(ctx context.Context, id string) error {
 	if id == "" {
 		return p.store.Delete(ctx, id)
 	}
-	currentRec, currentErr := getCredentialRecordByID(ctx, p.store, id)
-	if currentErr != nil {
-		return currentErr
-	}
-	legacyRec, legacyErr := getCredentialRecordByID(ctx, p.legacyStore, id)
-	if legacyErr != nil {
-		return legacyErr
-	}
-	rec := currentRec
-	if rec == nil {
-		rec = legacyRec
+	rec, err := getCredentialRecordByID(ctx, p.store, id)
+	if err != nil {
+		return err
 	}
 	if rec == nil {
 		return nil
@@ -136,12 +129,7 @@ func (p *LocalProvider) DeleteCredential(ctx context.Context, id string) error {
 	integration := recordString(rec, "integration")
 	connection := recordString(rec, "connection")
 	instance := recordString(rec, "instance")
-
-	errs := []error{
-		deleteCredentialLookupRecords(ctx, p.store, subjectID, integration, connection, instance),
-		deleteCredentialLookupRecords(ctx, p.legacyStore, subjectID, integration, connection, instance),
-	}
-	return errors.Join(errs...)
+	return deleteCredentialLookupRecords(ctx, p.store, subjectID, integration, connection, instance)
 }
 
 func (p *LocalProvider) storeCredential(ctx context.Context, credential *core.ExternalCredential, preserveTimestamps bool) error {
@@ -272,15 +260,11 @@ func (p *LocalProvider) credentialRecord(ctx context.Context, subjectID, integra
 }
 
 func (p *LocalProvider) listCredentialRecords(ctx context.Context, indexName string, keys ...any) ([]indexeddb.Record, error) {
-	current, err := p.store.Index(indexName).GetAll(ctx, nil, keys...)
+	recs, err := p.store.Index(indexName).GetAll(ctx, nil, keys...)
 	if err != nil {
 		return nil, err
 	}
-	legacy, err := getAllLegacyCredentialRecords(ctx, p.legacyStore, indexName, keys...)
-	if err != nil {
-		return nil, err
-	}
-	return mergeCredentialRecords(current, legacy), nil
+	return dedupeCredentialRecords(recs), nil
 }
 
 func (p *LocalProvider) deleteDuplicateLookupRecords(ctx context.Context, keepID, subjectID, integration, connection, instance string) error {
@@ -324,38 +308,6 @@ func dedupeCredentialRecords(recs []indexeddb.Record) []indexeddb.Record {
 	return out
 }
 
-func mergeCredentialRecords(current, legacy []indexeddb.Record) []indexeddb.Record {
-	current = dedupeCredentialRecords(current)
-	legacy = dedupeCredentialRecords(legacy)
-	if len(current) == 0 {
-		return legacy
-	}
-	if len(legacy) == 0 {
-		return current
-	}
-
-	bestByLookup := make(map[string]indexeddb.Record, len(current)+len(legacy))
-	for _, rec := range current {
-		bestByLookup[credentialLookupKey(rec)] = rec
-	}
-	for _, rec := range legacy {
-		key := credentialLookupKey(rec)
-		if _, ok := bestByLookup[key]; ok {
-			continue
-		}
-		bestByLookup[key] = rec
-	}
-
-	out := make([]indexeddb.Record, 0, len(bestByLookup))
-	for _, rec := range bestByLookup {
-		out = append(out, rec)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return credentialRecordLess(out[i], out[j])
-	})
-	return out
-}
-
 func credentialLookupKey(rec indexeddb.Record) string {
 	return credentialRecordSubjectID(rec) + "\x00" +
 		recordString(rec, "integration") + "\x00" +
@@ -381,17 +333,6 @@ func credentialRecordLess(a, b indexeddb.Record) bool {
 	}
 
 	return recordString(a, "id") < recordString(b, "id")
-}
-
-func getAllLegacyCredentialRecords(ctx context.Context, store indexeddb.ObjectStore, indexName string, keys ...any) ([]indexeddb.Record, error) {
-	if store == nil {
-		return nil, nil
-	}
-	recs, err := store.Index(indexName).GetAll(ctx, nil, keys...)
-	if errors.Is(err, indexeddb.ErrNotFound) {
-		return nil, nil
-	}
-	return recs, err
 }
 
 func deleteCredentialRecord(ctx context.Context, store indexeddb.ObjectStore, id string) error {
@@ -439,6 +380,49 @@ func deleteCredentialLookupRecords(ctx context.Context, store indexeddb.ObjectSt
 		errs = append(errs, deleteCredentialRecord(ctx, store, id))
 	}
 	return errors.Join(errs...)
+}
+
+func failOnLegacyCredentialRows(ctx context.Context, ds indexeddb.IndexedDB) error {
+	exists, err := objectStoreExists(ctx, ds, removedLegacyStoreName)
+	if err != nil {
+		return fmt.Errorf("check legacy %s store: %w", removedLegacyStoreName, err)
+	}
+	if !exists {
+		return nil
+	}
+	count, err := ds.ObjectStore(removedLegacyStoreName).Count(ctx, nil)
+	switch {
+	case err == nil:
+	case errors.Is(err, indexeddb.ErrNotFound):
+		return nil
+	default:
+		return fmt.Errorf("count legacy %s rows: %w", removedLegacyStoreName, err)
+	}
+	if count == 0 {
+		return nil
+	}
+	return fmt.Errorf("legacy %s store still contains %d rows; run the manual external_credentials migration before starting gestaltd", removedLegacyStoreName, count)
+}
+
+func objectStoreExists(ctx context.Context, db indexeddb.IndexedDB, storeName string) (bool, error) {
+	if storeName == "" {
+		return false, nil
+	}
+	type objectStoreExistenceChecker interface {
+		HasObjectStore(name string) bool
+	}
+	if checker, ok := db.(objectStoreExistenceChecker); ok {
+		return checker.HasObjectStore(storeName), nil
+	}
+	_, err := db.ObjectStore(storeName).Count(ctx, nil)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, indexeddb.ErrNotFound):
+		return false, nil
+	default:
+		return false, err
+	}
 }
 
 func recordString(rec indexeddb.Record, key string) string {

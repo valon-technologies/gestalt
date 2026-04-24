@@ -6,10 +6,7 @@ import (
 )
 
 const (
-	StoreUsers = "users"
-	// StoreIntegrationTokens is kept only as a legacy table name for
-	// deployment-managed migrations. New runtime writes use StoreExternalCredentials.
-	StoreIntegrationTokens        = "integration_tokens"
+	StoreUsers                    = "users"
 	StoreExternalCredentials      = externalcredentials.StoreName
 	StoreAPITokens                = "api_tokens"
 	StoreIdentities               = "identities"
@@ -43,10 +40,6 @@ var UsersSchema = indexeddb.ObjectStoreSchema{
 }
 
 var ExternalCredentialsSchema = externalcredentials.Schema
-
-// IntegrationTokensSchema is kept only as a legacy schema alias for
-// deployment-managed migrations. New runtime writes use ExternalCredentialsSchema.
-var IntegrationTokensSchema = externalcredentials.Schema
 
 var APITokensSchema = indexeddb.ObjectStoreSchema{
 	Indexes: []indexeddb.IndexSchema{

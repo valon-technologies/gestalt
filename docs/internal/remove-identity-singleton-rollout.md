@@ -68,8 +68,8 @@ After that rewrite, rerun the precheck and make sure it returns `0`.
 1. Take a snapshot / backup of the `external_credentials` table.
 2. Drain old app revisions so old code is no longer serving against the store.
    No rolling old/new overlap after the schema flip.
-3. Deploy the new revision.
-4. Let startup rebuild canonical `external_credentials` from `integration_tokens`.
+3. Run the manual backfill from `integration_tokens` into `external_credentials`.
+4. Deploy the new revision.
 
 ## Exact cutover SQL
 
@@ -103,8 +103,9 @@ CREATE TABLE external_credentials (
 ```
 
 The backup table is expected to keep the pre-cutover rows and indexes exactly as
-they were. The new `external_credentials` table must start empty; startup will
-clear and repopulate it canonically from `integration_tokens`.
+they were. The new `external_credentials` table must be populated manually
+before the new revision serves traffic; this rollout no longer relies on
+startup rebuilding canonical rows from `integration_tokens`.
 
 ## Required verification
 

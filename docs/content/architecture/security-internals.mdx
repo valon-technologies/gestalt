@@ -22,7 +22,7 @@ Each encryption generates a fresh 12-byte nonce via `crypto/rand`, encrypts the 
 
 ### Creation
 
-For OAuth connections, Gestalt generates an encrypted state parameter (10-minute TTL) and optional PKCE verifier, redirects the caller to the provider, then exchanges the authorization code for tokens on callback. Both the access token and refresh token are encrypted and stored in `integration_tokens`, keyed by `(subject_id, integration, connection, instance)`.
+For OAuth connections, Gestalt generates an encrypted state parameter (10-minute TTL) and optional PKCE verifier, redirects the caller to the provider, then exchanges the authorization code for tokens on callback. Both the access token and refresh token are encrypted and stored in `external_credentials`, keyed by `(subject_id, integration, connection, instance)`.
 
 If the provider supports post-connect discovery (multiple workspaces or accounts), Gestalt fetches the resource list after the token exchange. One resource is auto-selected; multiple resources prompt the user.
 
