@@ -10,6 +10,18 @@ prefixes configured in `providers.ui.<name>.path`. The built-in admin UI at
 `/admin` remains available regardless of whether a custom UI bundle is
 configured.
 
+For local iteration, you can run a source UI bundle directly with the same
+provider-local commands used for plugins:
+
+```sh
+gestaltd provider validate --path ./ui
+gestaltd provider dev --path ./ui
+```
+
+When the UI is part of a `plugin/` + sibling `ui/` package layout, running
+`gestaltd provider dev` from the plugin side also picks up that sibling UI
+automatically for the local session.
+
 A UI bundle is not a plugin in the executable sense. It contains no server-side
 code. Gestalt simply serves the static files from the asset root directory. The
 bundle talks to Gestalt through the same HTTP API and MCP endpoints that any
