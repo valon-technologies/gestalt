@@ -416,10 +416,16 @@ func writeProviderLocalBaseConfig(path, dbPath string) error {
 		"server": map[string]any{
 			"encryptionKey": encryptionKey,
 			"providers": map[string]any{
-				"indexeddb": providerDevIndexedDBName,
+				"externalCredentials": config.DefaultProviderInstance,
+				"indexeddb":           providerDevIndexedDBName,
 			},
 		},
 		"providers": map[string]any{
+			"externalCredentials": map[string]any{
+				config.DefaultProviderInstance: map[string]any{
+					"source": providerLocalExternalCredentialsSourceConfig(),
+				},
+			},
 			"indexeddb": map[string]any{
 				providerDevIndexedDBName: map[string]any{
 					"source": providerLocalIndexedDBSourceConfig(),
@@ -595,15 +601,19 @@ func findSiblingUIManifestPath(pluginManifestPath string, manifest *providermani
 func providerLocalIndexedDBSourceConfig() any {
 	if providersDir := strings.TrimSpace(os.Getenv("GESTALT_PROVIDERS_DIR")); providersDir != "" {
 		return map[string]any{
-			"path": filepath.Join(providersDir, "indexeddb", "relationaldb", "manifest.yaml"),
+			"path": config.DefaultLocalProviderManifestPath(providersDir, config.DefaultIndexedDBProvider),
 		}
 	}
-	return defaultProviderMetadataURL(config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion)
+	return config.DefaultProviderMetadataURL(config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion)
 }
 
-func defaultProviderMetadataURL(source, version string) string {
-	rel := strings.TrimPrefix(strings.TrimSpace(source), config.DefaultProviderRepo+"/")
-	return fmt.Sprintf("https://github.com/valon-technologies/gestalt-providers/releases/download/%s/v%s/provider-release.yaml", rel, strings.TrimSpace(version))
+func providerLocalExternalCredentialsSourceConfig() any {
+	if providersDir := strings.TrimSpace(os.Getenv("GESTALT_PROVIDERS_DIR")); providersDir != "" {
+		return map[string]any{
+			"path": config.DefaultLocalProviderManifestPath(providersDir, config.DefaultExternalCredentialsProvider),
+		}
+	}
+	return config.DefaultProviderMetadataURL(config.DefaultExternalCredentialsProvider, config.DefaultExternalCredentialsVersion)
 }
 
 func providerLocalPublicURL(cfg *config.Config) string {

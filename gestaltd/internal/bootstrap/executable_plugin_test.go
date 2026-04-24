@@ -34,7 +34,6 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
@@ -2825,14 +2824,11 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
 
-	enc, err := corecrypto.NewAESGCM(corecrypto.DeriveKey("plugin-invokes-test-key"))
-	if err != nil {
-		t.Fatalf("NewAESGCM: %v", err)
-	}
-	services, err := coredata.New(&coretesting.StubIndexedDB{}, enc)
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
 		t.Fatalf("coredata.New: %v", err)
 	}
+	coretesting.AttachStubExternalCredentials(services)
 	t.Cleanup(func() { _ = services.Close() })
 
 	broker := invocation.NewBroker(providers, services.Users, services.Tokens, brokerOpts...)
@@ -2957,14 +2953,11 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
 
-	enc, err := corecrypto.NewAESGCM(corecrypto.DeriveKey("plugin-graphql-invokes-test-key"))
-	if err != nil {
-		t.Fatalf("NewAESGCM: %v", err)
-	}
-	services, err := coredata.New(&coretesting.StubIndexedDB{}, enc)
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
 		t.Fatalf("coredata.New: %v", err)
 	}
+	coretesting.AttachStubExternalCredentials(services)
 	t.Cleanup(func() { _ = services.Close() })
 
 	if len(authCfg.Workloads) > 0 || len(authCfg.Policies) > 0 {
@@ -6717,14 +6710,11 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
 
-	enc, err := corecrypto.NewAESGCM(corecrypto.DeriveKey("plugin-invokes-test-key"))
-	if err != nil {
-		t.Fatalf("NewAESGCM: %v", err)
-	}
-	services, err := coredata.New(&coretesting.StubIndexedDB{}, enc)
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
 		t.Fatalf("coredata.New: %v", err)
 	}
+	coretesting.AttachStubExternalCredentials(services)
 	t.Cleanup(func() { _ = services.Close() })
 
 	broker := invocation.NewBroker(providers, services.Users, services.Tokens)

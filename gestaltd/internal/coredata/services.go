@@ -5,13 +5,11 @@ import (
 	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
 type Services struct {
 	Users                    *UserService
-	LocalExternalCredentials core.ExternalCredentialProvider
 	ExternalCredentials      core.ExternalCredentialProvider
 	Tokens                   *TokenService
 	APITokens                *APITokenService
@@ -28,7 +26,7 @@ type Services struct {
 	DB                       indexeddb.IndexedDB
 }
 
-func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, error) {
+func New(ds indexeddb.IndexedDB) (*Services, error) {
 	ctx := context.Background()
 	if err := ds.CreateObjectStore(ctx, StoreUsers, UsersSchema); err != nil {
 		return nil, fmt.Errorf("create users store: %w", err)
@@ -92,11 +90,6 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 		return nil, fmt.Errorf("backfill users store: %w", err)
 	}
 	apiTokens := NewAPITokenService(ds, apiTokenAccess, users)
-	localExternalCredentials, err := NewLocalExternalCredentialProvider(ds, enc)
-	if err != nil {
-		return nil, fmt.Errorf("create local external credentials provider: %w", err)
-	}
-	tokens := NewTokenService(localExternalCredentials)
 
 	if err := rebuildCanonicalIdentityGraph(ctx, identities, authBindings, identityManagementGrants, workspaceRoles, identityPluginAccess, apiTokenAccess); err != nil {
 		return nil, err
@@ -107,9 +100,9 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := apiTokens.BackfillTokenAccess(ctx); err != nil {
 		return nil, fmt.Errorf("backfill canonical api token access: %w", err)
 	}
+	tokens := NewTokenService(nil)
 	return &Services{
-		LocalExternalCredentials: localExternalCredentials,
-		ExternalCredentials:      localExternalCredentials,
+		ExternalCredentials:      nil,
 		Users:                    users,
 		Tokens:                   tokens,
 		APITokens:                apiTokens,

@@ -2,12 +2,10 @@ package coredata
 
 import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	"github.com/valon-technologies/gestalt/server/internal/externalcredentials"
 )
 
 const (
 	StoreUsers                    = "users"
-	StoreExternalCredentials      = externalcredentials.StoreName
 	StoreAPITokens                = "api_tokens"
 	StoreIdentities               = "identities"
 	StoreIdentityAuthBindings     = "identity_auth_bindings"
@@ -38,8 +36,6 @@ var UsersSchema = indexeddb.ObjectStoreSchema{
 		{Name: "updated_at", Type: indexeddb.TypeTime},
 	},
 }
-
-var ExternalCredentialsSchema = externalcredentials.Schema
 
 var APITokensSchema = indexeddb.ObjectStoreSchema{
 	Indexes: []indexeddb.IndexSchema{

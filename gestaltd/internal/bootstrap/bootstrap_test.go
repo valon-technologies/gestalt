@@ -1409,6 +1409,9 @@ func selectedAuthenticationEntry(t *testing.T, cfg *config.Config) *config.Provi
 func validFactories() *bootstrap.FactoryRegistry {
 	f := bootstrap.NewFactoryRegistry()
 	f.Auth = stubAuthFactory("test-auth")
+	f.ExternalCredentials = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (core.ExternalCredentialProvider, error) {
+		return coretesting.NewStubExternalCredentialProvider(), nil
+	}
 	f.IndexedDB = stubIndexedDBFactory()
 	f.Secrets["test-secrets"] = stubSecretManagerFactory()
 	f.Telemetry["test-telemetry"] = stubTelemetryFactory()
@@ -3233,6 +3236,58 @@ func TestBootstrapClosesWorkflowIndexedDBAndAppliesScopedConfig(t *testing.T) {
 	}
 	if got := workflowCloseCount.Load(); got != 1 {
 		t.Fatalf("workflowCloseCount after workflow shutdown = %d, want 1", got)
+	}
+}
+
+func TestBootstrapRoutesExternalCredentialsIndexedDBHostServices(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Server.Providers.IndexedDB = "test"
+	cfg.Providers.IndexedDB["archive"] = &config.ProviderEntry{
+		Source: config.NewMetadataSource("https://example.invalid/indexeddb/archive/provider-release.yaml"),
+		Config: mustYAMLNode(t, map[string]any{"dsn": "sqlite://archive.db"}),
+	}
+	cfg.Providers.IndexedDB["test"] = &config.ProviderEntry{
+		Source: config.NewMetadataSource("https://example.invalid/indexeddb/test/provider-release.yaml"),
+		Config: mustYAMLNode(t, map[string]any{"dsn": "sqlite://test.db"}),
+	}
+	cfg.Server.Providers.ExternalCredentials = "runner"
+	cfg.Providers.ExternalCredentials = map[string]*config.ProviderEntry{
+		"runner": {
+			Source: config.NewMetadataSource("https://example.invalid/external-credentials/default/provider-release.yaml"),
+			Config: mustYAMLNode(t, map[string]any{"indexeddb": "test"}),
+		},
+	}
+
+	factories := validFactories()
+	var hostServices []providerhost.HostService
+	factories.ExternalCredentials = func(_ context.Context, _ string, _ yaml.Node, services []providerhost.HostService, _ bootstrap.Deps) (core.ExternalCredentialProvider, error) {
+		hostServices = append([]providerhost.HostService(nil), services...)
+		return coretesting.NewStubExternalCredentialProvider(), nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(hostServices) != 3 {
+		t.Fatalf("external credentials host services = %d, want 3", len(hostServices))
+	}
+	if hostServices[0].EnvVar != providerhost.DefaultIndexedDBSocketEnv {
+		t.Fatalf("external credentials default indexeddb env = %q, want %q", hostServices[0].EnvVar, providerhost.DefaultIndexedDBSocketEnv)
+	}
+	wantNamed := []string{
+		providerhost.IndexedDBSocketEnv("archive"),
+		providerhost.IndexedDBSocketEnv("test"),
+	}
+	for i, want := range wantNamed {
+		if got := hostServices[i+1].EnvVar; got != want {
+			t.Fatalf("external credentials indexeddb env[%d] = %q, want %q", i, got, want)
+		}
 	}
 }
 

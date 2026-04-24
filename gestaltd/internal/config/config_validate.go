@@ -184,13 +184,10 @@ func validateHostProviderEntries(kind HostProviderKind, entries map[string]*Prov
 			}
 		case HostProviderKindExternalCredentials:
 			if entry.Source.IsBuiltin() {
-				if builtin := strings.TrimSpace(entry.Source.Builtin); builtin != "" && builtin != "local" {
-					return fmt.Errorf("config validation: unknown externalCredentials provider %q", builtin)
-				}
-			} else {
-				if err := validateProviderEntrySource("externalCredentials", name, entry, sourceSyntax); err != nil {
-					return err
-				}
+				return fmt.Errorf("config validation: externalCredentials provider %q does not support builtin providers; use a provider source reference or omit externalCredentials", name)
+			}
+			if err := validateProviderEntrySource("externalCredentials", name, entry, sourceSyntax); err != nil {
+				return err
 			}
 		case HostProviderKindSecrets, HostProviderKindTelemetry:
 			if !entry.Source.IsBuiltin() {

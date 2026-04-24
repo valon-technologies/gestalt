@@ -5,9 +5,6 @@ import (
 	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
-	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	"github.com/valon-technologies/gestalt/server/internal/externalcredentials"
 )
 
 type TokenService struct {
@@ -16,15 +13,15 @@ type TokenService struct {
 
 var _ core.ExternalCredentialProvider = (*TokenService)(nil)
 
-func NewLocalExternalCredentialProvider(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (core.ExternalCredentialProvider, error) {
-	if enc == nil {
-		return nil, nil
-	}
-	return externalcredentials.NewLocalProvider(ds, enc)
-}
-
 func NewTokenService(provider core.ExternalCredentialProvider) *TokenService {
 	return &TokenService{provider: provider}
+}
+
+func (s *TokenService) SetProvider(provider core.ExternalCredentialProvider) {
+	if s == nil {
+		return
+	}
+	s.provider = provider
 }
 
 func (s *TokenService) PutCredential(ctx context.Context, credential *core.ExternalCredential) error {
