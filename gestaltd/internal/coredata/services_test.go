@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -900,7 +901,7 @@ func TestTokenService(t *testing.T) {
 		}
 	})
 
-	t.Run("New_reads_legacy_integration_tokens_until_manual_migration", func(t *testing.T) {
+	t.Run("New_reads_existing_external_credentials", func(t *testing.T) {
 		t.Parallel()
 
 		db := &coretesting.StubIndexedDB{}
@@ -909,14 +910,58 @@ func TestTokenService(t *testing.T) {
 			t.Fatalf("NewAESGCM: %v", err)
 		}
 		ctx := context.Background()
-		if err := db.CreateObjectStore(ctx, coredata.StoreIntegrationTokens, coredata.IntegrationTokensSchema); err != nil {
-			t.Fatalf("CreateObjectStore(%s): %v", coredata.StoreIntegrationTokens, err)
+		if err := db.CreateObjectStore(ctx, coredata.StoreExternalCredentials, coredata.ExternalCredentialsSchema); err != nil {
+			t.Fatalf("CreateObjectStore(%s): %v", coredata.StoreExternalCredentials, err)
+		}
+		accessEncrypted, refreshEncrypted, err := enc.EncryptTokenPair("current-access", "current-refresh")
+		if err != nil {
+			t.Fatalf("EncryptTokenPair: %v", err)
+		}
+		if err := db.ObjectStore(coredata.StoreExternalCredentials).Put(ctx, indexeddb.Record{
+			"id":                      "current-token",
+			"subject_id":              "user:user-current",
+			"integration":             "slack",
+			"connection":              "default",
+			"instance":                "workspace-1",
+			"access_token_encrypted":  accessEncrypted,
+			"refresh_token_encrypted": refreshEncrypted,
+			"created_at":              time.Now().UTC(),
+			"updated_at":              time.Now().UTC(),
+		}); err != nil {
+			t.Fatalf("seed external credential: %v", err)
+		}
+
+		svc, err := coredata.New(db, enc)
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+
+		got, err := svc.Tokens.Token(ctx, "user:user-current", "slack", "default", "workspace-1")
+		if err != nil {
+			t.Fatalf("Token: %v", err)
+		}
+		if got.ID != "current-token" || got.AccessToken != "current-access" || got.RefreshToken != "current-refresh" {
+			t.Fatalf("Token = %+v, want current-token / current-access / current-refresh", got)
+		}
+	})
+
+	t.Run("New_rejects_legacy_integration_tokens_rows", func(t *testing.T) {
+		t.Parallel()
+
+		db := &coretesting.StubIndexedDB{}
+		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
+		if err != nil {
+			t.Fatalf("NewAESGCM: %v", err)
+		}
+		ctx := context.Background()
+		if err := db.CreateObjectStore(ctx, "integration_tokens", coredata.ExternalCredentialsSchema); err != nil {
+			t.Fatalf("CreateObjectStore(integration_tokens): %v", err)
 		}
 		accessEncrypted, refreshEncrypted, err := enc.EncryptTokenPair("legacy-access", "legacy-refresh")
 		if err != nil {
 			t.Fatalf("EncryptTokenPair: %v", err)
 		}
-		if err := db.ObjectStore(coredata.StoreIntegrationTokens).Put(ctx, indexeddb.Record{
+		if err := db.ObjectStore("integration_tokens").Put(ctx, indexeddb.Record{
 			"id":                      "legacy-token",
 			"subject_id":              "user:user-legacy",
 			"integration":             "slack",
@@ -930,24 +975,16 @@ func TestTokenService(t *testing.T) {
 			t.Fatalf("seed legacy integration token: %v", err)
 		}
 
-		svc, err := coredata.New(db, enc)
-		if err != nil {
-			t.Fatalf("coredata.New: %v", err)
+		_, err = coredata.New(db, enc)
+		if err == nil {
+			t.Fatal("coredata.New succeeded, want legacy migration error")
 		}
-
-		got, err := svc.Tokens.Token(ctx, "user:user-legacy", "slack", "default", "workspace-1")
-		if err != nil {
-			t.Fatalf("Token: %v", err)
-		}
-		if got.ID != "legacy-token" || got.AccessToken != "legacy-access" || got.RefreshToken != "legacy-refresh" {
-			t.Fatalf("Token = %+v, want legacy-token / legacy-access / legacy-refresh", got)
-		}
-		if _, err := db.ObjectStore(coredata.StoreExternalCredentials).Get(ctx, "legacy-token"); err == nil {
-			t.Fatalf("legacy-only token should not be copied into %s during startup", coredata.StoreExternalCredentials)
+		if !strings.Contains(err.Error(), "manual external_credentials migration") {
+			t.Fatalf("coredata.New error = %v, want manual migration guidance", err)
 		}
 	})
 
-	t.Run("New_prefers_external_credentials_over_legacy_store", func(t *testing.T) {
+	t.Run("DeleteToken_removes_matching_external_credential_rows", func(t *testing.T) {
 		t.Parallel()
 
 		db := &coretesting.StubIndexedDB{}
@@ -956,29 +993,8 @@ func TestTokenService(t *testing.T) {
 			t.Fatalf("NewAESGCM: %v", err)
 		}
 		ctx := context.Background()
-		if err := db.CreateObjectStore(ctx, coredata.StoreIntegrationTokens, coredata.IntegrationTokensSchema); err != nil {
-			t.Fatalf("CreateObjectStore(%s): %v", coredata.StoreIntegrationTokens, err)
-		}
 		if err := db.CreateObjectStore(ctx, coredata.StoreExternalCredentials, coredata.ExternalCredentialsSchema); err != nil {
 			t.Fatalf("CreateObjectStore(%s): %v", coredata.StoreExternalCredentials, err)
-		}
-		accessEncrypted, refreshEncrypted, err := enc.EncryptTokenPair("legacy-access", "legacy-refresh")
-		if err != nil {
-			t.Fatalf("EncryptTokenPair: %v", err)
-		}
-		legacyRaw := indexeddb.Record{
-			"id":                      "legacy-token",
-			"subject_id":              "user:user-legacy",
-			"integration":             "slack",
-			"connection":              "default",
-			"instance":                "workspace-1",
-			"access_token_encrypted":  accessEncrypted,
-			"refresh_token_encrypted": refreshEncrypted,
-			"created_at":              time.Now().UTC().Add(-time.Minute),
-			"updated_at":              time.Now().UTC().Add(-time.Minute),
-		}
-		if err := db.ObjectStore(coredata.StoreIntegrationTokens).Put(ctx, legacyRaw); err != nil {
-			t.Fatalf("seed legacy integration token: %v", err)
 		}
 		currentAccessEncrypted, currentRefreshEncrypted, err := enc.EncryptTokenPair("current-access", "current-refresh")
 		if err != nil {
@@ -1006,79 +1022,16 @@ func TestTokenService(t *testing.T) {
 
 		got, err := svc.Tokens.Token(ctx, "user:user-legacy", "slack", "default", "workspace-1")
 		if err != nil {
-			t.Fatalf("Token: %v", err)
+			t.Fatalf("Token before delete: %v", err)
 		}
 		if got.ID != "current-token" || got.AccessToken != "current-access" || got.RefreshToken != "current-refresh" {
-			t.Fatalf("Token = %+v, want current-token / current-access / current-refresh", got)
-		}
-	})
-
-	t.Run("DeleteToken_removes_matching_legacy_lookup_rows", func(t *testing.T) {
-		t.Parallel()
-
-		db := &coretesting.StubIndexedDB{}
-		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
-		if err != nil {
-			t.Fatalf("NewAESGCM: %v", err)
-		}
-		ctx := context.Background()
-		if err := db.CreateObjectStore(ctx, coredata.StoreIntegrationTokens, coredata.IntegrationTokensSchema); err != nil {
-			t.Fatalf("CreateObjectStore(%s): %v", coredata.StoreIntegrationTokens, err)
-		}
-		if err := db.CreateObjectStore(ctx, coredata.StoreExternalCredentials, coredata.ExternalCredentialsSchema); err != nil {
-			t.Fatalf("CreateObjectStore(%s): %v", coredata.StoreExternalCredentials, err)
-		}
-
-		legacyAccessEncrypted, legacyRefreshEncrypted, err := enc.EncryptTokenPair("legacy-access", "legacy-refresh")
-		if err != nil {
-			t.Fatalf("EncryptTokenPair legacy: %v", err)
-		}
-		legacyRaw := indexeddb.Record{
-			"id":                      "legacy-token",
-			"subject_id":              "user:user-legacy",
-			"integration":             "slack",
-			"connection":              "default",
-			"instance":                "workspace-1",
-			"access_token_encrypted":  legacyAccessEncrypted,
-			"refresh_token_encrypted": legacyRefreshEncrypted,
-			"created_at":              time.Now().UTC().Add(-time.Minute),
-			"updated_at":              time.Now().UTC().Add(-time.Minute),
-		}
-		if err := db.ObjectStore(coredata.StoreIntegrationTokens).Put(ctx, legacyRaw); err != nil {
-			t.Fatalf("seed legacy integration token: %v", err)
-		}
-
-		currentAccessEncrypted, currentRefreshEncrypted, err := enc.EncryptTokenPair("current-access", "current-refresh")
-		if err != nil {
-			t.Fatalf("EncryptTokenPair current: %v", err)
-		}
-		currentRaw := indexeddb.Record{
-			"id":                      "current-token",
-			"subject_id":              "user:user-legacy",
-			"integration":             "slack",
-			"connection":              "default",
-			"instance":                "workspace-1",
-			"access_token_encrypted":  currentAccessEncrypted,
-			"refresh_token_encrypted": currentRefreshEncrypted,
-			"created_at":              time.Now().UTC(),
-			"updated_at":              time.Now().UTC(),
-		}
-		if err := db.ObjectStore(coredata.StoreExternalCredentials).Put(ctx, currentRaw); err != nil {
-			t.Fatalf("seed external credential: %v", err)
-		}
-
-		svc, err := coredata.New(db, enc)
-		if err != nil {
-			t.Fatalf("coredata.New: %v", err)
+			t.Fatalf("Token before delete = %+v, want current-token / current-access / current-refresh", got)
 		}
 		if err := svc.Tokens.DeleteToken(ctx, "current-token"); err != nil {
 			t.Fatalf("DeleteToken: %v", err)
 		}
 		if _, err := svc.Tokens.Token(ctx, "user:user-legacy", "slack", "default", "workspace-1"); err != core.ErrNotFound {
 			t.Fatalf("Token after delete = %v, want ErrNotFound", err)
-		}
-		if _, err := db.ObjectStore(coredata.StoreIntegrationTokens).Get(ctx, "legacy-token"); err != indexeddb.ErrNotFound {
-			t.Fatalf("legacy token raw Get = %v, want ErrNotFound", err)
 		}
 		if _, err := db.ObjectStore(coredata.StoreExternalCredentials).Get(ctx, "current-token"); err != indexeddb.ErrNotFound {
 			t.Fatalf("external credential raw Get = %v, want ErrNotFound", err)

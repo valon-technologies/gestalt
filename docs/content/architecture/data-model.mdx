@@ -22,7 +22,7 @@ Created automatically on first login.
 
 Emails and display names are plaintext. If you need encrypted PII at rest, handle it at the storage layer.
 
-### `integration_tokens`
+### `external_credentials`
 
 Stores upstream credentials (OAuth tokens, API keys, manual credentials) for each subject's connected integrations.
 
@@ -91,17 +91,17 @@ Credentials are encrypted. Everything else is plaintext.
 
 | Data | Where | How |
 | --- | --- | --- |
-| Access tokens | `integration_tokens.access_token_encrypted` | AES-256-GCM |
-| Refresh tokens | `integration_tokens.refresh_token_encrypted` | AES-256-GCM |
+| Access tokens | `external_credentials.access_token_encrypted` | AES-256-GCM |
+| Refresh tokens | `external_credentials.refresh_token_encrypted` | AES-256-GCM |
 | MCP OAuth client secrets | `oauth_registrations.client_secret_encrypted` | AES-256-GCM |
 | API tokens | `api_tokens.hashed_token` | One-way SHA-256 |
 | Emails, names, metadata, scopes, timestamps | Various | Plaintext |
 
 All encrypted fields use the same key derived from `server.encryptionKey`. There is no per-user or per-provider key separation.
 
-## Token storage granularity
+## Credential storage granularity
 
-Integration tokens are keyed by four dimensions: `subject_id`, `integration`, `connection`, and `instance`.
+External credentials are keyed by four dimensions: `subject_id`, `integration`, `connection`, and `instance`.
 
 The *integration* is the provider name from your config. The *connection* is the named connection within that provider (most have just `default`). The *instance* distinguishes multiple accounts within the same connection, which matters for providers with post-connect discovery (e.g., a user connected to three Slack workspaces).
 
@@ -112,7 +112,7 @@ The `_connection` and `_instance` selectors in the [HTTP API](/reference/http-ap
 - **`none`**: No credentials stored. Operations run without upstream authentication.
 - **`user`**: Each calling subject connects individually. Tokens are keyed by `subject_id`.
 
-Renaming a `plugins` key in config is a breaking change. Stored tokens reference the old name.
+Renaming a `plugins` key in config is a breaking change. Stored credentials reference the old name.
 
 ## Sessions
 
