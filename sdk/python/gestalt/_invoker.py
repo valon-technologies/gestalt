@@ -10,6 +10,7 @@ from google.protobuf import json_format
 from google.protobuf import struct_pb2 as _struct_pb2
 
 from ._api import Response
+from ._grpc_transport import insecure_internal_channel, secure_internal_channel
 from .gen.v1 import plugin_pb2 as _pb
 from .gen.v1 import plugin_pb2_grpc as _pb_grpc
 
@@ -198,7 +199,8 @@ def _plugin_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel
                 f"plugin invoker: tcp target {raw_target!r} is missing host:port"
             )
         return _with_plugin_invoker_relay_token(
-            grpc.insecure_channel(f"dns:///{address}"), token
+            insecure_internal_channel(f"dns:///{address}"),
+            token,
         )
     if target.startswith("tls://"):
         address = target[len("tls://") :].strip()
@@ -207,7 +209,7 @@ def _plugin_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel
                 f"plugin invoker: tls target {raw_target!r} is missing host:port"
             )
         return _with_plugin_invoker_relay_token(
-            grpc.secure_channel(f"dns:///{address}", grpc.ssl_channel_credentials()),
+            secure_internal_channel(f"dns:///{address}"),
             token,
         )
     if target.startswith("unix://"):
@@ -217,14 +219,18 @@ def _plugin_invoker_channel(raw_target: str, *, token: str = "") -> grpc.Channel
                 f"plugin invoker: unix target {raw_target!r} is missing a socket path"
             )
         return _with_plugin_invoker_relay_token(
-            grpc.insecure_channel(f"unix:{socket_path}"), token
+            insecure_internal_channel(f"unix:{socket_path}"),
+            token,
         )
     if "://" in target:
         parsed = _urlparse.urlparse(target)
         raise RuntimeError(
             f"plugin invoker: unsupported target scheme {parsed.scheme!r}"
         )
-    return _with_plugin_invoker_relay_token(grpc.insecure_channel(f"unix:{target}"), token)
+    return _with_plugin_invoker_relay_token(
+        insecure_internal_channel(f"unix:{target}"),
+        token,
+    )
 
 
 def _with_plugin_invoker_relay_token(

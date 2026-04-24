@@ -11,6 +11,7 @@ from urllib import parse as _urlparse
 import grpc
 from google.protobuf import duration_pb2 as _duration_pb2
 
+from ._grpc_transport import insecure_internal_channel, secure_internal_channel
 from .gen.v1 import cache_pb2 as _pb
 from .gen.v1 import cache_pb2_grpc as _pb_grpc
 
@@ -198,11 +199,11 @@ class _ClientCallDetails(grpc.ClientCallDetails):
 def _cache_channel(target: str, *, token: str = "") -> Any:
     scheme, address = _parse_cache_target(target)
     if scheme == "unix":
-        channel = grpc.insecure_channel(f"unix:{address}")
+        channel = insecure_internal_channel(f"unix:{address}")
     elif scheme == "tcp":
-        channel = grpc.insecure_channel(address)
+        channel = insecure_internal_channel(address)
     elif scheme == "tls":
-        channel = grpc.secure_channel(address, grpc.ssl_channel_credentials())
+        channel = secure_internal_channel(address)
     else:
         raise RuntimeError(f"unsupported cache transport scheme {scheme!r}")
     if token:

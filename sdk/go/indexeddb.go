@@ -163,7 +163,7 @@ func IndexedDB(name ...string) (*IndexedDBClient, error) {
 	switch network {
 	case "unix":
 		conn, err = grpc.DialContext(ctx, "passthrough:///localhost",
-			append([]grpc.DialOption{
+			append(internalHostServiceBaseDialOptions(
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 					var d net.Dialer
@@ -171,14 +171,14 @@ func IndexedDB(name ...string) (*IndexedDBClient, error) {
 				}),
 				grpc.WithAuthority("localhost"),
 				grpc.WithBlock(),
-			}, opts...)...,
+			), opts...)...,
 		)
 	case "tcp":
 		conn, err = grpc.DialContext(ctx, address,
-			append([]grpc.DialOption{
+			append(internalHostServiceBaseDialOptions(
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithBlock(),
-			}, opts...)...,
+			), opts...)...,
 		)
 	case "tls":
 		host, _, splitErr := net.SplitHostPort(address)
@@ -186,14 +186,14 @@ func IndexedDB(name ...string) (*IndexedDBClient, error) {
 			return nil, fmt.Errorf("indexeddb: parse tls target %q: %w", address, splitErr)
 		}
 		conn, err = grpc.DialContext(ctx, address,
-			append([]grpc.DialOption{
+			append(internalHostServiceBaseDialOptions(
 				grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 					MinVersion: tls.VersionTLS12,
 					ServerName: host,
 					NextProtos: []string{"h2"},
 				})),
 				grpc.WithBlock(),
-			}, opts...)...,
+			), opts...)...,
 		)
 	default:
 		return nil, fmt.Errorf("indexeddb: unsupported transport network %q", network)
