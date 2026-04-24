@@ -8,8 +8,10 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { expect, test } from "bun:test";
 
 import {
+  AgentExecutionStatus,
   AgentProvider as AgentProviderService,
-  StartAgentProviderRunRequestSchema,
+  CreateAgentProviderSessionRequestSchema,
+  CreateAgentProviderTurnRequestSchema,
 } from "../gen/v1/agent_pb.ts";
 import {
   AuthenticationProvider as AuthenticationProviderService,
@@ -962,10 +964,19 @@ test("buildProviderBinary compiles a runnable agent provider executable", async 
       }),
     );
 
-    const run = await agent.startRun(
-      create(StartAgentProviderRunRequestSchema, {
-        runId: "run-1",
-        providerName: "fixture-agent",
+    const session = await agent.createSession(
+      create(CreateAgentProviderSessionRequestSchema, {
+        sessionId: "session-1",
+        model: "gpt-test",
+        clientRef: "build-test",
+      }),
+    );
+    expect(session.id).toBe("session-1");
+
+    const turn = await agent.createTurn(
+      create(CreateAgentProviderTurnRequestSchema, {
+        turnId: "turn-1",
+        sessionId: session.id,
         model: "gpt-test",
         messages: [
           {
@@ -975,9 +986,10 @@ test("buildProviderBinary compiles a runnable agent provider executable", async 
         ],
       }),
     );
-    expect(run.id).toBe("run-1");
-    expect(run.model).toBe("gpt-test");
-    expect(run.outputText).toBe("echo:Check build smoke test");
+    expect(turn.id).toBe("turn-1");
+    expect(turn.model).toBe("gpt-test");
+    expect(turn.status).toBe(AgentExecutionStatus.SUCCEEDED);
+    expect(turn.outputText).toBe("echo:Check build smoke test");
   } finally {
     if (child) {
       await stopProcess(child);

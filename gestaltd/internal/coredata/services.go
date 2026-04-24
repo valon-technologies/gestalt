@@ -22,9 +22,8 @@ type Services struct {
 	WorkspaceRoles           *WorkspaceRoleService
 	IdentityPluginAccess     *IdentityPluginAccessService
 	APITokenAccess           *APITokenAccessService
+	AgentSessions            *AgentSessionMetadataService
 	AgentRunMetadata         *AgentRunMetadataService
-	AgentRunEvents           *AgentRunEventService
-	AgentRunInteractions     *AgentRunInteractionService
 	RuntimeSessionLogs       *RuntimeSessionLogService
 	DB                       indexeddb.IndexedDB
 }
@@ -58,17 +57,17 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := ds.CreateObjectStore(ctx, StoreAPITokenAccess, APITokenAccessSchema); err != nil {
 		return nil, fmt.Errorf("create api_token_access store: %w", err)
 	}
+	if err := ds.CreateObjectStore(ctx, StoreAgentSessionMetadata, AgentSessionMetadataSchema); err != nil {
+		return nil, fmt.Errorf("create agent_session_metadata store: %w", err)
+	}
+	if err := ds.CreateObjectStore(ctx, StoreAgentSessionIdempotency, AgentSessionIdempotencySchema); err != nil {
+		return nil, fmt.Errorf("create agent_session_idempotency store: %w", err)
+	}
 	if err := ds.CreateObjectStore(ctx, StoreAgentRunMetadata, AgentRunMetadataSchema); err != nil {
 		return nil, fmt.Errorf("create agent_run_metadata store: %w", err)
 	}
 	if err := ds.CreateObjectStore(ctx, StoreAgentRunIdempotency, AgentRunIdempotencySchema); err != nil {
 		return nil, fmt.Errorf("create agent_run_idempotency store: %w", err)
-	}
-	if err := ds.CreateObjectStore(ctx, StoreAgentRunEvents, AgentRunEventsSchema); err != nil {
-		return nil, fmt.Errorf("create agent_run_events store: %w", err)
-	}
-	if err := ds.CreateObjectStore(ctx, StoreAgentRunInteractions, AgentRunInteractionsSchema); err != nil {
-		return nil, fmt.Errorf("create agent_run_interactions store: %w", err)
 	}
 	if err := ds.CreateObjectStore(ctx, StoreRuntimeSessions, RuntimeSessionsSchema); err != nil {
 		return nil, fmt.Errorf("create runtime_sessions store: %w", err)
@@ -84,9 +83,8 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	workspaceRoles := NewWorkspaceRoleService(ds)
 	identityPluginAccess := NewIdentityPluginAccessService(ds)
 	apiTokenAccess := NewAPITokenAccessService(ds)
+	agentSessions := NewAgentSessionMetadataService(ds)
 	agentRunMetadata := NewAgentRunMetadataService(ds)
-	agentRunEvents := NewAgentRunEventService(ds)
-	agentRunInteractions := NewAgentRunInteractionService(ds)
 	runtimeSessionLogs := NewRuntimeSessionLogService(ds)
 
 	users := NewUserService(ds, identities, authBindings)
@@ -122,9 +120,8 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 		WorkspaceRoles:           workspaceRoles,
 		IdentityPluginAccess:     identityPluginAccess,
 		APITokenAccess:           apiTokenAccess,
+		AgentSessions:            agentSessions,
 		AgentRunMetadata:         agentRunMetadata,
-		AgentRunEvents:           agentRunEvents,
-		AgentRunInteractions:     agentRunInteractions,
 		RuntimeSessionLogs:       runtimeSessionLogs,
 		DB:                       ds,
 	}, nil

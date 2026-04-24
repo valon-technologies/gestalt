@@ -60,6 +60,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/structpb"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1047,35 +1048,108 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(providerhost.HostServiceRelayTokenHeader, token))
 
 	client := proto.NewAgentManagerHostClient(conn)
-	created, err := client.Run(ctx, &proto.AgentManagerRunRequest{
+	session, err := client.CreateSession(ctx, &proto.AgentManagerCreateSessionRequest{
 		InvocationToken: invocationToken,
 		ProviderName:    "managed",
-		IdempotencyKey:  "plugin-agent-run",
+		Model:           "gpt-test",
+		ClientRef:       "plugin-session",
+		IdempotencyKey:  "plugin-agent-session",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create agent session: %w", err)
+	}
+	sessionID := strings.TrimSpace(session.GetId())
+	if sessionID == "" {
+		return nil, fmt.Errorf("agent manager create session did not return a session id")
+	}
+
+	turnMetadata, err := structpb.NewStruct(map[string]any{
+		"requireInteraction": true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build agent turn metadata: %w", err)
+	}
+
+	turn, err := client.CreateTurn(ctx, &proto.AgentManagerCreateTurnRequest{
+		InvocationToken: invocationToken,
+		SessionId:       sessionID,
+		Model:           "gpt-test",
+		IdempotencyKey:  "plugin-agent-turn",
 		ToolSource:      proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_INHERIT_INVOKES,
+		Metadata:        turnMetadata,
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "sync it",
 		}},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create agent run: %w", err)
+		return nil, fmt.Errorf("create agent turn: %w", err)
 	}
-	runID := strings.TrimSpace(created.GetRun().GetId())
-	if runID == "" {
-		return nil, fmt.Errorf("agent manager create did not return a run id")
+	turnID := strings.TrimSpace(turn.GetId())
+	if turnID == "" {
+		return nil, fmt.Errorf("agent manager create turn did not return a turn id")
 	}
-	fetched, err := client.GetRun(ctx, &proto.AgentManagerGetRunRequest{
+
+	interactions, err := client.ListInteractions(ctx, &proto.AgentManagerListInteractionsRequest{
 		InvocationToken: invocationToken,
-		RunId:           runID,
+		TurnId:          turnID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("get agent run: %w", err)
+		return nil, fmt.Errorf("list agent interactions: %w", err)
+	}
+	if len(interactions.GetInteractions()) != 1 {
+		return nil, fmt.Errorf("agent manager listed %d interactions, want 1", len(interactions.GetInteractions()))
+	}
+	interactionID := strings.TrimSpace(interactions.GetInteractions()[0].GetId())
+	if interactionID == "" {
+		return nil, fmt.Errorf("agent interaction did not return an interaction id")
+	}
+
+	resolution, err := structpb.NewStruct(map[string]any{
+		"approved": true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build interaction resolution: %w", err)
+	}
+	resolved, err := client.ResolveInteraction(ctx, &proto.AgentManagerResolveInteractionRequest{
+		InvocationToken: invocationToken,
+		TurnId:          turnID,
+		InteractionId:   interactionID,
+		Resolution:      resolution,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve agent interaction: %w", err)
+	}
+
+	fetched, err := client.GetTurn(ctx, &proto.AgentManagerGetTurnRequest{
+		InvocationToken: invocationToken,
+		TurnId:          turnID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get agent turn: %w", err)
+	}
+
+	events, err := client.ListTurnEvents(ctx, &proto.AgentManagerListTurnEventsRequest{
+		InvocationToken: invocationToken,
+		TurnId:          turnID,
+		AfterSeq:        0,
+		Limit:           10,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list agent turn events: %w", err)
+	}
+	eventTypes := make([]string, 0, len(events.GetEvents()))
+	for _, event := range events.GetEvents() {
+		eventTypes = append(eventTypes, event.GetType())
 	}
 
 	return map[string]any{
-		"provider_name": created.GetProviderName(),
-		"run_id":        runID,
-		"status":        fetched.GetRun().GetStatus().String(),
+		"provider_name":  session.GetProviderName(),
+		"session_id":     sessionID,
+		"turn_id":        turnID,
+		"interaction_id": strings.TrimSpace(resolved.GetId()),
+		"status":         fetched.GetStatus().String(),
+		"event_types":    eventTypes,
 	}, nil
 }
 
@@ -1533,88 +1607,302 @@ func (m *stubWorkflowManager) Subjects() []string {
 	return append([]string(nil), m.subjects...)
 }
 
-type stubAgentRunManagerProvider struct {
-	mu               sync.Mutex
-	startRunRequests []coreagent.StartRunRequest
-	runs             map[string]*coreagent.Run
+type stubAgentTurnManagerProvider struct {
+	coreagent.UnimplementedProvider
+	mu                    sync.Mutex
+	createSessionRequests []coreagent.CreateSessionRequest
+	createTurnRequests    []coreagent.CreateTurnRequest
+	sessions              map[string]*coreagent.Session
+	turns                 map[string]*coreagent.Turn
+	turnEvents            map[string][]*coreagent.TurnEvent
+	interactions          map[string]*coreagent.Interaction
 }
 
-func newStubAgentRunManagerProvider() *stubAgentRunManagerProvider {
-	return &stubAgentRunManagerProvider{
-		runs: map[string]*coreagent.Run{},
+func newStubAgentTurnManagerProvider() *stubAgentTurnManagerProvider {
+	return &stubAgentTurnManagerProvider{
+		sessions:     map[string]*coreagent.Session{},
+		turns:        map[string]*coreagent.Turn{},
+		turnEvents:   map[string][]*coreagent.TurnEvent{},
+		interactions: map[string]*coreagent.Interaction{},
 	}
 }
 
-func (p *stubAgentRunManagerProvider) StartRun(_ context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
+func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.startRunRequests = append(p.startRunRequests, req)
-	run := &coreagent.Run{
-		ID:           req.RunID,
-		ProviderName: req.ProviderName,
-		Status:       coreagent.RunStatusRunning,
-		ExecutionRef: req.ExecutionRef,
+	now := time.Now().UTC().Truncate(time.Second)
+	p.createSessionRequests = append(p.createSessionRequests, req)
+	session := &coreagent.Session{
+		ID:           req.SessionID,
+		ProviderName: "managed",
+		Model:        req.Model,
+		ClientRef:    req.ClientRef,
+		State:        coreagent.SessionStateActive,
+		Metadata:     maps.Clone(req.Metadata),
 		CreatedBy:    req.CreatedBy,
+		CreatedAt:    &now,
+		UpdatedAt:    &now,
 	}
-	p.runs[req.RunID] = run
-	cloned := *run
-	return &cloned, nil
+	p.sessions[session.ID] = session
+	return cloneAgentSession(session), nil
 }
 
-func (p *stubAgentRunManagerProvider) GetRun(_ context.Context, req coreagent.GetRunRequest) (*coreagent.Run, error) {
+func (p *stubAgentTurnManagerProvider) GetSession(_ context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	run, ok := p.runs[req.RunID]
+	session, ok := p.sessions[req.SessionID]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
-	cloned := *run
-	return &cloned, nil
+	return cloneAgentSession(session), nil
 }
 
-func (p *stubAgentRunManagerProvider) ListRuns(context.Context, coreagent.ListRunsRequest) ([]*coreagent.Run, error) {
+func (p *stubAgentTurnManagerProvider) ListSessions(context.Context, coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	out := make([]*coreagent.Run, 0, len(p.runs))
-	for _, run := range p.runs {
-		cloned := *run
-		out = append(out, &cloned)
+	out := make([]*coreagent.Session, 0, len(p.sessions))
+	for _, session := range p.sessions {
+		out = append(out, cloneAgentSession(session))
 	}
 	return out, nil
 }
 
-func (p *stubAgentRunManagerProvider) CancelRun(_ context.Context, req coreagent.CancelRunRequest) (*coreagent.Run, error) {
+func (p *stubAgentTurnManagerProvider) UpdateSession(_ context.Context, req coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	run, ok := p.runs[req.RunID]
+	session, ok := p.sessions[req.SessionID]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
-	cloned := *run
-	cloned.Status = coreagent.RunStatusCanceled
-	p.runs[req.RunID] = &cloned
-	return &cloned, nil
+	now := time.Now().UTC().Truncate(time.Second)
+	if req.ClientRef != "" {
+		session.ClientRef = req.ClientRef
+	}
+	if req.State != "" {
+		session.State = req.State
+	}
+	if req.Metadata != nil {
+		session.Metadata = maps.Clone(req.Metadata)
+	}
+	session.UpdatedAt = &now
+	return cloneAgentSession(session), nil
 }
 
-func (p *stubAgentRunManagerProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
-	return &coreagent.ProviderCapabilities{StreamingText: true, ToolCalls: true}, nil
-}
-
-func (p *stubAgentRunManagerProvider) ResumeRun(_ context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
+func (p *stubAgentTurnManagerProvider) CreateTurn(_ context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	run, ok := p.runs[req.RunID]
+
+	now := time.Now().UTC().Truncate(time.Second)
+	p.createTurnRequests = append(p.createTurnRequests, req)
+
+	turn := &coreagent.Turn{
+		ID:           req.TurnID,
+		SessionID:    req.SessionID,
+		ProviderName: "managed",
+		Model:        req.Model,
+		Status:       coreagent.ExecutionStatusSucceeded,
+		Messages:     append([]coreagent.Message(nil), req.Messages...),
+		OutputText:   "turn completed",
+		CreatedBy:    req.CreatedBy,
+		CreatedAt:    &now,
+		StartedAt:    &now,
+		CompletedAt:  &now,
+		ExecutionRef: req.ExecutionRef,
+	}
+	p.turns[turn.ID] = turn
+	p.appendTurnEventLocked(turn.ID, "turn.started", map[string]any{"session_id": req.SessionID})
+
+	if requireInteraction, _ := req.Metadata["requireInteraction"].(bool); requireInteraction {
+		turn.Status = coreagent.ExecutionStatusWaitingForInput
+		turn.StatusMessage = "waiting for input"
+		turn.CompletedAt = nil
+		interactionID := "interaction-" + turn.ID
+		p.interactions[interactionID] = &coreagent.Interaction{
+			ID:        interactionID,
+			TurnID:    turn.ID,
+			SessionID: turn.SessionID,
+			Type:      coreagent.InteractionTypeApproval,
+			State:     coreagent.InteractionStatePending,
+			Title:     "Approve action",
+			Prompt:    "Continue the turn?",
+			Request:   map[string]any{"provider_name": "managed"},
+			CreatedAt: &now,
+		}
+		p.appendTurnEventLocked(turn.ID, "interaction.requested", map[string]any{"interaction_id": interactionID})
+	} else {
+		p.appendTurnEventLocked(turn.ID, "assistant.completed", map[string]any{"text": "turn completed"})
+		p.appendTurnEventLocked(turn.ID, "turn.completed", map[string]any{"status": "succeeded"})
+	}
+
+	if session := p.sessions[req.SessionID]; session != nil {
+		session.LastTurnAt = &now
+		session.UpdatedAt = &now
+	}
+	return cloneAgentTurn(turn), nil
+}
+
+func (p *stubAgentTurnManagerProvider) GetTurn(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	turn, ok := p.turns[req.TurnID]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
-	cloned := *run
-	cloned.Status = coreagent.RunStatusSucceeded
-	p.runs[req.RunID] = &cloned
-	return &cloned, nil
+	return cloneAgentTurn(turn), nil
 }
 
-func (p *stubAgentRunManagerProvider) Ping(context.Context) error { return nil }
-func (p *stubAgentRunManagerProvider) Close() error               { return nil }
+func (p *stubAgentTurnManagerProvider) ListTurns(_ context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]*coreagent.Turn, 0, len(p.turns))
+	for _, turn := range p.turns {
+		if req.SessionID == "" || turn.SessionID == req.SessionID {
+			out = append(out, cloneAgentTurn(turn))
+		}
+	}
+	return out, nil
+}
+
+func (p *stubAgentTurnManagerProvider) CancelTurn(_ context.Context, req coreagent.CancelTurnRequest) (*coreagent.Turn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	turn, ok := p.turns[req.TurnID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	turn.Status = coreagent.ExecutionStatusCanceled
+	turn.StatusMessage = req.Reason
+	turn.CompletedAt = &now
+	p.appendTurnEventLocked(turn.ID, "turn.canceled", map[string]any{"reason": req.Reason})
+	return cloneAgentTurn(turn), nil
+}
+
+func (p *stubAgentTurnManagerProvider) ListTurnEvents(_ context.Context, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	events := p.turnEvents[req.TurnID]
+	out := make([]*coreagent.TurnEvent, 0, len(events))
+	for _, event := range events {
+		if event.Seq <= req.AfterSeq {
+			continue
+		}
+		out = append(out, cloneAgentTurnEvent(event))
+		if req.Limit > 0 && len(out) >= req.Limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (p *stubAgentTurnManagerProvider) GetInteraction(_ context.Context, req coreagent.GetInteractionRequest) (*coreagent.Interaction, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	interaction, ok := p.interactions[req.InteractionID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	return cloneAgentInteraction(interaction), nil
+}
+
+func (p *stubAgentTurnManagerProvider) ListInteractions(_ context.Context, req coreagent.ListInteractionsRequest) ([]*coreagent.Interaction, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]*coreagent.Interaction, 0, len(p.interactions))
+	for _, interaction := range p.interactions {
+		if req.TurnID == "" || interaction.TurnID == req.TurnID {
+			out = append(out, cloneAgentInteraction(interaction))
+		}
+	}
+	return out, nil
+}
+
+func (p *stubAgentTurnManagerProvider) ResolveInteraction(_ context.Context, req coreagent.ResolveInteractionRequest) (*coreagent.Interaction, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	interaction, ok := p.interactions[req.InteractionID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	interaction.State = coreagent.InteractionStateResolved
+	interaction.Resolution = maps.Clone(req.Resolution)
+	interaction.ResolvedAt = &now
+	if turn := p.turns[interaction.TurnID]; turn != nil {
+		turn.Status = coreagent.ExecutionStatusSucceeded
+		turn.StatusMessage = interaction.ID
+		turn.CompletedAt = &now
+		p.appendTurnEventLocked(turn.ID, "interaction.resolved", map[string]any{"interaction_id": interaction.ID})
+		p.appendTurnEventLocked(turn.ID, "turn.completed", map[string]any{"status": "succeeded"})
+	}
+	return cloneAgentInteraction(interaction), nil
+}
+
+func (p *stubAgentTurnManagerProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	return &coreagent.ProviderCapabilities{
+		StreamingText:    true,
+		ToolCalls:        true,
+		Interactions:     true,
+		ResumableTurns:   true,
+		StructuredOutput: true,
+	}, nil
+}
+
+func (p *stubAgentTurnManagerProvider) Ping(context.Context) error { return nil }
+func (p *stubAgentTurnManagerProvider) Close() error               { return nil }
+
+func (p *stubAgentTurnManagerProvider) appendTurnEventLocked(turnID, eventType string, data map[string]any) {
+	events := p.turnEvents[turnID]
+	now := time.Now().UTC().Truncate(time.Second)
+	p.turnEvents[turnID] = append(events, &coreagent.TurnEvent{
+		ID:         fmt.Sprintf("%s-event-%d", turnID, len(events)+1),
+		TurnID:     turnID,
+		Seq:        int64(len(events) + 1),
+		Type:       eventType,
+		Source:     "managed",
+		Visibility: "private",
+		Data:       maps.Clone(data),
+		CreatedAt:  &now,
+	})
+}
+
+func cloneAgentSession(src *coreagent.Session) *coreagent.Session {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.Metadata = maps.Clone(src.Metadata)
+	return &dst
+}
+
+func cloneAgentTurn(src *coreagent.Turn) *coreagent.Turn {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.Messages = append([]coreagent.Message(nil), src.Messages...)
+	dst.StructuredOutput = maps.Clone(src.StructuredOutput)
+	return &dst
+}
+
+func cloneAgentTurnEvent(src *coreagent.TurnEvent) *coreagent.TurnEvent {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.Data = maps.Clone(src.Data)
+	return &dst
+}
+
+func cloneAgentInteraction(src *coreagent.Interaction) *coreagent.Interaction {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.Request = maps.Clone(src.Request)
+	dst.Resolution = maps.Clone(src.Resolution)
+	return &dst
+}
 
 func cloneManagedSchedule(value *workflowmanager.ManagedSchedule) *workflowmanager.ManagedSchedule {
 	if value == nil {
@@ -3279,7 +3567,7 @@ func TestPluginAgentManagerExposeHostSocketEnv(t *testing.T) {
 	}
 }
 
-func TestPluginAgentManagerRunUsesInheritedInvokesAndRequestContext(t *testing.T) {
+func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
@@ -3295,7 +3583,7 @@ func TestPluginAgentManagerRunUsesInheritedInvokesAndRequestContext(t *testing.T
 			{ID: "agent_manager_roundtrip", Method: http.MethodPost},
 		},
 	})
-	manifest := newExecutableManifest("Echo", "Agent manager run roundtrip")
+	manifest := newExecutableManifest("Echo", "Agent manager turn roundtrip")
 	services := coretesting.NewStubServices(t)
 
 	pluginProviders := registry.New()
@@ -3326,16 +3614,17 @@ func TestPluginAgentManagerRunUsesInheritedInvokesAndRequestContext(t *testing.T
 		t.Fatalf("Register roadmap provider: %v", err)
 	}
 
-	agentProvider := newStubAgentRunManagerProvider()
+	agentProvider := newStubAgentTurnManagerProvider()
 	agentRuntime := &agentRuntime{defaultProviderName: "managed", providers: map[string]coreagent.Provider{"managed": agentProvider}}
 	broker := invocation.NewBroker(&pluginProviders.Providers, services.Users, services.Tokens)
 	agentRuntime.SetRunMetadata(services.AgentRunMetadata)
 	agentRuntime.SetInvoker(broker)
 	manager := agentmanager.New(agentmanager.Config{
-		Providers:   &pluginProviders.Providers,
-		Agent:       agentRuntime,
-		RunMetadata: services.AgentRunMetadata,
-		Invoker:     broker,
+		Providers:       &pluginProviders.Providers,
+		Agent:           agentRuntime,
+		SessionMetadata: services.AgentSessions,
+		RunMetadata:     services.AgentRunMetadata,
+		Invoker:         broker,
 		PluginInvokes: map[string][]config.PluginInvocationDependency{
 			"echoext": {{
 				Plugin:    "roadmap",
@@ -3418,36 +3707,71 @@ func TestPluginAgentManagerRunUsesInheritedInvokesAndRequestContext(t *testing.T
 	}
 
 	var roundTrip struct {
-		ProviderName string `json:"provider_name"`
-		RunID        string `json:"run_id"`
-		Status       string `json:"status"`
+		ProviderName  string   `json:"provider_name"`
+		SessionID     string   `json:"session_id"`
+		TurnID        string   `json:"turn_id"`
+		InteractionID string   `json:"interaction_id"`
+		Status        string   `json:"status"`
+		EventTypes    []string `json:"event_types"`
 	}
 	if err := json.Unmarshal([]byte(result.Body), &roundTrip); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
-	if roundTrip.ProviderName != "managed" || roundTrip.RunID == "" {
+	if roundTrip.ProviderName != "managed" || roundTrip.SessionID == "" || roundTrip.TurnID == "" || roundTrip.InteractionID == "" {
 		t.Fatalf("agent roundtrip result = %+v", roundTrip)
+	}
+	if roundTrip.Status != proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED.String() {
+		t.Fatalf("agent roundtrip status = %q, want %q", roundTrip.Status, proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED.String())
+	}
+	if !slices.Contains(roundTrip.EventTypes, "turn.started") ||
+		!slices.Contains(roundTrip.EventTypes, "interaction.requested") ||
+		!slices.Contains(roundTrip.EventTypes, "interaction.resolved") ||
+		!slices.Contains(roundTrip.EventTypes, "turn.completed") {
+		t.Fatalf("agent roundtrip event_types = %#v, want canonical turn lifecycle events", roundTrip.EventTypes)
 	}
 
 	agentProvider.mu.Lock()
-	startRunCount := len(agentProvider.startRunRequests)
-	startReq := agentProvider.startRunRequests[0]
+	createSessionCount := len(agentProvider.createSessionRequests)
+	createTurnCount := len(agentProvider.createTurnRequests)
+	var sessionReq coreagent.CreateSessionRequest
+	if createSessionCount > 0 {
+		sessionReq = agentProvider.createSessionRequests[0]
+	}
+	var turnReq coreagent.CreateTurnRequest
+	if createTurnCount > 0 {
+		turnReq = agentProvider.createTurnRequests[0]
+	}
 	agentProvider.mu.Unlock()
 
-	if startRunCount != 1 {
-		t.Fatalf("StartRun count = %d, want 1", startRunCount)
+	if createSessionCount != 1 {
+		t.Fatalf("CreateSession count = %d, want 1", createSessionCount)
 	}
-	if startReq.IdempotencyKey != "plugin-agent-run" {
-		t.Fatalf("StartRun idempotency_key = %q, want %q", startReq.IdempotencyKey, "plugin-agent-run")
+	if createTurnCount != 1 {
+		t.Fatalf("CreateTurn count = %d, want 1", createTurnCount)
 	}
-	if startReq.CreatedBy.SubjectID != "user:user-123" {
-		t.Fatalf("StartRun created_by.subject_id = %q, want %q", startReq.CreatedBy.SubjectID, "user:user-123")
+	if sessionReq.IdempotencyKey != "plugin-agent-session" {
+		t.Fatalf("CreateSession idempotency_key = %q, want %q", sessionReq.IdempotencyKey, "plugin-agent-session")
 	}
-	if len(startReq.Tools) != 1 {
-		t.Fatalf("StartRun tools = %#v, want 1 inherited tool", startReq.Tools)
+	if sessionReq.CreatedBy.SubjectID != "user:user-123" {
+		t.Fatalf("CreateSession created_by.subject_id = %q, want %q", sessionReq.CreatedBy.SubjectID, "user:user-123")
 	}
-	if startReq.Tools[0].Target.PluginName != "roadmap" || startReq.Tools[0].Target.Operation != "sync" {
-		t.Fatalf("StartRun tool target = %#v", startReq.Tools[0].Target)
+	if turnReq.IdempotencyKey != "plugin-agent-turn" {
+		t.Fatalf("CreateTurn idempotency_key = %q, want %q", turnReq.IdempotencyKey, "plugin-agent-turn")
+	}
+	if turnReq.SessionID != roundTrip.SessionID {
+		t.Fatalf("CreateTurn session_id = %q, want %q", turnReq.SessionID, roundTrip.SessionID)
+	}
+	if turnReq.CreatedBy.SubjectID != "user:user-123" {
+		t.Fatalf("CreateTurn created_by.subject_id = %q, want %q", turnReq.CreatedBy.SubjectID, "user:user-123")
+	}
+	if requireInteraction, _ := turnReq.Metadata["requireInteraction"].(bool); !requireInteraction {
+		t.Fatalf("CreateTurn metadata = %#v, want requireInteraction=true", turnReq.Metadata)
+	}
+	if len(turnReq.Tools) != 1 {
+		t.Fatalf("CreateTurn tools = %#v, want 1 inherited tool", turnReq.Tools)
+	}
+	if turnReq.Tools[0].Target.PluginName != "roadmap" || turnReq.Tools[0].Target.Operation != "sync" {
+		t.Fatalf("CreateTurn tool target = %#v", turnReq.Tools[0].Target)
 	}
 }
 

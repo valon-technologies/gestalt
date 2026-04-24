@@ -65,7 +65,7 @@ pub enum Commands {
         command: WorkflowCommands,
     },
 
-    /// Manage global agent runs
+    /// Manage global agent sessions and turns
     Agent {
         #[command(subcommand)]
         command: AgentCommands,
@@ -221,10 +221,15 @@ pub enum WorkflowCommands {
 
 #[derive(Subcommand)]
 pub enum AgentCommands {
-    /// Inspect and control agent runs
-    Runs {
+    /// Inspect and control agent sessions
+    Sessions {
         #[command(subcommand)]
-        command: AgentRunCommands,
+        command: AgentSessionCommands,
+    },
+    /// Inspect and control agent turns
+    Turns {
+        #[command(subcommand)]
+        command: AgentTurnCommands,
     },
 }
 
@@ -326,44 +331,65 @@ pub enum WorkflowRunCommands {
 }
 
 #[derive(Subcommand)]
-pub enum AgentRunCommands {
-    /// Create an agent run
-    Create(AgentRunCreateArgs),
-    /// List agent runs
+pub enum AgentSessionCommands {
+    /// Create an agent session
+    Create(AgentSessionCreateArgs),
+    /// List agent sessions
     List {
-        /// Filter runs by provider
+        /// Filter sessions by provider
         #[arg(long)]
         provider: Option<String>,
-        /// Filter runs by status
+        /// Filter sessions by state
+        #[arg(long)]
+        state: Option<String>,
+    },
+    /// Show a single agent session
+    Get {
+        /// Session ID
+        id: String,
+    },
+    /// Update an existing agent session
+    Update(AgentSessionUpdateArgs),
+}
+
+#[derive(Subcommand)]
+pub enum AgentTurnCommands {
+    /// Create an agent turn within a session
+    Create(AgentTurnCreateArgs),
+    /// List turns in a session
+    List {
+        /// Session ID
+        session_id: String,
+        /// Filter turns by status
         #[arg(long)]
         status: Option<String>,
     },
-    /// Show a single agent run
+    /// Show a single agent turn
     Get {
-        /// Run ID
+        /// Turn ID
         id: String,
     },
-    /// Cancel an agent run
+    /// Cancel an agent turn
     Cancel {
-        /// Run ID
+        /// Turn ID
         id: String,
         /// Optional cancellation reason
         #[arg(long)]
         reason: Option<String>,
     },
-    /// Inspect or stream agent run events
+    /// Inspect or stream agent turn events
     Events {
         #[command(subcommand)]
-        command: AgentRunEventCommands,
+        command: AgentTurnEventCommands,
     },
 }
 
 #[derive(Subcommand)]
-pub enum AgentRunEventCommands {
-    /// List stored events for an agent run
-    List(AgentRunEventListArgs),
-    /// Stream events for an agent run as server-sent events
-    Stream(AgentRunEventStreamArgs),
+pub enum AgentTurnEventCommands {
+    /// List stored events for an agent turn
+    List(AgentTurnEventListArgs),
+    /// Stream events for an agent turn as server-sent events
+    Stream(AgentTurnEventStreamArgs),
 }
 
 #[derive(Subcommand)]
@@ -441,10 +467,50 @@ impl AgentToolArg {
 }
 
 #[derive(Args)]
-pub struct AgentRunCreateArgs {
+pub struct AgentSessionCreateArgs {
     /// Agent provider name
     #[arg(long)]
     pub provider: Option<String>,
+
+    /// Model name override
+    #[arg(long)]
+    pub model: Option<String>,
+
+    /// Client reference for the session
+    #[arg(long = "client-ref")]
+    pub client_ref: Option<String>,
+
+    /// Idempotency key for safe retries
+    #[arg(long = "idempotency-key")]
+    pub idempotency_key: Option<String>,
+
+    /// Load the JSON request body from a file (use "-" for stdin)
+    #[arg(long = "input", alias = "request-file")]
+    pub input: Option<String>,
+}
+
+#[derive(Args)]
+pub struct AgentSessionUpdateArgs {
+    /// Session ID
+    pub id: String,
+
+    /// Client reference for the session
+    #[arg(long = "client-ref")]
+    pub client_ref: Option<String>,
+
+    /// Session state
+    #[arg(long)]
+    pub state: Option<String>,
+
+    /// Load the JSON request body from a file (use "-" for stdin)
+    #[arg(long = "input", alias = "request-file")]
+    pub input: Option<String>,
+}
+
+#[derive(Args)]
+pub struct AgentTurnCreateArgs {
+    /// Session ID
+    pub session_id: String,
 
     /// Model name override
     #[arg(long)]
@@ -462,10 +528,6 @@ pub struct AgentRunCreateArgs {
     #[arg(long = "tool", value_parser = AgentToolArg::parse)]
     pub tools: Vec<AgentToolArg>,
 
-    /// Continue an existing provider session reference
-    #[arg(long = "session-ref")]
-    pub session_ref: Option<String>,
-
     /// Idempotency key for safe retries
     #[arg(long = "idempotency-key")]
     pub idempotency_key: Option<String>,
@@ -476,8 +538,8 @@ pub struct AgentRunCreateArgs {
 }
 
 #[derive(Args)]
-pub struct AgentRunEventListArgs {
-    /// Run ID
+pub struct AgentTurnEventListArgs {
+    /// Turn ID
     pub id: String,
 
     /// Return events after this event sequence number
@@ -490,8 +552,8 @@ pub struct AgentRunEventListArgs {
 }
 
 #[derive(Args)]
-pub struct AgentRunEventStreamArgs {
-    /// Run ID
+pub struct AgentTurnEventStreamArgs {
+    /// Turn ID
     pub id: String,
 
     /// Stream events after this event sequence number

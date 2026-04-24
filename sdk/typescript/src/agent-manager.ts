@@ -7,12 +7,22 @@ import {
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
-  AgentManagerCancelRunRequestSchema,
-  AgentManagerGetRunRequestSchema,
+  AgentManagerCancelTurnRequestSchema,
+  AgentManagerCreateSessionRequestSchema,
+  AgentManagerCreateTurnRequestSchema,
+  AgentManagerGetSessionRequestSchema,
+  AgentManagerGetTurnRequestSchema,
   AgentManagerHost as AgentManagerHostService,
-  AgentManagerListRunsRequestSchema,
-  AgentManagerRunRequestSchema,
-  type ManagedAgentRun,
+  AgentManagerListInteractionsRequestSchema,
+  AgentManagerListSessionsRequestSchema,
+  AgentManagerListTurnEventsRequestSchema,
+  AgentManagerListTurnsRequestSchema,
+  AgentManagerResolveInteractionRequestSchema,
+  AgentManagerUpdateSessionRequestSchema,
+  type AgentInteraction,
+  type AgentSession,
+  type AgentTurn,
+  type AgentTurnEvent,
 } from "../gen/v1/agent_pb.ts";
 import type { Request } from "./api.ts";
 
@@ -20,18 +30,38 @@ export const ENV_AGENT_MANAGER_SOCKET = "GESTALT_AGENT_MANAGER_SOCKET";
 export const ENV_AGENT_MANAGER_SOCKET_TOKEN = `${ENV_AGENT_MANAGER_SOCKET}_TOKEN`;
 const AGENT_MANAGER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
-export type ManagedAgentRunMessage = ManagedAgentRun;
-export type AgentManagerRunInput = MessageInitShape<
-  typeof AgentManagerRunRequestSchema
+export type AgentManagerCreateSessionInput = MessageInitShape<
+  typeof AgentManagerCreateSessionRequestSchema
 >;
-export type AgentManagerGetRunInput = MessageInitShape<
-  typeof AgentManagerGetRunRequestSchema
+export type AgentManagerGetSessionInput = MessageInitShape<
+  typeof AgentManagerGetSessionRequestSchema
 >;
-export type AgentManagerListRunsInput = MessageInitShape<
-  typeof AgentManagerListRunsRequestSchema
+export type AgentManagerListSessionsInput = MessageInitShape<
+  typeof AgentManagerListSessionsRequestSchema
 >;
-export type AgentManagerCancelRunInput = MessageInitShape<
-  typeof AgentManagerCancelRunRequestSchema
+export type AgentManagerUpdateSessionInput = MessageInitShape<
+  typeof AgentManagerUpdateSessionRequestSchema
+>;
+export type AgentManagerCreateTurnInput = MessageInitShape<
+  typeof AgentManagerCreateTurnRequestSchema
+>;
+export type AgentManagerGetTurnInput = MessageInitShape<
+  typeof AgentManagerGetTurnRequestSchema
+>;
+export type AgentManagerListTurnsInput = MessageInitShape<
+  typeof AgentManagerListTurnsRequestSchema
+>;
+export type AgentManagerCancelTurnInput = MessageInitShape<
+  typeof AgentManagerCancelTurnRequestSchema
+>;
+export type AgentManagerListTurnEventsInput = MessageInitShape<
+  typeof AgentManagerListTurnEventsRequestSchema
+>;
+export type AgentManagerListInteractionsInput = MessageInitShape<
+  typeof AgentManagerListInteractionsRequestSchema
+>;
+export type AgentManagerResolveInteractionInput = MessageInitShape<
+  typeof AgentManagerResolveInteractionRequestSchema
 >;
 
 export class AgentManager {
@@ -59,36 +89,94 @@ export class AgentManager {
     this.client = createClient(AgentManagerHostService, transport);
   }
 
-  async run(request: AgentManagerRunInput): Promise<ManagedAgentRunMessage> {
-    return await this.client.run({
+  async createSession(
+    request: AgentManagerCreateSessionInput,
+  ): Promise<AgentSession> {
+    return await this.client.createSession({
       ...request,
       invocationToken: this.invocationToken,
     });
   }
 
-  async getRun(
-    request: AgentManagerGetRunInput,
-  ): Promise<ManagedAgentRunMessage> {
-    return await this.client.getRun({
+  async getSession(request: AgentManagerGetSessionInput): Promise<AgentSession> {
+    return await this.client.getSession({
       ...request,
       invocationToken: this.invocationToken,
     });
   }
 
-  async listRuns(
-    request: AgentManagerListRunsInput = {},
-  ): Promise<ManagedAgentRunMessage[]> {
-    const response = await this.client.listRuns({
+  async listSessions(
+    request: AgentManagerListSessionsInput = {},
+  ): Promise<AgentSession[]> {
+    const response = await this.client.listSessions({
       ...request,
       invocationToken: this.invocationToken,
     });
-    return [...response.runs];
+    return [...response.sessions];
   }
 
-  async cancelRun(
-    request: AgentManagerCancelRunInput,
-  ): Promise<ManagedAgentRunMessage> {
-    return await this.client.cancelRun({
+  async updateSession(
+    request: AgentManagerUpdateSessionInput,
+  ): Promise<AgentSession> {
+    return await this.client.updateSession({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  async createTurn(request: AgentManagerCreateTurnInput): Promise<AgentTurn> {
+    return await this.client.createTurn({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  async getTurn(request: AgentManagerGetTurnInput): Promise<AgentTurn> {
+    return await this.client.getTurn({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  async listTurns(request: AgentManagerListTurnsInput): Promise<AgentTurn[]> {
+    const response = await this.client.listTurns({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+    return [...response.turns];
+  }
+
+  async cancelTurn(request: AgentManagerCancelTurnInput): Promise<AgentTurn> {
+    return await this.client.cancelTurn({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+  }
+
+  async listTurnEvents(
+    request: AgentManagerListTurnEventsInput,
+  ): Promise<AgentTurnEvent[]> {
+    const response = await this.client.listTurnEvents({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+    return [...response.events];
+  }
+
+  async listInteractions(
+    request: AgentManagerListInteractionsInput,
+  ): Promise<AgentInteraction[]> {
+    const response = await this.client.listInteractions({
+      ...request,
+      invocationToken: this.invocationToken,
+    });
+    return [...response.interactions];
+  }
+
+  async resolveInteraction(
+    request: AgentManagerResolveInteractionInput,
+  ): Promise<AgentInteraction> {
+    return await this.client.resolveInteraction({
       ...request,
       invocationToken: this.invocationToken,
     });

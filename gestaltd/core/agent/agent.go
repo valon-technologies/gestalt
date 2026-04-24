@@ -2,20 +2,28 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 )
 
-type RunStatus string
+type ExecutionStatus string
 
 const (
-	RunStatusPending         RunStatus = "pending"
-	RunStatusRunning         RunStatus = "running"
-	RunStatusSucceeded       RunStatus = "succeeded"
-	RunStatusFailed          RunStatus = "failed"
-	RunStatusCanceled        RunStatus = "canceled"
-	RunStatusWaitingForInput RunStatus = "waiting_for_input"
+	ExecutionStatusPending         ExecutionStatus = "pending"
+	ExecutionStatusRunning         ExecutionStatus = "running"
+	ExecutionStatusSucceeded       ExecutionStatus = "succeeded"
+	ExecutionStatusFailed          ExecutionStatus = "failed"
+	ExecutionStatusCanceled        ExecutionStatus = "canceled"
+	ExecutionStatusWaitingForInput ExecutionStatus = "waiting_for_input"
+)
+
+type SessionState string
+
+const (
+	SessionStateActive   SessionState = "active"
+	SessionStateArchived SessionState = "archived"
 )
 
 type Actor struct {
@@ -101,12 +109,48 @@ const (
 	ToolSourceModeInheritInvokes ToolSourceMode = "inherit_invokes"
 )
 
-type Run struct {
+type Session struct {
+	ID           string
+	ProviderName string
+	Model        string
+	ClientRef    string
+	State        SessionState
+	Metadata     map[string]any
+	CreatedBy    Actor
+	CreatedAt    *time.Time
+	UpdatedAt    *time.Time
+	LastTurnAt   *time.Time
+}
+
+type CreateSessionRequest struct {
+	SessionID       string
+	IdempotencyKey  string
+	Model           string
+	ClientRef       string
+	Metadata        map[string]any
+	ProviderOptions map[string]any
+	CreatedBy       Actor
+}
+
+type GetSessionRequest struct {
+	SessionID string
+}
+
+type ListSessionsRequest struct{}
+
+type UpdateSessionRequest struct {
+	SessionID string
+	ClientRef string
+	State     SessionState
+	Metadata  map[string]any
+}
+
+type Turn struct {
 	ID               string
+	SessionID        string
 	ProviderName     string
 	Model            string
-	Status           RunStatus
-	SessionRef       string
+	Status           ExecutionStatus
 	Messages         []Message
 	OutputText       string
 	StructuredOutput map[string]any
@@ -118,67 +162,36 @@ type Run struct {
 	ExecutionRef     string
 }
 
-type StartRunRequest struct {
-	RunID           string
+type CreateTurnRequest struct {
+	TurnID          string
+	SessionID       string
 	IdempotencyKey  string
-	ProviderName    string
 	Model           string
 	Messages        []Message
 	Tools           []Tool
 	ResponseSchema  map[string]any
-	SessionRef      string
 	Metadata        map[string]any
 	ProviderOptions map[string]any
 	CreatedBy       Actor
 	ExecutionRef    string
 }
 
-type GetRunRequest struct {
-	RunID string
+type GetTurnRequest struct {
+	TurnID string
 }
 
-type ListRunsRequest struct{}
+type ListTurnsRequest struct {
+	SessionID string
+}
 
-type CancelRunRequest struct {
-	RunID  string
+type CancelTurnRequest struct {
+	TurnID string
 	Reason string
 }
 
-type GetCapabilitiesRequest struct{}
-
-type ProviderCapabilities struct {
-	StreamingText       bool
-	ToolCalls           bool
-	ParallelToolCalls   bool
-	StructuredOutput    bool
-	SessionContinuation bool
-	Approvals           bool
-	ResumableRuns       bool
-	ReasoningSummaries  bool
-}
-
-type ResumeRunRequest struct {
-	RunID         string
-	InteractionID string
-	Resolution    map[string]any
-}
-
-type ExecuteToolRequest struct {
-	ProviderName string
-	RunID        string
-	ToolCallID   string
-	ToolID       string
-	Arguments    map[string]any
-}
-
-type ExecuteToolResponse struct {
-	Status int
-	Body   string
-}
-
-type RunEvent struct {
+type TurnEvent struct {
 	ID         string
-	RunID      string
+	TurnID     string
 	Seq        int64
 	Type       string
 	Source     string
@@ -187,12 +200,49 @@ type RunEvent struct {
 	CreatedAt  *time.Time
 }
 
-type EmitEventRequest struct {
+type ListTurnEventsRequest struct {
+	TurnID   string
+	AfterSeq int64
+	Limit    int
+}
+
+type GetCapabilitiesRequest struct{}
+
+type ProviderCapabilities struct {
+	StreamingText      bool
+	ToolCalls          bool
+	ParallelToolCalls  bool
+	StructuredOutput   bool
+	Interactions       bool
+	ResumableTurns     bool
+	ReasoningSummaries bool
+}
+
+type GetInteractionRequest struct {
+	InteractionID string
+}
+
+type ListInteractionsRequest struct {
+	TurnID string
+}
+
+type ResolveInteractionRequest struct {
+	InteractionID string
+	Resolution    map[string]any
+}
+
+type ExecuteToolRequest struct {
 	ProviderName string
-	RunID        string
-	Type         string
-	Visibility   string
-	Data         map[string]any
+	SessionID    string
+	TurnID       string
+	ToolCallID   string
+	ToolID       string
+	Arguments    map[string]any
+}
+
+type ExecuteToolResponse struct {
+	Status int
+	Body   string
 }
 
 type InteractionType string
@@ -213,7 +263,8 @@ const (
 
 type Interaction struct {
 	ID         string
-	RunID      string
+	TurnID     string
+	SessionID  string
 	Type       InteractionType
 	State      InteractionState
 	Title      string
@@ -224,47 +275,61 @@ type Interaction struct {
 	ResolvedAt *time.Time
 }
 
-type RequestInteractionRequest struct {
-	ProviderName string
-	RunID        string
-	Type         InteractionType
-	Title        string
-	Prompt       string
-	Request      map[string]any
+type ManagerCreateSessionRequest struct {
+	IdempotencyKey  string
+	ProviderName    string
+	Model           string
+	ClientRef       string
+	Metadata        map[string]any
+	ProviderOptions map[string]any
 }
 
-type ManagedRun struct {
-	ProviderName string
-	Run          *Run
+type ManagerUpdateSessionRequest struct {
+	SessionID string
+	ClientRef string
+	State     SessionState
+	Metadata  map[string]any
 }
 
-type ManagerRunRequest struct {
+type ManagerCreateTurnRequest struct {
 	CallerPluginName string
 	IdempotencyKey   string
-	ProviderName     string
 	Model            string
+	SessionID        string
 	Messages         []Message
 	ToolRefs         []ToolRef
 	ToolSource       ToolSourceMode
 	ResponseSchema   map[string]any
-	SessionRef       string
 	Metadata         map[string]any
 	ProviderOptions  map[string]any
 }
 
-type ManagerGetRunRequest struct {
-	RunID string
+type ManagerListSessionsRequest struct {
+	ProviderName string
 }
 
-type ManagerListRunsRequest struct{}
+type ManagerListTurnsRequest struct {
+	SessionID string
+}
 
-type ManagerCancelRunRequest struct {
-	RunID  string
+type ManagerCancelTurnRequest struct {
+	TurnID string
 	Reason string
+}
+
+type SessionReference struct {
+	ID                  string
+	ProviderName        string
+	SubjectID           string
+	CredentialSubjectID string
+	IdempotencyKey      string
+	CreatedAt           *time.Time
+	ArchivedAt          *time.Time
 }
 
 type ExecutionReference struct {
 	ID                  string
+	SessionID           string
 	ProviderName        string
 	SubjectID           string
 	CredentialSubjectID string
@@ -276,18 +341,85 @@ type ExecutionReference struct {
 }
 
 type Provider interface {
-	StartRun(ctx context.Context, req StartRunRequest) (*Run, error)
-	GetRun(ctx context.Context, req GetRunRequest) (*Run, error)
-	ListRuns(ctx context.Context, req ListRunsRequest) ([]*Run, error)
-	CancelRun(ctx context.Context, req CancelRunRequest) (*Run, error)
+	CreateSession(ctx context.Context, req CreateSessionRequest) (*Session, error)
+	GetSession(ctx context.Context, req GetSessionRequest) (*Session, error)
+	ListSessions(ctx context.Context, req ListSessionsRequest) ([]*Session, error)
+	UpdateSession(ctx context.Context, req UpdateSessionRequest) (*Session, error)
+	CreateTurn(ctx context.Context, req CreateTurnRequest) (*Turn, error)
+	GetTurn(ctx context.Context, req GetTurnRequest) (*Turn, error)
+	ListTurns(ctx context.Context, req ListTurnsRequest) ([]*Turn, error)
+	CancelTurn(ctx context.Context, req CancelTurnRequest) (*Turn, error)
+	ListTurnEvents(ctx context.Context, req ListTurnEventsRequest) ([]*TurnEvent, error)
+	GetInteraction(ctx context.Context, req GetInteractionRequest) (*Interaction, error)
+	ListInteractions(ctx context.Context, req ListInteractionsRequest) ([]*Interaction, error)
+	ResolveInteraction(ctx context.Context, req ResolveInteractionRequest) (*Interaction, error)
 	GetCapabilities(ctx context.Context, req GetCapabilitiesRequest) (*ProviderCapabilities, error)
-	ResumeRun(ctx context.Context, req ResumeRunRequest) (*Run, error)
 	Ping(ctx context.Context) error
 	Close() error
 }
 
 type Host interface {
 	ExecuteTool(ctx context.Context, req ExecuteToolRequest) (*ExecuteToolResponse, error)
-	EmitEvent(ctx context.Context, req EmitEventRequest) (*RunEvent, error)
-	RequestInteraction(ctx context.Context, req RequestInteractionRequest) (*Interaction, error)
+}
+
+type UnimplementedProvider struct{}
+
+func (UnimplementedProvider) CreateSession(context.Context, CreateSessionRequest) (*Session, error) {
+	return nil, fmt.Errorf("agent provider create session is not implemented")
+}
+
+func (UnimplementedProvider) GetSession(context.Context, GetSessionRequest) (*Session, error) {
+	return nil, fmt.Errorf("agent provider get session is not implemented")
+}
+
+func (UnimplementedProvider) ListSessions(context.Context, ListSessionsRequest) ([]*Session, error) {
+	return nil, fmt.Errorf("agent provider list sessions is not implemented")
+}
+
+func (UnimplementedProvider) UpdateSession(context.Context, UpdateSessionRequest) (*Session, error) {
+	return nil, fmt.Errorf("agent provider update session is not implemented")
+}
+
+func (UnimplementedProvider) CreateTurn(context.Context, CreateTurnRequest) (*Turn, error) {
+	return nil, fmt.Errorf("agent provider create turn is not implemented")
+}
+
+func (UnimplementedProvider) GetTurn(context.Context, GetTurnRequest) (*Turn, error) {
+	return nil, fmt.Errorf("agent provider get turn is not implemented")
+}
+
+func (UnimplementedProvider) ListTurns(context.Context, ListTurnsRequest) ([]*Turn, error) {
+	return nil, fmt.Errorf("agent provider list turns is not implemented")
+}
+
+func (UnimplementedProvider) CancelTurn(context.Context, CancelTurnRequest) (*Turn, error) {
+	return nil, fmt.Errorf("agent provider cancel turn is not implemented")
+}
+
+func (UnimplementedProvider) ListTurnEvents(context.Context, ListTurnEventsRequest) ([]*TurnEvent, error) {
+	return nil, fmt.Errorf("agent provider list turn events is not implemented")
+}
+
+func (UnimplementedProvider) GetInteraction(context.Context, GetInteractionRequest) (*Interaction, error) {
+	return nil, fmt.Errorf("agent provider get interaction is not implemented")
+}
+
+func (UnimplementedProvider) ListInteractions(context.Context, ListInteractionsRequest) ([]*Interaction, error) {
+	return nil, fmt.Errorf("agent provider list interactions is not implemented")
+}
+
+func (UnimplementedProvider) ResolveInteraction(context.Context, ResolveInteractionRequest) (*Interaction, error) {
+	return nil, fmt.Errorf("agent provider resolve interaction is not implemented")
+}
+
+func (UnimplementedProvider) GetCapabilities(context.Context, GetCapabilitiesRequest) (*ProviderCapabilities, error) {
+	return nil, fmt.Errorf("agent provider get capabilities is not implemented")
+}
+
+func (UnimplementedProvider) Ping(context.Context) error {
+	return fmt.Errorf("agent provider ping is not implemented")
+}
+
+func (UnimplementedProvider) Close() error {
+	return nil
 }

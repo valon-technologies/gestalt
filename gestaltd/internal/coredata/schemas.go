@@ -19,10 +19,10 @@ const (
 	StoreWorkspaceRoles           = "workspace_roles"
 	StoreIdentityPluginAccess     = "identity_plugin_access"
 	StoreAPITokenAccess           = "api_token_access"
+	StoreAgentSessionMetadata     = "agent_session_metadata"
+	StoreAgentSessionIdempotency  = "agent_session_idempotency"
 	StoreAgentRunMetadata         = "agent_run_metadata"
 	StoreAgentRunIdempotency      = "agent_run_idempotency"
-	StoreAgentRunEvents           = "agent_run_events"
-	StoreAgentRunInteractions     = "agent_run_interactions"
 	StoreRuntimeSessions          = "runtime_sessions"
 	StoreRuntimeSessionLogs       = "runtime_session_logs"
 )
@@ -191,7 +191,7 @@ var APITokenAccessSchema = indexeddb.ObjectStoreSchema{
 	},
 }
 
-var AgentRunMetadataSchema = indexeddb.ObjectStoreSchema{
+var AgentSessionMetadataSchema = indexeddb.ObjectStoreSchema{
 	Indexes: []indexeddb.IndexSchema{
 		{Name: "by_subject", KeyPath: []string{"subject_id"}},
 	},
@@ -200,12 +200,39 @@ var AgentRunMetadataSchema = indexeddb.ObjectStoreSchema{
 		{Name: "provider_name", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "subject_id", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "credential_subject_id", Type: indexeddb.TypeString},
+		{Name: "idempotency_key", Type: indexeddb.TypeString},
+		{Name: "created_at", Type: indexeddb.TypeTime},
+		{Name: "archived_at", Type: indexeddb.TypeTime},
+	},
+}
+
+var AgentSessionIdempotencySchema = indexeddb.ObjectStoreSchema{
+	Indexes: []indexeddb.IndexSchema{
+		{Name: "by_session_id", KeyPath: []string{"session_id"}},
+	},
+	Columns: []indexeddb.ColumnDef{
+		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
+		{Name: "session_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "subject_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "provider_name", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "idempotency_key", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "created_at", Type: indexeddb.TypeTime},
+	},
+}
+
+var AgentRunMetadataSchema = indexeddb.ObjectStoreSchema{
+	Indexes: []indexeddb.IndexSchema{
+		{Name: "by_subject", KeyPath: []string{"subject_id"}},
+		{Name: "by_subject_session", KeyPath: []string{"subject_id", "session_id"}},
+	},
+	Columns: []indexeddb.ColumnDef{
+		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
+		{Name: "session_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "provider_name", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "subject_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "credential_subject_id", Type: indexeddb.TypeString},
 		{Name: "permissions_json", Type: indexeddb.TypeString},
 		{Name: "idempotency_key", Type: indexeddb.TypeString},
-		{Name: "model", Type: indexeddb.TypeString},
-		{Name: "session_ref", Type: indexeddb.TypeString},
-		{Name: "created_by_json", Type: indexeddb.TypeString},
-		{Name: "tool_source", Type: indexeddb.TypeString},
 		{Name: "tools_json", Type: indexeddb.TypeString},
 		{Name: "created_at", Type: indexeddb.TypeTime},
 		{Name: "revoked_at", Type: indexeddb.TypeTime},
@@ -223,42 +250,6 @@ var AgentRunIdempotencySchema = indexeddb.ObjectStoreSchema{
 		{Name: "provider_name", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "idempotency_key", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "created_at", Type: indexeddb.TypeTime},
-	},
-}
-
-var AgentRunEventsSchema = indexeddb.ObjectStoreSchema{
-	Indexes: []indexeddb.IndexSchema{
-		{Name: "by_run", KeyPath: []string{"run_id"}},
-		{Name: "by_run_seq", KeyPath: []string{"run_id", "seq"}, Unique: true},
-	},
-	Columns: []indexeddb.ColumnDef{
-		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-		{Name: "run_id", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "seq", Type: indexeddb.TypeInt, NotNull: true},
-		{Name: "type", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "source", Type: indexeddb.TypeString},
-		{Name: "visibility", Type: indexeddb.TypeString},
-		{Name: "data_json", Type: indexeddb.TypeString},
-		{Name: "created_at", Type: indexeddb.TypeTime},
-	},
-}
-
-var AgentRunInteractionsSchema = indexeddb.ObjectStoreSchema{
-	Indexes: []indexeddb.IndexSchema{
-		{Name: "by_run", KeyPath: []string{"run_id"}},
-		{Name: "by_run_state", KeyPath: []string{"run_id", "state"}},
-	},
-	Columns: []indexeddb.ColumnDef{
-		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
-		{Name: "run_id", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "type", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "state", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "title", Type: indexeddb.TypeString},
-		{Name: "prompt", Type: indexeddb.TypeString},
-		{Name: "request_json", Type: indexeddb.TypeString},
-		{Name: "resolution_json", Type: indexeddb.TypeString},
-		{Name: "created_at", Type: indexeddb.TypeTime},
-		{Name: "resolved_at", Type: indexeddb.TypeTime},
 	},
 }
 

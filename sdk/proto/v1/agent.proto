@@ -4,7 +4,6 @@ package gestalt.provider.v1;
 
 option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -88,14 +87,20 @@ enum AgentToolSourceMode {
   AGENT_TOOL_SOURCE_MODE_INHERIT_INVOKES = 2;
 }
 
-enum AgentRunStatus {
-  AGENT_RUN_STATUS_UNSPECIFIED = 0;
-  AGENT_RUN_STATUS_PENDING = 1;
-  AGENT_RUN_STATUS_RUNNING = 2;
-  AGENT_RUN_STATUS_SUCCEEDED = 3;
-  AGENT_RUN_STATUS_FAILED = 4;
-  AGENT_RUN_STATUS_CANCELED = 5;
-  AGENT_RUN_STATUS_WAITING_FOR_INPUT = 6;
+enum AgentExecutionStatus {
+  AGENT_EXECUTION_STATUS_UNSPECIFIED = 0;
+  AGENT_EXECUTION_STATUS_PENDING = 1;
+  AGENT_EXECUTION_STATUS_RUNNING = 2;
+  AGENT_EXECUTION_STATUS_SUCCEEDED = 3;
+  AGENT_EXECUTION_STATUS_FAILED = 4;
+  AGENT_EXECUTION_STATUS_CANCELED = 5;
+  AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT = 6;
+}
+
+enum AgentSessionState {
+  AGENT_SESSION_STATE_UNSPECIFIED = 0;
+  AGENT_SESSION_STATE_ACTIVE = 1;
+  AGENT_SESSION_STATE_ARCHIVED = 2;
 }
 
 enum AgentInteractionType {
@@ -117,51 +122,77 @@ message AgentProviderCapabilities {
   bool tool_calls = 2;
   bool parallel_tool_calls = 3;
   bool structured_output = 4;
-  bool session_continuation = 5;
-  bool approvals = 6;
-  bool resumable_runs = 7;
-  bool reasoning_summaries = 8;
+  bool interactions = 5;
+  bool resumable_turns = 6;
+  bool reasoning_summaries = 7;
 }
 
 message GetAgentProviderCapabilitiesRequest {}
 
-message ResumeAgentProviderRunRequest {
-  string run_id = 1;
-  string interaction_id = 2;
-  google.protobuf.Struct resolution = 3;
-}
-
-message RequestAgentInteractionRequest {
-  string run_id = 1;
-  AgentInteractionType type = 2;
-  string title = 3;
-  string prompt = 4;
-  google.protobuf.Struct request = 5;
-}
-
 message AgentInteraction {
   string id = 1;
-  string run_id = 2;
-  AgentInteractionType type = 3;
-  AgentInteractionState state = 4;
-  string title = 5;
-  string prompt = 6;
-  google.protobuf.Struct request = 7;
-  google.protobuf.Struct resolution = 8;
-  google.protobuf.Timestamp created_at = 9;
-  google.protobuf.Timestamp resolved_at = 10;
+  AgentInteractionType type = 2;
+  AgentInteractionState state = 3;
+  string title = 4;
+  string prompt = 5;
+  google.protobuf.Struct request = 6;
+  google.protobuf.Struct resolution = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp resolved_at = 9;
+  string turn_id = 10;
+  string session_id = 11;
 }
 
-message BoundAgentRun {
+message AgentSession {
   string id = 1;
   string provider_name = 2;
   string model = 3;
-  AgentRunStatus status = 4;
-  repeated AgentMessage messages = 5;
-  string output_text = 6;
-  google.protobuf.Struct structured_output = 7;
-  string status_message = 8;
-  string session_ref = 9;
+  string client_ref = 4;
+  AgentSessionState state = 5;
+  google.protobuf.Struct metadata = 6;
+  AgentActor created_by = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  google.protobuf.Timestamp last_turn_at = 10;
+}
+
+message CreateAgentProviderSessionRequest {
+  string session_id = 1;
+  string idempotency_key = 2;
+  string model = 3;
+  string client_ref = 4;
+  google.protobuf.Struct metadata = 5;
+  google.protobuf.Struct provider_options = 6;
+  AgentActor created_by = 7;
+}
+
+message GetAgentProviderSessionRequest {
+  string session_id = 1;
+}
+
+message ListAgentProviderSessionsRequest {}
+
+message ListAgentProviderSessionsResponse {
+  repeated AgentSession sessions = 1;
+}
+
+message UpdateAgentProviderSessionRequest {
+  string session_id = 1;
+  string client_ref = 2;
+  AgentSessionState state = 3;
+  google.protobuf.Struct metadata = 4;
+}
+
+message AgentTurn {
+  string id = 1;
+  string session_id = 2;
+  string provider_name = 3;
+  string model = 4;
+  AgentExecutionStatus status = 5;
+  repeated AgentMessage messages = 6;
+  string output_text = 7;
+  google.protobuf.Struct structured_output = 8;
+  string status_message = 9;
   AgentActor created_by = 10;
   google.protobuf.Timestamp created_at = 11;
   google.protobuf.Timestamp started_at = 12;
@@ -169,51 +200,40 @@ message BoundAgentRun {
   string execution_ref = 14;
 }
 
-message StartAgentProviderRunRequest {
-  string run_id = 1;
-  string idempotency_key = 2;
-  string provider_name = 3;
+message CreateAgentProviderTurnRequest {
+  string turn_id = 1;
+  string session_id = 2;
+  string idempotency_key = 3;
   string model = 4;
   repeated AgentMessage messages = 5;
   repeated ResolvedAgentTool tools = 6;
   google.protobuf.Struct response_schema = 7;
-  string session_ref = 8;
-  google.protobuf.Struct metadata = 9;
-  google.protobuf.Struct provider_options = 10;
-  AgentActor created_by = 11;
-  string execution_ref = 12;
+  google.protobuf.Struct metadata = 8;
+  google.protobuf.Struct provider_options = 9;
+  AgentActor created_by = 10;
+  string execution_ref = 11;
 }
 
-message GetAgentProviderRunRequest {
-  string run_id = 1;
+message GetAgentProviderTurnRequest {
+  string turn_id = 1;
 }
 
-message ListAgentProviderRunsRequest {}
-
-message ListAgentProviderRunsResponse {
-  repeated BoundAgentRun runs = 1;
+message ListAgentProviderTurnsRequest {
+  string session_id = 1;
 }
 
-message CancelAgentProviderRunRequest {
-  string run_id = 1;
+message ListAgentProviderTurnsResponse {
+  repeated AgentTurn turns = 1;
+}
+
+message CancelAgentProviderTurnRequest {
+  string turn_id = 1;
   string reason = 2;
 }
 
-message ExecuteAgentToolRequest {
-  string run_id = 1;
-  string tool_call_id = 2;
-  string tool_id = 3;
-  google.protobuf.Struct arguments = 4;
-}
-
-message ExecuteAgentToolResponse {
-  int32 status = 1;
-  string body = 2;
-}
-
-message AgentRunEvent {
+message AgentTurnEvent {
   string id = 1;
-  string run_id = 2;
+  string turn_id = 2;
   int64 seq = 3;
   string type = 4;
   string source = 5;
@@ -222,77 +242,193 @@ message AgentRunEvent {
   google.protobuf.Timestamp created_at = 8;
 }
 
-message EmitAgentEventRequest {
-  string run_id = 1;
-  string type = 2;
-  string visibility = 3;
-  google.protobuf.Struct data = 4;
+message ListAgentProviderTurnEventsRequest {
+  string turn_id = 1;
+  int64 after_seq = 2;
+  int32 limit = 3;
 }
 
-message ManagedAgentRun {
-  string provider_name = 1;
-  BoundAgentRun run = 2;
+message ListAgentProviderTurnEventsResponse {
+  repeated AgentTurnEvent events = 1;
 }
 
-message AgentManagerRunRequest {
+message GetAgentProviderInteractionRequest {
+  string interaction_id = 1;
+}
+
+message ListAgentProviderInteractionsRequest {
+  string turn_id = 1;
+}
+
+message ListAgentProviderInteractionsResponse {
+  repeated AgentInteraction interactions = 1;
+}
+
+message ResolveAgentProviderInteractionRequest {
+  string interaction_id = 1;
+  google.protobuf.Struct resolution = 2;
+}
+
+message ExecuteAgentToolRequest {
+  string session_id = 1;
+  string turn_id = 2;
+  string tool_call_id = 3;
+  string tool_id = 4;
+  google.protobuf.Struct arguments = 5;
+}
+
+message ExecuteAgentToolResponse {
+  int32 status = 1;
+  string body = 2;
+}
+
+message AgentManagerCreateSessionRequest {
   reserved 1;
   reserved "request_handle";
   string provider_name = 2;
+  string model = 3;
+  string client_ref = 4;
+  google.protobuf.Struct metadata = 5;
+  google.protobuf.Struct provider_options = 6;
+  string idempotency_key = 7;
+  string invocation_token = 8;
+}
+
+message AgentManagerGetSessionRequest {
+  reserved 1;
+  reserved "request_handle";
+  string session_id = 2;
+  string invocation_token = 3;
+}
+
+message AgentManagerListSessionsRequest {
+  reserved 1;
+  reserved "request_handle";
+  string provider_name = 2;
+  string invocation_token = 3;
+}
+
+message AgentManagerListSessionsResponse {
+  repeated AgentSession sessions = 1;
+}
+
+message AgentManagerUpdateSessionRequest {
+  reserved 1;
+  reserved "request_handle";
+  string session_id = 2;
+  string client_ref = 3;
+  AgentSessionState state = 4;
+  google.protobuf.Struct metadata = 5;
+  string invocation_token = 6;
+}
+
+message AgentManagerCreateTurnRequest {
+  reserved 1;
+  reserved "request_handle";
+  string session_id = 2;
   string model = 3;
   repeated AgentMessage messages = 4;
   repeated AgentToolRef tool_refs = 5;
   AgentToolSourceMode tool_source = 6;
   google.protobuf.Struct response_schema = 7;
-  string session_ref = 8;
-  google.protobuf.Struct metadata = 9;
-  google.protobuf.Struct provider_options = 10;
-  string idempotency_key = 11;
-  string invocation_token = 12;
+  google.protobuf.Struct metadata = 8;
+  google.protobuf.Struct provider_options = 9;
+  string idempotency_key = 10;
+  string invocation_token = 11;
 }
 
-message AgentManagerGetRunRequest {
+message AgentManagerGetTurnRequest {
   reserved 1;
   reserved "request_handle";
-  string run_id = 2;
+  string turn_id = 2;
   string invocation_token = 3;
 }
 
-message AgentManagerListRunsRequest {
+message AgentManagerListTurnsRequest {
   reserved 1;
   reserved "request_handle";
-  string invocation_token = 2;
+  string session_id = 2;
+  string invocation_token = 3;
 }
 
-message AgentManagerListRunsResponse {
-  repeated ManagedAgentRun runs = 1;
+message AgentManagerListTurnsResponse {
+  repeated AgentTurn turns = 1;
 }
 
-message AgentManagerCancelRunRequest {
+message AgentManagerCancelTurnRequest {
   reserved 1;
   reserved "request_handle";
-  string run_id = 2;
+  string turn_id = 2;
   string reason = 3;
   string invocation_token = 4;
 }
 
+message AgentManagerListTurnEventsRequest {
+  reserved 1;
+  reserved "request_handle";
+  string turn_id = 2;
+  int64 after_seq = 3;
+  int32 limit = 4;
+  string invocation_token = 5;
+}
+
+message AgentManagerListTurnEventsResponse {
+  repeated AgentTurnEvent events = 1;
+}
+
+message AgentManagerListInteractionsRequest {
+  reserved 1;
+  reserved "request_handle";
+  string turn_id = 2;
+  string invocation_token = 3;
+}
+
+message AgentManagerListInteractionsResponse {
+  repeated AgentInteraction interactions = 1;
+}
+
+message AgentManagerResolveInteractionRequest {
+  reserved 1;
+  reserved "request_handle";
+  string turn_id = 2;
+  string interaction_id = 3;
+  google.protobuf.Struct resolution = 4;
+  string invocation_token = 5;
+}
+
 service AgentProvider {
-  rpc StartRun(StartAgentProviderRunRequest) returns (BoundAgentRun);
-  rpc GetRun(GetAgentProviderRunRequest) returns (BoundAgentRun);
-  rpc ListRuns(ListAgentProviderRunsRequest) returns (ListAgentProviderRunsResponse);
-  rpc CancelRun(CancelAgentProviderRunRequest) returns (BoundAgentRun);
+  rpc CreateSession(CreateAgentProviderSessionRequest) returns (AgentSession);
+  rpc GetSession(GetAgentProviderSessionRequest) returns (AgentSession);
+  rpc ListSessions(ListAgentProviderSessionsRequest) returns (ListAgentProviderSessionsResponse);
+  rpc UpdateSession(UpdateAgentProviderSessionRequest) returns (AgentSession);
+
+  rpc CreateTurn(CreateAgentProviderTurnRequest) returns (AgentTurn);
+  rpc GetTurn(GetAgentProviderTurnRequest) returns (AgentTurn);
+  rpc ListTurns(ListAgentProviderTurnsRequest) returns (ListAgentProviderTurnsResponse);
+  rpc CancelTurn(CancelAgentProviderTurnRequest) returns (AgentTurn);
+
+  rpc ListTurnEvents(ListAgentProviderTurnEventsRequest) returns (ListAgentProviderTurnEventsResponse);
+
+  rpc GetInteraction(GetAgentProviderInteractionRequest) returns (AgentInteraction);
+  rpc ListInteractions(ListAgentProviderInteractionsRequest) returns (ListAgentProviderInteractionsResponse);
+  rpc ResolveInteraction(ResolveAgentProviderInteractionRequest) returns (AgentInteraction);
   rpc GetCapabilities(GetAgentProviderCapabilitiesRequest) returns (AgentProviderCapabilities);
-  rpc ResumeRun(ResumeAgentProviderRunRequest) returns (BoundAgentRun);
 }
 
 service AgentHost {
   rpc ExecuteTool(ExecuteAgentToolRequest) returns (ExecuteAgentToolResponse);
-  rpc EmitEvent(EmitAgentEventRequest) returns (google.protobuf.Empty);
-  rpc RequestInteraction(RequestAgentInteractionRequest) returns (AgentInteraction);
 }
 
 service AgentManagerHost {
-  rpc Run(AgentManagerRunRequest) returns (ManagedAgentRun);
-  rpc GetRun(AgentManagerGetRunRequest) returns (ManagedAgentRun);
-  rpc ListRuns(AgentManagerListRunsRequest) returns (AgentManagerListRunsResponse);
-  rpc CancelRun(AgentManagerCancelRunRequest) returns (ManagedAgentRun);
+  rpc CreateSession(AgentManagerCreateSessionRequest) returns (AgentSession);
+  rpc GetSession(AgentManagerGetSessionRequest) returns (AgentSession);
+  rpc ListSessions(AgentManagerListSessionsRequest) returns (AgentManagerListSessionsResponse);
+  rpc UpdateSession(AgentManagerUpdateSessionRequest) returns (AgentSession);
+  rpc CreateTurn(AgentManagerCreateTurnRequest) returns (AgentTurn);
+  rpc GetTurn(AgentManagerGetTurnRequest) returns (AgentTurn);
+  rpc ListTurns(AgentManagerListTurnsRequest) returns (AgentManagerListTurnsResponse);
+  rpc CancelTurn(AgentManagerCancelTurnRequest) returns (AgentTurn);
+  rpc ListTurnEvents(AgentManagerListTurnEventsRequest) returns (AgentManagerListTurnEventsResponse);
+  rpc ListInteractions(AgentManagerListInteractionsRequest) returns (AgentManagerListInteractionsResponse);
+  rpc ResolveInteraction(AgentManagerResolveInteractionRequest) returns (AgentInteraction);
 }

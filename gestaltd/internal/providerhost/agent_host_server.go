@@ -10,27 +10,20 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type agentExecuteToolFunc func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error)
-type agentEmitEventFunc func(context.Context, coreagent.EmitEventRequest) (*coreagent.RunEvent, error)
-type agentRequestInteractionFunc func(context.Context, coreagent.RequestInteractionRequest) (*coreagent.Interaction, error)
 
 type AgentHostServer struct {
 	proto.UnimplementedAgentHostServer
-	providerName       string
-	executeTool        agentExecuteToolFunc
-	emitEvent          agentEmitEventFunc
-	requestInteraction agentRequestInteractionFunc
+	providerName string
+	executeTool  agentExecuteToolFunc
 }
 
-func NewAgentHostServer(providerName string, executeTool agentExecuteToolFunc, emitEvent agentEmitEventFunc, requestInteraction agentRequestInteractionFunc) *AgentHostServer {
+func NewAgentHostServer(providerName string, executeTool agentExecuteToolFunc) *AgentHostServer {
 	return &AgentHostServer{
-		providerName:       providerName,
-		executeTool:        executeTool,
-		emitEvent:          emitEvent,
-		requestInteraction: requestInteraction,
+		providerName: providerName,
+		executeTool:  executeTool,
 	}
 }
 
@@ -41,9 +34,13 @@ func (s *AgentHostServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAge
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	runID := strings.TrimSpace(req.GetRunId())
-	if runID == "" {
-		return nil, status.Error(codes.InvalidArgument, "run_id is required")
+	sessionID := strings.TrimSpace(req.GetSessionId())
+	if sessionID == "" {
+		return nil, status.Error(codes.InvalidArgument, "session_id is required")
+	}
+	turnID := strings.TrimSpace(req.GetTurnId())
+	if turnID == "" {
+		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
 	toolID := strings.TrimSpace(req.GetToolId())
 	if toolID == "" {
@@ -51,7 +48,8 @@ func (s *AgentHostServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAge
 	}
 	resp, err := s.executeTool(ctx, coreagent.ExecuteToolRequest{
 		ProviderName: strings.TrimSpace(s.providerName),
-		RunID:        runID,
+		SessionID:    sessionID,
+		TurnID:       turnID,
 		ToolCallID:   strings.TrimSpace(req.GetToolCallId()),
 		ToolID:       toolID,
 		Arguments:    mapFromStruct(req.GetArguments()),
@@ -66,66 +64,6 @@ func (s *AgentHostServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAge
 		Status: int32(resp.Status),
 		Body:   resp.Body,
 	}, nil
-}
-
-func (s *AgentHostServer) EmitEvent(ctx context.Context, req *proto.EmitAgentEventRequest) (*emptypb.Empty, error) {
-	if s == nil || s.emitEvent == nil {
-		return nil, status.Error(codes.FailedPrecondition, "agent host event emitter is not configured")
-	}
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	runID := strings.TrimSpace(req.GetRunId())
-	if runID == "" {
-		return nil, status.Error(codes.InvalidArgument, "run_id is required")
-	}
-	eventType := strings.TrimSpace(req.GetType())
-	if eventType == "" {
-		return nil, status.Error(codes.InvalidArgument, "type is required")
-	}
-	if _, err := s.emitEvent(ctx, coreagent.EmitEventRequest{
-		ProviderName: strings.TrimSpace(s.providerName),
-		RunID:        runID,
-		Type:         eventType,
-		Visibility:   strings.TrimSpace(req.GetVisibility()),
-		Data:         mapFromStruct(req.GetData()),
-	}); err != nil {
-		return nil, status.Errorf(agentHostErrorCode(err), "agent emit event: %v", err)
-	}
-	return &emptypb.Empty{}, nil
-}
-
-func (s *AgentHostServer) RequestInteraction(ctx context.Context, req *proto.RequestAgentInteractionRequest) (*proto.AgentInteraction, error) {
-	if s == nil || s.requestInteraction == nil {
-		return nil, status.Error(codes.FailedPrecondition, "agent host interaction requester is not configured")
-	}
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	runID := strings.TrimSpace(req.GetRunId())
-	if runID == "" {
-		return nil, status.Error(codes.InvalidArgument, "run_id is required")
-	}
-	interactionType, err := agentInteractionTypeFromProto(req.GetType())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "interaction type: %v", err)
-	}
-	interaction, err := s.requestInteraction(ctx, coreagent.RequestInteractionRequest{
-		ProviderName: strings.TrimSpace(s.providerName),
-		RunID:        runID,
-		Type:         interactionType,
-		Title:        strings.TrimSpace(req.GetTitle()),
-		Prompt:       strings.TrimSpace(req.GetPrompt()),
-		Request:      mapFromStruct(req.GetRequest()),
-	})
-	if err != nil {
-		return nil, status.Errorf(agentHostErrorCode(err), "agent request interaction: %v", err)
-	}
-	resp, err := agentInteractionToProto(interaction)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode interaction: %v", err)
-	}
-	return resp, nil
 }
 
 func agentHostErrorCode(err error) codes.Code {

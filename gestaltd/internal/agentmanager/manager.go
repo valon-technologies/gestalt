@@ -27,17 +27,15 @@ var (
 	ErrAgentNotConfigured                = errors.New("agent is not configured")
 	ErrAgentProviderRequired             = errors.New("agent provider is required")
 	ErrAgentProviderNotAvailable         = errors.New("agent provider is not available")
-	ErrAgentRunMetadataNotConfigured     = errors.New("agent run metadata is not configured")
-	ErrAgentRunEventsNotConfigured       = errors.New("agent run events are not configured")
-	ErrAgentRunInteractionsNotConfigured = errors.New("agent run interactions are not configured")
-	ErrAgentRunResumeNotSupported        = errors.New("agent run resume is not supported by this provider")
+	ErrAgentSessionMetadataNotConfigured = errors.New("agent session metadata is not configured")
+	ErrAgentTurnMetadataNotConfigured    = errors.New("agent turn metadata is not configured")
 	ErrAgentSubjectRequired              = errors.New("agent subject is required")
 	ErrAgentCallerPluginRequired         = errors.New("agent caller plugin is required for inherited tools")
 	ErrAgentInheritedSurfaceTool         = errors.New("agent inherited surface tools are not supported")
-	ErrAgentRunCreationInProgress        = errors.New("agent run creation is already in progress for this idempotency key")
+	ErrAgentSessionCreationInProgress    = errors.New("agent session creation is already in progress for this idempotency key")
+	ErrAgentTurnCreationInProgress       = errors.New("agent turn creation is already in progress for this idempotency key")
 	ErrAgentInteractionRequired          = errors.New("agent interaction is required")
 	ErrAgentInteractionNotFound          = errors.New("agent interaction is not found")
-	ErrAgentInteractionNotPending        = errors.New("agent interaction is not pending")
 )
 
 type AgentProviderNotAvailableError struct {
@@ -68,23 +66,25 @@ type AgentControl interface {
 
 type Service interface {
 	Available() bool
-	Run(ctx context.Context, p *principal.Principal, req coreagent.ManagerRunRequest) (*coreagent.ManagedRun, error)
-	GetRun(ctx context.Context, p *principal.Principal, runID string) (*coreagent.ManagedRun, error)
-	ListRuns(ctx context.Context, p *principal.Principal) ([]*coreagent.ManagedRun, error)
-	ListRunsByProvider(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.ManagedRun, error)
-	CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*coreagent.ManagedRun, error)
-	ListRunEvents(ctx context.Context, p *principal.Principal, runID string, afterSeq int64, limit int) ([]*coreagent.RunEvent, error)
-	ListRunInteractions(ctx context.Context, p *principal.Principal, runID string) ([]*coreagent.Interaction, error)
-	ResumeRun(ctx context.Context, p *principal.Principal, runID, interactionID string, resolution map[string]any) (*coreagent.ManagedRun, error)
+	CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error)
+	GetSession(ctx context.Context, p *principal.Principal, sessionID string) (*coreagent.Session, error)
+	ListSessions(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.Session, error)
+	UpdateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerUpdateSessionRequest) (*coreagent.Session, error)
+	CreateTurn(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error)
+	GetTurn(ctx context.Context, p *principal.Principal, turnID string) (*coreagent.Turn, error)
+	ListTurns(ctx context.Context, p *principal.Principal, sessionID string) ([]*coreagent.Turn, error)
+	CancelTurn(ctx context.Context, p *principal.Principal, turnID, reason string) (*coreagent.Turn, error)
+	ListTurnEvents(ctx context.Context, p *principal.Principal, turnID string, afterSeq int64, limit int) ([]*coreagent.TurnEvent, error)
+	ListInteractions(ctx context.Context, p *principal.Principal, turnID string) ([]*coreagent.Interaction, error)
+	ResolveInteraction(ctx context.Context, p *principal.Principal, turnID, interactionID string, resolution map[string]any) (*coreagent.Interaction, error)
 }
 
 type Config struct {
 	Providers         *registry.ProviderMap[core.Provider]
 	Agent             AgentControl
+	SessionMetadata   *coredata.AgentSessionMetadataService
 	RunMetadata       *coredata.AgentRunMetadataService
-	RunEvents         *coredata.AgentRunEventService
 	Tokens            *coredata.TokenService
-	RunInteractions   *coredata.AgentRunInteractionService
 	Invoker           invocation.Invoker
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
@@ -96,10 +96,9 @@ type Config struct {
 type Manager struct {
 	providers         *registry.ProviderMap[core.Provider]
 	agent             AgentControl
+	sessionMetadata   *coredata.AgentSessionMetadataService
 	runMetadata       *coredata.AgentRunMetadataService
-	runEvents         *coredata.AgentRunEventService
 	tokens            *coredata.TokenService
-	runInteractions   *coredata.AgentRunInteractionService
 	invoker           invocation.Invoker
 	authorizer        authorization.RuntimeAuthorizer
 	defaultConnection map[string]string
@@ -120,10 +119,9 @@ func New(cfg Config) *Manager {
 	return &Manager{
 		providers:         cfg.Providers,
 		agent:             cfg.Agent,
+		sessionMetadata:   cfg.SessionMetadata,
 		runMetadata:       cfg.RunMetadata,
-		runEvents:         cfg.RunEvents,
 		tokens:            cfg.Tokens,
-		runInteractions:   cfg.RunInteractions,
 		invoker:           cfg.Invoker,
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
@@ -140,10 +138,10 @@ func (m *Manager) Available() bool {
 	return len(m.agent.ProviderNames()) > 0
 }
 
-func (m *Manager) Run(ctx context.Context, p *principal.Principal, req coreagent.ManagerRunRequest) (*coreagent.ManagedRun, error) {
+func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
 	p = principal.Canonicalized(p)
-	if m == nil || m.runMetadata == nil {
-		return nil, ErrAgentRunMetadataNotConfigured
+	if m == nil || m.sessionMetadata == nil {
+		return nil, ErrAgentSessionMetadataNotConfigured
 	}
 	subjectID := strings.TrimSpace(principalSubjectID(p))
 	if subjectID == "" {
@@ -154,34 +152,222 @@ func (m *Manager) Run(ctx context.Context, p *principal.Principal, req coreagent
 		return nil, err
 	}
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
-
-	tools, err := m.resolveTools(ctx, p, req.CallerPluginName, req.ToolRefs, req.ToolSource)
-	if err != nil {
-		return nil, err
-	}
-	runID := uuid.NewString()
+	sessionID := uuid.NewString()
 	if idempotencyKey != "" {
 		for {
-			claimedRunID, claimed, err := m.runMetadata.ClaimIdempotency(ctx, subjectID, providerName, idempotencyKey, runID, m.now())
+			claimedSessionID, claimed, err := m.sessionMetadata.ClaimIdempotency(ctx, subjectID, providerName, idempotencyKey, sessionID, m.now())
 			if err != nil {
 				return nil, err
 			}
 			if claimed {
 				break
 			}
-			existing, err := m.runMetadata.Get(ctx, claimedRunID)
+			existing, err := m.sessionMetadata.Get(ctx, claimedSessionID)
 			if err != nil {
 				if errors.Is(err, indexeddb.ErrNotFound) {
-					return nil, ErrAgentRunCreationInProgress
+					return nil, ErrAgentSessionCreationInProgress
 				}
 				return nil, err
 			}
-			if !executionRefOwnedBy(existing, p) || !m.allowRun(ctx, p, existing) {
+			if !sessionRefOwnedBy(existing, p) {
 				return nil, core.ErrNotFound
 			}
-			managed, err := m.getManagedRunByMetadata(ctx, p, existing)
+			session, err := m.getSessionByMetadata(ctx, p, existing)
 			if err == nil {
-				return managed, nil
+				return session, nil
+			}
+			if !errors.Is(err, core.ErrNotFound) {
+				return nil, err
+			}
+			if deleteErr := m.sessionMetadata.Delete(ctx, existing.ID); deleteErr != nil {
+				return nil, deleteErr
+			}
+			sessionID = uuid.NewString()
+		}
+	}
+	session, err := provider.CreateSession(ctx, coreagent.CreateSessionRequest{
+		SessionID:       sessionID,
+		IdempotencyKey:  idempotencyKey,
+		Model:           strings.TrimSpace(req.Model),
+		ClientRef:       strings.TrimSpace(req.ClientRef),
+		Metadata:        maps.Clone(req.Metadata),
+		ProviderOptions: maps.Clone(req.ProviderOptions),
+		CreatedBy:       agentActorFromPrincipal(p),
+	})
+	if err != nil {
+		fallback, getErr := provider.GetSession(ctx, coreagent.GetSessionRequest{SessionID: sessionID})
+		if getErr != nil {
+			if idempotencyKey != "" {
+				_ = m.sessionMetadata.ReleaseIdempotency(ctx, subjectID, providerName, idempotencyKey)
+			}
+			return nil, err
+		}
+		session = fallback
+	}
+	normalized, err := normalizeProviderSession(providerName, sessionID, session)
+	if err != nil {
+		if idempotencyKey != "" {
+			_ = m.sessionMetadata.ReleaseIdempotency(ctx, subjectID, providerName, idempotencyKey)
+		}
+		return nil, err
+	}
+	if _, err := m.sessionMetadata.Put(ctx, &coreagent.SessionReference{
+		ID:                  normalized.ID,
+		ProviderName:        providerName,
+		SubjectID:           subjectID,
+		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
+		IdempotencyKey:      idempotencyKey,
+	}); err != nil {
+		if idempotencyKey != "" {
+			_ = m.sessionMetadata.ReleaseIdempotency(ctx, subjectID, providerName, idempotencyKey)
+		}
+		return nil, err
+	}
+	return normalized, nil
+}
+
+func (m *Manager) GetSession(ctx context.Context, p *principal.Principal, sessionID string) (*coreagent.Session, error) {
+	ref, err := m.requireOwnedSessionMetadata(ctx, sessionID, p)
+	if err != nil {
+		return nil, err
+	}
+	return m.getSessionByMetadata(ctx, p, ref)
+}
+
+func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.Session, error) {
+	refs, err := m.listOwnedSessionMetadata(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	refsByProvider := sessionRefsByProvider(refs)
+	providerName = strings.TrimSpace(providerName)
+	if providerName != "" {
+		if providerRefs, ok := refsByProvider[providerName]; ok {
+			refsByProvider = map[string][]*coreagent.SessionReference{providerName: providerRefs}
+		} else {
+			refsByProvider = map[string][]*coreagent.SessionReference{}
+		}
+	}
+	out := make([]*coreagent.Session, 0, len(refs))
+	for providerName, providerRefs := range refsByProvider {
+		provider, err := m.resolveProviderByName(providerName)
+		if err != nil {
+			return nil, err
+		}
+		sessions, err := provider.ListSessions(ctx, coreagent.ListSessionsRequest{})
+		if err != nil {
+			return nil, err
+		}
+		refIndex := sessionRefsByID(providerRefs)
+		for _, session := range sessions {
+			if session == nil {
+				continue
+			}
+			ref := refIndex[strings.TrimSpace(session.ID)]
+			if ref == nil || !sessionRefOwnedBy(ref, p) {
+				continue
+			}
+			normalized, err := normalizeProviderSession(providerName, ref.ID, session)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, normalized)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		left := out[i]
+		right := out[j]
+		leftTime := sessionSortTime(left)
+		rightTime := sessionSortTime(right)
+		if leftTime != nil && rightTime != nil && !leftTime.Equal(*rightTime) {
+			return leftTime.After(*rightTime)
+		}
+		return left.ID < right.ID
+	})
+	return out, nil
+}
+
+func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerUpdateSessionRequest) (*coreagent.Session, error) {
+	ref, err := m.requireOwnedSessionMetadata(ctx, req.SessionID, p)
+	if err != nil {
+		return nil, err
+	}
+	provider, err := m.resolveProviderByName(ref.ProviderName)
+	if err != nil {
+		return nil, err
+	}
+	session, err := provider.UpdateSession(ctx, coreagent.UpdateSessionRequest{
+		SessionID: strings.TrimSpace(req.SessionID),
+		ClientRef: strings.TrimSpace(req.ClientRef),
+		State:     req.State,
+		Metadata:  maps.Clone(req.Metadata),
+	})
+	if err != nil {
+		return nil, err
+	}
+	normalized, err := normalizeProviderSession(ref.ProviderName, ref.ID, session)
+	if err != nil {
+		return nil, err
+	}
+	ref.ArchivedAt = nil
+	if normalized.State == coreagent.SessionStateArchived {
+		now := m.now()
+		ref.ArchivedAt = &now
+	}
+	if _, err := m.sessionMetadata.Put(ctx, ref); err != nil {
+		return nil, err
+	}
+	return normalized, nil
+}
+
+func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+	p = principal.Canonicalized(p)
+	if m == nil || m.runMetadata == nil {
+		return nil, ErrAgentTurnMetadataNotConfigured
+	}
+	subjectID := strings.TrimSpace(principalSubjectID(p))
+	if subjectID == "" {
+		return nil, ErrAgentSubjectRequired
+	}
+	sessionRef, err := m.requireOwnedSessionMetadata(ctx, req.SessionID, p)
+	if err != nil {
+		return nil, err
+	}
+	provider, err := m.resolveProviderByName(sessionRef.ProviderName)
+	if err != nil {
+		return nil, err
+	}
+	tools, err := m.resolveTools(ctx, p, req.CallerPluginName, req.ToolRefs, req.ToolSource)
+	if err != nil {
+		return nil, err
+	}
+	turnID := uuid.NewString()
+	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
+	if idempotencyKey != "" {
+		for {
+			claimedTurnID, claimed, err := m.runMetadata.ClaimIdempotency(ctx, subjectID, sessionRef.ProviderName, idempotencyKey, turnID, m.now())
+			if err != nil {
+				return nil, err
+			}
+			if claimed {
+				break
+			}
+			existing, err := m.runMetadata.Get(ctx, claimedTurnID)
+			if err != nil {
+				if errors.Is(err, indexeddb.ErrNotFound) {
+					return nil, ErrAgentTurnCreationInProgress
+				}
+				return nil, err
+			}
+			if !executionRefOwnedBy(existing, p) || existing.SessionID != sessionRef.ID {
+				return nil, core.ErrNotFound
+			}
+			if !m.allowRun(ctx, p, existing) {
+				return nil, core.ErrNotFound
+			}
+			turn, err := m.getTurnByMetadata(ctx, p, existing)
+			if err == nil {
+				return turn, nil
 			}
 			if !errors.Is(err, core.ErrNotFound) {
 				return nil, err
@@ -189,12 +375,13 @@ func (m *Manager) Run(ctx context.Context, p *principal.Principal, req coreagent
 			if deleteErr := m.runMetadata.Delete(ctx, existing.ID); deleteErr != nil {
 				return nil, deleteErr
 			}
-			runID = uuid.NewString()
+			turnID = uuid.NewString()
 		}
 	}
 	ref, err := m.runMetadata.Put(ctx, &coreagent.ExecutionReference{
-		ID:                  runID,
-		ProviderName:        providerName,
+		ID:                  turnID,
+		SessionID:           sessionRef.ID,
+		ProviderName:        sessionRef.ProviderName,
 		SubjectID:           subjectID,
 		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
 		IdempotencyKey:      idempotencyKey,
@@ -203,127 +390,94 @@ func (m *Manager) Run(ctx context.Context, p *principal.Principal, req coreagent
 	})
 	if err != nil {
 		if idempotencyKey != "" {
-			if releaseErr := m.runMetadata.ReleaseIdempotency(ctx, subjectID, providerName, idempotencyKey); releaseErr != nil {
-				err = errors.Join(err, releaseErr)
-			}
+			_ = m.runMetadata.ReleaseIdempotency(ctx, subjectID, sessionRef.ProviderName, idempotencyKey)
 		}
 		return nil, err
 	}
-
-	run, err := provider.StartRun(ctx, coreagent.StartRunRequest{
-		RunID:           runID,
+	turn, err := provider.CreateTurn(ctx, coreagent.CreateTurnRequest{
+		TurnID:          turnID,
+		SessionID:       sessionRef.ID,
 		IdempotencyKey:  idempotencyKey,
-		ProviderName:    providerName,
 		Model:           strings.TrimSpace(req.Model),
 		Messages:        append([]coreagent.Message(nil), req.Messages...),
 		Tools:           append([]coreagent.Tool(nil), tools...),
 		ResponseSchema:  maps.Clone(req.ResponseSchema),
-		SessionRef:      strings.TrimSpace(req.SessionRef),
 		Metadata:        maps.Clone(req.Metadata),
 		ProviderOptions: maps.Clone(req.ProviderOptions),
 		CreatedBy:       agentActorFromPrincipal(p),
-		ExecutionRef:    runID,
+		ExecutionRef:    turnID,
 	})
 	if err != nil {
-		fallback, getErr := provider.GetRun(ctx, coreagent.GetRunRequest{RunID: runID})
+		fallback, getErr := provider.GetTurn(ctx, coreagent.GetTurnRequest{TurnID: turnID})
 		if getErr == nil {
-			run = fallback
+			turn = fallback
 		} else {
 			_ = m.runMetadata.Delete(ctx, ref.ID)
 			return nil, err
 		}
 	}
-	normalized, err := normalizeProviderRun(providerName, runID, run)
+	normalized, err := normalizeProviderTurn(sessionRef.ProviderName, sessionRef.ID, turnID, turn)
 	if err != nil {
 		_ = m.runMetadata.Delete(ctx, ref.ID)
 		return nil, err
 	}
-	return &coreagent.ManagedRun{
-		ProviderName: providerName,
-		Run:          normalized,
-	}, nil
+	return normalized, nil
 }
 
-func (m *Manager) GetRun(ctx context.Context, p *principal.Principal, runID string) (*coreagent.ManagedRun, error) {
-	ref, err := m.requireOwnedRunMetadata(ctx, runID, p)
+func (m *Manager) GetTurn(ctx context.Context, p *principal.Principal, turnID string) (*coreagent.Turn, error) {
+	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
 	if err != nil {
 		return nil, err
 	}
-	return m.getManagedRunByMetadata(ctx, p, ref)
+	return m.getTurnByMetadata(ctx, p, ref)
 }
 
-func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal) ([]*coreagent.ManagedRun, error) {
-	return m.listRuns(ctx, p, "")
-}
-
-func (m *Manager) ListRunsByProvider(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.ManagedRun, error) {
-	return m.listRuns(ctx, p, providerName)
-}
-
-func (m *Manager) listRuns(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.ManagedRun, error) {
-	refs, err := m.listOwnedRunMetadata(ctx, p, false)
+func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, sessionID string) ([]*coreagent.Turn, error) {
+	sessionRef, err := m.requireOwnedSessionMetadata(ctx, sessionID, p)
 	if err != nil {
 		return nil, err
 	}
-	refsByProvider := executionRefsByProvider(refs)
-	providerName = strings.TrimSpace(providerName)
-	if providerName != "" {
-		if providerRefs, ok := refsByProvider[providerName]; ok {
-			refsByProvider = map[string][]*coreagent.ExecutionReference{providerName: providerRefs}
-		} else {
-			refsByProvider = map[string][]*coreagent.ExecutionReference{}
-		}
+	provider, err := m.resolveProviderByName(sessionRef.ProviderName)
+	if err != nil {
+		return nil, err
 	}
-	out := make([]*coreagent.ManagedRun, 0, len(refs))
-	for providerName, providerRefs := range refsByProvider {
-		provider, err := m.resolveProviderByName(providerName)
+	turns, err := provider.ListTurns(ctx, coreagent.ListTurnsRequest{SessionID: sessionRef.ID})
+	if err != nil {
+		return nil, err
+	}
+	ownedRefs, err := m.listOwnedTurnMetadata(ctx, p, sessionRef.ID, false)
+	if err != nil {
+		return nil, err
+	}
+	refIndex := executionRefsByID(ownedRefs)
+	out := make([]*coreagent.Turn, 0, len(turns))
+	for _, turn := range turns {
+		if turn == nil {
+			continue
+		}
+		ref := refIndex[strings.TrimSpace(turn.ID)]
+		if ref == nil {
+			continue
+		}
+		normalized, err := normalizeProviderTurn(sessionRef.ProviderName, sessionRef.ID, ref.ID, turn)
 		if err != nil {
 			return nil, err
 		}
-		runs, err := provider.ListRuns(ctx, coreagent.ListRunsRequest{})
-		if err != nil {
-			return nil, err
-		}
-		refIndex := executionRefsByID(providerRefs)
-		for _, run := range runs {
-			if run == nil {
-				continue
-			}
-			ref := refIndex[strings.TrimSpace(run.ID)]
-			if ref == nil || !m.allowRun(ctx, p, ref) {
-				continue
-			}
-			normalized, err := normalizeProviderRun(providerName, ref.ID, run)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, &coreagent.ManagedRun{
-				ProviderName: providerName,
-				Run:          normalized,
-			})
-		}
+		out = append(out, normalized)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		left := out[i]
 		right := out[j]
-		if left.Run != nil && right.Run != nil && left.Run.CreatedAt != nil && right.Run.CreatedAt != nil && !left.Run.CreatedAt.Equal(*right.Run.CreatedAt) {
-			return left.Run.CreatedAt.After(*right.Run.CreatedAt)
+		if left.CreatedAt != nil && right.CreatedAt != nil && !left.CreatedAt.Equal(*right.CreatedAt) {
+			return left.CreatedAt.After(*right.CreatedAt)
 		}
-		leftID := ""
-		rightID := ""
-		if left.Run != nil {
-			leftID = left.Run.ID
-		}
-		if right.Run != nil {
-			rightID = right.Run.ID
-		}
-		return leftID < rightID
+		return left.ID < right.ID
 	})
 	return out, nil
 }
 
-func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*coreagent.ManagedRun, error) {
-	ref, err := m.requireOwnedRunMetadata(ctx, runID, p)
+func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, turnID, reason string) (*coreagent.Turn, error) {
+	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
 	if err != nil {
 		return nil, err
 	}
@@ -331,8 +485,8 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, 
 	if err != nil {
 		return nil, err
 	}
-	run, err := provider.CancelRun(ctx, coreagent.CancelRunRequest{
-		RunID:  strings.TrimSpace(runID),
+	turn, err := provider.CancelTurn(ctx, coreagent.CancelTurnRequest{
+		TurnID: strings.TrimSpace(turnID),
 		Reason: strings.TrimSpace(reason),
 	})
 	if err != nil {
@@ -341,52 +495,11 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, 
 	if _, err := m.runMetadata.Revoke(ctx, ref.ID, m.now()); err != nil {
 		return nil, err
 	}
-	if m.runInteractions != nil {
-		if err := m.runInteractions.CancelByRun(ctx, ref.ID, m.now()); err != nil {
-			return nil, err
-		}
-	}
-	normalized, err := normalizeProviderRun(ref.ProviderName, strings.TrimSpace(runID), run)
-	if err != nil {
-		return nil, err
-	}
-	return &coreagent.ManagedRun{
-		ProviderName: ref.ProviderName,
-		Run:          normalized,
-	}, nil
+	return normalizeProviderTurn(ref.ProviderName, ref.SessionID, ref.ID, turn)
 }
 
-func (m *Manager) ListRunEvents(ctx context.Context, p *principal.Principal, runID string, afterSeq int64, limit int) ([]*coreagent.RunEvent, error) {
-	if m == nil || m.runEvents == nil {
-		return nil, ErrAgentRunEventsNotConfigured
-	}
-	ref, err := m.requireOwnedRunMetadata(ctx, runID, p)
-	if err != nil {
-		return nil, err
-	}
-	return m.runEvents.ListByRun(ctx, ref.ID, afterSeq, limit)
-}
-
-func (m *Manager) ListRunInteractions(ctx context.Context, p *principal.Principal, runID string) ([]*coreagent.Interaction, error) {
-	if m == nil || m.runInteractions == nil {
-		return nil, ErrAgentRunInteractionsNotConfigured
-	}
-	ref, err := m.requireOwnedRunMetadata(ctx, runID, p)
-	if err != nil {
-		return nil, err
-	}
-	return m.runInteractions.ListByRun(ctx, ref.ID)
-}
-
-func (m *Manager) ResumeRun(ctx context.Context, p *principal.Principal, runID, interactionID string, resolution map[string]any) (*coreagent.ManagedRun, error) {
-	if m == nil || m.runInteractions == nil {
-		return nil, ErrAgentRunInteractionsNotConfigured
-	}
-	ref, err := m.requireOwnedRunMetadata(ctx, runID, p)
-	if err != nil {
-		return nil, err
-	}
-	interaction, err := m.requireInteraction(ctx, ref, interactionID)
+func (m *Manager) ListTurnEvents(ctx context.Context, p *principal.Principal, turnID string, afterSeq int64, limit int) ([]*coreagent.TurnEvent, error) {
+	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
 	if err != nil {
 		return nil, err
 	}
@@ -394,69 +507,114 @@ func (m *Manager) ResumeRun(ctx context.Context, p *principal.Principal, runID, 
 	if err != nil {
 		return nil, err
 	}
-	providerManagedInteractions := providerManagesResumeRunInteractions(provider)
-	if !providerManagedInteractions && interaction.State != coreagent.InteractionStatePending {
-		return nil, ErrAgentInteractionNotPending
-	}
-	capabilities, err := provider.GetCapabilities(ctx, coreagent.GetCapabilitiesRequest{})
+	return provider.ListTurnEvents(ctx, coreagent.ListTurnEventsRequest{
+		TurnID:   ref.ID,
+		AfterSeq: afterSeq,
+		Limit:    limit,
+	})
+}
+
+func (m *Manager) ListInteractions(ctx context.Context, p *principal.Principal, turnID string) ([]*coreagent.Interaction, error) {
+	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
 	if err != nil {
 		return nil, err
 	}
-	if capabilities == nil || !capabilities.ResumableRuns {
-		return nil, ErrAgentRunResumeNotSupported
+	provider, err := m.resolveProviderByName(ref.ProviderName)
+	if err != nil {
+		return nil, err
 	}
-	run, err := provider.ResumeRun(ctx, coreagent.ResumeRunRequest{
-		RunID:         ref.ID,
-		InteractionID: interaction.ID,
+	interactions, err := provider.ListInteractions(ctx, coreagent.ListInteractionsRequest{TurnID: ref.ID})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*coreagent.Interaction, 0, len(interactions))
+	for _, interaction := range interactions {
+		if interaction == nil {
+			continue
+		}
+		if strings.TrimSpace(interaction.TurnID) != ref.ID {
+			return nil, fmt.Errorf("agent provider returned interaction %q for turn %q, want %q", strings.TrimSpace(interaction.ID), strings.TrimSpace(interaction.TurnID), ref.ID)
+		}
+		if strings.TrimSpace(interaction.SessionID) != ref.SessionID {
+			return nil, fmt.Errorf("agent provider returned interaction %q for session %q, want %q", strings.TrimSpace(interaction.ID), strings.TrimSpace(interaction.SessionID), ref.SessionID)
+		}
+		out = append(out, interaction)
+	}
+	return out, nil
+}
+
+func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal, turnID, interactionID string, resolution map[string]any) (*coreagent.Interaction, error) {
+	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
+	if err != nil {
+		return nil, err
+	}
+	interactionID = strings.TrimSpace(interactionID)
+	if interactionID == "" {
+		return nil, ErrAgentInteractionRequired
+	}
+	provider, err := m.resolveProviderByName(ref.ProviderName)
+	if err != nil {
+		return nil, err
+	}
+	interaction, err := provider.ResolveInteraction(ctx, coreagent.ResolveInteractionRequest{
+		InteractionID: interactionID,
 		Resolution:    maps.Clone(resolution),
 	})
 	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return nil, ErrAgentInteractionNotFound
+		}
 		return nil, err
 	}
-	if !providerManagedInteractions {
-		current, err := m.runInteractions.Get(ctx, interaction.ID)
-		if err != nil && !errors.Is(err, indexeddb.ErrNotFound) {
-			return nil, err
-		}
-		if current != nil && current.State == coreagent.InteractionStatePending {
-			if _, err := m.runInteractions.Resolve(ctx, interaction.ID, maps.Clone(resolution), m.now()); err != nil {
-				return nil, err
-			}
-		}
+	if interaction == nil {
+		return nil, ErrAgentInteractionNotFound
 	}
-	normalized, err := normalizeProviderRun(ref.ProviderName, ref.ID, run)
-	if err != nil {
-		return nil, err
+	if gotInteractionID := strings.TrimSpace(interaction.ID); gotInteractionID == "" || gotInteractionID != interactionID {
+		return nil, ErrAgentInteractionNotFound
 	}
-	return &coreagent.ManagedRun{
-		ProviderName: ref.ProviderName,
-		Run:          normalized,
-	}, nil
-}
-
-func (m *Manager) getManagedRunByMetadata(ctx context.Context, p *principal.Principal, ref *coreagent.ExecutionReference) (*coreagent.ManagedRun, error) {
-	if ref == nil {
+	if gotTurnID := strings.TrimSpace(interaction.TurnID); gotTurnID != "" && gotTurnID != ref.ID {
 		return nil, core.ErrNotFound
 	}
-	if !m.allowRun(ctx, p, ref) {
+	if gotSessionID := strings.TrimSpace(interaction.SessionID); gotSessionID != "" && gotSessionID != ref.SessionID {
+		return nil, core.ErrNotFound
+	}
+	if strings.TrimSpace(interaction.TurnID) == "" {
+		return nil, fmt.Errorf("agent provider returned interaction %q without turn id", interactionID)
+	}
+	if strings.TrimSpace(interaction.SessionID) == "" {
+		return nil, fmt.Errorf("agent provider returned interaction %q without session id", interactionID)
+	}
+	return interaction, nil
+}
+
+func (m *Manager) getSessionByMetadata(ctx context.Context, p *principal.Principal, ref *coreagent.SessionReference) (*coreagent.Session, error) {
+	if ref == nil || !sessionRefOwnedBy(ref, p) {
 		return nil, core.ErrNotFound
 	}
 	provider, err := m.resolveProviderByName(ref.ProviderName)
 	if err != nil {
 		return nil, err
 	}
-	run, err := provider.GetRun(ctx, coreagent.GetRunRequest{RunID: strings.TrimSpace(ref.ID)})
+	session, err := provider.GetSession(ctx, coreagent.GetSessionRequest{SessionID: ref.ID})
 	if err != nil {
 		return nil, err
 	}
-	normalized, err := normalizeProviderRun(ref.ProviderName, ref.ID, run)
+	return normalizeProviderSession(ref.ProviderName, ref.ID, session)
+}
+
+func (m *Manager) getTurnByMetadata(ctx context.Context, p *principal.Principal, ref *coreagent.ExecutionReference) (*coreagent.Turn, error) {
+	if ref == nil || !executionRefOwnedBy(ref, p) || !m.allowRun(ctx, p, ref) {
+		return nil, core.ErrNotFound
+	}
+	provider, err := m.resolveProviderByName(ref.ProviderName)
 	if err != nil {
 		return nil, err
 	}
-	return &coreagent.ManagedRun{
-		ProviderName: ref.ProviderName,
-		Run:          normalized,
-	}, nil
+	turn, err := provider.GetTurn(ctx, coreagent.GetTurnRequest{TurnID: strings.TrimSpace(ref.ID)})
+	if err != nil {
+		return nil, err
+	}
+	return normalizeProviderTurn(ref.ProviderName, ref.SessionID, ref.ID, turn)
 }
 
 func (m *Manager) resolveProviderSelection(providerName string) (string, coreagent.Provider, error) {
@@ -473,9 +631,52 @@ func (m *Manager) resolveProviderByName(providerName string) (coreagent.Provider
 	return m.agent.ResolveProvider(strings.TrimSpace(providerName))
 }
 
-func (m *Manager) listOwnedRunMetadata(ctx context.Context, p *principal.Principal, activeOnly bool) ([]*coreagent.ExecutionReference, error) {
+func (m *Manager) listOwnedSessionMetadata(ctx context.Context, p *principal.Principal) ([]*coreagent.SessionReference, error) {
+	if m == nil || m.sessionMetadata == nil {
+		return nil, ErrAgentSessionMetadataNotConfigured
+	}
+	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
+	if subjectID == "" {
+		return nil, ErrAgentSubjectRequired
+	}
+	refs, err := m.sessionMetadata.ListBySubject(ctx, subjectID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*coreagent.SessionReference, 0, len(refs))
+	for _, ref := range refs {
+		if !sessionRefOwnedBy(ref, p) {
+			continue
+		}
+		out = append(out, ref)
+	}
+	return out, nil
+}
+
+func (m *Manager) requireOwnedSessionMetadata(ctx context.Context, sessionID string, p *principal.Principal) (*coreagent.SessionReference, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil, core.ErrNotFound
+	}
+	if m == nil || m.sessionMetadata == nil {
+		return nil, ErrAgentSessionMetadataNotConfigured
+	}
+	ref, err := m.sessionMetadata.Get(ctx, sessionID)
+	if err != nil {
+		if errors.Is(err, indexeddb.ErrNotFound) {
+			return nil, core.ErrNotFound
+		}
+		return nil, err
+	}
+	if !sessionRefOwnedBy(ref, p) {
+		return nil, core.ErrNotFound
+	}
+	return ref, nil
+}
+
+func (m *Manager) listOwnedTurnMetadata(ctx context.Context, p *principal.Principal, sessionID string, activeOnly bool) ([]*coreagent.ExecutionReference, error) {
 	if m == nil || m.runMetadata == nil {
-		return nil, ErrAgentRunMetadataNotConfigured
+		return nil, ErrAgentTurnMetadataNotConfigured
 	}
 	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
 	if subjectID == "" {
@@ -485,9 +686,13 @@ func (m *Manager) listOwnedRunMetadata(ctx context.Context, p *principal.Princip
 	if err != nil {
 		return nil, err
 	}
+	sessionID = strings.TrimSpace(sessionID)
 	out := make([]*coreagent.ExecutionReference, 0, len(refs))
 	for _, ref := range refs {
 		if !executionRefOwnedBy(ref, p) || (activeOnly && !executionRefActive(ref)) {
+			continue
+		}
+		if sessionID != "" && strings.TrimSpace(ref.SessionID) != sessionID {
 			continue
 		}
 		out = append(out, ref)
@@ -495,15 +700,15 @@ func (m *Manager) listOwnedRunMetadata(ctx context.Context, p *principal.Princip
 	return out, nil
 }
 
-func (m *Manager) requireOwnedRunMetadata(ctx context.Context, runID string, p *principal.Principal) (*coreagent.ExecutionReference, error) {
-	runID = strings.TrimSpace(runID)
-	if runID == "" {
+func (m *Manager) requireOwnedTurnMetadata(ctx context.Context, turnID string, p *principal.Principal) (*coreagent.ExecutionReference, error) {
+	turnID = strings.TrimSpace(turnID)
+	if turnID == "" {
 		return nil, core.ErrNotFound
 	}
 	if m == nil || m.runMetadata == nil {
-		return nil, ErrAgentRunMetadataNotConfigured
+		return nil, ErrAgentTurnMetadataNotConfigured
 	}
-	ref, err := m.runMetadata.Get(ctx, runID)
+	ref, err := m.runMetadata.Get(ctx, turnID)
 	if err != nil {
 		if errors.Is(err, indexeddb.ErrNotFound) {
 			return nil, core.ErrNotFound
@@ -514,30 +719,6 @@ func (m *Manager) requireOwnedRunMetadata(ctx context.Context, runID string, p *
 		return nil, core.ErrNotFound
 	}
 	return ref, nil
-}
-
-func (m *Manager) requireInteraction(ctx context.Context, ref *coreagent.ExecutionReference, interactionID string) (*coreagent.Interaction, error) {
-	if ref == nil {
-		return nil, core.ErrNotFound
-	}
-	interactionID = strings.TrimSpace(interactionID)
-	if interactionID == "" {
-		return nil, ErrAgentInteractionRequired
-	}
-	if m == nil || m.runInteractions == nil {
-		return nil, ErrAgentRunInteractionsNotConfigured
-	}
-	interaction, err := m.runInteractions.Get(ctx, interactionID)
-	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
-			return nil, ErrAgentInteractionNotFound
-		}
-		return nil, err
-	}
-	if interaction == nil || strings.TrimSpace(interaction.RunID) != ref.ID {
-		return nil, ErrAgentInteractionNotFound
-	}
-	return interaction, nil
 }
 
 func (m *Manager) resolveTools(ctx context.Context, p *principal.Principal, callerPluginName string, explicit []coreagent.ToolRef, source coreagent.ToolSourceMode) ([]coreagent.Tool, error) {
@@ -1023,15 +1204,23 @@ func executionRefOwnedBy(ref *coreagent.ExecutionReference, p *principal.Princip
 	return subjectID != "" && strings.TrimSpace(ref.SubjectID) == subjectID
 }
 
+func sessionRefOwnedBy(ref *coreagent.SessionReference, p *principal.Principal) bool {
+	if ref == nil || p == nil {
+		return false
+	}
+	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
+	return subjectID != "" && strings.TrimSpace(ref.SubjectID) == subjectID
+}
+
 func executionRefActive(ref *coreagent.ExecutionReference) bool {
 	return ref != nil && (ref.RevokedAt == nil || ref.RevokedAt.IsZero())
 }
 
-func executionRefsByProvider(refs []*coreagent.ExecutionReference) map[string][]*coreagent.ExecutionReference {
+func sessionRefsByProvider(refs []*coreagent.SessionReference) map[string][]*coreagent.SessionReference {
 	if len(refs) == 0 {
 		return nil
 	}
-	out := make(map[string][]*coreagent.ExecutionReference)
+	out := make(map[string][]*coreagent.SessionReference)
 	for _, ref := range refs {
 		if ref == nil {
 			continue
@@ -1041,6 +1230,24 @@ func executionRefsByProvider(refs []*coreagent.ExecutionReference) map[string][]
 			continue
 		}
 		out[providerName] = append(out[providerName], ref)
+	}
+	return out
+}
+
+func sessionRefsByID(refs []*coreagent.SessionReference) map[string]*coreagent.SessionReference {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make(map[string]*coreagent.SessionReference, len(refs))
+	for _, ref := range refs {
+		if ref == nil {
+			continue
+		}
+		id := strings.TrimSpace(ref.ID)
+		if id == "" {
+			continue
+		}
+		out[id] = ref
 	}
 	return out
 }
@@ -1063,21 +1270,57 @@ func executionRefsByID(refs []*coreagent.ExecutionReference) map[string]*coreage
 	return out
 }
 
-func normalizeProviderRun(providerName, runID string, run *coreagent.Run) (*coreagent.Run, error) {
-	if run == nil {
+func normalizeProviderSession(providerName, sessionID string, session *coreagent.Session) (*coreagent.Session, error) {
+	if session == nil {
 		return nil, core.ErrNotFound
 	}
-	cloned := *run
+	cloned := *session
 	if strings.TrimSpace(cloned.ID) == "" {
-		cloned.ID = strings.TrimSpace(runID)
+		return nil, fmt.Errorf("agent provider returned session without id")
 	}
-	if strings.TrimSpace(cloned.ID) != strings.TrimSpace(runID) {
-		return nil, fmt.Errorf("agent provider returned run id %q, want %q", cloned.ID, runID)
+	if strings.TrimSpace(cloned.ID) != strings.TrimSpace(sessionID) {
+		return nil, fmt.Errorf("agent provider returned session id %q, want %q", cloned.ID, sessionID)
 	}
 	if strings.TrimSpace(cloned.ProviderName) == "" {
 		cloned.ProviderName = strings.TrimSpace(providerName)
 	}
 	return &cloned, nil
+}
+
+func normalizeProviderTurn(providerName, sessionID, turnID string, turn *coreagent.Turn) (*coreagent.Turn, error) {
+	if turn == nil {
+		return nil, core.ErrNotFound
+	}
+	cloned := *turn
+	if strings.TrimSpace(cloned.ID) == "" {
+		return nil, fmt.Errorf("agent provider returned turn without id")
+	}
+	if strings.TrimSpace(cloned.ID) != strings.TrimSpace(turnID) {
+		return nil, fmt.Errorf("agent provider returned turn id %q, want %q", cloned.ID, turnID)
+	}
+	if strings.TrimSpace(cloned.SessionID) == "" {
+		return nil, fmt.Errorf("agent provider returned turn %q without session id", turnID)
+	}
+	if strings.TrimSpace(cloned.SessionID) != strings.TrimSpace(sessionID) {
+		return nil, fmt.Errorf("agent provider returned turn session id %q, want %q", cloned.SessionID, sessionID)
+	}
+	if strings.TrimSpace(cloned.ProviderName) == "" {
+		cloned.ProviderName = strings.TrimSpace(providerName)
+	}
+	return &cloned, nil
+}
+
+func sessionSortTime(session *coreagent.Session) *time.Time {
+	if session == nil {
+		return nil
+	}
+	if session.LastTurnAt != nil && !session.LastTurnAt.IsZero() {
+		return session.LastTurnAt
+	}
+	if session.UpdatedAt != nil && !session.UpdatedAt.IsZero() {
+		return session.UpdatedAt
+	}
+	return session.CreatedAt
 }
 
 func operationInputSchema(op catalog.CatalogOperation) (map[string]any, error) {

@@ -34,12 +34,6 @@ class AgentHost:
     def execute_tool(self, request: Any) -> Any:
         return _grpc_call(self._stub.ExecuteTool, request)
 
-    def emit_event(self, request: Any) -> Any:
-        return _grpc_call(self._stub.EmitEvent, request)
-
-    def request_interaction(self, request: Any) -> Any:
-        return _grpc_call(self._stub.RequestInteraction, request)
-
     def __enter__(self) -> AgentHost:
         return self
 
@@ -65,21 +59,49 @@ class AgentManager:
     def close(self) -> None:
         self._channel.close()
 
-    def run(self, request: Any) -> Any:
+    def create_session(self, request: Any) -> Any:
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.Run, request)
+        return _grpc_call(self._stub.CreateSession, request)
 
-    def get_run(self, request: Any) -> Any:
+    def get_session(self, request: Any) -> Any:
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.GetRun, request)
+        return _grpc_call(self._stub.GetSession, request)
 
-    def list_runs(self, request: Any) -> Any:
+    def list_sessions(self, request: Any) -> Any:
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.ListRuns, request)
+        return _grpc_call(self._stub.ListSessions, request)
 
-    def cancel_run(self, request: Any) -> Any:
+    def update_session(self, request: Any) -> Any:
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.CancelRun, request)
+        return _grpc_call(self._stub.UpdateSession, request)
+
+    def create_turn(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.CreateTurn, request)
+
+    def get_turn(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.GetTurn, request)
+
+    def list_turns(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.ListTurns, request)
+
+    def cancel_turn(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.CancelTurn, request)
+
+    def list_turn_events(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.ListTurnEvents, request)
+
+    def list_interactions(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.ListInteractions, request)
+
+    def resolve_interaction(self, request: Any) -> Any:
+        request.invocation_token = self._invocation_token
+        return _grpc_call(self._stub.ResolveInteraction, request)
 
     def __enter__(self) -> AgentManager:
         return self

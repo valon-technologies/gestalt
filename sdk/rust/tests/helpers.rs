@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use prost_types::{Struct, Value};
+use prost_types::{Struct, Timestamp, Value};
 
 pub fn env_lock() -> &'static tokio::sync::Mutex<()> {
     static ENV_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
@@ -67,6 +67,16 @@ pub fn json_to_prost(value: &serde_json::Value) -> Value {
         }),
     };
     Value { kind: Some(kind) }
+}
+
+pub fn timestamp_now() -> Timestamp {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("unix epoch");
+    Timestamp {
+        seconds: now.as_secs() as i64,
+        nanos: now.subsec_nanos() as i32,
+    }
 }
 
 pub async fn wait_for_socket(path: &Path) {

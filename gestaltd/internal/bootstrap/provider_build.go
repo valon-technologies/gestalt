@@ -1876,35 +1876,47 @@ func (unavailableAgentManager) Available() bool {
 	return false
 }
 
-func (unavailableAgentManager) Run(context.Context, *principal.Principal, coreagent.ManagerRunRequest) (*coreagent.ManagedRun, error) {
+func (unavailableAgentManager) CreateSession(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) GetRun(context.Context, *principal.Principal, string) (*coreagent.ManagedRun, error) {
+func (unavailableAgentManager) GetSession(context.Context, *principal.Principal, string) (*coreagent.Session, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) ListRuns(context.Context, *principal.Principal) ([]*coreagent.ManagedRun, error) {
+func (unavailableAgentManager) ListSessions(context.Context, *principal.Principal, string) ([]*coreagent.Session, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) ListRunsByProvider(context.Context, *principal.Principal, string) ([]*coreagent.ManagedRun, error) {
+func (unavailableAgentManager) UpdateSession(context.Context, *principal.Principal, coreagent.ManagerUpdateSessionRequest) (*coreagent.Session, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) CancelRun(context.Context, *principal.Principal, string, string) (*coreagent.ManagedRun, error) {
+func (unavailableAgentManager) CreateTurn(context.Context, *principal.Principal, coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) ListRunEvents(context.Context, *principal.Principal, string, int64, int) ([]*coreagent.RunEvent, error) {
+func (unavailableAgentManager) GetTurn(context.Context, *principal.Principal, string) (*coreagent.Turn, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) ListRunInteractions(context.Context, *principal.Principal, string) ([]*coreagent.Interaction, error) {
+func (unavailableAgentManager) ListTurns(context.Context, *principal.Principal, string) ([]*coreagent.Turn, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) ResumeRun(context.Context, *principal.Principal, string, string, map[string]any) (*coreagent.ManagedRun, error) {
+func (unavailableAgentManager) CancelTurn(context.Context, *principal.Principal, string, string) (*coreagent.Turn, error) {
+	return nil, fmt.Errorf("agent manager is not available")
+}
+
+func (unavailableAgentManager) ListTurnEvents(context.Context, *principal.Principal, string, int64, int) ([]*coreagent.TurnEvent, error) {
+	return nil, fmt.Errorf("agent manager is not available")
+}
+
+func (unavailableAgentManager) ListInteractions(context.Context, *principal.Principal, string) ([]*coreagent.Interaction, error) {
+	return nil, fmt.Errorf("agent manager is not available")
+}
+
+func (unavailableAgentManager) ResolveInteraction(context.Context, *principal.Principal, string, string, map[string]any) (*coreagent.Interaction, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
 

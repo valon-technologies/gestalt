@@ -61,6 +61,7 @@ func (s *AgentRunMetadataService) Put(ctx context.Context, ref *coreagent.Execut
 
 	rec := indexeddb.Record{
 		"id":                    id,
+		"session_id":            strings.TrimSpace(ref.SessionID),
 		"provider_name":         providerName,
 		"subject_id":            subjectID,
 		"credential_subject_id": strings.TrimSpace(ref.CredentialSubjectID),
@@ -240,6 +241,7 @@ func (s *AgentRunMetadataService) deleteIdempotencyRecord(ctx context.Context, r
 func recordToAgentRunMetadata(rec indexeddb.Record) *coreagent.ExecutionReference {
 	return &coreagent.ExecutionReference{
 		ID:                  recString(rec, "id"),
+		SessionID:           recString(rec, "session_id"),
 		ProviderName:        recString(rec, "provider_name"),
 		SubjectID:           recString(rec, "subject_id"),
 		CredentialSubjectID: recString(rec, "credential_subject_id"),

@@ -44,12 +44,3 @@ func (c *AgentHostClient) Close() error {
 func (c *AgentHostClient) ExecuteTool(ctx context.Context, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {
 	return c.client.ExecuteTool(ctx, req)
 }
-
-func (c *AgentHostClient) EmitEvent(ctx context.Context, req *proto.EmitAgentEventRequest) error {
-	_, err := c.client.EmitEvent(ctx, req)
-	return err
-}
-
-func (c *AgentHostClient) RequestInteraction(ctx context.Context, req *proto.RequestAgentInteractionRequest) (*proto.AgentInteraction, error) {
-	return c.client.RequestInteraction(ctx, req)
-}

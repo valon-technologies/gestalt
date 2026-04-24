@@ -113,81 +113,122 @@ pub struct AgentProviderCapabilities {
     #[prost(bool, tag = "4")]
     pub structured_output: bool,
     #[prost(bool, tag = "5")]
-    pub session_continuation: bool,
+    pub interactions: bool,
     #[prost(bool, tag = "6")]
-    pub approvals: bool,
+    pub resumable_turns: bool,
     #[prost(bool, tag = "7")]
-    pub resumable_runs: bool,
-    #[prost(bool, tag = "8")]
     pub reasoning_summaries: bool,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderCapabilitiesRequest {}
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ResumeAgentProviderRunRequest {
-    #[prost(string, tag = "1")]
-    pub run_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub interaction_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
-    pub resolution: ::core::option::Option<::prost_types::Struct>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RequestAgentInteractionRequest {
-    #[prost(string, tag = "1")]
-    pub run_id: ::prost::alloc::string::String,
-    #[prost(enumeration = "AgentInteractionType", tag = "2")]
-    pub r#type: i32,
-    #[prost(string, tag = "3")]
-    pub title: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub prompt: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
-    pub request: ::core::option::Option<::prost_types::Struct>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentInteraction {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub run_id: ::prost::alloc::string::String,
-    #[prost(enumeration = "AgentInteractionType", tag = "3")]
+    #[prost(enumeration = "AgentInteractionType", tag = "2")]
     pub r#type: i32,
-    #[prost(enumeration = "AgentInteractionState", tag = "4")]
+    #[prost(enumeration = "AgentInteractionState", tag = "3")]
     pub state: i32,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag = "4")]
     pub title: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag = "5")]
     pub prompt: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag = "6")]
     pub request: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag = "7")]
     pub resolution: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "9")]
+    #[prost(message, optional, tag = "8")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "10")]
+    #[prost(message, optional, tag = "9")]
     pub resolved_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(string, tag = "10")]
+    pub turn_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub session_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BoundAgentRun {
+pub struct AgentSession {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub provider_name: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub model: ::prost::alloc::string::String,
-    #[prost(enumeration = "AgentRunStatus", tag = "4")]
-    pub status: i32,
-    #[prost(message, repeated, tag = "5")]
-    pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
-    #[prost(string, tag = "6")]
-    pub output_text: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub client_ref: ::prost::alloc::string::String,
+    #[prost(enumeration = "AgentSessionState", tag = "5")]
+    pub state: i32,
+    #[prost(message, optional, tag = "6")]
+    pub metadata: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "7")]
+    pub created_by: ::core::option::Option<AgentActor>,
+    #[prost(message, optional, tag = "8")]
+    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "9")]
+    pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "10")]
+    pub last_turn_at: ::core::option::Option<::prost_types::Timestamp>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateAgentProviderSessionRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub model: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub client_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "5")]
+    pub metadata: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "6")]
+    pub provider_options: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "7")]
+    pub created_by: ::core::option::Option<AgentActor>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetAgentProviderSessionRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListAgentProviderSessionsRequest {}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListAgentProviderSessionsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub sessions: ::prost::alloc::vec::Vec<AgentSession>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpdateAgentProviderSessionRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub client_ref: ::prost::alloc::string::String,
+    #[prost(enumeration = "AgentSessionState", tag = "3")]
+    pub state: i32,
+    #[prost(message, optional, tag = "4")]
+    pub metadata: ::core::option::Option<::prost_types::Struct>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentTurn {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub model: ::prost::alloc::string::String,
+    #[prost(enumeration = "AgentExecutionStatus", tag = "5")]
+    pub status: i32,
+    #[prost(message, repeated, tag = "6")]
+    pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
+    #[prost(string, tag = "7")]
+    pub output_text: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "8")]
     pub structured_output: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "8")]
-    pub status_message: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
-    pub session_ref: ::prost::alloc::string::String,
+    pub status_message: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "10")]
     pub created_by: ::core::option::Option<AgentActor>,
     #[prost(message, optional, tag = "11")]
@@ -200,13 +241,13 @@ pub struct BoundAgentRun {
     pub execution_ref: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StartAgentProviderRunRequest {
+pub struct CreateAgentProviderTurnRequest {
     #[prost(string, tag = "1")]
-    pub run_id: ::prost::alloc::string::String,
+    pub turn_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub idempotency_key: ::prost::alloc::string::String,
+    pub session_id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub provider_name: ::prost::alloc::string::String,
+    pub idempotency_key: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub model: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "5")]
@@ -215,60 +256,43 @@ pub struct StartAgentProviderRunRequest {
     pub tools: ::prost::alloc::vec::Vec<ResolvedAgentTool>,
     #[prost(message, optional, tag = "7")]
     pub response_schema: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "8")]
-    pub session_ref: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "9")]
+    #[prost(message, optional, tag = "8")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "10")]
+    #[prost(message, optional, tag = "9")]
     pub provider_options: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "11")]
+    #[prost(message, optional, tag = "10")]
     pub created_by: ::core::option::Option<AgentActor>,
-    #[prost(string, tag = "12")]
+    #[prost(string, tag = "11")]
     pub execution_ref: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetAgentProviderRunRequest {
+pub struct GetAgentProviderTurnRequest {
     #[prost(string, tag = "1")]
-    pub run_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListAgentProviderRunsRequest {}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListAgentProviderRunsResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub runs: ::prost::alloc::vec::Vec<BoundAgentRun>,
+    pub turn_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct CancelAgentProviderRunRequest {
+pub struct ListAgentProviderTurnsRequest {
     #[prost(string, tag = "1")]
-    pub run_id: ::prost::alloc::string::String,
+    pub session_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListAgentProviderTurnsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub turns: ::prost::alloc::vec::Vec<AgentTurn>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CancelAgentProviderTurnRequest {
+    #[prost(string, tag = "1")]
+    pub turn_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub reason: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ExecuteAgentToolRequest {
-    #[prost(string, tag = "1")]
-    pub run_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub tool_call_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub tool_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub arguments: ::core::option::Option<::prost_types::Struct>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ExecuteAgentToolResponse {
-    #[prost(int32, tag = "1")]
-    pub status: i32,
-    #[prost(string, tag = "2")]
-    pub body: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AgentRunEvent {
+pub struct AgentTurnEvent {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub run_id: ::prost::alloc::string::String,
+    pub turn_id: ::prost::alloc::string::String,
     #[prost(int64, tag = "3")]
     pub seq: i64,
     #[prost(string, tag = "4")]
@@ -282,28 +306,115 @@ pub struct AgentRunEvent {
     #[prost(message, optional, tag = "8")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EmitAgentEventRequest {
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListAgentProviderTurnEventsRequest {
     #[prost(string, tag = "1")]
-    pub run_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub r#type: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub visibility: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub data: ::core::option::Option<::prost_types::Struct>,
+    pub turn_id: ::prost::alloc::string::String,
+    #[prost(int64, tag = "2")]
+    pub after_seq: i64,
+    #[prost(int32, tag = "3")]
+    pub limit: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ManagedAgentRun {
+pub struct ListAgentProviderTurnEventsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub events: ::prost::alloc::vec::Vec<AgentTurnEvent>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetAgentProviderInteractionRequest {
     #[prost(string, tag = "1")]
-    pub provider_name: ::prost::alloc::string::String,
+    pub interaction_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListAgentProviderInteractionsRequest {
+    #[prost(string, tag = "1")]
+    pub turn_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListAgentProviderInteractionsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub interactions: ::prost::alloc::vec::Vec<AgentInteraction>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ResolveAgentProviderInteractionRequest {
+    #[prost(string, tag = "1")]
+    pub interaction_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
-    pub run: ::core::option::Option<BoundAgentRun>,
+    pub resolution: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AgentManagerRunRequest {
+pub struct ExecuteAgentToolRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub turn_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub tool_call_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub tool_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "5")]
+    pub arguments: ::core::option::Option<::prost_types::Struct>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ExecuteAgentToolResponse {
+    #[prost(int32, tag = "1")]
+    pub status: i32,
+    #[prost(string, tag = "2")]
+    pub body: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentManagerCreateSessionRequest {
     #[prost(string, tag = "2")]
     pub provider_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub model: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub client_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "5")]
+    pub metadata: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "6")]
+    pub provider_options: ::core::option::Option<::prost_types::Struct>,
+    #[prost(string, tag = "7")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AgentManagerGetSessionRequest {
+    #[prost(string, tag = "2")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AgentManagerListSessionsRequest {
+    #[prost(string, tag = "2")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentManagerListSessionsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub sessions: ::prost::alloc::vec::Vec<AgentSession>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentManagerUpdateSessionRequest {
+    #[prost(string, tag = "2")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub client_ref: ::prost::alloc::string::String,
+    #[prost(enumeration = "AgentSessionState", tag = "4")]
+    pub state: i32,
+    #[prost(message, optional, tag = "5")]
+    pub metadata: ::core::option::Option<::prost_types::Struct>,
+    #[prost(string, tag = "6")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentManagerCreateTurnRequest {
+    #[prost(string, tag = "2")]
+    pub session_id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub model: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "4")]
@@ -314,41 +425,80 @@ pub struct AgentManagerRunRequest {
     pub tool_source: i32,
     #[prost(message, optional, tag = "7")]
     pub response_schema: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "8")]
-    pub session_ref: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "9")]
+    #[prost(message, optional, tag = "8")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "10")]
+    #[prost(message, optional, tag = "9")]
     pub provider_options: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "11")]
+    #[prost(string, tag = "10")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "12")]
+    #[prost(string, tag = "11")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AgentManagerGetRunRequest {
+pub struct AgentManagerGetTurnRequest {
     #[prost(string, tag = "2")]
-    pub run_id: ::prost::alloc::string::String,
+    pub turn_id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AgentManagerListRunsRequest {
+pub struct AgentManagerListTurnsRequest {
     #[prost(string, tag = "2")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AgentManagerListRunsResponse {
+pub struct AgentManagerListTurnsResponse {
     #[prost(message, repeated, tag = "1")]
-    pub runs: ::prost::alloc::vec::Vec<ManagedAgentRun>,
+    pub turns: ::prost::alloc::vec::Vec<AgentTurn>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AgentManagerCancelRunRequest {
+pub struct AgentManagerCancelTurnRequest {
     #[prost(string, tag = "2")]
-    pub run_id: ::prost::alloc::string::String,
+    pub turn_id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub reason: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AgentManagerListTurnEventsRequest {
+    #[prost(string, tag = "2")]
+    pub turn_id: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub after_seq: i64,
+    #[prost(int32, tag = "4")]
+    pub limit: i32,
+    #[prost(string, tag = "5")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentManagerListTurnEventsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub events: ::prost::alloc::vec::Vec<AgentTurnEvent>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AgentManagerListInteractionsRequest {
+    #[prost(string, tag = "2")]
+    pub turn_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentManagerListInteractionsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub interactions: ::prost::alloc::vec::Vec<AgentInteraction>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentManagerResolveInteractionRequest {
+    #[prost(string, tag = "2")]
+    pub turn_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub interaction_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub resolution: ::core::option::Option<::prost_types::Struct>,
+    #[prost(string, tag = "5")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -420,7 +570,7 @@ impl AgentToolSourceMode {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
-pub enum AgentRunStatus {
+pub enum AgentExecutionStatus {
     Unspecified = 0,
     Pending = 1,
     Running = 2,
@@ -429,32 +579,61 @@ pub enum AgentRunStatus {
     Canceled = 5,
     WaitingForInput = 6,
 }
-impl AgentRunStatus {
+impl AgentExecutionStatus {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "AGENT_RUN_STATUS_UNSPECIFIED",
-            Self::Pending => "AGENT_RUN_STATUS_PENDING",
-            Self::Running => "AGENT_RUN_STATUS_RUNNING",
-            Self::Succeeded => "AGENT_RUN_STATUS_SUCCEEDED",
-            Self::Failed => "AGENT_RUN_STATUS_FAILED",
-            Self::Canceled => "AGENT_RUN_STATUS_CANCELED",
-            Self::WaitingForInput => "AGENT_RUN_STATUS_WAITING_FOR_INPUT",
+            Self::Unspecified => "AGENT_EXECUTION_STATUS_UNSPECIFIED",
+            Self::Pending => "AGENT_EXECUTION_STATUS_PENDING",
+            Self::Running => "AGENT_EXECUTION_STATUS_RUNNING",
+            Self::Succeeded => "AGENT_EXECUTION_STATUS_SUCCEEDED",
+            Self::Failed => "AGENT_EXECUTION_STATUS_FAILED",
+            Self::Canceled => "AGENT_EXECUTION_STATUS_CANCELED",
+            Self::WaitingForInput => "AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
-            "AGENT_RUN_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
-            "AGENT_RUN_STATUS_PENDING" => Some(Self::Pending),
-            "AGENT_RUN_STATUS_RUNNING" => Some(Self::Running),
-            "AGENT_RUN_STATUS_SUCCEEDED" => Some(Self::Succeeded),
-            "AGENT_RUN_STATUS_FAILED" => Some(Self::Failed),
-            "AGENT_RUN_STATUS_CANCELED" => Some(Self::Canceled),
-            "AGENT_RUN_STATUS_WAITING_FOR_INPUT" => Some(Self::WaitingForInput),
+            "AGENT_EXECUTION_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
+            "AGENT_EXECUTION_STATUS_PENDING" => Some(Self::Pending),
+            "AGENT_EXECUTION_STATUS_RUNNING" => Some(Self::Running),
+            "AGENT_EXECUTION_STATUS_SUCCEEDED" => Some(Self::Succeeded),
+            "AGENT_EXECUTION_STATUS_FAILED" => Some(Self::Failed),
+            "AGENT_EXECUTION_STATUS_CANCELED" => Some(Self::Canceled),
+            "AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT" => Some(Self::WaitingForInput),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum AgentSessionState {
+    Unspecified = 0,
+    Active = 1,
+    Archived = 2,
+}
+impl AgentSessionState {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "AGENT_SESSION_STATE_UNSPECIFIED",
+            Self::Active => "AGENT_SESSION_STATE_ACTIVE",
+            Self::Archived => "AGENT_SESSION_STATE_ARCHIVED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "AGENT_SESSION_STATE_UNSPECIFIED" => Some(Self::Unspecified),
+            "AGENT_SESSION_STATE_ACTIVE" => Some(Self::Active),
+            "AGENT_SESSION_STATE_ARCHIVED" => Some(Self::Archived),
             _ => None,
         }
     }
@@ -613,73 +792,230 @@ pub mod agent_provider_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        pub async fn start_run(
+        pub async fn create_session(
             &mut self,
-            request: impl tonic::IntoRequest<super::StartAgentProviderRunRequest>,
-        ) -> std::result::Result<tonic::Response<super::BoundAgentRun>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AgentProvider/StartRun");
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
-                "StartRun",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        pub async fn get_run(
-            &mut self,
-            request: impl tonic::IntoRequest<super::GetAgentProviderRunRequest>,
-        ) -> std::result::Result<tonic::Response<super::BoundAgentRun>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AgentProvider/GetRun");
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
-                "GetRun",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        pub async fn list_runs(
-            &mut self,
-            request: impl tonic::IntoRequest<super::ListAgentProviderRunsRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListAgentProviderRunsResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AgentProvider/ListRuns");
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
-                "ListRuns",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        pub async fn cancel_run(
-            &mut self,
-            request: impl tonic::IntoRequest<super::CancelAgentProviderRunRequest>,
-        ) -> std::result::Result<tonic::Response<super::BoundAgentRun>, tonic::Status> {
+            request: impl tonic::IntoRequest<super::CreateAgentProviderSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/CancelRun",
+                "/gestalt.provider.v1.AgentProvider/CreateSession",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
                 "gestalt.provider.v1.AgentProvider",
-                "CancelRun",
+                "CreateSession",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn get_session(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetAgentProviderSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentProvider/GetSession",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "GetSession",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn list_sessions(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ListAgentProviderSessionsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListAgentProviderSessionsResponse>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentProvider/ListSessions",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "ListSessions",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn update_session(
+            &mut self,
+            request: impl tonic::IntoRequest<super::UpdateAgentProviderSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentProvider/UpdateSession",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "UpdateSession",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn create_turn(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CreateAgentProviderTurnRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentProvider/CreateTurn",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "CreateTurn",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn get_turn(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetAgentProviderTurnRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AgentProvider/GetTurn");
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "GetTurn",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn list_turns(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ListAgentProviderTurnsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListAgentProviderTurnsResponse>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentProvider/ListTurns",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "ListTurns",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn cancel_turn(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CancelAgentProviderTurnRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentProvider/CancelTurn",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "CancelTurn",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn list_turn_events(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ListAgentProviderTurnEventsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListAgentProviderTurnEventsResponse>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentProvider/ListTurnEvents",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "ListTurnEvents",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn get_interaction(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetAgentProviderInteractionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentInteraction>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentProvider/GetInteraction",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "GetInteraction",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn list_interactions(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ListAgentProviderInteractionsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListAgentProviderInteractionsResponse>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentProvider/ListInteractions",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "ListInteractions",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn resolve_interaction(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ResolveAgentProviderInteractionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentInteraction>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentProvider/ResolveInteraction",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "ResolveInteraction",
             ));
             self.inner.unary(req, path, codec).await
         }
@@ -702,24 +1038,6 @@ pub mod agent_provider_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        pub async fn resume_run(
-            &mut self,
-            request: impl tonic::IntoRequest<super::ResumeAgentProviderRunRequest>,
-        ) -> std::result::Result<tonic::Response<super::BoundAgentRun>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/ResumeRun",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
-                "ResumeRun",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
     }
 }
 /// Generated server implementations.
@@ -735,30 +1053,70 @@ pub mod agent_provider_server {
     /// Generated trait containing gRPC methods that should be implemented for use with AgentProviderServer.
     #[async_trait]
     pub trait AgentProvider: std::marker::Send + std::marker::Sync + 'static {
-        async fn start_run(
+        async fn create_session(
             &self,
-            request: tonic::Request<super::StartAgentProviderRunRequest>,
-        ) -> std::result::Result<tonic::Response<super::BoundAgentRun>, tonic::Status>;
-        async fn get_run(
+            request: tonic::Request<super::CreateAgentProviderSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status>;
+        async fn get_session(
             &self,
-            request: tonic::Request<super::GetAgentProviderRunRequest>,
-        ) -> std::result::Result<tonic::Response<super::BoundAgentRun>, tonic::Status>;
-        async fn list_runs(
+            request: tonic::Request<super::GetAgentProviderSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status>;
+        async fn list_sessions(
             &self,
-            request: tonic::Request<super::ListAgentProviderRunsRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListAgentProviderRunsResponse>, tonic::Status>;
-        async fn cancel_run(
+            request: tonic::Request<super::ListAgentProviderSessionsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListAgentProviderSessionsResponse>,
+            tonic::Status,
+        >;
+        async fn update_session(
             &self,
-            request: tonic::Request<super::CancelAgentProviderRunRequest>,
-        ) -> std::result::Result<tonic::Response<super::BoundAgentRun>, tonic::Status>;
+            request: tonic::Request<super::UpdateAgentProviderSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status>;
+        async fn create_turn(
+            &self,
+            request: tonic::Request<super::CreateAgentProviderTurnRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status>;
+        async fn get_turn(
+            &self,
+            request: tonic::Request<super::GetAgentProviderTurnRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status>;
+        async fn list_turns(
+            &self,
+            request: tonic::Request<super::ListAgentProviderTurnsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListAgentProviderTurnsResponse>,
+            tonic::Status,
+        >;
+        async fn cancel_turn(
+            &self,
+            request: tonic::Request<super::CancelAgentProviderTurnRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status>;
+        async fn list_turn_events(
+            &self,
+            request: tonic::Request<super::ListAgentProviderTurnEventsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListAgentProviderTurnEventsResponse>,
+            tonic::Status,
+        >;
+        async fn get_interaction(
+            &self,
+            request: tonic::Request<super::GetAgentProviderInteractionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentInteraction>, tonic::Status>;
+        async fn list_interactions(
+            &self,
+            request: tonic::Request<super::ListAgentProviderInteractionsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::ListAgentProviderInteractionsResponse>,
+            tonic::Status,
+        >;
+        async fn resolve_interaction(
+            &self,
+            request: tonic::Request<super::ResolveAgentProviderInteractionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentInteraction>, tonic::Status>;
         async fn get_capabilities(
             &self,
             request: tonic::Request<super::GetAgentProviderCapabilitiesRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentProviderCapabilities>, tonic::Status>;
-        async fn resume_run(
-            &self,
-            request: tonic::Request<super::ResumeAgentProviderRunRequest>,
-        ) -> std::result::Result<tonic::Response<super::BoundAgentRun>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct AgentProviderServer<T> {
@@ -833,22 +1191,22 @@ pub mod agent_provider_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/gestalt.provider.v1.AgentProvider/StartRun" => {
+                "/gestalt.provider.v1.AgentProvider/CreateSession" => {
                     #[allow(non_camel_case_types)]
-                    struct StartRunSvc<T: AgentProvider>(pub Arc<T>);
+                    struct CreateSessionSvc<T: AgentProvider>(pub Arc<T>);
                     impl<T: AgentProvider>
-                        tonic::server::UnaryService<super::StartAgentProviderRunRequest>
-                        for StartRunSvc<T>
+                        tonic::server::UnaryService<super::CreateAgentProviderSessionRequest>
+                        for CreateSessionSvc<T>
                     {
-                        type Response = super::BoundAgentRun;
+                        type Response = super::AgentSession;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::StartAgentProviderRunRequest>,
+                            request: tonic::Request<super::CreateAgentProviderSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AgentProvider>::start_run(&inner, request).await
+                                <T as AgentProvider>::create_session(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -859,7 +1217,7 @@ pub mod agent_provider_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = StartRunSvc(inner);
+                        let method = CreateSessionSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -875,22 +1233,23 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/GetRun" => {
+                "/gestalt.provider.v1.AgentProvider/GetSession" => {
                     #[allow(non_camel_case_types)]
-                    struct GetRunSvc<T: AgentProvider>(pub Arc<T>);
+                    struct GetSessionSvc<T: AgentProvider>(pub Arc<T>);
                     impl<T: AgentProvider>
-                        tonic::server::UnaryService<super::GetAgentProviderRunRequest>
-                        for GetRunSvc<T>
+                        tonic::server::UnaryService<super::GetAgentProviderSessionRequest>
+                        for GetSessionSvc<T>
                     {
-                        type Response = super::BoundAgentRun;
+                        type Response = super::AgentSession;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::GetAgentProviderRunRequest>,
+                            request: tonic::Request<super::GetAgentProviderSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut =
-                                async move { <T as AgentProvider>::get_run(&inner, request).await };
+                            let fut = async move {
+                                <T as AgentProvider>::get_session(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -900,7 +1259,7 @@ pub mod agent_provider_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = GetRunSvc(inner);
+                        let method = GetSessionSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -916,22 +1275,22 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/ListRuns" => {
+                "/gestalt.provider.v1.AgentProvider/ListSessions" => {
                     #[allow(non_camel_case_types)]
-                    struct ListRunsSvc<T: AgentProvider>(pub Arc<T>);
+                    struct ListSessionsSvc<T: AgentProvider>(pub Arc<T>);
                     impl<T: AgentProvider>
-                        tonic::server::UnaryService<super::ListAgentProviderRunsRequest>
-                        for ListRunsSvc<T>
+                        tonic::server::UnaryService<super::ListAgentProviderSessionsRequest>
+                        for ListSessionsSvc<T>
                     {
-                        type Response = super::ListAgentProviderRunsResponse;
+                        type Response = super::ListAgentProviderSessionsResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::ListAgentProviderRunsRequest>,
+                            request: tonic::Request<super::ListAgentProviderSessionsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AgentProvider>::list_runs(&inner, request).await
+                                <T as AgentProvider>::list_sessions(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -942,7 +1301,7 @@ pub mod agent_provider_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = ListRunsSvc(inner);
+                        let method = ListSessionsSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -958,22 +1317,22 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/CancelRun" => {
+                "/gestalt.provider.v1.AgentProvider/UpdateSession" => {
                     #[allow(non_camel_case_types)]
-                    struct CancelRunSvc<T: AgentProvider>(pub Arc<T>);
+                    struct UpdateSessionSvc<T: AgentProvider>(pub Arc<T>);
                     impl<T: AgentProvider>
-                        tonic::server::UnaryService<super::CancelAgentProviderRunRequest>
-                        for CancelRunSvc<T>
+                        tonic::server::UnaryService<super::UpdateAgentProviderSessionRequest>
+                        for UpdateSessionSvc<T>
                     {
-                        type Response = super::BoundAgentRun;
+                        type Response = super::AgentSession;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::CancelAgentProviderRunRequest>,
+                            request: tonic::Request<super::UpdateAgentProviderSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AgentProvider>::cancel_run(&inner, request).await
+                                <T as AgentProvider>::update_session(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -984,7 +1343,343 @@ pub mod agent_provider_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = CancelRunSvc(inner);
+                        let method = UpdateSessionSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentProvider/CreateTurn" => {
+                    #[allow(non_camel_case_types)]
+                    struct CreateTurnSvc<T: AgentProvider>(pub Arc<T>);
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::CreateAgentProviderTurnRequest>
+                        for CreateTurnSvc<T>
+                    {
+                        type Response = super::AgentTurn;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::CreateAgentProviderTurnRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentProvider>::create_turn(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = CreateTurnSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentProvider/GetTurn" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetTurnSvc<T: AgentProvider>(pub Arc<T>);
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::GetAgentProviderTurnRequest>
+                        for GetTurnSvc<T>
+                    {
+                        type Response = super::AgentTurn;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetAgentProviderTurnRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentProvider>::get_turn(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetTurnSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentProvider/ListTurns" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListTurnsSvc<T: AgentProvider>(pub Arc<T>);
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::ListAgentProviderTurnsRequest>
+                        for ListTurnsSvc<T>
+                    {
+                        type Response = super::ListAgentProviderTurnsResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ListAgentProviderTurnsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentProvider>::list_turns(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListTurnsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentProvider/CancelTurn" => {
+                    #[allow(non_camel_case_types)]
+                    struct CancelTurnSvc<T: AgentProvider>(pub Arc<T>);
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::CancelAgentProviderTurnRequest>
+                        for CancelTurnSvc<T>
+                    {
+                        type Response = super::AgentTurn;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::CancelAgentProviderTurnRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentProvider>::cancel_turn(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = CancelTurnSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentProvider/ListTurnEvents" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListTurnEventsSvc<T: AgentProvider>(pub Arc<T>);
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::ListAgentProviderTurnEventsRequest>
+                        for ListTurnEventsSvc<T>
+                    {
+                        type Response = super::ListAgentProviderTurnEventsResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ListAgentProviderTurnEventsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentProvider>::list_turn_events(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListTurnEventsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentProvider/GetInteraction" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetInteractionSvc<T: AgentProvider>(pub Arc<T>);
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::GetAgentProviderInteractionRequest>
+                        for GetInteractionSvc<T>
+                    {
+                        type Response = super::AgentInteraction;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetAgentProviderInteractionRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentProvider>::get_interaction(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetInteractionSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentProvider/ListInteractions" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListInteractionsSvc<T: AgentProvider>(pub Arc<T>);
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::ListAgentProviderInteractionsRequest>
+                        for ListInteractionsSvc<T>
+                    {
+                        type Response = super::ListAgentProviderInteractionsResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ListAgentProviderInteractionsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentProvider>::list_interactions(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListInteractionsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentProvider/ResolveInteraction" => {
+                    #[allow(non_camel_case_types)]
+                    struct ResolveInteractionSvc<T: AgentProvider>(pub Arc<T>);
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::ResolveAgentProviderInteractionRequest>
+                        for ResolveInteractionSvc<T>
+                    {
+                        type Response = super::AgentInteraction;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ResolveAgentProviderInteractionRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentProvider>::resolve_interaction(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ResolveInteractionSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -1027,48 +1722,6 @@ pub mod agent_provider_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = GetCapabilitiesSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.AgentProvider/ResumeRun" => {
-                    #[allow(non_camel_case_types)]
-                    struct ResumeRunSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<T: AgentProvider>
-                        tonic::server::UnaryService<super::ResumeAgentProviderRunRequest>
-                        for ResumeRunSvc<T>
-                    {
-                        type Response = super::BoundAgentRun;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::ResumeAgentProviderRunRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AgentProvider>::resume_run(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = ResumeRunSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -1226,41 +1879,6 @@ pub mod agent_host_client {
             ));
             self.inner.unary(req, path, codec).await
         }
-        pub async fn emit_event(
-            &mut self,
-            request: impl tonic::IntoRequest<super::EmitAgentEventRequest>,
-        ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AgentHost/EmitEvent");
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentHost",
-                "EmitEvent",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        pub async fn request_interaction(
-            &mut self,
-            request: impl tonic::IntoRequest<super::RequestAgentInteractionRequest>,
-        ) -> std::result::Result<tonic::Response<super::AgentInteraction>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentHost/RequestInteraction",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentHost",
-                "RequestInteraction",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
     }
 }
 /// Generated server implementations.
@@ -1280,14 +1898,6 @@ pub mod agent_host_server {
             &self,
             request: tonic::Request<super::ExecuteAgentToolRequest>,
         ) -> std::result::Result<tonic::Response<super::ExecuteAgentToolResponse>, tonic::Status>;
-        async fn emit_event(
-            &self,
-            request: tonic::Request<super::EmitAgentEventRequest>,
-        ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
-        async fn request_interaction(
-            &self,
-            request: tonic::Request<super::RequestAgentInteractionRequest>,
-        ) -> std::result::Result<tonic::Response<super::AgentInteraction>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct AgentHostServer<T> {
@@ -1388,86 +1998,6 @@ pub mod agent_host_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = ExecuteToolSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.AgentHost/EmitEvent" => {
-                    #[allow(non_camel_case_types)]
-                    struct EmitEventSvc<T: AgentHost>(pub Arc<T>);
-                    impl<T: AgentHost> tonic::server::UnaryService<super::EmitAgentEventRequest> for EmitEventSvc<T> {
-                        type Response = ();
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::EmitAgentEventRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut =
-                                async move { <T as AgentHost>::emit_event(&inner, request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = EmitEventSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.AgentHost/RequestInteraction" => {
-                    #[allow(non_camel_case_types)]
-                    struct RequestInteractionSvc<T: AgentHost>(pub Arc<T>);
-                    impl<T: AgentHost>
-                        tonic::server::UnaryService<super::RequestAgentInteractionRequest>
-                        for RequestInteractionSvc<T>
-                    {
-                        type Response = super::AgentInteraction;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::RequestAgentInteractionRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AgentHost>::request_interaction(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = RequestInteractionSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -1607,75 +2137,211 @@ pub mod agent_manager_host_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        pub async fn run(
+        pub async fn create_session(
             &mut self,
-            request: impl tonic::IntoRequest<super::AgentManagerRunRequest>,
-        ) -> std::result::Result<tonic::Response<super::ManagedAgentRun>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AgentManagerHost/Run");
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentManagerHost",
-                "Run",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        pub async fn get_run(
-            &mut self,
-            request: impl tonic::IntoRequest<super::AgentManagerGetRunRequest>,
-        ) -> std::result::Result<tonic::Response<super::ManagedAgentRun>, tonic::Status> {
+            request: impl tonic::IntoRequest<super::AgentManagerCreateSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentManagerHost/GetRun",
+                "/gestalt.provider.v1.AgentManagerHost/CreateSession",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
                 "gestalt.provider.v1.AgentManagerHost",
-                "GetRun",
+                "CreateSession",
             ));
             self.inner.unary(req, path, codec).await
         }
-        pub async fn list_runs(
+        pub async fn get_session(
             &mut self,
-            request: impl tonic::IntoRequest<super::AgentManagerListRunsRequest>,
-        ) -> std::result::Result<tonic::Response<super::AgentManagerListRunsResponse>, tonic::Status>
+            request: impl tonic::IntoRequest<super::AgentManagerGetSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentManagerHost/GetSession",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentManagerHost",
+                "GetSession",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn list_sessions(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AgentManagerListSessionsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::AgentManagerListSessionsResponse>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentManagerHost/ListSessions",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentManagerHost",
+                "ListSessions",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn update_session(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AgentManagerUpdateSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentManagerHost/UpdateSession",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentManagerHost",
+                "UpdateSession",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn create_turn(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AgentManagerCreateTurnRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentManagerHost/CreateTurn",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentManagerHost",
+                "CreateTurn",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn get_turn(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AgentManagerGetTurnRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentManagerHost/GetTurn",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentManagerHost",
+                "GetTurn",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn list_turns(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AgentManagerListTurnsRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentManagerListTurnsResponse>, tonic::Status>
         {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentManagerHost/ListRuns",
+                "/gestalt.provider.v1.AgentManagerHost/ListTurns",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
                 "gestalt.provider.v1.AgentManagerHost",
-                "ListRuns",
+                "ListTurns",
             ));
             self.inner.unary(req, path, codec).await
         }
-        pub async fn cancel_run(
+        pub async fn cancel_turn(
             &mut self,
-            request: impl tonic::IntoRequest<super::AgentManagerCancelRunRequest>,
-        ) -> std::result::Result<tonic::Response<super::ManagedAgentRun>, tonic::Status> {
+            request: impl tonic::IntoRequest<super::AgentManagerCancelTurnRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentManagerHost/CancelRun",
+                "/gestalt.provider.v1.AgentManagerHost/CancelTurn",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
                 "gestalt.provider.v1.AgentManagerHost",
-                "CancelRun",
+                "CancelTurn",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn list_turn_events(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AgentManagerListTurnEventsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::AgentManagerListTurnEventsResponse>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentManagerHost/ListTurnEvents",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentManagerHost",
+                "ListTurnEvents",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn list_interactions(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AgentManagerListInteractionsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::AgentManagerListInteractionsResponse>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentManagerHost/ListInteractions",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentManagerHost",
+                "ListInteractions",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        pub async fn resolve_interaction(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AgentManagerResolveInteractionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentInteraction>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.AgentManagerHost/ResolveInteraction",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentManagerHost",
+                "ResolveInteraction",
             ));
             self.inner.unary(req, path, codec).await
         }
@@ -1694,22 +2360,59 @@ pub mod agent_manager_host_server {
     /// Generated trait containing gRPC methods that should be implemented for use with AgentManagerHostServer.
     #[async_trait]
     pub trait AgentManagerHost: std::marker::Send + std::marker::Sync + 'static {
-        async fn run(
+        async fn create_session(
             &self,
-            request: tonic::Request<super::AgentManagerRunRequest>,
-        ) -> std::result::Result<tonic::Response<super::ManagedAgentRun>, tonic::Status>;
-        async fn get_run(
+            request: tonic::Request<super::AgentManagerCreateSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status>;
+        async fn get_session(
             &self,
-            request: tonic::Request<super::AgentManagerGetRunRequest>,
-        ) -> std::result::Result<tonic::Response<super::ManagedAgentRun>, tonic::Status>;
-        async fn list_runs(
+            request: tonic::Request<super::AgentManagerGetSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status>;
+        async fn list_sessions(
             &self,
-            request: tonic::Request<super::AgentManagerListRunsRequest>,
-        ) -> std::result::Result<tonic::Response<super::AgentManagerListRunsResponse>, tonic::Status>;
-        async fn cancel_run(
+            request: tonic::Request<super::AgentManagerListSessionsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::AgentManagerListSessionsResponse>,
+            tonic::Status,
+        >;
+        async fn update_session(
             &self,
-            request: tonic::Request<super::AgentManagerCancelRunRequest>,
-        ) -> std::result::Result<tonic::Response<super::ManagedAgentRun>, tonic::Status>;
+            request: tonic::Request<super::AgentManagerUpdateSessionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status>;
+        async fn create_turn(
+            &self,
+            request: tonic::Request<super::AgentManagerCreateTurnRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status>;
+        async fn get_turn(
+            &self,
+            request: tonic::Request<super::AgentManagerGetTurnRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status>;
+        async fn list_turns(
+            &self,
+            request: tonic::Request<super::AgentManagerListTurnsRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentManagerListTurnsResponse>, tonic::Status>;
+        async fn cancel_turn(
+            &self,
+            request: tonic::Request<super::AgentManagerCancelTurnRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status>;
+        async fn list_turn_events(
+            &self,
+            request: tonic::Request<super::AgentManagerListTurnEventsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::AgentManagerListTurnEventsResponse>,
+            tonic::Status,
+        >;
+        async fn list_interactions(
+            &self,
+            request: tonic::Request<super::AgentManagerListInteractionsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::AgentManagerListInteractionsResponse>,
+            tonic::Status,
+        >;
+        async fn resolve_interaction(
+            &self,
+            request: tonic::Request<super::AgentManagerResolveInteractionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentInteraction>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct AgentManagerHostServer<T> {
@@ -1784,21 +2487,23 @@ pub mod agent_manager_host_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/gestalt.provider.v1.AgentManagerHost/Run" => {
+                "/gestalt.provider.v1.AgentManagerHost/CreateSession" => {
                     #[allow(non_camel_case_types)]
-                    struct RunSvc<T: AgentManagerHost>(pub Arc<T>);
+                    struct CreateSessionSvc<T: AgentManagerHost>(pub Arc<T>);
                     impl<T: AgentManagerHost>
-                        tonic::server::UnaryService<super::AgentManagerRunRequest> for RunSvc<T>
+                        tonic::server::UnaryService<super::AgentManagerCreateSessionRequest>
+                        for CreateSessionSvc<T>
                     {
-                        type Response = super::ManagedAgentRun;
+                        type Response = super::AgentSession;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::AgentManagerRunRequest>,
+                            request: tonic::Request<super::AgentManagerCreateSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut =
-                                async move { <T as AgentManagerHost>::run(&inner, request).await };
+                            let fut = async move {
+                                <T as AgentManagerHost>::create_session(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -1808,7 +2513,7 @@ pub mod agent_manager_host_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = RunSvc(inner);
+                        let method = CreateSessionSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -1824,22 +2529,22 @@ pub mod agent_manager_host_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentManagerHost/GetRun" => {
+                "/gestalt.provider.v1.AgentManagerHost/GetSession" => {
                     #[allow(non_camel_case_types)]
-                    struct GetRunSvc<T: AgentManagerHost>(pub Arc<T>);
+                    struct GetSessionSvc<T: AgentManagerHost>(pub Arc<T>);
                     impl<T: AgentManagerHost>
-                        tonic::server::UnaryService<super::AgentManagerGetRunRequest>
-                        for GetRunSvc<T>
+                        tonic::server::UnaryService<super::AgentManagerGetSessionRequest>
+                        for GetSessionSvc<T>
                     {
-                        type Response = super::ManagedAgentRun;
+                        type Response = super::AgentSession;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::AgentManagerGetRunRequest>,
+                            request: tonic::Request<super::AgentManagerGetSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AgentManagerHost>::get_run(&inner, request).await
+                                <T as AgentManagerHost>::get_session(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -1850,7 +2555,7 @@ pub mod agent_manager_host_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = GetRunSvc(inner);
+                        let method = GetSessionSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -1866,22 +2571,22 @@ pub mod agent_manager_host_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentManagerHost/ListRuns" => {
+                "/gestalt.provider.v1.AgentManagerHost/ListSessions" => {
                     #[allow(non_camel_case_types)]
-                    struct ListRunsSvc<T: AgentManagerHost>(pub Arc<T>);
+                    struct ListSessionsSvc<T: AgentManagerHost>(pub Arc<T>);
                     impl<T: AgentManagerHost>
-                        tonic::server::UnaryService<super::AgentManagerListRunsRequest>
-                        for ListRunsSvc<T>
+                        tonic::server::UnaryService<super::AgentManagerListSessionsRequest>
+                        for ListSessionsSvc<T>
                     {
-                        type Response = super::AgentManagerListRunsResponse;
+                        type Response = super::AgentManagerListSessionsResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::AgentManagerListRunsRequest>,
+                            request: tonic::Request<super::AgentManagerListSessionsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AgentManagerHost>::list_runs(&inner, request).await
+                                <T as AgentManagerHost>::list_sessions(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -1892,7 +2597,7 @@ pub mod agent_manager_host_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = ListRunsSvc(inner);
+                        let method = ListSessionsSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -1908,22 +2613,22 @@ pub mod agent_manager_host_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentManagerHost/CancelRun" => {
+                "/gestalt.provider.v1.AgentManagerHost/UpdateSession" => {
                     #[allow(non_camel_case_types)]
-                    struct CancelRunSvc<T: AgentManagerHost>(pub Arc<T>);
+                    struct UpdateSessionSvc<T: AgentManagerHost>(pub Arc<T>);
                     impl<T: AgentManagerHost>
-                        tonic::server::UnaryService<super::AgentManagerCancelRunRequest>
-                        for CancelRunSvc<T>
+                        tonic::server::UnaryService<super::AgentManagerUpdateSessionRequest>
+                        for UpdateSessionSvc<T>
                     {
-                        type Response = super::ManagedAgentRun;
+                        type Response = super::AgentSession;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::AgentManagerCancelRunRequest>,
+                            request: tonic::Request<super::AgentManagerUpdateSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AgentManagerHost>::cancel_run(&inner, request).await
+                                <T as AgentManagerHost>::update_session(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -1934,7 +2639,301 @@ pub mod agent_manager_host_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = CancelRunSvc(inner);
+                        let method = UpdateSessionSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentManagerHost/CreateTurn" => {
+                    #[allow(non_camel_case_types)]
+                    struct CreateTurnSvc<T: AgentManagerHost>(pub Arc<T>);
+                    impl<T: AgentManagerHost>
+                        tonic::server::UnaryService<super::AgentManagerCreateTurnRequest>
+                        for CreateTurnSvc<T>
+                    {
+                        type Response = super::AgentTurn;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::AgentManagerCreateTurnRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentManagerHost>::create_turn(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = CreateTurnSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentManagerHost/GetTurn" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetTurnSvc<T: AgentManagerHost>(pub Arc<T>);
+                    impl<T: AgentManagerHost>
+                        tonic::server::UnaryService<super::AgentManagerGetTurnRequest>
+                        for GetTurnSvc<T>
+                    {
+                        type Response = super::AgentTurn;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::AgentManagerGetTurnRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentManagerHost>::get_turn(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetTurnSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentManagerHost/ListTurns" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListTurnsSvc<T: AgentManagerHost>(pub Arc<T>);
+                    impl<T: AgentManagerHost>
+                        tonic::server::UnaryService<super::AgentManagerListTurnsRequest>
+                        for ListTurnsSvc<T>
+                    {
+                        type Response = super::AgentManagerListTurnsResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::AgentManagerListTurnsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentManagerHost>::list_turns(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListTurnsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentManagerHost/CancelTurn" => {
+                    #[allow(non_camel_case_types)]
+                    struct CancelTurnSvc<T: AgentManagerHost>(pub Arc<T>);
+                    impl<T: AgentManagerHost>
+                        tonic::server::UnaryService<super::AgentManagerCancelTurnRequest>
+                        for CancelTurnSvc<T>
+                    {
+                        type Response = super::AgentTurn;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::AgentManagerCancelTurnRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentManagerHost>::cancel_turn(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = CancelTurnSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentManagerHost/ListTurnEvents" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListTurnEventsSvc<T: AgentManagerHost>(pub Arc<T>);
+                    impl<T: AgentManagerHost>
+                        tonic::server::UnaryService<super::AgentManagerListTurnEventsRequest>
+                        for ListTurnEventsSvc<T>
+                    {
+                        type Response = super::AgentManagerListTurnEventsResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::AgentManagerListTurnEventsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentManagerHost>::list_turn_events(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListTurnEventsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentManagerHost/ListInteractions" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListInteractionsSvc<T: AgentManagerHost>(pub Arc<T>);
+                    impl<T: AgentManagerHost>
+                        tonic::server::UnaryService<super::AgentManagerListInteractionsRequest>
+                        for ListInteractionsSvc<T>
+                    {
+                        type Response = super::AgentManagerListInteractionsResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::AgentManagerListInteractionsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentManagerHost>::list_interactions(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListInteractionsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.AgentManagerHost/ResolveInteraction" => {
+                    #[allow(non_camel_case_types)]
+                    struct ResolveInteractionSvc<T: AgentManagerHost>(pub Arc<T>);
+                    impl<T: AgentManagerHost>
+                        tonic::server::UnaryService<super::AgentManagerResolveInteractionRequest>
+                        for ResolveInteractionSvc<T>
+                    {
+                        type Response = super::AgentInteraction;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::AgentManagerResolveInteractionRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentManagerHost>::resolve_interaction(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ResolveInteractionSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

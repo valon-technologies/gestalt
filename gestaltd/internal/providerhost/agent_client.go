@@ -85,7 +85,80 @@ func NewRemoteAgent(ctx context.Context, cfg RemoteAgentConfig) (coreagent.Provi
 	return &remoteAgent{client: cfg.Client, runtime: cfg.Runtime, closer: cfg.Closer}, nil
 }
 
-func (r *remoteAgent) StartRun(ctx context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
+func (r *remoteAgent) CreateSession(ctx context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	metadata, err := structFromMap(req.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	providerOptions, err := structFromMap(req.ProviderOptions)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.client.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
+		SessionId:       req.SessionID,
+		IdempotencyKey:  req.IdempotencyKey,
+		Model:           req.Model,
+		ClientRef:       req.ClientRef,
+		Metadata:        metadata,
+		ProviderOptions: providerOptions,
+		CreatedBy:       agentActorToProto(req.CreatedBy),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return agentSessionFromProto(resp)
+}
+
+func (r *remoteAgent) GetSession(ctx context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resp, err := r.client.GetSession(ctx, &proto.GetAgentProviderSessionRequest{SessionId: req.SessionID})
+	if err != nil {
+		return nil, err
+	}
+	return agentSessionFromProto(resp)
+}
+
+func (r *remoteAgent) ListSessions(ctx context.Context, req coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resp, err := r.client.ListSessions(ctx, &proto.ListAgentProviderSessionsRequest{})
+	if err != nil {
+		return nil, err
+	}
+	sessions := make([]*coreagent.Session, 0, len(resp.GetSessions()))
+	for _, session := range resp.GetSessions() {
+		value, err := agentSessionFromProto(session)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, value)
+	}
+	return sessions, nil
+}
+
+func (r *remoteAgent) UpdateSession(ctx context.Context, req coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	metadata, err := structFromMap(req.Metadata)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.client.UpdateSession(ctx, &proto.UpdateAgentProviderSessionRequest{
+		SessionId: req.SessionID,
+		ClientRef: req.ClientRef,
+		State:     agentSessionStateToProto(req.State),
+		Metadata:  metadata,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return agentSessionFromProto(resp)
+}
+
+func (r *remoteAgent) CreateTurn(ctx context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	messages, err := agentMessagesToProto(req.Messages)
@@ -108,15 +181,14 @@ func (r *remoteAgent) StartRun(ctx context.Context, req coreagent.StartRunReques
 	if err != nil {
 		return nil, err
 	}
-	resp, err := r.client.StartRun(ctx, &proto.StartAgentProviderRunRequest{
-		RunId:           req.RunID,
+	resp, err := r.client.CreateTurn(ctx, &proto.CreateAgentProviderTurnRequest{
+		TurnId:          req.TurnID,
+		SessionId:       req.SessionID,
 		IdempotencyKey:  req.IdempotencyKey,
-		ProviderName:    req.ProviderName,
 		Model:           req.Model,
 		Messages:        messages,
 		Tools:           tools,
 		ResponseSchema:  responseSchema,
-		SessionRef:      req.SessionRef,
 		Metadata:        metadata,
 		ProviderOptions: providerOptions,
 		CreatedBy:       agentActorToProto(req.CreatedBy),
@@ -125,48 +197,103 @@ func (r *remoteAgent) StartRun(ctx context.Context, req coreagent.StartRunReques
 	if err != nil {
 		return nil, err
 	}
-	return agentRunFromProto(resp)
+	return agentTurnFromProto(resp)
 }
 
-func (r *remoteAgent) GetRun(ctx context.Context, req coreagent.GetRunRequest) (*coreagent.Run, error) {
+func (r *remoteAgent) GetTurn(ctx context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.GetRun(ctx, &proto.GetAgentProviderRunRequest{RunId: req.RunID})
+	resp, err := r.client.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{TurnId: req.TurnID})
 	if err != nil {
 		return nil, err
 	}
-	return agentRunFromProto(resp)
+	return agentTurnFromProto(resp)
 }
 
-func (r *remoteAgent) ListRuns(ctx context.Context, req coreagent.ListRunsRequest) ([]*coreagent.Run, error) {
+func (r *remoteAgent) ListTurns(ctx context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.ListRuns(ctx, &proto.ListAgentProviderRunsRequest{})
+	resp, err := r.client.ListTurns(ctx, &proto.ListAgentProviderTurnsRequest{SessionId: req.SessionID})
 	if err != nil {
 		return nil, err
 	}
-	runs := make([]*coreagent.Run, 0, len(resp.GetRuns()))
-	for _, run := range resp.GetRuns() {
-		value, err := agentRunFromProto(run)
+	turns := make([]*coreagent.Turn, 0, len(resp.GetTurns()))
+	for _, turn := range resp.GetTurns() {
+		value, err := agentTurnFromProto(turn)
 		if err != nil {
 			return nil, err
 		}
-		runs = append(runs, value)
+		turns = append(turns, value)
 	}
-	return runs, nil
+	return turns, nil
 }
 
-func (r *remoteAgent) CancelRun(ctx context.Context, req coreagent.CancelRunRequest) (*coreagent.Run, error) {
+func (r *remoteAgent) CancelTurn(ctx context.Context, req coreagent.CancelTurnRequest) (*coreagent.Turn, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.CancelRun(ctx, &proto.CancelAgentProviderRunRequest{
-		RunId:  req.RunID,
+	resp, err := r.client.CancelTurn(ctx, &proto.CancelAgentProviderTurnRequest{
+		TurnId: req.TurnID,
 		Reason: req.Reason,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return agentRunFromProto(resp)
+	return agentTurnFromProto(resp)
+}
+
+func (r *remoteAgent) ListTurnEvents(ctx context.Context, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resp, err := r.client.ListTurnEvents(ctx, &proto.ListAgentProviderTurnEventsRequest{
+		TurnId:   req.TurnID,
+		AfterSeq: req.AfterSeq,
+		Limit:    int32(req.Limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return agentTurnEventsFromProto(resp.GetEvents()), nil
+}
+
+func (r *remoteAgent) GetInteraction(ctx context.Context, req coreagent.GetInteractionRequest) (*coreagent.Interaction, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resp, err := r.client.GetInteraction(ctx, &proto.GetAgentProviderInteractionRequest{
+		InteractionId: req.InteractionID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return agentInteractionFromProto(resp)
+}
+
+func (r *remoteAgent) ListInteractions(ctx context.Context, req coreagent.ListInteractionsRequest) ([]*coreagent.Interaction, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resp, err := r.client.ListInteractions(ctx, &proto.ListAgentProviderInteractionsRequest{
+		TurnId: req.TurnID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return agentInteractionsFromProto(resp.GetInteractions())
+}
+
+func (r *remoteAgent) ResolveInteraction(ctx context.Context, req coreagent.ResolveInteractionRequest) (*coreagent.Interaction, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resolution, err := structFromMap(req.Resolution)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.client.ResolveInteraction(ctx, &proto.ResolveAgentProviderInteractionRequest{
+		InteractionId: req.InteractionID,
+		Resolution:    resolution,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return agentInteractionFromProto(resp)
 }
 
 func (r *remoteAgent) GetCapabilities(ctx context.Context, req coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
@@ -180,24 +307,6 @@ func (r *remoteAgent) GetCapabilities(ctx context.Context, req coreagent.GetCapa
 		return nil, err
 	}
 	return agentProviderCapabilitiesFromProto(resp), nil
-}
-
-func (r *remoteAgent) ResumeRun(ctx context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
-	ctx, cancel := providerCallContext(ctx)
-	defer cancel()
-	resolution, err := structFromMap(req.Resolution)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := r.client.ResumeRun(ctx, &proto.ResumeAgentProviderRunRequest{
-		RunId:         req.RunID,
-		InteractionId: req.InteractionID,
-		Resolution:    resolution,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return agentRunFromProto(resp)
 }
 
 func (r *remoteAgent) Ping(ctx context.Context) error {

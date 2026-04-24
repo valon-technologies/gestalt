@@ -42,12 +42,11 @@ struct_pb2: Any = _struct_pb2
 _runtime_server: grpc.Server | None = None
 _host_server: grpc.Server | None = None
 _manager_server: grpc.Server | None = None
-_runtime_socket: str = ""
-_host_socket: str = ""
-_manager_socket: str = ""
+_runtime_socket = ""
+_host_socket = ""
+_manager_socket = ""
 _previous_envs: dict[str, str | None] = {}
 _provider: "_AgentRuntimeProvider"
-_host_events: list[dict[str, Any]] = []
 _host_relay_tokens: list[str] = []
 _manager_requests: list[dict[str, str]] = []
 _manager_relay_tokens: list[str] = []
@@ -72,15 +71,170 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
     def warnings(self) -> list[str]:
         return ["set OPENAI_API_KEY"]
 
-    def StartRun(self, request: Any, context: grpc.ServicerContext) -> Any:
-        return agent_pb2.BoundAgentRun(
-            id=request.run_id or request.idempotency_key,
-            provider_name=request.provider_name,
+    def CreateSession(self, request: Any, context: grpc.ServicerContext) -> Any:
+        return agent_pb2.AgentSession(
+            id=request.session_id,
+            provider_name="py-agent",
             model=request.model,
-            status=agent_pb2.AGENT_RUN_STATUS_PENDING,
+            client_ref=request.client_ref,
+            state=agent_pb2.AGENT_SESSION_STATE_ACTIVE,
+            metadata=request.metadata,
+            created_by=request.created_by,
+        )
+
+    def GetSession(self, request: Any, context: grpc.ServicerContext) -> Any:
+        metadata = struct_pb2.Struct()
+        metadata.update({"source": "py-test"})
+        return agent_pb2.AgentSession(
+            id=request.session_id,
+            provider_name="py-agent",
+            model="gpt-5.1",
+            client_ref="cli-session-1",
+            state=agent_pb2.AGENT_SESSION_STATE_ARCHIVED,
+            metadata=metadata,
+        )
+
+    def ListSessions(self, request: Any, context: grpc.ServicerContext) -> Any:
+        return agent_pb2.ListAgentProviderSessionsResponse(
+            sessions=[
+                agent_pb2.AgentSession(
+                    id="session-1",
+                    provider_name="py-agent",
+                    model="gpt-5.1",
+                    client_ref="cli-session-1",
+                    state=agent_pb2.AGENT_SESSION_STATE_ARCHIVED,
+                )
+            ]
+        )
+
+    def UpdateSession(self, request: Any, context: grpc.ServicerContext) -> Any:
+        return agent_pb2.AgentSession(
+            id=request.session_id,
+            provider_name="py-agent",
+            model="gpt-5.1",
+            client_ref=request.client_ref,
+            state=request.state,
+            metadata=request.metadata,
+        )
+
+    def CreateTurn(self, request: Any, context: grpc.ServicerContext) -> Any:
+        return agent_pb2.AgentTurn(
+            id=request.turn_id,
+            session_id=request.session_id,
+            provider_name="py-agent",
+            model=request.model,
+            status=agent_pb2.AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
             messages=request.messages,
-            session_ref=request.session_ref,
+            output_text="echo:Plan it",
+            status_message="waiting for input",
+            created_by=request.created_by,
             execution_ref=request.execution_ref,
+        )
+
+    def GetTurn(self, request: Any, context: grpc.ServicerContext) -> Any:
+        return agent_pb2.AgentTurn(
+            id=request.turn_id,
+            session_id="session-1",
+            provider_name="py-agent",
+            model="gpt-5.1",
+            status=agent_pb2.AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
+            output_text="echo:Plan it",
+            status_message="waiting for input",
+        )
+
+    def ListTurns(self, request: Any, context: grpc.ServicerContext) -> Any:
+        return agent_pb2.ListAgentProviderTurnsResponse(
+            turns=[
+                agent_pb2.AgentTurn(
+                    id="turn-1",
+                    session_id=request.session_id,
+                    provider_name="py-agent",
+                    model="gpt-5.1",
+                    status=agent_pb2.AGENT_EXECUTION_STATUS_SUCCEEDED,
+                    status_message="done",
+                )
+            ]
+        )
+
+    def CancelTurn(self, request: Any, context: grpc.ServicerContext) -> Any:
+        return agent_pb2.AgentTurn(
+            id=request.turn_id,
+            session_id="session-1",
+            provider_name="py-agent",
+            model="gpt-5.1",
+            status=agent_pb2.AGENT_EXECUTION_STATUS_CANCELED,
+            status_message=request.reason,
+        )
+
+    def ListTurnEvents(self, request: Any, context: grpc.ServicerContext) -> Any:
+        return agent_pb2.ListAgentProviderTurnEventsResponse(
+            events=[
+                agent_pb2.AgentTurnEvent(
+                    id=f"{request.turn_id}-event-1",
+                    turn_id=request.turn_id,
+                    seq=1,
+                    type="turn.started",
+                    source="py-agent",
+                    visibility="private",
+                ),
+                agent_pb2.AgentTurnEvent(
+                    id=f"{request.turn_id}-event-2",
+                    turn_id=request.turn_id,
+                    seq=2,
+                    type="interaction.requested",
+                    source="py-agent",
+                    visibility="private",
+                ),
+            ]
+        )
+
+    def GetInteraction(self, request: Any, context: grpc.ServicerContext) -> Any:
+        return agent_pb2.AgentInteraction(
+            id=request.interaction_id,
+            turn_id="turn-1",
+            session_id="session-1",
+            type=agent_pb2.AGENT_INTERACTION_TYPE_APPROVAL,
+            state=agent_pb2.AGENT_INTERACTION_STATE_PENDING,
+            title="Approve command",
+            prompt="Run git status?",
+        )
+
+    def ListInteractions(self, request: Any, context: grpc.ServicerContext) -> Any:
+        return agent_pb2.ListAgentProviderInteractionsResponse(
+            interactions=[
+                agent_pb2.AgentInteraction(
+                    id="interaction-1",
+                    turn_id=request.turn_id,
+                    session_id="session-1",
+                    type=agent_pb2.AGENT_INTERACTION_TYPE_APPROVAL,
+                    state=agent_pb2.AGENT_INTERACTION_STATE_PENDING,
+                    title="Approve command",
+                    prompt="Run git status?",
+                )
+            ]
+        )
+
+    def ResolveInteraction(self, request: Any, context: grpc.ServicerContext) -> Any:
+        return agent_pb2.AgentInteraction(
+            id=request.interaction_id,
+            turn_id="turn-1",
+            session_id="session-1",
+            type=agent_pb2.AGENT_INTERACTION_TYPE_APPROVAL,
+            state=agent_pb2.AGENT_INTERACTION_STATE_RESOLVED,
+            title="Approve command",
+            prompt="Run git status?",
+            resolution=request.resolution,
+        )
+
+    def GetCapabilities(self, request: Any, context: grpc.ServicerContext) -> Any:
+        return agent_pb2.AgentProviderCapabilities(
+            streaming_text=True,
+            tool_calls=True,
+            parallel_tool_calls=False,
+            structured_output=True,
+            interactions=True,
+            resumable_turns=True,
+            reasoning_summaries=False,
         )
 
 
@@ -89,111 +243,270 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
         _record_host_relay_tokens(context)
         return agent_pb2.ExecuteAgentToolResponse(
             status=207,
-            body=f"{request.run_id}:{request.tool_call_id}:{request.tool_id}",
+            body=f"{request.session_id}:{request.turn_id}:{request.tool_call_id}:{request.tool_id}",
         )
-
-    def EmitEvent(self, request: Any, context: grpc.ServicerContext) -> Any:
-        _record_host_relay_tokens(context)
-        _host_events.append(
-            {
-                "run_id": request.run_id,
-                "type": request.type,
-                "visibility": request.visibility,
-                "data": json_format.MessageToDict(request.data),
-            }
-        )
-        return empty_pb2.Empty()
 
 
 class _AgentManagerServicer(agent_pb2_grpc.AgentManagerHostServicer):
-    def Run(self, request: Any, context: grpc.ServicerContext) -> Any:
+    def CreateSession(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
         _manager_requests.append(
             {
-                "method": "run",
+                "method": "create_session",
                 "invocation_token": request.invocation_token,
                 "provider_name": request.provider_name,
-                "run_id": "",
+                "session_id": "",
+                "turn_id": "",
+                "interaction_id": "",
                 "reason": "",
             }
         )
-        return agent_pb2.ManagedAgentRun(
+        return agent_pb2.AgentSession(
+            id="session-managed-1",
             provider_name=request.provider_name,
-            run=agent_pb2.BoundAgentRun(
-                id="run-managed-1",
-                provider_name=request.provider_name,
-                model=request.model,
-                status=agent_pb2.AGENT_RUN_STATUS_RUNNING,
-                messages=request.messages,
-            ),
+            model=request.model,
+            client_ref=request.client_ref,
+            state=agent_pb2.AGENT_SESSION_STATE_ACTIVE,
         )
 
-    def GetRun(self, request: Any, context: grpc.ServicerContext) -> Any:
+    def GetSession(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
         _manager_requests.append(
             {
-                "method": "get",
+                "method": "get_session",
                 "invocation_token": request.invocation_token,
                 "provider_name": "",
-                "run_id": request.run_id,
+                "session_id": request.session_id,
+                "turn_id": "",
+                "interaction_id": "",
                 "reason": "",
             }
         )
-        return agent_pb2.ManagedAgentRun(
+        return agent_pb2.AgentSession(
+            id=request.session_id,
             provider_name="openai",
-            run=agent_pb2.BoundAgentRun(
-                id=request.run_id,
-                provider_name="openai",
-                model="gpt-5.1",
-                status=agent_pb2.AGENT_RUN_STATUS_SUCCEEDED,
-            ),
+            model="gpt-5.1",
+            client_ref="cli-session-1",
+            state=agent_pb2.AGENT_SESSION_STATE_ARCHIVED,
         )
 
-    def ListRuns(self, request: Any, context: grpc.ServicerContext) -> Any:
+    def ListSessions(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
         _manager_requests.append(
             {
-                "method": "list",
+                "method": "list_sessions",
                 "invocation_token": request.invocation_token,
-                "provider_name": "",
-                "run_id": "",
+                "provider_name": request.provider_name,
+                "session_id": "",
+                "turn_id": "",
+                "interaction_id": "",
                 "reason": "",
             }
         )
-        return agent_pb2.AgentManagerListRunsResponse(
-            runs=[
-                agent_pb2.ManagedAgentRun(
+        return agent_pb2.AgentManagerListSessionsResponse(
+            sessions=[
+                agent_pb2.AgentSession(
+                    id="session-managed-1",
                     provider_name="openai",
-                    run=agent_pb2.BoundAgentRun(
-                        id="run-managed-1",
-                        provider_name="openai",
-                        model="gpt-5.1",
-                        status=agent_pb2.AGENT_RUN_STATUS_RUNNING,
-                    ),
+                    model="gpt-5.1",
+                    client_ref="cli-session-1",
+                    state=agent_pb2.AGENT_SESSION_STATE_ACTIVE,
                 )
             ]
         )
 
-    def CancelRun(self, request: Any, context: grpc.ServicerContext) -> Any:
+    def UpdateSession(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
         _manager_requests.append(
             {
-                "method": "cancel",
+                "method": "update_session",
                 "invocation_token": request.invocation_token,
                 "provider_name": "",
-                "run_id": request.run_id,
+                "session_id": request.session_id,
+                "turn_id": "",
+                "interaction_id": "",
+                "reason": "",
+            }
+        )
+        return agent_pb2.AgentSession(
+            id=request.session_id,
+            provider_name="openai",
+            model="gpt-5.1",
+            client_ref=request.client_ref,
+            state=request.state,
+            metadata=request.metadata,
+        )
+
+    def CreateTurn(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _record_relay_tokens(context)
+        _manager_requests.append(
+            {
+                "method": "create_turn",
+                "invocation_token": request.invocation_token,
+                "provider_name": "",
+                "session_id": request.session_id,
+                "turn_id": "",
+                "interaction_id": "",
+                "reason": "",
+            }
+        )
+        return agent_pb2.AgentTurn(
+            id="turn-managed-1",
+            session_id=request.session_id,
+            provider_name="openai",
+            model=request.model,
+            status=agent_pb2.AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
+            messages=request.messages,
+            output_text="echo:Summarize this",
+            status_message="waiting for input",
+        )
+
+    def GetTurn(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _record_relay_tokens(context)
+        _manager_requests.append(
+            {
+                "method": "get_turn",
+                "invocation_token": request.invocation_token,
+                "provider_name": "",
+                "session_id": "",
+                "turn_id": request.turn_id,
+                "interaction_id": "",
+                "reason": "",
+            }
+        )
+        return agent_pb2.AgentTurn(
+            id=request.turn_id,
+            session_id="session-managed-1",
+            provider_name="openai",
+            model="gpt-5.1",
+            status=agent_pb2.AGENT_EXECUTION_STATUS_SUCCEEDED,
+            output_text="done",
+            status_message="completed",
+        )
+
+    def ListTurns(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _record_relay_tokens(context)
+        _manager_requests.append(
+            {
+                "method": "list_turns",
+                "invocation_token": request.invocation_token,
+                "provider_name": "",
+                "session_id": request.session_id,
+                "turn_id": "",
+                "interaction_id": "",
+                "reason": "",
+            }
+        )
+        return agent_pb2.AgentManagerListTurnsResponse(
+            turns=[
+                agent_pb2.AgentTurn(
+                    id="turn-managed-1",
+                    session_id=request.session_id,
+                    provider_name="openai",
+                    model="gpt-5.1",
+                    status=agent_pb2.AGENT_EXECUTION_STATUS_RUNNING,
+                    status_message="running",
+                )
+            ]
+        )
+
+    def CancelTurn(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _record_relay_tokens(context)
+        _manager_requests.append(
+            {
+                "method": "cancel_turn",
+                "invocation_token": request.invocation_token,
+                "provider_name": "",
+                "session_id": "",
+                "turn_id": request.turn_id,
+                "interaction_id": "",
                 "reason": request.reason,
             }
         )
-        return agent_pb2.ManagedAgentRun(
+        return agent_pb2.AgentTurn(
+            id=request.turn_id,
+            session_id="session-managed-1",
             provider_name="openai",
-            run=agent_pb2.BoundAgentRun(
-                id=request.run_id,
-                provider_name="openai",
-                model="gpt-5.1",
-                status=agent_pb2.AGENT_RUN_STATUS_CANCELED,
-                status_message=request.reason,
-            ),
+            model="gpt-5.1",
+            status=agent_pb2.AGENT_EXECUTION_STATUS_CANCELED,
+            status_message=request.reason,
+        )
+
+    def ListTurnEvents(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _record_relay_tokens(context)
+        _manager_requests.append(
+            {
+                "method": "list_turn_events",
+                "invocation_token": request.invocation_token,
+                "provider_name": "",
+                "session_id": "",
+                "turn_id": request.turn_id,
+                "interaction_id": "",
+                "reason": "",
+            }
+        )
+        return agent_pb2.AgentManagerListTurnEventsResponse(
+            events=[
+                agent_pb2.AgentTurnEvent(
+                    id=f"{request.turn_id}-event-1",
+                    turn_id=request.turn_id,
+                    seq=1,
+                    type="turn.started",
+                    source="openai",
+                    visibility="private",
+                )
+            ]
+        )
+
+    def ListInteractions(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _record_relay_tokens(context)
+        _manager_requests.append(
+            {
+                "method": "list_interactions",
+                "invocation_token": request.invocation_token,
+                "provider_name": "",
+                "session_id": "",
+                "turn_id": request.turn_id,
+                "interaction_id": "",
+                "reason": "",
+            }
+        )
+        return agent_pb2.AgentManagerListInteractionsResponse(
+            interactions=[
+                agent_pb2.AgentInteraction(
+                    id="interaction-1",
+                    turn_id=request.turn_id,
+                    session_id="session-managed-1",
+                    type=agent_pb2.AGENT_INTERACTION_TYPE_APPROVAL,
+                    state=agent_pb2.AGENT_INTERACTION_STATE_PENDING,
+                    title="Approve command",
+                    prompt="Run git status?",
+                )
+            ]
+        )
+
+    def ResolveInteraction(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _record_relay_tokens(context)
+        _manager_requests.append(
+            {
+                "method": "resolve_interaction",
+                "invocation_token": request.invocation_token,
+                "provider_name": "",
+                "session_id": "",
+                "turn_id": request.turn_id,
+                "interaction_id": request.interaction_id,
+                "reason": "",
+            }
+        )
+        return agent_pb2.AgentInteraction(
+            id=request.interaction_id,
+            turn_id=request.turn_id,
+            session_id="session-managed-1",
+            type=agent_pb2.AGENT_INTERACTION_TYPE_APPROVAL,
+            state=agent_pb2.AGENT_INTERACTION_STATE_RESOLVED,
+            title="Approve command",
+            prompt="Run git status?",
+            resolution=request.resolution,
         )
 
 
@@ -275,7 +588,6 @@ def tearDownModule() -> None:
 class AgentTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _provider.configured.clear()
-        _host_events.clear()
         _host_relay_tokens.clear()
         _manager_requests.clear()
         _manager_relay_tokens.clear()
@@ -292,39 +604,126 @@ class AgentTransportTests(unittest.TestCase):
         )
         json_format.ParseDict({"tenant": "acme"}, configure_request.config)
         configured = runtime_client.ConfigureProvider(configure_request)
-        started = provider_client.StartRun(
-            agent_pb2.StartAgentProviderRunRequest(
-                run_id="run-42",
-                idempotency_key="idem-42",
-                provider_name="openai",
+
+        create_session_request = agent_pb2.CreateAgentProviderSessionRequest(
+            session_id="session-1",
+            idempotency_key="session-req-1",
+            model="gpt-5.1",
+            client_ref="cli-session-1",
+        )
+        create_session_metadata = struct_pb2.Struct()
+        create_session_metadata.update({"source": "py-test"})
+        create_session_request.metadata.CopyFrom(create_session_metadata)
+        created_session = provider_client.CreateSession(create_session_request)
+        listed_sessions = provider_client.ListSessions(
+            agent_pb2.ListAgentProviderSessionsRequest()
+        )
+        fetched_session = provider_client.GetSession(
+            agent_pb2.GetAgentProviderSessionRequest(session_id="session-1")
+        )
+
+        update_session_request = agent_pb2.UpdateAgentProviderSessionRequest(
+            session_id="session-1",
+            client_ref="cli-session-2",
+            state=agent_pb2.AGENT_SESSION_STATE_ARCHIVED,
+        )
+        updated_session_metadata = struct_pb2.Struct()
+        updated_session_metadata.update({"source": "py-test-updated"})
+        update_session_request.metadata.CopyFrom(updated_session_metadata)
+        updated_session = provider_client.UpdateSession(update_session_request)
+
+        created_turn = provider_client.CreateTurn(
+            agent_pb2.CreateAgentProviderTurnRequest(
+                turn_id="turn-1",
+                session_id="session-1",
                 model="gpt-5.1",
-                messages=[agent_pb2.AgentMessage(role="user", text="Plan it")],
-                session_ref="sess-1",
-                execution_ref="exec-1",
+                messages=[
+                    agent_pb2.AgentMessage(
+                        role="user",
+                        text="Plan it",
+                        parts=[
+                            agent_pb2.AgentMessagePart(
+                                type=agent_pb2.AGENT_MESSAGE_PART_TYPE_TEXT,
+                                text="Plan it",
+                            )
+                        ],
+                    )
+                ],
+                execution_ref="exec-turn-1",
             )
+        )
+        listed_turns = provider_client.ListTurns(
+            agent_pb2.ListAgentProviderTurnsRequest(session_id="session-1")
+        )
+        fetched_turn = provider_client.GetTurn(
+            agent_pb2.GetAgentProviderTurnRequest(turn_id="turn-1")
+        )
+        turn_events = provider_client.ListTurnEvents(
+            agent_pb2.ListAgentProviderTurnEventsRequest(
+                turn_id="turn-1",
+                after_seq=0,
+                limit=10,
+            )
+        )
+        listed_interactions = provider_client.ListInteractions(
+            agent_pb2.ListAgentProviderInteractionsRequest(turn_id="turn-1")
+        )
+        fetched_interaction = provider_client.GetInteraction(
+            agent_pb2.GetAgentProviderInteractionRequest(
+                interaction_id="interaction-1"
+            )
+        )
+        resolve_interaction_request = agent_pb2.ResolveAgentProviderInteractionRequest(
+            interaction_id="interaction-1"
+        )
+        resolved_interaction_payload = struct_pb2.Struct()
+        resolved_interaction_payload.update({"approved": True})
+        resolve_interaction_request.resolution.CopyFrom(resolved_interaction_payload)
+        resolved_interaction = provider_client.ResolveInteraction(
+            resolve_interaction_request
+        )
+        capabilities = provider_client.GetCapabilities(
+            agent_pb2.GetAgentProviderCapabilitiesRequest()
         )
 
         self.assertEqual(identity.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_AGENT)
         self.assertEqual(identity.name, "py-agent")
         self.assertEqual(list(identity.warnings), ["set OPENAI_API_KEY"])
+        self.assertEqual(configured.protocol_version, _runtime.CURRENT_PROTOCOL_VERSION)
+        self.assertEqual(_provider.configured, [("agent-runtime", {"tenant": "acme"})])
+        self.assertEqual(created_session.id, "session-1")
+        self.assertEqual(created_session.state, agent_pb2.AGENT_SESSION_STATE_ACTIVE)
+        self.assertEqual([session.id for session in listed_sessions.sessions], ["session-1"])
+        self.assertEqual(fetched_session.state, agent_pb2.AGENT_SESSION_STATE_ARCHIVED)
+        self.assertEqual(updated_session.client_ref, "cli-session-2")
+        self.assertEqual(created_turn.id, "turn-1")
         self.assertEqual(
-            configured.protocol_version,
-            _runtime.CURRENT_PROTOCOL_VERSION,
+            created_turn.status,
+            agent_pb2.AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
+        )
+        self.assertEqual(len(created_turn.messages[0].parts), 1)
+        self.assertEqual([turn.id for turn in listed_turns.turns], ["turn-1"])
+        self.assertEqual(fetched_turn.status_message, "waiting for input")
+        self.assertEqual(
+            [event.type for event in turn_events.events],
+            ["turn.started", "interaction.requested"],
         )
         self.assertEqual(
-            _provider.configured,
-            [("agent-runtime", {"tenant": "acme"})],
+            [interaction.id for interaction in listed_interactions.interactions],
+            ["interaction-1"],
         )
-        self.assertEqual(started.id, "run-42")
-        self.assertEqual(started.provider_name, "openai")
-        self.assertEqual(started.model, "gpt-5.1")
-        self.assertEqual(started.status, agent_pb2.AGENT_RUN_STATUS_PENDING)
         self.assertEqual(
-            [(message.role, message.text) for message in started.messages],
-            [("user", "Plan it")],
+            fetched_interaction.state,
+            agent_pb2.AGENT_INTERACTION_STATE_PENDING,
         )
-        self.assertEqual(started.session_ref, "sess-1")
-        self.assertEqual(started.execution_ref, "exec-1")
+        self.assertEqual(
+            resolved_interaction.state,
+            agent_pb2.AGENT_INTERACTION_STATE_RESOLVED,
+        )
+        self.assertTrue(capabilities.streaming_text)
+        self.assertTrue(capabilities.tool_calls)
+        self.assertTrue(capabilities.interactions)
+        self.assertTrue(capabilities.resumable_turns)
 
     def test_agent_host_roundtrip(self) -> None:
         arguments = struct_pb2.Struct()
@@ -333,96 +732,205 @@ class AgentTransportTests(unittest.TestCase):
         with AgentHost() as host:
             response = host.execute_tool(
                 agent_pb2.ExecuteAgentToolRequest(
-                    run_id="run-42",
+                    session_id="session-1",
+                    turn_id="turn-1",
                     tool_call_id="call-7",
                     tool_id="lookup",
                     arguments=arguments,
                 )
             )
-            data = struct_pb2.Struct()
-            data.update({"phase": "tool_call", "attempt": 1})
-            host.emit_event(
-                agent_pb2.EmitAgentEventRequest(
-                    run_id="run-42",
-                    type="agent.tool_call.started",
-                    visibility="public",
-                    data=data,
-                )
-            )
 
         self.assertEqual(response.status, 207)
-        self.assertEqual(response.body, "run-42:call-7:lookup")
-        self.assertEqual(
-            _host_events,
-            [
-                {
-                    "run_id": "run-42",
-                    "type": "agent.tool_call.started",
-                    "visibility": "public",
-                    "data": {"phase": "tool_call", "attempt": 1.0},
-                }
-            ],
-        )
-        self.assertEqual(_host_relay_tokens, ["relay-token-py"] * 2)
+        self.assertEqual(response.body, "session-1:turn-1:call-7:lookup")
+        self.assertEqual(_host_relay_tokens, ["relay-token-py"])
 
     def test_agent_manager_roundtrip(self) -> None:
         with AgentManager("token-123") as manager:
-            started = manager.run(
-                agent_pb2.AgentManagerRunRequest(
+            created_session = manager.create_session(
+                agent_pb2.AgentManagerCreateSessionRequest(
                     provider_name="openai",
                     model="gpt-5.1",
-                    messages=[agent_pb2.AgentMessage(role="user", text="Summarize this")],
+                    client_ref="cli-session-1",
+                )
+            )
+            fetched_session = manager.get_session(
+                agent_pb2.AgentManagerGetSessionRequest(session_id="session-managed-1")
+            )
+            listed_sessions = manager.list_sessions(
+                agent_pb2.AgentManagerListSessionsRequest(provider_name="openai")
+            )
+            updated_session = manager.update_session(
+                agent_pb2.AgentManagerUpdateSessionRequest(
+                    session_id="session-managed-1",
+                    client_ref="cli-session-2",
+                    state=agent_pb2.AGENT_SESSION_STATE_ARCHIVED,
+                )
+            )
+            created_turn = manager.create_turn(
+                agent_pb2.AgentManagerCreateTurnRequest(
+                    session_id="session-managed-1",
+                    model="gpt-5.1",
+                    messages=[
+                        agent_pb2.AgentMessage(
+                            role="user",
+                            text="Summarize this",
+                            parts=[
+                                agent_pb2.AgentMessagePart(
+                                    type=agent_pb2.AGENT_MESSAGE_PART_TYPE_TEXT,
+                                    text="Summarize this",
+                                )
+                            ],
+                        )
+                    ],
                     tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_EXPLICIT,
                 )
             )
-            fetched = manager.get_run(
-                agent_pb2.AgentManagerGetRunRequest(run_id="run-managed-1")
+            fetched_turn = manager.get_turn(
+                agent_pb2.AgentManagerGetTurnRequest(turn_id="turn-managed-1")
             )
-            listed = manager.list_runs(agent_pb2.AgentManagerListRunsRequest())
-            canceled = manager.cancel_run(
-                agent_pb2.AgentManagerCancelRunRequest(
-                    run_id="run-managed-1",
+            listed_turns = manager.list_turns(
+                agent_pb2.AgentManagerListTurnsRequest(session_id="session-managed-1")
+            )
+            canceled_turn = manager.cancel_turn(
+                agent_pb2.AgentManagerCancelTurnRequest(
+                    turn_id="turn-managed-1",
                     reason="user canceled",
                 )
             )
+            turn_events = manager.list_turn_events(
+                agent_pb2.AgentManagerListTurnEventsRequest(
+                    turn_id="turn-managed-1",
+                    after_seq=0,
+                    limit=10,
+                )
+            )
+            interactions = manager.list_interactions(
+                agent_pb2.AgentManagerListInteractionsRequest(turn_id="turn-managed-1")
+            )
+            resolve_request = agent_pb2.AgentManagerResolveInteractionRequest(
+                turn_id="turn-managed-1",
+                interaction_id="interaction-1",
+            )
+            resolution = struct_pb2.Struct()
+            resolution.update({"approved": True})
+            resolve_request.resolution.CopyFrom(resolution)
+            resolved = manager.resolve_interaction(resolve_request)
 
-        self.assertEqual(started.provider_name, "openai")
-        self.assertEqual(started.run.id, "run-managed-1")
-        self.assertEqual(fetched.run.id, "run-managed-1")
-        self.assertEqual(len(listed.runs), 1)
-        self.assertEqual(listed.runs[0].run.id, "run-managed-1")
-        self.assertEqual(canceled.run.status_message, "user canceled")
-        self.assertEqual(_manager_relay_tokens, ["relay-token-py"] * 4)
+        self.assertEqual(created_session.id, "session-managed-1")
+        self.assertEqual(fetched_session.id, "session-managed-1")
+        self.assertEqual(len(listed_sessions.sessions), 1)
+        self.assertEqual(updated_session.client_ref, "cli-session-2")
+        self.assertEqual(created_turn.id, "turn-managed-1")
+        self.assertEqual(len(created_turn.messages[0].parts), 1)
+        self.assertEqual(fetched_turn.id, "turn-managed-1")
+        self.assertEqual(len(listed_turns.turns), 1)
+        self.assertEqual(canceled_turn.status_message, "user canceled")
+        self.assertEqual(len(turn_events.events), 1)
+        self.assertEqual(len(interactions.interactions), 1)
+        self.assertEqual(resolved.id, "interaction-1")
+        self.assertEqual(resolved.state, agent_pb2.AGENT_INTERACTION_STATE_RESOLVED)
+        self.assertEqual(_manager_relay_tokens, ["relay-token-py"] * 11)
         self.assertEqual(
             _manager_requests,
             [
                 {
-                    "method": "run",
+                    "method": "create_session",
                     "invocation_token": "token-123",
                     "provider_name": "openai",
-                    "run_id": "",
+                    "session_id": "",
+                    "turn_id": "",
+                    "interaction_id": "",
                     "reason": "",
                 },
                 {
-                    "method": "get",
+                    "method": "get_session",
                     "invocation_token": "token-123",
                     "provider_name": "",
-                    "run_id": "run-managed-1",
+                    "session_id": "session-managed-1",
+                    "turn_id": "",
+                    "interaction_id": "",
                     "reason": "",
                 },
                 {
-                    "method": "list",
+                    "method": "list_sessions",
                     "invocation_token": "token-123",
-                    "provider_name": "",
-                    "run_id": "",
+                    "provider_name": "openai",
+                    "session_id": "",
+                    "turn_id": "",
+                    "interaction_id": "",
                     "reason": "",
                 },
                 {
-                    "method": "cancel",
+                    "method": "update_session",
                     "invocation_token": "token-123",
                     "provider_name": "",
-                    "run_id": "run-managed-1",
+                    "session_id": "session-managed-1",
+                    "turn_id": "",
+                    "interaction_id": "",
+                    "reason": "",
+                },
+                {
+                    "method": "create_turn",
+                    "invocation_token": "token-123",
+                    "provider_name": "",
+                    "session_id": "session-managed-1",
+                    "turn_id": "",
+                    "interaction_id": "",
+                    "reason": "",
+                },
+                {
+                    "method": "get_turn",
+                    "invocation_token": "token-123",
+                    "provider_name": "",
+                    "session_id": "",
+                    "turn_id": "turn-managed-1",
+                    "interaction_id": "",
+                    "reason": "",
+                },
+                {
+                    "method": "list_turns",
+                    "invocation_token": "token-123",
+                    "provider_name": "",
+                    "session_id": "session-managed-1",
+                    "turn_id": "",
+                    "interaction_id": "",
+                    "reason": "",
+                },
+                {
+                    "method": "cancel_turn",
+                    "invocation_token": "token-123",
+                    "provider_name": "",
+                    "session_id": "",
+                    "turn_id": "turn-managed-1",
+                    "interaction_id": "",
                     "reason": "user canceled",
+                },
+                {
+                    "method": "list_turn_events",
+                    "invocation_token": "token-123",
+                    "provider_name": "",
+                    "session_id": "",
+                    "turn_id": "turn-managed-1",
+                    "interaction_id": "",
+                    "reason": "",
+                },
+                {
+                    "method": "list_interactions",
+                    "invocation_token": "token-123",
+                    "provider_name": "",
+                    "session_id": "",
+                    "turn_id": "turn-managed-1",
+                    "interaction_id": "",
+                    "reason": "",
+                },
+                {
+                    "method": "resolve_interaction",
+                    "invocation_token": "token-123",
+                    "provider_name": "",
+                    "session_id": "",
+                    "turn_id": "turn-managed-1",
+                    "interaction_id": "interaction-1",
+                    "reason": "",
                 },
             ],
         )
@@ -431,20 +939,22 @@ class AgentTransportTests(unittest.TestCase):
         request = Request(invocation_token="token-embedded")
 
         with request.agent_manager() as manager:
-            fetched = manager.get_run(
-                agent_pb2.AgentManagerGetRunRequest(run_id="run-managed-1")
+            fetched = manager.get_session(
+                agent_pb2.AgentManagerGetSessionRequest(session_id="session-managed-1")
             )
 
-        self.assertEqual(fetched.run.id, "run-managed-1")
+        self.assertEqual(fetched.id, "session-managed-1")
         self.assertEqual(_manager_relay_tokens, ["relay-token-py"])
         self.assertEqual(
             _manager_requests,
             [
                 {
-                    "method": "get",
+                    "method": "get_session",
                     "invocation_token": "token-embedded",
                     "provider_name": "",
-                    "run_id": "run-managed-1",
+                    "session_id": "session-managed-1",
+                    "turn_id": "",
+                    "interaction_id": "",
                     "reason": "",
                 }
             ],

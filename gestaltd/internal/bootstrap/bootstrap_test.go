@@ -529,147 +529,279 @@ func (s *stubWorkflowProvider) PublishEvent(context.Context, coreworkflow.Publis
 func (s *stubWorkflowProvider) Ping(context.Context) error { return nil }
 func (s *stubWorkflowProvider) Close() error               { return nil }
 
-type stubAgentProvider struct {
-	mu             sync.Mutex
-	cancelRequests []coreagent.CancelRunRequest
-}
-
-func (s *stubAgentProvider) StartRun(_ context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
-	runID := strings.TrimSpace(req.RunID)
-	if runID == "" {
-		runID = "run-1"
-	}
-	return &coreagent.Run{ID: runID}, nil
-}
-func (s *stubAgentProvider) GetRun(_ context.Context, req coreagent.GetRunRequest) (*coreagent.Run, error) {
-	runID := strings.TrimSpace(req.RunID)
-	if runID == "" {
-		runID = "run-1"
-	}
-	return &coreagent.Run{ID: runID}, nil
-}
-func (s *stubAgentProvider) ListRuns(context.Context, coreagent.ListRunsRequest) ([]*coreagent.Run, error) {
-	return []*coreagent.Run{{ID: "run-1"}}, nil
-}
-func (s *stubAgentProvider) CancelRun(_ context.Context, req coreagent.CancelRunRequest) (*coreagent.Run, error) {
-	s.mu.Lock()
-	s.cancelRequests = append(s.cancelRequests, req)
-	s.mu.Unlock()
-	runID := strings.TrimSpace(req.RunID)
-	if runID == "" {
-		runID = "run-1"
-	}
-	return &coreagent.Run{ID: runID, Status: coreagent.RunStatusCanceled}, nil
-}
-func (s *stubAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
-	return &coreagent.ProviderCapabilities{StreamingText: true, ToolCalls: true}, nil
-}
-func (s *stubAgentProvider) ResumeRun(_ context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
-	runID := strings.TrimSpace(req.RunID)
-	if runID == "" {
-		runID = "run-1"
-	}
-	return &coreagent.Run{ID: runID, Status: coreagent.RunStatusSucceeded}, nil
-}
-func (s *stubAgentProvider) Ping(context.Context) error { return nil }
-func (s *stubAgentProvider) Close() error               { return nil }
-
-func (s *stubAgentProvider) CancelRequests() []coreagent.CancelRunRequest {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]coreagent.CancelRunRequest(nil), s.cancelRequests...)
-}
-
 type recordingAgentProvider struct {
-	mu               sync.Mutex
-	startRunRequests []coreagent.StartRunRequest
-	cancelRequests   []coreagent.CancelRunRequest
-	runs             map[string]*coreagent.Run
+	coreagent.UnimplementedProvider
+	mu                         sync.Mutex
+	createSessionRequests      []coreagent.CreateSessionRequest
+	updateSessionRequests      []coreagent.UpdateSessionRequest
+	createTurnRequests         []coreagent.CreateTurnRequest
+	cancelTurnRequests         []coreagent.CancelTurnRequest
+	resolveInteractionRequests []coreagent.ResolveInteractionRequest
+	sessions                   map[string]*coreagent.Session
+	turns                      map[string]*coreagent.Turn
+	turnEvents                 map[string][]*coreagent.TurnEvent
+	interactions               map[string]*coreagent.Interaction
 }
 
 func newRecordingAgentProvider() *recordingAgentProvider {
-	return &recordingAgentProvider{runs: map[string]*coreagent.Run{}}
-}
-
-func (p *recordingAgentProvider) StartRun(_ context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.startRunRequests = append(p.startRunRequests, req)
-	run := &coreagent.Run{
-		ID:           req.RunID,
-		ProviderName: req.ProviderName,
-		Status:       coreagent.RunStatusRunning,
-		ExecutionRef: req.ExecutionRef,
-		CreatedBy:    req.CreatedBy,
+	return &recordingAgentProvider{
+		sessions:     map[string]*coreagent.Session{},
+		turns:        map[string]*coreagent.Turn{},
+		turnEvents:   map[string][]*coreagent.TurnEvent{},
+		interactions: map[string]*coreagent.Interaction{},
 	}
-	p.runs[req.RunID] = run
-	return run, nil
 }
 
-func (p *recordingAgentProvider) GetRun(_ context.Context, req coreagent.GetRunRequest) (*coreagent.Run, error) {
+func (p *recordingAgentProvider) ensureStateLocked() {
+	if p.sessions == nil {
+		p.sessions = map[string]*coreagent.Session{}
+	}
+	if p.turns == nil {
+		p.turns = map[string]*coreagent.Turn{}
+	}
+	if p.turnEvents == nil {
+		p.turnEvents = map[string][]*coreagent.TurnEvent{}
+	}
+	if p.interactions == nil {
+		p.interactions = map[string]*coreagent.Interaction{}
+	}
+}
+
+func (p *recordingAgentProvider) CreateSession(_ context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	run, ok := p.runs[req.RunID]
+	p.ensureStateLocked()
+	p.createSessionRequests = append(p.createSessionRequests, req)
+	sessionID := strings.TrimSpace(req.SessionID)
+	if sessionID == "" {
+		sessionID = fmt.Sprintf("session-%d", len(p.sessions)+1)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	session := &coreagent.Session{
+		ID:         sessionID,
+		Model:      strings.TrimSpace(req.Model),
+		ClientRef:  strings.TrimSpace(req.ClientRef),
+		State:      coreagent.SessionStateActive,
+		Metadata:   maps.Clone(req.Metadata),
+		CreatedBy:  req.CreatedBy,
+		CreatedAt:  &now,
+		UpdatedAt:  &now,
+		LastTurnAt: nil,
+	}
+	p.sessions[sessionID] = cloneBootstrapAgentSession(session)
+	return cloneBootstrapAgentSession(session), nil
+}
+
+func (p *recordingAgentProvider) GetSession(_ context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	session, ok := p.sessions[strings.TrimSpace(req.SessionID)]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
-	cloned := *run
-	return &cloned, nil
+	return cloneBootstrapAgentSession(session), nil
 }
 
-func (p *recordingAgentProvider) ListRuns(context.Context, coreagent.ListRunsRequest) ([]*coreagent.Run, error) {
+func (p *recordingAgentProvider) ListSessions(context.Context, coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	out := make([]*coreagent.Run, 0, len(p.runs))
-	for _, run := range p.runs {
-		cloned := *run
-		out = append(out, &cloned)
+	out := make([]*coreagent.Session, 0, len(p.sessions))
+	for _, session := range p.sessions {
+		out = append(out, cloneBootstrapAgentSession(session))
 	}
 	return out, nil
 }
 
-func (p *recordingAgentProvider) CancelRun(_ context.Context, req coreagent.CancelRunRequest) (*coreagent.Run, error) {
+func (p *recordingAgentProvider) UpdateSession(_ context.Context, req coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.cancelRequests = append(p.cancelRequests, req)
-	run, ok := p.runs[req.RunID]
+	p.ensureStateLocked()
+	p.updateSessionRequests = append(p.updateSessionRequests, req)
+	session, ok := p.sessions[strings.TrimSpace(req.SessionID)]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
-	cloned := *run
-	cloned.Status = coreagent.RunStatusCanceled
-	p.runs[req.RunID] = &cloned
-	return &cloned, nil
+	if clientRef := strings.TrimSpace(req.ClientRef); clientRef != "" {
+		session.ClientRef = clientRef
+	}
+	if req.State != "" {
+		session.State = req.State
+	}
+	if req.Metadata != nil {
+		session.Metadata = maps.Clone(req.Metadata)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	session.UpdatedAt = &now
+	return cloneBootstrapAgentSession(session), nil
 }
+
+func (p *recordingAgentProvider) CreateTurn(_ context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.ensureStateLocked()
+	p.createTurnRequests = append(p.createTurnRequests, req)
+	turnID := strings.TrimSpace(req.TurnID)
+	if turnID == "" {
+		turnID = fmt.Sprintf("turn-%d", len(p.turns)+1)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	turn := &coreagent.Turn{
+		ID:           turnID,
+		SessionID:    strings.TrimSpace(req.SessionID),
+		Model:        strings.TrimSpace(req.Model),
+		Status:       coreagent.ExecutionStatusSucceeded,
+		Messages:     cloneBootstrapAgentMessages(req.Messages),
+		CreatedBy:    req.CreatedBy,
+		CreatedAt:    &now,
+		StartedAt:    &now,
+		CompletedAt:  &now,
+		ExecutionRef: strings.TrimSpace(req.ExecutionRef),
+	}
+	p.turns[turnID] = cloneBootstrapAgentTurn(turn)
+	if session := p.sessions[turn.SessionID]; session != nil {
+		session.LastTurnAt = &now
+		session.UpdatedAt = &now
+	}
+	return cloneBootstrapAgentTurn(turn), nil
+}
+
+func (p *recordingAgentProvider) GetTurn(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	turn, ok := p.turns[strings.TrimSpace(req.TurnID)]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	return cloneBootstrapAgentTurn(turn), nil
+}
+
+func (p *recordingAgentProvider) ListTurns(_ context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	sessionID := strings.TrimSpace(req.SessionID)
+	out := make([]*coreagent.Turn, 0, len(p.turns))
+	for _, turn := range p.turns {
+		if sessionID != "" && strings.TrimSpace(turn.SessionID) != sessionID {
+			continue
+		}
+		out = append(out, cloneBootstrapAgentTurn(turn))
+	}
+	return out, nil
+}
+
+func (p *recordingAgentProvider) CancelTurn(_ context.Context, req coreagent.CancelTurnRequest) (*coreagent.Turn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.ensureStateLocked()
+	p.cancelTurnRequests = append(p.cancelTurnRequests, req)
+	turnID := strings.TrimSpace(req.TurnID)
+	turn, ok := p.turns[turnID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	turn.Status = coreagent.ExecutionStatusCanceled
+	turn.StatusMessage = strings.TrimSpace(req.Reason)
+	turn.CompletedAt = &now
+	return cloneBootstrapAgentTurn(turn), nil
+}
+
+func (p *recordingAgentProvider) ListTurnEvents(_ context.Context, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	events := p.turnEvents[strings.TrimSpace(req.TurnID)]
+	out := make([]*coreagent.TurnEvent, 0, len(events))
+	for _, event := range events {
+		if event.Seq <= req.AfterSeq {
+			continue
+		}
+		out = append(out, cloneBootstrapAgentTurnEvent(event))
+		if req.Limit > 0 && len(out) >= req.Limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (p *recordingAgentProvider) GetInteraction(_ context.Context, req coreagent.GetInteractionRequest) (*coreagent.Interaction, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	interaction, ok := p.interactions[strings.TrimSpace(req.InteractionID)]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	return cloneBootstrapAgentInteraction(interaction), nil
+}
+
+func (p *recordingAgentProvider) ListInteractions(_ context.Context, req coreagent.ListInteractionsRequest) ([]*coreagent.Interaction, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	turnID := strings.TrimSpace(req.TurnID)
+	out := make([]*coreagent.Interaction, 0, len(p.interactions))
+	for _, interaction := range p.interactions {
+		if turnID != "" && strings.TrimSpace(interaction.TurnID) != turnID {
+			continue
+		}
+		out = append(out, cloneBootstrapAgentInteraction(interaction))
+	}
+	return out, nil
+}
+
+func (p *recordingAgentProvider) ResolveInteraction(_ context.Context, req coreagent.ResolveInteractionRequest) (*coreagent.Interaction, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.resolveInteractionRequests = append(p.resolveInteractionRequests, req)
+	interaction, ok := p.interactions[strings.TrimSpace(req.InteractionID)]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	interaction.State = coreagent.InteractionStateResolved
+	interaction.Resolution = maps.Clone(req.Resolution)
+	interaction.ResolvedAt = &now
+	return cloneBootstrapAgentInteraction(interaction), nil
+}
+
 func (p *recordingAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
-	return &coreagent.ProviderCapabilities{StreamingText: true, ToolCalls: true}, nil
+	return &coreagent.ProviderCapabilities{
+		StreamingText:    true,
+		ToolCalls:        true,
+		Interactions:     true,
+		ResumableTurns:   true,
+		StructuredOutput: true,
+	}, nil
 }
-func (p *recordingAgentProvider) ResumeRun(_ context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	run, ok := p.runs[req.RunID]
-	if !ok {
-		return nil, core.ErrNotFound
-	}
-	cloned := *run
-	cloned.Status = coreagent.RunStatusSucceeded
-	p.runs[req.RunID] = &cloned
-	return &cloned, nil
+
+func (p *recordingAgentProvider) appendTurnEventLocked(turnID, eventType string, data map[string]any) {
+	now := time.Now().UTC().Truncate(time.Second)
+	events := p.turnEvents[turnID]
+	p.turnEvents[turnID] = append(events, &coreagent.TurnEvent{
+		ID:         fmt.Sprintf("%s-event-%d", turnID, len(events)+1),
+		TurnID:     turnID,
+		Seq:        int64(len(events) + 1),
+		Type:       eventType,
+		Source:     "managed",
+		Visibility: "private",
+		Data:       maps.Clone(data),
+		CreatedAt:  &now,
+	})
 }
 
 func (p *recordingAgentProvider) Ping(context.Context) error { return nil }
 func (p *recordingAgentProvider) Close() error               { return nil }
 
+func (p *recordingAgentProvider) CancelTurnRequests() []coreagent.CancelTurnRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]coreagent.CancelTurnRequest(nil), p.cancelTurnRequests...)
+}
+
 type callbackAgentProvider struct {
-	mu                  sync.Mutex
-	started             *providerhost.StartedHostServices
-	socketPath          string
-	startRunRequests    []coreagent.StartRunRequest
-	cancelRequests      []coreagent.CancelRunRequest
-	toolBodies          []string
-	runs                map[string]*coreagent.Run
-	getCapabilitiesHook func(context.Context) error
-	resumeHook          func(context.Context, coreagent.ResumeRunRequest) error
+	*recordingAgentProvider
+	started                *providerhost.StartedHostServices
+	socketPath             string
+	toolBodies             []string
+	resolveInteractionHook func(context.Context, coreagent.ResolveInteractionRequest) error
 }
 
 func newCallbackAgentProvider(started *providerhost.StartedHostServices) (*callbackAgentProvider, error) {
@@ -687,26 +819,32 @@ func newCallbackAgentProvider(started *providerhost.StartedHostServices) (*callb
 		return nil, fmt.Errorf("agent host socket binding is missing")
 	}
 	return &callbackAgentProvider{
-		started:    started,
-		socketPath: socketPath,
-		runs:       map[string]*coreagent.Run{},
+		recordingAgentProvider: newRecordingAgentProvider(),
+		started:                started,
+		socketPath:             socketPath,
 	}, nil
 }
 
-func (p *callbackAgentProvider) StartRun(ctx context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
+func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
-	p.startRunRequests = append(p.startRunRequests, req)
-	p.mu.Unlock()
-
+	defer p.mu.Unlock()
+	p.ensureStateLocked()
+	p.createTurnRequests = append(p.createTurnRequests, req)
+	turnID := strings.TrimSpace(req.TurnID)
+	if turnID == "" {
+		turnID = fmt.Sprintf("turn-%d", len(p.turns)+1)
+	}
 	outputBody := ""
-	needsInteraction := false
-	for _, message := range req.Messages {
-		if strings.TrimSpace(message.Text) == "request approval" {
-			needsInteraction = true
-			break
+	needsInteraction, _ := req.Metadata["requireInteraction"].(bool)
+	if !needsInteraction {
+		for _, message := range req.Messages {
+			if strings.TrimSpace(message.Text) == "request approval" {
+				needsInteraction = true
+				break
+			}
 		}
 	}
-	if len(req.Tools) > 0 || needsInteraction {
+	if len(req.Tools) > 0 {
 		conn, err := grpc.NewClient(
 			"passthrough:///localhost",
 			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
@@ -722,7 +860,8 @@ func (p *callbackAgentProvider) StartRun(ctx context.Context, req coreagent.Star
 		client := proto.NewAgentHostClient(conn)
 		if len(req.Tools) > 0 {
 			resp, err := client.ExecuteTool(ctx, &proto.ExecuteAgentToolRequest{
-				RunId:      req.RunID,
+				SessionId:  req.SessionID,
+				TurnId:     turnID,
 				ToolCallId: "tool-call-1",
 				ToolId:     req.Tools[0].ID,
 				Arguments: func() *structpb.Struct {
@@ -737,104 +876,88 @@ func (p *callbackAgentProvider) StartRun(ctx context.Context, req coreagent.Star
 				return nil, err
 			}
 			outputBody = resp.GetBody()
-			p.mu.Lock()
 			p.toolBodies = append(p.toolBodies, outputBody)
-			p.mu.Unlock()
-		}
-		if needsInteraction {
-			requestPayload, err := structpb.NewStruct(map[string]any{"approved": true})
-			if err != nil {
-				return nil, err
-			}
-			if _, err := client.RequestInteraction(ctx, &proto.RequestAgentInteractionRequest{
-				RunId:   req.RunID,
-				Type:    proto.AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL,
-				Title:   "Approve response",
-				Prompt:  "Allow this run to continue?",
-				Request: requestPayload,
-			}); err != nil {
-				return nil, err
-			}
 		}
 	}
 
-	run := &coreagent.Run{
-		ID:           req.RunID,
-		ProviderName: req.ProviderName,
-		Status:       coreagent.RunStatusSucceeded,
+	now := time.Now().UTC().Truncate(time.Second)
+	turn := &coreagent.Turn{
+		ID:           turnID,
+		SessionID:    strings.TrimSpace(req.SessionID),
+		Model:        strings.TrimSpace(req.Model),
+		Status:       coreagent.ExecutionStatusSucceeded,
+		Messages:     cloneBootstrapAgentMessages(req.Messages),
 		OutputText:   outputBody,
-		ExecutionRef: req.ExecutionRef,
 		CreatedBy:    req.CreatedBy,
+		CreatedAt:    &now,
+		StartedAt:    &now,
+		CompletedAt:  &now,
+		ExecutionRef: strings.TrimSpace(req.ExecutionRef),
 	}
+	p.appendTurnEventLocked(turn.ID, "turn.started", map[string]any{"session_id": turn.SessionID})
 	if needsInteraction {
-		run.Status = coreagent.RunStatusWaitingForInput
-		run.StatusMessage = "waiting for input"
-	}
-	p.mu.Lock()
-	p.runs[req.RunID] = run
-	p.mu.Unlock()
-	return run, nil
-}
-
-func (p *callbackAgentProvider) GetRun(_ context.Context, req coreagent.GetRunRequest) (*coreagent.Run, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	run, ok := p.runs[req.RunID]
-	if !ok {
-		return nil, core.ErrNotFound
-	}
-	cloned := *run
-	return &cloned, nil
-}
-
-func (p *callbackAgentProvider) ListRuns(context.Context, coreagent.ListRunsRequest) ([]*coreagent.Run, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	out := make([]*coreagent.Run, 0, len(p.runs))
-	for _, run := range p.runs {
-		cloned := *run
-		out = append(out, &cloned)
-	}
-	return out, nil
-}
-
-func (p *callbackAgentProvider) CancelRun(_ context.Context, req coreagent.CancelRunRequest) (*coreagent.Run, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.cancelRequests = append(p.cancelRequests, req)
-	run, ok := p.runs[req.RunID]
-	if !ok {
-		return nil, core.ErrNotFound
-	}
-	cloned := *run
-	cloned.Status = coreagent.RunStatusCanceled
-	p.runs[req.RunID] = &cloned
-	return &cloned, nil
-}
-func (p *callbackAgentProvider) GetCapabilities(ctx context.Context, _ coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
-	if p.getCapabilitiesHook != nil {
-		if err := p.getCapabilitiesHook(ctx); err != nil {
-			return nil, err
+		turn.Status = coreagent.ExecutionStatusWaitingForInput
+		turn.StatusMessage = "waiting for input"
+		turn.CompletedAt = nil
+		interactionID := "interaction-" + turn.ID
+		p.interactions[interactionID] = &coreagent.Interaction{
+			ID:        interactionID,
+			TurnID:    turn.ID,
+			SessionID: turn.SessionID,
+			Type:      coreagent.InteractionTypeApproval,
+			State:     coreagent.InteractionStatePending,
+			Title:     "Approve response",
+			Prompt:    "Allow this turn to continue?",
+			Request:   map[string]any{"approved": true},
+			CreatedAt: &now,
 		}
+		p.appendTurnEventLocked(turn.ID, "interaction.requested", map[string]any{"interaction_id": interactionID})
+	} else {
+		p.appendTurnEventLocked(turn.ID, "turn.completed", map[string]any{"status": "succeeded"})
 	}
-	return &coreagent.ProviderCapabilities{StreamingText: true, ToolCalls: true, Approvals: true, ResumableRuns: true}, nil
+	p.turns[turn.ID] = cloneBootstrapAgentTurn(turn)
+	if session := p.sessions[turn.SessionID]; session != nil {
+		session.LastTurnAt = &now
+		session.UpdatedAt = &now
+	}
+	return cloneBootstrapAgentTurn(turn), nil
 }
-func (p *callbackAgentProvider) ResumeRun(ctx context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
-	if p.resumeHook != nil {
-		if err := p.resumeHook(ctx, req); err != nil {
+
+func (p *callbackAgentProvider) ResolveInteraction(ctx context.Context, req coreagent.ResolveInteractionRequest) (*coreagent.Interaction, error) {
+	if p.resolveInteractionHook != nil {
+		if err := p.resolveInteractionHook(ctx, req); err != nil {
 			return nil, err
 		}
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	run, ok := p.runs[req.RunID]
+	p.resolveInteractionRequests = append(p.resolveInteractionRequests, req)
+	interaction, ok := p.interactions[strings.TrimSpace(req.InteractionID)]
 	if !ok {
 		return nil, core.ErrNotFound
 	}
-	cloned := *run
-	cloned.Status = coreagent.RunStatusSucceeded
-	p.runs[req.RunID] = &cloned
-	return &cloned, nil
+	now := time.Now().UTC().Truncate(time.Second)
+	interaction.State = coreagent.InteractionStateResolved
+	interaction.Resolution = maps.Clone(req.Resolution)
+	interaction.ResolvedAt = &now
+	if turn := p.turns[interaction.TurnID]; turn != nil {
+		turn.Status = coreagent.ExecutionStatusSucceeded
+		turn.StatusMessage = interaction.ID
+		turn.CompletedAt = &now
+		p.appendTurnEventLocked(turn.ID, "interaction.resolved", map[string]any{"interaction_id": interaction.ID})
+		p.appendTurnEventLocked(turn.ID, "turn.completed", map[string]any{"status": "succeeded"})
+	}
+	return cloneBootstrapAgentInteraction(interaction), nil
+}
+
+func (p *callbackAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	return &coreagent.ProviderCapabilities{
+		StreamingText:    true,
+		ToolCalls:        true,
+		Interactions:     true,
+		ResumableTurns:   true,
+		StructuredOutput: true,
+	}, nil
 }
 
 func (p *callbackAgentProvider) Ping(context.Context) error { return nil }
@@ -847,46 +970,142 @@ func (p *callbackAgentProvider) Close() error {
 }
 
 type generatedIDAgentProvider struct {
+	coreagent.UnimplementedProvider
 	mu             sync.Mutex
-	startRequests  []coreagent.StartRunRequest
-	cancelRequests []coreagent.CancelRunRequest
+	cancelRequests []coreagent.CancelTurnRequest
 }
 
-func (p *generatedIDAgentProvider) StartRun(_ context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.startRequests = append(p.startRequests, req)
-	return &coreagent.Run{ID: "generated-run-1", Status: coreagent.RunStatusRunning}, nil
+func (p *generatedIDAgentProvider) CreateSession(context.Context, coreagent.CreateSessionRequest) (*coreagent.Session, error) {
+	return &coreagent.Session{ID: "generated-session-1", State: coreagent.SessionStateActive}, nil
 }
 
-func (p *generatedIDAgentProvider) GetRun(context.Context, coreagent.GetRunRequest) (*coreagent.Run, error) {
+func (p *generatedIDAgentProvider) GetSession(context.Context, coreagent.GetSessionRequest) (*coreagent.Session, error) {
 	return nil, core.ErrNotFound
 }
 
-func (p *generatedIDAgentProvider) ListRuns(context.Context, coreagent.ListRunsRequest) ([]*coreagent.Run, error) {
+func (p *generatedIDAgentProvider) ListSessions(context.Context, coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
 	return nil, nil
 }
 
-func (p *generatedIDAgentProvider) CancelRun(_ context.Context, req coreagent.CancelRunRequest) (*coreagent.Run, error) {
+func (p *generatedIDAgentProvider) UpdateSession(context.Context, coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
+	return nil, core.ErrNotFound
+}
+
+func (p *generatedIDAgentProvider) CreateTurn(_ context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+	return &coreagent.Turn{ID: "generated-turn-1", SessionID: req.SessionID, Status: coreagent.ExecutionStatusRunning}, nil
+}
+
+func (p *generatedIDAgentProvider) GetTurn(context.Context, coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+	return nil, core.ErrNotFound
+}
+
+func (p *generatedIDAgentProvider) ListTurns(context.Context, coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
+	return nil, nil
+}
+
+func (p *generatedIDAgentProvider) ListTurnEvents(context.Context, coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+	return nil, nil
+}
+
+func (p *generatedIDAgentProvider) GetInteraction(context.Context, coreagent.GetInteractionRequest) (*coreagent.Interaction, error) {
+	return nil, core.ErrNotFound
+}
+
+func (p *generatedIDAgentProvider) ListInteractions(context.Context, coreagent.ListInteractionsRequest) ([]*coreagent.Interaction, error) {
+	return nil, nil
+}
+
+func (p *generatedIDAgentProvider) ResolveInteraction(context.Context, coreagent.ResolveInteractionRequest) (*coreagent.Interaction, error) {
+	return nil, core.ErrNotFound
+}
+
+func (p *generatedIDAgentProvider) CancelTurn(_ context.Context, req coreagent.CancelTurnRequest) (*coreagent.Turn, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.cancelRequests = append(p.cancelRequests, req)
-	return &coreagent.Run{ID: req.RunID, Status: coreagent.RunStatusCanceled}, nil
+	return &coreagent.Turn{ID: req.TurnID, Status: coreagent.ExecutionStatusCanceled}, nil
 }
+
 func (p *generatedIDAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
-	return &coreagent.ProviderCapabilities{StreamingText: true}, nil
-}
-func (p *generatedIDAgentProvider) ResumeRun(_ context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
-	return &coreagent.Run{ID: req.RunID, Status: coreagent.RunStatusSucceeded}, nil
+	return &coreagent.ProviderCapabilities{StreamingText: true, Interactions: true, ResumableTurns: true}, nil
 }
 
 func (p *generatedIDAgentProvider) Ping(context.Context) error { return nil }
 func (p *generatedIDAgentProvider) Close() error               { return nil }
 
-func (p *generatedIDAgentProvider) CancelRequests() []coreagent.CancelRunRequest {
+func (p *generatedIDAgentProvider) CancelTurnRequests() []coreagent.CancelTurnRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return append([]coreagent.CancelRunRequest(nil), p.cancelRequests...)
+	return append([]coreagent.CancelTurnRequest(nil), p.cancelRequests...)
+}
+
+func cloneBootstrapAgentSession(src *coreagent.Session) *coreagent.Session {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.Metadata = maps.Clone(src.Metadata)
+	return &dst
+}
+
+func cloneBootstrapAgentTurn(src *coreagent.Turn) *coreagent.Turn {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.Messages = cloneBootstrapAgentMessages(src.Messages)
+	dst.StructuredOutput = maps.Clone(src.StructuredOutput)
+	return &dst
+}
+
+func cloneBootstrapAgentTurnEvent(src *coreagent.TurnEvent) *coreagent.TurnEvent {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.Data = maps.Clone(src.Data)
+	return &dst
+}
+
+func cloneBootstrapAgentInteraction(src *coreagent.Interaction) *coreagent.Interaction {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.Request = maps.Clone(src.Request)
+	dst.Resolution = maps.Clone(src.Resolution)
+	return &dst
+}
+
+func cloneBootstrapAgentMessages(src []coreagent.Message) []coreagent.Message {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]coreagent.Message, 0, len(src))
+	for _, message := range src {
+		cloned := message
+		cloned.Metadata = maps.Clone(message.Metadata)
+		if len(message.Parts) > 0 {
+			cloned.Parts = make([]coreagent.MessagePart, 0, len(message.Parts))
+			for _, part := range message.Parts {
+				partCopy := part
+				partCopy.JSON = maps.Clone(part.JSON)
+				if part.ToolCall != nil {
+					value := *part.ToolCall
+					value.Arguments = maps.Clone(part.ToolCall.Arguments)
+					partCopy.ToolCall = &value
+				}
+				if part.ToolResult != nil {
+					value := *part.ToolResult
+					value.Output = maps.Clone(part.ToolResult.Output)
+					partCopy.ToolResult = &value
+				}
+				cloned.Parts = append(cloned.Parts, partCopy)
+			}
+		}
+		out = append(out, cloned)
+	}
+	return out
 }
 
 type recordingWorkflowProvider struct {
@@ -1264,42 +1483,6 @@ func invokeAgentHostCallback(t *testing.T, hostServices []providerhost.HostServi
 	t.Cleanup(func() { _ = conn.Close() })
 
 	return proto.NewAgentHostClient(conn).ExecuteTool(context.Background(), req)
-}
-
-func invokeAgentHostEmitEvent(t *testing.T, hostServices []providerhost.HostService, req *proto.EmitAgentEventRequest) error {
-	t.Helper()
-
-	if len(hostServices) != 1 {
-		t.Fatalf("agent host services = %d, want 1", len(hostServices))
-	}
-	if hostServices[0].Register == nil {
-		t.Fatal("agent host register func is nil")
-	}
-
-	lis := bufconn.Listen(1024 * 1024)
-	srv := grpc.NewServer()
-	hostServices[0].Register(srv)
-	go func() {
-		_ = srv.Serve(lis)
-	}()
-	t.Cleanup(func() {
-		srv.Stop()
-		_ = lis.Close()
-	})
-
-	conn, err := grpc.NewClient("passthrough:///bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return lis.Dial()
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		t.Fatalf("grpc.NewClient: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-
-	_, err = proto.NewAgentHostClient(conn).EmitEvent(context.Background(), req)
-	return err
 }
 
 func withIndexedDBHostClient(t *testing.T, hostService providerhost.HostService, fn func(proto.IndexedDBClient)) {
@@ -1864,7 +2047,7 @@ func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
 			return nil, fmt.Errorf("agent host services = %d, want 1", len(hostServices))
 		}
 		hostSockets[name] = hostServices[0].EnvVar
-		return &stubAgentProvider{}, nil
+		return newRecordingAgentProvider(), nil
 	}
 
 	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
@@ -1895,16 +2078,18 @@ func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
 	if selectedName != "reviewer" {
 		t.Fatalf("selected agent provider = %q, want %q", selectedName, "reviewer")
 	}
-	run, err := provider.StartRun(context.Background(), coreagent.StartRunRequest{})
+	session, err := provider.CreateSession(context.Background(), coreagent.CreateSessionRequest{
+		Model: "gpt-test",
+	})
 	if err != nil {
-		t.Fatalf("StartRun: %v", err)
+		t.Fatalf("CreateSession: %v", err)
 	}
-	if run == nil || run.ID != "run-1" {
-		t.Fatalf("run = %#v, want ID run-1", run)
+	if session == nil || session.ID != "session-1" {
+		t.Fatalf("session = %#v, want ID session-1", session)
 	}
 }
 
-func TestBootstrapAgentManagerRunPersistsMetadataForToolCallbacks(t *testing.T) {
+func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -1984,9 +2169,18 @@ func TestBootstrapAgentManagerRunPersistsMetadataForToolCallbacks(t *testing.T) 
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
 
-	req := coreagent.ManagerRunRequest{
-		ProviderName:   "managed",
+	session, err := result.AgentManager.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+		ClientRef:    "cli-session-1",
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession: %v", err)
+	}
+	req := coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
 		IdempotencyKey: "demo-idempotency-key",
+		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
 		ToolRefs: []coreagent.ToolRef{{
 			PluginName: "roadmap",
@@ -1995,65 +2189,71 @@ func TestBootstrapAgentManagerRunPersistsMetadataForToolCallbacks(t *testing.T) 
 		}},
 	}
 
-	first, err := result.AgentManager.Run(ctx, p, req)
+	first, err := result.AgentManager.CreateTurn(ctx, p, req)
 	if err != nil {
-		t.Fatalf("AgentManager.Run(first): %v", err)
+		t.Fatalf("AgentManager.CreateTurn(first): %v", err)
 	}
-	second, err := result.AgentManager.Run(ctx, p, req)
+	second, err := result.AgentManager.CreateTurn(ctx, p, req)
 	if err != nil {
-		t.Fatalf("AgentManager.Run(second): %v", err)
+		t.Fatalf("AgentManager.CreateTurn(second): %v", err)
 	}
-	if first.Run == nil || second.Run == nil {
-		t.Fatalf("managed runs = %#v / %#v", first, second)
+	if first == nil || second == nil {
+		t.Fatalf("managed turns = %#v / %#v", first, second)
 	}
-	if first.Run.ID != second.Run.ID {
-		t.Fatalf("idempotent run ids = (%q, %q), want identical ids", first.Run.ID, second.Run.ID)
+	if first.ID != second.ID {
+		t.Fatalf("idempotent turn ids = (%q, %q), want identical ids", first.ID, second.ID)
 	}
 
 	provider.mu.Lock()
-	startRunCount := len(provider.startRunRequests)
-	startReq := provider.startRunRequests[0]
+	createTurnCount := len(provider.createTurnRequests)
+	createTurnReq := provider.createTurnRequests[0]
 	toolBodies := append([]string(nil), provider.toolBodies...)
 	provider.mu.Unlock()
 
-	if startRunCount != 1 {
-		t.Fatalf("StartRun count = %d, want 1", startRunCount)
+	if createTurnCount != 1 {
+		t.Fatalf("CreateTurn count = %d, want 1", createTurnCount)
 	}
-	if startReq.RunID != first.Run.ID {
-		t.Fatalf("StartRun run_id = %q, want %q", startReq.RunID, first.Run.ID)
+	if createTurnReq.TurnID != first.ID {
+		t.Fatalf("CreateTurn turn_id = %q, want %q", createTurnReq.TurnID, first.ID)
 	}
-	if startReq.ExecutionRef != first.Run.ID {
-		t.Fatalf("StartRun execution_ref = %q, want %q", startReq.ExecutionRef, first.Run.ID)
+	if createTurnReq.SessionID != session.ID {
+		t.Fatalf("CreateTurn session_id = %q, want %q", createTurnReq.SessionID, session.ID)
 	}
-	if startReq.CreatedBy.SubjectID != p.SubjectID {
-		t.Fatalf("StartRun created_by.subject_id = %q, want %q", startReq.CreatedBy.SubjectID, p.SubjectID)
+	if createTurnReq.ExecutionRef != first.ID {
+		t.Fatalf("CreateTurn execution_ref = %q, want %q", createTurnReq.ExecutionRef, first.ID)
 	}
-	if len(startReq.Tools) != 1 {
-		t.Fatalf("StartRun tools = %#v, want 1 tool", startReq.Tools)
+	if createTurnReq.CreatedBy.SubjectID != p.SubjectID {
+		t.Fatalf("CreateTurn created_by.subject_id = %q, want %q", createTurnReq.CreatedBy.SubjectID, p.SubjectID)
 	}
-	if startReq.Tools[0].Target.PluginName != "roadmap" || startReq.Tools[0].Target.Operation != "sync" {
-		t.Fatalf("StartRun tool target = %#v", startReq.Tools[0].Target)
+	if len(createTurnReq.Tools) != 1 {
+		t.Fatalf("CreateTurn tools = %#v, want 1 tool", createTurnReq.Tools)
+	}
+	if createTurnReq.Tools[0].Target.PluginName != "roadmap" || createTurnReq.Tools[0].Target.Operation != "sync" {
+		t.Fatalf("CreateTurn tool target = %#v", createTurnReq.Tools[0].Target)
 	}
 	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"subject":"user:user-123"`) || !strings.Contains(toolBodies[0], `"taskId":"task-123"`) {
 		t.Fatalf("tool callback bodies = %#v", toolBodies)
 	}
 
-	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), first.Run.ID)
+	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), first.ID)
 	if err != nil {
 		t.Fatalf("AgentRunMetadata.Get: %v", err)
 	}
 	if ref.IdempotencyKey != "demo-idempotency-key" {
 		t.Fatalf("stored idempotency key = %q, want %q", ref.IdempotencyKey, "demo-idempotency-key")
 	}
-	if len(ref.Tools) != 1 || ref.Tools[0].ID != startReq.Tools[0].ID {
-		t.Fatalf("stored tools = %#v, want tool id %q", ref.Tools, startReq.Tools[0].ID)
+	if ref.SessionID != session.ID {
+		t.Fatalf("stored session id = %q, want %q", ref.SessionID, session.ID)
+	}
+	if len(ref.Tools) != 1 || ref.Tools[0].ID != createTurnReq.Tools[0].ID {
+		t.Fatalf("stored tools = %#v, want tool id %q", ref.Tools, createTurnReq.Tools[0].ID)
 	}
 	if ref.CredentialSubjectID != principal.WorkloadSubjectID("agent-credential") {
 		t.Fatalf("stored credential subject = %q, want %q", ref.CredentialSubjectID, principal.WorkloadSubjectID("agent-credential"))
 	}
 }
 
-func TestBootstrapAgentProviderTracksPlainRunsForInteractionCallbacks(t *testing.T) {
+func TestBootstrapAgentProviderSupportsDirectTurnInteractionLifecycle(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -2092,58 +2292,65 @@ func TestBootstrapAgentProviderTracksPlainRunsForInteractionCallbacks(t *testing
 		t.Fatalf("ResolveProviderSelection: %v", err)
 	}
 	startCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "system:config"})
-	run, err := selected.StartRun(startCtx, coreagent.StartRunRequest{
-		RunID:        "agent-run-plain",
-		ProviderName: "managed",
-		CreatedBy:    coreagent.Actor{SubjectID: "system:config"},
+	if _, err := selected.CreateSession(startCtx, coreagent.CreateSessionRequest{
+		SessionID: "agent-session-plain",
+		Model:     "gpt-test",
+		CreatedBy: coreagent.Actor{SubjectID: "system:config"},
+	}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	turn, err := selected.CreateTurn(startCtx, coreagent.CreateTurnRequest{
+		TurnID:    "agent-turn-plain",
+		SessionID: "agent-session-plain",
+		Model:     "gpt-test",
+		CreatedBy: coreagent.Actor{SubjectID: "system:config"},
 		Messages: []coreagent.Message{{
 			Role: "user",
 			Text: "request approval",
 		}},
 	})
 	if err != nil {
-		t.Fatalf("StartRun: %v", err)
+		t.Fatalf("CreateTurn: %v", err)
 	}
-	if run == nil || run.Status != coreagent.RunStatusWaitingForInput {
-		t.Fatalf("run = %#v, want waiting_for_input", run)
+	if turn == nil || turn.Status != coreagent.ExecutionStatusWaitingForInput {
+		t.Fatalf("turn = %#v, want waiting_for_input", turn)
 	}
 
-	interactions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-plain")
+	interactions, err := selected.ListInteractions(context.Background(), coreagent.ListInteractionsRequest{TurnID: "agent-turn-plain"})
 	if err != nil {
-		t.Fatalf("AgentRunInteractions.ListByRun: %v", err)
+		t.Fatalf("ListInteractions: %v", err)
 	}
 	if len(interactions) != 1 || interactions[0].State != coreagent.InteractionStatePending {
 		t.Fatalf("interactions = %#v, want one pending interaction", interactions)
 	}
 
-	provider.resumeHook = func(ctx context.Context, req coreagent.ResumeRunRequest) error {
-		current, err := result.Services.AgentRunInteractions.Get(ctx, req.InteractionID)
+	provider.resolveInteractionHook = func(ctx context.Context, req coreagent.ResolveInteractionRequest) error {
+		current, err := selected.GetInteraction(ctx, coreagent.GetInteractionRequest{InteractionID: req.InteractionID})
 		if err != nil {
 			return err
 		}
-		if current.State != coreagent.InteractionStatePending {
-			return fmt.Errorf("interaction state during direct provider resume = %q, want pending", current.State)
+		if current.State != coreagent.InteractionStatePending || current.TurnID != "agent-turn-plain" {
+			return fmt.Errorf("interaction during direct provider resolve = %#v, want pending agent-turn-plain", current)
 		}
 		return nil
 	}
 
-	resumed, err := selected.ResumeRun(startCtx, coreagent.ResumeRunRequest{
-		RunID:         "agent-run-plain",
+	resolved, err := selected.ResolveInteraction(startCtx, coreagent.ResolveInteractionRequest{
 		InteractionID: interactions[0].ID,
 		Resolution: map[string]any{
 			"approved": true,
 		},
 	})
 	if err != nil {
-		t.Fatalf("ResumeRun: %v", err)
+		t.Fatalf("ResolveInteraction: %v", err)
 	}
-	if resumed == nil || resumed.Status != coreagent.RunStatusSucceeded {
-		t.Fatalf("resumed run = %#v, want succeeded", resumed)
+	if resolved == nil || resolved.State != coreagent.InteractionStateResolved || resolved.Resolution["approved"] != true {
+		t.Fatalf("resolved interaction = %#v, want resolved approved interaction", resolved)
 	}
 
-	resolvedInteractions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-plain")
+	resolvedInteractions, err := selected.ListInteractions(context.Background(), coreagent.ListInteractionsRequest{TurnID: "agent-turn-plain"})
 	if err != nil {
-		t.Fatalf("AgentRunInteractions.ListByRun(resolved): %v", err)
+		t.Fatalf("ListInteractions(resolved): %v", err)
 	}
 	if len(resolvedInteractions) != 1 || resolvedInteractions[0].State != coreagent.InteractionStateResolved || resolvedInteractions[0].Resolution["approved"] != true {
 		t.Fatalf("resolved interactions = %#v, want one resolved interaction", resolvedInteractions)
@@ -2151,12 +2358,12 @@ func TestBootstrapAgentProviderTracksPlainRunsForInteractionCallbacks(t *testing
 
 	provider.mu.Lock()
 	defer provider.mu.Unlock()
-	if len(provider.startRunRequests) != 1 || len(provider.startRunRequests[0].Tools) != 0 || len(provider.startRunRequests[0].Metadata) != 0 {
-		t.Fatalf("start run requests = %#v, want plain run without tools or metadata", provider.startRunRequests)
+	if len(provider.createTurnRequests) != 1 || len(provider.createTurnRequests[0].Tools) != 0 || len(provider.createTurnRequests[0].Metadata) != 0 {
+		t.Fatalf("create turn requests = %#v, want plain turn without tools or metadata", provider.createTurnRequests)
 	}
 }
 
-func TestBootstrapAgentProviderResumeIgnoresMissingResolvedInteraction(t *testing.T) {
+func TestBootstrapAgentManagerResolvesProviderOwnedInteractions(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -2190,316 +2397,387 @@ func TestBootstrapAgentProviderResumeIgnoresMissingResolvedInteraction(t *testin
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	_, selected, err := result.AgentControl.ResolveProviderSelection("")
-	if err != nil {
-		t.Fatalf("ResolveProviderSelection: %v", err)
+	p := &principal.Principal{
+		SubjectID: "system:config",
 	}
-	startCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "system:config"})
-	run, err := selected.StartRun(startCtx, coreagent.StartRunRequest{
-		RunID:        "agent-run-race",
-		ProviderName: "managed",
-		CreatedBy:    coreagent.Actor{SubjectID: "system:config"},
-		Messages: []coreagent.Message{{
-			Role: "user",
-			Text: "request approval",
-		}},
-	})
-	if err != nil {
-		t.Fatalf("StartRun: %v", err)
-	}
-	if run == nil || run.Status != coreagent.RunStatusWaitingForInput {
-		t.Fatalf("run = %#v, want waiting_for_input", run)
-	}
-
-	interactions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-race")
-	if err != nil {
-		t.Fatalf("AgentRunInteractions.ListByRun: %v", err)
-	}
-	if len(interactions) != 1 || interactions[0].State != coreagent.InteractionStatePending {
-		t.Fatalf("interactions = %#v, want one pending interaction", interactions)
-	}
-
-	provider.resumeHook = func(ctx context.Context, req coreagent.ResumeRunRequest) error {
-		return result.Services.AgentRunInteractions.DeleteByRun(ctx, req.RunID)
-	}
-
-	resumed, err := selected.ResumeRun(startCtx, coreagent.ResumeRunRequest{
-		RunID:         "agent-run-race",
-		InteractionID: interactions[0].ID,
-		Resolution: map[string]any{
-			"approved": true,
-		},
-	})
-	if err != nil {
-		t.Fatalf("ResumeRun: %v", err)
-	}
-	if resumed == nil || resumed.Status != coreagent.RunStatusSucceeded {
-		t.Fatalf("resumed run = %#v, want succeeded", resumed)
-	}
-
-	remainingInteractions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-race")
-	if err != nil {
-		t.Fatalf("AgentRunInteractions.ListByRun(remaining): %v", err)
-	}
-	if len(remainingInteractions) != 0 {
-		t.Fatalf("remaining interactions = %#v, want none after simulated deletion race", remainingInteractions)
-	}
-}
-
-func TestBootstrapAgentManagerResumeReturnsInteractionNotPendingOnValidationRace(t *testing.T) {
-	t.Parallel()
-
-	cfg := validConfig()
-	cfg.Providers.Agent = map[string]*config.ProviderEntry{
-		"managed": {
-			Source:  config.ProviderSource{Path: "stub"},
-			Default: true,
-		},
-	}
-
-	var provider *callbackAgentProvider
-	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := providerhost.StartHostServices(hostServices)
-		if err != nil {
-			return nil, err
-		}
-		value, err := newCallbackAgentProvider(started)
-		if err != nil {
-			_ = started.Close()
-			return nil, err
-		}
-		provider = value
-		return value, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	_, selected, err := result.AgentControl.ResolveProviderSelection("")
-	if err != nil {
-		t.Fatalf("ResolveProviderSelection: %v", err)
-	}
-	resumeManagingProvider, ok := selected.(agentmanager.ResumeRunInteractionManagingProvider)
-	if !ok || !resumeManagingProvider.ManagesResumeRunInteractions() {
-		t.Fatalf("selected provider = %T, want ResumeRunInteractionManagingProvider", selected)
-	}
-	p := &principal.Principal{SubjectID: "system:config"}
 	startCtx := principal.WithPrincipal(context.Background(), p)
-	run, err := selected.StartRun(startCtx, coreagent.StartRunRequest{
-		RunID:        "agent-run-pending-race",
+	session, err := result.AgentManager.CreateSession(startCtx, p, coreagent.ManagerCreateSessionRequest{
 		ProviderName: "managed",
-		CreatedBy:    coreagent.Actor{SubjectID: "system:config"},
+		Model:        "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession: %v", err)
+	}
+	turn, err := result.AgentManager.CreateTurn(startCtx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "gpt-test",
 		Messages: []coreagent.Message{{
 			Role: "user",
 			Text: "request approval",
 		}},
 	})
 	if err != nil {
-		t.Fatalf("StartRun: %v", err)
+		t.Fatalf("AgentManager.CreateTurn: %v", err)
 	}
-	if run == nil || run.Status != coreagent.RunStatusWaitingForInput {
-		t.Fatalf("run = %#v, want waiting_for_input", run)
+	if turn == nil || turn.Status != coreagent.ExecutionStatusWaitingForInput {
+		t.Fatalf("turn = %#v, want waiting_for_input", turn)
 	}
 
-	interactions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-pending-race")
+	interactions, err := result.AgentManager.ListInteractions(startCtx, p, turn.ID)
 	if err != nil {
-		t.Fatalf("AgentRunInteractions.ListByRun: %v", err)
+		t.Fatalf("AgentManager.ListInteractions: %v", err)
 	}
 	if len(interactions) != 1 || interactions[0].State != coreagent.InteractionStatePending {
 		t.Fatalf("interactions = %#v, want one pending interaction", interactions)
 	}
 
-	provider.getCapabilitiesHook = func(ctx context.Context) error {
-		_, err := result.Services.AgentRunInteractions.Resolve(ctx, interactions[0].ID, map[string]any{
-			"approved": false,
-		}, time.Now())
-		return err
-	}
-
-	_, err = result.AgentManager.ResumeRun(startCtx, p, "agent-run-pending-race", interactions[0].ID, map[string]any{
-		"approved": true,
-	})
-	if !errors.Is(err, agentmanager.ErrAgentInteractionNotPending) {
-		t.Fatalf("ResumeRun error = %v, want ErrAgentInteractionNotPending", err)
-	}
-}
-
-func TestBootstrapAgentManagerResumeReturnsInteractionNotFoundOnValidationRace(t *testing.T) {
-	t.Parallel()
-
-	cfg := validConfig()
-	cfg.Providers.Agent = map[string]*config.ProviderEntry{
-		"managed": {
-			Source:  config.ProviderSource{Path: "stub"},
-			Default: true,
-		},
-	}
-
-	var provider *callbackAgentProvider
-	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := providerhost.StartHostServices(hostServices)
-		if err != nil {
-			return nil, err
-		}
-		value, err := newCallbackAgentProvider(started)
-		if err != nil {
-			_ = started.Close()
-			return nil, err
-		}
-		provider = value
-		return value, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	_, selected, err := result.AgentControl.ResolveProviderSelection("")
-	if err != nil {
-		t.Fatalf("ResolveProviderSelection: %v", err)
-	}
-	p := &principal.Principal{SubjectID: "system:config"}
-	startCtx := principal.WithPrincipal(context.Background(), p)
-	run, err := selected.StartRun(startCtx, coreagent.StartRunRequest{
-		RunID:        "agent-run-not-found-race",
-		ProviderName: "managed",
-		CreatedBy:    coreagent.Actor{SubjectID: "system:config"},
-		Messages: []coreagent.Message{{
-			Role: "user",
-			Text: "request approval",
-		}},
-	})
-	if err != nil {
-		t.Fatalf("StartRun: %v", err)
-	}
-	if run == nil || run.Status != coreagent.RunStatusWaitingForInput {
-		t.Fatalf("run = %#v, want waiting_for_input", run)
-	}
-
-	interactions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-not-found-race")
-	if err != nil {
-		t.Fatalf("AgentRunInteractions.ListByRun: %v", err)
-	}
-	if len(interactions) != 1 || interactions[0].State != coreagent.InteractionStatePending {
-		t.Fatalf("interactions = %#v, want one pending interaction", interactions)
-	}
-
-	provider.getCapabilitiesHook = func(ctx context.Context) error {
-		return result.Services.AgentRunInteractions.DeleteByRun(ctx, "agent-run-not-found-race")
-	}
-
-	_, err = result.AgentManager.ResumeRun(startCtx, p, "agent-run-not-found-race", interactions[0].ID, map[string]any{
-		"approved": true,
-	})
-	if !errors.Is(err, agentmanager.ErrAgentInteractionNotFound) {
-		t.Fatalf("ResumeRun error = %v, want ErrAgentInteractionNotFound", err)
-	}
-}
-
-func TestBootstrapAgentManagerResumeDelegatesInteractionTrackingToProvider(t *testing.T) {
-	t.Parallel()
-
-	cfg := validConfig()
-	cfg.Providers.Agent = map[string]*config.ProviderEntry{
-		"managed": {
-			Source:  config.ProviderSource{Path: "stub"},
-			Default: true,
-		},
-	}
-
-	var provider *callbackAgentProvider
-	factories := validFactories()
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := providerhost.StartHostServices(hostServices)
-		if err != nil {
-			return nil, err
-		}
-		value, err := newCallbackAgentProvider(started)
-		if err != nil {
-			_ = started.Close()
-			return nil, err
-		}
-		provider = value
-		return value, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	_, selected, err := result.AgentControl.ResolveProviderSelection("")
-	if err != nil {
-		t.Fatalf("ResolveProviderSelection: %v", err)
-	}
-	p := &principal.Principal{SubjectID: "system:config"}
-	startCtx := principal.WithPrincipal(context.Background(), p)
-	run, err := selected.StartRun(startCtx, coreagent.StartRunRequest{
-		RunID:        "agent-run-managed-resume",
-		ProviderName: "managed",
-		CreatedBy:    coreagent.Actor{SubjectID: "system:config"},
-		Messages: []coreagent.Message{{
-			Role: "user",
-			Text: "request approval",
-		}},
-	})
-	if err != nil {
-		t.Fatalf("StartRun: %v", err)
-	}
-	if run == nil || run.Status != coreagent.RunStatusWaitingForInput {
-		t.Fatalf("run = %#v, want waiting_for_input", run)
-	}
-
-	interactions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-managed-resume")
-	if err != nil {
-		t.Fatalf("AgentRunInteractions.ListByRun: %v", err)
-	}
-	if len(interactions) != 1 || interactions[0].State != coreagent.InteractionStatePending {
-		t.Fatalf("interactions = %#v, want one pending interaction", interactions)
-	}
-
-	provider.resumeHook = func(ctx context.Context, req coreagent.ResumeRunRequest) error {
-		current, err := result.Services.AgentRunInteractions.Get(ctx, req.InteractionID)
+	provider.resolveInteractionHook = func(ctx context.Context, req coreagent.ResolveInteractionRequest) error {
+		current, err := provider.GetInteraction(ctx, coreagent.GetInteractionRequest{InteractionID: req.InteractionID})
 		if err != nil {
 			return err
 		}
-		if current.State != coreagent.InteractionStatePending {
-			return fmt.Errorf("interaction state during manager resume = %q, want pending", current.State)
+		if current.State != coreagent.InteractionStatePending || current.TurnID != turn.ID {
+			return fmt.Errorf("interaction during manager resolve = %#v, want pending %q", current, turn.ID)
 		}
 		return nil
 	}
 
-	resumed, err := result.AgentManager.ResumeRun(startCtx, p, "agent-run-managed-resume", interactions[0].ID, map[string]any{
+	resolved, err := result.AgentManager.ResolveInteraction(startCtx, p, turn.ID, interactions[0].ID, map[string]any{
 		"approved": true,
 	})
 	if err != nil {
-		t.Fatalf("ResumeRun: %v", err)
+		t.Fatalf("AgentManager.ResolveInteraction: %v", err)
 	}
-	if resumed == nil || resumed.Run == nil || resumed.Run.Status != coreagent.RunStatusSucceeded {
-		t.Fatalf("resumed run = %#v, want succeeded", resumed)
+	if resolved == nil || resolved.State != coreagent.InteractionStateResolved || resolved.Resolution["approved"] != true {
+		t.Fatalf("resolved interaction = %#v, want resolved approved interaction", resolved)
 	}
 
-	resolvedInteractions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-managed-resume")
+	resolvedInteractions, err := result.AgentManager.ListInteractions(startCtx, p, turn.ID)
 	if err != nil {
-		t.Fatalf("AgentRunInteractions.ListByRun(resolved): %v", err)
+		t.Fatalf("AgentManager.ListInteractions(resolved): %v", err)
 	}
 	if len(resolvedInteractions) != 1 || resolvedInteractions[0].State != coreagent.InteractionStateResolved || resolvedInteractions[0].Resolution["approved"] != true {
 		t.Fatalf("resolved interactions = %#v, want one resolved interaction", resolvedInteractions)
 	}
 }
 
-func TestBootstrapAgentManagerRunReturnsInProgressForClaimedIdempotencyWithoutMetadata(t *testing.T) {
+func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundWhenProviderInteractionDisappears(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	var provider *callbackAgentProvider
+	factories := validFactories()
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := providerhost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	p := &principal.Principal{
+		SubjectID: "system:config",
+	}
+	startCtx := principal.WithPrincipal(context.Background(), p)
+	session, err := result.AgentManager.CreateSession(startCtx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession: %v", err)
+	}
+	turn, err := result.AgentManager.CreateTurn(startCtx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "gpt-test",
+		Messages: []coreagent.Message{{
+			Role: "user",
+			Text: "request approval",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn: %v", err)
+	}
+	if turn == nil || turn.Status != coreagent.ExecutionStatusWaitingForInput {
+		t.Fatalf("turn = %#v, want waiting_for_input", turn)
+	}
+
+	interactions, err := result.AgentManager.ListInteractions(startCtx, p, turn.ID)
+	if err != nil {
+		t.Fatalf("AgentManager.ListInteractions: %v", err)
+	}
+	if len(interactions) != 1 || interactions[0].State != coreagent.InteractionStatePending {
+		t.Fatalf("interactions = %#v, want one pending interaction", interactions)
+	}
+
+	provider.resolveInteractionHook = func(context.Context, coreagent.ResolveInteractionRequest) error {
+		provider.mu.Lock()
+		defer provider.mu.Unlock()
+		delete(provider.interactions, interactions[0].ID)
+		return nil
+	}
+
+	_, err = result.AgentManager.ResolveInteraction(startCtx, p, turn.ID, interactions[0].ID, map[string]any{
+		"approved": true,
+	})
+	if !errors.Is(err, agentmanager.ErrAgentInteractionNotFound) {
+		t.Fatalf("ResolveInteraction error = %v, want ErrAgentInteractionNotFound", err)
+	}
+}
+
+func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundOnProviderInteractionIDMismatch(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	var provider *callbackAgentProvider
+	factories := validFactories()
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := providerhost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	p := &principal.Principal{SubjectID: "system:config"}
+	startCtx := principal.WithPrincipal(context.Background(), p)
+	session, err := result.AgentManager.CreateSession(startCtx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession: %v", err)
+	}
+	turn, err := result.AgentManager.CreateTurn(startCtx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "gpt-test",
+		Messages: []coreagent.Message{{
+			Role: "user",
+			Text: "request approval",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn: %v", err)
+	}
+
+	interactions, err := result.AgentManager.ListInteractions(startCtx, p, turn.ID)
+	if err != nil {
+		t.Fatalf("AgentManager.ListInteractions: %v", err)
+	}
+	if len(interactions) != 1 {
+		t.Fatalf("interactions = %#v, want one interaction", interactions)
+	}
+
+	provider.resolveInteractionHook = func(context.Context, coreagent.ResolveInteractionRequest) error {
+		provider.mu.Lock()
+		defer provider.mu.Unlock()
+		current := provider.interactions[interactions[0].ID]
+		if current == nil {
+			return fmt.Errorf("interaction %q not found", interactions[0].ID)
+		}
+		current.ID = "interaction-mismatch"
+		return nil
+	}
+
+	_, err = result.AgentManager.ResolveInteraction(startCtx, p, turn.ID, interactions[0].ID, map[string]any{
+		"approved": true,
+	})
+	if !errors.Is(err, agentmanager.ErrAgentInteractionNotFound) {
+		t.Fatalf("ResolveInteraction error = %v, want ErrAgentInteractionNotFound", err)
+	}
+}
+
+func TestBootstrapAgentManagerListInteractionsRejectsMissingSessionID(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	var provider *callbackAgentProvider
+	factories := validFactories()
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := providerhost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	p := &principal.Principal{SubjectID: "system:config"}
+	startCtx := principal.WithPrincipal(context.Background(), p)
+	session, err := result.AgentManager.CreateSession(startCtx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession: %v", err)
+	}
+	turn, err := result.AgentManager.CreateTurn(startCtx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "gpt-test",
+		Messages: []coreagent.Message{{
+			Role: "user",
+			Text: "request approval",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn: %v", err)
+	}
+
+	provider.mu.Lock()
+	for _, interaction := range provider.interactions {
+		interaction.SessionID = ""
+	}
+	provider.mu.Unlock()
+
+	if _, err := result.AgentManager.ListInteractions(startCtx, p, turn.ID); err == nil {
+		t.Fatal("ListInteractions error = nil, want missing session id failure")
+	} else if !strings.Contains(err.Error(), `for session "", want "`+session.ID+`"`) {
+		t.Fatalf("ListInteractions error = %v, want missing session id failure", err)
+	}
+}
+
+func TestBootstrapAgentManagerResolveInteractionRejectsMissingSessionID(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	var provider *callbackAgentProvider
+	factories := validFactories()
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := providerhost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	p := &principal.Principal{SubjectID: "system:config"}
+	startCtx := principal.WithPrincipal(context.Background(), p)
+	session, err := result.AgentManager.CreateSession(startCtx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession: %v", err)
+	}
+	turn, err := result.AgentManager.CreateTurn(startCtx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "gpt-test",
+		Messages: []coreagent.Message{{
+			Role: "user",
+			Text: "request approval",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn: %v", err)
+	}
+
+	interactions, err := result.AgentManager.ListInteractions(startCtx, p, turn.ID)
+	if err != nil {
+		t.Fatalf("AgentManager.ListInteractions: %v", err)
+	}
+	if len(interactions) != 1 {
+		t.Fatalf("interactions = %#v, want one interaction", interactions)
+	}
+
+	provider.resolveInteractionHook = func(context.Context, coreagent.ResolveInteractionRequest) error {
+		provider.mu.Lock()
+		defer provider.mu.Unlock()
+		current := provider.interactions[interactions[0].ID]
+		if current == nil {
+			return fmt.Errorf("interaction %q not found", interactions[0].ID)
+		}
+		current.SessionID = ""
+		return nil
+	}
+
+	if _, err := result.AgentManager.ResolveInteraction(startCtx, p, turn.ID, interactions[0].ID, map[string]any{
+		"approved": true,
+	}); err == nil {
+		t.Fatal("ResolveInteraction error = nil, want missing session id failure")
+	} else if !strings.Contains(err.Error(), `without session id`) {
+		t.Fatalf("ResolveInteraction error = %v, want missing session id failure", err)
+	}
+}
+
+func TestBootstrapAgentManagerCreateTurnReturnsInProgressForClaimedIdempotencyWithoutMetadata(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -2531,33 +2809,42 @@ func TestBootstrapAgentManagerRunReturnsInProgressForClaimedIdempotencyWithoutMe
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
 
-	const runID = "pending-run"
-	claimedRunID, claimed, err := result.Services.AgentRunMetadata.ClaimIdempotency(context.Background(), p.SubjectID, "managed", "pending-key", runID, time.Now())
+	session, err := result.AgentManager.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession: %v", err)
+	}
+
+	const turnID = "pending-turn"
+	claimedTurnID, claimed, err := result.Services.AgentRunMetadata.ClaimIdempotency(context.Background(), p.SubjectID, "managed", "pending-key", turnID, time.Now())
 	if err != nil {
 		t.Fatalf("ClaimIdempotency: %v", err)
 	}
-	if !claimed || claimedRunID != runID {
-		t.Fatalf("ClaimIdempotency = (%q, %t), want (%q, true)", claimedRunID, claimed, runID)
+	if !claimed || claimedTurnID != turnID {
+		t.Fatalf("ClaimIdempotency = (%q, %t), want (%q, true)", claimedTurnID, claimed, turnID)
 	}
 
-	_, err = result.AgentManager.Run(ctx, p, coreagent.ManagerRunRequest{
-		ProviderName:   "managed",
+	_, err = result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
 		IdempotencyKey: "pending-key",
+		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "continue"}},
 	})
-	if !errors.Is(err, agentmanager.ErrAgentRunCreationInProgress) {
-		t.Fatalf("AgentManager.Run error = %v, want %v", err, agentmanager.ErrAgentRunCreationInProgress)
+	if !errors.Is(err, agentmanager.ErrAgentTurnCreationInProgress) {
+		t.Fatalf("AgentManager.CreateTurn error = %v, want %v", err, agentmanager.ErrAgentTurnCreationInProgress)
 	}
 
 	provider.mu.Lock()
-	startRunCount := len(provider.startRunRequests)
+	createTurnCount := len(provider.createTurnRequests)
 	provider.mu.Unlock()
-	if startRunCount != 0 {
-		t.Fatalf("StartRun count = %d, want 0", startRunCount)
+	if createTurnCount != 0 {
+		t.Fatalf("CreateTurn count = %d, want 0", createTurnCount)
 	}
 }
 
-func TestBootstrapAgentManagerIdempotentReplayDoesNotDeleteMetadataWhenCallerLosesToolAccess(t *testing.T) {
+func TestBootstrapAgentManagerIdempotentTurnReplayDoesNotDeleteMetadataWhenCallerLosesToolAccess(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -2610,9 +2897,18 @@ func TestBootstrapAgentManagerIdempotentReplayDoesNotDeleteMetadataWhenCallerLos
 	}
 	fullCtx := principal.WithPrincipal(context.Background(), full)
 
-	first, err := result.AgentManager.Run(fullCtx, full, coreagent.ManagerRunRequest{
-		ProviderName:   "managed",
+	session, err := result.AgentManager.CreateSession(fullCtx, full, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession: %v", err)
+	}
+
+	first, err := result.AgentManager.CreateTurn(fullCtx, full, coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
 		IdempotencyKey: "same-run",
+		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
 		ToolRefs: []coreagent.ToolRef{{
 			PluginName: "roadmap",
@@ -2620,10 +2916,10 @@ func TestBootstrapAgentManagerIdempotentReplayDoesNotDeleteMetadataWhenCallerLos
 		}},
 	})
 	if err != nil {
-		t.Fatalf("AgentManager.Run(first): %v", err)
+		t.Fatalf("AgentManager.CreateTurn(first): %v", err)
 	}
-	if first.Run == nil {
-		t.Fatalf("AgentManager.Run(first) returned nil run: %#v", first)
+	if first == nil {
+		t.Fatalf("AgentManager.CreateTurn(first) returned nil turn: %#v", first)
 	}
 
 	restricted := &principal.Principal{
@@ -2636,28 +2932,33 @@ func TestBootstrapAgentManagerIdempotentReplayDoesNotDeleteMetadataWhenCallerLos
 	}
 	restrictedCtx := principal.WithPrincipal(context.Background(), restricted)
 
-	_, err = result.AgentManager.Run(restrictedCtx, restricted, coreagent.ManagerRunRequest{
-		ProviderName:   "managed",
+	_, err = result.AgentManager.CreateTurn(restrictedCtx, restricted, coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
 		IdempotencyKey: "same-run",
+		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
+		ToolRefs: []coreagent.ToolRef{{
+			PluginName: "roadmap",
+			Operation:  "sync",
+		}},
 	})
-	if !errors.Is(err, core.ErrNotFound) {
-		t.Fatalf("AgentManager.Run(replay) error = %v, want %v", err, core.ErrNotFound)
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("AgentManager.CreateTurn(replay) error = %v, want %v", err, invocation.ErrAuthorizationDenied)
 	}
 
-	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), first.Run.ID)
+	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), first.ID)
 	if err != nil {
 		t.Fatalf("AgentRunMetadata.Get: %v", err)
 	}
-	if ref.ID != first.Run.ID {
-		t.Fatalf("stored run id = %q, want %q", ref.ID, first.Run.ID)
+	if ref.ID != first.ID {
+		t.Fatalf("stored turn id = %q, want %q", ref.ID, first.ID)
 	}
 
 	provider.mu.Lock()
-	startRunCount := len(provider.startRunRequests)
+	createTurnCount := len(provider.createTurnRequests)
 	provider.mu.Unlock()
-	if startRunCount != 1 {
-		t.Fatalf("StartRun count = %d, want 1", startRunCount)
+	if createTurnCount != 1 {
+		t.Fatalf("CreateTurn count = %d, want 1", createTurnCount)
 	}
 }
 
@@ -2743,7 +3044,7 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 	}
 	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, services []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
 		hostServices = append([]providerhost.HostService(nil), services...)
-		return &stubAgentProvider{}, nil
+		return newRecordingAgentProvider(), nil
 	}
 
 	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
@@ -4691,7 +4992,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 	}
 
 	var capturedHostServices []providerhost.HostService
-	providerImpl := &stubAgentProvider{}
+	providerImpl := newRecordingAgentProvider()
 	factories := validFactories()
 	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
 		if name != "reviewer" {
@@ -4720,20 +5021,29 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 			Operation:  "sync",
 		},
 	}
-	if _, err := provider.StartRun(startCtx, coreagent.StartRunRequest{
-		RunID:        "agent-run-1",
-		ProviderName: "reviewer",
-		CreatedBy:    coreagent.Actor{SubjectID: "system:config"},
-		Tools:        []coreagent.Tool{tool},
+	if _, err := provider.CreateSession(startCtx, coreagent.CreateSessionRequest{
+		SessionID: "agent-session-1",
+		Model:     "gpt-test",
+		CreatedBy: coreagent.Actor{SubjectID: "system:config"},
 	}); err != nil {
-		t.Fatalf("StartRun: %v", err)
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if _, err := provider.CreateTurn(startCtx, coreagent.CreateTurnRequest{
+		TurnID:    "agent-turn-1",
+		SessionID: "agent-session-1",
+		Model:     "gpt-test",
+		CreatedBy: coreagent.Actor{SubjectID: "system:config"},
+		Tools:     []coreagent.Tool{tool},
+	}); err != nil {
+		t.Fatalf("CreateTurn: %v", err)
 	}
 	args, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
 	if err != nil {
 		t.Fatalf("structpb.NewStruct: %v", err)
 	}
 	resp, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
-		RunId:      "agent-run-1",
+		SessionId:  "agent-session-1",
+		TurnId:     "agent-turn-1",
 		ToolCallId: "tool-call-1",
 		ToolId:     tool.ID,
 		Arguments:  args,
@@ -4751,53 +5061,36 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 	if got, _ := requestBody.Load().(string); !strings.Contains(got, `"taskId":"task-123"`) {
 		t.Fatalf("request body = %q, want taskId payload", got)
 	}
-
-	eventData, err := structpb.NewStruct(map[string]any{"text": "review started"})
-	if err != nil {
-		t.Fatalf("structpb.NewStruct event: %v", err)
-	}
-	if err := invokeAgentHostEmitEvent(t, capturedHostServices, &proto.EmitAgentEventRequest{
-		RunId:      "agent-run-1",
-		Type:       "agent.message.delta",
-		Visibility: "public",
-		Data:       eventData,
-	}); err != nil {
-		t.Fatalf("invoke agent host emit event: %v", err)
-	}
-	events, err := result.Services.AgentRunEvents.ListByRun(context.Background(), "agent-run-1", 0, 10)
-	if err != nil {
-		t.Fatalf("ListByRun: %v", err)
-	}
-	if len(events) != 1 || events[0].Seq != 1 || events[0].Source != "reviewer" || events[0].Type != "agent.message.delta" || events[0].Data["text"] != "review started" {
-		t.Fatalf("events after host emit = %#v", events)
+	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
+		SessionId:  "wrong-session",
+		TurnId:     "agent-turn-1",
+		ToolCallId: "tool-call-mismatch",
+		ToolId:     tool.ID,
+		Arguments:  args,
+	}); status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("invoke agent host callback with mismatched session status = %s, want %s", status.Code(err), codes.PermissionDenied)
 	}
 
-	if _, err := provider.CancelRun(startCtx, coreagent.CancelRunRequest{RunID: "agent-run-1"}); err != nil {
-		t.Fatalf("CancelRun: %v", err)
+	if _, err := provider.CancelTurn(startCtx, coreagent.CancelTurnRequest{TurnID: "agent-turn-1"}); err != nil {
+		t.Fatalf("CancelTurn: %v", err)
 	}
-	cancelRequests := providerImpl.CancelRequests()
+	cancelRequests := providerImpl.CancelTurnRequests()
 	if len(cancelRequests) != 1 {
-		t.Fatalf("CancelRun requests = %d, want 1", len(cancelRequests))
+		t.Fatalf("CancelTurn requests = %d, want 1", len(cancelRequests))
 	}
-	if cancelRequests[0].RunID != "agent-run-1" {
-		t.Fatalf("CancelRun run_id = %q, want %q", cancelRequests[0].RunID, "agent-run-1")
+	if cancelRequests[0].TurnID != "agent-turn-1" {
+		t.Fatalf("CancelTurn turn_id = %q, want %q", cancelRequests[0].TurnID, "agent-turn-1")
 	}
-	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), "agent-run-1")
+	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), "agent-turn-1")
 	if err != nil {
 		t.Fatalf("AgentRunMetadata.Get after cancel: %v", err)
 	}
 	if ref.RevokedAt == nil || ref.RevokedAt.IsZero() {
 		t.Fatalf("RevokedAt after cancel = %#v, want set", ref.RevokedAt)
 	}
-	eventsAfterCancel, err := result.Services.AgentRunEvents.ListByRun(context.Background(), "agent-run-1", 0, 10)
-	if err != nil {
-		t.Fatalf("ListByRun after cancel: %v", err)
-	}
-	if len(eventsAfterCancel) != 1 || eventsAfterCancel[0].ID != events[0].ID {
-		t.Fatalf("events after cancel = %#v, want retained %#v", eventsAfterCancel, events)
-	}
 	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
-		RunId:      "agent-run-1",
+		SessionId:  "agent-session-1",
+		TurnId:     "agent-turn-1",
 		ToolCallId: "tool-call-2",
 		ToolId:     tool.ID,
 		Arguments:  args,
@@ -4806,7 +5099,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 	}
 }
 
-func TestBootstrapAgentProviderAssignedRunIDCancelsOnTrackingFailure(t *testing.T) {
+func TestBootstrapAgentProviderAssignedTurnIDCancelsOnTrackingFailure(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -4838,8 +5131,9 @@ func TestBootstrapAgentProviderAssignedRunIDCancelsOnTrackingFailure(t *testing.
 		t.Fatalf("ResolveProviderSelection: %v", err)
 	}
 
-	_, err = provider.StartRun(context.Background(), coreagent.StartRunRequest{
-		ProviderName: "reviewer",
+	_, err = provider.CreateTurn(context.Background(), coreagent.CreateTurnRequest{
+		SessionID: "generated-session-1",
+		Model:     "gpt-test",
 		Tools: []coreagent.Tool{{
 			ID: "roadmap.sync",
 			Target: coreagent.ToolTarget{
@@ -4849,25 +5143,25 @@ func TestBootstrapAgentProviderAssignedRunIDCancelsOnTrackingFailure(t *testing.
 		}},
 	})
 	if err == nil {
-		t.Fatal("StartRun error = nil, want tracking failure for provider-assigned run id")
+		t.Fatal("CreateTurn error = nil, want tracking failure for provider-assigned turn id")
 	}
 	if !strings.Contains(err.Error(), "agent execution principal is required") {
-		t.Fatalf("StartRun error = %v, want missing principal failure", err)
+		t.Fatalf("CreateTurn error = %v, want missing principal failure", err)
 	}
 
-	cancelRequests := providerImpl.CancelRequests()
+	cancelRequests := providerImpl.CancelTurnRequests()
 	if len(cancelRequests) != 1 {
-		t.Fatalf("CancelRun requests = %d, want 1", len(cancelRequests))
+		t.Fatalf("CancelTurn requests = %d, want 1", len(cancelRequests))
 	}
-	if cancelRequests[0].RunID != "generated-run-1" {
-		t.Fatalf("CancelRun run_id = %q, want %q", cancelRequests[0].RunID, "generated-run-1")
+	if cancelRequests[0].TurnID != "generated-turn-1" {
+		t.Fatalf("CancelTurn turn_id = %q, want %q", cancelRequests[0].TurnID, "generated-turn-1")
 	}
-	if cancelRequests[0].Reason != "agent run tracking failed" {
-		t.Fatalf("CancelRun reason = %q, want %q", cancelRequests[0].Reason, "agent run tracking failed")
+	if cancelRequests[0].Reason != "agent turn tracking failed" {
+		t.Fatalf("CancelTurn reason = %q, want %q", cancelRequests[0].Reason, "agent turn tracking failed")
 	}
 }
 
-func TestBootstrapAgentProviderRejectsMismatchedRequestedRunID(t *testing.T) {
+func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -4926,28 +5220,36 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedRunID(t *testing.T) {
 			Operation:  "sync",
 		},
 	}
-	_, err = provider.StartRun(startCtx, coreagent.StartRunRequest{
-		RunID:        "agent-run-1",
-		ProviderName: "reviewer",
-		CreatedBy:    coreagent.Actor{SubjectID: "system:config"},
-		Tools:        []coreagent.Tool{tool},
-	})
-	if err == nil {
-		t.Fatal("StartRun error = nil, want mismatched run id failure")
-	}
-	if !strings.Contains(err.Error(), `returned run id "generated-run-1" for requested run id "agent-run-1"`) {
-		t.Fatalf("StartRun error = %v, want mismatched run id failure", err)
+	if _, err := provider.CreateSession(startCtx, coreagent.CreateSessionRequest{
+		SessionID: "agent-session-1",
+		Model:     "gpt-test",
+	}); err == nil {
+		t.Fatal("CreateSession error = nil, want mismatched session id failure")
+	} else if !strings.Contains(err.Error(), `returned session id "generated-session-1" for requested session id "agent-session-1"`) {
+		t.Fatalf("CreateSession error = %v, want mismatched session id failure", err)
 	}
 
-	cancelRequests := providerImpl.CancelRequests()
+	if _, err := provider.CreateTurn(startCtx, coreagent.CreateTurnRequest{
+		TurnID:    "agent-turn-1",
+		SessionID: "agent-session-1",
+		Model:     "gpt-test",
+		CreatedBy: coreagent.Actor{SubjectID: "system:config"},
+		Tools:     []coreagent.Tool{tool},
+	}); err == nil {
+		t.Fatal("CreateTurn error = nil, want mismatched turn id failure")
+	} else if !strings.Contains(err.Error(), `returned turn id "generated-turn-1" for requested turn id "agent-turn-1"`) {
+		t.Fatalf("CreateTurn error = %v, want mismatched turn id failure", err)
+	}
+
+	cancelRequests := providerImpl.CancelTurnRequests()
 	if len(cancelRequests) != 1 {
-		t.Fatalf("CancelRun requests = %d, want 1", len(cancelRequests))
+		t.Fatalf("CancelTurn requests = %d, want 1", len(cancelRequests))
 	}
-	if cancelRequests[0].RunID != "generated-run-1" {
-		t.Fatalf("CancelRun run_id = %q, want %q", cancelRequests[0].RunID, "generated-run-1")
+	if cancelRequests[0].TurnID != "generated-turn-1" {
+		t.Fatalf("CancelTurn turn_id = %q, want %q", cancelRequests[0].TurnID, "generated-turn-1")
 	}
-	if cancelRequests[0].Reason != "agent provider returned mismatched run id" {
-		t.Fatalf("CancelRun reason = %q, want %q", cancelRequests[0].Reason, "agent provider returned mismatched run id")
+	if cancelRequests[0].Reason != "agent provider returned mismatched turn id" {
+		t.Fatalf("CancelTurn reason = %q, want %q", cancelRequests[0].Reason, "agent provider returned mismatched turn id")
 	}
 
 	args, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
@@ -4955,7 +5257,8 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedRunID(t *testing.T) {
 		t.Fatalf("structpb.NewStruct: %v", err)
 	}
 	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
-		RunId:      "agent-run-1",
+		SessionId:  "agent-session-1",
+		TurnId:     "agent-turn-1",
 		ToolCallId: "tool-call-1",
 		ToolId:     tool.ID,
 		Arguments:  args,
