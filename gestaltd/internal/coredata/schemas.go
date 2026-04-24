@@ -23,6 +23,8 @@ const (
 	StoreAgentRunIdempotency      = "agent_run_idempotency"
 	StoreAgentRunEvents           = "agent_run_events"
 	StoreAgentRunInteractions     = "agent_run_interactions"
+	StoreRuntimeSessions          = "runtime_sessions"
+	StoreRuntimeSessionLogs       = "runtime_session_logs"
 )
 
 var UsersSchema = indexeddb.ObjectStoreSchema{
@@ -257,5 +259,45 @@ var AgentRunInteractionsSchema = indexeddb.ObjectStoreSchema{
 		{Name: "resolution_json", Type: indexeddb.TypeString},
 		{Name: "created_at", Type: indexeddb.TypeTime},
 		{Name: "resolved_at", Type: indexeddb.TypeTime},
+	},
+}
+
+var RuntimeSessionsSchema = indexeddb.ObjectStoreSchema{
+	Indexes: []indexeddb.IndexSchema{
+		{Name: "by_runtime_provider_session", KeyPath: []string{"runtime_provider_name", "session_id"}, Unique: true},
+		{Name: "by_provider_name", KeyPath: []string{"provider_name"}},
+		{Name: "by_owner", KeyPath: []string{"owner_kind", "owner_id"}},
+	},
+	Columns: []indexeddb.ColumnDef{
+		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
+		{Name: "runtime_provider_name", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "session_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "provider_name", Type: indexeddb.TypeString},
+		{Name: "provider_kind", Type: indexeddb.TypeString},
+		{Name: "owner_kind", Type: indexeddb.TypeString},
+		{Name: "owner_id", Type: indexeddb.TypeString},
+		{Name: "metadata_json", Type: indexeddb.TypeString},
+		{Name: "created_at", Type: indexeddb.TypeTime},
+		{Name: "updated_at", Type: indexeddb.TypeTime},
+		{Name: "stopped_at", Type: indexeddb.TypeTime},
+	},
+}
+
+var RuntimeSessionLogsSchema = indexeddb.ObjectStoreSchema{
+	Indexes: []indexeddb.IndexSchema{
+		{Name: "by_session", KeyPath: []string{"runtime_provider_name", "session_id"}},
+		{Name: "by_session_seq", KeyPath: []string{"runtime_provider_name", "session_id", "seq"}, Unique: true},
+		{Name: "by_session_source_seq", KeyPath: []string{"runtime_provider_name", "session_id", "source_seq"}},
+	},
+	Columns: []indexeddb.ColumnDef{
+		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
+		{Name: "runtime_provider_name", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "session_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "seq", Type: indexeddb.TypeInt, NotNull: true},
+		{Name: "source_seq", Type: indexeddb.TypeInt},
+		{Name: "stream", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "message", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "observed_at", Type: indexeddb.TypeTime},
+		{Name: "appended_at", Type: indexeddb.TypeTime, NotNull: true},
 	},
 }

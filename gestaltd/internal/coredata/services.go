@@ -25,6 +25,7 @@ type Services struct {
 	AgentRunMetadata         *AgentRunMetadataService
 	AgentRunEvents           *AgentRunEventService
 	AgentRunInteractions     *AgentRunInteractionService
+	RuntimeSessionLogs       *RuntimeSessionLogService
 	DB                       indexeddb.IndexedDB
 }
 
@@ -69,6 +70,12 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := ds.CreateObjectStore(ctx, StoreAgentRunInteractions, AgentRunInteractionsSchema); err != nil {
 		return nil, fmt.Errorf("create agent_run_interactions store: %w", err)
 	}
+	if err := ds.CreateObjectStore(ctx, StoreRuntimeSessions, RuntimeSessionsSchema); err != nil {
+		return nil, fmt.Errorf("create runtime_sessions store: %w", err)
+	}
+	if err := ds.CreateObjectStore(ctx, StoreRuntimeSessionLogs, RuntimeSessionLogsSchema); err != nil {
+		return nil, fmt.Errorf("create runtime_session_logs store: %w", err)
+	}
 
 	identities := NewIdentityService(ds)
 	authBindings := NewIdentityAuthBindingService(ds)
@@ -80,6 +87,7 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	agentRunMetadata := NewAgentRunMetadataService(ds)
 	agentRunEvents := NewAgentRunEventService(ds)
 	agentRunInteractions := NewAgentRunInteractionService(ds)
+	runtimeSessionLogs := NewRuntimeSessionLogService(ds)
 
 	users := NewUserService(ds, identities, authBindings)
 	if err := users.BackfillNormalizedEmails(ctx); err != nil {
@@ -117,6 +125,7 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 		AgentRunMetadata:         agentRunMetadata,
 		AgentRunEvents:           agentRunEvents,
 		AgentRunInteractions:     agentRunInteractions,
+		RuntimeSessionLogs:       runtimeSessionLogs,
 		DB:                       ds,
 	}, nil
 }

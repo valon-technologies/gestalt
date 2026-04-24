@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"maps"
 
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
+	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
 
@@ -20,6 +24,11 @@ func buildExecutablePluginRuntime(ctx context.Context, name string, entry *confi
 		return nil, err
 	}
 
+	var sessionLogs runtimelogs.Store
+	if deps.Services != nil {
+		sessionLogs = deps.Services.RuntimeSessionLogs
+	}
+
 	return pluginruntime.NewExecutableProvider(ctx, pluginruntime.ExecutableConfig{
 		Name:         name,
 		Command:      entry.Command,
@@ -28,8 +37,23 @@ func buildExecutablePluginRuntime(ctx context.Context, name string, entry *confi
 		Config:       runtimeConfig,
 		AllowedHosts: append([]string(nil), entry.AllowedHosts...),
 		HostBinary:   entry.HostBinary,
+		HostServices: buildRuntimeProviderHostServices(name, deps),
 		Telemetry:    deps.Telemetry,
+		SessionLogs:  sessionLogs,
 	})
+}
+
+func buildRuntimeProviderHostServices(name string, deps Deps) []providerhost.HostService {
+	if deps.Services == nil || deps.Services.RuntimeSessionLogs == nil {
+		return nil
+	}
+	return []providerhost.HostService{{
+		Name:   "runtime_log_host",
+		EnvVar: providerhost.DefaultRuntimeLogHostSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterPluginRuntimeLogHostServer(srv, providerhost.NewRuntimeLogHostServer(name, deps.Services.RuntimeSessionLogs.AppendSessionLogs))
+		},
+	}}
 }
 
 func runtimeProviderConfigMap(name string, entry *config.RuntimeProviderEntry) (map[string]any, error) {

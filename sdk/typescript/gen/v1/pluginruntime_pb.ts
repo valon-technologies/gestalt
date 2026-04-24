@@ -4,15 +4,15 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { EmptySchema } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_empty } from "@bufbuild/protobuf/wkt";
+import type { EmptySchema, Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_empty, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file v1/pluginruntime.proto.
  */
 export const file_v1_pluginruntime: GenFile = /*@__PURE__*/
-  fileDesc("ChZ2MS9wbHVnaW5ydW50aW1lLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIjwKHFBsdWdpblJ1bnRpbWVFeGVjdXRpb25UYXJnZXQSDAoEZ29vcxgBIAEoCRIOCgZnb2FyY2gYAiABKAki1QIKFFBsdWdpblJ1bnRpbWVTdXBwb3J0EhgKEGNhbl9ob3N0X3BsdWdpbnMYASABKAgSUAoTaG9zdF9zZXJ2aWNlX2FjY2VzcxgCIAEoDjIzLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZUhvc3RTZXJ2aWNlQWNjZXNzEkEKC2VncmVzc19tb2RlGAMgASgOMiwuZ2VzdGFsdC5wcm92aWRlci52MS5QbHVnaW5SdW50aW1lRWdyZXNzTW9kZRJBCgtsYXVuY2hfbW9kZRgEIAEoDjIsLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZUxhdW5jaE1vZGUSSwoQZXhlY3V0aW9uX3RhcmdldBgFIAEoCzIxLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZUV4ZWN1dGlvblRhcmdldCKtAQoUUGx1Z2luUnVudGltZVNlc3Npb24SCgoCaWQYASABKAkSDQoFc3RhdGUYAiABKAkSSQoIbWV0YWRhdGEYAyADKAsyNy5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVTZXNzaW9uLk1ldGFkYXRhRW50cnkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIuABCiBTdGFydFBsdWdpblJ1bnRpbWVTZXNzaW9uUmVxdWVzdBITCgtwbHVnaW5fbmFtZRgBIAEoCRIQCgh0ZW1wbGF0ZRgCIAEoCRINCgVpbWFnZRgDIAEoCRJVCghtZXRhZGF0YRgEIAMoCzJDLmdlc3RhbHQucHJvdmlkZXIudjEuU3RhcnRQbHVnaW5SdW50aW1lU2Vzc2lvblJlcXVlc3QuTWV0YWRhdGFFbnRyeRovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiNAoeR2V0UGx1Z2luUnVudGltZVNlc3Npb25SZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiNQofU3RvcFBsdWdpblJ1bnRpbWVTZXNzaW9uUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJIjQKHVBsdWdpblJ1bnRpbWVIb3N0U2VydmljZVJlbGF5EhMKC2RpYWxfdGFyZ2V0GAEgASgJIpMBCiNCaW5kUGx1Z2luUnVudGltZUhvc3RTZXJ2aWNlUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEg8KB2Vudl92YXIYAiABKAkSQQoFcmVsYXkYBCABKAsyMi5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVIb3N0U2VydmljZVJlbGF5SgQIAxAEIpsBCh9QbHVnaW5SdW50aW1lSG9zdFNlcnZpY2VCaW5kaW5nEgoKAmlkGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSDwoHZW52X3ZhchgDIAEoCRJBCgVyZWxheRgFIAEoCzIyLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZUhvc3RTZXJ2aWNlUmVsYXlKBAgEEAUiqwIKGFN0YXJ0SG9zdGVkUGx1Z2luUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhMKC3BsdWdpbl9uYW1lGAIgASgJEg8KB2NvbW1hbmQYAyABKAkSDAoEYXJncxgEIAMoCRJDCgNlbnYYBSADKAsyNi5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0YXJ0SG9zdGVkUGx1Z2luUmVxdWVzdC5FbnZFbnRyeRISCgpidW5kbGVfZGlyGAYgASgJEhUKDWFsbG93ZWRfaG9zdHMYByADKAkSFgoOZGVmYXVsdF9hY3Rpb24YCCABKAkSEwoLaG9zdF9iaW5hcnkYCSABKAkaKgoIRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJYCgxIb3N0ZWRQbHVnaW4SCgoCaWQYASABKAkSEgoKc2Vzc2lvbl9pZBgCIAEoCRITCgtwbHVnaW5fbmFtZRgDIAEoCRITCgtkaWFsX3RhcmdldBgEIAEoCSqwAQoeUGx1Z2luUnVudGltZUhvc3RTZXJ2aWNlQWNjZXNzEjIKLlBMVUdJTl9SVU5USU1FX0hPU1RfU0VSVklDRV9BQ0NFU1NfVU5TUEVDSUZJRUQQABIrCidQTFVHSU5fUlVOVElNRV9IT1NUX1NFUlZJQ0VfQUNDRVNTX05PTkUQARItCilQTFVHSU5fUlVOVElNRV9IT1NUX1NFUlZJQ0VfQUNDRVNTX0RJUkVDVBACKrgBChdQbHVnaW5SdW50aW1lRWdyZXNzTW9kZRIqCiZQTFVHSU5fUlVOVElNRV9FR1JFU1NfTU9ERV9VTlNQRUNJRklFRBAAEiMKH1BMVUdJTl9SVU5USU1FX0VHUkVTU19NT0RFX05PTkUQARIjCh9QTFVHSU5fUlVOVElNRV9FR1JFU1NfTU9ERV9DSURSEAISJwojUExVR0lOX1JVTlRJTUVfRUdSRVNTX01PREVfSE9TVE5BTUUQAyqWAQoXUGx1Z2luUnVudGltZUxhdW5jaE1vZGUSKgomUExVR0lOX1JVTlRJTUVfTEFVTkNIX01PREVfVU5TUEVDSUZJRUQQABIlCiFQTFVHSU5fUlVOVElNRV9MQVVOQ0hfTU9ERV9CVU5ETEUQARIoCiRQTFVHSU5fUlVOVElNRV9MQVVOQ0hfTU9ERV9IT1NUX1BBVEgQAjKKBQoVUGx1Z2luUnVudGltZVByb3ZpZGVyEk8KCkdldFN1cHBvcnQSFi5nb29nbGUucHJvdG9idWYuRW1wdHkaKS5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVTdXBwb3J0EnAKDFN0YXJ0U2Vzc2lvbhI1Lmdlc3RhbHQucHJvdmlkZXIudjEuU3RhcnRQbHVnaW5SdW50aW1lU2Vzc2lvblJlcXVlc3QaKS5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVTZXNzaW9uEmwKCkdldFNlc3Npb24SMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldFBsdWdpblJ1bnRpbWVTZXNzaW9uUmVxdWVzdBopLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZVNlc3Npb24SWwoLU3RvcFNlc3Npb24SNC5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0b3BQbHVnaW5SdW50aW1lU2Vzc2lvblJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSgQEKD0JpbmRIb3N0U2VydmljZRI4Lmdlc3RhbHQucHJvdmlkZXIudjEuQmluZFBsdWdpblJ1bnRpbWVIb3N0U2VydmljZVJlcXVlc3QaNC5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVIb3N0U2VydmljZUJpbmRpbmcSXwoLU3RhcnRQbHVnaW4SLS5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0YXJ0SG9zdGVkUGx1Z2luUmVxdWVzdBohLmdlc3RhbHQucHJvdmlkZXIudjEuSG9zdGVkUGx1Z2luQjtaOWdpdGh1Yi5jb20vdmFsb24tdGVjaG5vbG9naWVzL2dlc3RhbHQvc2RrL2dvL2dlbi92MTtwcm90b2IGcHJvdG8z", [file_google_protobuf_empty]);
+  fileDesc("ChZ2MS9wbHVnaW5ydW50aW1lLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIjwKHFBsdWdpblJ1bnRpbWVFeGVjdXRpb25UYXJnZXQSDAoEZ29vcxgBIAEoCRIOCgZnb2FyY2gYAiABKAki1QIKFFBsdWdpblJ1bnRpbWVTdXBwb3J0EhgKEGNhbl9ob3N0X3BsdWdpbnMYASABKAgSUAoTaG9zdF9zZXJ2aWNlX2FjY2VzcxgCIAEoDjIzLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZUhvc3RTZXJ2aWNlQWNjZXNzEkEKC2VncmVzc19tb2RlGAMgASgOMiwuZ2VzdGFsdC5wcm92aWRlci52MS5QbHVnaW5SdW50aW1lRWdyZXNzTW9kZRJBCgtsYXVuY2hfbW9kZRgEIAEoDjIsLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZUxhdW5jaE1vZGUSSwoQZXhlY3V0aW9uX3RhcmdldBgFIAEoCzIxLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZUV4ZWN1dGlvblRhcmdldCKtAQoUUGx1Z2luUnVudGltZVNlc3Npb24SCgoCaWQYASABKAkSDQoFc3RhdGUYAiABKAkSSQoIbWV0YWRhdGEYAyADKAsyNy5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVTZXNzaW9uLk1ldGFkYXRhRW50cnkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIuABCiBTdGFydFBsdWdpblJ1bnRpbWVTZXNzaW9uUmVxdWVzdBITCgtwbHVnaW5fbmFtZRgBIAEoCRIQCgh0ZW1wbGF0ZRgCIAEoCRINCgVpbWFnZRgDIAEoCRJVCghtZXRhZGF0YRgEIAMoCzJDLmdlc3RhbHQucHJvdmlkZXIudjEuU3RhcnRQbHVnaW5SdW50aW1lU2Vzc2lvblJlcXVlc3QuTWV0YWRhdGFFbnRyeRovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiNAoeR2V0UGx1Z2luUnVudGltZVNlc3Npb25SZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiNQofU3RvcFBsdWdpblJ1bnRpbWVTZXNzaW9uUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJIjQKHVBsdWdpblJ1bnRpbWVIb3N0U2VydmljZVJlbGF5EhMKC2RpYWxfdGFyZ2V0GAEgASgJIpMBCiNCaW5kUGx1Z2luUnVudGltZUhvc3RTZXJ2aWNlUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEg8KB2Vudl92YXIYAiABKAkSQQoFcmVsYXkYBCABKAsyMi5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVIb3N0U2VydmljZVJlbGF5SgQIAxAEIpsBCh9QbHVnaW5SdW50aW1lSG9zdFNlcnZpY2VCaW5kaW5nEgoKAmlkGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSDwoHZW52X3ZhchgDIAEoCRJBCgVyZWxheRgFIAEoCzIyLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZUhvc3RTZXJ2aWNlUmVsYXlKBAgEEAUiqwIKGFN0YXJ0SG9zdGVkUGx1Z2luUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhMKC3BsdWdpbl9uYW1lGAIgASgJEg8KB2NvbW1hbmQYAyABKAkSDAoEYXJncxgEIAMoCRJDCgNlbnYYBSADKAsyNi5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0YXJ0SG9zdGVkUGx1Z2luUmVxdWVzdC5FbnZFbnRyeRISCgpidW5kbGVfZGlyGAYgASgJEhUKDWFsbG93ZWRfaG9zdHMYByADKAkSFgoOZGVmYXVsdF9hY3Rpb24YCCABKAkSEwoLaG9zdF9iaW5hcnkYCSABKAkaKgoIRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJYCgxIb3N0ZWRQbHVnaW4SCgoCaWQYASABKAkSEgoKc2Vzc2lvbl9pZBgCIAEoCRITCgtwbHVnaW5fbmFtZRgDIAEoCRITCgtkaWFsX3RhcmdldBgEIAEoCSKqAQoVUGx1Z2luUnVudGltZUxvZ0VudHJ5EjsKBnN0cmVhbRgBIAEoDjIrLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZUxvZ1N0cmVhbRIPCgdtZXNzYWdlGAIgASgJEi8KC29ic2VydmVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgpzb3VyY2Vfc2VxGAQgASgDIm4KHkFwcGVuZFBsdWdpblJ1bnRpbWVMb2dzUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEjgKBGxvZ3MYAiADKAsyKi5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVMb2dFbnRyeSIzCh9BcHBlbmRQbHVnaW5SdW50aW1lTG9nc1Jlc3BvbnNlEhAKCGxhc3Rfc2VxGAEgASgDKrABCh5QbHVnaW5SdW50aW1lSG9zdFNlcnZpY2VBY2Nlc3MSMgouUExVR0lOX1JVTlRJTUVfSE9TVF9TRVJWSUNFX0FDQ0VTU19VTlNQRUNJRklFRBAAEisKJ1BMVUdJTl9SVU5USU1FX0hPU1RfU0VSVklDRV9BQ0NFU1NfTk9ORRABEi0KKVBMVUdJTl9SVU5USU1FX0hPU1RfU0VSVklDRV9BQ0NFU1NfRElSRUNUEAIquAEKF1BsdWdpblJ1bnRpbWVFZ3Jlc3NNb2RlEioKJlBMVUdJTl9SVU5USU1FX0VHUkVTU19NT0RFX1VOU1BFQ0lGSUVEEAASIwofUExVR0lOX1JVTlRJTUVfRUdSRVNTX01PREVfTk9ORRABEiMKH1BMVUdJTl9SVU5USU1FX0VHUkVTU19NT0RFX0NJRFIQAhInCiNQTFVHSU5fUlVOVElNRV9FR1JFU1NfTU9ERV9IT1NUTkFNRRADKpYBChdQbHVnaW5SdW50aW1lTGF1bmNoTW9kZRIqCiZQTFVHSU5fUlVOVElNRV9MQVVOQ0hfTU9ERV9VTlNQRUNJRklFRBAAEiUKIVBMVUdJTl9SVU5USU1FX0xBVU5DSF9NT0RFX0JVTkRMRRABEigKJFBMVUdJTl9SVU5USU1FX0xBVU5DSF9NT0RFX0hPU1RfUEFUSBACKrYBChZQbHVnaW5SdW50aW1lTG9nU3RyZWFtEikKJVBMVUdJTl9SVU5USU1FX0xPR19TVFJFQU1fVU5TUEVDSUZJRUQQABIkCiBQTFVHSU5fUlVOVElNRV9MT0dfU1RSRUFNX1NURE9VVBABEiQKIFBMVUdJTl9SVU5USU1FX0xPR19TVFJFQU1fU1RERVJSEAISJQohUExVR0lOX1JVTlRJTUVfTE9HX1NUUkVBTV9SVU5USU1FEAMyjwEKFFBsdWdpblJ1bnRpbWVMb2dIb3N0EncKCkFwcGVuZExvZ3MSMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFwcGVuZFBsdWdpblJ1bnRpbWVMb2dzUmVxdWVzdBo0Lmdlc3RhbHQucHJvdmlkZXIudjEuQXBwZW5kUGx1Z2luUnVudGltZUxvZ3NSZXNwb25zZTKKBQoVUGx1Z2luUnVudGltZVByb3ZpZGVyEk8KCkdldFN1cHBvcnQSFi5nb29nbGUucHJvdG9idWYuRW1wdHkaKS5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVTdXBwb3J0EnAKDFN0YXJ0U2Vzc2lvbhI1Lmdlc3RhbHQucHJvdmlkZXIudjEuU3RhcnRQbHVnaW5SdW50aW1lU2Vzc2lvblJlcXVlc3QaKS5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVTZXNzaW9uEmwKCkdldFNlc3Npb24SMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldFBsdWdpblJ1bnRpbWVTZXNzaW9uUmVxdWVzdBopLmdlc3RhbHQucHJvdmlkZXIudjEuUGx1Z2luUnVudGltZVNlc3Npb24SWwoLU3RvcFNlc3Npb24SNC5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0b3BQbHVnaW5SdW50aW1lU2Vzc2lvblJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSgQEKD0JpbmRIb3N0U2VydmljZRI4Lmdlc3RhbHQucHJvdmlkZXIudjEuQmluZFBsdWdpblJ1bnRpbWVIb3N0U2VydmljZVJlcXVlc3QaNC5nZXN0YWx0LnByb3ZpZGVyLnYxLlBsdWdpblJ1bnRpbWVIb3N0U2VydmljZUJpbmRpbmcSXwoLU3RhcnRQbHVnaW4SLS5nZXN0YWx0LnByb3ZpZGVyLnYxLlN0YXJ0SG9zdGVkUGx1Z2luUmVxdWVzdBohLmdlc3RhbHQucHJvdmlkZXIudjEuSG9zdGVkUGx1Z2luQjtaOWdpdGh1Yi5jb20vdmFsb24tdGVjaG5vbG9naWVzL2dlc3RhbHQvc2RrL2dvL2dlbi92MTtwcm90b2IGcHJvdG8z", [file_google_protobuf_empty, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message gestalt.provider.v1.PluginRuntimeExecutionTarget
@@ -337,6 +337,77 @@ export const HostedPluginSchema: GenMessage<HostedPlugin> = /*@__PURE__*/
   messageDesc(file_v1_pluginruntime, 10);
 
 /**
+ * @generated from message gestalt.provider.v1.PluginRuntimeLogEntry
+ */
+export type PluginRuntimeLogEntry = Message<"gestalt.provider.v1.PluginRuntimeLogEntry"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.PluginRuntimeLogStream stream = 1;
+   */
+  stream: PluginRuntimeLogStream;
+
+  /**
+   * @generated from field: string message = 2;
+   */
+  message: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp observed_at = 3;
+   */
+  observedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: int64 source_seq = 4;
+   */
+  sourceSeq: bigint;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.PluginRuntimeLogEntry.
+ * Use `create(PluginRuntimeLogEntrySchema)` to create a new message.
+ */
+export const PluginRuntimeLogEntrySchema: GenMessage<PluginRuntimeLogEntry> = /*@__PURE__*/
+  messageDesc(file_v1_pluginruntime, 11);
+
+/**
+ * @generated from message gestalt.provider.v1.AppendPluginRuntimeLogsRequest
+ */
+export type AppendPluginRuntimeLogsRequest = Message<"gestalt.provider.v1.AppendPluginRuntimeLogsRequest"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: repeated gestalt.provider.v1.PluginRuntimeLogEntry logs = 2;
+   */
+  logs: PluginRuntimeLogEntry[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AppendPluginRuntimeLogsRequest.
+ * Use `create(AppendPluginRuntimeLogsRequestSchema)` to create a new message.
+ */
+export const AppendPluginRuntimeLogsRequestSchema: GenMessage<AppendPluginRuntimeLogsRequest> = /*@__PURE__*/
+  messageDesc(file_v1_pluginruntime, 12);
+
+/**
+ * @generated from message gestalt.provider.v1.AppendPluginRuntimeLogsResponse
+ */
+export type AppendPluginRuntimeLogsResponse = Message<"gestalt.provider.v1.AppendPluginRuntimeLogsResponse"> & {
+  /**
+   * @generated from field: int64 last_seq = 1;
+   */
+  lastSeq: bigint;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AppendPluginRuntimeLogsResponse.
+ * Use `create(AppendPluginRuntimeLogsResponseSchema)` to create a new message.
+ */
+export const AppendPluginRuntimeLogsResponseSchema: GenMessage<AppendPluginRuntimeLogsResponse> = /*@__PURE__*/
+  messageDesc(file_v1_pluginruntime, 13);
+
+/**
  * @generated from enum gestalt.provider.v1.PluginRuntimeHostServiceAccess
  */
 export enum PluginRuntimeHostServiceAccess {
@@ -420,6 +491,52 @@ export const PluginRuntimeLaunchModeSchema: GenEnum<PluginRuntimeLaunchMode> = /
   enumDesc(file_v1_pluginruntime, 2);
 
 /**
+ * @generated from enum gestalt.provider.v1.PluginRuntimeLogStream
+ */
+export enum PluginRuntimeLogStream {
+  /**
+   * @generated from enum value: PLUGIN_RUNTIME_LOG_STREAM_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: PLUGIN_RUNTIME_LOG_STREAM_STDOUT = 1;
+   */
+  STDOUT = 1,
+
+  /**
+   * @generated from enum value: PLUGIN_RUNTIME_LOG_STREAM_STDERR = 2;
+   */
+  STDERR = 2,
+
+  /**
+   * @generated from enum value: PLUGIN_RUNTIME_LOG_STREAM_RUNTIME = 3;
+   */
+  RUNTIME = 3,
+}
+
+/**
+ * Describes the enum gestalt.provider.v1.PluginRuntimeLogStream.
+ */
+export const PluginRuntimeLogStreamSchema: GenEnum<PluginRuntimeLogStream> = /*@__PURE__*/
+  enumDesc(file_v1_pluginruntime, 3);
+
+/**
+ * @generated from service gestalt.provider.v1.PluginRuntimeLogHost
+ */
+export const PluginRuntimeLogHost: GenService<{
+  /**
+   * @generated from rpc gestalt.provider.v1.PluginRuntimeLogHost.AppendLogs
+   */
+  appendLogs: {
+    methodKind: "unary";
+    input: typeof AppendPluginRuntimeLogsRequestSchema;
+    output: typeof AppendPluginRuntimeLogsResponseSchema;
+  },
+}> = /*@__PURE__*/
+  serviceDesc(file_v1_pluginruntime, 0);
+
+/**
  * @generated from service gestalt.provider.v1.PluginRuntimeProvider
  */
 export const PluginRuntimeProvider: GenService<{
@@ -472,5 +589,5 @@ export const PluginRuntimeProvider: GenService<{
     output: typeof HostedPluginSchema;
   },
 }> = /*@__PURE__*/
-  serviceDesc(file_v1_pluginruntime, 0);
+  serviceDesc(file_v1_pluginruntime, 1);
 
