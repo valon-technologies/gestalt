@@ -173,6 +173,8 @@ async fn agent_manager_connects_over_tcp_and_sends_relay_token() {
             messages: vec![AgentMessage {
                 role: "user".to_string(),
                 text: "hello".to_string(),
+                parts: Vec::new(),
+                metadata: None,
             }],
             tool_source: AgentToolSourceMode::Explicit as i32,
             ..Default::default()
@@ -221,6 +223,8 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
             messages: vec![AgentMessage {
                 role: "user".to_string(),
                 text: "Summarize this".to_string(),
+                parts: Vec::new(),
+                metadata: None,
             }],
             tool_source: AgentToolSourceMode::Explicit as i32,
             ..Default::default()

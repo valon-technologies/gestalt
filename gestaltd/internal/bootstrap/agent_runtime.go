@@ -28,6 +28,7 @@ type agentRuntime struct {
 	invoker             invocation.Invoker
 	runMetadata         *coredata.AgentRunMetadataService
 	runEvents           *coredata.AgentRunEventService
+	runInteractions     *coredata.AgentRunInteractionService
 }
 
 func newAgentRuntime(cfg *config.Config) (*agentRuntime, error) {
@@ -98,12 +99,21 @@ func (r *agentRuntime) SetRunEvents(service *coredata.AgentRunEventService) {
 	r.runEvents = service
 }
 
+func (r *agentRuntime) SetRunInteractions(service *coredata.AgentRunInteractionService) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.runInteractions = service
+}
+
 func (r *agentRuntime) TrackRun(ctx context.Context, providerName string, req coreagent.StartRunRequest) error {
 	if r == nil {
 		return nil
 	}
 	runID := strings.TrimSpace(req.RunID)
-	if runID == "" || len(req.Tools) == 0 {
+	if runID == "" {
 		return nil
 	}
 	r.mu.RLock()
@@ -125,6 +135,9 @@ func (r *agentRuntime) TrackRun(ctx context.Context, providerName string, req co
 		credentialSubjectID = subjectID
 	}
 	if subjectID == "" {
+		if len(req.Tools) == 0 {
+			return nil
+		}
 		return fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
 	_, err := runMetadata.Put(ctx, &coreagent.ExecutionReference{
@@ -145,6 +158,7 @@ func (r *agentRuntime) DeleteTrackedRun(ctx context.Context, runID string) error
 	}
 	r.mu.RLock()
 	runMetadata := r.runMetadata
+	runInteractions := r.runInteractions
 	r.mu.RUnlock()
 	if runMetadata == nil {
 		return nil
@@ -158,6 +172,11 @@ func (r *agentRuntime) DeleteTrackedRun(ctx context.Context, runID string) error
 	r.mu.RUnlock()
 	if runEvents != nil {
 		if deleteErr := runEvents.DeleteByRun(ctx, runID); deleteErr != nil {
+			err = errors.Join(err, deleteErr)
+		}
+	}
+	if runInteractions != nil {
+		if deleteErr := runInteractions.DeleteByRun(ctx, runID); deleteErr != nil {
 			err = errors.Join(err, deleteErr)
 		}
 	}
@@ -346,6 +365,138 @@ func (r *agentRuntime) EmitEvent(ctx context.Context, req coreagent.EmitEventReq
 		return nil, fmt.Errorf("%w: %v", invocation.ErrInternal, err)
 	}
 	return event, nil
+}
+
+func (r *agentRuntime) RequestInteraction(ctx context.Context, req coreagent.RequestInteractionRequest) (*coreagent.Interaction, error) {
+	if r == nil {
+		return nil, fmt.Errorf("agent runtime is not configured")
+	}
+	r.mu.RLock()
+	runMetadata := r.runMetadata
+	runInteractions := r.runInteractions
+	r.mu.RUnlock()
+	if runMetadata == nil {
+		return nil, fmt.Errorf("%w: agent run metadata is not configured", invocation.ErrInternal)
+	}
+	if runInteractions == nil {
+		return nil, fmt.Errorf("%w: agent run interactions are not configured", invocation.ErrInternal)
+	}
+	runID := strings.TrimSpace(req.RunID)
+	interactionType := strings.TrimSpace(string(req.Type))
+	if interactionType == "" {
+		return nil, fmt.Errorf("%w: interaction type is required", invocation.ErrAuthorizationDenied)
+	}
+	if _, err := r.authorizeTrackedRun(ctx, runMetadata, strings.TrimSpace(req.ProviderName), runID); err != nil {
+		return nil, err
+	}
+	return runInteractions.Create(ctx, coreagent.Interaction{
+		RunID:   runID,
+		Type:    req.Type,
+		State:   coreagent.InteractionStatePending,
+		Title:   strings.TrimSpace(req.Title),
+		Prompt:  strings.TrimSpace(req.Prompt),
+		Request: maps.Clone(req.Request),
+	})
+}
+
+func (r *agentRuntime) ValidateInteraction(ctx context.Context, providerName, runID, interactionID string) (*coreagent.Interaction, error) {
+	if r == nil {
+		return nil, fmt.Errorf("agent runtime is not configured")
+	}
+	r.mu.RLock()
+	runMetadata := r.runMetadata
+	runInteractions := r.runInteractions
+	r.mu.RUnlock()
+	if runMetadata == nil {
+		return nil, fmt.Errorf("%w: agent run metadata is not configured", invocation.ErrInternal)
+	}
+	if runInteractions == nil {
+		return nil, fmt.Errorf("%w: agent run interactions are not configured", invocation.ErrInternal)
+	}
+	if _, err := r.authorizeTrackedRun(ctx, runMetadata, providerName, runID); err != nil {
+		return nil, err
+	}
+	interaction, err := runInteractions.Get(ctx, strings.TrimSpace(interactionID))
+	if err != nil {
+		if errors.Is(err, indexeddb.ErrNotFound) {
+			return nil, agentmanager.ErrAgentInteractionNotFound
+		}
+		return nil, err
+	}
+	if interaction == nil || strings.TrimSpace(interaction.RunID) != strings.TrimSpace(runID) {
+		return nil, agentmanager.ErrAgentInteractionNotFound
+	}
+	if interaction.State != coreagent.InteractionStatePending {
+		return nil, fmt.Errorf("%w: %q", agentmanager.ErrAgentInteractionNotPending, strings.TrimSpace(interactionID))
+	}
+	return interaction, nil
+}
+
+func (r *agentRuntime) ResolveInteraction(ctx context.Context, interactionID string, resolution map[string]any) (*coreagent.Interaction, error) {
+	if r == nil {
+		return nil, fmt.Errorf("agent runtime is not configured")
+	}
+	r.mu.RLock()
+	runInteractions := r.runInteractions
+	r.mu.RUnlock()
+	if runInteractions == nil {
+		return nil, fmt.Errorf("%w: agent run interactions are not configured", invocation.ErrInternal)
+	}
+	interaction, err := runInteractions.Get(ctx, strings.TrimSpace(interactionID))
+	if err != nil {
+		if errors.Is(err, indexeddb.ErrNotFound) {
+			return nil, core.ErrNotFound
+		}
+		return nil, err
+	}
+	if interaction == nil {
+		return nil, core.ErrNotFound
+	}
+	if interaction.State != coreagent.InteractionStatePending {
+		return interaction, nil
+	}
+	return runInteractions.Resolve(ctx, interaction.ID, maps.Clone(resolution), time.Now())
+}
+
+func (r *agentRuntime) CancelInteractions(ctx context.Context, runID string) error {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	runInteractions := r.runInteractions
+	r.mu.RUnlock()
+	if runInteractions == nil {
+		return nil
+	}
+	return runInteractions.CancelByRun(ctx, runID, time.Now())
+}
+
+func (r *agentRuntime) authorizeTrackedRun(ctx context.Context, runMetadata *coredata.AgentRunMetadataService, providerName, runID string) (*coreagent.ExecutionReference, error) {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return nil, fmt.Errorf("%w: run id is required", invocation.ErrAuthorizationDenied)
+	}
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return nil, fmt.Errorf("%w: provider name is required", invocation.ErrAuthorizationDenied)
+	}
+	ref, err := runMetadata.Get(ctx, runID)
+	if err != nil {
+		if errors.Is(err, indexeddb.ErrNotFound) {
+			return nil, fmt.Errorf("%w: agent run %q was not found", invocation.ErrAuthorizationDenied, runID)
+		}
+		return nil, fmt.Errorf("%w: agent run %q lookup failed: %v", invocation.ErrInternal, runID, err)
+	}
+	if ref == nil {
+		return nil, fmt.Errorf("%w: agent run %q was not found", invocation.ErrAuthorizationDenied, runID)
+	}
+	if ref.RevokedAt != nil && !ref.RevokedAt.IsZero() {
+		return nil, fmt.Errorf("%w: agent run %q is revoked", invocation.ErrAuthorizationDenied, runID)
+	}
+	if strings.TrimSpace(ref.ProviderName) != providerName {
+		return nil, fmt.Errorf("%w: agent run %q is not valid for provider %q", invocation.ErrAuthorizationDenied, runID, providerName)
+	}
+	return ref, nil
 }
 
 func lookupAgentTool(tools []coreagent.Tool, toolID string) (coreagent.Tool, bool) {

@@ -41,8 +41,13 @@ func (p *agentProvider) StartRun(ctx context.Context, req *proto.StartAgentProvi
 	output := map[string]any{
 		"provider_name": req.GetProviderName(),
 	}
+	waitingForInput := false
+	requireInteraction := false
+	if metadata := req.GetMetadata(); metadata != nil {
+		requireInteraction, _ = metadata.AsMap()["requireInteraction"].(bool)
+	}
 
-	if len(req.GetTools()) > 0 {
+	if len(req.GetTools()) > 0 || requireInteraction {
 		host, err := gestalt.AgentHost()
 		if err != nil {
 			output["host_error"] = err.Error()
@@ -53,36 +58,61 @@ func (p *agentProvider) StartRun(ctx context.Context, req *proto.StartAgentProvi
 				}
 			}()
 
-			arguments, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
-			if err != nil {
-				return nil, fmt.Errorf("build tool arguments: %w", err)
-			}
-			resp, err := host.ExecuteTool(ctx, &proto.ExecuteAgentToolRequest{
-				RunId:      runID,
-				ToolCallId: "call-1",
-				ToolId:     req.GetTools()[0].GetId(),
-				Arguments:  arguments,
-			})
-			if err != nil {
-				output["tool_error"] = err.Error()
-			} else {
-				output["tool_status"] = resp.GetStatus()
-				output["tool_body"] = resp.GetBody()
+			if len(req.GetTools()) > 0 {
+				arguments, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
+				if err != nil {
+					return nil, fmt.Errorf("build tool arguments: %w", err)
+				}
+				resp, err := host.ExecuteTool(ctx, &proto.ExecuteAgentToolRequest{
+					RunId:      runID,
+					ToolCallId: "call-1",
+					ToolId:     req.GetTools()[0].GetId(),
+					Arguments:  arguments,
+				})
+				if err != nil {
+					output["tool_error"] = err.Error()
+				} else {
+					output["tool_status"] = resp.GetStatus()
+					output["tool_body"] = resp.GetBody()
+				}
 			}
 
-			data, err := structpb.NewStruct(map[string]any{"provider_name": req.GetProviderName()})
-			if err != nil {
-				return nil, fmt.Errorf("build event payload: %w", err)
+			if len(req.GetTools()) > 0 {
+				data, err := structpb.NewStruct(map[string]any{"provider_name": req.GetProviderName()})
+				if err != nil {
+					return nil, fmt.Errorf("build event payload: %w", err)
+				}
+				if err := host.EmitEvent(ctx, &proto.EmitAgentEventRequest{
+					RunId:      runID,
+					Type:       "agent.test",
+					Visibility: "private",
+					Data:       data,
+				}); err != nil {
+					output["event_error"] = err.Error()
+				} else {
+					output["event_emitted"] = true
+				}
 			}
-			if err := host.EmitEvent(ctx, &proto.EmitAgentEventRequest{
-				RunId:      runID,
-				Type:       "agent.test",
-				Visibility: "private",
-				Data:       data,
-			}); err != nil {
-				output["event_error"] = err.Error()
-			} else {
-				output["event_emitted"] = true
+
+			if requireInteraction {
+				interactionRequest, err := structpb.NewStruct(map[string]any{"provider_name": req.GetProviderName()})
+				if err != nil {
+					return nil, fmt.Errorf("build interaction payload: %w", err)
+				}
+				interaction, err := host.RequestInteraction(ctx, &proto.RequestAgentInteractionRequest{
+					RunId:   runID,
+					Type:    proto.AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL,
+					Title:   "Approve action",
+					Prompt:  "Continue the agent run?",
+					Request: interactionRequest,
+				})
+				if err != nil {
+					output["interaction_error"] = err.Error()
+				} else {
+					output["interaction_requested"] = true
+					output["interaction_id"] = interaction.GetId()
+					waitingForInput = true
+				}
 			}
 		}
 	}
@@ -103,8 +133,13 @@ func (p *agentProvider) StartRun(ctx context.Context, req *proto.StartAgentProvi
 		CreatedBy:    req.GetCreatedBy(),
 		CreatedAt:    now,
 		StartedAt:    now,
-		CompletedAt:  now,
 		ExecutionRef: req.GetExecutionRef(),
+	}
+	if waitingForInput {
+		run.Status = proto.AgentRunStatus_AGENT_RUN_STATUS_WAITING_FOR_INPUT
+		run.StatusMessage = "waiting for input"
+	} else {
+		run.CompletedAt = now
 	}
 
 	p.mu.Lock()
@@ -143,6 +178,31 @@ func (p *agentProvider) CancelRun(_ context.Context, req *proto.CancelAgentProvi
 		return nil, status.Error(codes.NotFound, "run not found")
 	}
 	run.Status = proto.AgentRunStatus_AGENT_RUN_STATUS_CANCELED
+	return run, nil
+}
+
+func (p *agentProvider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
+	return &proto.AgentProviderCapabilities{
+		StreamingText:       true,
+		ToolCalls:           true,
+		StructuredOutput:    true,
+		SessionContinuation: true,
+		Approvals:           true,
+		ResumableRuns:       true,
+	}, nil
+}
+
+func (p *agentProvider) ResumeRun(_ context.Context, req *proto.ResumeAgentProviderRunRequest) (*proto.BoundAgentRun, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	runID := strings.TrimSpace(req.GetRunId())
+	run, ok := p.runs[runID]
+	if !ok {
+		return nil, status.Error(codes.NotFound, "run not found")
+	}
+	run.Status = proto.AgentRunStatus_AGENT_RUN_STATUS_SUCCEEDED
+	run.StatusMessage = strings.TrimSpace(req.GetInteractionId())
+	run.CompletedAt = timestamppb.Now()
 	return run, nil
 }
 

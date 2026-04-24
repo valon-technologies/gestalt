@@ -38,6 +38,8 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Get("/", s.listGlobalAgentRuns)
 			r.Get("/{runID}/events", s.listGlobalAgentRunEvents)
 			r.Get("/{runID}/events/stream", s.streamGlobalAgentRunEvents)
+			r.Get("/{runID}/interactions", s.listGlobalAgentRunInteractions)
+			r.Post("/{runID}/resume", s.resumeGlobalAgentRun)
 			r.Get("/{runID}", s.getGlobalAgentRun)
 			r.Post("/{runID}/cancel", s.cancelGlobalAgentRun)
 		})

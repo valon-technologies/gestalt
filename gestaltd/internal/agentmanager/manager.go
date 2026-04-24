@@ -24,15 +24,20 @@ import (
 )
 
 var (
-	ErrAgentNotConfigured            = errors.New("agent is not configured")
-	ErrAgentProviderRequired         = errors.New("agent provider is required")
-	ErrAgentProviderNotAvailable     = errors.New("agent provider is not available")
-	ErrAgentRunMetadataNotConfigured = errors.New("agent run metadata is not configured")
-	ErrAgentRunEventsNotConfigured   = errors.New("agent run events are not configured")
-	ErrAgentSubjectRequired          = errors.New("agent subject is required")
-	ErrAgentCallerPluginRequired     = errors.New("agent caller plugin is required for inherited tools")
-	ErrAgentInheritedSurfaceTool     = errors.New("agent inherited surface tools are not supported")
-	ErrAgentRunCreationInProgress    = errors.New("agent run creation is already in progress for this idempotency key")
+	ErrAgentNotConfigured                = errors.New("agent is not configured")
+	ErrAgentProviderRequired             = errors.New("agent provider is required")
+	ErrAgentProviderNotAvailable         = errors.New("agent provider is not available")
+	ErrAgentRunMetadataNotConfigured     = errors.New("agent run metadata is not configured")
+	ErrAgentRunEventsNotConfigured       = errors.New("agent run events are not configured")
+	ErrAgentRunInteractionsNotConfigured = errors.New("agent run interactions are not configured")
+	ErrAgentRunResumeNotSupported        = errors.New("agent run resume is not supported by this provider")
+	ErrAgentSubjectRequired              = errors.New("agent subject is required")
+	ErrAgentCallerPluginRequired         = errors.New("agent caller plugin is required for inherited tools")
+	ErrAgentInheritedSurfaceTool         = errors.New("agent inherited surface tools are not supported")
+	ErrAgentRunCreationInProgress        = errors.New("agent run creation is already in progress for this idempotency key")
+	ErrAgentInteractionRequired          = errors.New("agent interaction is required")
+	ErrAgentInteractionNotFound          = errors.New("agent interaction is not found")
+	ErrAgentInteractionNotPending        = errors.New("agent interaction is not pending")
 )
 
 type AgentProviderNotAvailableError struct {
@@ -69,6 +74,8 @@ type Service interface {
 	ListRunsByProvider(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.ManagedRun, error)
 	CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*coreagent.ManagedRun, error)
 	ListRunEvents(ctx context.Context, p *principal.Principal, runID string, afterSeq int64, limit int) ([]*coreagent.RunEvent, error)
+	ListRunInteractions(ctx context.Context, p *principal.Principal, runID string) ([]*coreagent.Interaction, error)
+	ResumeRun(ctx context.Context, p *principal.Principal, runID, interactionID string, resolution map[string]any) (*coreagent.ManagedRun, error)
 }
 
 type Config struct {
@@ -77,6 +84,7 @@ type Config struct {
 	RunMetadata       *coredata.AgentRunMetadataService
 	RunEvents         *coredata.AgentRunEventService
 	Tokens            *coredata.TokenService
+	RunInteractions   *coredata.AgentRunInteractionService
 	Invoker           invocation.Invoker
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
@@ -91,6 +99,7 @@ type Manager struct {
 	runMetadata       *coredata.AgentRunMetadataService
 	runEvents         *coredata.AgentRunEventService
 	tokens            *coredata.TokenService
+	runInteractions   *coredata.AgentRunInteractionService
 	invoker           invocation.Invoker
 	authorizer        authorization.RuntimeAuthorizer
 	defaultConnection map[string]string
@@ -114,6 +123,7 @@ func New(cfg Config) *Manager {
 		runMetadata:       cfg.RunMetadata,
 		runEvents:         cfg.RunEvents,
 		tokens:            cfg.Tokens,
+		runInteractions:   cfg.RunInteractions,
 		invoker:           cfg.Invoker,
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
@@ -331,6 +341,11 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, 
 	if _, err := m.runMetadata.Revoke(ctx, ref.ID, m.now()); err != nil {
 		return nil, err
 	}
+	if m.runInteractions != nil {
+		if err := m.runInteractions.CancelByRun(ctx, ref.ID, m.now()); err != nil {
+			return nil, err
+		}
+	}
 	normalized, err := normalizeProviderRun(ref.ProviderName, strings.TrimSpace(runID), run)
 	if err != nil {
 		return nil, err
@@ -350,6 +365,73 @@ func (m *Manager) ListRunEvents(ctx context.Context, p *principal.Principal, run
 		return nil, err
 	}
 	return m.runEvents.ListByRun(ctx, ref.ID, afterSeq, limit)
+}
+
+func (m *Manager) ListRunInteractions(ctx context.Context, p *principal.Principal, runID string) ([]*coreagent.Interaction, error) {
+	if m == nil || m.runInteractions == nil {
+		return nil, ErrAgentRunInteractionsNotConfigured
+	}
+	ref, err := m.requireOwnedRunMetadata(ctx, runID, p)
+	if err != nil {
+		return nil, err
+	}
+	return m.runInteractions.ListByRun(ctx, ref.ID)
+}
+
+func (m *Manager) ResumeRun(ctx context.Context, p *principal.Principal, runID, interactionID string, resolution map[string]any) (*coreagent.ManagedRun, error) {
+	if m == nil || m.runInteractions == nil {
+		return nil, ErrAgentRunInteractionsNotConfigured
+	}
+	ref, err := m.requireOwnedRunMetadata(ctx, runID, p)
+	if err != nil {
+		return nil, err
+	}
+	interaction, err := m.requireInteraction(ctx, ref, interactionID)
+	if err != nil {
+		return nil, err
+	}
+	provider, err := m.resolveProviderByName(ref.ProviderName)
+	if err != nil {
+		return nil, err
+	}
+	providerManagedInteractions := providerManagesResumeRunInteractions(provider)
+	if !providerManagedInteractions && interaction.State != coreagent.InteractionStatePending {
+		return nil, ErrAgentInteractionNotPending
+	}
+	capabilities, err := provider.GetCapabilities(ctx, coreagent.GetCapabilitiesRequest{})
+	if err != nil {
+		return nil, err
+	}
+	if capabilities == nil || !capabilities.ResumableRuns {
+		return nil, ErrAgentRunResumeNotSupported
+	}
+	run, err := provider.ResumeRun(ctx, coreagent.ResumeRunRequest{
+		RunID:         ref.ID,
+		InteractionID: interaction.ID,
+		Resolution:    maps.Clone(resolution),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !providerManagedInteractions {
+		current, err := m.runInteractions.Get(ctx, interaction.ID)
+		if err != nil && !errors.Is(err, indexeddb.ErrNotFound) {
+			return nil, err
+		}
+		if current != nil && current.State == coreagent.InteractionStatePending {
+			if _, err := m.runInteractions.Resolve(ctx, interaction.ID, maps.Clone(resolution), m.now()); err != nil {
+				return nil, err
+			}
+		}
+	}
+	normalized, err := normalizeProviderRun(ref.ProviderName, ref.ID, run)
+	if err != nil {
+		return nil, err
+	}
+	return &coreagent.ManagedRun{
+		ProviderName: ref.ProviderName,
+		Run:          normalized,
+	}, nil
 }
 
 func (m *Manager) getManagedRunByMetadata(ctx context.Context, p *principal.Principal, ref *coreagent.ExecutionReference) (*coreagent.ManagedRun, error) {
@@ -432,6 +514,30 @@ func (m *Manager) requireOwnedRunMetadata(ctx context.Context, runID string, p *
 		return nil, core.ErrNotFound
 	}
 	return ref, nil
+}
+
+func (m *Manager) requireInteraction(ctx context.Context, ref *coreagent.ExecutionReference, interactionID string) (*coreagent.Interaction, error) {
+	if ref == nil {
+		return nil, core.ErrNotFound
+	}
+	interactionID = strings.TrimSpace(interactionID)
+	if interactionID == "" {
+		return nil, ErrAgentInteractionRequired
+	}
+	if m == nil || m.runInteractions == nil {
+		return nil, ErrAgentRunInteractionsNotConfigured
+	}
+	interaction, err := m.runInteractions.Get(ctx, interactionID)
+	if err != nil {
+		if errors.Is(err, indexeddb.ErrNotFound) {
+			return nil, ErrAgentInteractionNotFound
+		}
+		return nil, err
+	}
+	if interaction == nil || strings.TrimSpace(interaction.RunID) != ref.ID {
+		return nil, ErrAgentInteractionNotFound
+	}
+	return interaction, nil
 }
 
 func (m *Manager) resolveTools(ctx context.Context, p *principal.Principal, callerPluginName string, explicit []coreagent.ToolRef, source coreagent.ToolSourceMode) ([]coreagent.Tool, error) {

@@ -457,7 +457,14 @@ def _register_agent_services(server: Any, provider: PluginProvider) -> None:
         _service_wrapper(
             provider,
             agent_pb2_grpc.AgentProviderServicer,
-            ("StartRun", "GetRun", "ListRuns", "CancelRun"),
+            (
+                "StartRun",
+                "GetRun",
+                "ListRuns",
+                "CancelRun",
+                "GetCapabilities",
+                "ResumeRun",
+            ),
         ),
         server,
     )

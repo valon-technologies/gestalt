@@ -178,6 +178,7 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	agentRuntime.SetInvoker(invoker)
 	agentRuntime.SetRunMetadata(services.AgentRunMetadata)
 	agentRuntime.SetRunEvents(services.AgentRunEvents)
+	agentRuntime.SetRunInteractions(services.AgentRunInteractions)
 	capturingRuntime := newCapturingPluginRuntime()
 
 	factories := NewFactoryRegistry()
@@ -221,6 +222,13 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	}()
 	if len(agents) != 1 {
 		t.Fatalf("agents len = %d, want 1", len(agents))
+	}
+	capabilities, err := agents[0].GetCapabilities(context.Background(), coreagent.GetCapabilitiesRequest{})
+	if err != nil {
+		t.Fatalf("GetCapabilities: %v", err)
+	}
+	if capabilities == nil || !capabilities.Approvals || !capabilities.ResumableRuns {
+		t.Fatalf("capabilities = %#v, want approvals+resumable_runs", capabilities)
 	}
 
 	run, err := agents[0].StartRun(context.Background(), coreagent.StartRunRequest{
@@ -309,6 +317,65 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	if got := bindRequests[0].Relay.DialTarget; !strings.HasPrefix(got, "unix://") {
 		t.Fatalf("BindHostService relay target = %q, want unix relay target", got)
 	}
+
+	pausedRun, err := agents[0].StartRun(context.Background(), coreagent.StartRunRequest{
+		RunID:        "run-2",
+		ProviderName: "simple",
+		CreatedBy:    coreagent.Actor{SubjectID: "user:user-123"},
+		Metadata: map[string]any{
+			"requireInteraction": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartRun(waiting): %v", err)
+	}
+	if pausedRun == nil {
+		t.Fatal("StartRun(waiting) returned nil run")
+	}
+	if pausedRun.Status != coreagent.RunStatusWaitingForInput {
+		t.Fatalf("paused run status = %q, want %q", pausedRun.Status, coreagent.RunStatusWaitingForInput)
+	}
+	var pausedOutput struct {
+		InteractionRequested bool   `json:"interaction_requested"`
+		InteractionID        string `json:"interaction_id"`
+		InteractionError     string `json:"interaction_error"`
+	}
+	if err := json.Unmarshal([]byte(pausedRun.OutputText), &pausedOutput); err != nil {
+		t.Fatalf("json.Unmarshal(pausedRun.OutputText): %v", err)
+	}
+	if !pausedOutput.InteractionRequested || strings.TrimSpace(pausedOutput.InteractionID) == "" || pausedOutput.InteractionError != "" {
+		t.Fatalf("paused run output = %+v", pausedOutput)
+	}
+	interactions, err := services.AgentRunInteractions.ListByRun(context.Background(), "run-2")
+	if err != nil {
+		t.Fatalf("AgentRunInteractions.ListByRun: %v", err)
+	}
+	if len(interactions) != 1 {
+		t.Fatalf("agent run interactions = %d, want 1", len(interactions))
+	}
+	if interactions[0].Type != coreagent.InteractionTypeApproval || interactions[0].State != coreagent.InteractionStatePending {
+		t.Fatalf("interaction = %#v, want pending approval", interactions[0])
+	}
+	resumedRun, err := agents[0].ResumeRun(context.Background(), coreagent.ResumeRunRequest{
+		RunID:         "run-2",
+		InteractionID: interactions[0].ID,
+		Resolution: map[string]any{
+			"approved": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResumeRun: %v", err)
+	}
+	if resumedRun == nil || resumedRun.Status != coreagent.RunStatusSucceeded || resumedRun.StatusMessage != interactions[0].ID {
+		t.Fatalf("resumed run = %#v, want succeeded status_message=%q", resumedRun, interactions[0].ID)
+	}
+	resolvedInteractions, err := services.AgentRunInteractions.ListByRun(context.Background(), "run-2")
+	if err != nil {
+		t.Fatalf("AgentRunInteractions.ListByRun(resolved): %v", err)
+	}
+	if len(resolvedInteractions) != 1 || resolvedInteractions[0].State != coreagent.InteractionStateResolved || resolvedInteractions[0].Resolution["approved"] != true {
+		t.Fatalf("resolved interactions = %#v, want resolved approved interaction", resolvedInteractions)
+	}
 }
 
 //nolint:paralleltest // Hosted public-relay startup is serialized to avoid Linux CI contention.
@@ -352,10 +419,15 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 		},
 	}
 
+	services := coretesting.NewStubServices(t)
+	runtimeState := &agentRuntime{providers: map[string]coreagent.Provider{}}
+	runtimeState.SetRunMetadata(services.AgentRunMetadata)
+	runtimeState.SetRunEvents(services.AgentRunEvents)
+	runtimeState.SetRunInteractions(services.AgentRunInteractions)
 	deps := Deps{
 		BaseURL:       relaySrv.URL,
 		EncryptionKey: secret,
-		AgentRuntime:  &agentRuntime{providers: map[string]coreagent.Provider{}},
+		AgentRuntime:  runtimeState,
 	}
 	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
 

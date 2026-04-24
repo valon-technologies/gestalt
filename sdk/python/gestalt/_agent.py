@@ -37,6 +37,9 @@ class AgentHost:
     def emit_event(self, request: Any) -> Any:
         return _grpc_call(self._stub.EmitEvent, request)
 
+    def request_interaction(self, request: Any) -> Any:
+        return _grpc_call(self._stub.RequestInteraction, request)
+
     def __enter__(self) -> AgentHost:
         return self
 

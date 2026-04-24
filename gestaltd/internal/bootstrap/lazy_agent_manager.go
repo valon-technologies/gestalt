@@ -81,6 +81,22 @@ func (l *lazyAgentManager) ListRunEvents(ctx context.Context, p *principal.Princ
 	return target.ListRunEvents(ctx, p, runID, afterSeq, limit)
 }
 
+func (l *lazyAgentManager) ListRunInteractions(ctx context.Context, p *principal.Principal, runID string) ([]*coreagent.Interaction, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ListRunInteractions(ctx, p, runID)
+}
+
+func (l *lazyAgentManager) ResumeRun(ctx context.Context, p *principal.Principal, runID, interactionID string, resolution map[string]any) (*coreagent.ManagedRun, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ResumeRun(ctx, p, runID, interactionID, resolution)
+}
+
 func (l *lazyAgentManager) current() (agentmanager.Service, error) {
 	l.mu.RLock()
 	target := l.target

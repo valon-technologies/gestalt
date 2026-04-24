@@ -73,6 +73,8 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | `POST` | `/api/v1/agent/runs/{runID}/cancel` | Cancel one agent run. The request body may include an optional `reason`. |
 | `GET` | `/api/v1/agent/runs/{runID}/events` | List stored events for one agent run. Supports optional `after` sequence cursor and `limit`. |
 | `GET` | `/api/v1/agent/runs/{runID}/events/stream` | Stream agent run events as server-sent events. Supports optional `after` sequence cursor and `limit`. |
+| `GET` | `/api/v1/agent/runs/{runID}/interactions` | List persisted interactions for one agent run. |
+| `POST` | `/api/v1/agent/runs/{runID}/resume` | Resume one paused agent run by submitting an `interactionId` and optional `resolution` payload. |
 
 Agent run creation accepts `provider`, `model`, `messages`, optional
 `toolRefs`, optional `toolSource`, optional `responseSchema`, optional
@@ -84,6 +86,11 @@ Missing `toolRefs[].pluginName` or `toolRefs[].operation` returns `400`.
 Conflicting header/body idempotency keys also return `400`, an in-progress
 idempotent create returns `409`, and an unconfigured agent surface returns
 `412`.
+
+Each `messages[]` entry accepts `role`, optional `text`, optional `parts`, and
+optional `metadata`. `parts[]` supports `type: text | json | tool_call |
+tool_result | image_ref` plus the corresponding `text`, `json`, `toolCall`,
+`toolResult`, or `imageRef` payload.
 
 ### API Tokens
 
@@ -223,8 +230,29 @@ curl -X POST http://localhost:8080/api/v1/agent/runs \
     "provider": "managed",
     "model": "gpt-5.4",
     "messages": [
-      {"role": "system", "text": "Be concise."},
-      {"role": "user", "text": "Summarize the roadmap risk."}
+      {
+        "role": "system",
+        "text": "Be concise.",
+        "parts": [
+          {"type": "text", "text": "Be concise."}
+        ]
+      },
+      {
+        "role": "user",
+        "text": "Summarize the roadmap risk.",
+        "parts": [
+          {"type": "text", "text": "Summarize the roadmap risk."},
+          {
+            "type": "json",
+            "json": {
+              "ticket": "RD-42"
+            }
+          }
+        ],
+        "metadata": {
+          "ticket": "RD-42"
+        }
+      }
     ],
     "responseSchema": {
       "type": "object",
@@ -266,6 +294,21 @@ curl -H 'Authorization: Bearer gst_api_...' \
 curl -N -H 'Authorization: Bearer gst_api_...' \
   'http://localhost:8080/api/v1/agent/runs/run-123/events/stream?after=0'
 
+# List pending run interactions
+curl -H 'Authorization: Bearer gst_api_...' \
+  'http://localhost:8080/api/v1/agent/runs/run-123/interactions'
+
+# Resume a paused run
+curl -X POST http://localhost:8080/api/v1/agent/runs/run-123/resume \
+  -H 'Authorization: Bearer gst_api_...' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "interactionId": "interaction-123",
+    "resolution": {
+      "approved": true
+    }
+  }'
+
 # List filtered runs
 curl -H 'Authorization: Bearer gst_api_...' \
   'http://localhost:8080/api/v1/agent/runs?provider=managed&status=running'
@@ -283,13 +326,26 @@ curl -X POST http://localhost:8080/api/v1/agent/runs/run-123/cancel \
 #   "model": "gpt-5.4",
 #   "status": "pending",
 #   "messages": [
-#     {"role":"system","text":"Be concise."},
-#     {"role":"user","text":"Summarize the roadmap risk."}
+#     {"role":"system","text":"Be concise.","parts":[{"type":"text","text":"Be concise."}]},
+#     {"role":"user","text":"Summarize the roadmap risk.","parts":[{"type":"text","text":"Summarize the roadmap risk."}],"metadata":{"ticket":"RD-42"}}
 #   ],
 #   "sessionRef": "session-1",
 #   "createdAt": "2026-04-22T00:00:00Z",
 #   "executionRef": "run-123"
 # }
+
+# Typical interaction list response
+# [
+#   {
+#     "id": "interaction-123",
+#     "runId": "run-123",
+#     "type": "approval",
+#     "state": "pending",
+#     "title": "Approve external call",
+#     "prompt": "Allow this run to continue?",
+#     "request": {"host":"api.openai.com"}
+#   }
+# ]
 
 # Add a dynamic plugin member from the management/admin surface by email alias
 curl -X PUT http://localhost:9090/admin/api/v1/authorization/plugins/sample_plugin/members \

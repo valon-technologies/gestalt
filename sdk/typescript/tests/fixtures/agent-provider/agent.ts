@@ -56,6 +56,39 @@ export const provider = defineAgentProvider({
     canceledRuns += 1;
     return updated;
   },
+  async getCapabilities() {
+    return {
+      streamingText: true,
+      toolCalls: true,
+      parallelToolCalls: false,
+      structuredOutput: true,
+      sessionContinuation: true,
+      approvals: true,
+      resumableRuns: true,
+      reasoningSummaries: false,
+    };
+  },
+  async resumeRun(request) {
+    const run = requireRunByID(request.runId);
+    const updated = create(BoundAgentRunSchema, {
+      id: run.id,
+      providerName: run.providerName,
+      model: run.model,
+      status: AgentRunStatus.SUCCEEDED,
+      messages: run.messages,
+      outputText: `resumed:${request.interactionId}`,
+      ...(run.structuredOutput ? { structuredOutput: run.structuredOutput } : {}),
+      statusMessage: request.interactionId,
+      sessionRef: run.sessionRef,
+      ...(run.createdBy ? { createdBy: run.createdBy } : {}),
+      ...(run.createdAt ? { createdAt: run.createdAt } : {}),
+      startedAt: run.startedAt,
+      completedAt: timestampNow(),
+      executionRef: run.executionRef,
+    });
+    runs.set(updated.id, updated);
+    return updated;
+  },
   warnings() {
     return canceledRuns > 0 ? [`canceled-runs:${canceledRuns}`] : [];
   },

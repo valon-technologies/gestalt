@@ -561,6 +561,16 @@ func (s *stubAgentProvider) CancelRun(_ context.Context, req coreagent.CancelRun
 	}
 	return &coreagent.Run{ID: runID, Status: coreagent.RunStatusCanceled}, nil
 }
+func (s *stubAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	return &coreagent.ProviderCapabilities{StreamingText: true, ToolCalls: true}, nil
+}
+func (s *stubAgentProvider) ResumeRun(_ context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
+	runID := strings.TrimSpace(req.RunID)
+	if runID == "" {
+		runID = "run-1"
+	}
+	return &coreagent.Run{ID: runID, Status: coreagent.RunStatusSucceeded}, nil
+}
 func (s *stubAgentProvider) Ping(context.Context) error { return nil }
 func (s *stubAgentProvider) Close() error               { return nil }
 
@@ -631,18 +641,35 @@ func (p *recordingAgentProvider) CancelRun(_ context.Context, req coreagent.Canc
 	p.runs[req.RunID] = &cloned
 	return &cloned, nil
 }
+func (p *recordingAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	return &coreagent.ProviderCapabilities{StreamingText: true, ToolCalls: true}, nil
+}
+func (p *recordingAgentProvider) ResumeRun(_ context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	run, ok := p.runs[req.RunID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	cloned := *run
+	cloned.Status = coreagent.RunStatusSucceeded
+	p.runs[req.RunID] = &cloned
+	return &cloned, nil
+}
 
 func (p *recordingAgentProvider) Ping(context.Context) error { return nil }
 func (p *recordingAgentProvider) Close() error               { return nil }
 
 type callbackAgentProvider struct {
-	mu               sync.Mutex
-	started          *providerhost.StartedHostServices
-	socketPath       string
-	startRunRequests []coreagent.StartRunRequest
-	cancelRequests   []coreagent.CancelRunRequest
-	toolBodies       []string
-	runs             map[string]*coreagent.Run
+	mu                  sync.Mutex
+	started             *providerhost.StartedHostServices
+	socketPath          string
+	startRunRequests    []coreagent.StartRunRequest
+	cancelRequests      []coreagent.CancelRunRequest
+	toolBodies          []string
+	runs                map[string]*coreagent.Run
+	getCapabilitiesHook func(context.Context) error
+	resumeHook          func(context.Context, coreagent.ResumeRunRequest) error
 }
 
 func newCallbackAgentProvider(started *providerhost.StartedHostServices) (*callbackAgentProvider, error) {
@@ -672,7 +699,14 @@ func (p *callbackAgentProvider) StartRun(ctx context.Context, req coreagent.Star
 	p.mu.Unlock()
 
 	outputBody := ""
-	if len(req.Tools) > 0 {
+	needsInteraction := false
+	for _, message := range req.Messages {
+		if strings.TrimSpace(message.Text) == "request approval" {
+			needsInteraction = true
+			break
+		}
+	}
+	if len(req.Tools) > 0 || needsInteraction {
 		conn, err := grpc.NewClient(
 			"passthrough:///localhost",
 			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
@@ -685,26 +719,43 @@ func (p *callbackAgentProvider) StartRun(ctx context.Context, req coreagent.Star
 			return nil, fmt.Errorf("dial agent host: %w", err)
 		}
 		defer func() { _ = conn.Close() }()
-
-		resp, err := proto.NewAgentHostClient(conn).ExecuteTool(ctx, &proto.ExecuteAgentToolRequest{
-			RunId:      req.RunID,
-			ToolCallId: "tool-call-1",
-			ToolId:     req.Tools[0].ID,
-			Arguments: func() *structpb.Struct {
-				value, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
-				if err != nil {
-					panic(err)
-				}
-				return value
-			}(),
-		})
-		if err != nil {
-			return nil, err
+		client := proto.NewAgentHostClient(conn)
+		if len(req.Tools) > 0 {
+			resp, err := client.ExecuteTool(ctx, &proto.ExecuteAgentToolRequest{
+				RunId:      req.RunID,
+				ToolCallId: "tool-call-1",
+				ToolId:     req.Tools[0].ID,
+				Arguments: func() *structpb.Struct {
+					value, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
+					if err != nil {
+						panic(err)
+					}
+					return value
+				}(),
+			})
+			if err != nil {
+				return nil, err
+			}
+			outputBody = resp.GetBody()
+			p.mu.Lock()
+			p.toolBodies = append(p.toolBodies, outputBody)
+			p.mu.Unlock()
 		}
-		outputBody = resp.GetBody()
-		p.mu.Lock()
-		p.toolBodies = append(p.toolBodies, outputBody)
-		p.mu.Unlock()
+		if needsInteraction {
+			requestPayload, err := structpb.NewStruct(map[string]any{"approved": true})
+			if err != nil {
+				return nil, err
+			}
+			if _, err := client.RequestInteraction(ctx, &proto.RequestAgentInteractionRequest{
+				RunId:   req.RunID,
+				Type:    proto.AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL,
+				Title:   "Approve response",
+				Prompt:  "Allow this run to continue?",
+				Request: requestPayload,
+			}); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	run := &coreagent.Run{
@@ -714,6 +765,10 @@ func (p *callbackAgentProvider) StartRun(ctx context.Context, req coreagent.Star
 		OutputText:   outputBody,
 		ExecutionRef: req.ExecutionRef,
 		CreatedBy:    req.CreatedBy,
+	}
+	if needsInteraction {
+		run.Status = coreagent.RunStatusWaitingForInput
+		run.StatusMessage = "waiting for input"
 	}
 	p.mu.Lock()
 	p.runs[req.RunID] = run
@@ -756,6 +811,31 @@ func (p *callbackAgentProvider) CancelRun(_ context.Context, req coreagent.Cance
 	p.runs[req.RunID] = &cloned
 	return &cloned, nil
 }
+func (p *callbackAgentProvider) GetCapabilities(ctx context.Context, _ coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	if p.getCapabilitiesHook != nil {
+		if err := p.getCapabilitiesHook(ctx); err != nil {
+			return nil, err
+		}
+	}
+	return &coreagent.ProviderCapabilities{StreamingText: true, ToolCalls: true, Approvals: true, ResumableRuns: true}, nil
+}
+func (p *callbackAgentProvider) ResumeRun(ctx context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
+	if p.resumeHook != nil {
+		if err := p.resumeHook(ctx, req); err != nil {
+			return nil, err
+		}
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	run, ok := p.runs[req.RunID]
+	if !ok {
+		return nil, core.ErrNotFound
+	}
+	cloned := *run
+	cloned.Status = coreagent.RunStatusSucceeded
+	p.runs[req.RunID] = &cloned
+	return &cloned, nil
+}
 
 func (p *callbackAgentProvider) Ping(context.Context) error { return nil }
 
@@ -792,6 +872,12 @@ func (p *generatedIDAgentProvider) CancelRun(_ context.Context, req coreagent.Ca
 	defer p.mu.Unlock()
 	p.cancelRequests = append(p.cancelRequests, req)
 	return &coreagent.Run{ID: req.RunID, Status: coreagent.RunStatusCanceled}, nil
+}
+func (p *generatedIDAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
+	return &coreagent.ProviderCapabilities{StreamingText: true}, nil
+}
+func (p *generatedIDAgentProvider) ResumeRun(_ context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
+	return &coreagent.Run{ID: req.RunID, Status: coreagent.RunStatusSucceeded}, nil
 }
 
 func (p *generatedIDAgentProvider) Ping(context.Context) error { return nil }
@@ -1826,6 +1912,11 @@ func TestBootstrapAgentManagerRunPersistsMetadataForToolCallbacks(t *testing.T) 
 		"managed": {
 			Source:  config.ProviderSource{Path: "stub"},
 			Default: true,
+			IndexedDB: &config.PluginIndexedDBConfig{
+				Provider:     "test",
+				DB:           "agent_resume",
+				ObjectStores: []string{"provider_state"},
+			},
 		},
 	}
 
@@ -1959,6 +2050,452 @@ func TestBootstrapAgentManagerRunPersistsMetadataForToolCallbacks(t *testing.T) 
 	}
 	if ref.CredentialSubjectID != principal.WorkloadSubjectID("agent-credential") {
 		t.Fatalf("stored credential subject = %q, want %q", ref.CredentialSubjectID, principal.WorkloadSubjectID("agent-credential"))
+	}
+}
+
+func TestBootstrapAgentProviderTracksPlainRunsForInteractionCallbacks(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	var provider *callbackAgentProvider
+	factories := validFactories()
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := providerhost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	_, selected, err := result.AgentControl.ResolveProviderSelection("")
+	if err != nil {
+		t.Fatalf("ResolveProviderSelection: %v", err)
+	}
+	startCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "system:config"})
+	run, err := selected.StartRun(startCtx, coreagent.StartRunRequest{
+		RunID:        "agent-run-plain",
+		ProviderName: "managed",
+		CreatedBy:    coreagent.Actor{SubjectID: "system:config"},
+		Messages: []coreagent.Message{{
+			Role: "user",
+			Text: "request approval",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+	if run == nil || run.Status != coreagent.RunStatusWaitingForInput {
+		t.Fatalf("run = %#v, want waiting_for_input", run)
+	}
+
+	interactions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-plain")
+	if err != nil {
+		t.Fatalf("AgentRunInteractions.ListByRun: %v", err)
+	}
+	if len(interactions) != 1 || interactions[0].State != coreagent.InteractionStatePending {
+		t.Fatalf("interactions = %#v, want one pending interaction", interactions)
+	}
+
+	provider.resumeHook = func(ctx context.Context, req coreagent.ResumeRunRequest) error {
+		current, err := result.Services.AgentRunInteractions.Get(ctx, req.InteractionID)
+		if err != nil {
+			return err
+		}
+		if current.State != coreagent.InteractionStatePending {
+			return fmt.Errorf("interaction state during direct provider resume = %q, want pending", current.State)
+		}
+		return nil
+	}
+
+	resumed, err := selected.ResumeRun(startCtx, coreagent.ResumeRunRequest{
+		RunID:         "agent-run-plain",
+		InteractionID: interactions[0].ID,
+		Resolution: map[string]any{
+			"approved": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResumeRun: %v", err)
+	}
+	if resumed == nil || resumed.Status != coreagent.RunStatusSucceeded {
+		t.Fatalf("resumed run = %#v, want succeeded", resumed)
+	}
+
+	resolvedInteractions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-plain")
+	if err != nil {
+		t.Fatalf("AgentRunInteractions.ListByRun(resolved): %v", err)
+	}
+	if len(resolvedInteractions) != 1 || resolvedInteractions[0].State != coreagent.InteractionStateResolved || resolvedInteractions[0].Resolution["approved"] != true {
+		t.Fatalf("resolved interactions = %#v, want one resolved interaction", resolvedInteractions)
+	}
+
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	if len(provider.startRunRequests) != 1 || len(provider.startRunRequests[0].Tools) != 0 || len(provider.startRunRequests[0].Metadata) != 0 {
+		t.Fatalf("start run requests = %#v, want plain run without tools or metadata", provider.startRunRequests)
+	}
+}
+
+func TestBootstrapAgentProviderResumeIgnoresMissingResolvedInteraction(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	var provider *callbackAgentProvider
+	factories := validFactories()
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := providerhost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	_, selected, err := result.AgentControl.ResolveProviderSelection("")
+	if err != nil {
+		t.Fatalf("ResolveProviderSelection: %v", err)
+	}
+	startCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "system:config"})
+	run, err := selected.StartRun(startCtx, coreagent.StartRunRequest{
+		RunID:        "agent-run-race",
+		ProviderName: "managed",
+		CreatedBy:    coreagent.Actor{SubjectID: "system:config"},
+		Messages: []coreagent.Message{{
+			Role: "user",
+			Text: "request approval",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+	if run == nil || run.Status != coreagent.RunStatusWaitingForInput {
+		t.Fatalf("run = %#v, want waiting_for_input", run)
+	}
+
+	interactions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-race")
+	if err != nil {
+		t.Fatalf("AgentRunInteractions.ListByRun: %v", err)
+	}
+	if len(interactions) != 1 || interactions[0].State != coreagent.InteractionStatePending {
+		t.Fatalf("interactions = %#v, want one pending interaction", interactions)
+	}
+
+	provider.resumeHook = func(ctx context.Context, req coreagent.ResumeRunRequest) error {
+		return result.Services.AgentRunInteractions.DeleteByRun(ctx, req.RunID)
+	}
+
+	resumed, err := selected.ResumeRun(startCtx, coreagent.ResumeRunRequest{
+		RunID:         "agent-run-race",
+		InteractionID: interactions[0].ID,
+		Resolution: map[string]any{
+			"approved": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResumeRun: %v", err)
+	}
+	if resumed == nil || resumed.Status != coreagent.RunStatusSucceeded {
+		t.Fatalf("resumed run = %#v, want succeeded", resumed)
+	}
+
+	remainingInteractions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-race")
+	if err != nil {
+		t.Fatalf("AgentRunInteractions.ListByRun(remaining): %v", err)
+	}
+	if len(remainingInteractions) != 0 {
+		t.Fatalf("remaining interactions = %#v, want none after simulated deletion race", remainingInteractions)
+	}
+}
+
+func TestBootstrapAgentManagerResumeReturnsInteractionNotPendingOnValidationRace(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	var provider *callbackAgentProvider
+	factories := validFactories()
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := providerhost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	_, selected, err := result.AgentControl.ResolveProviderSelection("")
+	if err != nil {
+		t.Fatalf("ResolveProviderSelection: %v", err)
+	}
+	resumeManagingProvider, ok := selected.(agentmanager.ResumeRunInteractionManagingProvider)
+	if !ok || !resumeManagingProvider.ManagesResumeRunInteractions() {
+		t.Fatalf("selected provider = %T, want ResumeRunInteractionManagingProvider", selected)
+	}
+	p := &principal.Principal{SubjectID: "system:config"}
+	startCtx := principal.WithPrincipal(context.Background(), p)
+	run, err := selected.StartRun(startCtx, coreagent.StartRunRequest{
+		RunID:        "agent-run-pending-race",
+		ProviderName: "managed",
+		CreatedBy:    coreagent.Actor{SubjectID: "system:config"},
+		Messages: []coreagent.Message{{
+			Role: "user",
+			Text: "request approval",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+	if run == nil || run.Status != coreagent.RunStatusWaitingForInput {
+		t.Fatalf("run = %#v, want waiting_for_input", run)
+	}
+
+	interactions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-pending-race")
+	if err != nil {
+		t.Fatalf("AgentRunInteractions.ListByRun: %v", err)
+	}
+	if len(interactions) != 1 || interactions[0].State != coreagent.InteractionStatePending {
+		t.Fatalf("interactions = %#v, want one pending interaction", interactions)
+	}
+
+	provider.getCapabilitiesHook = func(ctx context.Context) error {
+		_, err := result.Services.AgentRunInteractions.Resolve(ctx, interactions[0].ID, map[string]any{
+			"approved": false,
+		}, time.Now())
+		return err
+	}
+
+	_, err = result.AgentManager.ResumeRun(startCtx, p, "agent-run-pending-race", interactions[0].ID, map[string]any{
+		"approved": true,
+	})
+	if !errors.Is(err, agentmanager.ErrAgentInteractionNotPending) {
+		t.Fatalf("ResumeRun error = %v, want ErrAgentInteractionNotPending", err)
+	}
+}
+
+func TestBootstrapAgentManagerResumeReturnsInteractionNotFoundOnValidationRace(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	var provider *callbackAgentProvider
+	factories := validFactories()
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := providerhost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	_, selected, err := result.AgentControl.ResolveProviderSelection("")
+	if err != nil {
+		t.Fatalf("ResolveProviderSelection: %v", err)
+	}
+	p := &principal.Principal{SubjectID: "system:config"}
+	startCtx := principal.WithPrincipal(context.Background(), p)
+	run, err := selected.StartRun(startCtx, coreagent.StartRunRequest{
+		RunID:        "agent-run-not-found-race",
+		ProviderName: "managed",
+		CreatedBy:    coreagent.Actor{SubjectID: "system:config"},
+		Messages: []coreagent.Message{{
+			Role: "user",
+			Text: "request approval",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+	if run == nil || run.Status != coreagent.RunStatusWaitingForInput {
+		t.Fatalf("run = %#v, want waiting_for_input", run)
+	}
+
+	interactions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-not-found-race")
+	if err != nil {
+		t.Fatalf("AgentRunInteractions.ListByRun: %v", err)
+	}
+	if len(interactions) != 1 || interactions[0].State != coreagent.InteractionStatePending {
+		t.Fatalf("interactions = %#v, want one pending interaction", interactions)
+	}
+
+	provider.getCapabilitiesHook = func(ctx context.Context) error {
+		return result.Services.AgentRunInteractions.DeleteByRun(ctx, "agent-run-not-found-race")
+	}
+
+	_, err = result.AgentManager.ResumeRun(startCtx, p, "agent-run-not-found-race", interactions[0].ID, map[string]any{
+		"approved": true,
+	})
+	if !errors.Is(err, agentmanager.ErrAgentInteractionNotFound) {
+		t.Fatalf("ResumeRun error = %v, want ErrAgentInteractionNotFound", err)
+	}
+}
+
+func TestBootstrapAgentManagerResumeDelegatesInteractionTrackingToProvider(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	var provider *callbackAgentProvider
+	factories := validFactories()
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := providerhost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	_, selected, err := result.AgentControl.ResolveProviderSelection("")
+	if err != nil {
+		t.Fatalf("ResolveProviderSelection: %v", err)
+	}
+	p := &principal.Principal{SubjectID: "system:config"}
+	startCtx := principal.WithPrincipal(context.Background(), p)
+	run, err := selected.StartRun(startCtx, coreagent.StartRunRequest{
+		RunID:        "agent-run-managed-resume",
+		ProviderName: "managed",
+		CreatedBy:    coreagent.Actor{SubjectID: "system:config"},
+		Messages: []coreagent.Message{{
+			Role: "user",
+			Text: "request approval",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+	if run == nil || run.Status != coreagent.RunStatusWaitingForInput {
+		t.Fatalf("run = %#v, want waiting_for_input", run)
+	}
+
+	interactions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-managed-resume")
+	if err != nil {
+		t.Fatalf("AgentRunInteractions.ListByRun: %v", err)
+	}
+	if len(interactions) != 1 || interactions[0].State != coreagent.InteractionStatePending {
+		t.Fatalf("interactions = %#v, want one pending interaction", interactions)
+	}
+
+	provider.resumeHook = func(ctx context.Context, req coreagent.ResumeRunRequest) error {
+		current, err := result.Services.AgentRunInteractions.Get(ctx, req.InteractionID)
+		if err != nil {
+			return err
+		}
+		if current.State != coreagent.InteractionStatePending {
+			return fmt.Errorf("interaction state during manager resume = %q, want pending", current.State)
+		}
+		return nil
+	}
+
+	resumed, err := result.AgentManager.ResumeRun(startCtx, p, "agent-run-managed-resume", interactions[0].ID, map[string]any{
+		"approved": true,
+	})
+	if err != nil {
+		t.Fatalf("ResumeRun: %v", err)
+	}
+	if resumed == nil || resumed.Run == nil || resumed.Run.Status != coreagent.RunStatusSucceeded {
+		t.Fatalf("resumed run = %#v, want succeeded", resumed)
+	}
+
+	resolvedInteractions, err := result.Services.AgentRunInteractions.ListByRun(context.Background(), "agent-run-managed-resume")
+	if err != nil {
+		t.Fatalf("AgentRunInteractions.ListByRun(resolved): %v", err)
+	}
+	if len(resolvedInteractions) != 1 || resolvedInteractions[0].State != coreagent.InteractionStateResolved || resolvedInteractions[0].Resolution["approved"] != true {
+		t.Fatalf("resolved interactions = %#v, want one resolved interaction", resolvedInteractions)
 	}
 }
 

@@ -20,6 +20,10 @@ import {
   PresignObjectResponseSchema,
   ReadObjectChunkSchema,
   S3 as S3Service,
+  type ByteRange as ProtoByteRange,
+  type ReadObjectRequest as ProtoReadObjectRequest,
+  type S3ObjectMeta as ProtoS3ObjectMeta,
+  type S3ObjectRef as ProtoS3ObjectRef,
   WriteObjectResponseSchema,
 } from "../gen/v1/s3_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
@@ -766,15 +770,6 @@ export class S3Object {
   }
 }
 
-function unixSocketBaseUrl(socketPath: string): string {
-  let hash = 0x811c9dc5;
-  for (const char of socketPath) {
-    hash ^= char.charCodeAt(0);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return `http://unix-${(hash >>> 0).toString(16)}.local`;
-}
-
 function s3TransportOptions(rawTarget: string): {
   baseUrl: string;
   nodeOptions?: { path: string };
@@ -803,7 +798,7 @@ function s3TransportOptions(rawTarget: string): {
       throw new Error(`s3 unix target ${JSON.stringify(rawTarget)} is missing a socket path`);
     }
     return {
-      baseUrl: unixSocketBaseUrl(socketPath),
+      baseUrl: "http://localhost",
       nodeOptions: { path: socketPath },
     };
   }
@@ -812,7 +807,7 @@ function s3TransportOptions(rawTarget: string): {
     throw new Error(`Unsupported s3 target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`);
   }
   return {
-    baseUrl: unixSocketBaseUrl(target),
+    baseUrl: "http://localhost",
     nodeOptions: { path: target },
   };
 }
@@ -1044,7 +1039,7 @@ function toProtoObjectRef(ref: ObjectRef) {
   };
 }
 
-function fromProtoObjectRef(ref: { bucket?: string; key?: string; versionId?: string } | undefined): ObjectRef {
+function fromProtoObjectRef(ref: ProtoS3ObjectRef | undefined): ObjectRef {
   const value: ObjectRef = {
     bucket: ref?.bucket ?? "",
     key: ref?.key ?? "",
@@ -1078,15 +1073,7 @@ function toProtoObjectMeta(meta: ObjectMeta) {
   return value;
 }
 
-function fromProtoObjectMeta(meta: {
-  ref?: { bucket?: string; key?: string; versionId?: string };
-  etag?: string;
-  size?: bigint;
-  contentType?: string;
-  lastModified?: { seconds?: bigint; nanos?: number };
-  metadata?: Record<string, string>;
-  storageClass?: string;
-} | undefined): ObjectMeta {
+function fromProtoObjectMeta(meta: ProtoS3ObjectMeta | undefined): ObjectMeta {
   const value: ObjectMeta = {
     ref: fromProtoObjectRef(meta?.ref),
     etag: meta?.etag ?? "",
@@ -1118,27 +1105,21 @@ function toProtoReadOptions(options?: ReadOptions) {
   return proto;
 }
 
-function fromProtoReadOptions(request: {
-  range?: { start?: bigint; end?: bigint };
-  ifMatch?: string;
-  ifNoneMatch?: string;
-  ifModifiedSince?: { seconds?: bigint; nanos?: number };
-  ifUnmodifiedSince?: { seconds?: bigint; nanos?: number };
-}): ReadOptions {
+function fromProtoReadOptions(request: ProtoReadObjectRequest | undefined): ReadOptions {
   const options: ReadOptions = {};
-  if (request.range) {
+  if (request?.range) {
     options.range = fromProtoByteRange(request.range);
   }
-  if (request.ifMatch) {
+  if (request?.ifMatch) {
     options.ifMatch = request.ifMatch;
   }
-  if (request.ifNoneMatch) {
+  if (request?.ifNoneMatch) {
     options.ifNoneMatch = request.ifNoneMatch;
   }
-  if (request.ifModifiedSince) {
+  if (request?.ifModifiedSince) {
     options.ifModifiedSince = fromProtoTimestamp(request.ifModifiedSince);
   }
-  if (request.ifUnmodifiedSince) {
+  if (request?.ifUnmodifiedSince) {
     options.ifUnmodifiedSince = fromProtoTimestamp(request.ifUnmodifiedSince);
   }
   return options;
@@ -1193,12 +1174,12 @@ function toProtoByteRange(range: ByteRange) {
   return proto;
 }
 
-function fromProtoByteRange(range: { start?: bigint; end?: bigint }): ByteRange {
+function fromProtoByteRange(range: ProtoByteRange | undefined): ByteRange {
   const value: ByteRange = {};
-  if (range.start !== undefined) {
+  if (range?.start !== undefined) {
     value.start = range.start;
   }
-  if (range.end !== undefined) {
+  if (range?.end !== undefined) {
     value.end = range.end;
   }
   return value;

@@ -49,3 +49,7 @@ func (c *AgentHostClient) EmitEvent(ctx context.Context, req *proto.EmitAgentEve
 	_, err := c.client.EmitEvent(ctx, req)
 	return err
 }
+
+func (c *AgentHostClient) RequestInteraction(ctx context.Context, req *proto.RequestAgentInteractionRequest) (*proto.AgentInteraction, error) {
+	return c.client.RequestInteraction(ctx, req)
+}

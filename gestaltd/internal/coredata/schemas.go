@@ -16,6 +16,7 @@ const (
 	StoreAgentRunMetadata         = "agent_run_metadata"
 	StoreAgentRunIdempotency      = "agent_run_idempotency"
 	StoreAgentRunEvents           = "agent_run_events"
+	StoreAgentRunInteractions     = "agent_run_interactions"
 )
 
 var UsersSchema = indexeddb.ObjectStoreSchema{
@@ -250,5 +251,24 @@ var AgentRunEventsSchema = indexeddb.ObjectStoreSchema{
 		{Name: "visibility", Type: indexeddb.TypeString},
 		{Name: "data_json", Type: indexeddb.TypeString},
 		{Name: "created_at", Type: indexeddb.TypeTime},
+	},
+}
+
+var AgentRunInteractionsSchema = indexeddb.ObjectStoreSchema{
+	Indexes: []indexeddb.IndexSchema{
+		{Name: "by_run", KeyPath: []string{"run_id"}},
+		{Name: "by_run_state", KeyPath: []string{"run_id", "state"}},
+	},
+	Columns: []indexeddb.ColumnDef{
+		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
+		{Name: "run_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "type", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "state", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "title", Type: indexeddb.TypeString},
+		{Name: "prompt", Type: indexeddb.TypeString},
+		{Name: "request_json", Type: indexeddb.TypeString},
+		{Name: "resolution_json", Type: indexeddb.TypeString},
+		{Name: "created_at", Type: indexeddb.TypeTime},
+		{Name: "resolved_at", Type: indexeddb.TypeTime},
 	},
 }

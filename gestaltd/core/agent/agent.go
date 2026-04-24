@@ -10,11 +10,12 @@ import (
 type RunStatus string
 
 const (
-	RunStatusPending   RunStatus = "pending"
-	RunStatusRunning   RunStatus = "running"
-	RunStatusSucceeded RunStatus = "succeeded"
-	RunStatusFailed    RunStatus = "failed"
-	RunStatusCanceled  RunStatus = "canceled"
+	RunStatusPending         RunStatus = "pending"
+	RunStatusRunning         RunStatus = "running"
+	RunStatusSucceeded       RunStatus = "succeeded"
+	RunStatusFailed          RunStatus = "failed"
+	RunStatusCanceled        RunStatus = "canceled"
+	RunStatusWaitingForInput RunStatus = "waiting_for_input"
 )
 
 type Actor struct {
@@ -25,8 +26,47 @@ type Actor struct {
 }
 
 type Message struct {
-	Role string
-	Text string
+	Role     string
+	Text     string
+	Parts    []MessagePart
+	Metadata map[string]any
+}
+
+type MessagePartType string
+
+const (
+	MessagePartTypeText       MessagePartType = "text"
+	MessagePartTypeJSON       MessagePartType = "json"
+	MessagePartTypeToolCall   MessagePartType = "tool_call"
+	MessagePartTypeToolResult MessagePartType = "tool_result"
+	MessagePartTypeImageRef   MessagePartType = "image_ref"
+)
+
+type ToolCallPart struct {
+	ID        string
+	ToolID    string
+	Arguments map[string]any
+}
+
+type ToolResultPart struct {
+	ToolCallID string
+	Status     int
+	Content    string
+	Output     map[string]any
+}
+
+type ImageRefPart struct {
+	URI      string
+	MIMEType string
+}
+
+type MessagePart struct {
+	Type       MessagePartType
+	Text       string
+	JSON       map[string]any
+	ToolCall   *ToolCallPart
+	ToolResult *ToolResultPart
+	ImageRef   *ImageRefPart
 }
 
 type ToolTarget struct {
@@ -104,6 +144,25 @@ type CancelRunRequest struct {
 	Reason string
 }
 
+type GetCapabilitiesRequest struct{}
+
+type ProviderCapabilities struct {
+	StreamingText       bool
+	ToolCalls           bool
+	ParallelToolCalls   bool
+	StructuredOutput    bool
+	SessionContinuation bool
+	Approvals           bool
+	ResumableRuns       bool
+	ReasoningSummaries  bool
+}
+
+type ResumeRunRequest struct {
+	RunID         string
+	InteractionID string
+	Resolution    map[string]any
+}
+
 type ExecuteToolRequest struct {
 	ProviderName string
 	RunID        string
@@ -134,6 +193,44 @@ type EmitEventRequest struct {
 	Type         string
 	Visibility   string
 	Data         map[string]any
+}
+
+type InteractionType string
+
+const (
+	InteractionTypeApproval      InteractionType = "approval"
+	InteractionTypeClarification InteractionType = "clarification"
+	InteractionTypeInput         InteractionType = "input"
+)
+
+type InteractionState string
+
+const (
+	InteractionStatePending  InteractionState = "pending"
+	InteractionStateResolved InteractionState = "resolved"
+	InteractionStateCanceled InteractionState = "canceled"
+)
+
+type Interaction struct {
+	ID         string
+	RunID      string
+	Type       InteractionType
+	State      InteractionState
+	Title      string
+	Prompt     string
+	Request    map[string]any
+	Resolution map[string]any
+	CreatedAt  *time.Time
+	ResolvedAt *time.Time
+}
+
+type RequestInteractionRequest struct {
+	ProviderName string
+	RunID        string
+	Type         InteractionType
+	Title        string
+	Prompt       string
+	Request      map[string]any
 }
 
 type ManagedRun struct {
@@ -183,6 +280,8 @@ type Provider interface {
 	GetRun(ctx context.Context, req GetRunRequest) (*Run, error)
 	ListRuns(ctx context.Context, req ListRunsRequest) ([]*Run, error)
 	CancelRun(ctx context.Context, req CancelRunRequest) (*Run, error)
+	GetCapabilities(ctx context.Context, req GetCapabilitiesRequest) (*ProviderCapabilities, error)
+	ResumeRun(ctx context.Context, req ResumeRunRequest) (*Run, error)
 	Ping(ctx context.Context) error
 	Close() error
 }
@@ -190,4 +289,5 @@ type Provider interface {
 type Host interface {
 	ExecuteTool(ctx context.Context, req ExecuteToolRequest) (*ExecuteToolResponse, error)
 	EmitEvent(ctx context.Context, req EmitEventRequest) (*RunEvent, error)
+	RequestInteraction(ctx context.Context, req RequestInteractionRequest) (*Interaction, error)
 }

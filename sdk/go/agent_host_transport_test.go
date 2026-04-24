@@ -21,6 +21,7 @@ type agentHostTransportHarness struct {
 	mu            sync.Mutex
 	toolRequests  []*proto.ExecuteAgentToolRequest
 	eventRequests []*proto.EmitAgentEventRequest
+	interactions  []*proto.RequestAgentInteractionRequest
 	tokens        []string
 }
 
@@ -46,6 +47,27 @@ func (h *agentHostTransportHarness) EmitEvent(ctx context.Context, req *proto.Em
 	h.eventRequests = append(h.eventRequests, gproto.Clone(req).(*proto.EmitAgentEventRequest))
 	h.mu.Unlock()
 	return &emptypb.Empty{}, nil
+}
+
+func (h *agentHostTransportHarness) RequestInteraction(ctx context.Context, req *proto.RequestAgentInteractionRequest) (*proto.AgentInteraction, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+
+	h.mu.Lock()
+	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
+		h.tokens = append(h.tokens, values...)
+	}
+	h.interactions = append(h.interactions, gproto.Clone(req).(*proto.RequestAgentInteractionRequest))
+	h.mu.Unlock()
+
+	return &proto.AgentInteraction{
+		Id:      "interaction-1",
+		RunId:   req.GetRunId(),
+		Type:    req.GetType(),
+		State:   proto.AgentInteractionState_AGENT_INTERACTION_STATE_PENDING,
+		Title:   req.GetTitle(),
+		Prompt:  req.GetPrompt(),
+		Request: req.GetRequest(),
+	}, nil
 }
 
 func TestTransport_AgentHostUnixSocket(t *testing.T) {
@@ -96,6 +118,25 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("EmitEvent: %v", err)
 	}
+	interaction, err := client.RequestInteraction(context.Background(), &proto.RequestAgentInteractionRequest{
+		RunId:  "run-1",
+		Type:   proto.AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL,
+		Title:  "Approve command",
+		Prompt: "Run git status?",
+		Request: func() *structpb.Struct {
+			value, err := structpb.NewStruct(map[string]any{"command": []any{"git", "status"}})
+			if err != nil {
+				t.Fatalf("NewStruct interaction request: %v", err)
+			}
+			return value
+		}(),
+	})
+	if err != nil {
+		t.Fatalf("RequestInteraction: %v", err)
+	}
+	if interaction.GetId() != "interaction-1" || interaction.GetRunId() != "run-1" {
+		t.Fatalf("interaction = %#v", interaction)
+	}
 
 	harness.mu.Lock()
 	defer harness.mu.Unlock()
@@ -108,13 +149,19 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if len(harness.eventRequests) != 1 {
 		t.Fatalf("eventRequests len = %d, want 1", len(harness.eventRequests))
 	}
-	if len(harness.tokens) != 2 || harness.tokens[0] != "relay-token-go" || harness.tokens[1] != "relay-token-go" {
-		t.Fatalf("relay tokens = %#v, want [relay-token-go relay-token-go]", harness.tokens)
+	if len(harness.interactions) != 1 {
+		t.Fatalf("interactions len = %d, want 1", len(harness.interactions))
+	}
+	if len(harness.tokens) != 3 || harness.tokens[0] != "relay-token-go" || harness.tokens[1] != "relay-token-go" || harness.tokens[2] != "relay-token-go" {
+		t.Fatalf("relay tokens = %#v, want three relay-token-go values", harness.tokens)
 	}
 	if harness.eventRequests[0].GetRunId() != "run-1" || harness.eventRequests[0].GetType() != "agent.tool_call.started" || harness.eventRequests[0].GetVisibility() != "public" {
 		t.Fatalf("event request = %#v", harness.eventRequests[0])
 	}
 	if got := harness.eventRequests[0].GetData().GetFields()["phase"].GetStringValue(); got != "tool_call" {
 		t.Fatalf("event phase = %q, want tool_call", got)
+	}
+	if harness.interactions[0].GetType() != proto.AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL || harness.interactions[0].GetTitle() != "Approve command" {
+		t.Fatalf("interaction request = %#v", harness.interactions[0])
 	}
 }

@@ -32,7 +32,7 @@ spec:
 
 ## Provider interface
 
-The agent service includes four run methods:
+The agent service now includes six provider methods:
 
 | Method | Purpose |
 | --- | --- |
@@ -40,10 +40,18 @@ The agent service includes four run methods:
 | `GetRun` | Inspect one run by `run_id` |
 | `ListRuns` | Return currently known runs for this provider |
 | `CancelRun` | Request cancellation for one run |
+| `GetCapabilities` | Advertise which optional agent features the provider actually supports |
+| `ResumeRun` | Continue a run after Gestalt resolves a pending interaction |
 
-Providers can also call back into Gestalt through `AgentHost.ExecuteTool` when
-they want the host to execute a bound plugin operation during a run. That
-callback works the same way when the provider is launched inside a hosted
+Providers can also call back into Gestalt through the host service:
+
+| Host method | Purpose |
+| --- | --- |
+| `ExecuteTool` | Ask Gestalt to execute a bound plugin operation during a run |
+| `EmitEvent` | Append a run event to Gestalt-managed run storage |
+| `RequestInteraction` | Pause for human approval or clarification through a canonical host callback |
+
+These callbacks work the same way when the provider is launched inside a hosted
 runtime.
 
 ## Run shape
@@ -54,8 +62,23 @@ runtime.
   "providerName": "openai",
   "model": "gpt-5.4",
   "messages": [
-    { "role": "system", "text": "Be concise." },
-    { "role": "user", "text": "Summarize the roadmap risk." }
+    {
+      "role": "system",
+      "text": "Be concise.",
+      "parts": [
+        { "type": "text", "text": "Be concise." }
+      ]
+    },
+    {
+      "role": "user",
+      "text": "Summarize the roadmap risk.",
+      "parts": [
+        { "type": "text", "text": "Summarize the roadmap risk." }
+      ],
+      "metadata": {
+        "ticket": "RD-42"
+      }
+    }
   ],
   "tools": [
     {
@@ -99,6 +122,17 @@ runtime.
     	}, nil
     }
 
+    func (p *provider) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
+      return &proto.AgentProviderCapabilities{
+        StreamingText:       true,
+        ToolCalls:           true,
+        StructuredOutput:    true,
+        SessionContinuation: true,
+        Approvals:           true,
+        ResumableRuns:       true,
+      }, nil
+    }
+
     func (p *provider) GetRun(_ context.Context, req *proto.GetAgentProviderRunRequest) (*proto.BoundAgentRun, error) {
     	return &proto.BoundAgentRun{Id: req.GetRunId()}, nil
     }
@@ -112,6 +146,13 @@ runtime.
     		Id:     req.GetRunId(),
     		Status: proto.AgentRunStatus_AGENT_RUN_STATUS_CANCELED,
     	}, nil
+    }
+
+    func (p *provider) ResumeRun(_ context.Context, req *proto.ResumeAgentProviderRunRequest) (*proto.BoundAgentRun, error) {
+      return &proto.BoundAgentRun{
+        Id:     req.GetRunId(),
+        Status: proto.AgentRunStatus_AGENT_RUN_STATUS_RUNNING,
+      }, nil
     }
 
     func main() {
@@ -144,6 +185,16 @@ runtime.
           });
         }
 
+        if (request.metadata?.requireApproval === true) {
+          await host.requestInteraction({
+            runId: request.runId,
+            type: "approval",
+            title: "Approve external call",
+            prompt: "Allow this provider to call the vendor backend?",
+            request: { host: "api.openai.com" },
+          });
+        }
+
         return {
           id: request.runId,
           providerName: request.providerName || "example",
@@ -162,6 +213,19 @@ runtime.
       },
       async cancelRun(request) {
         return { id: request.runId, providerName: "example", status: AgentRunStatus.CANCELED };
+      },
+      async getCapabilities() {
+        return {
+          streamingText: true,
+          toolCalls: true,
+          structuredOutput: true,
+          sessionContinuation: true,
+          approvals: true,
+          resumableRuns: true,
+        };
+      },
+      async resumeRun(request) {
+        return { id: request.runId, providerName: "example", status: AgentRunStatus.RUNNING };
       },
     });
     ```
@@ -193,9 +257,49 @@ Gestalt returns an HTTP-like envelope:
 }
 ```
 
-In V1 there is no standardized IndexedDB or general storage binding for agent
-providers. If your provider needs durable state, define it in your own config
-schema and manage it behind the provider.
+## Interactions
+
+When the provider needs human input, it can request a persisted interaction:
+
+```json
+{
+  "runId": "run-123",
+  "type": "approval",
+  "title": "Approve external call",
+  "prompt": "Allow this provider to call the vendor backend?",
+  "request": {
+    "host": "api.openai.com"
+  }
+}
+```
+
+Gestalt returns an interaction record that the provider can later resume from:
+
+```json
+{
+  "id": "interaction-123",
+  "runId": "run-123",
+  "type": "approval",
+  "state": "pending",
+  "title": "Approve external call",
+  "prompt": "Allow this provider to call the vendor backend?",
+  "request": {
+    "host": "api.openai.com"
+  }
+}
+```
+
+The user-facing HTTP surface can then list those records at
+`GET /api/v1/agent/runs/{runID}/interactions` and resume the paused run through
+`POST /api/v1/agent/runs/{runID}/resume`.
+
+## IndexedDB binding
+
+Agent providers do have a standard IndexedDB binding. If you configure
+`providers.agent.<name>.indexeddb`, Gestalt exposes the selected store to the
+provider through the SDK `GESTALT_INDEXEDDB_SOCKET`, just like other hosted
+surfaces. The provider still owns its own object-store schema and durable-state
+model.
 
 ## What to read next
 

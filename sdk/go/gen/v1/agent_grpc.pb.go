@@ -20,10 +20,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AgentProvider_StartRun_FullMethodName  = "/gestalt.provider.v1.AgentProvider/StartRun"
-	AgentProvider_GetRun_FullMethodName    = "/gestalt.provider.v1.AgentProvider/GetRun"
-	AgentProvider_ListRuns_FullMethodName  = "/gestalt.provider.v1.AgentProvider/ListRuns"
-	AgentProvider_CancelRun_FullMethodName = "/gestalt.provider.v1.AgentProvider/CancelRun"
+	AgentProvider_StartRun_FullMethodName        = "/gestalt.provider.v1.AgentProvider/StartRun"
+	AgentProvider_GetRun_FullMethodName          = "/gestalt.provider.v1.AgentProvider/GetRun"
+	AgentProvider_ListRuns_FullMethodName        = "/gestalt.provider.v1.AgentProvider/ListRuns"
+	AgentProvider_CancelRun_FullMethodName       = "/gestalt.provider.v1.AgentProvider/CancelRun"
+	AgentProvider_GetCapabilities_FullMethodName = "/gestalt.provider.v1.AgentProvider/GetCapabilities"
+	AgentProvider_ResumeRun_FullMethodName       = "/gestalt.provider.v1.AgentProvider/ResumeRun"
 )
 
 // AgentProviderClient is the client API for AgentProvider service.
@@ -34,6 +36,8 @@ type AgentProviderClient interface {
 	GetRun(ctx context.Context, in *GetAgentProviderRunRequest, opts ...grpc.CallOption) (*BoundAgentRun, error)
 	ListRuns(ctx context.Context, in *ListAgentProviderRunsRequest, opts ...grpc.CallOption) (*ListAgentProviderRunsResponse, error)
 	CancelRun(ctx context.Context, in *CancelAgentProviderRunRequest, opts ...grpc.CallOption) (*BoundAgentRun, error)
+	GetCapabilities(ctx context.Context, in *GetAgentProviderCapabilitiesRequest, opts ...grpc.CallOption) (*AgentProviderCapabilities, error)
+	ResumeRun(ctx context.Context, in *ResumeAgentProviderRunRequest, opts ...grpc.CallOption) (*BoundAgentRun, error)
 }
 
 type agentProviderClient struct {
@@ -84,6 +88,26 @@ func (c *agentProviderClient) CancelRun(ctx context.Context, in *CancelAgentProv
 	return out, nil
 }
 
+func (c *agentProviderClient) GetCapabilities(ctx context.Context, in *GetAgentProviderCapabilitiesRequest, opts ...grpc.CallOption) (*AgentProviderCapabilities, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentProviderCapabilities)
+	err := c.cc.Invoke(ctx, AgentProvider_GetCapabilities_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentProviderClient) ResumeRun(ctx context.Context, in *ResumeAgentProviderRunRequest, opts ...grpc.CallOption) (*BoundAgentRun, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BoundAgentRun)
+	err := c.cc.Invoke(ctx, AgentProvider_ResumeRun_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentProviderServer is the server API for AgentProvider service.
 // All implementations must embed UnimplementedAgentProviderServer
 // for forward compatibility.
@@ -92,6 +116,8 @@ type AgentProviderServer interface {
 	GetRun(context.Context, *GetAgentProviderRunRequest) (*BoundAgentRun, error)
 	ListRuns(context.Context, *ListAgentProviderRunsRequest) (*ListAgentProviderRunsResponse, error)
 	CancelRun(context.Context, *CancelAgentProviderRunRequest) (*BoundAgentRun, error)
+	GetCapabilities(context.Context, *GetAgentProviderCapabilitiesRequest) (*AgentProviderCapabilities, error)
+	ResumeRun(context.Context, *ResumeAgentProviderRunRequest) (*BoundAgentRun, error)
 	mustEmbedUnimplementedAgentProviderServer()
 }
 
@@ -113,6 +139,12 @@ func (UnimplementedAgentProviderServer) ListRuns(context.Context, *ListAgentProv
 }
 func (UnimplementedAgentProviderServer) CancelRun(context.Context, *CancelAgentProviderRunRequest) (*BoundAgentRun, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelRun not implemented")
+}
+func (UnimplementedAgentProviderServer) GetCapabilities(context.Context, *GetAgentProviderCapabilitiesRequest) (*AgentProviderCapabilities, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetCapabilities not implemented")
+}
+func (UnimplementedAgentProviderServer) ResumeRun(context.Context, *ResumeAgentProviderRunRequest) (*BoundAgentRun, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResumeRun not implemented")
 }
 func (UnimplementedAgentProviderServer) mustEmbedUnimplementedAgentProviderServer() {}
 func (UnimplementedAgentProviderServer) testEmbeddedByValue()                       {}
@@ -207,6 +239,42 @@ func _AgentProvider_CancelRun_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentProvider_GetCapabilities_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAgentProviderCapabilitiesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentProviderServer).GetCapabilities(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentProvider_GetCapabilities_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentProviderServer).GetCapabilities(ctx, req.(*GetAgentProviderCapabilitiesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentProvider_ResumeRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResumeAgentProviderRunRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentProviderServer).ResumeRun(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentProvider_ResumeRun_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentProviderServer).ResumeRun(ctx, req.(*ResumeAgentProviderRunRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentProvider_ServiceDesc is the grpc.ServiceDesc for AgentProvider service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -230,14 +298,23 @@ var AgentProvider_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "CancelRun",
 			Handler:    _AgentProvider_CancelRun_Handler,
 		},
+		{
+			MethodName: "GetCapabilities",
+			Handler:    _AgentProvider_GetCapabilities_Handler,
+		},
+		{
+			MethodName: "ResumeRun",
+			Handler:    _AgentProvider_ResumeRun_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "v1/agent.proto",
 }
 
 const (
-	AgentHost_ExecuteTool_FullMethodName = "/gestalt.provider.v1.AgentHost/ExecuteTool"
-	AgentHost_EmitEvent_FullMethodName   = "/gestalt.provider.v1.AgentHost/EmitEvent"
+	AgentHost_ExecuteTool_FullMethodName        = "/gestalt.provider.v1.AgentHost/ExecuteTool"
+	AgentHost_EmitEvent_FullMethodName          = "/gestalt.provider.v1.AgentHost/EmitEvent"
+	AgentHost_RequestInteraction_FullMethodName = "/gestalt.provider.v1.AgentHost/RequestInteraction"
 )
 
 // AgentHostClient is the client API for AgentHost service.
@@ -246,6 +323,7 @@ const (
 type AgentHostClient interface {
 	ExecuteTool(ctx context.Context, in *ExecuteAgentToolRequest, opts ...grpc.CallOption) (*ExecuteAgentToolResponse, error)
 	EmitEvent(ctx context.Context, in *EmitAgentEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	RequestInteraction(ctx context.Context, in *RequestAgentInteractionRequest, opts ...grpc.CallOption) (*AgentInteraction, error)
 }
 
 type agentHostClient struct {
@@ -276,12 +354,23 @@ func (c *agentHostClient) EmitEvent(ctx context.Context, in *EmitAgentEventReque
 	return out, nil
 }
 
+func (c *agentHostClient) RequestInteraction(ctx context.Context, in *RequestAgentInteractionRequest, opts ...grpc.CallOption) (*AgentInteraction, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentInteraction)
+	err := c.cc.Invoke(ctx, AgentHost_RequestInteraction_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentHostServer is the server API for AgentHost service.
 // All implementations must embed UnimplementedAgentHostServer
 // for forward compatibility.
 type AgentHostServer interface {
 	ExecuteTool(context.Context, *ExecuteAgentToolRequest) (*ExecuteAgentToolResponse, error)
 	EmitEvent(context.Context, *EmitAgentEventRequest) (*emptypb.Empty, error)
+	RequestInteraction(context.Context, *RequestAgentInteractionRequest) (*AgentInteraction, error)
 	mustEmbedUnimplementedAgentHostServer()
 }
 
@@ -297,6 +386,9 @@ func (UnimplementedAgentHostServer) ExecuteTool(context.Context, *ExecuteAgentTo
 }
 func (UnimplementedAgentHostServer) EmitEvent(context.Context, *EmitAgentEventRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method EmitEvent not implemented")
+}
+func (UnimplementedAgentHostServer) RequestInteraction(context.Context, *RequestAgentInteractionRequest) (*AgentInteraction, error) {
+	return nil, status.Error(codes.Unimplemented, "method RequestInteraction not implemented")
 }
 func (UnimplementedAgentHostServer) mustEmbedUnimplementedAgentHostServer() {}
 func (UnimplementedAgentHostServer) testEmbeddedByValue()                   {}
@@ -355,6 +447,24 @@ func _AgentHost_EmitEvent_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentHost_RequestInteraction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RequestAgentInteractionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentHostServer).RequestInteraction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentHost_RequestInteraction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentHostServer).RequestInteraction(ctx, req.(*RequestAgentInteractionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentHost_ServiceDesc is the grpc.ServiceDesc for AgentHost service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -369,6 +479,10 @@ var AgentHost_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "EmitEvent",
 			Handler:    _AgentHost_EmitEvent_Handler,
+		},
+		{
+			MethodName: "RequestInteraction",
+			Handler:    _AgentHost_RequestInteraction_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

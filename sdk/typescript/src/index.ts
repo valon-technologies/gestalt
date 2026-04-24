@@ -291,6 +291,9 @@ export {
 export {
   ENV_AGENT_HOST_SOCKET,
   AgentHost,
+  AgentInteractionState,
+  AgentInteractionType,
+  AgentMessagePartType,
   AgentProvider,
   AgentRunStatus,
   AgentToolSourceMode,
@@ -298,7 +301,12 @@ export {
   defineAgentProvider,
   isAgentProvider,
   type AgentActor,
+  type AgentInteraction,
   type AgentMessage,
+  type AgentMessagePart,
+  type AgentMessagePartImageRef,
+  type AgentMessagePartToolCall,
+  type AgentMessagePartToolResult,
   type AgentProviderOptions,
   type AgentToolRef,
   type BoundAgentRun,
@@ -309,7 +317,9 @@ export {
   type ExecuteAgentToolResponse,
   type GetAgentProviderRunRequest,
   type ListAgentProviderRunsRequest,
+  type RequestAgentInteractionRequest,
   type ResolvedAgentTool,
+  type ResumeAgentProviderRunRequest,
   type StartAgentProviderRunRequest,
 } from "./agent.ts";
 export {
