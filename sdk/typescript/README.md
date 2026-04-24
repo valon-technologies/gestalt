@@ -16,7 +16,7 @@ property in `package.json`:
   "name": "my-provider",
   "version": "0.0.1-alpha.1",
   "dependencies": {
-    "@valon-technologies/gestalt": "0.0.1-alpha.1"
+    "@valon-technologies/gestalt": "0.0.1-alpha.13"
   },
   "gestalt": {
     "provider": {

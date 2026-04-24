@@ -411,7 +411,7 @@ export const plugin = definePlugin({
   }
 });
 
-test("loadProviderFromTarget rejects legacy structural plugin objects without alpha.12 hook methods", async () => {
+test("loadProviderFromTarget rejects legacy structural plugin objects without alpha.13 hook methods", async () => {
   const root = makeTempDir("gestalt-typescript-runtime-legacy-structural-");
 
   try {
@@ -451,6 +451,79 @@ test("loadProviderFromTarget rejects legacy structural plugin objects without al
     return false;
   },
   writeManifestMetadata() {},
+  supportsPostConnect() {
+    return false;
+  },
+  async postConnectMetadata() {
+    return undefined;
+  },
+  async execute() {
+    return { status: 200, body: "{}" };
+  },
+};`,
+      "utf8",
+    );
+
+    await expect(loadProviderFromTarget(root)).rejects.toThrow(
+      "plugin:./provider.ts#plugin did not resolve to a Gestalt plugin provider",
+    );
+  } finally {
+    removeTempDir(root);
+  }
+});
+
+test("loadProviderFromTarget rejects structural plugin objects without the full runtime lifecycle contract", async () => {
+  const root = makeTempDir("gestalt-typescript-runtime-structural-runtime-base-");
+
+  try {
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "structural-runtime-base-provider",
+        gestalt: {
+          provider: {
+            kind: "plugin",
+            target: "./provider.ts#plugin",
+          },
+        },
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(root, "provider.ts"),
+      `export const plugin = {
+  kind: "integration",
+  name: "structural-runtime-base",
+  displayName: "Structural Runtime Base",
+  description: "structural plugin missing runtime base methods",
+  version: "1.0.0",
+  connectionMode: "unspecified",
+  authTypes: [],
+  connectionParams: {},
+  resolveName() {},
+  async configureProvider() {},
+  staticCatalog() {
+    return { name: "structural-runtime-base", operations: [] };
+  },
+  supportsSessionCatalog() {
+    return false;
+  },
+  async catalogForRequest() {
+    return undefined;
+  },
+  supportsManifestMetadata() {
+    return false;
+  },
+  writeManifestMetadata() {},
+  supportsPostConnect() {
+    return false;
+  },
+  async postConnectMetadata() {
+    return undefined;
+  },
+  async resolveHTTPSubject() {
+    return undefined;
+  },
   async execute() {
     return { status: 200, body: "{}" };
   },
@@ -559,7 +632,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
   const metadata = await (service.getMetadata as any)();
   expect(metadata.name).toBe("basic-provider");
   expect(metadata.supportsSessionCatalog).toBe(true);
-  expect(metadata.supportsPostConnect).toBe(false);
+  expect(metadata.supportsPostConnect).toBe(true);
   expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   expect(
@@ -684,25 +757,27 @@ test("integration provider service exposes metadata, configure, execute, and ses
     "Session Hello ops user:user-123 identity viewer",
   );
 
-  await expectConnectCode(
-    (service.postConnect as any)(
-      create(PostConnectRequestSchema, {
-        token: {
-          id: "tok-123",
-          userId: "user:user-123",
-          integration: "basic-provider",
-          connection: "workspace",
-          instance: "__default__",
-          accessToken: "access-token",
-          metadataJson: JSON.stringify({
-            team_id: "T123",
-            user_id: "U456",
-          }),
-        },
-      }),
-    ),
-    Code.Unimplemented,
+  const postConnect = await (service.postConnect as any)(
+    create(PostConnectRequestSchema, {
+      token: {
+        id: "tok-123",
+        userId: "user:user-123",
+        integration: "basic-provider",
+        connection: "workspace",
+        instance: "__default__",
+        accessToken: "access-token",
+        metadataJson: JSON.stringify({
+          team_id: "T123",
+          user_id: "U456",
+        }),
+      },
+    }),
   );
+  expect(postConnect.metadata).toEqual({
+    "gestalt.external_identity.type": "fixture_identity",
+    "gestalt.external_identity.id": "workspace:__default__:user:user-123",
+    configured_connection: "workspace",
+  });
 });
 
 test("integration provider service labels metadata failures", async () => {
@@ -716,7 +791,7 @@ test("integration provider service labels metadata failures", async () => {
       },
     ],
   });
-  (plugin as any).supportsSessionCatalog = () => {
+  (plugin as any).supportsPostConnect = () => {
     throw new Error("metadata exploded");
   };
 

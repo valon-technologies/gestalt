@@ -152,7 +152,17 @@ export function isRuntimeProvider(value: unknown): value is RuntimeProvider {
       value !== null &&
       "kind" in value &&
       "resolveName" in value &&
-      "configureProvider" in value)
+      typeof (value as { resolveName?: unknown }).resolveName === "function" &&
+      "configureProvider" in value &&
+      typeof (value as { configureProvider?: unknown }).configureProvider === "function" &&
+      "supportsHealthCheck" in value &&
+      typeof (value as { supportsHealthCheck?: unknown }).supportsHealthCheck === "function" &&
+      "healthCheck" in value &&
+      typeof (value as { healthCheck?: unknown }).healthCheck === "function" &&
+      "warnings" in value &&
+      typeof (value as { warnings?: unknown }).warnings === "function" &&
+      "closeProvider" in value &&
+      typeof (value as { closeProvider?: unknown }).closeProvider === "function")
   );
 }
 

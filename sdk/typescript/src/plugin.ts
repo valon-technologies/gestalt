@@ -32,7 +32,11 @@ import {
   type HTTPSubjectResolutionContext,
   type HTTPSubjectResolver,
 } from "./http-subject.ts";
-import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
+import {
+  isRuntimeProvider,
+  RuntimeProvider,
+  type RuntimeProviderOptions,
+} from "./provider.ts";
 import type { Schema } from "./schema.ts";
 
 /**
@@ -433,8 +437,7 @@ export function isPluginProvider(
 ): value is PluginProvider {
   return (
     value instanceof PluginProvider ||
-    (typeof value === "object" &&
-      value !== null &&
+    (isRuntimeProvider(value) &&
       "kind" in value &&
       (value as { kind?: unknown }).kind === "integration" &&
       "staticCatalog" in value &&
@@ -449,6 +452,10 @@ export function isPluginProvider(
       typeof (value as { supportsManifestMetadata?: unknown }).supportsManifestMetadata === "function" &&
       "writeManifestMetadata" in value &&
       typeof (value as { writeManifestMetadata?: unknown }).writeManifestMetadata === "function" &&
+      "supportsPostConnect" in value &&
+      typeof (value as { supportsPostConnect?: unknown }).supportsPostConnect === "function" &&
+      "postConnectMetadata" in value &&
+      typeof (value as { postConnectMetadata?: unknown }).postConnectMetadata === "function" &&
       "resolveHTTPSubject" in value &&
       typeof (value as { resolveHTTPSubject?: unknown }).resolveHTTPSubject === "function")
   );

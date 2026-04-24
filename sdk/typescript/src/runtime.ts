@@ -43,10 +43,12 @@ import {
   CatalogSchema as ProtoCatalogSchema,
   ConnectionMode as ProviderConnectionMode,
   GetSessionCatalogResponseSchema,
+  PostConnectResponseSchema,
   ResolveHTTPSubjectResponseSchema,
   OperationResultSchema,
   ProviderMetadataSchema,
   type HTTPSubjectRequest as ProtoHTTPSubjectRequest,
+  type IntegrationToken as ProtoIntegrationToken,
   type RequestContext as ProtoRequestContext,
   type ResolveHTTPSubjectRequest as ProtoResolveHTTPSubjectRequest,
   IntegrationProvider as IntegrationProviderService,
@@ -85,6 +87,7 @@ import {
   type HTTPSubjectResolutionContext,
 } from "./http-subject.ts";
 import {
+  type ConnectedToken,
   PluginProvider,
   connectionModeToProtoValue,
   connectionParamToProto,
@@ -512,7 +515,7 @@ export function createProviderService(
           ),
           staticCatalog: catalogToProto(provider.staticCatalog()),
           supportsSessionCatalog: provider.supportsSessionCatalog(),
-          supportsPostConnect: false,
+          supportsPostConnect: provider.supportsPostConnect(),
           minProtocolVersion: CURRENT_PROTOCOL_VERSION,
           maxProtocolVersion: CURRENT_PROTOCOL_VERSION,
         });
@@ -605,11 +608,29 @@ export function createProviderService(
         catalog: catalogToProto(catalog),
       });
     },
-    async postConnect() {
-      throw new ConnectError(
-        "provider does not support post connect",
-        Code.Unimplemented,
-      );
+    async postConnect(request) {
+      if (!provider.supportsPostConnect()) {
+        throw new ConnectError(
+          "provider does not support post connect",
+          Code.Unimplemented,
+        );
+      }
+      let metadata: Record<string, string> | null | undefined;
+      try {
+        metadata = await provider.postConnectMetadata(
+          providerConnectedToken(request.token),
+        );
+      } catch (error) {
+        throw new ConnectError(
+          `post connect: ${errorMessage(error)}`,
+          Code.Unknown,
+        );
+      }
+      return create(PostConnectResponseSchema, {
+        metadata: {
+          ...(metadata ?? {}),
+        },
+      });
     },
   };
 }
@@ -841,6 +862,29 @@ function providerHTTPSubjectResolutionContext(
     credential: request.credential,
     access: request.access,
     workflow: request.workflow,
+  };
+}
+
+function providerConnectedToken(
+  token?: ProtoIntegrationToken,
+): ConnectedToken {
+  const metadataJson = token?.metadataJson ?? "";
+  return {
+    id: token?.id ?? "",
+    subjectId: token?.userId ?? "",
+    integration: token?.integration ?? "",
+    connection: token?.connection ?? "",
+    instance: token?.instance ?? "",
+    accessToken: token?.accessToken ?? "",
+    refreshToken: token?.refreshToken ?? "",
+    scopes: token?.scopes ?? "",
+    expiresAt: timestampToDate(token?.expiresAt),
+    lastRefreshedAt: timestampToDate(token?.lastRefreshedAt),
+    refreshErrorCount: token?.refreshErrorCount ?? 0,
+    metadataJson,
+    metadata: stringRecordFromJSON(metadataJson),
+    createdAt: timestampToDate(token?.createdAt),
+    updatedAt: timestampToDate(token?.updatedAt),
   };
 }
 
