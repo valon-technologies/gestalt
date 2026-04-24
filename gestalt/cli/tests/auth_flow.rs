@@ -250,3 +250,48 @@ fn test_auth_status_json_includes_server_fields() {
     assert_eq!(json["urlSource"], serde_json::json!("--url flag"));
     assert_eq!(json["authenticated"], serde_json::json!(false));
 }
+
+#[test]
+fn test_no_auth_server_allows_agent_session_commands_without_credentials() {
+    let mut server = Server::new();
+    let _auth_info = json_mock!(server, Method::GET, "/api/v1/auth/info", StatusCode::OK)
+        .with_body(r#"{"provider":"none","displayName":"none","loginSupported":false}"#)
+        .create();
+    let _create = json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/agent/sessions",
+        StatusCode::CREATED
+    )
+    .match_header(header::AUTHORIZATION.as_str(), Matcher::Missing)
+    .match_body(Matcher::JsonString(
+        r#"{"provider":"managed","model":"gpt-5.4"}"#.to_string(),
+    ))
+    .with_body(
+        r#"{
+                "id":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "state":"active"
+            }"#,
+    )
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+
+    cli_command(home.path())
+        .arg("--url")
+        .arg(server.url())
+        .args([
+            "agent",
+            "sessions",
+            "create",
+            "--provider",
+            "managed",
+            "--model",
+            "gpt-5.4",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("session-1"));
+}

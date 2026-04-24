@@ -67,25 +67,28 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/v1/agent/runs` | Create one agent run. Accepts an optional `idempotencyKey` field and optional `Idempotency-Key` header. |
-| `GET` | `/api/v1/agent/runs` | List agent runs. Supports optional `provider` and `status` query filters. |
-| `GET` | `/api/v1/agent/runs/{runID}` | Inspect one agent run. |
-| `POST` | `/api/v1/agent/runs/{runID}/cancel` | Cancel one agent run. The request body may include an optional `reason`. |
-| `GET` | `/api/v1/agent/runs/{runID}/events` | List stored events for one agent run. Supports optional `after` sequence cursor and `limit`. |
-| `GET` | `/api/v1/agent/runs/{runID}/events/stream` | Stream agent run events as server-sent events. Supports optional `after` sequence cursor and `limit`. |
-| `GET` | `/api/v1/agent/runs/{runID}/interactions` | List persisted interactions for one agent run. |
-| `POST` | `/api/v1/agent/runs/{runID}/resume` | Resume one paused agent run by submitting an `interactionId` and optional `resolution` payload. |
+| `POST` | `/api/v1/agent/sessions` | Create one agent session. Accepts an optional `idempotencyKey` field and optional `Idempotency-Key` header. |
+| `GET` | `/api/v1/agent/sessions` | List agent sessions. Supports optional `provider` and `state` query filters. |
+| `GET` | `/api/v1/agent/sessions/{sessionID}` | Inspect one agent session. |
+| `PATCH` | `/api/v1/agent/sessions/{sessionID}` | Update one agent session. |
+| `POST` | `/api/v1/agent/sessions/{sessionID}/turns` | Create one agent turn inside a session. Accepts an optional `idempotencyKey` field and optional `Idempotency-Key` header. |
+| `GET` | `/api/v1/agent/sessions/{sessionID}/turns` | List turns for one session. Supports optional `status`. |
+| `GET` | `/api/v1/agent/turns/{turnID}` | Inspect one agent turn. |
+| `POST` | `/api/v1/agent/turns/{turnID}/cancel` | Cancel one agent turn. The request body may include an optional `reason`. |
+| `GET` | `/api/v1/agent/turns/{turnID}/events` | List stored events for one turn. Supports optional `after` sequence cursor and `limit`. |
+| `GET` | `/api/v1/agent/turns/{turnID}/events/stream` | Stream turn events as server-sent events. Supports optional `after` sequence cursor and `limit`. |
+| `GET` | `/api/v1/agent/turns/{turnID}/interactions` | List provider-owned interactions for one turn. |
+| `POST` | `/api/v1/agent/turns/{turnID}/interactions/{interactionID}/resolve` | Resolve one pending interaction by submitting a `resolution` payload. |
 
-Agent run creation accepts `provider`, `model`, `messages`, optional
-`toolRefs`, optional `toolSource`, optional `responseSchema`, optional
-`sessionRef`, optional `metadata`, optional `providerOptions`, and optional
-`idempotencyKey`. When `toolSource` is omitted on a global run, Gestalt
-attaches the caller's authorized safe tools by default and treats `toolRefs` as
-additive. Set `toolSource` to `explicit` to opt into explicit-only tools.
-Missing `toolRefs[].pluginName` or `toolRefs[].operation` returns `400`.
-Conflicting header/body idempotency keys also return `400`, an in-progress
-idempotent create returns `409`, and an unconfigured agent surface returns
-`412`.
+Session creation accepts `provider`, `model`, optional `clientRef`, optional
+`metadata`, optional `providerOptions`, and optional `idempotencyKey`.
+
+Turn creation accepts `model`, `messages`, optional `toolRefs`, optional
+`toolSource`, optional `responseSchema`, optional `metadata`, optional
+`providerOptions`, and optional `idempotencyKey`. Missing
+`toolRefs[].pluginName` or `toolRefs[].operation` returns `400`. Conflicting
+header/body idempotency keys also return `400`, an in-progress idempotent
+create returns `409`, and an unconfigured agent surface returns `412`.
 
 Each `messages[]` entry accepts `role`, optional `text`, optional `parts`, and
 optional `metadata`. `parts[]` supports `type: text | json | tool_call |
@@ -221,13 +224,26 @@ curl -X POST http://localhost:8080/api/v1/workflow/events \
 curl 'http://localhost:8080/api/v1/workflow/runs?plugin=github&status=failed' \
   -H 'Authorization: Bearer gst_api_...'
 
-# Create an agent run
-curl -X POST http://localhost:8080/api/v1/agent/runs \
+# Create an agent session
+curl -X POST http://localhost:8080/api/v1/agent/sessions \
   -H 'Authorization: Bearer gst_api_...' \
   -H 'Content-Type: application/json' \
-  -H 'Idempotency-Key: agent-run-1' \
+  -H 'Idempotency-Key: agent-session-1' \
   -d '{
     "provider": "managed",
+    "model": "gpt-5.4",
+    "clientRef": "roadmap-risk",
+    "metadata": {
+      "ticket": "RD-42"
+    }
+  }'
+
+# Create a turn in that session
+curl -X POST http://localhost:8080/api/v1/agent/sessions/session-123/turns \
+  -H 'Authorization: Bearer gst_api_...' \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: agent-turn-1' \
+  -d '{
     "model": "gpt-5.4",
     "messages": [
       {
@@ -254,6 +270,9 @@ curl -X POST http://localhost:8080/api/v1/agent/runs \
         }
       }
     ],
+    "toolRefs": [
+      {"pluginName": "roadmap", "operation": "sync"}
+    ],
     "responseSchema": {
       "type": "object",
       "properties": {
@@ -261,88 +280,91 @@ curl -X POST http://localhost:8080/api/v1/agent/runs \
       },
       "required": ["summary"]
     },
-    "sessionRef": "session-1",
     "metadata": {
       "ticket": "RD-42"
     }
   }'
 
-# Create an explicit-only agent run
-curl -X POST http://localhost:8080/api/v1/agent/runs \
-  -H 'Authorization: Bearer gst_api_...' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "provider": "managed",
-    "messages": [
-      {"role": "user", "text": "Summarize the roadmap risk."}
-    ],
-    "toolSource": "explicit",
-    "toolRefs": [
-      {"pluginName": "roadmap", "operation": "sync"}
-    ]
-  }'
-
-# Inspect a run
+# List active sessions for one provider
 curl -H 'Authorization: Bearer gst_api_...' \
-  http://localhost:8080/api/v1/agent/runs/run-123
+  'http://localhost:8080/api/v1/agent/sessions?provider=managed&state=active'
 
-# List run events after sequence 0
+# Inspect a session
 curl -H 'Authorization: Bearer gst_api_...' \
-  'http://localhost:8080/api/v1/agent/runs/run-123/events?after=0&limit=100'
+  http://localhost:8080/api/v1/agent/sessions/session-123
 
-# Stream run events
+# Inspect a turn
+curl -H 'Authorization: Bearer gst_api_...' \
+  http://localhost:8080/api/v1/agent/turns/turn-123
+
+# List session turns
+curl -H 'Authorization: Bearer gst_api_...' \
+  'http://localhost:8080/api/v1/agent/sessions/session-123/turns?status=running'
+
+# List turn events after sequence 0
+curl -H 'Authorization: Bearer gst_api_...' \
+  'http://localhost:8080/api/v1/agent/turns/turn-123/events?after=0&limit=100'
+
+# Stream turn events
 curl -N -H 'Authorization: Bearer gst_api_...' \
-  'http://localhost:8080/api/v1/agent/runs/run-123/events/stream?after=0'
+  'http://localhost:8080/api/v1/agent/turns/turn-123/events/stream?after=0'
 
-# List pending run interactions
+# List pending turn interactions
 curl -H 'Authorization: Bearer gst_api_...' \
-  'http://localhost:8080/api/v1/agent/runs/run-123/interactions'
+  'http://localhost:8080/api/v1/agent/turns/turn-123/interactions'
 
-# Resume a paused run
-curl -X POST http://localhost:8080/api/v1/agent/runs/run-123/resume \
+# Resolve a pending interaction
+curl -X POST http://localhost:8080/api/v1/agent/turns/turn-123/interactions/interaction-123/resolve \
   -H 'Authorization: Bearer gst_api_...' \
   -H 'Content-Type: application/json' \
   -d '{
-    "interactionId": "interaction-123",
     "resolution": {
       "approved": true
     }
   }'
 
-# List filtered runs
-curl -H 'Authorization: Bearer gst_api_...' \
-  'http://localhost:8080/api/v1/agent/runs?provider=managed&status=running'
-
-# Cancel an agent run
-curl -X POST http://localhost:8080/api/v1/agent/runs/run-123/cancel \
+# Cancel an agent turn
+curl -X POST http://localhost:8080/api/v1/agent/turns/turn-123/cancel \
   -H 'Authorization: Bearer gst_api_...' \
   -H 'Content-Type: application/json' \
   -d '{"reason":"operator requested"}'
 
-# Typical create response
+# Typical session create response
 # {
-#   "id": "run-123",
+#   "id": "session-123",
 #   "provider": "managed",
 #   "model": "gpt-5.4",
-#   "status": "pending",
+#   "state": "active",
+#   "clientRef": "roadmap-risk",
+#   "createdAt": "2026-04-22T00:00:00Z",
+#   "updatedAt": "2026-04-22T00:00:00Z"
+# }
+
+# Typical turn create response
+# {
+#   "id": "turn-123",
+#   "sessionId": "session-123",
+#   "provider": "managed",
+#   "model": "gpt-5.4",
+#   "status": "running",
 #   "messages": [
 #     {"role":"system","text":"Be concise.","parts":[{"type":"text","text":"Be concise."}]},
 #     {"role":"user","text":"Summarize the roadmap risk.","parts":[{"type":"text","text":"Summarize the roadmap risk."}],"metadata":{"ticket":"RD-42"}}
 #   ],
-#   "sessionRef": "session-1",
 #   "createdAt": "2026-04-22T00:00:00Z",
-#   "executionRef": "run-123"
+#   "startedAt": "2026-04-22T00:00:00Z",
+#   "executionRef": "turn-123"
 # }
 
 # Typical interaction list response
 # [
 #   {
 #     "id": "interaction-123",
-#     "runId": "run-123",
+#     "turnId": "turn-123",
 #     "type": "approval",
 #     "state": "pending",
 #     "title": "Approve external call",
-#     "prompt": "Allow this run to continue?",
+#     "prompt": "Allow this turn to continue?",
 #     "request": {"host":"api.openai.com"}
 #   }
 # ]

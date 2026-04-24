@@ -246,25 +246,12 @@ impl std::error::Error for ApiError {}
 
 impl ApiClient {
     pub fn from_env(url_override: Option<&str>) -> Result<Self> {
-        let (token, source, stored_credentials) =
-            if let Some(key) = std::env::var(ENV_API_KEY).ok().filter(|v| !v.is_empty()) {
-                (key, TokenSource::EnvVar, None)
-            } else {
-                let store = CredentialStore::new()?;
-                match store.load()? {
-                    Some(creds) => (
-                        creds.api_token.clone(),
-                        TokenSource::StoredCredentials,
-                        Some(creds),
-                    ),
-                    None => {
-                        bail!(
-                            "not authenticated: set {} or run 'gestalt auth login'",
-                            ENV_API_KEY
-                        )
-                    }
-                }
-            };
+        let env_api_key = std::env::var(ENV_API_KEY).ok().filter(|v| !v.is_empty());
+        let stored_credentials = if env_api_key.is_none() {
+            CredentialStore::new()?.load()?
+        } else {
+            None
+        };
 
         let base_url = match resolve_url(url_override) {
             Ok(url) => url,
@@ -274,6 +261,27 @@ impl ApiClient {
             {
                 Some(url) => normalize_url(url),
                 None => return Err(err),
+            },
+        };
+        let (token, source) = match env_api_key {
+            Some(key) => (key, TokenSource::EnvVar),
+            None => match stored_credentials.as_ref() {
+                Some(creds) => (creds.api_token.clone(), TokenSource::StoredCredentials),
+                None => match server_auth_disabled(&base_url) {
+                    Ok(true) => (String::new(), TokenSource::Direct),
+                    Ok(false) => {
+                        bail!(
+                            "not authenticated: set {} or run 'gestalt auth login'",
+                            ENV_API_KEY
+                        )
+                    }
+                    Err(err) => {
+                        return Err(err.context(format!(
+                            "failed to determine authentication mode for {}",
+                            base_url
+                        )));
+                    }
+                },
             },
         };
         let mut client = Self::new(&base_url, &token)?;
@@ -316,16 +324,12 @@ impl ApiClient {
 
     pub fn get_stream(&self, path: &str) -> Result<reqwest::blocking::Response> {
         let url = format!("{}{}", self.base_url, path);
-        let resp = self
-            .stream_client
-            .request(Method::GET, &url)
-            .bearer_auth(&self.token)
-            .header(
-                header::ACCEPT,
-                HeaderValue::from_static("text/event-stream"),
-            )
-            .send()
-            .map_err(|e| self.wrap_send_error(e, &url))?;
+        let req = self.stream_client.request(Method::GET, &url);
+        let req = self.with_auth(req).header(
+            header::ACCEPT,
+            HeaderValue::from_static("text/event-stream"),
+        );
+        let resp = req.send().map_err(|e| self.wrap_send_error(e, &url))?;
         let status = resp.status();
         if !(status.is_client_error() || status.is_server_error()) {
             return Ok(resp);
@@ -392,17 +396,15 @@ impl ApiClient {
     {
         let url = format!("{}{}", self.base_url, path);
         let encoded = serde_urlencoded::to_string(body).context("failed to encode form body")?;
-        let resp = self
-            .client
-            .request(method, &url)
-            .bearer_auth(&self.token)
+        let req = self.client.request(method, &url);
+        let req = self
+            .with_auth(req)
             .header(
                 header::CONTENT_TYPE,
                 HeaderValue::from_static(http::APPLICATION_X_WWW_FORM_URLENCODED),
             )
-            .body(encoded)
-            .send()
-            .map_err(|e| self.wrap_send_error(e, &url))?;
+            .body(encoded);
+        let resp = req.send().map_err(|e| self.wrap_send_error(e, &url))?;
         self.handle_text_response(resp)
     }
 
@@ -416,13 +418,24 @@ impl ApiClient {
         T: Serialize + ?Sized,
     {
         let url = format!("{}{}", self.base_url, path);
-        let request = self.client.request(method, &url).bearer_auth(&self.token);
+        let request = self.with_auth(self.client.request(method, &url));
         let request = match body {
             Some(body) => request.json(body),
             None => request,
         };
         let resp = request.send().map_err(|e| self.wrap_send_error(e, &url))?;
         self.handle_response(resp)
+    }
+
+    fn with_auth(
+        &self,
+        request: reqwest::blocking::RequestBuilder,
+    ) -> reqwest::blocking::RequestBuilder {
+        if self.token.is_empty() {
+            request
+        } else {
+            request.bearer_auth(&self.token)
+        }
     }
 
     fn wrap_send_error(&self, err: reqwest::Error, url: &str) -> anyhow::Error {

@@ -413,6 +413,57 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestAgentSessionsAndTurnsRoundTripWithoutAuth(t *testing.T) {
+	t.Parallel()
+
+	provider := newMemoryAgentProvider()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		services := coretesting.NewStubServices(t)
+		cfg.Auth = nil
+		cfg.Services = services
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent:           &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			SessionMetadata: services.AgentSessions,
+			RunMetadata:     services.AgentRunMetadata,
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4","clientRef":"cli-1"}`))
+	sessionResp, err := http.DefaultClient.Do(sessionReq)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+	if sessionResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(sessionResp.Body)
+		t.Fatalf("create session status = %d body=%s", sessionResp.StatusCode, body)
+	}
+	var session map[string]any
+	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	sessionID := session["id"].(string)
+
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}]}`))
+	turnResp, err := http.DefaultClient.Do(turnReq)
+	if err != nil {
+		t.Fatalf("create turn: %v", err)
+	}
+	defer func() { _ = turnResp.Body.Close() }()
+	if turnResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(turnResp.Body)
+		t.Fatalf("create turn status = %d body=%s", turnResp.StatusCode, body)
+	}
+	var turn map[string]any
+	if err := json.NewDecoder(turnResp.Body).Decode(&turn); err != nil {
+		t.Fatalf("decode turn: %v", err)
+	}
+	if turn["sessionId"] != sessionID {
+		t.Fatalf("turn sessionId = %#v, want %q", turn["sessionId"], sessionID)
+	}
+}
+
 func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 	t.Parallel()
 

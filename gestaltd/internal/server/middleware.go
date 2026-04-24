@@ -175,7 +175,17 @@ func (s *Server) resolveRequestPrincipalWithUserID(r *http.Request) (*principal.
 
 func (s *Server) serveAuthenticated(w http.ResponseWriter, r *http.Request, next http.Handler, resolver *principal.Resolver, noAuth bool, anonymous *principal.Principal, auditProvider string) {
 	if noAuth {
-		ctx := principal.WithPrincipal(r.Context(), anonymous)
+		p := anonymous
+		if p != nil {
+			enriched, err := s.resolvePrincipalUserID(r.Context(), p)
+			switch {
+			case err == nil && enriched != nil:
+				p = enriched
+			case err != nil:
+				slog.WarnContext(r.Context(), "auth: unable to resolve anonymous user ID", "error", err)
+			}
+		}
+		ctx := principal.WithPrincipal(r.Context(), p)
 		next.ServeHTTP(w, r.WithContext(ctx))
 		return
 	}

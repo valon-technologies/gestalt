@@ -39,6 +39,7 @@ jobs:
         with:
           version: v2.11.3
           working-directory: gestaltd
+          verify: false
 
   test:
     name: Go Tests
