@@ -111,6 +111,17 @@ class BuildTests(unittest.TestCase):
                     "pyinstaller-config",
                 )
                 self.assertEqual(captured.env["SOURCE_DATE_EPOCH"], "0")
+                self.assertIn("--collect-submodules", captured.command)
+                self.assertEqual(
+                    captured.command[
+                        captured.command.index("--collect-submodules") + 1
+                    ],
+                    "gestalt",
+                )
+                self.assertEqual(
+                    captured.command[captured.command.index("--hidden-import") + 1],
+                    "provider",
+                )
                 self.assertEqual(
                     captured.bundle_config,
                     {

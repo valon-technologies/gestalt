@@ -119,6 +119,10 @@ def _pyinstaller_command(
         str(bundle_config_path.parent / "spec"),
         "--name",
         pyinstaller_name,
+        # Bundle the entire SDK package so lazy `gestalt.__getattr__` exports
+        # (for example `gestalt._indexeddb`) remain available in frozen builds.
+        "--collect-submodules",
+        "gestalt",
         "--hidden-import",
         module_name,
         "--paths",
