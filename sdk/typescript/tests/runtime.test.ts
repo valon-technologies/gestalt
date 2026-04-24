@@ -411,6 +411,61 @@ export const plugin = definePlugin({
   }
 });
 
+test("loadProviderFromTarget rejects legacy structural plugin objects without alpha.12 hook methods", async () => {
+  const root = makeTempDir("gestalt-typescript-runtime-legacy-structural-");
+
+  try {
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "legacy-structural-provider",
+        gestalt: {
+          provider: {
+            kind: "plugin",
+            target: "./provider.ts#plugin",
+          },
+        },
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(root, "provider.ts"),
+      `export const plugin = {
+  kind: "integration",
+  name: "legacy-structural",
+  displayName: "Legacy Structural",
+  description: "legacy structural plugin",
+  connectionMode: "unspecified",
+  authTypes: [],
+  connectionParams: {},
+  staticCatalog() {
+    return { name: "legacy-structural", operations: [] };
+  },
+  supportsSessionCatalog() {
+    return false;
+  },
+  async catalogForRequest() {
+    return undefined;
+  },
+  supportsManifestMetadata() {
+    return false;
+  },
+  writeManifestMetadata() {},
+  async execute() {
+    return { status: 200, body: "{}" };
+  },
+};`,
+      "utf8",
+    );
+
+    await expect(loadProviderFromTarget(root)).rejects.toThrow(
+      "plugin:./provider.ts#plugin did not resolve to a Gestalt plugin provider",
+    );
+  } finally {
+    removeTempDir(root);
+  }
+});
+
 test("runtime serves a secrets provider over unix gRPC", async () => {
   const runtimeEntry = join(import.meta.dir, "..", "src", "runtime.ts");
   const root = fixturePath("secrets-provider");
@@ -504,7 +559,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
   const metadata = await (service.getMetadata as any)();
   expect(metadata.name).toBe("basic-provider");
   expect(metadata.supportsSessionCatalog).toBe(true);
-  expect(metadata.supportsPostConnect).toBe(true);
+  expect(metadata.supportsPostConnect).toBe(false);
   expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   expect(
@@ -629,27 +684,25 @@ test("integration provider service exposes metadata, configure, execute, and ses
     "Session Hello ops user:user-123 identity viewer",
   );
 
-  const postConnect = await (service.postConnect as any)(
-    create(PostConnectRequestSchema, {
-      token: {
-        id: "tok-123",
-        userId: "user:user-123",
-        integration: "basic-provider",
-        connection: "workspace",
-        instance: "__default__",
-        accessToken: "access-token",
-        metadataJson: JSON.stringify({
-          team_id: "T123",
-          user_id: "U456",
-        }),
-      },
-    }),
+  await expectConnectCode(
+    (service.postConnect as any)(
+      create(PostConnectRequestSchema, {
+        token: {
+          id: "tok-123",
+          userId: "user:user-123",
+          integration: "basic-provider",
+          connection: "workspace",
+          instance: "__default__",
+          accessToken: "access-token",
+          metadataJson: JSON.stringify({
+            team_id: "T123",
+            user_id: "U456",
+          }),
+        },
+      }),
+    ),
+    Code.Unimplemented,
   );
-  expect(postConnect.metadata).toEqual({
-    "gestalt.external_identity.type": "fixture_identity",
-    "gestalt.external_identity.id": "workspace:__default__:user:user-123",
-    configured_connection: "workspace",
-  });
 });
 
 test("integration provider service labels metadata failures", async () => {
@@ -663,7 +716,7 @@ test("integration provider service labels metadata failures", async () => {
       },
     ],
   });
-  (plugin as any).supportsPostConnect = () => {
+  (plugin as any).supportsSessionCatalog = () => {
     throw new Error("metadata exploded");
   };
 
@@ -677,113 +730,6 @@ test("integration provider service labels metadata failures", async () => {
       "provider metadata: metadata exploded",
     );
   }
-});
-
-test("integration provider service tolerates legacy plugin objects without newer optional hooks", async () => {
-  const plugin = definePlugin({
-    operations: [
-      {
-        id: "noop",
-        handler() {
-          return { ok: true };
-        },
-      },
-    ],
-  });
-  (plugin as any).supportsSessionCatalog = undefined;
-  (plugin as any).supportsPostConnect = undefined;
-  (plugin as any).resolveHTTPSubject = undefined;
-
-  const service = createProviderService(plugin as any);
-  const metadata = await (service.getMetadata as any)();
-  expect(metadata.supportsSessionCatalog).toBe(false);
-  expect(metadata.supportsPostConnect).toBe(false);
-
-  await expectConnectCode(
-    (service.postConnect as any)(
-      create(PostConnectRequestSchema, {
-        token: {
-          id: "tok-123",
-          integration: "legacy-plugin",
-        },
-      }),
-    ),
-    Code.Unimplemented,
-  );
-
-  const unresolved = await (service.resolveHTTPSubject as any)(
-    create(ResolveHTTPSubjectRequestSchema, {
-      request: create(HTTPSubjectRequestSchema, {
-        binding: "command",
-      }),
-    }),
-  );
-  expect(unresolved.subject).toBeUndefined();
-});
-
-test("integration provider service infers optional hooks for prototype-backed structural plugin objects", async () => {
-  class StructuralPlugin {
-    kind = "integration" as const;
-    name = "structural-plugin";
-    displayName = "Structural Plugin";
-    description = "structural plugin";
-    version = "1.0.0";
-    connectionMode = "unspecified" as const;
-    authTypes: string[] = [];
-    connectionParams: Record<string, unknown> = {};
-
-    staticCatalog() {
-      return {
-        name: "structural-plugin",
-        operations: [],
-      };
-    }
-
-    async execute() {
-      return {
-        status: 200,
-        body: "{}",
-      };
-    }
-
-    async catalogForRequest() {
-      return {
-        name: "structural-session",
-        operations: [],
-      };
-    }
-
-    async postConnectMetadata() {
-      return {
-        structural: "true",
-      };
-    }
-  }
-
-  const service = createProviderService(new StructuralPlugin() as any);
-
-  const metadata = await (service.getMetadata as any)();
-  expect(metadata.supportsSessionCatalog).toBe(true);
-  expect(metadata.supportsPostConnect).toBe(true);
-
-  const sessionCatalog = await (service.getSessionCatalog as any)(
-    create(GetSessionCatalogRequestSchema, {
-      token: "token-123",
-    }),
-  );
-  expect(sessionCatalog.catalog?.name).toBe("structural-session");
-
-  const postConnect = await (service.postConnect as any)(
-    create(PostConnectRequestSchema, {
-      token: {
-        id: "tok-123",
-        integration: "structural-plugin",
-      },
-    }),
-  );
-  expect(postConnect.metadata).toEqual({
-    structural: "true",
-  });
 });
 
 test("integration provider service resolves hosted HTTP subjects through the plugin hook", async () => {

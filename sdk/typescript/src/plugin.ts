@@ -438,7 +438,19 @@ export function isPluginProvider(
       "kind" in value &&
       (value as { kind?: unknown }).kind === "integration" &&
       "staticCatalog" in value &&
-      "execute" in value)
+      typeof (value as { staticCatalog?: unknown }).staticCatalog === "function" &&
+      "execute" in value &&
+      typeof (value as { execute?: unknown }).execute === "function" &&
+      "supportsSessionCatalog" in value &&
+      typeof (value as { supportsSessionCatalog?: unknown }).supportsSessionCatalog === "function" &&
+      "catalogForRequest" in value &&
+      typeof (value as { catalogForRequest?: unknown }).catalogForRequest === "function" &&
+      "supportsManifestMetadata" in value &&
+      typeof (value as { supportsManifestMetadata?: unknown }).supportsManifestMetadata === "function" &&
+      "writeManifestMetadata" in value &&
+      typeof (value as { writeManifestMetadata?: unknown }).writeManifestMetadata === "function" &&
+      "resolveHTTPSubject" in value &&
+      typeof (value as { resolveHTTPSubject?: unknown }).resolveHTTPSubject === "function")
   );
 }
 
