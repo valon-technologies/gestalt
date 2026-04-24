@@ -24,8 +24,8 @@ import (
 )
 
 const agentIdempotencyKeyHeader = "Idempotency-Key"
-const defaultAgentRunEventLimit = 100
-const maxAgentRunEventLimit = 1000
+const defaultAgentTurnEventLimit = 100
+const maxAgentTurnEventLimit = 1000
 
 type agentMessageRequest struct {
 	Role     string                    `json:"role,omitempty"`
@@ -70,30 +70,56 @@ type agentToolRefRequest struct {
 	Description string `json:"description,omitempty"`
 }
 
-type agentRunCreateRequest struct {
-	ProviderName    string                `json:"provider,omitempty"`
+type agentSessionCreateRequest struct {
+	ProviderName    string         `json:"provider,omitempty"`
+	Model           string         `json:"model,omitempty"`
+	ClientRef       string         `json:"clientRef,omitempty"`
+	Metadata        map[string]any `json:"metadata,omitempty"`
+	ProviderOptions map[string]any `json:"providerOptions,omitempty"`
+	IdempotencyKey  string         `json:"idempotencyKey,omitempty"`
+}
+
+type agentSessionUpdateRequest struct {
+	ClientRef string         `json:"clientRef,omitempty"`
+	State     string         `json:"state,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+}
+
+type agentTurnCreateRequest struct {
 	Model           string                `json:"model,omitempty"`
 	Messages        []agentMessageRequest `json:"messages,omitempty"`
 	ToolRefs        []agentToolRefRequest `json:"toolRefs,omitempty"`
 	ToolSource      string                `json:"toolSource,omitempty"`
 	ResponseSchema  map[string]any        `json:"responseSchema,omitempty"`
-	SessionRef      string                `json:"sessionRef,omitempty"`
 	Metadata        map[string]any        `json:"metadata,omitempty"`
 	ProviderOptions map[string]any        `json:"providerOptions,omitempty"`
 	IdempotencyKey  string                `json:"idempotencyKey,omitempty"`
 }
 
-type agentRunCancelRequest struct {
+type agentTurnCancelRequest struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-type agentRunResumeRequest struct {
-	InteractionID string         `json:"interactionId,omitempty"`
-	Resolution    map[string]any `json:"resolution,omitempty"`
+type agentInteractionResolveRequest struct {
+	Resolution map[string]any `json:"resolution,omitempty"`
 }
 
-type agentRunInfo struct {
+type agentSessionInfo struct {
+	ID         string             `json:"id"`
+	Provider   string             `json:"provider"`
+	Model      string             `json:"model,omitempty"`
+	ClientRef  string             `json:"clientRef,omitempty"`
+	State      string             `json:"state,omitempty"`
+	Metadata   map[string]any     `json:"metadata,omitempty"`
+	CreatedBy  *workflowActorInfo `json:"createdBy,omitempty"`
+	CreatedAt  *time.Time         `json:"createdAt,omitempty"`
+	UpdatedAt  *time.Time         `json:"updatedAt,omitempty"`
+	LastTurnAt *time.Time         `json:"lastTurnAt,omitempty"`
+}
+
+type agentTurnInfo struct {
 	ID               string                `json:"id"`
+	SessionID        string                `json:"sessionId"`
 	Provider         string                `json:"provider"`
 	Model            string                `json:"model,omitempty"`
 	Status           string                `json:"status,omitempty"`
@@ -101,7 +127,6 @@ type agentRunInfo struct {
 	OutputText       string                `json:"outputText,omitempty"`
 	StructuredOutput map[string]any        `json:"structuredOutput,omitempty"`
 	StatusMessage    string                `json:"statusMessage,omitempty"`
-	SessionRef       string                `json:"sessionRef,omitempty"`
 	CreatedBy        *workflowActorInfo    `json:"createdBy,omitempty"`
 	CreatedAt        *time.Time            `json:"createdAt,omitempty"`
 	StartedAt        *time.Time            `json:"startedAt,omitempty"`
@@ -109,9 +134,9 @@ type agentRunInfo struct {
 	ExecutionRef     string                `json:"executionRef,omitempty"`
 }
 
-type agentRunEventInfo struct {
+type agentTurnEventInfo struct {
 	ID         string         `json:"id"`
-	RunID      string         `json:"runId"`
+	TurnID     string         `json:"turnId"`
 	Seq        int64          `json:"seq"`
 	Type       string         `json:"type"`
 	Source     string         `json:"source"`
@@ -122,7 +147,7 @@ type agentRunEventInfo struct {
 
 type agentInteractionInfo struct {
 	ID         string         `json:"id"`
-	RunID      string         `json:"runId"`
+	TurnID     string         `json:"turnId"`
 	Type       string         `json:"type"`
 	State      string         `json:"state"`
 	Title      string         `json:"title,omitempty"`
@@ -133,16 +158,12 @@ type agentInteractionInfo struct {
 	ResolvedAt *time.Time     `json:"resolvedAt,omitempty"`
 }
 
-func (s *Server) createGlobalAgentRun(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveAgentRunActor(w, r)
+func (s *Server) createAgentSession(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentActor(w, r)
 	if !ok {
 		return
 	}
-	if s == nil || s.agentRuns == nil {
-		writeError(w, http.StatusPreconditionFailed, agentmanager.ErrAgentNotConfigured.Error())
-		return
-	}
-	var req agentRunCreateRequest
+	var req agentSessionCreateRequest
 	if r.Body != nil {
 		defer func() { _ = r.Body.Close() }()
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
@@ -150,13 +171,113 @@ func (s *Server) createGlobalAgentRun(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
-	if headerKey := strings.TrimSpace(r.Header.Get(agentIdempotencyKeyHeader)); headerKey != "" {
-		if idempotencyKey != "" && idempotencyKey != headerKey {
-			writeError(w, http.StatusBadRequest, "idempotency key header and body must match")
+	idempotencyKey, ok := resolveAgentIdempotencyKey(w, r, req.IdempotencyKey)
+	if !ok {
+		return
+	}
+	session, err := s.agentRuns.CreateSession(r.Context(), p, coreagent.ManagerCreateSessionRequest{
+		IdempotencyKey:  idempotencyKey,
+		ProviderName:    strings.TrimSpace(req.ProviderName),
+		Model:           strings.TrimSpace(req.Model),
+		ClientRef:       strings.TrimSpace(req.ClientRef),
+		Metadata:        maps.Clone(req.Metadata),
+		ProviderOptions: maps.Clone(req.ProviderOptions),
+	})
+	if err != nil {
+		s.writeAgentManagerError(w, r, "session", "", nil, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, agentSessionInfoFromCore(session))
+}
+
+func (s *Server) listAgentSessions(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentActor(w, r)
+	if !ok {
+		return
+	}
+	providerName := strings.TrimSpace(r.URL.Query().Get("provider"))
+	sessions, err := s.agentRuns.ListSessions(r.Context(), p, providerName)
+	if err != nil {
+		s.writeAgentManagerError(w, r, "session", "", nil, err)
+		return
+	}
+	stateFilter := strings.TrimSpace(r.URL.Query().Get("state"))
+	out := make([]agentSessionInfo, 0, len(sessions))
+	for _, session := range sessions {
+		if session == nil {
+			continue
+		}
+		if stateFilter != "" && strings.TrimSpace(string(session.State)) != stateFilter {
+			continue
+		}
+		out = append(out, agentSessionInfoFromCore(session))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) getAgentSession(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentActor(w, r)
+	if !ok {
+		return
+	}
+	sessionID := chi.URLParam(r, "sessionID")
+	session, err := s.agentRuns.GetSession(r.Context(), p, sessionID)
+	if err != nil {
+		s.writeAgentManagerError(w, r, "session", sessionID, nil, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, agentSessionInfoFromCore(session))
+}
+
+func (s *Server) updateAgentSession(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentActor(w, r)
+	if !ok {
+		return
+	}
+	sessionID := chi.URLParam(r, "sessionID")
+	var req agentSessionUpdateRequest
+	if r.Body != nil {
+		defer func() { _ = r.Body.Close() }()
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
-		idempotencyKey = headerKey
+	}
+	state, err := agentSessionStateFromRequest(req.State)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	session, err := s.agentRuns.UpdateSession(r.Context(), p, coreagent.ManagerUpdateSessionRequest{
+		SessionID: strings.TrimSpace(sessionID),
+		ClientRef: strings.TrimSpace(req.ClientRef),
+		State:     state,
+		Metadata:  maps.Clone(req.Metadata),
+	})
+	if err != nil {
+		s.writeAgentManagerError(w, r, "session", sessionID, nil, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, agentSessionInfoFromCore(session))
+}
+
+func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentActor(w, r)
+	if !ok {
+		return
+	}
+	sessionID := chi.URLParam(r, "sessionID")
+	var req agentTurnCreateRequest
+	if r.Body != nil {
+		defer func() { _ = r.Body.Close() }()
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+	}
+	idempotencyKey, ok := resolveAgentIdempotencyKey(w, r, req.IdempotencyKey)
+	if !ok {
+		return
 	}
 	if err := validateAgentToolRefs(req.ToolRefs); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -167,93 +288,70 @@ func (s *Server) createGlobalAgentRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	managed, err := s.agentRuns.Run(r.Context(), p, coreagent.ManagerRunRequest{
-		ProviderName:    strings.TrimSpace(req.ProviderName),
+	turn, err := s.agentRuns.CreateTurn(r.Context(), p, coreagent.ManagerCreateTurnRequest{
+		IdempotencyKey:  idempotencyKey,
 		Model:           strings.TrimSpace(req.Model),
+		SessionID:       strings.TrimSpace(sessionID),
 		Messages:        agentMessagesFromRequest(req.Messages),
 		ToolRefs:        agentToolRefsFromRequest(req.ToolRefs),
 		ToolSource:      toolSource,
 		ResponseSchema:  maps.Clone(req.ResponseSchema),
-		SessionRef:      strings.TrimSpace(req.SessionRef),
 		Metadata:        maps.Clone(req.Metadata),
 		ProviderOptions: maps.Clone(req.ProviderOptions),
-		IdempotencyKey:  idempotencyKey,
 	})
 	if err != nil {
-		s.writeAgentRunManagerError(w, r, "", req, err)
+		s.writeAgentManagerError(w, r, "turn", sessionID, req.ToolRefs, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, agentRunInfoFromManaged(managed))
+	writeJSON(w, http.StatusCreated, agentTurnInfoFromCore(turn))
 }
 
-func (s *Server) listGlobalAgentRuns(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveAgentRunActor(w, r)
+func (s *Server) listAgentTurns(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentActor(w, r)
 	if !ok {
 		return
 	}
-	if s == nil || s.agentRuns == nil {
-		writeError(w, http.StatusPreconditionFailed, agentmanager.ErrAgentNotConfigured.Error())
-		return
-	}
-	providerFilter := strings.TrimSpace(r.URL.Query().Get("provider"))
-	var (
-		err  error
-		runs []*coreagent.ManagedRun
-	)
-	if providerFilter != "" {
-		runs, err = s.agentRuns.ListRunsByProvider(r.Context(), p, providerFilter)
-	} else {
-		runs, err = s.agentRuns.ListRuns(r.Context(), p)
-	}
+	sessionID := chi.URLParam(r, "sessionID")
+	turns, err := s.agentRuns.ListTurns(r.Context(), p, sessionID)
 	if err != nil {
-		s.writeAgentRunManagerError(w, r, "", agentRunCreateRequest{}, err)
+		s.writeAgentManagerError(w, r, "session", sessionID, nil, err)
 		return
 	}
 	statusFilter := strings.TrimSpace(r.URL.Query().Get("status"))
-	out := make([]agentRunInfo, 0, len(runs))
-	for _, managed := range runs {
-		if managed == nil || managed.Run == nil {
+	out := make([]agentTurnInfo, 0, len(turns))
+	for _, turn := range turns {
+		if turn == nil {
 			continue
 		}
-		if providerFilter != "" && strings.TrimSpace(managed.ProviderName) != providerFilter {
+		if statusFilter != "" && strings.TrimSpace(string(turn.Status)) != statusFilter {
 			continue
 		}
-		if statusFilter != "" && strings.TrimSpace(string(managed.Run.Status)) != statusFilter {
-			continue
-		}
-		out = append(out, agentRunInfoFromManaged(managed))
+		out = append(out, agentTurnInfoFromCore(turn))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) getGlobalAgentRun(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveAgentRunActor(w, r)
+func (s *Server) getAgentTurn(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentActor(w, r)
 	if !ok {
 		return
 	}
-	if s == nil || s.agentRuns == nil {
-		writeError(w, http.StatusPreconditionFailed, agentmanager.ErrAgentNotConfigured.Error())
-		return
-	}
-	runID := chi.URLParam(r, "runID")
-	managed, err := s.agentRuns.GetRun(r.Context(), p, runID)
+	turnID := chi.URLParam(r, "turnID")
+	turn, err := s.agentRuns.GetTurn(r.Context(), p, turnID)
 	if err != nil {
-		s.writeAgentRunManagerError(w, r, runID, agentRunCreateRequest{}, err)
+		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, agentRunInfoFromManaged(managed))
+	writeJSON(w, http.StatusOK, agentTurnInfoFromCore(turn))
 }
 
-func (s *Server) cancelGlobalAgentRun(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveAgentRunActor(w, r)
+func (s *Server) cancelAgentTurn(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentActor(w, r)
 	if !ok {
 		return
 	}
-	if s == nil || s.agentRuns == nil {
-		writeError(w, http.StatusPreconditionFailed, agentmanager.ErrAgentNotConfigured.Error())
-		return
-	}
-	var req agentRunCancelRequest
+	turnID := chi.URLParam(r, "turnID")
+	var req agentTurnCancelRequest
 	if r.Body != nil {
 		defer func() { _ = r.Body.Close() }()
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
@@ -261,36 +359,104 @@ func (s *Server) cancelGlobalAgentRun(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	runID := chi.URLParam(r, "runID")
-	managed, err := s.agentRuns.CancelRun(r.Context(), p, runID, req.Reason)
+	turn, err := s.agentRuns.CancelTurn(r.Context(), p, turnID, req.Reason)
 	if err != nil {
-		s.writeAgentRunManagerError(w, r, runID, agentRunCreateRequest{}, err)
+		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, agentRunInfoFromManaged(managed))
+	writeJSON(w, http.StatusOK, agentTurnInfoFromCore(turn))
 }
 
-func (s *Server) listGlobalAgentRunEvents(w http.ResponseWriter, r *http.Request) {
-	events, ok := s.resolveGlobalAgentRunEvents(w, r)
+func (s *Server) listAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentActor(w, r)
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, events)
-}
-
-func (s *Server) listGlobalAgentRunInteractions(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveAgentRunActor(w, r)
+	turnID := chi.URLParam(r, "turnID")
+	afterSeq, limit, ok := parseAgentTurnEventQuery(w, r)
 	if !ok {
 		return
 	}
-	if s == nil || s.agentRuns == nil {
-		writeError(w, http.StatusPreconditionFailed, agentmanager.ErrAgentNotConfigured.Error())
+	events, err := s.agentRuns.ListTurnEvents(r.Context(), p, turnID, afterSeq, limit)
+	if err != nil {
+		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
 		return
 	}
-	runID := chi.URLParam(r, "runID")
-	interactions, err := s.agentRuns.ListRunInteractions(r.Context(), p, runID)
+	out := make([]agentTurnEventInfo, 0, len(events))
+	for _, event := range events {
+		out = append(out, agentTurnEventInfoFromCore(event))
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentActor(w, r)
+	if !ok {
+		return
+	}
+	turnID := chi.URLParam(r, "turnID")
+	afterSeq, limit, ok := parseAgentTurnEventQuery(w, r)
+	if !ok {
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming is not supported")
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	ctx := r.Context()
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
+		if err != nil {
+			s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
+			return
+		}
+		for _, event := range events {
+			info := agentTurnEventInfoFromCore(event)
+			payload, err := json.Marshal(info)
+			if err != nil {
+				slog.ErrorContext(ctx, "marshal agent turn event", "turn_id", turnID, "error", err)
+				continue
+			}
+			_, _ = w.Write([]byte("data: "))
+			_, _ = w.Write(payload)
+			_, _ = w.Write([]byte("\n\n"))
+			flusher.Flush()
+			if info.Seq > afterSeq {
+				afterSeq = info.Seq
+			}
+		}
+		terminal, err := s.agentTurnTerminalStatus(ctx, p, turnID)
+		if err != nil {
+			s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
+			return
+		}
+		if terminal {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (s *Server) listAgentTurnInteractions(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentActor(w, r)
+	if !ok {
+		return
+	}
+	turnID := chi.URLParam(r, "turnID")
+	interactions, err := s.agentRuns.ListInteractions(r.Context(), p, turnID)
 	if err != nil {
-		s.writeAgentRunManagerError(w, r, runID, agentRunCreateRequest{}, err)
+		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
 		return
 	}
 	out := make([]agentInteractionInfo, 0, len(interactions))
@@ -300,16 +466,14 @@ func (s *Server) listGlobalAgentRunInteractions(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) resumeGlobalAgentRun(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveAgentRunActor(w, r)
+func (s *Server) resolveAgentInteraction(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.resolveAgentActor(w, r)
 	if !ok {
 		return
 	}
-	if s == nil || s.agentRuns == nil {
-		writeError(w, http.StatusPreconditionFailed, agentmanager.ErrAgentNotConfigured.Error())
-		return
-	}
-	var req agentRunResumeRequest
+	turnID := chi.URLParam(r, "turnID")
+	interactionID := chi.URLParam(r, "interactionID")
+	var req agentInteractionResolveRequest
 	if r.Body != nil {
 		defer func() { _ = r.Body.Close() }()
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
@@ -317,195 +481,76 @@ func (s *Server) resumeGlobalAgentRun(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	runID := chi.URLParam(r, "runID")
-	managed, err := s.agentRuns.ResumeRun(r.Context(), p, runID, req.InteractionID, maps.Clone(req.Resolution))
+	interaction, err := s.agentRuns.ResolveInteraction(r.Context(), p, turnID, interactionID, maps.Clone(req.Resolution))
 	if err != nil {
-		s.writeAgentRunManagerError(w, r, runID, agentRunCreateRequest{}, err)
+		s.writeAgentManagerError(w, r, "interaction", interactionID, nil, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, agentRunInfoFromManaged(managed))
+	writeJSON(w, http.StatusOK, agentInteractionInfoFromCore(interaction))
 }
 
-func (s *Server) streamGlobalAgentRunEvents(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveAgentRunActor(w, r)
-	if !ok {
-		return
-	}
-	if s == nil || s.agentRuns == nil {
-		writeError(w, http.StatusPreconditionFailed, agentmanager.ErrAgentNotConfigured.Error())
-		return
-	}
-	afterSeq, ok := parseAgentRunEventCursor(w, r)
-	if !ok {
-		return
-	}
-	limit, ok := parseAgentRunEventLimit(w, r)
-	if !ok {
-		return
-	}
-	runID := chi.URLParam(r, "runID")
-	events, err := s.agentRuns.ListRunEvents(r.Context(), p, runID, afterSeq, limit)
-	if err != nil {
-		s.writeAgentRunManagerError(w, r, runID, agentRunCreateRequest{}, err)
-		return
-	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.WriteHeader(http.StatusOK)
-	flusher, _ := w.(http.Flusher)
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		nextSeq, err := s.writeAgentRunEventStreamBatch(w, flusher, events, afterSeq)
-		if err != nil {
-			return
-		}
-		if nextSeq > afterSeq {
-			afterSeq = nextSeq
-		}
-		if len(events) < limit {
-			terminal, err := s.agentRunEventStreamTerminal(r.Context(), p, runID)
-			if err != nil {
-				slog.DebugContext(r.Context(), "agent run event stream ended", "run_id", runID, "error", err)
-				return
-			}
-			if terminal {
-				select {
-				case <-r.Context().Done():
-					return
-				case <-ticker.C:
-				}
-				events, err = s.agentRuns.ListRunEvents(r.Context(), p, runID, afterSeq, limit)
-				if err != nil {
-					slog.DebugContext(r.Context(), "agent run event stream ended", "run_id", runID, "error", err)
-					return
-				}
-				if len(events) == 0 {
-					return
-				}
-				continue
-			}
-		}
-		select {
-		case <-r.Context().Done():
-			return
-		case <-ticker.C:
-		}
-		events, err = s.agentRuns.ListRunEvents(r.Context(), p, runID, afterSeq, limit)
-		if err != nil {
-			slog.DebugContext(r.Context(), "agent run event stream ended", "run_id", runID, "error", err)
-			return
-		}
-	}
-}
-
-func (s *Server) resolveGlobalAgentRunEvents(w http.ResponseWriter, r *http.Request) ([]agentRunEventInfo, bool) {
-	p, ok := s.resolveAgentRunActor(w, r)
-	if !ok {
-		return nil, false
-	}
+func (s *Server) resolveAgentActor(w http.ResponseWriter, r *http.Request) (*principal.Principal, bool) {
 	if s == nil || s.agentRuns == nil {
 		writeError(w, http.StatusPreconditionFailed, agentmanager.ErrAgentNotConfigured.Error())
 		return nil, false
 	}
-	afterSeq, ok := parseAgentRunEventCursor(w, r)
-	if !ok {
+	p := principal.Canonicalized(PrincipalFromContext(r.Context()))
+	if p == nil {
+		writeError(w, http.StatusUnauthorized, "missing authorization")
 		return nil, false
 	}
-	limit, ok := parseAgentRunEventLimit(w, r)
-	if !ok {
+	if strings.TrimSpace(p.SubjectID) == "" {
+		writeError(w, http.StatusUnauthorized, "missing subject")
 		return nil, false
 	}
-	runID := chi.URLParam(r, "runID")
-	events, err := s.agentRuns.ListRunEvents(r.Context(), p, runID, afterSeq, limit)
-	if err != nil {
-		s.writeAgentRunManagerError(w, r, runID, agentRunCreateRequest{}, err)
-		return nil, false
-	}
-	out := make([]agentRunEventInfo, 0, len(events))
-	for _, event := range events {
-		out = append(out, agentRunEventInfoFromCore(event))
-	}
-	return out, true
+	return p, true
 }
 
-func (s *Server) writeAgentRunEventStreamBatch(w http.ResponseWriter, flusher http.Flusher, events []*coreagent.RunEvent, afterSeq int64) (int64, error) {
-	nextSeq := afterSeq
-	for _, event := range events {
-		info := agentRunEventInfoFromCore(event)
-		payload, err := json.Marshal(info)
-		if err != nil {
-			return nextSeq, err
+func resolveAgentIdempotencyKey(w http.ResponseWriter, r *http.Request, bodyValue string) (string, bool) {
+	idempotencyKey := strings.TrimSpace(bodyValue)
+	if headerKey := strings.TrimSpace(r.Header.Get(agentIdempotencyKeyHeader)); headerKey != "" {
+		if idempotencyKey != "" && idempotencyKey != headerKey {
+			writeError(w, http.StatusBadRequest, "idempotency key header and body must match")
+			return "", false
 		}
-		if _, err := fmt.Fprintf(w, "id: %d\nevent: %s\ndata: %s\n\n", info.Seq, sseFieldValue(info.Type), payload); err != nil {
-			return nextSeq, err
-		}
-		if info.Seq > nextSeq {
-			nextSeq = info.Seq
-		}
-		if flusher != nil {
-			flusher.Flush()
-		}
+		idempotencyKey = headerKey
 	}
-	if len(events) == 0 && flusher != nil {
-		flusher.Flush()
-	}
-	return nextSeq, nil
+	return idempotencyKey, true
 }
 
-func (s *Server) agentRunEventStreamTerminal(ctx context.Context, p *principal.Principal, runID string) (bool, error) {
-	managed, err := s.agentRuns.GetRun(ctx, p, runID)
+func parseAgentTurnEventQuery(w http.ResponseWriter, r *http.Request) (int64, int, bool) {
+	afterSeq := int64(0)
+	if raw := strings.TrimSpace(r.URL.Query().Get("after")); raw != "" {
+		value, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || value < 0 {
+			writeError(w, http.StatusBadRequest, "after must be a non-negative integer")
+			return 0, 0, false
+		}
+		afterSeq = value
+	}
+	limit := defaultAgentTurnEventLimit
+	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 || value > maxAgentTurnEventLimit {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("limit must be between 0 and %d", maxAgentTurnEventLimit))
+			return 0, 0, false
+		}
+		limit = value
+	}
+	return afterSeq, limit, true
+}
+
+func (s *Server) agentTurnTerminalStatus(ctx context.Context, p *principal.Principal, turnID string) (bool, error) {
+	turn, err := s.agentRuns.GetTurn(ctx, p, turnID)
 	if err != nil {
 		return false, err
 	}
-	if managed == nil || managed.Run == nil {
-		return false, nil
-	}
-	switch managed.Run.Status {
-	case coreagent.RunStatusSucceeded, coreagent.RunStatusFailed, coreagent.RunStatusCanceled:
+	switch turn.Status {
+	case coreagent.ExecutionStatusSucceeded, coreagent.ExecutionStatusFailed, coreagent.ExecutionStatusCanceled:
 		return true, nil
 	default:
 		return false, nil
 	}
-}
-
-func sseFieldValue(value string) string {
-	value = strings.TrimSpace(value)
-	value = strings.ReplaceAll(value, "\r", " ")
-	return strings.ReplaceAll(value, "\n", " ")
-}
-
-func parseAgentRunEventCursor(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	raw := strings.TrimSpace(r.URL.Query().Get("after"))
-	if raw == "" {
-		return 0, true
-	}
-	afterSeq, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || afterSeq < 0 {
-		writeError(w, http.StatusBadRequest, "after must be a non-negative integer")
-		return 0, false
-	}
-	return afterSeq, true
-}
-
-func parseAgentRunEventLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
-	raw := strings.TrimSpace(r.URL.Query().Get("limit"))
-	if raw == "" {
-		return defaultAgentRunEventLimit, true
-	}
-	limit64, err := strconv.ParseInt(raw, 10, 32)
-	if err != nil || limit64 < 1 {
-		writeError(w, http.StatusBadRequest, "limit must be a positive integer")
-		return 0, false
-	}
-	if limit64 > maxAgentRunEventLimit {
-		limit64 = maxAgentRunEventLimit
-	}
-	return int(limit64), true
-}
-
-func (s *Server) resolveAgentRunActor(w http.ResponseWriter, r *http.Request) (*principal.Principal, bool) {
-	return s.resolveWorkflowScheduleActor(w, r)
 }
 
 func agentMessagesFromRequest(messages []agentMessageRequest) []coreagent.Message {
@@ -609,45 +654,70 @@ func agentToolSourceModeFromRequest(value string) (coreagent.ToolSourceMode, err
 	}
 }
 
-func agentRunInfoFromManaged(managed *coreagent.ManagedRun) agentRunInfo {
-	if managed == nil {
-		return agentRunInfo{}
+func agentSessionStateFromRequest(value string) (coreagent.SessionState, error) {
+	switch strings.TrimSpace(value) {
+	case "":
+		return "", nil
+	case string(coreagent.SessionStateActive):
+		return coreagent.SessionStateActive, nil
+	case string(coreagent.SessionStateArchived):
+		return coreagent.SessionStateArchived, nil
+	default:
+		return "", fmt.Errorf("unsupported agent session state %q", value)
 	}
-	return agentRunInfoFromCore(managed.Run, strings.TrimSpace(managed.ProviderName))
 }
 
-func agentRunInfoFromCore(run *coreagent.Run, providerName string) agentRunInfo {
-	info := agentRunInfo{Provider: providerName}
-	if run == nil {
+func agentSessionInfoFromCore(session *coreagent.Session) agentSessionInfo {
+	info := agentSessionInfo{}
+	if session == nil {
 		return info
 	}
-	info.ID = run.ID
-	info.Model = strings.TrimSpace(run.Model)
-	info.Status = strings.TrimSpace(string(run.Status))
-	info.Messages = agentMessageInfoFromCore(run.Messages)
-	info.OutputText = run.OutputText
-	info.StructuredOutput = maps.Clone(run.StructuredOutput)
-	info.StatusMessage = run.StatusMessage
-	info.SessionRef = run.SessionRef
-	info.CreatedBy = agentActorInfoFromCore(run.CreatedBy)
-	info.CreatedAt = run.CreatedAt
-	info.StartedAt = run.StartedAt
-	info.CompletedAt = run.CompletedAt
-	info.ExecutionRef = strings.TrimSpace(run.ExecutionRef)
+	info.ID = session.ID
+	info.Provider = strings.TrimSpace(session.ProviderName)
+	info.Model = strings.TrimSpace(session.Model)
+	info.ClientRef = strings.TrimSpace(session.ClientRef)
+	info.State = strings.TrimSpace(string(session.State))
+	info.Metadata = maps.Clone(session.Metadata)
+	info.CreatedBy = agentActorInfoFromCore(session.CreatedBy)
+	info.CreatedAt = session.CreatedAt
+	info.UpdatedAt = session.UpdatedAt
+	info.LastTurnAt = session.LastTurnAt
 	return info
 }
 
-func agentRunEventInfoFromCore(event *coreagent.RunEvent) agentRunEventInfo {
+func agentTurnInfoFromCore(turn *coreagent.Turn) agentTurnInfo {
+	info := agentTurnInfo{}
+	if turn == nil {
+		return info
+	}
+	info.ID = turn.ID
+	info.SessionID = strings.TrimSpace(turn.SessionID)
+	info.Provider = strings.TrimSpace(turn.ProviderName)
+	info.Model = strings.TrimSpace(turn.Model)
+	info.Status = strings.TrimSpace(string(turn.Status))
+	info.Messages = agentMessageInfoFromCore(turn.Messages)
+	info.OutputText = turn.OutputText
+	info.StructuredOutput = maps.Clone(turn.StructuredOutput)
+	info.StatusMessage = turn.StatusMessage
+	info.CreatedBy = agentActorInfoFromCore(turn.CreatedBy)
+	info.CreatedAt = turn.CreatedAt
+	info.StartedAt = turn.StartedAt
+	info.CompletedAt = turn.CompletedAt
+	info.ExecutionRef = strings.TrimSpace(turn.ExecutionRef)
+	return info
+}
+
+func agentTurnEventInfoFromCore(event *coreagent.TurnEvent) agentTurnEventInfo {
 	if event == nil {
-		return agentRunEventInfo{}
+		return agentTurnEventInfo{}
 	}
 	data := maps.Clone(event.Data)
 	if data == nil {
 		data = map[string]any{}
 	}
-	return agentRunEventInfo{
+	return agentTurnEventInfo{
 		ID:         event.ID,
-		RunID:      event.RunID,
+		TurnID:     event.TurnID,
 		Seq:        event.Seq,
 		Type:       strings.TrimSpace(event.Type),
 		Source:     strings.TrimSpace(event.Source),
@@ -733,7 +803,7 @@ func agentInteractionInfoFromCore(interaction *coreagent.Interaction) agentInter
 	}
 	return agentInteractionInfo{
 		ID:         strings.TrimSpace(interaction.ID),
-		RunID:      strings.TrimSpace(interaction.RunID),
+		TurnID:     strings.TrimSpace(interaction.TurnID),
 		Type:       strings.TrimSpace(string(interaction.Type)),
 		State:      strings.TrimSpace(string(interaction.State)),
 		Title:      strings.TrimSpace(interaction.Title),
@@ -745,22 +815,19 @@ func agentInteractionInfoFromCore(interaction *coreagent.Interaction) agentInter
 	}
 }
 
-func (s *Server) writeAgentRunManagerError(w http.ResponseWriter, r *http.Request, runID string, req agentRunCreateRequest, err error) {
-	pluginName, operation := firstAgentToolTarget(req.ToolRefs)
+func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, resource string, id string, toolRefs []agentToolRefRequest, err error) {
+	pluginName, operation := firstAgentToolTarget(toolRefs)
 	switch {
 	case errors.Is(err, agentmanager.ErrAgentNotConfigured),
 		errors.Is(err, agentmanager.ErrAgentProviderRequired),
 		errors.Is(err, agentmanager.ErrAgentProviderNotAvailable),
-		errors.Is(err, agentmanager.ErrAgentRunMetadataNotConfigured),
-		errors.Is(err, agentmanager.ErrAgentRunEventsNotConfigured),
-		errors.Is(err, agentmanager.ErrAgentRunInteractionsNotConfigured),
-		errors.Is(err, agentmanager.ErrAgentRunResumeNotSupported):
+		errors.Is(err, agentmanager.ErrAgentSessionMetadataNotConfigured),
+		errors.Is(err, agentmanager.ErrAgentTurnMetadataNotConfigured):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentSubjectRequired):
 		writeError(w, http.StatusUnauthorized, err.Error())
-	case errors.Is(err, agentmanager.ErrAgentRunCreationInProgress):
-		writeError(w, http.StatusConflict, err.Error())
-	case errors.Is(err, agentmanager.ErrAgentInteractionNotPending):
+	case errors.Is(err, agentmanager.ErrAgentSessionCreationInProgress),
+		errors.Is(err, agentmanager.ErrAgentTurnCreationInProgress):
 		writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentCallerPluginRequired),
 		errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool),
@@ -779,15 +846,15 @@ func (s *Server) writeAgentRunManagerError(w http.ResponseWriter, r *http.Reques
 		errors.Is(err, invocation.ErrUserResolution),
 		errors.Is(err, invocation.ErrInternal),
 		errors.Is(err, core.ErrMCPOnly):
-		s.writeAgentRunTargetError(w, r, pluginName, operation, err)
+		s.writeAgentTargetError(w, r, pluginName, operation, err)
 	case errors.Is(err, core.ErrNotFound):
-		s.writeAgentRunProviderError(r.Context(), w, runID, err)
+		s.writeAgentProviderError(r.Context(), w, resource, id, err)
 	default:
-		s.writeAgentRunProviderError(r.Context(), w, runID, err)
+		s.writeAgentProviderError(r.Context(), w, resource, id, err)
 	}
 }
 
-func (s *Server) writeAgentRunTargetError(w http.ResponseWriter, r *http.Request, pluginName, operation string, err error) {
+func (s *Server) writeAgentTargetError(w http.ResponseWriter, r *http.Request, pluginName, operation string, err error) {
 	switch {
 	case errors.Is(err, invocation.ErrProviderNotFound),
 		errors.Is(err, invocation.ErrOperationNotFound),
@@ -806,15 +873,19 @@ func (s *Server) writeAgentRunTargetError(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func (s *Server) writeAgentRunProviderError(ctx context.Context, w http.ResponseWriter, runID string, err error) {
+func (s *Server) writeAgentProviderError(ctx context.Context, w http.ResponseWriter, resource string, id string, err error) {
+	resource = strings.TrimSpace(resource)
+	if resource == "" {
+		resource = "agent resource"
+	}
 	switch {
 	case errors.Is(err, core.ErrNotFound):
-		writeError(w, http.StatusNotFound, fmt.Sprintf("agent run %q not found", runID))
+		writeError(w, http.StatusNotFound, fmt.Sprintf("%s %q not found", resource, id))
 	case grpcstatus.Code(err) == codes.InvalidArgument:
 		writeError(w, http.StatusBadRequest, grpcstatus.Convert(err).Message())
 	default:
-		slog.ErrorContext(ctx, "agent run provider error", "run_id", runID, "error", err)
-		writeError(w, http.StatusInternalServerError, "agent run request failed")
+		slog.ErrorContext(ctx, "agent provider error", "resource", resource, "id", id, "error", err)
+		writeError(w, http.StatusInternalServerError, "agent request failed")
 	}
 }
 

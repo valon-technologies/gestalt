@@ -8,13 +8,23 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { expect, test } from "bun:test";
 
 import {
+  AgentExecutionStatus,
+  AgentInteractionState,
   AgentInteractionType,
   AgentMessagePartType,
-  AgentRunStatus,
-  CancelAgentProviderRunRequestSchema,
-  ListAgentProviderRunsRequestSchema,
-  ResumeAgentProviderRunRequestSchema,
-  StartAgentProviderRunRequestSchema,
+  AgentSessionState,
+  CancelAgentProviderTurnRequestSchema,
+  CreateAgentProviderSessionRequestSchema,
+  CreateAgentProviderTurnRequestSchema,
+  GetAgentProviderInteractionRequestSchema,
+  GetAgentProviderSessionRequestSchema,
+  GetAgentProviderTurnRequestSchema,
+  ListAgentProviderInteractionsRequestSchema,
+  ListAgentProviderSessionsRequestSchema,
+  ListAgentProviderTurnEventsRequestSchema,
+  ListAgentProviderTurnsRequestSchema,
+  ResolveAgentProviderInteractionRequestSchema,
+  UpdateAgentProviderSessionRequestSchema,
 } from "../gen/v1/agent_pb.ts";
 import {
   BeginLoginRequestSchema,
@@ -1420,11 +1430,139 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
   expect(metadata.kind).toBe(ProtoProviderKind.AGENT);
   expect(metadata.displayName).toBe("Fixture Agent");
 
-  const run = await (agent.startRun as any)(
-    create(StartAgentProviderRunRequestSchema, {
-      runId: "run-123",
-      idempotencyKey: "req-1",
-      providerName: "fixture-agent",
+  const session = await (agent.createSession as any)(
+    create(CreateAgentProviderSessionRequestSchema, {
+      sessionId: "session-canonical-1",
+      idempotencyKey: "session-req-1",
+      model: "gpt-test",
+      clientRef: "cli-session-1",
+      metadata: {
+        source: "runtime-test",
+      },
+      createdBy: {
+        subjectId: "user:user-123",
+        subjectKind: "user",
+        displayName: "Ada",
+        authSource: "api_token",
+      },
+    }),
+  );
+  expect(session.id).toBe("session-canonical-1");
+  expect(session.state).toBe(AgentSessionState.ACTIVE);
+  expect(session.clientRef).toBe("cli-session-1");
+
+  const updatedSession = await (agent.updateSession as any)(
+    create(UpdateAgentProviderSessionRequestSchema, {
+      sessionId: session.id,
+      clientRef: "cli-session-2",
+      state: AgentSessionState.ARCHIVED,
+      metadata: {
+        source: "runtime-test-updated",
+      },
+    }),
+  );
+  expect(updatedSession.clientRef).toBe("cli-session-2");
+  expect(updatedSession.state).toBe(AgentSessionState.ARCHIVED);
+
+  const listedSessions = await (agent.listSessions as any)(
+    create(ListAgentProviderSessionsRequestSchema, {}),
+  );
+  expect(listedSessions.sessions.map((entry: any) => entry.id)).toEqual([
+    "session-canonical-1",
+  ]);
+
+  const fetchedSession = await (agent.getSession as any)(
+    create(GetAgentProviderSessionRequestSchema, {
+      sessionId: session.id,
+    }),
+  );
+  expect(fetchedSession.metadata).toEqual({
+    source: "runtime-test-updated",
+  });
+
+  const turn = await (agent.createTurn as any)(
+    create(CreateAgentProviderTurnRequestSchema, {
+      turnId: "turn-canonical-1",
+      sessionId: session.id,
+      idempotencyKey: "turn-req-1",
+      model: "gpt-test",
+      messages: [
+        {
+          role: "user",
+          text: "Should I continue?",
+        },
+      ],
+      metadata: {
+        requireInteraction: true,
+      },
+      executionRef: "exec-turn-1",
+    }),
+  );
+  expect(turn.id).toBe("turn-canonical-1");
+  expect(turn.status).toBe(AgentExecutionStatus.WAITING_FOR_INPUT);
+  expect(turn.sessionId).toBe(session.id);
+
+  const listedTurns = await (agent.listTurns as any)(
+    create(ListAgentProviderTurnsRequestSchema, {
+      sessionId: session.id,
+    }),
+  );
+  expect(listedTurns.turns.map((entry: any) => entry.id)).toEqual([
+    "turn-canonical-1",
+  ]);
+
+  const fetchedTurn = await (agent.getTurn as any)(
+    create(GetAgentProviderTurnRequestSchema, {
+      turnId: turn.id,
+    }),
+  );
+  expect(fetchedTurn.statusMessage).toBe("waiting for input");
+
+  const listedInteractions = await (agent.listInteractions as any)(
+    create(ListAgentProviderInteractionsRequestSchema, {
+      turnId: turn.id,
+    }),
+  );
+  expect(listedInteractions.interactions).toHaveLength(1);
+  expect(listedInteractions.interactions[0]?.turnId).toBe(turn.id);
+
+  const fetchedInteraction = await (agent.getInteraction as any)(
+    create(GetAgentProviderInteractionRequestSchema, {
+      interactionId: listedInteractions.interactions[0]?.id,
+    }),
+  );
+  expect(fetchedInteraction.state).toBe(AgentInteractionState.PENDING);
+
+  const resolvedInteraction = await (agent.resolveInteraction as any)(
+    create(ResolveAgentProviderInteractionRequestSchema, {
+      interactionId: fetchedInteraction.id,
+      resolution: {
+        approved: true,
+      },
+    }),
+  );
+  expect(resolvedInteraction.state).toBe(AgentInteractionState.RESOLVED);
+
+  const listedEvents = await (agent.listTurnEvents as any)(
+    create(ListAgentProviderTurnEventsRequestSchema, {
+      turnId: turn.id,
+      afterSeq: 0n,
+      limit: 10,
+    }),
+  );
+  expect(listedEvents.events.map((entry: any) => entry.type)).toEqual([
+    "turn.started",
+    "interaction.requested",
+    "interaction.resolved",
+    "assistant.completed",
+    "turn.completed",
+  ]);
+
+  const completedTurn = await (agent.createTurn as any)(
+    create(CreateAgentProviderTurnRequestSchema, {
+      turnId: "turn-canonical-2",
+      sessionId: session.id,
+      idempotencyKey: "turn-req-2",
       model: "gpt-test",
       messages: [
         {
@@ -1447,55 +1585,49 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
         displayName: "Ada",
         authSource: "api_token",
       },
-      sessionRef: "session-123",
-      executionRef: "exec-123",
+      executionRef: "exec-turn-2",
     }),
   );
-  expect(run.id).toBe("run-123");
-  expect(run.providerName).toBe("fixture-agent");
-  expect(run.model).toBe("gpt-test");
-  expect(run.status).toBe(AgentRunStatus.PENDING);
-  expect(run.outputText).toBe("echo:Summarize deployment status");
-  expect(run.createdBy?.subjectId).toBe("user:user-123");
-  expect(run.messages[0]?.parts[0]?.type).toBe(AgentMessagePartType.TEXT);
-  expect(run.messages[0]?.metadata).toEqual({ priority: "high" });
+  expect(completedTurn.id).toBe("turn-canonical-2");
+  expect(completedTurn.providerName).toBe("fixture-agent");
+  expect(completedTurn.model).toBe("gpt-test");
+  expect(completedTurn.status).toBe(AgentExecutionStatus.SUCCEEDED);
+  expect(completedTurn.outputText).toBe("echo:Summarize deployment status");
+  expect(completedTurn.createdBy?.subjectId).toBe("user:user-123");
+  expect(completedTurn.messages[0]?.parts[0]?.type).toBe(
+    AgentMessagePartType.TEXT,
+  );
+  expect(completedTurn.messages[0]?.metadata).toEqual({ priority: "high" });
 
   const capabilities = await (agent.getCapabilities as any)({});
   expect(capabilities.streamingText).toBe(true);
   expect(capabilities.toolCalls).toBe(true);
-  expect(capabilities.approvals).toBe(true);
+  expect(capabilities.interactions).toBe(true);
+  expect(capabilities.resumableTurns).toBe(true);
 
-  const listed = await (agent.listRuns as any)(
-    create(ListAgentProviderRunsRequestSchema, {}),
-  );
-  expect(listed.runs.map((entry: any) => entry.id)).toEqual(["run-123"]);
-
-  const resumed = await (agent.resumeRun as any)(
-    create(ResumeAgentProviderRunRequestSchema, {
-      runId: "run-123",
-      interactionId: "interaction-1",
-      resolution: {
-        approved: true,
-        type: AgentInteractionType.APPROVAL,
-      },
+  const allTurns = await (agent.listTurns as any)(
+    create(ListAgentProviderTurnsRequestSchema, {
+      sessionId: session.id,
     }),
   );
-  expect(resumed.status).toBe(AgentRunStatus.SUCCEEDED);
-  expect(resumed.statusMessage).toBe("interaction-1");
+  expect(allTurns.turns.map((entry: any) => entry.id)).toEqual([
+    "turn-canonical-1",
+    "turn-canonical-2",
+  ]);
 
-  const canceled = await (agent.cancelRun as any)(
-    create(CancelAgentProviderRunRequestSchema, {
-      runId: "run-123",
+  const canceledTurn = await (agent.cancelTurn as any)(
+    create(CancelAgentProviderTurnRequestSchema, {
+      turnId: "turn-canonical-2",
       reason: "user requested cancellation",
     }),
   );
-  expect(canceled.status).toBe(AgentRunStatus.CANCELED);
-  expect(canceled.statusMessage).toBe("user requested cancellation");
+  expect(canceledTurn.status).toBe(AgentExecutionStatus.CANCELED);
+  expect(canceledTurn.statusMessage).toBe("user requested cancellation");
 
   const refreshedMetadata = await (runtime.getProviderIdentity as any)(
     create(EmptySchema, {}),
   );
-  expect(refreshedMetadata.warnings).toEqual(["canceled-runs:1"]);
+  expect(refreshedMetadata.warnings).toEqual(["canceled-turns:1"]);
 });
 
 test("integration provider request context includes workflow metadata", async () => {

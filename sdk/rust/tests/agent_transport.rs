@@ -10,14 +10,13 @@ use gestalt::proto::v1::agent_provider_client::AgentProviderClient;
 use gestalt::proto::v1::agent_provider_server::AgentProvider as AgentProviderGrpc;
 use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use gestalt::proto::v1::{
-    self as pb, AgentInteractionState, AgentInteractionType, AgentMessage, AgentMessagePart,
-    AgentMessagePartType, AgentRunStatus, BoundAgentRun, ConfigureProviderRequest, ProviderKind,
-    StartAgentProviderRunRequest,
+    self as pb, AgentExecutionStatus, AgentInteractionState, AgentInteractionType, AgentMessage,
+    AgentMessagePart, AgentMessagePartType, AgentSessionState, ConfigureProviderRequest,
+    ProviderKind,
 };
 use gestalt::{AgentHost, AgentProvider, RuntimeMetadata};
 use hyper_util::rt::tokio::TokioIo;
-use tokio::net::UnixListener;
-use tokio::net::UnixStream;
+use tokio::net::{UnixListener, UnixStream};
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::{Endpoint, Server};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
@@ -29,10 +28,7 @@ struct TestAgentProvider {
 }
 
 #[derive(Default, Clone)]
-struct TestAgentHostService {
-    events: Arc<Mutex<Vec<String>>>,
-    interactions: Arc<Mutex<Vec<String>>>,
-}
+struct TestAgentHostService;
 
 #[gestalt::async_trait]
 impl AgentProvider for TestAgentProvider {
@@ -61,46 +57,253 @@ impl AgentProvider for TestAgentProvider {
 
 #[tonic::async_trait]
 impl AgentProviderGrpc for TestAgentProvider {
-    async fn start_run(
+    async fn create_session(
         &self,
-        request: GrpcRequest<StartAgentProviderRunRequest>,
-    ) -> std::result::Result<GrpcResponse<BoundAgentRun>, Status> {
+        request: GrpcRequest<pb::CreateAgentProviderSessionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
         let request = request.into_inner();
-        Ok(GrpcResponse::new(BoundAgentRun {
-            id: if request.run_id.is_empty() {
-                request.idempotency_key
-            } else {
-                request.run_id
-            },
-            provider_name: request.provider_name,
+        Ok(GrpcResponse::new(pb::AgentSession {
+            id: request.session_id,
+            provider_name: configured_name(self),
             model: request.model,
-            status: AgentRunStatus::WaitingForInput as i32,
+            client_ref: request.client_ref,
+            state: AgentSessionState::Active as i32,
+            metadata: request.metadata,
+            created_by: request.created_by,
+            created_at: Some(helpers::timestamp_now()),
+            updated_at: Some(helpers::timestamp_now()),
+            ..Default::default()
+        }))
+    }
+
+    async fn get_session(
+        &self,
+        request: GrpcRequest<pb::GetAgentProviderSessionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(pb::AgentSession {
+            id: request.session_id,
+            provider_name: configured_name(self),
+            model: "gpt-5.1".to_string(),
+            client_ref: "cli-session-1".to_string(),
+            state: AgentSessionState::Archived as i32,
+            metadata: Some(helpers::struct_from_json(serde_json::json!({
+                "source": "rust-test"
+            }))),
+            created_at: Some(helpers::timestamp_now()),
+            updated_at: Some(helpers::timestamp_now()),
+            last_turn_at: Some(helpers::timestamp_now()),
+            ..Default::default()
+        }))
+    }
+
+    async fn list_sessions(
+        &self,
+        _request: GrpcRequest<pb::ListAgentProviderSessionsRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderSessionsResponse>, Status> {
+        Ok(GrpcResponse::new(pb::ListAgentProviderSessionsResponse {
+            sessions: vec![pb::AgentSession {
+                id: "session-1".to_string(),
+                provider_name: configured_name(self),
+                model: "gpt-5.1".to_string(),
+                client_ref: "cli-session-1".to_string(),
+                state: AgentSessionState::Archived as i32,
+                created_at: Some(helpers::timestamp_now()),
+                updated_at: Some(helpers::timestamp_now()),
+                ..Default::default()
+            }],
+        }))
+    }
+
+    async fn update_session(
+        &self,
+        request: GrpcRequest<pb::UpdateAgentProviderSessionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(pb::AgentSession {
+            id: request.session_id,
+            provider_name: configured_name(self),
+            model: "gpt-5.1".to_string(),
+            client_ref: request.client_ref,
+            state: request.state,
+            metadata: request.metadata,
+            created_at: Some(helpers::timestamp_now()),
+            updated_at: Some(helpers::timestamp_now()),
+            ..Default::default()
+        }))
+    }
+
+    async fn create_turn(
+        &self,
+        request: GrpcRequest<pb::CreateAgentProviderTurnRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(pb::AgentTurn {
+            id: request.turn_id,
+            session_id: request.session_id,
+            provider_name: configured_name(self),
+            model: request.model,
+            status: AgentExecutionStatus::WaitingForInput as i32,
             messages: request.messages,
-            session_ref: request.session_ref,
+            output_text: "echo:Plan it".to_string(),
+            status_message: "waiting for input".to_string(),
+            created_by: request.created_by,
+            created_at: Some(helpers::timestamp_now()),
+            started_at: Some(helpers::timestamp_now()),
             execution_ref: request.execution_ref,
             ..Default::default()
         }))
     }
 
-    async fn get_run(
+    async fn get_turn(
         &self,
-        _request: GrpcRequest<pb::GetAgentProviderRunRequest>,
-    ) -> std::result::Result<GrpcResponse<BoundAgentRun>, Status> {
-        Err(Status::unimplemented("not used"))
+        request: GrpcRequest<pb::GetAgentProviderTurnRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(pb::AgentTurn {
+            id: request.turn_id,
+            session_id: "session-1".to_string(),
+            provider_name: configured_name(self),
+            model: "gpt-5.1".to_string(),
+            status: AgentExecutionStatus::WaitingForInput as i32,
+            output_text: "echo:Plan it".to_string(),
+            status_message: "waiting for input".to_string(),
+            created_at: Some(helpers::timestamp_now()),
+            started_at: Some(helpers::timestamp_now()),
+            ..Default::default()
+        }))
     }
 
-    async fn list_runs(
+    async fn list_turns(
         &self,
-        _request: GrpcRequest<pb::ListAgentProviderRunsRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderRunsResponse>, Status> {
-        Err(Status::unimplemented("not used"))
+        request: GrpcRequest<pb::ListAgentProviderTurnsRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderTurnsResponse>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(pb::ListAgentProviderTurnsResponse {
+            turns: vec![pb::AgentTurn {
+                id: "turn-1".to_string(),
+                session_id: request.session_id,
+                provider_name: configured_name(self),
+                model: "gpt-5.1".to_string(),
+                status: AgentExecutionStatus::Succeeded as i32,
+                status_message: "done".to_string(),
+                created_at: Some(helpers::timestamp_now()),
+                started_at: Some(helpers::timestamp_now()),
+                completed_at: Some(helpers::timestamp_now()),
+                ..Default::default()
+            }],
+        }))
     }
 
-    async fn cancel_run(
+    async fn cancel_turn(
         &self,
-        _request: GrpcRequest<pb::CancelAgentProviderRunRequest>,
-    ) -> std::result::Result<GrpcResponse<BoundAgentRun>, Status> {
-        Err(Status::unimplemented("not used"))
+        request: GrpcRequest<pb::CancelAgentProviderTurnRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(pb::AgentTurn {
+            id: request.turn_id,
+            session_id: "session-1".to_string(),
+            provider_name: configured_name(self),
+            model: "gpt-5.1".to_string(),
+            status: AgentExecutionStatus::Canceled as i32,
+            status_message: request.reason,
+            created_at: Some(helpers::timestamp_now()),
+            started_at: Some(helpers::timestamp_now()),
+            completed_at: Some(helpers::timestamp_now()),
+            ..Default::default()
+        }))
+    }
+
+    async fn list_turn_events(
+        &self,
+        request: GrpcRequest<pb::ListAgentProviderTurnEventsRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderTurnEventsResponse>, Status> {
+        let request = request.into_inner();
+        let provider_name = configured_name(self);
+        Ok(GrpcResponse::new(pb::ListAgentProviderTurnEventsResponse {
+            events: vec![
+                pb::AgentTurnEvent {
+                    id: format!("{}-event-1", request.turn_id),
+                    turn_id: request.turn_id.clone(),
+                    seq: 1,
+                    r#type: "turn.started".to_string(),
+                    source: provider_name.clone(),
+                    visibility: "private".to_string(),
+                    created_at: Some(helpers::timestamp_now()),
+                    ..Default::default()
+                },
+                pb::AgentTurnEvent {
+                    id: format!("{}-event-2", request.turn_id),
+                    turn_id: request.turn_id,
+                    seq: 2,
+                    r#type: "interaction.requested".to_string(),
+                    source: provider_name,
+                    visibility: "private".to_string(),
+                    created_at: Some(helpers::timestamp_now()),
+                    ..Default::default()
+                },
+            ],
+        }))
+    }
+
+    async fn get_interaction(
+        &self,
+        request: GrpcRequest<pb::GetAgentProviderInteractionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentInteraction>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(pb::AgentInteraction {
+            id: request.interaction_id,
+            turn_id: "turn-1".to_string(),
+            session_id: "session-1".to_string(),
+            r#type: AgentInteractionType::Approval as i32,
+            state: AgentInteractionState::Pending as i32,
+            title: "Approve command".to_string(),
+            prompt: "Run git status?".to_string(),
+            created_at: Some(helpers::timestamp_now()),
+            ..Default::default()
+        }))
+    }
+
+    async fn list_interactions(
+        &self,
+        request: GrpcRequest<pb::ListAgentProviderInteractionsRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderInteractionsResponse>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(
+            pb::ListAgentProviderInteractionsResponse {
+                interactions: vec![pb::AgentInteraction {
+                    id: "interaction-1".to_string(),
+                    turn_id: request.turn_id,
+                    session_id: "session-1".to_string(),
+                    r#type: AgentInteractionType::Approval as i32,
+                    state: AgentInteractionState::Pending as i32,
+                    title: "Approve command".to_string(),
+                    prompt: "Run git status?".to_string(),
+                    created_at: Some(helpers::timestamp_now()),
+                    ..Default::default()
+                }],
+            },
+        ))
+    }
+
+    async fn resolve_interaction(
+        &self,
+        request: GrpcRequest<pb::ResolveAgentProviderInteractionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentInteraction>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(pb::AgentInteraction {
+            id: request.interaction_id,
+            turn_id: "turn-1".to_string(),
+            session_id: "session-1".to_string(),
+            r#type: AgentInteractionType::Approval as i32,
+            state: AgentInteractionState::Resolved as i32,
+            title: "Approve command".to_string(),
+            prompt: "Run git status?".to_string(),
+            resolution: request.resolution,
+            created_at: Some(helpers::timestamp_now()),
+            resolved_at: Some(helpers::timestamp_now()),
+            ..Default::default()
+        }))
     }
 
     async fn get_capabilities(
@@ -112,23 +315,9 @@ impl AgentProviderGrpc for TestAgentProvider {
             tool_calls: true,
             parallel_tool_calls: false,
             structured_output: true,
-            session_continuation: true,
-            approvals: true,
-            resumable_runs: true,
+            interactions: true,
+            resumable_turns: true,
             reasoning_summaries: false,
-        }))
-    }
-
-    async fn resume_run(
-        &self,
-        request: GrpcRequest<pb::ResumeAgentProviderRunRequest>,
-    ) -> std::result::Result<GrpcResponse<BoundAgentRun>, Status> {
-        let request = request.into_inner();
-        Ok(GrpcResponse::new(BoundAgentRun {
-            id: request.run_id,
-            status: AgentRunStatus::Succeeded as i32,
-            status_message: request.interaction_id,
-            ..Default::default()
         }))
     }
 }
@@ -143,45 +332,9 @@ impl AgentHostRpc for TestAgentHostService {
         Ok(GrpcResponse::new(pb::ExecuteAgentToolResponse {
             status: 207,
             body: format!(
-                "{}:{}:{}",
-                request.run_id, request.tool_call_id, request.tool_id
+                "{}:{}:{}:{}",
+                request.session_id, request.turn_id, request.tool_call_id, request.tool_id
             ),
-        }))
-    }
-
-    async fn emit_event(
-        &self,
-        request: GrpcRequest<pb::EmitAgentEventRequest>,
-    ) -> std::result::Result<GrpcResponse<()>, Status> {
-        let request = request.into_inner();
-        self.events.lock().expect("events lock").push(format!(
-            "{}:{}:{}",
-            request.run_id, request.r#type, request.visibility
-        ));
-        Ok(GrpcResponse::new(()))
-    }
-
-    async fn request_interaction(
-        &self,
-        request: GrpcRequest<pb::RequestAgentInteractionRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::AgentInteraction>, Status> {
-        let request = request.into_inner();
-        self.interactions
-            .lock()
-            .expect("interactions lock")
-            .push(format!(
-                "{}:{}:{}",
-                request.run_id, request.r#type, request.title
-            ));
-        Ok(GrpcResponse::new(pb::AgentInteraction {
-            id: "interaction-1".to_string(),
-            run_id: request.run_id,
-            r#type: request.r#type,
-            state: AgentInteractionState::Pending as i32,
-            title: request.title,
-            prompt: request.prompt,
-            request: request.request,
-            ..Default::default()
         }))
     }
 }
@@ -239,11 +392,67 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
         .expect("configure provider");
 
     let mut client = AgentProviderClient::new(channel);
-    let started = client
-        .start_run(StartAgentProviderRunRequest {
-            run_id: "run-42".to_string(),
-            idempotency_key: "idem-42".to_string(),
-            provider_name: "openai".to_string(),
+    let session = client
+        .create_session(pb::CreateAgentProviderSessionRequest {
+            session_id: "session-1".to_string(),
+            idempotency_key: "session-req-1".to_string(),
+            model: "gpt-5.1".to_string(),
+            client_ref: "cli-session-1".to_string(),
+            metadata: Some(helpers::struct_from_json(serde_json::json!({
+                "source": "rust-test"
+            }))),
+            ..Default::default()
+        })
+        .await
+        .expect("create session")
+        .into_inner();
+    assert_eq!(session.id, "session-1");
+    assert_eq!(
+        AgentSessionState::try_from(session.state)
+            .expect("valid session state")
+            .as_str_name(),
+        "AGENT_SESSION_STATE_ACTIVE"
+    );
+
+    let listed_sessions = client
+        .list_sessions(pb::ListAgentProviderSessionsRequest {})
+        .await
+        .expect("list sessions")
+        .into_inner();
+    assert_eq!(listed_sessions.sessions.len(), 1);
+
+    let fetched_session = client
+        .get_session(pb::GetAgentProviderSessionRequest {
+            session_id: "session-1".to_string(),
+        })
+        .await
+        .expect("get session")
+        .into_inner();
+    assert_eq!(
+        AgentSessionState::try_from(fetched_session.state)
+            .expect("valid fetched session state")
+            .as_str_name(),
+        "AGENT_SESSION_STATE_ARCHIVED"
+    );
+
+    let updated_session = client
+        .update_session(pb::UpdateAgentProviderSessionRequest {
+            session_id: "session-1".to_string(),
+            client_ref: "cli-session-2".to_string(),
+            state: AgentSessionState::Archived as i32,
+            metadata: Some(helpers::struct_from_json(serde_json::json!({
+                "source": "rust-test-updated"
+            }))),
+        })
+        .await
+        .expect("update session")
+        .into_inner();
+    assert_eq!(updated_session.client_ref, "cli-session-2");
+
+    let created_turn = client
+        .create_turn(pb::CreateAgentProviderTurnRequest {
+            turn_id: "turn-1".to_string(),
+            session_id: "session-1".to_string(),
             model: "gpt-5.1".to_string(),
             messages: vec![AgentMessage {
                 role: "user".to_string(),
@@ -257,40 +466,99 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
                     "priority": "high"
                 }))),
             }],
-            session_ref: "sess-1".to_string(),
-            execution_ref: "exec-1".to_string(),
+            execution_ref: "exec-turn-1".to_string(),
             ..Default::default()
         })
         .await
-        .expect("start run")
+        .expect("create turn")
         .into_inner();
-
-    assert_eq!(started.id, "run-42");
-    assert_eq!(started.provider_name, "openai");
-    assert_eq!(started.model, "gpt-5.1");
+    assert_eq!(created_turn.id, "turn-1");
     assert_eq!(
-        AgentRunStatus::try_from(started.status)
-            .expect("valid agent run status")
+        AgentExecutionStatus::try_from(created_turn.status)
+            .expect("valid turn status")
             .as_str_name(),
-        "AGENT_RUN_STATUS_WAITING_FOR_INPUT"
+        "AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT"
     );
+    assert_eq!(created_turn.messages[0].parts.len(), 1);
+
+    let listed_turns = client
+        .list_turns(pb::ListAgentProviderTurnsRequest {
+            session_id: "session-1".to_string(),
+        })
+        .await
+        .expect("list turns")
+        .into_inner();
+    assert_eq!(listed_turns.turns.len(), 1);
+
+    let fetched_turn = client
+        .get_turn(pb::GetAgentProviderTurnRequest {
+            turn_id: "turn-1".to_string(),
+        })
+        .await
+        .expect("get turn")
+        .into_inner();
+    assert_eq!(fetched_turn.status_message, "waiting for input");
+
+    let turn_events = client
+        .list_turn_events(pb::ListAgentProviderTurnEventsRequest {
+            turn_id: "turn-1".to_string(),
+            after_seq: 0,
+            limit: 10,
+        })
+        .await
+        .expect("list turn events")
+        .into_inner();
     assert_eq!(
-        started.messages,
-        vec![AgentMessage {
-            role: "user".to_string(),
-            text: "Plan it".to_string(),
-            parts: vec![AgentMessagePart {
-                r#type: AgentMessagePartType::Text as i32,
-                text: "Plan it".to_string(),
-                ..Default::default()
-            }],
-            metadata: Some(helpers::struct_from_json(serde_json::json!({
-                "priority": "high"
-            }))),
-        }]
+        turn_events
+            .events
+            .iter()
+            .map(|event| event.r#type.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            "turn.started".to_string(),
+            "interaction.requested".to_string()
+        ]
     );
-    assert_eq!(started.session_ref, "sess-1");
-    assert_eq!(started.execution_ref, "exec-1");
+
+    let listed_interactions = client
+        .list_interactions(pb::ListAgentProviderInteractionsRequest {
+            turn_id: "turn-1".to_string(),
+        })
+        .await
+        .expect("list interactions")
+        .into_inner();
+    assert_eq!(listed_interactions.interactions.len(), 1);
+
+    let fetched_interaction = client
+        .get_interaction(pb::GetAgentProviderInteractionRequest {
+            interaction_id: "interaction-1".to_string(),
+        })
+        .await
+        .expect("get interaction")
+        .into_inner();
+    assert_eq!(
+        AgentInteractionState::try_from(fetched_interaction.state)
+            .expect("valid interaction state")
+            .as_str_name(),
+        "AGENT_INTERACTION_STATE_PENDING"
+    );
+
+    let resolved_interaction = client
+        .resolve_interaction(pb::ResolveAgentProviderInteractionRequest {
+            interaction_id: "interaction-1".to_string(),
+            resolution: Some(helpers::struct_from_json(serde_json::json!({
+                "approved": true
+            }))),
+        })
+        .await
+        .expect("resolve interaction")
+        .into_inner();
+    assert_eq!(
+        AgentInteractionState::try_from(resolved_interaction.state)
+            .expect("valid resolved interaction state")
+            .as_str_name(),
+        "AGENT_INTERACTION_STATE_RESOLVED"
+    );
 
     let capabilities = client
         .get_capabilities(pb::GetAgentProviderCapabilitiesRequest {})
@@ -299,26 +567,8 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
         .into_inner();
     assert!(capabilities.streaming_text);
     assert!(capabilities.tool_calls);
-    assert!(capabilities.approvals);
-
-    let resumed = client
-        .resume_run(pb::ResumeAgentProviderRunRequest {
-            run_id: "run-42".to_string(),
-            interaction_id: "interaction-1".to_string(),
-            resolution: Some(helpers::struct_from_json(serde_json::json!({
-                "approved": true
-            }))),
-        })
-        .await
-        .expect("resume run")
-        .into_inner();
-    assert_eq!(
-        AgentRunStatus::try_from(resumed.status)
-            .expect("valid resumed run status")
-            .as_str_name(),
-        "AGENT_RUN_STATUS_SUCCEEDED"
-    );
-    assert_eq!(resumed.status_message, "interaction-1");
+    assert!(capabilities.interactions);
+    assert!(capabilities.resumable_turns);
 
     assert_eq!(
         *provider
@@ -338,9 +588,7 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     let host_socket = helpers::temp_socket("gestalt-rust-agent-host.sock");
     let _agent_host_env =
         helpers::EnvGuard::set(gestalt::ENV_AGENT_HOST_SOCKET, host_socket.as_os_str());
-    let host_service = TestAgentHostService::default();
-    let events = Arc::clone(&host_service.events);
-    let interactions = Arc::clone(&host_service.interactions);
+    let host_service = TestAgentHostService;
 
     let host_socket_for_task = host_socket.clone();
     let host_task = tokio::spawn(async move {
@@ -357,7 +605,8 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     let mut host = AgentHost::connect().await.expect("connect agent host");
     let invoked = host
         .execute_tool(pb::ExecuteAgentToolRequest {
-            run_id: "run-42".to_string(),
+            session_id: "session-1".to_string(),
+            turn_id: "turn-1".to_string(),
             tool_call_id: "call-7".to_string(),
             tool_id: "lookup".to_string(),
             arguments: Some(helpers::struct_from_json(serde_json::json!({
@@ -367,52 +616,16 @@ async fn agent_host_client_round_trip_over_unix_socket() {
         .await
         .expect("execute tool");
     assert_eq!(invoked.status, 207);
-    assert_eq!(invoked.body, "run-42:call-7:lookup");
-
-    host.emit_event(pb::EmitAgentEventRequest {
-        run_id: "run-42".to_string(),
-        r#type: "agent.tool_call.started".to_string(),
-        visibility: "public".to_string(),
-        data: Some(helpers::struct_from_json(serde_json::json!({
-            "phase": "tool_call",
-            "attempt": 1
-        }))),
-    })
-    .await
-    .expect("emit event");
-    let interaction = host
-        .request_interaction(pb::RequestAgentInteractionRequest {
-            run_id: "run-42".to_string(),
-            r#type: AgentInteractionType::Approval as i32,
-            title: "Approve command".to_string(),
-            prompt: "Run git status?".to_string(),
-            request: Some(helpers::struct_from_json(serde_json::json!({
-                "command": ["git", "status"]
-            }))),
-        })
-        .await
-        .expect("request interaction");
-    assert_eq!(interaction.id, "interaction-1");
-    assert_eq!(
-        AgentInteractionState::try_from(interaction.state)
-            .expect("valid interaction state")
-            .as_str_name(),
-        "AGENT_INTERACTION_STATE_PENDING"
-    );
-    assert_eq!(
-        *events.lock().expect("events lock"),
-        vec!["run-42:agent.tool_call.started:public".to_string()]
-    );
-    assert_eq!(
-        *interactions.lock().expect("interactions lock"),
-        vec![format!(
-            "{}:{}:{}",
-            "run-42",
-            AgentInteractionType::Approval as i32,
-            "Approve command"
-        )]
-    );
+    assert_eq!(invoked.body, "session-1:turn-1:call-7:lookup");
 
     host_task.abort();
     let _ = host_task.await;
+}
+
+fn configured_name(provider: &TestAgentProvider) -> String {
+    provider
+        .configured_name
+        .lock()
+        .expect("configured_name lock")
+        .clone()
 }

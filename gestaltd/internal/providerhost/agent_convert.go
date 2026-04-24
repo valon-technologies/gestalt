@@ -7,24 +7,24 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 )
 
-func agentRunStatusFromProto(status proto.AgentRunStatus) (coreagent.RunStatus, error) {
+func agentExecutionStatusFromProto(status proto.AgentExecutionStatus) (coreagent.ExecutionStatus, error) {
 	switch status {
-	case proto.AgentRunStatus_AGENT_RUN_STATUS_UNSPECIFIED:
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED:
 		return "", nil
-	case proto.AgentRunStatus_AGENT_RUN_STATUS_PENDING:
-		return coreagent.RunStatusPending, nil
-	case proto.AgentRunStatus_AGENT_RUN_STATUS_RUNNING:
-		return coreagent.RunStatusRunning, nil
-	case proto.AgentRunStatus_AGENT_RUN_STATUS_SUCCEEDED:
-		return coreagent.RunStatusSucceeded, nil
-	case proto.AgentRunStatus_AGENT_RUN_STATUS_FAILED:
-		return coreagent.RunStatusFailed, nil
-	case proto.AgentRunStatus_AGENT_RUN_STATUS_CANCELED:
-		return coreagent.RunStatusCanceled, nil
-	case proto.AgentRunStatus_AGENT_RUN_STATUS_WAITING_FOR_INPUT:
-		return coreagent.RunStatusWaitingForInput, nil
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING:
+		return coreagent.ExecutionStatusPending, nil
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING:
+		return coreagent.ExecutionStatusRunning, nil
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED:
+		return coreagent.ExecutionStatusSucceeded, nil
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED:
+		return coreagent.ExecutionStatusFailed, nil
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED:
+		return coreagent.ExecutionStatusCanceled, nil
+	case proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT:
+		return coreagent.ExecutionStatusWaitingForInput, nil
 	default:
-		return "", fmt.Errorf("unknown agent run status %v", status)
+		return "", fmt.Errorf("unknown agent execution status %v", status)
 	}
 }
 
@@ -184,95 +184,205 @@ func agentToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.Tool
 	}
 }
 
-func agentRunFromProto(run *proto.BoundAgentRun) (*coreagent.Run, error) {
-	if run == nil {
-		return nil, nil
-	}
-	status, err := agentRunStatusFromProto(run.GetStatus())
-	if err != nil {
-		return nil, err
-	}
-	return &coreagent.Run{
-		ID:               run.GetId(),
-		ProviderName:     run.GetProviderName(),
-		Model:            run.GetModel(),
-		Status:           status,
-		Messages:         agentMessagesFromProto(run.GetMessages()),
-		OutputText:       run.GetOutputText(),
-		StructuredOutput: mapFromStruct(run.GetStructuredOutput()),
-		StatusMessage:    run.GetStatusMessage(),
-		SessionRef:       run.GetSessionRef(),
-		CreatedBy:        agentActorFromProto(run.GetCreatedBy()),
-		CreatedAt:        timeFromProto(run.GetCreatedAt()),
-		StartedAt:        timeFromProto(run.GetStartedAt()),
-		CompletedAt:      timeFromProto(run.GetCompletedAt()),
-		ExecutionRef:     run.GetExecutionRef(),
-	}, nil
-}
-
-func agentRunStatusToProto(status coreagent.RunStatus) proto.AgentRunStatus {
+func agentExecutionStatusToProto(status coreagent.ExecutionStatus) proto.AgentExecutionStatus {
 	switch status {
 	case "":
-		return proto.AgentRunStatus_AGENT_RUN_STATUS_UNSPECIFIED
-	case coreagent.RunStatusPending:
-		return proto.AgentRunStatus_AGENT_RUN_STATUS_PENDING
-	case coreagent.RunStatusRunning:
-		return proto.AgentRunStatus_AGENT_RUN_STATUS_RUNNING
-	case coreagent.RunStatusSucceeded:
-		return proto.AgentRunStatus_AGENT_RUN_STATUS_SUCCEEDED
-	case coreagent.RunStatusFailed:
-		return proto.AgentRunStatus_AGENT_RUN_STATUS_FAILED
-	case coreagent.RunStatusCanceled:
-		return proto.AgentRunStatus_AGENT_RUN_STATUS_CANCELED
-	case coreagent.RunStatusWaitingForInput:
-		return proto.AgentRunStatus_AGENT_RUN_STATUS_WAITING_FOR_INPUT
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED
+	case coreagent.ExecutionStatusPending:
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING
+	case coreagent.ExecutionStatusRunning:
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING
+	case coreagent.ExecutionStatusSucceeded:
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED
+	case coreagent.ExecutionStatusFailed:
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED
+	case coreagent.ExecutionStatusCanceled:
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED
+	case coreagent.ExecutionStatusWaitingForInput:
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT
 	default:
-		return proto.AgentRunStatus_AGENT_RUN_STATUS_UNSPECIFIED
+		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED
 	}
 }
 
-func agentRunToProto(run *coreagent.Run) (*proto.BoundAgentRun, error) {
-	if run == nil {
-		return nil, nil
+func agentSessionStateFromProto(state proto.AgentSessionState) (coreagent.SessionState, error) {
+	switch state {
+	case proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED:
+		return "", nil
+	case proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE:
+		return coreagent.SessionStateActive, nil
+	case proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED:
+		return coreagent.SessionStateArchived, nil
+	default:
+		return "", fmt.Errorf("unknown agent session state %v", state)
 	}
-	messages, err := agentMessagesToProto(run.Messages)
-	if err != nil {
-		return nil, fmt.Errorf("agent messages: %w", err)
-	}
-	structuredOutput, err := structFromMap(run.StructuredOutput)
-	if err != nil {
-		return nil, fmt.Errorf("agent structured output: %w", err)
-	}
-	return &proto.BoundAgentRun{
-		Id:               run.ID,
-		ProviderName:     run.ProviderName,
-		Model:            run.Model,
-		Status:           agentRunStatusToProto(run.Status),
-		Messages:         messages,
-		OutputText:       run.OutputText,
-		StructuredOutput: structuredOutput,
-		StatusMessage:    run.StatusMessage,
-		SessionRef:       run.SessionRef,
-		CreatedBy:        agentActorToProto(run.CreatedBy),
-		CreatedAt:        timeToProto(run.CreatedAt),
-		StartedAt:        timeToProto(run.StartedAt),
-		CompletedAt:      timeToProto(run.CompletedAt),
-		ExecutionRef:     run.ExecutionRef,
-	}, nil
 }
 
-func managedAgentRunToProto(run *coreagent.ManagedRun) (*proto.ManagedAgentRun, error) {
-	if run == nil {
+func agentSessionStateToProto(state coreagent.SessionState) proto.AgentSessionState {
+	switch state {
+	case "":
+		return proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED
+	case coreagent.SessionStateActive:
+		return proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE
+	case coreagent.SessionStateArchived:
+		return proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED
+	default:
+		return proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED
+	}
+}
+
+func agentSessionFromProto(session *proto.AgentSession) (*coreagent.Session, error) {
+	if session == nil {
 		return nil, nil
 	}
-	encodedRun, err := agentRunToProto(run.Run)
+	state, err := agentSessionStateFromProto(session.GetState())
 	if err != nil {
 		return nil, err
 	}
-	return &proto.ManagedAgentRun{
-		ProviderName: run.ProviderName,
-		Run:          encodedRun,
+	return &coreagent.Session{
+		ID:           session.GetId(),
+		ProviderName: session.GetProviderName(),
+		Model:        session.GetModel(),
+		ClientRef:    session.GetClientRef(),
+		State:        state,
+		Metadata:     mapFromStruct(session.GetMetadata()),
+		CreatedBy:    agentActorFromProto(session.GetCreatedBy()),
+		CreatedAt:    timeFromProto(session.GetCreatedAt()),
+		UpdatedAt:    timeFromProto(session.GetUpdatedAt()),
+		LastTurnAt:   timeFromProto(session.GetLastTurnAt()),
 	}, nil
+}
+
+func agentTurnFromProto(turn *proto.AgentTurn) (*coreagent.Turn, error) {
+	if turn == nil {
+		return nil, nil
+	}
+	status, err := agentExecutionStatusFromProto(turn.GetStatus())
+	if err != nil {
+		return nil, err
+	}
+	return &coreagent.Turn{
+		ID:               turn.GetId(),
+		SessionID:        turn.GetSessionId(),
+		ProviderName:     turn.GetProviderName(),
+		Model:            turn.GetModel(),
+		Status:           status,
+		Messages:         agentMessagesFromProto(turn.GetMessages()),
+		OutputText:       turn.GetOutputText(),
+		StructuredOutput: mapFromStruct(turn.GetStructuredOutput()),
+		StatusMessage:    turn.GetStatusMessage(),
+		CreatedBy:        agentActorFromProto(turn.GetCreatedBy()),
+		CreatedAt:        timeFromProto(turn.GetCreatedAt()),
+		StartedAt:        timeFromProto(turn.GetStartedAt()),
+		CompletedAt:      timeFromProto(turn.GetCompletedAt()),
+		ExecutionRef:     turn.GetExecutionRef(),
+	}, nil
+}
+
+func agentTurnEventFromProto(event *proto.AgentTurnEvent) *coreagent.TurnEvent {
+	if event == nil {
+		return nil
+	}
+	return &coreagent.TurnEvent{
+		ID:         event.GetId(),
+		TurnID:     event.GetTurnId(),
+		Seq:        event.GetSeq(),
+		Type:       event.GetType(),
+		Source:     event.GetSource(),
+		Visibility: event.GetVisibility(),
+		Data:       mapFromStruct(event.GetData()),
+		CreatedAt:  timeFromProto(event.GetCreatedAt()),
+	}
+}
+
+func agentTurnEventsFromProto(events []*proto.AgentTurnEvent) []*coreagent.TurnEvent {
+	if len(events) == 0 {
+		return nil
+	}
+	out := make([]*coreagent.TurnEvent, 0, len(events))
+	for _, event := range events {
+		out = append(out, agentTurnEventFromProto(event))
+	}
+	return out
+}
+
+func agentSessionToProto(session *coreagent.Session) (*proto.AgentSession, error) {
+	if session == nil {
+		return nil, nil
+	}
+	metadata, err := structFromMap(session.Metadata)
+	if err != nil {
+		return nil, fmt.Errorf("agent session metadata: %w", err)
+	}
+	return &proto.AgentSession{
+		Id:           session.ID,
+		ProviderName: session.ProviderName,
+		Model:        session.Model,
+		ClientRef:    session.ClientRef,
+		State:        agentSessionStateToProto(session.State),
+		Metadata:     metadata,
+		CreatedBy:    agentActorToProto(session.CreatedBy),
+		CreatedAt:    timeToProto(session.CreatedAt),
+		UpdatedAt:    timeToProto(session.UpdatedAt),
+		LastTurnAt:   timeToProto(session.LastTurnAt),
+	}, nil
+}
+
+func agentTurnToProto(turn *coreagent.Turn) (*proto.AgentTurn, error) {
+	if turn == nil {
+		return nil, nil
+	}
+	messages, err := agentMessagesToProto(turn.Messages)
+	if err != nil {
+		return nil, fmt.Errorf("agent turn messages: %w", err)
+	}
+	structuredOutput, err := structFromMap(turn.StructuredOutput)
+	if err != nil {
+		return nil, fmt.Errorf("agent turn structured output: %w", err)
+	}
+	return &proto.AgentTurn{
+		Id:               turn.ID,
+		SessionId:        turn.SessionID,
+		ProviderName:     turn.ProviderName,
+		Model:            turn.Model,
+		Status:           agentExecutionStatusToProto(turn.Status),
+		Messages:         messages,
+		OutputText:       turn.OutputText,
+		StructuredOutput: structuredOutput,
+		StatusMessage:    turn.StatusMessage,
+		CreatedBy:        agentActorToProto(turn.CreatedBy),
+		CreatedAt:        timeToProto(turn.CreatedAt),
+		StartedAt:        timeToProto(turn.StartedAt),
+		CompletedAt:      timeToProto(turn.CompletedAt),
+		ExecutionRef:     turn.ExecutionRef,
+	}, nil
+}
+
+func turnEventsToProto(values []*coreagent.TurnEvent) []*proto.AgentTurnEvent {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]*proto.AgentTurnEvent, 0, len(values))
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		data, err := structFromMap(value.Data)
+		if err != nil {
+			continue
+		}
+		out = append(out, &proto.AgentTurnEvent{
+			Id:         value.ID,
+			TurnId:     value.TurnID,
+			Seq:        value.Seq,
+			Type:       value.Type,
+			Source:     value.Source,
+			Visibility: value.Visibility,
+			Data:       data,
+			CreatedAt:  timeToProto(value.CreatedAt),
+		})
+	}
+	return out
 }
 
 func agentMessagePartTypeFromProto(partType proto.AgentMessagePartType) (coreagent.MessagePartType, error) {
@@ -430,14 +540,13 @@ func agentProviderCapabilitiesFromProto(value *proto.AgentProviderCapabilities) 
 		return nil
 	}
 	return &coreagent.ProviderCapabilities{
-		StreamingText:       value.GetStreamingText(),
-		ToolCalls:           value.GetToolCalls(),
-		ParallelToolCalls:   value.GetParallelToolCalls(),
-		StructuredOutput:    value.GetStructuredOutput(),
-		SessionContinuation: value.GetSessionContinuation(),
-		Approvals:           value.GetApprovals(),
-		ResumableRuns:       value.GetResumableRuns(),
-		ReasoningSummaries:  value.GetReasoningSummaries(),
+		StreamingText:      value.GetStreamingText(),
+		ToolCalls:          value.GetToolCalls(),
+		ParallelToolCalls:  value.GetParallelToolCalls(),
+		StructuredOutput:   value.GetStructuredOutput(),
+		Interactions:       value.GetInteractions(),
+		ResumableTurns:     value.GetResumableTurns(),
+		ReasoningSummaries: value.GetReasoningSummaries(),
 	}
 }
 
@@ -486,6 +595,63 @@ func agentInteractionStateToProto(value coreagent.InteractionState) proto.AgentI
 	}
 }
 
+func agentInteractionStateFromProto(value proto.AgentInteractionState) (coreagent.InteractionState, error) {
+	switch value {
+	case proto.AgentInteractionState_AGENT_INTERACTION_STATE_UNSPECIFIED:
+		return "", nil
+	case proto.AgentInteractionState_AGENT_INTERACTION_STATE_PENDING:
+		return coreagent.InteractionStatePending, nil
+	case proto.AgentInteractionState_AGENT_INTERACTION_STATE_RESOLVED:
+		return coreagent.InteractionStateResolved, nil
+	case proto.AgentInteractionState_AGENT_INTERACTION_STATE_CANCELED:
+		return coreagent.InteractionStateCanceled, nil
+	default:
+		return "", fmt.Errorf("unknown agent interaction state %v", value)
+	}
+}
+
+func agentInteractionFromProto(value *proto.AgentInteraction) (*coreagent.Interaction, error) {
+	if value == nil {
+		return nil, nil
+	}
+	interactionType, err := agentInteractionTypeFromProto(value.GetType())
+	if err != nil {
+		return nil, err
+	}
+	state, err := agentInteractionStateFromProto(value.GetState())
+	if err != nil {
+		return nil, err
+	}
+	return &coreagent.Interaction{
+		ID:         value.GetId(),
+		TurnID:     value.GetTurnId(),
+		SessionID:  value.GetSessionId(),
+		Type:       interactionType,
+		State:      state,
+		Title:      value.GetTitle(),
+		Prompt:     value.GetPrompt(),
+		Request:    mapFromStruct(value.GetRequest()),
+		Resolution: mapFromStruct(value.GetResolution()),
+		CreatedAt:  timeFromProto(value.GetCreatedAt()),
+		ResolvedAt: timeFromProto(value.GetResolvedAt()),
+	}, nil
+}
+
+func agentInteractionsFromProto(values []*proto.AgentInteraction) ([]*coreagent.Interaction, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]*coreagent.Interaction, 0, len(values))
+	for _, value := range values {
+		interaction, err := agentInteractionFromProto(value)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, interaction)
+	}
+	return out, nil
+}
+
 func agentInteractionToProto(value *coreagent.Interaction) (*proto.AgentInteraction, error) {
 	if value == nil {
 		return nil, nil
@@ -500,7 +666,8 @@ func agentInteractionToProto(value *coreagent.Interaction) (*proto.AgentInteract
 	}
 	return &proto.AgentInteraction{
 		Id:         value.ID,
-		RunId:      value.RunID,
+		TurnId:     value.TurnID,
+		SessionId:  value.SessionID,
 		Type:       agentInteractionTypeToProto(value.Type),
 		State:      agentInteractionStateToProto(value.State),
 		Title:      value.Title,
@@ -510,4 +677,19 @@ func agentInteractionToProto(value *coreagent.Interaction) (*proto.AgentInteract
 		CreatedAt:  timeToProto(value.CreatedAt),
 		ResolvedAt: timeToProto(value.ResolvedAt),
 	}, nil
+}
+
+func interactionsToProto(values []*coreagent.Interaction) []*proto.AgentInteraction {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]*proto.AgentInteraction, 0, len(values))
+	for _, value := range values {
+		encoded, err := agentInteractionToProto(value)
+		if err != nil {
+			continue
+		}
+		out = append(out, encoded)
+	}
+	return out
 }

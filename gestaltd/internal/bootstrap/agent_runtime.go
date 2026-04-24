@@ -27,8 +27,6 @@ type agentRuntime struct {
 	providers           map[string]coreagent.Provider
 	invoker             invocation.Invoker
 	runMetadata         *coredata.AgentRunMetadataService
-	runEvents           *coredata.AgentRunEventService
-	runInteractions     *coredata.AgentRunInteractionService
 }
 
 func newAgentRuntime(cfg *config.Config) (*agentRuntime, error) {
@@ -90,30 +88,12 @@ func (r *agentRuntime) SetRunMetadata(service *coredata.AgentRunMetadataService)
 	r.runMetadata = service
 }
 
-func (r *agentRuntime) SetRunEvents(service *coredata.AgentRunEventService) {
-	if r == nil {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.runEvents = service
-}
-
-func (r *agentRuntime) SetRunInteractions(service *coredata.AgentRunInteractionService) {
-	if r == nil {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.runInteractions = service
-}
-
-func (r *agentRuntime) TrackRun(ctx context.Context, providerName string, req coreagent.StartRunRequest) error {
+func (r *agentRuntime) TrackTurn(ctx context.Context, providerName string, req coreagent.CreateTurnRequest) error {
 	if r == nil {
 		return nil
 	}
-	runID := strings.TrimSpace(req.RunID)
-	if runID == "" {
+	turnID := strings.TrimSpace(req.TurnID)
+	if turnID == "" {
 		return nil
 	}
 	r.mu.RLock()
@@ -141,7 +121,8 @@ func (r *agentRuntime) TrackRun(ctx context.Context, providerName string, req co
 		return fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
 	_, err := runMetadata.Put(ctx, &coreagent.ExecutionReference{
-		ID:                  runID,
+		ID:                  turnID,
+		SessionID:           strings.TrimSpace(req.SessionID),
 		ProviderName:        strings.TrimSpace(providerName),
 		SubjectID:           subjectID,
 		CredentialSubjectID: credentialSubjectID,
@@ -152,39 +133,21 @@ func (r *agentRuntime) TrackRun(ctx context.Context, providerName string, req co
 	return err
 }
 
-func (r *agentRuntime) DeleteTrackedRun(ctx context.Context, runID string) error {
-	if r == nil || strings.TrimSpace(runID) == "" {
+func (r *agentRuntime) DeleteTrackedTurn(ctx context.Context, turnID string) error {
+	if r == nil || strings.TrimSpace(turnID) == "" {
 		return nil
 	}
 	r.mu.RLock()
 	runMetadata := r.runMetadata
-	runInteractions := r.runInteractions
 	r.mu.RUnlock()
 	if runMetadata == nil {
 		return nil
 	}
-	var err error
-	if deleteErr := runMetadata.Delete(ctx, runID); deleteErr != nil {
-		err = errors.Join(err, deleteErr)
-	}
-	r.mu.RLock()
-	runEvents := r.runEvents
-	r.mu.RUnlock()
-	if runEvents != nil {
-		if deleteErr := runEvents.DeleteByRun(ctx, runID); deleteErr != nil {
-			err = errors.Join(err, deleteErr)
-		}
-	}
-	if runInteractions != nil {
-		if deleteErr := runInteractions.DeleteByRun(ctx, runID); deleteErr != nil {
-			err = errors.Join(err, deleteErr)
-		}
-	}
-	return err
+	return runMetadata.Delete(ctx, turnID)
 }
 
-func (r *agentRuntime) RevokeTrackedRun(ctx context.Context, runID string) error {
-	if r == nil || strings.TrimSpace(runID) == "" {
+func (r *agentRuntime) RevokeTrackedTurn(ctx context.Context, turnID string) error {
+	if r == nil || strings.TrimSpace(turnID) == "" {
 		return nil
 	}
 	r.mu.RLock()
@@ -193,7 +156,7 @@ func (r *agentRuntime) RevokeTrackedRun(ctx context.Context, runID string) error
 	if runMetadata == nil {
 		return nil
 	}
-	_, err := runMetadata.Revoke(ctx, runID, time.Now())
+	_, err := runMetadata.Revoke(ctx, turnID, time.Now())
 	if err != nil {
 		if errors.Is(err, indexeddb.ErrNotFound) {
 			return nil
@@ -267,29 +230,36 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	if runMetadata == nil {
 		return nil, fmt.Errorf("%w: agent run metadata is not configured", invocation.ErrInternal)
 	}
-	runID := strings.TrimSpace(req.RunID)
-	if runID == "" {
-		return nil, fmt.Errorf("%w: run id is required", invocation.ErrAuthorizationDenied)
+	turnID := strings.TrimSpace(req.TurnID)
+	if turnID == "" {
+		return nil, fmt.Errorf("%w: turn id is required", invocation.ErrAuthorizationDenied)
 	}
-	ref, err := runMetadata.Get(ctx, runID)
+	sessionID := strings.TrimSpace(req.SessionID)
+	if sessionID == "" {
+		return nil, fmt.Errorf("%w: session id is required", invocation.ErrAuthorizationDenied)
+	}
+	ref, err := runMetadata.Get(ctx, turnID)
 	if err != nil {
 		if errors.Is(err, indexeddb.ErrNotFound) {
-			return nil, fmt.Errorf("%w: agent run %q was not found", invocation.ErrAuthorizationDenied, runID)
+			return nil, fmt.Errorf("%w: agent turn %q was not found", invocation.ErrAuthorizationDenied, turnID)
 		}
-		return nil, fmt.Errorf("%w: agent run %q lookup failed: %v", invocation.ErrInternal, runID, err)
+		return nil, fmt.Errorf("%w: agent turn %q lookup failed: %v", invocation.ErrInternal, turnID, err)
 	}
 	if ref == nil {
-		return nil, fmt.Errorf("%w: agent run %q was not found", invocation.ErrAuthorizationDenied, runID)
+		return nil, fmt.Errorf("%w: agent turn %q was not found", invocation.ErrAuthorizationDenied, turnID)
 	}
 	if ref.RevokedAt != nil && !ref.RevokedAt.IsZero() {
-		return nil, fmt.Errorf("%w: agent run %q is revoked", invocation.ErrAuthorizationDenied, runID)
+		return nil, fmt.Errorf("%w: agent turn %q is revoked", invocation.ErrAuthorizationDenied, turnID)
 	}
 	if providerName := strings.TrimSpace(req.ProviderName); providerName != "" && strings.TrimSpace(ref.ProviderName) != providerName {
-		return nil, fmt.Errorf("%w: agent run %q is not valid for provider %q", invocation.ErrAuthorizationDenied, runID, providerName)
+		return nil, fmt.Errorf("%w: agent turn %q is not valid for provider %q", invocation.ErrAuthorizationDenied, turnID, providerName)
+	}
+	if strings.TrimSpace(ref.SessionID) != sessionID {
+		return nil, fmt.Errorf("%w: agent turn %q is not valid for session %q", invocation.ErrAuthorizationDenied, turnID, sessionID)
 	}
 	tool, ok := lookupAgentTool(ref.Tools, req.ToolID)
 	if !ok {
-		return nil, fmt.Errorf("%w: agent tool %q is not available for run %q", invocation.ErrAuthorizationDenied, strings.TrimSpace(req.ToolID), runID)
+		return nil, fmt.Errorf("%w: agent tool %q is not available for turn %q", invocation.ErrAuthorizationDenied, strings.TrimSpace(req.ToolID), turnID)
 	}
 	principalValue := executionReferencePrincipal(ref.SubjectID, ref.CredentialSubjectID, ref.Permissions)
 	if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
@@ -310,193 +280,6 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 		Status: result.Status,
 		Body:   result.Body,
 	}, nil
-}
-
-func (r *agentRuntime) EmitEvent(ctx context.Context, req coreagent.EmitEventRequest) (*coreagent.RunEvent, error) {
-	if r == nil {
-		return nil, fmt.Errorf("agent runtime is not configured")
-	}
-	r.mu.RLock()
-	runMetadata := r.runMetadata
-	runEvents := r.runEvents
-	r.mu.RUnlock()
-	if runMetadata == nil {
-		return nil, fmt.Errorf("%w: agent run metadata is not configured", invocation.ErrInternal)
-	}
-	if runEvents == nil {
-		return nil, fmt.Errorf("%w: agent run events are not configured", invocation.ErrInternal)
-	}
-	runID := strings.TrimSpace(req.RunID)
-	if runID == "" {
-		return nil, fmt.Errorf("%w: run id is required", invocation.ErrAuthorizationDenied)
-	}
-	eventType := strings.TrimSpace(req.Type)
-	if eventType == "" {
-		return nil, fmt.Errorf("%w: event type is required", invocation.ErrAuthorizationDenied)
-	}
-	ref, err := runMetadata.Get(ctx, runID)
-	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
-			return nil, fmt.Errorf("%w: agent run %q was not found", invocation.ErrAuthorizationDenied, runID)
-		}
-		return nil, fmt.Errorf("%w: agent run %q lookup failed: %v", invocation.ErrInternal, runID, err)
-	}
-	if ref == nil {
-		return nil, fmt.Errorf("%w: agent run %q was not found", invocation.ErrAuthorizationDenied, runID)
-	}
-	if ref.RevokedAt != nil && !ref.RevokedAt.IsZero() {
-		return nil, fmt.Errorf("%w: agent run %q is revoked", invocation.ErrAuthorizationDenied, runID)
-	}
-	providerName := strings.TrimSpace(req.ProviderName)
-	if providerName == "" {
-		return nil, fmt.Errorf("%w: provider name is required", invocation.ErrAuthorizationDenied)
-	}
-	if strings.TrimSpace(ref.ProviderName) != providerName {
-		return nil, fmt.Errorf("%w: agent run %q is not valid for provider %q", invocation.ErrAuthorizationDenied, runID, providerName)
-	}
-	event, err := runEvents.Append(ctx, coreagent.RunEvent{
-		RunID:      runID,
-		Type:       eventType,
-		Source:     providerName,
-		Visibility: strings.TrimSpace(req.Visibility),
-		Data:       maps.Clone(req.Data),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", invocation.ErrInternal, err)
-	}
-	return event, nil
-}
-
-func (r *agentRuntime) RequestInteraction(ctx context.Context, req coreagent.RequestInteractionRequest) (*coreagent.Interaction, error) {
-	if r == nil {
-		return nil, fmt.Errorf("agent runtime is not configured")
-	}
-	r.mu.RLock()
-	runMetadata := r.runMetadata
-	runInteractions := r.runInteractions
-	r.mu.RUnlock()
-	if runMetadata == nil {
-		return nil, fmt.Errorf("%w: agent run metadata is not configured", invocation.ErrInternal)
-	}
-	if runInteractions == nil {
-		return nil, fmt.Errorf("%w: agent run interactions are not configured", invocation.ErrInternal)
-	}
-	runID := strings.TrimSpace(req.RunID)
-	interactionType := strings.TrimSpace(string(req.Type))
-	if interactionType == "" {
-		return nil, fmt.Errorf("%w: interaction type is required", invocation.ErrAuthorizationDenied)
-	}
-	if _, err := r.authorizeTrackedRun(ctx, runMetadata, strings.TrimSpace(req.ProviderName), runID); err != nil {
-		return nil, err
-	}
-	return runInteractions.Create(ctx, coreagent.Interaction{
-		RunID:   runID,
-		Type:    req.Type,
-		State:   coreagent.InteractionStatePending,
-		Title:   strings.TrimSpace(req.Title),
-		Prompt:  strings.TrimSpace(req.Prompt),
-		Request: maps.Clone(req.Request),
-	})
-}
-
-func (r *agentRuntime) ValidateInteraction(ctx context.Context, providerName, runID, interactionID string) (*coreagent.Interaction, error) {
-	if r == nil {
-		return nil, fmt.Errorf("agent runtime is not configured")
-	}
-	r.mu.RLock()
-	runMetadata := r.runMetadata
-	runInteractions := r.runInteractions
-	r.mu.RUnlock()
-	if runMetadata == nil {
-		return nil, fmt.Errorf("%w: agent run metadata is not configured", invocation.ErrInternal)
-	}
-	if runInteractions == nil {
-		return nil, fmt.Errorf("%w: agent run interactions are not configured", invocation.ErrInternal)
-	}
-	if _, err := r.authorizeTrackedRun(ctx, runMetadata, providerName, runID); err != nil {
-		return nil, err
-	}
-	interaction, err := runInteractions.Get(ctx, strings.TrimSpace(interactionID))
-	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
-			return nil, agentmanager.ErrAgentInteractionNotFound
-		}
-		return nil, err
-	}
-	if interaction == nil || strings.TrimSpace(interaction.RunID) != strings.TrimSpace(runID) {
-		return nil, agentmanager.ErrAgentInteractionNotFound
-	}
-	if interaction.State != coreagent.InteractionStatePending {
-		return nil, fmt.Errorf("%w: %q", agentmanager.ErrAgentInteractionNotPending, strings.TrimSpace(interactionID))
-	}
-	return interaction, nil
-}
-
-func (r *agentRuntime) ResolveInteraction(ctx context.Context, interactionID string, resolution map[string]any) (*coreagent.Interaction, error) {
-	if r == nil {
-		return nil, fmt.Errorf("agent runtime is not configured")
-	}
-	r.mu.RLock()
-	runInteractions := r.runInteractions
-	r.mu.RUnlock()
-	if runInteractions == nil {
-		return nil, fmt.Errorf("%w: agent run interactions are not configured", invocation.ErrInternal)
-	}
-	interaction, err := runInteractions.Get(ctx, strings.TrimSpace(interactionID))
-	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
-			return nil, core.ErrNotFound
-		}
-		return nil, err
-	}
-	if interaction == nil {
-		return nil, core.ErrNotFound
-	}
-	if interaction.State != coreagent.InteractionStatePending {
-		return interaction, nil
-	}
-	return runInteractions.Resolve(ctx, interaction.ID, maps.Clone(resolution), time.Now())
-}
-
-func (r *agentRuntime) CancelInteractions(ctx context.Context, runID string) error {
-	if r == nil {
-		return nil
-	}
-	r.mu.RLock()
-	runInteractions := r.runInteractions
-	r.mu.RUnlock()
-	if runInteractions == nil {
-		return nil
-	}
-	return runInteractions.CancelByRun(ctx, runID, time.Now())
-}
-
-func (r *agentRuntime) authorizeTrackedRun(ctx context.Context, runMetadata *coredata.AgentRunMetadataService, providerName, runID string) (*coreagent.ExecutionReference, error) {
-	runID = strings.TrimSpace(runID)
-	if runID == "" {
-		return nil, fmt.Errorf("%w: run id is required", invocation.ErrAuthorizationDenied)
-	}
-	providerName = strings.TrimSpace(providerName)
-	if providerName == "" {
-		return nil, fmt.Errorf("%w: provider name is required", invocation.ErrAuthorizationDenied)
-	}
-	ref, err := runMetadata.Get(ctx, runID)
-	if err != nil {
-		if errors.Is(err, indexeddb.ErrNotFound) {
-			return nil, fmt.Errorf("%w: agent run %q was not found", invocation.ErrAuthorizationDenied, runID)
-		}
-		return nil, fmt.Errorf("%w: agent run %q lookup failed: %v", invocation.ErrInternal, runID, err)
-	}
-	if ref == nil {
-		return nil, fmt.Errorf("%w: agent run %q was not found", invocation.ErrAuthorizationDenied, runID)
-	}
-	if ref.RevokedAt != nil && !ref.RevokedAt.IsZero() {
-		return nil, fmt.Errorf("%w: agent run %q is revoked", invocation.ErrAuthorizationDenied, runID)
-	}
-	if strings.TrimSpace(ref.ProviderName) != providerName {
-		return nil, fmt.Errorf("%w: agent run %q is not valid for provider %q", invocation.ErrAuthorizationDenied, runID, providerName)
-	}
-	return ref, nil
 }
 
 func lookupAgentTool(tools []coreagent.Tool, toolID string) (coreagent.Tool, bool) {

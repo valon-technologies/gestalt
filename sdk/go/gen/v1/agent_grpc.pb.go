@@ -11,7 +11,6 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -20,24 +19,38 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AgentProvider_StartRun_FullMethodName        = "/gestalt.provider.v1.AgentProvider/StartRun"
-	AgentProvider_GetRun_FullMethodName          = "/gestalt.provider.v1.AgentProvider/GetRun"
-	AgentProvider_ListRuns_FullMethodName        = "/gestalt.provider.v1.AgentProvider/ListRuns"
-	AgentProvider_CancelRun_FullMethodName       = "/gestalt.provider.v1.AgentProvider/CancelRun"
-	AgentProvider_GetCapabilities_FullMethodName = "/gestalt.provider.v1.AgentProvider/GetCapabilities"
-	AgentProvider_ResumeRun_FullMethodName       = "/gestalt.provider.v1.AgentProvider/ResumeRun"
+	AgentProvider_CreateSession_FullMethodName      = "/gestalt.provider.v1.AgentProvider/CreateSession"
+	AgentProvider_GetSession_FullMethodName         = "/gestalt.provider.v1.AgentProvider/GetSession"
+	AgentProvider_ListSessions_FullMethodName       = "/gestalt.provider.v1.AgentProvider/ListSessions"
+	AgentProvider_UpdateSession_FullMethodName      = "/gestalt.provider.v1.AgentProvider/UpdateSession"
+	AgentProvider_CreateTurn_FullMethodName         = "/gestalt.provider.v1.AgentProvider/CreateTurn"
+	AgentProvider_GetTurn_FullMethodName            = "/gestalt.provider.v1.AgentProvider/GetTurn"
+	AgentProvider_ListTurns_FullMethodName          = "/gestalt.provider.v1.AgentProvider/ListTurns"
+	AgentProvider_CancelTurn_FullMethodName         = "/gestalt.provider.v1.AgentProvider/CancelTurn"
+	AgentProvider_ListTurnEvents_FullMethodName     = "/gestalt.provider.v1.AgentProvider/ListTurnEvents"
+	AgentProvider_GetInteraction_FullMethodName     = "/gestalt.provider.v1.AgentProvider/GetInteraction"
+	AgentProvider_ListInteractions_FullMethodName   = "/gestalt.provider.v1.AgentProvider/ListInteractions"
+	AgentProvider_ResolveInteraction_FullMethodName = "/gestalt.provider.v1.AgentProvider/ResolveInteraction"
+	AgentProvider_GetCapabilities_FullMethodName    = "/gestalt.provider.v1.AgentProvider/GetCapabilities"
 )
 
 // AgentProviderClient is the client API for AgentProvider service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AgentProviderClient interface {
-	StartRun(ctx context.Context, in *StartAgentProviderRunRequest, opts ...grpc.CallOption) (*BoundAgentRun, error)
-	GetRun(ctx context.Context, in *GetAgentProviderRunRequest, opts ...grpc.CallOption) (*BoundAgentRun, error)
-	ListRuns(ctx context.Context, in *ListAgentProviderRunsRequest, opts ...grpc.CallOption) (*ListAgentProviderRunsResponse, error)
-	CancelRun(ctx context.Context, in *CancelAgentProviderRunRequest, opts ...grpc.CallOption) (*BoundAgentRun, error)
+	CreateSession(ctx context.Context, in *CreateAgentProviderSessionRequest, opts ...grpc.CallOption) (*AgentSession, error)
+	GetSession(ctx context.Context, in *GetAgentProviderSessionRequest, opts ...grpc.CallOption) (*AgentSession, error)
+	ListSessions(ctx context.Context, in *ListAgentProviderSessionsRequest, opts ...grpc.CallOption) (*ListAgentProviderSessionsResponse, error)
+	UpdateSession(ctx context.Context, in *UpdateAgentProviderSessionRequest, opts ...grpc.CallOption) (*AgentSession, error)
+	CreateTurn(ctx context.Context, in *CreateAgentProviderTurnRequest, opts ...grpc.CallOption) (*AgentTurn, error)
+	GetTurn(ctx context.Context, in *GetAgentProviderTurnRequest, opts ...grpc.CallOption) (*AgentTurn, error)
+	ListTurns(ctx context.Context, in *ListAgentProviderTurnsRequest, opts ...grpc.CallOption) (*ListAgentProviderTurnsResponse, error)
+	CancelTurn(ctx context.Context, in *CancelAgentProviderTurnRequest, opts ...grpc.CallOption) (*AgentTurn, error)
+	ListTurnEvents(ctx context.Context, in *ListAgentProviderTurnEventsRequest, opts ...grpc.CallOption) (*ListAgentProviderTurnEventsResponse, error)
+	GetInteraction(ctx context.Context, in *GetAgentProviderInteractionRequest, opts ...grpc.CallOption) (*AgentInteraction, error)
+	ListInteractions(ctx context.Context, in *ListAgentProviderInteractionsRequest, opts ...grpc.CallOption) (*ListAgentProviderInteractionsResponse, error)
+	ResolveInteraction(ctx context.Context, in *ResolveAgentProviderInteractionRequest, opts ...grpc.CallOption) (*AgentInteraction, error)
 	GetCapabilities(ctx context.Context, in *GetAgentProviderCapabilitiesRequest, opts ...grpc.CallOption) (*AgentProviderCapabilities, error)
-	ResumeRun(ctx context.Context, in *ResumeAgentProviderRunRequest, opts ...grpc.CallOption) (*BoundAgentRun, error)
 }
 
 type agentProviderClient struct {
@@ -48,40 +61,120 @@ func NewAgentProviderClient(cc grpc.ClientConnInterface) AgentProviderClient {
 	return &agentProviderClient{cc}
 }
 
-func (c *agentProviderClient) StartRun(ctx context.Context, in *StartAgentProviderRunRequest, opts ...grpc.CallOption) (*BoundAgentRun, error) {
+func (c *agentProviderClient) CreateSession(ctx context.Context, in *CreateAgentProviderSessionRequest, opts ...grpc.CallOption) (*AgentSession, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(BoundAgentRun)
-	err := c.cc.Invoke(ctx, AgentProvider_StartRun_FullMethodName, in, out, cOpts...)
+	out := new(AgentSession)
+	err := c.cc.Invoke(ctx, AgentProvider_CreateSession_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *agentProviderClient) GetRun(ctx context.Context, in *GetAgentProviderRunRequest, opts ...grpc.CallOption) (*BoundAgentRun, error) {
+func (c *agentProviderClient) GetSession(ctx context.Context, in *GetAgentProviderSessionRequest, opts ...grpc.CallOption) (*AgentSession, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(BoundAgentRun)
-	err := c.cc.Invoke(ctx, AgentProvider_GetRun_FullMethodName, in, out, cOpts...)
+	out := new(AgentSession)
+	err := c.cc.Invoke(ctx, AgentProvider_GetSession_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *agentProviderClient) ListRuns(ctx context.Context, in *ListAgentProviderRunsRequest, opts ...grpc.CallOption) (*ListAgentProviderRunsResponse, error) {
+func (c *agentProviderClient) ListSessions(ctx context.Context, in *ListAgentProviderSessionsRequest, opts ...grpc.CallOption) (*ListAgentProviderSessionsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListAgentProviderRunsResponse)
-	err := c.cc.Invoke(ctx, AgentProvider_ListRuns_FullMethodName, in, out, cOpts...)
+	out := new(ListAgentProviderSessionsResponse)
+	err := c.cc.Invoke(ctx, AgentProvider_ListSessions_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *agentProviderClient) CancelRun(ctx context.Context, in *CancelAgentProviderRunRequest, opts ...grpc.CallOption) (*BoundAgentRun, error) {
+func (c *agentProviderClient) UpdateSession(ctx context.Context, in *UpdateAgentProviderSessionRequest, opts ...grpc.CallOption) (*AgentSession, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(BoundAgentRun)
-	err := c.cc.Invoke(ctx, AgentProvider_CancelRun_FullMethodName, in, out, cOpts...)
+	out := new(AgentSession)
+	err := c.cc.Invoke(ctx, AgentProvider_UpdateSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentProviderClient) CreateTurn(ctx context.Context, in *CreateAgentProviderTurnRequest, opts ...grpc.CallOption) (*AgentTurn, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentTurn)
+	err := c.cc.Invoke(ctx, AgentProvider_CreateTurn_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentProviderClient) GetTurn(ctx context.Context, in *GetAgentProviderTurnRequest, opts ...grpc.CallOption) (*AgentTurn, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentTurn)
+	err := c.cc.Invoke(ctx, AgentProvider_GetTurn_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentProviderClient) ListTurns(ctx context.Context, in *ListAgentProviderTurnsRequest, opts ...grpc.CallOption) (*ListAgentProviderTurnsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAgentProviderTurnsResponse)
+	err := c.cc.Invoke(ctx, AgentProvider_ListTurns_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentProviderClient) CancelTurn(ctx context.Context, in *CancelAgentProviderTurnRequest, opts ...grpc.CallOption) (*AgentTurn, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentTurn)
+	err := c.cc.Invoke(ctx, AgentProvider_CancelTurn_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentProviderClient) ListTurnEvents(ctx context.Context, in *ListAgentProviderTurnEventsRequest, opts ...grpc.CallOption) (*ListAgentProviderTurnEventsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAgentProviderTurnEventsResponse)
+	err := c.cc.Invoke(ctx, AgentProvider_ListTurnEvents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentProviderClient) GetInteraction(ctx context.Context, in *GetAgentProviderInteractionRequest, opts ...grpc.CallOption) (*AgentInteraction, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentInteraction)
+	err := c.cc.Invoke(ctx, AgentProvider_GetInteraction_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentProviderClient) ListInteractions(ctx context.Context, in *ListAgentProviderInteractionsRequest, opts ...grpc.CallOption) (*ListAgentProviderInteractionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAgentProviderInteractionsResponse)
+	err := c.cc.Invoke(ctx, AgentProvider_ListInteractions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentProviderClient) ResolveInteraction(ctx context.Context, in *ResolveAgentProviderInteractionRequest, opts ...grpc.CallOption) (*AgentInteraction, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentInteraction)
+	err := c.cc.Invoke(ctx, AgentProvider_ResolveInteraction_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -98,26 +191,23 @@ func (c *agentProviderClient) GetCapabilities(ctx context.Context, in *GetAgentP
 	return out, nil
 }
 
-func (c *agentProviderClient) ResumeRun(ctx context.Context, in *ResumeAgentProviderRunRequest, opts ...grpc.CallOption) (*BoundAgentRun, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(BoundAgentRun)
-	err := c.cc.Invoke(ctx, AgentProvider_ResumeRun_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // AgentProviderServer is the server API for AgentProvider service.
 // All implementations must embed UnimplementedAgentProviderServer
 // for forward compatibility.
 type AgentProviderServer interface {
-	StartRun(context.Context, *StartAgentProviderRunRequest) (*BoundAgentRun, error)
-	GetRun(context.Context, *GetAgentProviderRunRequest) (*BoundAgentRun, error)
-	ListRuns(context.Context, *ListAgentProviderRunsRequest) (*ListAgentProviderRunsResponse, error)
-	CancelRun(context.Context, *CancelAgentProviderRunRequest) (*BoundAgentRun, error)
+	CreateSession(context.Context, *CreateAgentProviderSessionRequest) (*AgentSession, error)
+	GetSession(context.Context, *GetAgentProviderSessionRequest) (*AgentSession, error)
+	ListSessions(context.Context, *ListAgentProviderSessionsRequest) (*ListAgentProviderSessionsResponse, error)
+	UpdateSession(context.Context, *UpdateAgentProviderSessionRequest) (*AgentSession, error)
+	CreateTurn(context.Context, *CreateAgentProviderTurnRequest) (*AgentTurn, error)
+	GetTurn(context.Context, *GetAgentProviderTurnRequest) (*AgentTurn, error)
+	ListTurns(context.Context, *ListAgentProviderTurnsRequest) (*ListAgentProviderTurnsResponse, error)
+	CancelTurn(context.Context, *CancelAgentProviderTurnRequest) (*AgentTurn, error)
+	ListTurnEvents(context.Context, *ListAgentProviderTurnEventsRequest) (*ListAgentProviderTurnEventsResponse, error)
+	GetInteraction(context.Context, *GetAgentProviderInteractionRequest) (*AgentInteraction, error)
+	ListInteractions(context.Context, *ListAgentProviderInteractionsRequest) (*ListAgentProviderInteractionsResponse, error)
+	ResolveInteraction(context.Context, *ResolveAgentProviderInteractionRequest) (*AgentInteraction, error)
 	GetCapabilities(context.Context, *GetAgentProviderCapabilitiesRequest) (*AgentProviderCapabilities, error)
-	ResumeRun(context.Context, *ResumeAgentProviderRunRequest) (*BoundAgentRun, error)
 	mustEmbedUnimplementedAgentProviderServer()
 }
 
@@ -128,23 +218,44 @@ type AgentProviderServer interface {
 // pointer dereference when methods are called.
 type UnimplementedAgentProviderServer struct{}
 
-func (UnimplementedAgentProviderServer) StartRun(context.Context, *StartAgentProviderRunRequest) (*BoundAgentRun, error) {
-	return nil, status.Error(codes.Unimplemented, "method StartRun not implemented")
+func (UnimplementedAgentProviderServer) CreateSession(context.Context, *CreateAgentProviderSessionRequest) (*AgentSession, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateSession not implemented")
 }
-func (UnimplementedAgentProviderServer) GetRun(context.Context, *GetAgentProviderRunRequest) (*BoundAgentRun, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetRun not implemented")
+func (UnimplementedAgentProviderServer) GetSession(context.Context, *GetAgentProviderSessionRequest) (*AgentSession, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSession not implemented")
 }
-func (UnimplementedAgentProviderServer) ListRuns(context.Context, *ListAgentProviderRunsRequest) (*ListAgentProviderRunsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListRuns not implemented")
+func (UnimplementedAgentProviderServer) ListSessions(context.Context, *ListAgentProviderSessionsRequest) (*ListAgentProviderSessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSessions not implemented")
 }
-func (UnimplementedAgentProviderServer) CancelRun(context.Context, *CancelAgentProviderRunRequest) (*BoundAgentRun, error) {
-	return nil, status.Error(codes.Unimplemented, "method CancelRun not implemented")
+func (UnimplementedAgentProviderServer) UpdateSession(context.Context, *UpdateAgentProviderSessionRequest) (*AgentSession, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateSession not implemented")
+}
+func (UnimplementedAgentProviderServer) CreateTurn(context.Context, *CreateAgentProviderTurnRequest) (*AgentTurn, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateTurn not implemented")
+}
+func (UnimplementedAgentProviderServer) GetTurn(context.Context, *GetAgentProviderTurnRequest) (*AgentTurn, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTurn not implemented")
+}
+func (UnimplementedAgentProviderServer) ListTurns(context.Context, *ListAgentProviderTurnsRequest) (*ListAgentProviderTurnsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTurns not implemented")
+}
+func (UnimplementedAgentProviderServer) CancelTurn(context.Context, *CancelAgentProviderTurnRequest) (*AgentTurn, error) {
+	return nil, status.Error(codes.Unimplemented, "method CancelTurn not implemented")
+}
+func (UnimplementedAgentProviderServer) ListTurnEvents(context.Context, *ListAgentProviderTurnEventsRequest) (*ListAgentProviderTurnEventsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTurnEvents not implemented")
+}
+func (UnimplementedAgentProviderServer) GetInteraction(context.Context, *GetAgentProviderInteractionRequest) (*AgentInteraction, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetInteraction not implemented")
+}
+func (UnimplementedAgentProviderServer) ListInteractions(context.Context, *ListAgentProviderInteractionsRequest) (*ListAgentProviderInteractionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListInteractions not implemented")
+}
+func (UnimplementedAgentProviderServer) ResolveInteraction(context.Context, *ResolveAgentProviderInteractionRequest) (*AgentInteraction, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveInteraction not implemented")
 }
 func (UnimplementedAgentProviderServer) GetCapabilities(context.Context, *GetAgentProviderCapabilitiesRequest) (*AgentProviderCapabilities, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCapabilities not implemented")
-}
-func (UnimplementedAgentProviderServer) ResumeRun(context.Context, *ResumeAgentProviderRunRequest) (*BoundAgentRun, error) {
-	return nil, status.Error(codes.Unimplemented, "method ResumeRun not implemented")
 }
 func (UnimplementedAgentProviderServer) mustEmbedUnimplementedAgentProviderServer() {}
 func (UnimplementedAgentProviderServer) testEmbeddedByValue()                       {}
@@ -167,74 +278,218 @@ func RegisterAgentProviderServer(s grpc.ServiceRegistrar, srv AgentProviderServe
 	s.RegisterService(&AgentProvider_ServiceDesc, srv)
 }
 
-func _AgentProvider_StartRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(StartAgentProviderRunRequest)
+func _AgentProvider_CreateSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateAgentProviderSessionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AgentProviderServer).StartRun(ctx, in)
+		return srv.(AgentProviderServer).CreateSession(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AgentProvider_StartRun_FullMethodName,
+		FullMethod: AgentProvider_CreateSession_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentProviderServer).StartRun(ctx, req.(*StartAgentProviderRunRequest))
+		return srv.(AgentProviderServer).CreateSession(ctx, req.(*CreateAgentProviderSessionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AgentProvider_GetRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetAgentProviderRunRequest)
+func _AgentProvider_GetSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAgentProviderSessionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AgentProviderServer).GetRun(ctx, in)
+		return srv.(AgentProviderServer).GetSession(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AgentProvider_GetRun_FullMethodName,
+		FullMethod: AgentProvider_GetSession_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentProviderServer).GetRun(ctx, req.(*GetAgentProviderRunRequest))
+		return srv.(AgentProviderServer).GetSession(ctx, req.(*GetAgentProviderSessionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AgentProvider_ListRuns_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListAgentProviderRunsRequest)
+func _AgentProvider_ListSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAgentProviderSessionsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AgentProviderServer).ListRuns(ctx, in)
+		return srv.(AgentProviderServer).ListSessions(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AgentProvider_ListRuns_FullMethodName,
+		FullMethod: AgentProvider_ListSessions_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentProviderServer).ListRuns(ctx, req.(*ListAgentProviderRunsRequest))
+		return srv.(AgentProviderServer).ListSessions(ctx, req.(*ListAgentProviderSessionsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AgentProvider_CancelRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CancelAgentProviderRunRequest)
+func _AgentProvider_UpdateSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateAgentProviderSessionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AgentProviderServer).CancelRun(ctx, in)
+		return srv.(AgentProviderServer).UpdateSession(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AgentProvider_CancelRun_FullMethodName,
+		FullMethod: AgentProvider_UpdateSession_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentProviderServer).CancelRun(ctx, req.(*CancelAgentProviderRunRequest))
+		return srv.(AgentProviderServer).UpdateSession(ctx, req.(*UpdateAgentProviderSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentProvider_CreateTurn_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateAgentProviderTurnRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentProviderServer).CreateTurn(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentProvider_CreateTurn_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentProviderServer).CreateTurn(ctx, req.(*CreateAgentProviderTurnRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentProvider_GetTurn_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAgentProviderTurnRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentProviderServer).GetTurn(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentProvider_GetTurn_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentProviderServer).GetTurn(ctx, req.(*GetAgentProviderTurnRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentProvider_ListTurns_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAgentProviderTurnsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentProviderServer).ListTurns(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentProvider_ListTurns_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentProviderServer).ListTurns(ctx, req.(*ListAgentProviderTurnsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentProvider_CancelTurn_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelAgentProviderTurnRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentProviderServer).CancelTurn(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentProvider_CancelTurn_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentProviderServer).CancelTurn(ctx, req.(*CancelAgentProviderTurnRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentProvider_ListTurnEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAgentProviderTurnEventsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentProviderServer).ListTurnEvents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentProvider_ListTurnEvents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentProviderServer).ListTurnEvents(ctx, req.(*ListAgentProviderTurnEventsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentProvider_GetInteraction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAgentProviderInteractionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentProviderServer).GetInteraction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentProvider_GetInteraction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentProviderServer).GetInteraction(ctx, req.(*GetAgentProviderInteractionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentProvider_ListInteractions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAgentProviderInteractionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentProviderServer).ListInteractions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentProvider_ListInteractions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentProviderServer).ListInteractions(ctx, req.(*ListAgentProviderInteractionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentProvider_ResolveInteraction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveAgentProviderInteractionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentProviderServer).ResolveInteraction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentProvider_ResolveInteraction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentProviderServer).ResolveInteraction(ctx, req.(*ResolveAgentProviderInteractionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -257,24 +512,6 @@ func _AgentProvider_GetCapabilities_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AgentProvider_ResumeRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ResumeAgentProviderRunRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AgentProviderServer).ResumeRun(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AgentProvider_ResumeRun_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentProviderServer).ResumeRun(ctx, req.(*ResumeAgentProviderRunRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // AgentProvider_ServiceDesc is the grpc.ServiceDesc for AgentProvider service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -283,28 +520,56 @@ var AgentProvider_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*AgentProviderServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "StartRun",
-			Handler:    _AgentProvider_StartRun_Handler,
+			MethodName: "CreateSession",
+			Handler:    _AgentProvider_CreateSession_Handler,
 		},
 		{
-			MethodName: "GetRun",
-			Handler:    _AgentProvider_GetRun_Handler,
+			MethodName: "GetSession",
+			Handler:    _AgentProvider_GetSession_Handler,
 		},
 		{
-			MethodName: "ListRuns",
-			Handler:    _AgentProvider_ListRuns_Handler,
+			MethodName: "ListSessions",
+			Handler:    _AgentProvider_ListSessions_Handler,
 		},
 		{
-			MethodName: "CancelRun",
-			Handler:    _AgentProvider_CancelRun_Handler,
+			MethodName: "UpdateSession",
+			Handler:    _AgentProvider_UpdateSession_Handler,
+		},
+		{
+			MethodName: "CreateTurn",
+			Handler:    _AgentProvider_CreateTurn_Handler,
+		},
+		{
+			MethodName: "GetTurn",
+			Handler:    _AgentProvider_GetTurn_Handler,
+		},
+		{
+			MethodName: "ListTurns",
+			Handler:    _AgentProvider_ListTurns_Handler,
+		},
+		{
+			MethodName: "CancelTurn",
+			Handler:    _AgentProvider_CancelTurn_Handler,
+		},
+		{
+			MethodName: "ListTurnEvents",
+			Handler:    _AgentProvider_ListTurnEvents_Handler,
+		},
+		{
+			MethodName: "GetInteraction",
+			Handler:    _AgentProvider_GetInteraction_Handler,
+		},
+		{
+			MethodName: "ListInteractions",
+			Handler:    _AgentProvider_ListInteractions_Handler,
+		},
+		{
+			MethodName: "ResolveInteraction",
+			Handler:    _AgentProvider_ResolveInteraction_Handler,
 		},
 		{
 			MethodName: "GetCapabilities",
 			Handler:    _AgentProvider_GetCapabilities_Handler,
-		},
-		{
-			MethodName: "ResumeRun",
-			Handler:    _AgentProvider_ResumeRun_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -312,9 +577,7 @@ var AgentProvider_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	AgentHost_ExecuteTool_FullMethodName        = "/gestalt.provider.v1.AgentHost/ExecuteTool"
-	AgentHost_EmitEvent_FullMethodName          = "/gestalt.provider.v1.AgentHost/EmitEvent"
-	AgentHost_RequestInteraction_FullMethodName = "/gestalt.provider.v1.AgentHost/RequestInteraction"
+	AgentHost_ExecuteTool_FullMethodName = "/gestalt.provider.v1.AgentHost/ExecuteTool"
 )
 
 // AgentHostClient is the client API for AgentHost service.
@@ -322,8 +585,6 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AgentHostClient interface {
 	ExecuteTool(ctx context.Context, in *ExecuteAgentToolRequest, opts ...grpc.CallOption) (*ExecuteAgentToolResponse, error)
-	EmitEvent(ctx context.Context, in *EmitAgentEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	RequestInteraction(ctx context.Context, in *RequestAgentInteractionRequest, opts ...grpc.CallOption) (*AgentInteraction, error)
 }
 
 type agentHostClient struct {
@@ -344,33 +605,11 @@ func (c *agentHostClient) ExecuteTool(ctx context.Context, in *ExecuteAgentToolR
 	return out, nil
 }
 
-func (c *agentHostClient) EmitEvent(ctx context.Context, in *EmitAgentEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, AgentHost_EmitEvent_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *agentHostClient) RequestInteraction(ctx context.Context, in *RequestAgentInteractionRequest, opts ...grpc.CallOption) (*AgentInteraction, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AgentInteraction)
-	err := c.cc.Invoke(ctx, AgentHost_RequestInteraction_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // AgentHostServer is the server API for AgentHost service.
 // All implementations must embed UnimplementedAgentHostServer
 // for forward compatibility.
 type AgentHostServer interface {
 	ExecuteTool(context.Context, *ExecuteAgentToolRequest) (*ExecuteAgentToolResponse, error)
-	EmitEvent(context.Context, *EmitAgentEventRequest) (*emptypb.Empty, error)
-	RequestInteraction(context.Context, *RequestAgentInteractionRequest) (*AgentInteraction, error)
 	mustEmbedUnimplementedAgentHostServer()
 }
 
@@ -383,12 +622,6 @@ type UnimplementedAgentHostServer struct{}
 
 func (UnimplementedAgentHostServer) ExecuteTool(context.Context, *ExecuteAgentToolRequest) (*ExecuteAgentToolResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExecuteTool not implemented")
-}
-func (UnimplementedAgentHostServer) EmitEvent(context.Context, *EmitAgentEventRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method EmitEvent not implemented")
-}
-func (UnimplementedAgentHostServer) RequestInteraction(context.Context, *RequestAgentInteractionRequest) (*AgentInteraction, error) {
-	return nil, status.Error(codes.Unimplemented, "method RequestInteraction not implemented")
 }
 func (UnimplementedAgentHostServer) mustEmbedUnimplementedAgentHostServer() {}
 func (UnimplementedAgentHostServer) testEmbeddedByValue()                   {}
@@ -429,42 +662,6 @@ func _AgentHost_ExecuteTool_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AgentHost_EmitEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(EmitAgentEventRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AgentHostServer).EmitEvent(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AgentHost_EmitEvent_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentHostServer).EmitEvent(ctx, req.(*EmitAgentEventRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AgentHost_RequestInteraction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RequestAgentInteractionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AgentHostServer).RequestInteraction(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AgentHost_RequestInteraction_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentHostServer).RequestInteraction(ctx, req.(*RequestAgentInteractionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // AgentHost_ServiceDesc is the grpc.ServiceDesc for AgentHost service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -476,34 +673,40 @@ var AgentHost_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "ExecuteTool",
 			Handler:    _AgentHost_ExecuteTool_Handler,
 		},
-		{
-			MethodName: "EmitEvent",
-			Handler:    _AgentHost_EmitEvent_Handler,
-		},
-		{
-			MethodName: "RequestInteraction",
-			Handler:    _AgentHost_RequestInteraction_Handler,
-		},
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "v1/agent.proto",
 }
 
 const (
-	AgentManagerHost_Run_FullMethodName       = "/gestalt.provider.v1.AgentManagerHost/Run"
-	AgentManagerHost_GetRun_FullMethodName    = "/gestalt.provider.v1.AgentManagerHost/GetRun"
-	AgentManagerHost_ListRuns_FullMethodName  = "/gestalt.provider.v1.AgentManagerHost/ListRuns"
-	AgentManagerHost_CancelRun_FullMethodName = "/gestalt.provider.v1.AgentManagerHost/CancelRun"
+	AgentManagerHost_CreateSession_FullMethodName      = "/gestalt.provider.v1.AgentManagerHost/CreateSession"
+	AgentManagerHost_GetSession_FullMethodName         = "/gestalt.provider.v1.AgentManagerHost/GetSession"
+	AgentManagerHost_ListSessions_FullMethodName       = "/gestalt.provider.v1.AgentManagerHost/ListSessions"
+	AgentManagerHost_UpdateSession_FullMethodName      = "/gestalt.provider.v1.AgentManagerHost/UpdateSession"
+	AgentManagerHost_CreateTurn_FullMethodName         = "/gestalt.provider.v1.AgentManagerHost/CreateTurn"
+	AgentManagerHost_GetTurn_FullMethodName            = "/gestalt.provider.v1.AgentManagerHost/GetTurn"
+	AgentManagerHost_ListTurns_FullMethodName          = "/gestalt.provider.v1.AgentManagerHost/ListTurns"
+	AgentManagerHost_CancelTurn_FullMethodName         = "/gestalt.provider.v1.AgentManagerHost/CancelTurn"
+	AgentManagerHost_ListTurnEvents_FullMethodName     = "/gestalt.provider.v1.AgentManagerHost/ListTurnEvents"
+	AgentManagerHost_ListInteractions_FullMethodName   = "/gestalt.provider.v1.AgentManagerHost/ListInteractions"
+	AgentManagerHost_ResolveInteraction_FullMethodName = "/gestalt.provider.v1.AgentManagerHost/ResolveInteraction"
 )
 
 // AgentManagerHostClient is the client API for AgentManagerHost service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AgentManagerHostClient interface {
-	Run(ctx context.Context, in *AgentManagerRunRequest, opts ...grpc.CallOption) (*ManagedAgentRun, error)
-	GetRun(ctx context.Context, in *AgentManagerGetRunRequest, opts ...grpc.CallOption) (*ManagedAgentRun, error)
-	ListRuns(ctx context.Context, in *AgentManagerListRunsRequest, opts ...grpc.CallOption) (*AgentManagerListRunsResponse, error)
-	CancelRun(ctx context.Context, in *AgentManagerCancelRunRequest, opts ...grpc.CallOption) (*ManagedAgentRun, error)
+	CreateSession(ctx context.Context, in *AgentManagerCreateSessionRequest, opts ...grpc.CallOption) (*AgentSession, error)
+	GetSession(ctx context.Context, in *AgentManagerGetSessionRequest, opts ...grpc.CallOption) (*AgentSession, error)
+	ListSessions(ctx context.Context, in *AgentManagerListSessionsRequest, opts ...grpc.CallOption) (*AgentManagerListSessionsResponse, error)
+	UpdateSession(ctx context.Context, in *AgentManagerUpdateSessionRequest, opts ...grpc.CallOption) (*AgentSession, error)
+	CreateTurn(ctx context.Context, in *AgentManagerCreateTurnRequest, opts ...grpc.CallOption) (*AgentTurn, error)
+	GetTurn(ctx context.Context, in *AgentManagerGetTurnRequest, opts ...grpc.CallOption) (*AgentTurn, error)
+	ListTurns(ctx context.Context, in *AgentManagerListTurnsRequest, opts ...grpc.CallOption) (*AgentManagerListTurnsResponse, error)
+	CancelTurn(ctx context.Context, in *AgentManagerCancelTurnRequest, opts ...grpc.CallOption) (*AgentTurn, error)
+	ListTurnEvents(ctx context.Context, in *AgentManagerListTurnEventsRequest, opts ...grpc.CallOption) (*AgentManagerListTurnEventsResponse, error)
+	ListInteractions(ctx context.Context, in *AgentManagerListInteractionsRequest, opts ...grpc.CallOption) (*AgentManagerListInteractionsResponse, error)
+	ResolveInteraction(ctx context.Context, in *AgentManagerResolveInteractionRequest, opts ...grpc.CallOption) (*AgentInteraction, error)
 }
 
 type agentManagerHostClient struct {
@@ -514,40 +717,110 @@ func NewAgentManagerHostClient(cc grpc.ClientConnInterface) AgentManagerHostClie
 	return &agentManagerHostClient{cc}
 }
 
-func (c *agentManagerHostClient) Run(ctx context.Context, in *AgentManagerRunRequest, opts ...grpc.CallOption) (*ManagedAgentRun, error) {
+func (c *agentManagerHostClient) CreateSession(ctx context.Context, in *AgentManagerCreateSessionRequest, opts ...grpc.CallOption) (*AgentSession, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedAgentRun)
-	err := c.cc.Invoke(ctx, AgentManagerHost_Run_FullMethodName, in, out, cOpts...)
+	out := new(AgentSession)
+	err := c.cc.Invoke(ctx, AgentManagerHost_CreateSession_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *agentManagerHostClient) GetRun(ctx context.Context, in *AgentManagerGetRunRequest, opts ...grpc.CallOption) (*ManagedAgentRun, error) {
+func (c *agentManagerHostClient) GetSession(ctx context.Context, in *AgentManagerGetSessionRequest, opts ...grpc.CallOption) (*AgentSession, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedAgentRun)
-	err := c.cc.Invoke(ctx, AgentManagerHost_GetRun_FullMethodName, in, out, cOpts...)
+	out := new(AgentSession)
+	err := c.cc.Invoke(ctx, AgentManagerHost_GetSession_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *agentManagerHostClient) ListRuns(ctx context.Context, in *AgentManagerListRunsRequest, opts ...grpc.CallOption) (*AgentManagerListRunsResponse, error) {
+func (c *agentManagerHostClient) ListSessions(ctx context.Context, in *AgentManagerListSessionsRequest, opts ...grpc.CallOption) (*AgentManagerListSessionsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AgentManagerListRunsResponse)
-	err := c.cc.Invoke(ctx, AgentManagerHost_ListRuns_FullMethodName, in, out, cOpts...)
+	out := new(AgentManagerListSessionsResponse)
+	err := c.cc.Invoke(ctx, AgentManagerHost_ListSessions_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *agentManagerHostClient) CancelRun(ctx context.Context, in *AgentManagerCancelRunRequest, opts ...grpc.CallOption) (*ManagedAgentRun, error) {
+func (c *agentManagerHostClient) UpdateSession(ctx context.Context, in *AgentManagerUpdateSessionRequest, opts ...grpc.CallOption) (*AgentSession, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedAgentRun)
-	err := c.cc.Invoke(ctx, AgentManagerHost_CancelRun_FullMethodName, in, out, cOpts...)
+	out := new(AgentSession)
+	err := c.cc.Invoke(ctx, AgentManagerHost_UpdateSession_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentManagerHostClient) CreateTurn(ctx context.Context, in *AgentManagerCreateTurnRequest, opts ...grpc.CallOption) (*AgentTurn, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentTurn)
+	err := c.cc.Invoke(ctx, AgentManagerHost_CreateTurn_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentManagerHostClient) GetTurn(ctx context.Context, in *AgentManagerGetTurnRequest, opts ...grpc.CallOption) (*AgentTurn, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentTurn)
+	err := c.cc.Invoke(ctx, AgentManagerHost_GetTurn_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentManagerHostClient) ListTurns(ctx context.Context, in *AgentManagerListTurnsRequest, opts ...grpc.CallOption) (*AgentManagerListTurnsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentManagerListTurnsResponse)
+	err := c.cc.Invoke(ctx, AgentManagerHost_ListTurns_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentManagerHostClient) CancelTurn(ctx context.Context, in *AgentManagerCancelTurnRequest, opts ...grpc.CallOption) (*AgentTurn, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentTurn)
+	err := c.cc.Invoke(ctx, AgentManagerHost_CancelTurn_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentManagerHostClient) ListTurnEvents(ctx context.Context, in *AgentManagerListTurnEventsRequest, opts ...grpc.CallOption) (*AgentManagerListTurnEventsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentManagerListTurnEventsResponse)
+	err := c.cc.Invoke(ctx, AgentManagerHost_ListTurnEvents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentManagerHostClient) ListInteractions(ctx context.Context, in *AgentManagerListInteractionsRequest, opts ...grpc.CallOption) (*AgentManagerListInteractionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentManagerListInteractionsResponse)
+	err := c.cc.Invoke(ctx, AgentManagerHost_ListInteractions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentManagerHostClient) ResolveInteraction(ctx context.Context, in *AgentManagerResolveInteractionRequest, opts ...grpc.CallOption) (*AgentInteraction, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AgentInteraction)
+	err := c.cc.Invoke(ctx, AgentManagerHost_ResolveInteraction_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -558,10 +831,17 @@ func (c *agentManagerHostClient) CancelRun(ctx context.Context, in *AgentManager
 // All implementations must embed UnimplementedAgentManagerHostServer
 // for forward compatibility.
 type AgentManagerHostServer interface {
-	Run(context.Context, *AgentManagerRunRequest) (*ManagedAgentRun, error)
-	GetRun(context.Context, *AgentManagerGetRunRequest) (*ManagedAgentRun, error)
-	ListRuns(context.Context, *AgentManagerListRunsRequest) (*AgentManagerListRunsResponse, error)
-	CancelRun(context.Context, *AgentManagerCancelRunRequest) (*ManagedAgentRun, error)
+	CreateSession(context.Context, *AgentManagerCreateSessionRequest) (*AgentSession, error)
+	GetSession(context.Context, *AgentManagerGetSessionRequest) (*AgentSession, error)
+	ListSessions(context.Context, *AgentManagerListSessionsRequest) (*AgentManagerListSessionsResponse, error)
+	UpdateSession(context.Context, *AgentManagerUpdateSessionRequest) (*AgentSession, error)
+	CreateTurn(context.Context, *AgentManagerCreateTurnRequest) (*AgentTurn, error)
+	GetTurn(context.Context, *AgentManagerGetTurnRequest) (*AgentTurn, error)
+	ListTurns(context.Context, *AgentManagerListTurnsRequest) (*AgentManagerListTurnsResponse, error)
+	CancelTurn(context.Context, *AgentManagerCancelTurnRequest) (*AgentTurn, error)
+	ListTurnEvents(context.Context, *AgentManagerListTurnEventsRequest) (*AgentManagerListTurnEventsResponse, error)
+	ListInteractions(context.Context, *AgentManagerListInteractionsRequest) (*AgentManagerListInteractionsResponse, error)
+	ResolveInteraction(context.Context, *AgentManagerResolveInteractionRequest) (*AgentInteraction, error)
 	mustEmbedUnimplementedAgentManagerHostServer()
 }
 
@@ -572,17 +852,38 @@ type AgentManagerHostServer interface {
 // pointer dereference when methods are called.
 type UnimplementedAgentManagerHostServer struct{}
 
-func (UnimplementedAgentManagerHostServer) Run(context.Context, *AgentManagerRunRequest) (*ManagedAgentRun, error) {
-	return nil, status.Error(codes.Unimplemented, "method Run not implemented")
+func (UnimplementedAgentManagerHostServer) CreateSession(context.Context, *AgentManagerCreateSessionRequest) (*AgentSession, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateSession not implemented")
 }
-func (UnimplementedAgentManagerHostServer) GetRun(context.Context, *AgentManagerGetRunRequest) (*ManagedAgentRun, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetRun not implemented")
+func (UnimplementedAgentManagerHostServer) GetSession(context.Context, *AgentManagerGetSessionRequest) (*AgentSession, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSession not implemented")
 }
-func (UnimplementedAgentManagerHostServer) ListRuns(context.Context, *AgentManagerListRunsRequest) (*AgentManagerListRunsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListRuns not implemented")
+func (UnimplementedAgentManagerHostServer) ListSessions(context.Context, *AgentManagerListSessionsRequest) (*AgentManagerListSessionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSessions not implemented")
 }
-func (UnimplementedAgentManagerHostServer) CancelRun(context.Context, *AgentManagerCancelRunRequest) (*ManagedAgentRun, error) {
-	return nil, status.Error(codes.Unimplemented, "method CancelRun not implemented")
+func (UnimplementedAgentManagerHostServer) UpdateSession(context.Context, *AgentManagerUpdateSessionRequest) (*AgentSession, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateSession not implemented")
+}
+func (UnimplementedAgentManagerHostServer) CreateTurn(context.Context, *AgentManagerCreateTurnRequest) (*AgentTurn, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateTurn not implemented")
+}
+func (UnimplementedAgentManagerHostServer) GetTurn(context.Context, *AgentManagerGetTurnRequest) (*AgentTurn, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTurn not implemented")
+}
+func (UnimplementedAgentManagerHostServer) ListTurns(context.Context, *AgentManagerListTurnsRequest) (*AgentManagerListTurnsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTurns not implemented")
+}
+func (UnimplementedAgentManagerHostServer) CancelTurn(context.Context, *AgentManagerCancelTurnRequest) (*AgentTurn, error) {
+	return nil, status.Error(codes.Unimplemented, "method CancelTurn not implemented")
+}
+func (UnimplementedAgentManagerHostServer) ListTurnEvents(context.Context, *AgentManagerListTurnEventsRequest) (*AgentManagerListTurnEventsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTurnEvents not implemented")
+}
+func (UnimplementedAgentManagerHostServer) ListInteractions(context.Context, *AgentManagerListInteractionsRequest) (*AgentManagerListInteractionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListInteractions not implemented")
+}
+func (UnimplementedAgentManagerHostServer) ResolveInteraction(context.Context, *AgentManagerResolveInteractionRequest) (*AgentInteraction, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveInteraction not implemented")
 }
 func (UnimplementedAgentManagerHostServer) mustEmbedUnimplementedAgentManagerHostServer() {}
 func (UnimplementedAgentManagerHostServer) testEmbeddedByValue()                          {}
@@ -605,74 +906,200 @@ func RegisterAgentManagerHostServer(s grpc.ServiceRegistrar, srv AgentManagerHos
 	s.RegisterService(&AgentManagerHost_ServiceDesc, srv)
 }
 
-func _AgentManagerHost_Run_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AgentManagerRunRequest)
+func _AgentManagerHost_CreateSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentManagerCreateSessionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AgentManagerHostServer).Run(ctx, in)
+		return srv.(AgentManagerHostServer).CreateSession(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AgentManagerHost_Run_FullMethodName,
+		FullMethod: AgentManagerHost_CreateSession_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentManagerHostServer).Run(ctx, req.(*AgentManagerRunRequest))
+		return srv.(AgentManagerHostServer).CreateSession(ctx, req.(*AgentManagerCreateSessionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AgentManagerHost_GetRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AgentManagerGetRunRequest)
+func _AgentManagerHost_GetSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentManagerGetSessionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AgentManagerHostServer).GetRun(ctx, in)
+		return srv.(AgentManagerHostServer).GetSession(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AgentManagerHost_GetRun_FullMethodName,
+		FullMethod: AgentManagerHost_GetSession_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentManagerHostServer).GetRun(ctx, req.(*AgentManagerGetRunRequest))
+		return srv.(AgentManagerHostServer).GetSession(ctx, req.(*AgentManagerGetSessionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AgentManagerHost_ListRuns_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AgentManagerListRunsRequest)
+func _AgentManagerHost_ListSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentManagerListSessionsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AgentManagerHostServer).ListRuns(ctx, in)
+		return srv.(AgentManagerHostServer).ListSessions(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AgentManagerHost_ListRuns_FullMethodName,
+		FullMethod: AgentManagerHost_ListSessions_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentManagerHostServer).ListRuns(ctx, req.(*AgentManagerListRunsRequest))
+		return srv.(AgentManagerHostServer).ListSessions(ctx, req.(*AgentManagerListSessionsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AgentManagerHost_CancelRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AgentManagerCancelRunRequest)
+func _AgentManagerHost_UpdateSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentManagerUpdateSessionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AgentManagerHostServer).CancelRun(ctx, in)
+		return srv.(AgentManagerHostServer).UpdateSession(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AgentManagerHost_CancelRun_FullMethodName,
+		FullMethod: AgentManagerHost_UpdateSession_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AgentManagerHostServer).CancelRun(ctx, req.(*AgentManagerCancelRunRequest))
+		return srv.(AgentManagerHostServer).UpdateSession(ctx, req.(*AgentManagerUpdateSessionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentManagerHost_CreateTurn_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentManagerCreateTurnRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentManagerHostServer).CreateTurn(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentManagerHost_CreateTurn_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentManagerHostServer).CreateTurn(ctx, req.(*AgentManagerCreateTurnRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentManagerHost_GetTurn_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentManagerGetTurnRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentManagerHostServer).GetTurn(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentManagerHost_GetTurn_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentManagerHostServer).GetTurn(ctx, req.(*AgentManagerGetTurnRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentManagerHost_ListTurns_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentManagerListTurnsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentManagerHostServer).ListTurns(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentManagerHost_ListTurns_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentManagerHostServer).ListTurns(ctx, req.(*AgentManagerListTurnsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentManagerHost_CancelTurn_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentManagerCancelTurnRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentManagerHostServer).CancelTurn(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentManagerHost_CancelTurn_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentManagerHostServer).CancelTurn(ctx, req.(*AgentManagerCancelTurnRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentManagerHost_ListTurnEvents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentManagerListTurnEventsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentManagerHostServer).ListTurnEvents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentManagerHost_ListTurnEvents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentManagerHostServer).ListTurnEvents(ctx, req.(*AgentManagerListTurnEventsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentManagerHost_ListInteractions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentManagerListInteractionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentManagerHostServer).ListInteractions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentManagerHost_ListInteractions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentManagerHostServer).ListInteractions(ctx, req.(*AgentManagerListInteractionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentManagerHost_ResolveInteraction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AgentManagerResolveInteractionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentManagerHostServer).ResolveInteraction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentManagerHost_ResolveInteraction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentManagerHostServer).ResolveInteraction(ctx, req.(*AgentManagerResolveInteractionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -685,20 +1112,48 @@ var AgentManagerHost_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*AgentManagerHostServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Run",
-			Handler:    _AgentManagerHost_Run_Handler,
+			MethodName: "CreateSession",
+			Handler:    _AgentManagerHost_CreateSession_Handler,
 		},
 		{
-			MethodName: "GetRun",
-			Handler:    _AgentManagerHost_GetRun_Handler,
+			MethodName: "GetSession",
+			Handler:    _AgentManagerHost_GetSession_Handler,
 		},
 		{
-			MethodName: "ListRuns",
-			Handler:    _AgentManagerHost_ListRuns_Handler,
+			MethodName: "ListSessions",
+			Handler:    _AgentManagerHost_ListSessions_Handler,
 		},
 		{
-			MethodName: "CancelRun",
-			Handler:    _AgentManagerHost_CancelRun_Handler,
+			MethodName: "UpdateSession",
+			Handler:    _AgentManagerHost_UpdateSession_Handler,
+		},
+		{
+			MethodName: "CreateTurn",
+			Handler:    _AgentManagerHost_CreateTurn_Handler,
+		},
+		{
+			MethodName: "GetTurn",
+			Handler:    _AgentManagerHost_GetTurn_Handler,
+		},
+		{
+			MethodName: "ListTurns",
+			Handler:    _AgentManagerHost_ListTurns_Handler,
+		},
+		{
+			MethodName: "CancelTurn",
+			Handler:    _AgentManagerHost_CancelTurn_Handler,
+		},
+		{
+			MethodName: "ListTurnEvents",
+			Handler:    _AgentManagerHost_ListTurnEvents_Handler,
+		},
+		{
+			MethodName: "ListInteractions",
+			Handler:    _AgentManagerHost_ListInteractions_Handler,
+		},
+		{
+			MethodName: "ResolveInteraction",
+			Handler:    _AgentManagerHost_ResolveInteraction_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -68,8 +68,6 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	}
 	defer func() { _ = authz.Close() }()
 	prepared.Deps.AgentRuntime.SetRunMetadata(prepared.Services.AgentRunMetadata)
-	prepared.Deps.AgentRuntime.SetRunEvents(prepared.Services.AgentRunEvents)
-	prepared.Deps.AgentRuntime.SetRunInteractions(prepared.Services.AgentRunInteractions)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, coredata.EffectiveExternalCredentialProvider(prepared.Services),
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),

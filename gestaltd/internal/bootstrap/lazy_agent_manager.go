@@ -33,68 +33,92 @@ func (l *lazyAgentManager) Available() bool {
 	return target.Available()
 }
 
-func (l *lazyAgentManager) Run(ctx context.Context, p *principal.Principal, req coreagent.ManagerRunRequest) (*coreagent.ManagedRun, error) {
+func (l *lazyAgentManager) CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.Run(ctx, p, req)
+	return target.CreateSession(ctx, p, req)
 }
 
-func (l *lazyAgentManager) GetRun(ctx context.Context, p *principal.Principal, runID string) (*coreagent.ManagedRun, error) {
+func (l *lazyAgentManager) GetSession(ctx context.Context, p *principal.Principal, sessionID string) (*coreagent.Session, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.GetRun(ctx, p, runID)
+	return target.GetSession(ctx, p, sessionID)
 }
 
-func (l *lazyAgentManager) ListRuns(ctx context.Context, p *principal.Principal) ([]*coreagent.ManagedRun, error) {
+func (l *lazyAgentManager) ListSessions(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.Session, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.ListRuns(ctx, p)
+	return target.ListSessions(ctx, p, providerName)
 }
 
-func (l *lazyAgentManager) ListRunsByProvider(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.ManagedRun, error) {
+func (l *lazyAgentManager) UpdateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerUpdateSessionRequest) (*coreagent.Session, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.ListRunsByProvider(ctx, p, providerName)
+	return target.UpdateSession(ctx, p, req)
 }
 
-func (l *lazyAgentManager) CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*coreagent.ManagedRun, error) {
+func (l *lazyAgentManager) CreateTurn(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.CancelRun(ctx, p, runID, reason)
+	return target.CreateTurn(ctx, p, req)
 }
 
-func (l *lazyAgentManager) ListRunEvents(ctx context.Context, p *principal.Principal, runID string, afterSeq int64, limit int) ([]*coreagent.RunEvent, error) {
+func (l *lazyAgentManager) GetTurn(ctx context.Context, p *principal.Principal, turnID string) (*coreagent.Turn, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.ListRunEvents(ctx, p, runID, afterSeq, limit)
+	return target.GetTurn(ctx, p, turnID)
 }
 
-func (l *lazyAgentManager) ListRunInteractions(ctx context.Context, p *principal.Principal, runID string) ([]*coreagent.Interaction, error) {
+func (l *lazyAgentManager) ListTurns(ctx context.Context, p *principal.Principal, sessionID string) ([]*coreagent.Turn, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.ListRunInteractions(ctx, p, runID)
+	return target.ListTurns(ctx, p, sessionID)
 }
 
-func (l *lazyAgentManager) ResumeRun(ctx context.Context, p *principal.Principal, runID, interactionID string, resolution map[string]any) (*coreagent.ManagedRun, error) {
+func (l *lazyAgentManager) CancelTurn(ctx context.Context, p *principal.Principal, turnID, reason string) (*coreagent.Turn, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.ResumeRun(ctx, p, runID, interactionID, resolution)
+	return target.CancelTurn(ctx, p, turnID, reason)
+}
+
+func (l *lazyAgentManager) ListTurnEvents(ctx context.Context, p *principal.Principal, turnID string, afterSeq int64, limit int) ([]*coreagent.TurnEvent, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
+}
+
+func (l *lazyAgentManager) ListInteractions(ctx context.Context, p *principal.Principal, turnID string) ([]*coreagent.Interaction, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ListInteractions(ctx, p, turnID)
+}
+
+func (l *lazyAgentManager) ResolveInteraction(ctx context.Context, p *principal.Principal, turnID, interactionID string, resolution map[string]any) (*coreagent.Interaction, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ResolveInteraction(ctx, p, turnID, interactionID, resolution)
 }
 
 func (l *lazyAgentManager) current() (agentmanager.Service, error) {

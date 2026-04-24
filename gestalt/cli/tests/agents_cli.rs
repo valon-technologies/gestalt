@@ -2,8 +2,19 @@ mod support;
 
 use support::*;
 
-const RUN_JSON: &str = r#"{
-    "id":"run-1",
+const SESSION_JSON: &str = r#"{
+    "id":"session-1",
+    "provider":"managed",
+    "model":"gpt-5.4",
+    "state":"active",
+    "clientRef":"cli-session-1",
+    "createdAt":"2026-04-22T00:00:00Z",
+    "updatedAt":"2026-04-22T00:00:00Z"
+}"#;
+
+const TURN_JSON: &str = r#"{
+    "id":"turn-1",
+    "sessionId":"session-1",
     "provider":"managed",
     "model":"gpt-5.4",
     "status":"running",
@@ -11,17 +22,16 @@ const RUN_JSON: &str = r#"{
         {"role":"system","text":"Be concise."},
         {"role":"user","text":"Summarize the roadmap risk."}
     ],
-    "sessionRef":"session-1",
     "createdAt":"2026-04-22T00:00:00Z",
-    "executionRef":"run-1"
+    "executionRef":"turn-1"
 }"#;
 
-const RUN_EVENTS_JSON: &str = r#"[
+const TURN_EVENTS_JSON: &str = r#"[
     {
         "id":"evt-1",
-        "runId":"run-1",
+        "turnId":"turn-1",
         "seq":1,
-        "type":"agent.run.started",
+        "type":"turn.started",
         "source":"managed",
         "visibility":"public",
         "data":{"status":"running"},
@@ -29,7 +39,7 @@ const RUN_EVENTS_JSON: &str = r#"[
     },
     {
         "id":"evt-2",
-        "runId":"run-1",
+        "turnId":"turn-1",
         "seq":2,
         "type":"agent.message.delta",
         "source":"managed",
@@ -40,12 +50,12 @@ const RUN_EVENTS_JSON: &str = r#"[
 ]"#;
 
 #[test]
-fn test_cli_creates_agent_run() {
+fn test_cli_creates_agent_session() {
     let mut server = Server::new();
     let _mock = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/agent/runs",
+        "/api/v1/agent/sessions",
         StatusCode::CREATED
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
@@ -53,47 +63,40 @@ fn test_cli_creates_agent_run() {
         r#"{
                 "provider":"managed",
                 "model":"gpt-5.4",
-                "idempotencyKey":"agent-create-1",
-                "messages":[
-                    {"role":"system","text":"Be concise."},
-                    {"role":"user","text":"Summarize the roadmap risk."}
-                ]
+                "clientRef":"cli-session-1",
+                "idempotencyKey":"session-create-1"
             }"#
         .to_string(),
     ))
-    .with_body(RUN_JSON)
+    .with_body(SESSION_JSON)
     .create();
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
             "agent",
-            "runs",
+            "sessions",
             "create",
             "--provider",
             "managed",
             "--model",
             "gpt-5.4",
-            "--system",
-            "Be concise.",
-            "--message",
-            "Summarize the roadmap risk.",
+            "--client-ref",
+            "cli-session-1",
             "--idempotency-key",
-            "agent-create-1",
+            "session-create-1",
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("run-1"))
+        .stdout(predicate::str::contains("session-1"))
         .stdout(predicate::str::contains("managed"));
 }
 
 #[test]
-fn test_cli_creates_agent_run_from_input() {
+fn test_cli_creates_agent_turn_from_input() {
     let request_json = r#"{
-        "provider":"managed",
         "model":"gpt-5.4",
         "toolSource":"explicit",
-        "sessionRef":"session-1",
         "metadata":{"ticket":"AIT-123"},
         "providerOptions":{"temperature":0.2},
         "responseSchema":{
@@ -119,38 +122,39 @@ fn test_cli_creates_agent_run_from_input() {
     let _mock = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/agent/runs",
+        "/api/v1/agent/sessions/session-1/turns",
         StatusCode::CREATED
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(request_json.to_string()))
-    .with_body(RUN_JSON)
+    .with_body(TURN_JSON)
     .create();
 
     let home = tempfile::tempdir().unwrap();
-    let request_path = home.path().join("agent-request.json");
+    let request_path = home.path().join("agent-turn-request.json");
     std::fs::write(&request_path, request_json).unwrap();
 
     cli_command_for_server(home.path(), &server)
         .args([
             "agent",
-            "runs",
+            "turns",
             "create",
+            "session-1",
             "--input",
             request_path.to_str().unwrap(),
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("run-1"));
+        .stdout(predicate::str::contains("turn-1"));
 }
 
 #[test]
-fn test_cli_rejects_agent_run_create_without_messages() {
+fn test_cli_rejects_agent_turn_create_without_messages() {
     let mut server = Server::new();
     let create = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/agent/runs",
+        "/api/v1/agent/sessions/session-1/turns",
         StatusCode::CREATED
     )
     .expect(0)
@@ -158,83 +162,84 @@ fn test_cli_rejects_agent_run_create_without_messages() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["agent", "runs", "create"])
+        .args(["agent", "turns", "create", "session-1"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "agent runs create requires at least one message",
+            "agent turns create requires at least one message",
         ));
 
     create.assert();
 }
 
 #[test]
-fn test_cli_lists_agent_runs_with_server_side_filters() {
+fn test_cli_lists_agent_sessions_with_server_side_filters() {
     let mut server = Server::new();
     let _mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/agent/runs?provider=managed&status=running",
+        "/api/v1/agent/sessions?provider=managed&state=active",
         StatusCode::OK
     )
-        .with_body(
-            r#"[
-                {"id":"run-a","provider":"managed","model":"gpt-5.4","status":"running","createdAt":"2026-04-22T00:00:00Z"}
+    .with_body(
+        r#"[
+                {"id":"session-a","provider":"managed","model":"gpt-5.4","state":"active","updatedAt":"2026-04-22T00:00:00Z"}
             ]"#,
-        )
-        .create();
+    )
+    .create();
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
             "agent",
-            "runs",
+            "sessions",
             "list",
             "--provider",
             "managed",
-            "--status",
-            "running",
+            "--state",
+            "active",
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("run-a"));
+        .stdout(predicate::str::contains("session-a"));
 }
 
 #[test]
-fn test_cli_gets_agent_run() {
+fn test_cli_gets_agent_turn() {
     let mut server = Server::new();
     let _mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/agent/runs/run-1",
+        "/api/v1/agent/turns/turn-1",
         StatusCode::OK
     )
-    .with_body(RUN_JSON)
+    .with_body(TURN_JSON)
     .create();
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["agent", "runs", "get", "run-1"])
+        .args(["agent", "turns", "get", "turn-1"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("run-1"))
+        .stdout(predicate::str::contains("turn-1"))
         .stdout(predicate::str::contains("gpt-5.4"));
 }
 
 #[test]
-fn test_cli_cancels_agent_run() {
+fn test_cli_cancels_agent_turn() {
     let mut server = Server::new();
     let _mock = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/agent/runs/run-1/cancel",
+        "/api/v1/agent/turns/turn-1/cancel",
         StatusCode::OK
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(r#"{"reason":"stop now"}"#.to_string()))
     .with_body(
         r#"{
-                    "id":"run-1",
+                    "id":"turn-1",
+                    "sessionId":"session-1",
                     "provider":"managed",
                     "model":"gpt-5.4",
                     "status":"canceled",
@@ -245,28 +250,28 @@ fn test_cli_cancels_agent_run() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["agent", "runs", "cancel", "run-1", "--reason", "stop now"])
+        .args(["agent", "turns", "cancel", "turn-1", "--reason", "stop now"])
         .assert()
         .success()
         .stdout(predicate::str::contains("canceled"));
 }
 
 #[test]
-fn test_cli_lists_agent_run_events() {
+fn test_cli_lists_agent_turn_events() {
     let mut server = Server::new();
     let _mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/agent/runs/run-1/events?after=0&limit=10",
+        "/api/v1/agent/turns/turn-1/events?after=0&limit=10",
         StatusCode::OK
     )
-    .with_body(RUN_EVENTS_JSON)
+    .with_body(TURN_EVENTS_JSON)
     .create();
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
-            "--format", "json", "agent", "runs", "events", "list", "run-1", "--after", "0",
+            "--format", "json", "agent", "turns", "events", "list", "turn-1", "--after", "0",
             "--limit", "10",
         ])
         .assert()
@@ -276,28 +281,28 @@ fn test_cli_lists_agent_run_events() {
 }
 
 #[test]
-fn test_cli_streams_agent_run_events() {
+fn test_cli_streams_agent_turn_events() {
     let mut server = Server::new();
     let _mock = server
         .mock(
             Method::GET.as_str(),
-            "/api/v1/agent/runs/run-1/events/stream?after=2&limit=1",
+            "/api/v1/agent/turns/turn-1/events/stream?after=2&limit=1",
         )
         .match_header(header::AUTHORIZATION.as_str(), Matcher::Exact(test_bearer()))
         .with_status(usize::from(StatusCode::OK.as_u16()))
         .with_header(header::CONTENT_TYPE.as_str(), "text/event-stream")
         .with_body(
-            "id: 3\nevent: agent.run.completed\ndata: {\"seq\":3,\"type\":\"agent.run.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+            "id: 3\nevent: turn.completed\ndata: {\"seq\":3,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
         )
         .create();
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
-            "agent", "runs", "events", "stream", "run-1", "--after", "2", "--limit", "1",
+            "agent", "turns", "events", "stream", "turn-1", "--after", "2", "--limit", "1",
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("event: agent.run.completed"))
+        .stdout(predicate::str::contains("event: turn.completed"))
         .stdout(predicate::str::contains(r#""status":"succeeded""#));
 }

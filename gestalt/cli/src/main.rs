@@ -1,9 +1,10 @@
 use clap::{CommandFactory, Parser};
 use gestalt::api::{self, ApiClient};
 use gestalt::cli::{
-    AgentCommands, AgentRunCommands, AgentRunEventCommands, AuthCommands, Cli, Commands,
-    ConfigCommands, DescribeArgs, InvokeArgs, PluginCommands, TokenCommands, WorkflowCommands,
-    WorkflowEventCommands, WorkflowRunCommands, WorkflowScheduleCommands, WorkflowTriggerCommands,
+    AgentCommands, AgentSessionCommands, AgentTurnCommands, AgentTurnEventCommands, AuthCommands,
+    Cli, Commands, ConfigCommands, DescribeArgs, InvokeArgs, PluginCommands, TokenCommands,
+    WorkflowCommands, WorkflowEventCommands, WorkflowRunCommands, WorkflowScheduleCommands,
+    WorkflowTriggerCommands,
 };
 use gestalt::commands;
 use gestalt::output;
@@ -126,26 +127,47 @@ fn run() -> anyhow::Result<()> {
         Commands::Agent { command } => {
             let client = ApiClient::from_env(url)?;
             match command {
-                AgentCommands::Runs { command } => match command {
-                    AgentRunCommands::Create(args) => {
-                        commands::agents::create_run(&client, &args, format)
+                AgentCommands::Sessions { command } => match command {
+                    AgentSessionCommands::Create(args) => {
+                        commands::agents::create_session(&client, &args, format)
                     }
-                    AgentRunCommands::List { provider, status } => commands::agents::list_runs(
+                    AgentSessionCommands::List { provider, state } => {
+                        commands::agents::list_sessions(
+                            &client,
+                            provider.as_deref(),
+                            state.as_deref(),
+                            format,
+                        )
+                    }
+                    AgentSessionCommands::Get { id } => {
+                        commands::agents::get_session(&client, &id, format)
+                    }
+                    AgentSessionCommands::Update(args) => {
+                        commands::agents::update_session(&client, &args, format)
+                    }
+                },
+                AgentCommands::Turns { command } => match command {
+                    AgentTurnCommands::Create(args) => {
+                        commands::agents::create_turn(&client, &args, format)
+                    }
+                    AgentTurnCommands::List { session_id, status } => commands::agents::list_turns(
                         &client,
-                        provider.as_deref(),
+                        &session_id,
                         status.as_deref(),
                         format,
                     ),
-                    AgentRunCommands::Get { id } => commands::agents::get_run(&client, &id, format),
-                    AgentRunCommands::Cancel { id, reason } => {
-                        commands::agents::cancel_run(&client, &id, reason.as_deref(), format)
+                    AgentTurnCommands::Get { id } => {
+                        commands::agents::get_turn(&client, &id, format)
                     }
-                    AgentRunCommands::Events { command } => match command {
-                        AgentRunEventCommands::List(args) => {
-                            commands::agents::list_run_events(&client, &args, format)
+                    AgentTurnCommands::Cancel { id, reason } => {
+                        commands::agents::cancel_turn(&client, &id, reason.as_deref(), format)
+                    }
+                    AgentTurnCommands::Events { command } => match command {
+                        AgentTurnEventCommands::List(args) => {
+                            commands::agents::list_turn_events(&client, &args, format)
                         }
-                        AgentRunEventCommands::Stream(args) => {
-                            commands::agents::stream_run_events(&client, &args)
+                        AgentTurnEventCommands::Stream(args) => {
+                            commands::agents::stream_turn_events(&client, &args)
                         }
                     },
                 },

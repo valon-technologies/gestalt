@@ -4,15 +4,15 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { EmptySchema, Timestamp } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file v1/agent.proto.
  */
 export const file_v1_agent: GenFile = /*@__PURE__*/
-  fileDesc("Cg52MS9hZ2VudC5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSKLAQoMQWdlbnRNZXNzYWdlEgwKBHJvbGUYASABKAkSDAoEdGV4dBgCIAEoCRI0CgVwYXJ0cxgDIAMoCzIlLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRNZXNzYWdlUGFydBIpCghtZXRhZGF0YRgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiYwoYQWdlbnRNZXNzYWdlUGFydFRvb2xDYWxsEgoKAmlkGAEgASgJEg8KB3Rvb2xfaWQYAiABKAkSKgoJYXJndW1lbnRzGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJ8ChpBZ2VudE1lc3NhZ2VQYXJ0VG9vbFJlc3VsdBIUCgx0b29sX2NhbGxfaWQYASABKAkSDgoGc3RhdHVzGAIgASgFEg8KB2NvbnRlbnQYAyABKAkSJwoGb3V0cHV0GAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCI6ChhBZ2VudE1lc3NhZ2VQYXJ0SW1hZ2VSZWYSCwoDdXJpGAEgASgJEhEKCW1pbWVfdHlwZRgCIAEoCSLKAgoQQWdlbnRNZXNzYWdlUGFydBI3CgR0eXBlGAEgASgOMikuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudE1lc3NhZ2VQYXJ0VHlwZRIMCgR0ZXh0GAIgASgJEiUKBGpzb24YAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EkAKCXRvb2xfY2FsbBgEIAEoCzItLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRNZXNzYWdlUGFydFRvb2xDYWxsEkQKC3Rvb2xfcmVzdWx0GAUgASgLMi8uZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudE1lc3NhZ2VQYXJ0VG9vbFJlc3VsdBJACglpbWFnZV9yZWYYBiABKAsyLS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50TWVzc2FnZVBhcnRJbWFnZVJlZiJhCgpBZ2VudEFjdG9yEhIKCnN1YmplY3RfaWQYASABKAkSFAoMc3ViamVjdF9raW5kGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRITCgthdXRoX3NvdXJjZRgEIAEoCSJkChRCb3VuZEFnZW50VG9vbFRhcmdldBITCgtwbHVnaW5fbmFtZRgBIAEoCRIRCglvcGVyYXRpb24YAiABKAkSEgoKY29ubmVjdGlvbhgDIAEoCRIQCghpbnN0YW5jZRgEIAEoCSKxAQoRUmVzb2x2ZWRBZ2VudFRvb2wSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRI5CgZ0YXJnZXQYBCABKAsyKS5nZXN0YWx0LnByb3ZpZGVyLnYxLkJvdW5kQWdlbnRUb29sVGFyZ2V0EjIKEXBhcmFtZXRlcnNfc2NoZW1hGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCKAAQoMQWdlbnRUb29sUmVmEhMKC3BsdWdpbl9uYW1lGAEgASgJEhEKCW9wZXJhdGlvbhgCIAEoCRISCgpjb25uZWN0aW9uGAMgASgJEhAKCGluc3RhbmNlGAQgASgJEg0KBXRpdGxlGAUgASgJEhMKC2Rlc2NyaXB0aW9uGAYgASgJIuUBChlBZ2VudFByb3ZpZGVyQ2FwYWJpbGl0aWVzEhYKDnN0cmVhbWluZ190ZXh0GAEgASgIEhIKCnRvb2xfY2FsbHMYAiABKAgSGwoTcGFyYWxsZWxfdG9vbF9jYWxscxgDIAEoCBIZChFzdHJ1Y3R1cmVkX291dHB1dBgEIAEoCBIcChRzZXNzaW9uX2NvbnRpbnVhdGlvbhgFIAEoCBIRCglhcHByb3ZhbHMYBiABKAgSFgoOcmVzdW1hYmxlX3J1bnMYByABKAgSGwoTcmVhc29uaW5nX3N1bW1hcmllcxgIIAEoCCIlCiNHZXRBZ2VudFByb3ZpZGVyQ2FwYWJpbGl0aWVzUmVxdWVzdCJ0Ch1SZXN1bWVBZ2VudFByb3ZpZGVyUnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkSFgoOaW50ZXJhY3Rpb25faWQYAiABKAkSKwoKcmVzb2x1dGlvbhgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QisgEKHlJlcXVlc3RBZ2VudEludGVyYWN0aW9uUmVxdWVzdBIOCgZydW5faWQYASABKAkSNwoEdHlwZRgCIAEoDjIpLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRJbnRlcmFjdGlvblR5cGUSDQoFdGl0bGUYAyABKAkSDgoGcHJvbXB0GAQgASgJEigKB3JlcXVlc3QYBSABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IvkCChBBZ2VudEludGVyYWN0aW9uEgoKAmlkGAEgASgJEg4KBnJ1bl9pZBgCIAEoCRI3CgR0eXBlGAMgASgOMikuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudEludGVyYWN0aW9uVHlwZRI5CgVzdGF0ZRgEIAEoDjIqLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRJbnRlcmFjdGlvblN0YXRlEg0KBXRpdGxlGAUgASgJEg4KBnByb21wdBgGIAEoCRIoCgdyZXF1ZXN0GAcgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIrCgpyZXNvbHV0aW9uGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIuCgpjcmVhdGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtyZXNvbHZlZF9hdBgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAi/wMKDUJvdW5kQWdlbnRSdW4SCgoCaWQYASABKAkSFQoNcHJvdmlkZXJfbmFtZRgCIAEoCRINCgVtb2RlbBgDIAEoCRIzCgZzdGF0dXMYBCABKA4yIy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50UnVuU3RhdHVzEjMKCG1lc3NhZ2VzGAUgAygLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudE1lc3NhZ2USEwoLb3V0cHV0X3RleHQYBiABKAkSMgoRc3RydWN0dXJlZF9vdXRwdXQYByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhYKDnN0YXR1c19tZXNzYWdlGAggASgJEhMKC3Nlc3Npb25fcmVmGAkgASgJEjMKCmNyZWF0ZWRfYnkYCiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50QWN0b3ISLgoKY3JlYXRlZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKc3RhcnRlZF9hdBgMIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMY29tcGxldGVkX2F0GA0gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1leGVjdXRpb25fcmVmGA4gASgJIsoDChxTdGFydEFnZW50UHJvdmlkZXJSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCRIXCg9pZGVtcG90ZW5jeV9rZXkYAiABKAkSFQoNcHJvdmlkZXJfbmFtZRgDIAEoCRINCgVtb2RlbBgEIAEoCRIzCghtZXNzYWdlcxgFIAMoCzIhLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRNZXNzYWdlEjUKBXRvb2xzGAYgAygLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvbHZlZEFnZW50VG9vbBIwCg9yZXNwb25zZV9zY2hlbWEYByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhMKC3Nlc3Npb25fcmVmGAggASgJEikKCG1ldGFkYXRhGAkgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIxChBwcm92aWRlcl9vcHRpb25zGAogASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIzCgpjcmVhdGVkX2J5GAsgASgLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudEFjdG9yEhUKDWV4ZWN1dGlvbl9yZWYYDCABKAkiLAoaR2V0QWdlbnRQcm92aWRlclJ1blJlcXVlc3QSDgoGcnVuX2lkGAEgASgJIh4KHExpc3RBZ2VudFByb3ZpZGVyUnVuc1JlcXVlc3QiUQodTGlzdEFnZW50UHJvdmlkZXJSdW5zUmVzcG9uc2USMAoEcnVucxgBIAMoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuQm91bmRBZ2VudFJ1biI/Ch1DYW5jZWxBZ2VudFByb3ZpZGVyUnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkSDgoGcmVhc29uGAIgASgJInwKF0V4ZWN1dGVBZ2VudFRvb2xSZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCRIUCgx0b29sX2NhbGxfaWQYAiABKAkSDwoHdG9vbF9pZBgDIAEoCRIqCglhcmd1bWVudHMYBCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IjgKGEV4ZWN1dGVBZ2VudFRvb2xSZXNwb25zZRIOCgZzdGF0dXMYASABKAUSDAoEYm9keRgCIAEoCSLBAQoNQWdlbnRSdW5FdmVudBIKCgJpZBgBIAEoCRIOCgZydW5faWQYAiABKAkSCwoDc2VxGAMgASgDEgwKBHR5cGUYBCABKAkSDgoGc291cmNlGAUgASgJEhIKCnZpc2liaWxpdHkYBiABKAkSJQoEZGF0YRgHIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSLgoKY3JlYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAicAoVRW1pdEFnZW50RXZlbnRSZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCRIMCgR0eXBlGAIgASgJEhIKCnZpc2liaWxpdHkYAyABKAkSJQoEZGF0YRgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiWQoPTWFuYWdlZEFnZW50UnVuEhUKDXByb3ZpZGVyX25hbWUYASABKAkSLwoDcnVuGAIgASgLMiIuZ2VzdGFsdC5wcm92aWRlci52MS5Cb3VuZEFnZW50UnVuItYDChZBZ2VudE1hbmFnZXJSdW5SZXF1ZXN0EhUKDXByb3ZpZGVyX25hbWUYAiABKAkSDQoFbW9kZWwYAyABKAkSMwoIbWVzc2FnZXMYBCADKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50TWVzc2FnZRI0Cgl0b29sX3JlZnMYBSADKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50VG9vbFJlZhI9Cgt0b29sX3NvdXJjZRgGIAEoDjIoLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRUb29sU291cmNlTW9kZRIwCg9yZXNwb25zZV9zY2hlbWEYByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhMKC3Nlc3Npb25fcmVmGAggASgJEikKCG1ldGFkYXRhGAkgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIxChBwcm92aWRlcl9vcHRpb25zGAogASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIXCg9pZGVtcG90ZW5jeV9rZXkYCyABKAkSGAoQaW52b2NhdGlvbl90b2tlbhgMIAEoCUoECAEQAlIOcmVxdWVzdF9oYW5kbGUiWwoZQWdlbnRNYW5hZ2VyR2V0UnVuUmVxdWVzdBIOCgZydW5faWQYAiABKAkSGAoQaW52b2NhdGlvbl90b2tlbhgDIAEoCUoECAEQAlIOcmVxdWVzdF9oYW5kbGUiTQobQWdlbnRNYW5hZ2VyTGlzdFJ1bnNSZXF1ZXN0EhgKEGludm9jYXRpb25fdG9rZW4YAiABKAlKBAgBEAJSDnJlcXVlc3RfaGFuZGxlIlIKHEFnZW50TWFuYWdlckxpc3RSdW5zUmVzcG9uc2USMgoEcnVucxgBIAMoCzIkLmdlc3RhbHQucHJvdmlkZXIudjEuTWFuYWdlZEFnZW50UnVuIm4KHEFnZW50TWFuYWdlckNhbmNlbFJ1blJlcXVlc3QSDgoGcnVuX2lkGAIgASgJEg4KBnJlYXNvbhgDIAEoCRIYChBpbnZvY2F0aW9uX3Rva2VuGAQgASgJSgQIARACUg5yZXF1ZXN0X2hhbmRsZSr6AQoUQWdlbnRNZXNzYWdlUGFydFR5cGUSJwojQUdFTlRfTUVTU0FHRV9QQVJUX1RZUEVfVU5TUEVDSUZJRUQQABIgChxBR0VOVF9NRVNTQUdFX1BBUlRfVFlQRV9URVhUEAESIAocQUdFTlRfTUVTU0FHRV9QQVJUX1RZUEVfSlNPThACEiUKIUFHRU5UX01FU1NBR0VfUEFSVF9UWVBFX1RPT0xfQ0FMTBADEicKI0FHRU5UX01FU1NBR0VfUEFSVF9UWVBFX1RPT0xfUkVTVUxUEAQSJQohQUdFTlRfTUVTU0FHRV9QQVJUX1RZUEVfSU1BR0VfUkVGEAUqjgEKE0FnZW50VG9vbFNvdXJjZU1vZGUSJgoiQUdFTlRfVE9PTF9TT1VSQ0VfTU9ERV9VTlNQRUNJRklFRBAAEiMKH0FHRU5UX1RPT0xfU09VUkNFX01PREVfRVhQTElDSVQQARIqCiZBR0VOVF9UT09MX1NPVVJDRV9NT0RFX0lOSEVSSVRfSU5WT0tFUxACKvIBCg5BZ2VudFJ1blN0YXR1cxIgChxBR0VOVF9SVU5fU1RBVFVTX1VOU1BFQ0lGSUVEEAASHAoYQUdFTlRfUlVOX1NUQVRVU19QRU5ESU5HEAESHAoYQUdFTlRfUlVOX1NUQVRVU19SVU5OSU5HEAISHgoaQUdFTlRfUlVOX1NUQVRVU19TVUNDRUVERUQQAxIbChdBR0VOVF9SVU5fU1RBVFVTX0ZBSUxFRBAEEh0KGUFHRU5UX1JVTl9TVEFUVVNfQ0FOQ0VMRUQQBRImCiJBR0VOVF9SVU5fU1RBVFVTX1dBSVRJTkdfRk9SX0lOUFVUEAYqrwEKFEFnZW50SW50ZXJhY3Rpb25UeXBlEiYKIkFHRU5UX0lOVEVSQUNUSU9OX1RZUEVfVU5TUEVDSUZJRUQQABIjCh9BR0VOVF9JTlRFUkFDVElPTl9UWVBFX0FQUFJPVkFMEAESKAokQUdFTlRfSU5URVJBQ1RJT05fVFlQRV9DTEFSSUZJQ0FUSU9OEAISIAocQUdFTlRfSU5URVJBQ1RJT05fVFlQRV9JTlBVVBADKrEBChVBZ2VudEludGVyYWN0aW9uU3RhdGUSJwojQUdFTlRfSU5URVJBQ1RJT05fU1RBVEVfVU5TUEVDSUZJRUQQABIjCh9BR0VOVF9JTlRFUkFDVElPTl9TVEFURV9QRU5ESU5HEAESJAogQUdFTlRfSU5URVJBQ1RJT05fU1RBVEVfUkVTT0xWRUQQAhIkCiBBR0VOVF9JTlRFUkFDVElPTl9TVEFURV9DQU5DRUxFRBADMosFCg1BZ2VudFByb3ZpZGVyEmEKCFN0YXJ0UnVuEjEuZ2VzdGFsdC5wcm92aWRlci52MS5TdGFydEFnZW50UHJvdmlkZXJSdW5SZXF1ZXN0GiIuZ2VzdGFsdC5wcm92aWRlci52MS5Cb3VuZEFnZW50UnVuEl0KBkdldFJ1bhIvLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0QWdlbnRQcm92aWRlclJ1blJlcXVlc3QaIi5nZXN0YWx0LnByb3ZpZGVyLnYxLkJvdW5kQWdlbnRSdW4ScQoITGlzdFJ1bnMSMS5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RBZ2VudFByb3ZpZGVyUnVuc1JlcXVlc3QaMi5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RBZ2VudFByb3ZpZGVyUnVuc1Jlc3BvbnNlEmMKCUNhbmNlbFJ1bhIyLmdlc3RhbHQucHJvdmlkZXIudjEuQ2FuY2VsQWdlbnRQcm92aWRlclJ1blJlcXVlc3QaIi5nZXN0YWx0LnByb3ZpZGVyLnYxLkJvdW5kQWdlbnRSdW4SewoPR2V0Q2FwYWJpbGl0aWVzEjguZ2VzdGFsdC5wcm92aWRlci52MS5HZXRBZ2VudFByb3ZpZGVyQ2FwYWJpbGl0aWVzUmVxdWVzdBouLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRQcm92aWRlckNhcGFiaWxpdGllcxJjCglSZXN1bWVSdW4SMi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc3VtZUFnZW50UHJvdmlkZXJSdW5SZXF1ZXN0GiIuZ2VzdGFsdC5wcm92aWRlci52MS5Cb3VuZEFnZW50UnVuMroCCglBZ2VudEhvc3QSagoLRXhlY3V0ZVRvb2wSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4ZWN1dGVBZ2VudFRvb2xSZXF1ZXN0Gi0uZ2VzdGFsdC5wcm92aWRlci52MS5FeGVjdXRlQWdlbnRUb29sUmVzcG9uc2USTwoJRW1pdEV2ZW50EiouZ2VzdGFsdC5wcm92aWRlci52MS5FbWl0QWdlbnRFdmVudFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkScAoSUmVxdWVzdEludGVyYWN0aW9uEjMuZ2VzdGFsdC5wcm92aWRlci52MS5SZXF1ZXN0QWdlbnRJbnRlcmFjdGlvblJlcXVlc3QaJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50SW50ZXJhY3Rpb24yowMKEEFnZW50TWFuYWdlckhvc3QSWAoDUnVuEisuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudE1hbmFnZXJSdW5SZXF1ZXN0GiQuZ2VzdGFsdC5wcm92aWRlci52MS5NYW5hZ2VkQWdlbnRSdW4SXgoGR2V0UnVuEi4uZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudE1hbmFnZXJHZXRSdW5SZXF1ZXN0GiQuZ2VzdGFsdC5wcm92aWRlci52MS5NYW5hZ2VkQWdlbnRSdW4SbwoITGlzdFJ1bnMSMC5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50TWFuYWdlckxpc3RSdW5zUmVxdWVzdBoxLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRNYW5hZ2VyTGlzdFJ1bnNSZXNwb25zZRJkCglDYW5jZWxSdW4SMS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50TWFuYWdlckNhbmNlbFJ1blJlcXVlc3QaJC5nZXN0YWx0LnByb3ZpZGVyLnYxLk1hbmFnZWRBZ2VudFJ1bkI7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("Cg52MS9hZ2VudC5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSKLAQoMQWdlbnRNZXNzYWdlEgwKBHJvbGUYASABKAkSDAoEdGV4dBgCIAEoCRI0CgVwYXJ0cxgDIAMoCzIlLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRNZXNzYWdlUGFydBIpCghtZXRhZGF0YRgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiYwoYQWdlbnRNZXNzYWdlUGFydFRvb2xDYWxsEgoKAmlkGAEgASgJEg8KB3Rvb2xfaWQYAiABKAkSKgoJYXJndW1lbnRzGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJ8ChpBZ2VudE1lc3NhZ2VQYXJ0VG9vbFJlc3VsdBIUCgx0b29sX2NhbGxfaWQYASABKAkSDgoGc3RhdHVzGAIgASgFEg8KB2NvbnRlbnQYAyABKAkSJwoGb3V0cHV0GAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCI6ChhBZ2VudE1lc3NhZ2VQYXJ0SW1hZ2VSZWYSCwoDdXJpGAEgASgJEhEKCW1pbWVfdHlwZRgCIAEoCSLKAgoQQWdlbnRNZXNzYWdlUGFydBI3CgR0eXBlGAEgASgOMikuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudE1lc3NhZ2VQYXJ0VHlwZRIMCgR0ZXh0GAIgASgJEiUKBGpzb24YAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EkAKCXRvb2xfY2FsbBgEIAEoCzItLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRNZXNzYWdlUGFydFRvb2xDYWxsEkQKC3Rvb2xfcmVzdWx0GAUgASgLMi8uZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudE1lc3NhZ2VQYXJ0VG9vbFJlc3VsdBJACglpbWFnZV9yZWYYBiABKAsyLS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50TWVzc2FnZVBhcnRJbWFnZVJlZiJhCgpBZ2VudEFjdG9yEhIKCnN1YmplY3RfaWQYASABKAkSFAoMc3ViamVjdF9raW5kGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRITCgthdXRoX3NvdXJjZRgEIAEoCSJkChRCb3VuZEFnZW50VG9vbFRhcmdldBITCgtwbHVnaW5fbmFtZRgBIAEoCRIRCglvcGVyYXRpb24YAiABKAkSEgoKY29ubmVjdGlvbhgDIAEoCRIQCghpbnN0YW5jZRgEIAEoCSKxAQoRUmVzb2x2ZWRBZ2VudFRvb2wSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRI5CgZ0YXJnZXQYBCABKAsyKS5nZXN0YWx0LnByb3ZpZGVyLnYxLkJvdW5kQWdlbnRUb29sVGFyZ2V0EjIKEXBhcmFtZXRlcnNfc2NoZW1hGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCKAAQoMQWdlbnRUb29sUmVmEhMKC3BsdWdpbl9uYW1lGAEgASgJEhEKCW9wZXJhdGlvbhgCIAEoCRISCgpjb25uZWN0aW9uGAMgASgJEhAKCGluc3RhbmNlGAQgASgJEg0KBXRpdGxlGAUgASgJEhMKC2Rlc2NyaXB0aW9uGAYgASgJIssBChlBZ2VudFByb3ZpZGVyQ2FwYWJpbGl0aWVzEhYKDnN0cmVhbWluZ190ZXh0GAEgASgIEhIKCnRvb2xfY2FsbHMYAiABKAgSGwoTcGFyYWxsZWxfdG9vbF9jYWxscxgDIAEoCBIZChFzdHJ1Y3R1cmVkX291dHB1dBgEIAEoCBIUCgxpbnRlcmFjdGlvbnMYBSABKAgSFwoPcmVzdW1hYmxlX3R1cm5zGAYgASgIEhsKE3JlYXNvbmluZ19zdW1tYXJpZXMYByABKAgiJQojR2V0QWdlbnRQcm92aWRlckNhcGFiaWxpdGllc1JlcXVlc3QijgMKEEFnZW50SW50ZXJhY3Rpb24SCgoCaWQYASABKAkSNwoEdHlwZRgCIAEoDjIpLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRJbnRlcmFjdGlvblR5cGUSOQoFc3RhdGUYAyABKA4yKi5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50SW50ZXJhY3Rpb25TdGF0ZRINCgV0aXRsZRgEIAEoCRIOCgZwcm9tcHQYBSABKAkSKAoHcmVxdWVzdBgGIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSKwoKcmVzb2x1dGlvbhgHIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSLgoKY3JlYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLwoLcmVzb2x2ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB3R1cm5faWQYCiABKAkSEgoKc2Vzc2lvbl9pZBgLIAEoCSL9AgoMQWdlbnRTZXNzaW9uEgoKAmlkGAEgASgJEhUKDXByb3ZpZGVyX25hbWUYAiABKAkSDQoFbW9kZWwYAyABKAkSEgoKY2xpZW50X3JlZhgEIAEoCRI1CgVzdGF0ZRgFIAEoDjImLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRTZXNzaW9uU3RhdGUSKQoIbWV0YWRhdGEYBiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EjMKCmNyZWF0ZWRfYnkYByABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50QWN0b3ISLgoKY3JlYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF90dXJuX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKGAgohQ3JlYXRlQWdlbnRQcm92aWRlclNlc3Npb25SZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSFwoPaWRlbXBvdGVuY3lfa2V5GAIgASgJEg0KBW1vZGVsGAMgASgJEhIKCmNsaWVudF9yZWYYBCABKAkSKQoIbWV0YWRhdGEYBSABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EjEKEHByb3ZpZGVyX29wdGlvbnMYBiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EjMKCmNyZWF0ZWRfYnkYByABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50QWN0b3IiNAoeR2V0QWdlbnRQcm92aWRlclNlc3Npb25SZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiIgogTGlzdEFnZW50UHJvdmlkZXJTZXNzaW9uc1JlcXVlc3QiWAohTGlzdEFnZW50UHJvdmlkZXJTZXNzaW9uc1Jlc3BvbnNlEjMKCHNlc3Npb25zGAEgAygLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudFNlc3Npb24irQEKIVVwZGF0ZUFnZW50UHJvdmlkZXJTZXNzaW9uUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEhIKCmNsaWVudF9yZWYYAiABKAkSNQoFc3RhdGUYAyABKA4yJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50U2Vzc2lvblN0YXRlEikKCG1ldGFkYXRhGAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCKABAoJQWdlbnRUdXJuEgoKAmlkGAEgASgJEhIKCnNlc3Npb25faWQYAiABKAkSFQoNcHJvdmlkZXJfbmFtZRgDIAEoCRINCgVtb2RlbBgEIAEoCRI5CgZzdGF0dXMYBSABKA4yKS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50RXhlY3V0aW9uU3RhdHVzEjMKCG1lc3NhZ2VzGAYgAygLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudE1lc3NhZ2USEwoLb3V0cHV0X3RleHQYByABKAkSMgoRc3RydWN0dXJlZF9vdXRwdXQYCCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhYKDnN0YXR1c19tZXNzYWdlGAkgASgJEjMKCmNyZWF0ZWRfYnkYCiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50QWN0b3ISLgoKY3JlYXRlZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKc3RhcnRlZF9hdBgMIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMY29tcGxldGVkX2F0GA0gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1leGVjdXRpb25fcmVmGA4gASgJIrUDCh5DcmVhdGVBZ2VudFByb3ZpZGVyVHVyblJlcXVlc3QSDwoHdHVybl9pZBgBIAEoCRISCgpzZXNzaW9uX2lkGAIgASgJEhcKD2lkZW1wb3RlbmN5X2tleRgDIAEoCRINCgVtb2RlbBgEIAEoCRIzCghtZXNzYWdlcxgFIAMoCzIhLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRNZXNzYWdlEjUKBXRvb2xzGAYgAygLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvbHZlZEFnZW50VG9vbBIwCg9yZXNwb25zZV9zY2hlbWEYByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EikKCG1ldGFkYXRhGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIxChBwcm92aWRlcl9vcHRpb25zGAkgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIzCgpjcmVhdGVkX2J5GAogASgLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudEFjdG9yEhUKDWV4ZWN1dGlvbl9yZWYYCyABKAkiLgobR2V0QWdlbnRQcm92aWRlclR1cm5SZXF1ZXN0Eg8KB3R1cm5faWQYASABKAkiMwodTGlzdEFnZW50UHJvdmlkZXJUdXJuc1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCSJPCh5MaXN0QWdlbnRQcm92aWRlclR1cm5zUmVzcG9uc2USLQoFdHVybnMYASADKAsyHi5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50VHVybiJBCh5DYW5jZWxBZ2VudFByb3ZpZGVyVHVyblJlcXVlc3QSDwoHdHVybl9pZBgBIAEoCRIOCgZyZWFzb24YAiABKAkiwwEKDkFnZW50VHVybkV2ZW50EgoKAmlkGAEgASgJEg8KB3R1cm5faWQYAiABKAkSCwoDc2VxGAMgASgDEgwKBHR5cGUYBCABKAkSDgoGc291cmNlGAUgASgJEhIKCnZpc2liaWxpdHkYBiABKAkSJQoEZGF0YRgHIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSLgoKY3JlYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiVwoiTGlzdEFnZW50UHJvdmlkZXJUdXJuRXZlbnRzUmVxdWVzdBIPCgd0dXJuX2lkGAEgASgJEhEKCWFmdGVyX3NlcRgCIAEoAxINCgVsaW1pdBgDIAEoBSJaCiNMaXN0QWdlbnRQcm92aWRlclR1cm5FdmVudHNSZXNwb25zZRIzCgZldmVudHMYASADKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50VHVybkV2ZW50IjwKIkdldEFnZW50UHJvdmlkZXJJbnRlcmFjdGlvblJlcXVlc3QSFgoOaW50ZXJhY3Rpb25faWQYASABKAkiNwokTGlzdEFnZW50UHJvdmlkZXJJbnRlcmFjdGlvbnNSZXF1ZXN0Eg8KB3R1cm5faWQYASABKAkiZAolTGlzdEFnZW50UHJvdmlkZXJJbnRlcmFjdGlvbnNSZXNwb25zZRI7CgxpbnRlcmFjdGlvbnMYASADKAsyJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50SW50ZXJhY3Rpb24ibQomUmVzb2x2ZUFnZW50UHJvdmlkZXJJbnRlcmFjdGlvblJlcXVlc3QSFgoOaW50ZXJhY3Rpb25faWQYASABKAkSKwoKcmVzb2x1dGlvbhgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QikQEKF0V4ZWN1dGVBZ2VudFRvb2xSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSDwoHdHVybl9pZBgCIAEoCRIUCgx0b29sX2NhbGxfaWQYAyABKAkSDwoHdG9vbF9pZBgEIAEoCRIqCglhcmd1bWVudHMYBSABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IjgKGEV4ZWN1dGVBZ2VudFRvb2xSZXNwb25zZRIOCgZzdGF0dXMYASABKAUSDAoEYm9keRgCIAEoCSKDAgogQWdlbnRNYW5hZ2VyQ3JlYXRlU2Vzc2lvblJlcXVlc3QSFQoNcHJvdmlkZXJfbmFtZRgCIAEoCRINCgVtb2RlbBgDIAEoCRISCgpjbGllbnRfcmVmGAQgASgJEikKCG1ldGFkYXRhGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIxChBwcm92aWRlcl9vcHRpb25zGAYgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIXCg9pZGVtcG90ZW5jeV9rZXkYByABKAkSGAoQaW52b2NhdGlvbl90b2tlbhgIIAEoCUoECAEQAlIOcmVxdWVzdF9oYW5kbGUiYwodQWdlbnRNYW5hZ2VyR2V0U2Vzc2lvblJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgCIAEoCRIYChBpbnZvY2F0aW9uX3Rva2VuGAMgASgJSgQIARACUg5yZXF1ZXN0X2hhbmRsZSJoCh9BZ2VudE1hbmFnZXJMaXN0U2Vzc2lvbnNSZXF1ZXN0EhUKDXByb3ZpZGVyX25hbWUYAiABKAkSGAoQaW52b2NhdGlvbl90b2tlbhgDIAEoCUoECAEQAlIOcmVxdWVzdF9oYW5kbGUiVwogQWdlbnRNYW5hZ2VyTGlzdFNlc3Npb25zUmVzcG9uc2USMwoIc2Vzc2lvbnMYASADKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50U2Vzc2lvbiLcAQogQWdlbnRNYW5hZ2VyVXBkYXRlU2Vzc2lvblJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgCIAEoCRISCgpjbGllbnRfcmVmGAMgASgJEjUKBXN0YXRlGAQgASgOMiYuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudFNlc3Npb25TdGF0ZRIpCghtZXRhZGF0YRgFIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSGAoQaW52b2NhdGlvbl90b2tlbhgGIAEoCUoECAEQAlIOcmVxdWVzdF9oYW5kbGUixQMKHUFnZW50TWFuYWdlckNyZWF0ZVR1cm5SZXF1ZXN0EhIKCnNlc3Npb25faWQYAiABKAkSDQoFbW9kZWwYAyABKAkSMwoIbWVzc2FnZXMYBCADKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50TWVzc2FnZRI0Cgl0b29sX3JlZnMYBSADKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50VG9vbFJlZhI9Cgt0b29sX3NvdXJjZRgGIAEoDjIoLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRUb29sU291cmNlTW9kZRIwCg9yZXNwb25zZV9zY2hlbWEYByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EikKCG1ldGFkYXRhGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIxChBwcm92aWRlcl9vcHRpb25zGAkgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIXCg9pZGVtcG90ZW5jeV9rZXkYCiABKAkSGAoQaW52b2NhdGlvbl90b2tlbhgLIAEoCUoECAEQAlIOcmVxdWVzdF9oYW5kbGUiXQoaQWdlbnRNYW5hZ2VyR2V0VHVyblJlcXVlc3QSDwoHdHVybl9pZBgCIAEoCRIYChBpbnZvY2F0aW9uX3Rva2VuGAMgASgJSgQIARACUg5yZXF1ZXN0X2hhbmRsZSJiChxBZ2VudE1hbmFnZXJMaXN0VHVybnNSZXF1ZXN0EhIKCnNlc3Npb25faWQYAiABKAkSGAoQaW52b2NhdGlvbl90b2tlbhgDIAEoCUoECAEQAlIOcmVxdWVzdF9oYW5kbGUiTgodQWdlbnRNYW5hZ2VyTGlzdFR1cm5zUmVzcG9uc2USLQoFdHVybnMYASADKAsyHi5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50VHVybiJwCh1BZ2VudE1hbmFnZXJDYW5jZWxUdXJuUmVxdWVzdBIPCgd0dXJuX2lkGAIgASgJEg4KBnJlYXNvbhgDIAEoCRIYChBpbnZvY2F0aW9uX3Rva2VuGAQgASgJSgQIARACUg5yZXF1ZXN0X2hhbmRsZSKGAQohQWdlbnRNYW5hZ2VyTGlzdFR1cm5FdmVudHNSZXF1ZXN0Eg8KB3R1cm5faWQYAiABKAkSEQoJYWZ0ZXJfc2VxGAMgASgDEg0KBWxpbWl0GAQgASgFEhgKEGludm9jYXRpb25fdG9rZW4YBSABKAlKBAgBEAJSDnJlcXVlc3RfaGFuZGxlIlkKIkFnZW50TWFuYWdlckxpc3RUdXJuRXZlbnRzUmVzcG9uc2USMwoGZXZlbnRzGAEgAygLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudFR1cm5FdmVudCJmCiNBZ2VudE1hbmFnZXJMaXN0SW50ZXJhY3Rpb25zUmVxdWVzdBIPCgd0dXJuX2lkGAIgASgJEhgKEGludm9jYXRpb25fdG9rZW4YAyABKAlKBAgBEAJSDnJlcXVlc3RfaGFuZGxlImMKJEFnZW50TWFuYWdlckxpc3RJbnRlcmFjdGlvbnNSZXNwb25zZRI7CgxpbnRlcmFjdGlvbnMYASADKAsyJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50SW50ZXJhY3Rpb24irQEKJUFnZW50TWFuYWdlclJlc29sdmVJbnRlcmFjdGlvblJlcXVlc3QSDwoHdHVybl9pZBgCIAEoCRIWCg5pbnRlcmFjdGlvbl9pZBgDIAEoCRIrCgpyZXNvbHV0aW9uGAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIYChBpbnZvY2F0aW9uX3Rva2VuGAUgASgJSgQIARACUg5yZXF1ZXN0X2hhbmRsZSr6AQoUQWdlbnRNZXNzYWdlUGFydFR5cGUSJwojQUdFTlRfTUVTU0FHRV9QQVJUX1RZUEVfVU5TUEVDSUZJRUQQABIgChxBR0VOVF9NRVNTQUdFX1BBUlRfVFlQRV9URVhUEAESIAocQUdFTlRfTUVTU0FHRV9QQVJUX1RZUEVfSlNPThACEiUKIUFHRU5UX01FU1NBR0VfUEFSVF9UWVBFX1RPT0xfQ0FMTBADEicKI0FHRU5UX01FU1NBR0VfUEFSVF9UWVBFX1RPT0xfUkVTVUxUEAQSJQohQUdFTlRfTUVTU0FHRV9QQVJUX1RZUEVfSU1BR0VfUkVGEAUqjgEKE0FnZW50VG9vbFNvdXJjZU1vZGUSJgoiQUdFTlRfVE9PTF9TT1VSQ0VfTU9ERV9VTlNQRUNJRklFRBAAEiMKH0FHRU5UX1RPT0xfU09VUkNFX01PREVfRVhQTElDSVQQARIqCiZBR0VOVF9UT09MX1NPVVJDRV9NT0RFX0lOSEVSSVRfSU5WT0tFUxACKqICChRBZ2VudEV4ZWN1dGlvblN0YXR1cxImCiJBR0VOVF9FWEVDVVRJT05fU1RBVFVTX1VOU1BFQ0lGSUVEEAASIgoeQUdFTlRfRVhFQ1VUSU9OX1NUQVRVU19QRU5ESU5HEAESIgoeQUdFTlRfRVhFQ1VUSU9OX1NUQVRVU19SVU5OSU5HEAISJAogQUdFTlRfRVhFQ1VUSU9OX1NUQVRVU19TVUNDRUVERUQQAxIhCh1BR0VOVF9FWEVDVVRJT05fU1RBVFVTX0ZBSUxFRBAEEiMKH0FHRU5UX0VYRUNVVElPTl9TVEFUVVNfQ0FOQ0VMRUQQBRIsCihBR0VOVF9FWEVDVVRJT05fU1RBVFVTX1dBSVRJTkdfRk9SX0lOUFVUEAYqegoRQWdlbnRTZXNzaW9uU3RhdGUSIwofQUdFTlRfU0VTU0lPTl9TVEFURV9VTlNQRUNJRklFRBAAEh4KGkFHRU5UX1NFU1NJT05fU1RBVEVfQUNUSVZFEAESIAocQUdFTlRfU0VTU0lPTl9TVEFURV9BUkNISVZFRBACKq8BChRBZ2VudEludGVyYWN0aW9uVHlwZRImCiJBR0VOVF9JTlRFUkFDVElPTl9UWVBFX1VOU1BFQ0lGSUVEEAASIwofQUdFTlRfSU5URVJBQ1RJT05fVFlQRV9BUFBST1ZBTBABEigKJEFHRU5UX0lOVEVSQUNUSU9OX1RZUEVfQ0xBUklGSUNBVElPThACEiAKHEFHRU5UX0lOVEVSQUNUSU9OX1RZUEVfSU5QVVQQAyqxAQoVQWdlbnRJbnRlcmFjdGlvblN0YXRlEicKI0FHRU5UX0lOVEVSQUNUSU9OX1NUQVRFX1VOU1BFQ0lGSUVEEAASIwofQUdFTlRfSU5URVJBQ1RJT05fU1RBVEVfUEVORElORxABEiQKIEFHRU5UX0lOVEVSQUNUSU9OX1NUQVRFX1JFU09MVkVEEAISJAogQUdFTlRfSU5URVJBQ1RJT05fU1RBVEVfQ0FOQ0VMRUQQAzLgCwoNQWdlbnRQcm92aWRlchJqCg1DcmVhdGVTZXNzaW9uEjYuZ2VzdGFsdC5wcm92aWRlci52MS5DcmVhdGVBZ2VudFByb3ZpZGVyU2Vzc2lvblJlcXVlc3QaIS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50U2Vzc2lvbhJkCgpHZXRTZXNzaW9uEjMuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRBZ2VudFByb3ZpZGVyU2Vzc2lvblJlcXVlc3QaIS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50U2Vzc2lvbhJ9CgxMaXN0U2Vzc2lvbnMSNS5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RBZ2VudFByb3ZpZGVyU2Vzc2lvbnNSZXF1ZXN0GjYuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0QWdlbnRQcm92aWRlclNlc3Npb25zUmVzcG9uc2USagoNVXBkYXRlU2Vzc2lvbhI2Lmdlc3RhbHQucHJvdmlkZXIudjEuVXBkYXRlQWdlbnRQcm92aWRlclNlc3Npb25SZXF1ZXN0GiEuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudFNlc3Npb24SYQoKQ3JlYXRlVHVybhIzLmdlc3RhbHQucHJvdmlkZXIudjEuQ3JlYXRlQWdlbnRQcm92aWRlclR1cm5SZXF1ZXN0Gh4uZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudFR1cm4SWwoHR2V0VHVybhIwLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0QWdlbnRQcm92aWRlclR1cm5SZXF1ZXN0Gh4uZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudFR1cm4SdAoJTGlzdFR1cm5zEjIuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0QWdlbnRQcm92aWRlclR1cm5zUmVxdWVzdBozLmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdEFnZW50UHJvdmlkZXJUdXJuc1Jlc3BvbnNlEmEKCkNhbmNlbFR1cm4SMy5nZXN0YWx0LnByb3ZpZGVyLnYxLkNhbmNlbEFnZW50UHJvdmlkZXJUdXJuUmVxdWVzdBoeLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRUdXJuEoMBCg5MaXN0VHVybkV2ZW50cxI3Lmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdEFnZW50UHJvdmlkZXJUdXJuRXZlbnRzUmVxdWVzdBo4Lmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdEFnZW50UHJvdmlkZXJUdXJuRXZlbnRzUmVzcG9uc2UScAoOR2V0SW50ZXJhY3Rpb24SNy5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldEFnZW50UHJvdmlkZXJJbnRlcmFjdGlvblJlcXVlc3QaJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50SW50ZXJhY3Rpb24SiQEKEExpc3RJbnRlcmFjdGlvbnMSOS5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RBZ2VudFByb3ZpZGVySW50ZXJhY3Rpb25zUmVxdWVzdBo6Lmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdEFnZW50UHJvdmlkZXJJbnRlcmFjdGlvbnNSZXNwb25zZRJ4ChJSZXNvbHZlSW50ZXJhY3Rpb24SOy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc29sdmVBZ2VudFByb3ZpZGVySW50ZXJhY3Rpb25SZXF1ZXN0GiUuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudEludGVyYWN0aW9uEnsKD0dldENhcGFiaWxpdGllcxI4Lmdlc3RhbHQucHJvdmlkZXIudjEuR2V0QWdlbnRQcm92aWRlckNhcGFiaWxpdGllc1JlcXVlc3QaLi5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50UHJvdmlkZXJDYXBhYmlsaXRpZXMydwoJQWdlbnRIb3N0EmoKC0V4ZWN1dGVUb29sEiwuZ2VzdGFsdC5wcm92aWRlci52MS5FeGVjdXRlQWdlbnRUb29sUmVxdWVzdBotLmdlc3RhbHQucHJvdmlkZXIudjEuRXhlY3V0ZUFnZW50VG9vbFJlc3BvbnNlMuUJChBBZ2VudE1hbmFnZXJIb3N0EmkKDUNyZWF0ZVNlc3Npb24SNS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50TWFuYWdlckNyZWF0ZVNlc3Npb25SZXF1ZXN0GiEuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudFNlc3Npb24SYwoKR2V0U2Vzc2lvbhIyLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRNYW5hZ2VyR2V0U2Vzc2lvblJlcXVlc3QaIS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50U2Vzc2lvbhJ7CgxMaXN0U2Vzc2lvbnMSNC5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50TWFuYWdlckxpc3RTZXNzaW9uc1JlcXVlc3QaNS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50TWFuYWdlckxpc3RTZXNzaW9uc1Jlc3BvbnNlEmkKDVVwZGF0ZVNlc3Npb24SNS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50TWFuYWdlclVwZGF0ZVNlc3Npb25SZXF1ZXN0GiEuZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudFNlc3Npb24SYAoKQ3JlYXRlVHVybhIyLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRNYW5hZ2VyQ3JlYXRlVHVyblJlcXVlc3QaHi5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50VHVybhJaCgdHZXRUdXJuEi8uZ2VzdGFsdC5wcm92aWRlci52MS5BZ2VudE1hbmFnZXJHZXRUdXJuUmVxdWVzdBoeLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRUdXJuEnIKCUxpc3RUdXJucxIxLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRNYW5hZ2VyTGlzdFR1cm5zUmVxdWVzdBoyLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRNYW5hZ2VyTGlzdFR1cm5zUmVzcG9uc2USYAoKQ2FuY2VsVHVybhIyLmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRNYW5hZ2VyQ2FuY2VsVHVyblJlcXVlc3QaHi5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50VHVybhKBAQoOTGlzdFR1cm5FdmVudHMSNi5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50TWFuYWdlckxpc3RUdXJuRXZlbnRzUmVxdWVzdBo3Lmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRNYW5hZ2VyTGlzdFR1cm5FdmVudHNSZXNwb25zZRKHAQoQTGlzdEludGVyYWN0aW9ucxI4Lmdlc3RhbHQucHJvdmlkZXIudjEuQWdlbnRNYW5hZ2VyTGlzdEludGVyYWN0aW9uc1JlcXVlc3QaOS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50TWFuYWdlckxpc3RJbnRlcmFjdGlvbnNSZXNwb25zZRJ3ChJSZXNvbHZlSW50ZXJhY3Rpb24SOi5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50TWFuYWdlclJlc29sdmVJbnRlcmFjdGlvblJlcXVlc3QaJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkFnZW50SW50ZXJhY3Rpb25CO1o5Z2l0aHViLmNvbS92YWxvbi10ZWNobm9sb2dpZXMvZ2VzdGFsdC9zZGsvZ28vZ2VuL3YxO3Byb3RvYgZwcm90bzM", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message gestalt.provider.v1.AgentMessage
@@ -337,22 +337,17 @@ export type AgentProviderCapabilities = Message<"gestalt.provider.v1.AgentProvid
   structuredOutput: boolean;
 
   /**
-   * @generated from field: bool session_continuation = 5;
+   * @generated from field: bool interactions = 5;
    */
-  sessionContinuation: boolean;
+  interactions: boolean;
 
   /**
-   * @generated from field: bool approvals = 6;
+   * @generated from field: bool resumable_turns = 6;
    */
-  approvals: boolean;
+  resumableTurns: boolean;
 
   /**
-   * @generated from field: bool resumable_runs = 7;
-   */
-  resumableRuns: boolean;
-
-  /**
-   * @generated from field: bool reasoning_summaries = 8;
+   * @generated from field: bool reasoning_summaries = 7;
    */
   reasoningSummaries: boolean;
 };
@@ -378,70 +373,6 @@ export const GetAgentProviderCapabilitiesRequestSchema: GenMessage<GetAgentProvi
   messageDesc(file_v1_agent, 10);
 
 /**
- * @generated from message gestalt.provider.v1.ResumeAgentProviderRunRequest
- */
-export type ResumeAgentProviderRunRequest = Message<"gestalt.provider.v1.ResumeAgentProviderRunRequest"> & {
-  /**
-   * @generated from field: string run_id = 1;
-   */
-  runId: string;
-
-  /**
-   * @generated from field: string interaction_id = 2;
-   */
-  interactionId: string;
-
-  /**
-   * @generated from field: google.protobuf.Struct resolution = 3;
-   */
-  resolution?: JsonObject | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ResumeAgentProviderRunRequest.
- * Use `create(ResumeAgentProviderRunRequestSchema)` to create a new message.
- */
-export const ResumeAgentProviderRunRequestSchema: GenMessage<ResumeAgentProviderRunRequest> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 11);
-
-/**
- * @generated from message gestalt.provider.v1.RequestAgentInteractionRequest
- */
-export type RequestAgentInteractionRequest = Message<"gestalt.provider.v1.RequestAgentInteractionRequest"> & {
-  /**
-   * @generated from field: string run_id = 1;
-   */
-  runId: string;
-
-  /**
-   * @generated from field: gestalt.provider.v1.AgentInteractionType type = 2;
-   */
-  type: AgentInteractionType;
-
-  /**
-   * @generated from field: string title = 3;
-   */
-  title: string;
-
-  /**
-   * @generated from field: string prompt = 4;
-   */
-  prompt: string;
-
-  /**
-   * @generated from field: google.protobuf.Struct request = 5;
-   */
-  request?: JsonObject | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.RequestAgentInteractionRequest.
- * Use `create(RequestAgentInteractionRequestSchema)` to create a new message.
- */
-export const RequestAgentInteractionRequestSchema: GenMessage<RequestAgentInteractionRequest> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 12);
-
-/**
  * @generated from message gestalt.provider.v1.AgentInteraction
  */
 export type AgentInteraction = Message<"gestalt.provider.v1.AgentInteraction"> & {
@@ -451,49 +382,54 @@ export type AgentInteraction = Message<"gestalt.provider.v1.AgentInteraction"> &
   id: string;
 
   /**
-   * @generated from field: string run_id = 2;
-   */
-  runId: string;
-
-  /**
-   * @generated from field: gestalt.provider.v1.AgentInteractionType type = 3;
+   * @generated from field: gestalt.provider.v1.AgentInteractionType type = 2;
    */
   type: AgentInteractionType;
 
   /**
-   * @generated from field: gestalt.provider.v1.AgentInteractionState state = 4;
+   * @generated from field: gestalt.provider.v1.AgentInteractionState state = 3;
    */
   state: AgentInteractionState;
 
   /**
-   * @generated from field: string title = 5;
+   * @generated from field: string title = 4;
    */
   title: string;
 
   /**
-   * @generated from field: string prompt = 6;
+   * @generated from field: string prompt = 5;
    */
   prompt: string;
 
   /**
-   * @generated from field: google.protobuf.Struct request = 7;
+   * @generated from field: google.protobuf.Struct request = 6;
    */
   request?: JsonObject | undefined;
 
   /**
-   * @generated from field: google.protobuf.Struct resolution = 8;
+   * @generated from field: google.protobuf.Struct resolution = 7;
    */
   resolution?: JsonObject | undefined;
 
   /**
-   * @generated from field: google.protobuf.Timestamp created_at = 9;
+   * @generated from field: google.protobuf.Timestamp created_at = 8;
    */
   createdAt?: Timestamp | undefined;
 
   /**
-   * @generated from field: google.protobuf.Timestamp resolved_at = 10;
+   * @generated from field: google.protobuf.Timestamp resolved_at = 9;
    */
   resolvedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: string turn_id = 10;
+   */
+  turnId: string;
+
+  /**
+   * @generated from field: string session_id = 11;
+   */
+  sessionId: string;
 };
 
 /**
@@ -501,12 +437,12 @@ export type AgentInteraction = Message<"gestalt.provider.v1.AgentInteraction"> &
  * Use `create(AgentInteractionSchema)` to create a new message.
  */
 export const AgentInteractionSchema: GenMessage<AgentInteraction> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 13);
+  messageDesc(file_v1_agent, 11);
 
 /**
- * @generated from message gestalt.provider.v1.BoundAgentRun
+ * @generated from message gestalt.provider.v1.AgentSession
  */
-export type BoundAgentRun = Message<"gestalt.provider.v1.BoundAgentRun"> & {
+export type AgentSession = Message<"gestalt.provider.v1.AgentSession"> & {
   /**
    * @generated from field: string id = 1;
    */
@@ -523,34 +459,222 @@ export type BoundAgentRun = Message<"gestalt.provider.v1.BoundAgentRun"> & {
   model: string;
 
   /**
-   * @generated from field: gestalt.provider.v1.AgentRunStatus status = 4;
+   * @generated from field: string client_ref = 4;
    */
-  status: AgentRunStatus;
+  clientRef: string;
 
   /**
-   * @generated from field: repeated gestalt.provider.v1.AgentMessage messages = 5;
+   * @generated from field: gestalt.provider.v1.AgentSessionState state = 5;
+   */
+  state: AgentSessionState;
+
+  /**
+   * @generated from field: google.protobuf.Struct metadata = 6;
+   */
+  metadata?: JsonObject | undefined;
+
+  /**
+   * @generated from field: gestalt.provider.v1.AgentActor created_by = 7;
+   */
+  createdBy?: AgentActor | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 8;
+   */
+  createdAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp updated_at = 9;
+   */
+  updatedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp last_turn_at = 10;
+   */
+  lastTurnAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AgentSession.
+ * Use `create(AgentSessionSchema)` to create a new message.
+ */
+export const AgentSessionSchema: GenMessage<AgentSession> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 12);
+
+/**
+ * @generated from message gestalt.provider.v1.CreateAgentProviderSessionRequest
+ */
+export type CreateAgentProviderSessionRequest = Message<"gestalt.provider.v1.CreateAgentProviderSessionRequest"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: string idempotency_key = 2;
+   */
+  idempotencyKey: string;
+
+  /**
+   * @generated from field: string model = 3;
+   */
+  model: string;
+
+  /**
+   * @generated from field: string client_ref = 4;
+   */
+  clientRef: string;
+
+  /**
+   * @generated from field: google.protobuf.Struct metadata = 5;
+   */
+  metadata?: JsonObject | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Struct provider_options = 6;
+   */
+  providerOptions?: JsonObject | undefined;
+
+  /**
+   * @generated from field: gestalt.provider.v1.AgentActor created_by = 7;
+   */
+  createdBy?: AgentActor | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.CreateAgentProviderSessionRequest.
+ * Use `create(CreateAgentProviderSessionRequestSchema)` to create a new message.
+ */
+export const CreateAgentProviderSessionRequestSchema: GenMessage<CreateAgentProviderSessionRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 13);
+
+/**
+ * @generated from message gestalt.provider.v1.GetAgentProviderSessionRequest
+ */
+export type GetAgentProviderSessionRequest = Message<"gestalt.provider.v1.GetAgentProviderSessionRequest"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.GetAgentProviderSessionRequest.
+ * Use `create(GetAgentProviderSessionRequestSchema)` to create a new message.
+ */
+export const GetAgentProviderSessionRequestSchema: GenMessage<GetAgentProviderSessionRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 14);
+
+/**
+ * @generated from message gestalt.provider.v1.ListAgentProviderSessionsRequest
+ */
+export type ListAgentProviderSessionsRequest = Message<"gestalt.provider.v1.ListAgentProviderSessionsRequest"> & {
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ListAgentProviderSessionsRequest.
+ * Use `create(ListAgentProviderSessionsRequestSchema)` to create a new message.
+ */
+export const ListAgentProviderSessionsRequestSchema: GenMessage<ListAgentProviderSessionsRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 15);
+
+/**
+ * @generated from message gestalt.provider.v1.ListAgentProviderSessionsResponse
+ */
+export type ListAgentProviderSessionsResponse = Message<"gestalt.provider.v1.ListAgentProviderSessionsResponse"> & {
+  /**
+   * @generated from field: repeated gestalt.provider.v1.AgentSession sessions = 1;
+   */
+  sessions: AgentSession[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ListAgentProviderSessionsResponse.
+ * Use `create(ListAgentProviderSessionsResponseSchema)` to create a new message.
+ */
+export const ListAgentProviderSessionsResponseSchema: GenMessage<ListAgentProviderSessionsResponse> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 16);
+
+/**
+ * @generated from message gestalt.provider.v1.UpdateAgentProviderSessionRequest
+ */
+export type UpdateAgentProviderSessionRequest = Message<"gestalt.provider.v1.UpdateAgentProviderSessionRequest"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: string client_ref = 2;
+   */
+  clientRef: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.AgentSessionState state = 3;
+   */
+  state: AgentSessionState;
+
+  /**
+   * @generated from field: google.protobuf.Struct metadata = 4;
+   */
+  metadata?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.UpdateAgentProviderSessionRequest.
+ * Use `create(UpdateAgentProviderSessionRequestSchema)` to create a new message.
+ */
+export const UpdateAgentProviderSessionRequestSchema: GenMessage<UpdateAgentProviderSessionRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 17);
+
+/**
+ * @generated from message gestalt.provider.v1.AgentTurn
+ */
+export type AgentTurn = Message<"gestalt.provider.v1.AgentTurn"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string session_id = 2;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: string provider_name = 3;
+   */
+  providerName: string;
+
+  /**
+   * @generated from field: string model = 4;
+   */
+  model: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.AgentExecutionStatus status = 5;
+   */
+  status: AgentExecutionStatus;
+
+  /**
+   * @generated from field: repeated gestalt.provider.v1.AgentMessage messages = 6;
    */
   messages: AgentMessage[];
 
   /**
-   * @generated from field: string output_text = 6;
+   * @generated from field: string output_text = 7;
    */
   outputText: string;
 
   /**
-   * @generated from field: google.protobuf.Struct structured_output = 7;
+   * @generated from field: google.protobuf.Struct structured_output = 8;
    */
   structuredOutput?: JsonObject | undefined;
 
   /**
-   * @generated from field: string status_message = 8;
+   * @generated from field: string status_message = 9;
    */
   statusMessage: string;
-
-  /**
-   * @generated from field: string session_ref = 9;
-   */
-  sessionRef: string;
 
   /**
    * @generated from field: gestalt.provider.v1.AgentActor created_by = 10;
@@ -579,30 +703,30 @@ export type BoundAgentRun = Message<"gestalt.provider.v1.BoundAgentRun"> & {
 };
 
 /**
- * Describes the message gestalt.provider.v1.BoundAgentRun.
- * Use `create(BoundAgentRunSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.AgentTurn.
+ * Use `create(AgentTurnSchema)` to create a new message.
  */
-export const BoundAgentRunSchema: GenMessage<BoundAgentRun> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 14);
+export const AgentTurnSchema: GenMessage<AgentTurn> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 18);
 
 /**
- * @generated from message gestalt.provider.v1.StartAgentProviderRunRequest
+ * @generated from message gestalt.provider.v1.CreateAgentProviderTurnRequest
  */
-export type StartAgentProviderRunRequest = Message<"gestalt.provider.v1.StartAgentProviderRunRequest"> & {
+export type CreateAgentProviderTurnRequest = Message<"gestalt.provider.v1.CreateAgentProviderTurnRequest"> & {
   /**
-   * @generated from field: string run_id = 1;
+   * @generated from field: string turn_id = 1;
    */
-  runId: string;
+  turnId: string;
 
   /**
-   * @generated from field: string idempotency_key = 2;
+   * @generated from field: string session_id = 2;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: string idempotency_key = 3;
    */
   idempotencyKey: string;
-
-  /**
-   * @generated from field: string provider_name = 3;
-   */
-  providerName: string;
 
   /**
    * @generated from field: string model = 4;
@@ -625,93 +749,92 @@ export type StartAgentProviderRunRequest = Message<"gestalt.provider.v1.StartAge
   responseSchema?: JsonObject | undefined;
 
   /**
-   * @generated from field: string session_ref = 8;
-   */
-  sessionRef: string;
-
-  /**
-   * @generated from field: google.protobuf.Struct metadata = 9;
+   * @generated from field: google.protobuf.Struct metadata = 8;
    */
   metadata?: JsonObject | undefined;
 
   /**
-   * @generated from field: google.protobuf.Struct provider_options = 10;
+   * @generated from field: google.protobuf.Struct provider_options = 9;
    */
   providerOptions?: JsonObject | undefined;
 
   /**
-   * @generated from field: gestalt.provider.v1.AgentActor created_by = 11;
+   * @generated from field: gestalt.provider.v1.AgentActor created_by = 10;
    */
   createdBy?: AgentActor | undefined;
 
   /**
-   * @generated from field: string execution_ref = 12;
+   * @generated from field: string execution_ref = 11;
    */
   executionRef: string;
 };
 
 /**
- * Describes the message gestalt.provider.v1.StartAgentProviderRunRequest.
- * Use `create(StartAgentProviderRunRequestSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.CreateAgentProviderTurnRequest.
+ * Use `create(CreateAgentProviderTurnRequestSchema)` to create a new message.
  */
-export const StartAgentProviderRunRequestSchema: GenMessage<StartAgentProviderRunRequest> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 15);
+export const CreateAgentProviderTurnRequestSchema: GenMessage<CreateAgentProviderTurnRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 19);
 
 /**
- * @generated from message gestalt.provider.v1.GetAgentProviderRunRequest
+ * @generated from message gestalt.provider.v1.GetAgentProviderTurnRequest
  */
-export type GetAgentProviderRunRequest = Message<"gestalt.provider.v1.GetAgentProviderRunRequest"> & {
+export type GetAgentProviderTurnRequest = Message<"gestalt.provider.v1.GetAgentProviderTurnRequest"> & {
   /**
-   * @generated from field: string run_id = 1;
+   * @generated from field: string turn_id = 1;
    */
-  runId: string;
+  turnId: string;
 };
 
 /**
- * Describes the message gestalt.provider.v1.GetAgentProviderRunRequest.
- * Use `create(GetAgentProviderRunRequestSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.GetAgentProviderTurnRequest.
+ * Use `create(GetAgentProviderTurnRequestSchema)` to create a new message.
  */
-export const GetAgentProviderRunRequestSchema: GenMessage<GetAgentProviderRunRequest> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 16);
+export const GetAgentProviderTurnRequestSchema: GenMessage<GetAgentProviderTurnRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 20);
 
 /**
- * @generated from message gestalt.provider.v1.ListAgentProviderRunsRequest
+ * @generated from message gestalt.provider.v1.ListAgentProviderTurnsRequest
  */
-export type ListAgentProviderRunsRequest = Message<"gestalt.provider.v1.ListAgentProviderRunsRequest"> & {
+export type ListAgentProviderTurnsRequest = Message<"gestalt.provider.v1.ListAgentProviderTurnsRequest"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
 };
 
 /**
- * Describes the message gestalt.provider.v1.ListAgentProviderRunsRequest.
- * Use `create(ListAgentProviderRunsRequestSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.ListAgentProviderTurnsRequest.
+ * Use `create(ListAgentProviderTurnsRequestSchema)` to create a new message.
  */
-export const ListAgentProviderRunsRequestSchema: GenMessage<ListAgentProviderRunsRequest> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 17);
+export const ListAgentProviderTurnsRequestSchema: GenMessage<ListAgentProviderTurnsRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 21);
 
 /**
- * @generated from message gestalt.provider.v1.ListAgentProviderRunsResponse
+ * @generated from message gestalt.provider.v1.ListAgentProviderTurnsResponse
  */
-export type ListAgentProviderRunsResponse = Message<"gestalt.provider.v1.ListAgentProviderRunsResponse"> & {
+export type ListAgentProviderTurnsResponse = Message<"gestalt.provider.v1.ListAgentProviderTurnsResponse"> & {
   /**
-   * @generated from field: repeated gestalt.provider.v1.BoundAgentRun runs = 1;
+   * @generated from field: repeated gestalt.provider.v1.AgentTurn turns = 1;
    */
-  runs: BoundAgentRun[];
+  turns: AgentTurn[];
 };
 
 /**
- * Describes the message gestalt.provider.v1.ListAgentProviderRunsResponse.
- * Use `create(ListAgentProviderRunsResponseSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.ListAgentProviderTurnsResponse.
+ * Use `create(ListAgentProviderTurnsResponseSchema)` to create a new message.
  */
-export const ListAgentProviderRunsResponseSchema: GenMessage<ListAgentProviderRunsResponse> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 18);
+export const ListAgentProviderTurnsResponseSchema: GenMessage<ListAgentProviderTurnsResponse> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 22);
 
 /**
- * @generated from message gestalt.provider.v1.CancelAgentProviderRunRequest
+ * @generated from message gestalt.provider.v1.CancelAgentProviderTurnRequest
  */
-export type CancelAgentProviderRunRequest = Message<"gestalt.provider.v1.CancelAgentProviderRunRequest"> & {
+export type CancelAgentProviderTurnRequest = Message<"gestalt.provider.v1.CancelAgentProviderTurnRequest"> & {
   /**
-   * @generated from field: string run_id = 1;
+   * @generated from field: string turn_id = 1;
    */
-  runId: string;
+  turnId: string;
 
   /**
    * @generated from field: string reason = 2;
@@ -720,79 +843,25 @@ export type CancelAgentProviderRunRequest = Message<"gestalt.provider.v1.CancelA
 };
 
 /**
- * Describes the message gestalt.provider.v1.CancelAgentProviderRunRequest.
- * Use `create(CancelAgentProviderRunRequestSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.CancelAgentProviderTurnRequest.
+ * Use `create(CancelAgentProviderTurnRequestSchema)` to create a new message.
  */
-export const CancelAgentProviderRunRequestSchema: GenMessage<CancelAgentProviderRunRequest> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 19);
+export const CancelAgentProviderTurnRequestSchema: GenMessage<CancelAgentProviderTurnRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 23);
 
 /**
- * @generated from message gestalt.provider.v1.ExecuteAgentToolRequest
+ * @generated from message gestalt.provider.v1.AgentTurnEvent
  */
-export type ExecuteAgentToolRequest = Message<"gestalt.provider.v1.ExecuteAgentToolRequest"> & {
-  /**
-   * @generated from field: string run_id = 1;
-   */
-  runId: string;
-
-  /**
-   * @generated from field: string tool_call_id = 2;
-   */
-  toolCallId: string;
-
-  /**
-   * @generated from field: string tool_id = 3;
-   */
-  toolId: string;
-
-  /**
-   * @generated from field: google.protobuf.Struct arguments = 4;
-   */
-  arguments?: JsonObject | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ExecuteAgentToolRequest.
- * Use `create(ExecuteAgentToolRequestSchema)` to create a new message.
- */
-export const ExecuteAgentToolRequestSchema: GenMessage<ExecuteAgentToolRequest> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 20);
-
-/**
- * @generated from message gestalt.provider.v1.ExecuteAgentToolResponse
- */
-export type ExecuteAgentToolResponse = Message<"gestalt.provider.v1.ExecuteAgentToolResponse"> & {
-  /**
-   * @generated from field: int32 status = 1;
-   */
-  status: number;
-
-  /**
-   * @generated from field: string body = 2;
-   */
-  body: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ExecuteAgentToolResponse.
- * Use `create(ExecuteAgentToolResponseSchema)` to create a new message.
- */
-export const ExecuteAgentToolResponseSchema: GenMessage<ExecuteAgentToolResponse> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 21);
-
-/**
- * @generated from message gestalt.provider.v1.AgentRunEvent
- */
-export type AgentRunEvent = Message<"gestalt.provider.v1.AgentRunEvent"> & {
+export type AgentTurnEvent = Message<"gestalt.provider.v1.AgentTurnEvent"> & {
   /**
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
-   * @generated from field: string run_id = 2;
+   * @generated from field: string turn_id = 2;
    */
-  runId: string;
+  turnId: string;
 
   /**
    * @generated from field: int64 seq = 3;
@@ -826,74 +895,341 @@ export type AgentRunEvent = Message<"gestalt.provider.v1.AgentRunEvent"> & {
 };
 
 /**
- * Describes the message gestalt.provider.v1.AgentRunEvent.
- * Use `create(AgentRunEventSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.AgentTurnEvent.
+ * Use `create(AgentTurnEventSchema)` to create a new message.
  */
-export const AgentRunEventSchema: GenMessage<AgentRunEvent> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 22);
-
-/**
- * @generated from message gestalt.provider.v1.EmitAgentEventRequest
- */
-export type EmitAgentEventRequest = Message<"gestalt.provider.v1.EmitAgentEventRequest"> & {
-  /**
-   * @generated from field: string run_id = 1;
-   */
-  runId: string;
-
-  /**
-   * @generated from field: string type = 2;
-   */
-  type: string;
-
-  /**
-   * @generated from field: string visibility = 3;
-   */
-  visibility: string;
-
-  /**
-   * @generated from field: google.protobuf.Struct data = 4;
-   */
-  data?: JsonObject | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.EmitAgentEventRequest.
- * Use `create(EmitAgentEventRequestSchema)` to create a new message.
- */
-export const EmitAgentEventRequestSchema: GenMessage<EmitAgentEventRequest> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 23);
-
-/**
- * @generated from message gestalt.provider.v1.ManagedAgentRun
- */
-export type ManagedAgentRun = Message<"gestalt.provider.v1.ManagedAgentRun"> & {
-  /**
-   * @generated from field: string provider_name = 1;
-   */
-  providerName: string;
-
-  /**
-   * @generated from field: gestalt.provider.v1.BoundAgentRun run = 2;
-   */
-  run?: BoundAgentRun | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ManagedAgentRun.
- * Use `create(ManagedAgentRunSchema)` to create a new message.
- */
-export const ManagedAgentRunSchema: GenMessage<ManagedAgentRun> = /*@__PURE__*/
+export const AgentTurnEventSchema: GenMessage<AgentTurnEvent> = /*@__PURE__*/
   messageDesc(file_v1_agent, 24);
 
 /**
- * @generated from message gestalt.provider.v1.AgentManagerRunRequest
+ * @generated from message gestalt.provider.v1.ListAgentProviderTurnEventsRequest
  */
-export type AgentManagerRunRequest = Message<"gestalt.provider.v1.AgentManagerRunRequest"> & {
+export type ListAgentProviderTurnEventsRequest = Message<"gestalt.provider.v1.ListAgentProviderTurnEventsRequest"> & {
+  /**
+   * @generated from field: string turn_id = 1;
+   */
+  turnId: string;
+
+  /**
+   * @generated from field: int64 after_seq = 2;
+   */
+  afterSeq: bigint;
+
+  /**
+   * @generated from field: int32 limit = 3;
+   */
+  limit: number;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ListAgentProviderTurnEventsRequest.
+ * Use `create(ListAgentProviderTurnEventsRequestSchema)` to create a new message.
+ */
+export const ListAgentProviderTurnEventsRequestSchema: GenMessage<ListAgentProviderTurnEventsRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 25);
+
+/**
+ * @generated from message gestalt.provider.v1.ListAgentProviderTurnEventsResponse
+ */
+export type ListAgentProviderTurnEventsResponse = Message<"gestalt.provider.v1.ListAgentProviderTurnEventsResponse"> & {
+  /**
+   * @generated from field: repeated gestalt.provider.v1.AgentTurnEvent events = 1;
+   */
+  events: AgentTurnEvent[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ListAgentProviderTurnEventsResponse.
+ * Use `create(ListAgentProviderTurnEventsResponseSchema)` to create a new message.
+ */
+export const ListAgentProviderTurnEventsResponseSchema: GenMessage<ListAgentProviderTurnEventsResponse> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 26);
+
+/**
+ * @generated from message gestalt.provider.v1.GetAgentProviderInteractionRequest
+ */
+export type GetAgentProviderInteractionRequest = Message<"gestalt.provider.v1.GetAgentProviderInteractionRequest"> & {
+  /**
+   * @generated from field: string interaction_id = 1;
+   */
+  interactionId: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.GetAgentProviderInteractionRequest.
+ * Use `create(GetAgentProviderInteractionRequestSchema)` to create a new message.
+ */
+export const GetAgentProviderInteractionRequestSchema: GenMessage<GetAgentProviderInteractionRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 27);
+
+/**
+ * @generated from message gestalt.provider.v1.ListAgentProviderInteractionsRequest
+ */
+export type ListAgentProviderInteractionsRequest = Message<"gestalt.provider.v1.ListAgentProviderInteractionsRequest"> & {
+  /**
+   * @generated from field: string turn_id = 1;
+   */
+  turnId: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ListAgentProviderInteractionsRequest.
+ * Use `create(ListAgentProviderInteractionsRequestSchema)` to create a new message.
+ */
+export const ListAgentProviderInteractionsRequestSchema: GenMessage<ListAgentProviderInteractionsRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 28);
+
+/**
+ * @generated from message gestalt.provider.v1.ListAgentProviderInteractionsResponse
+ */
+export type ListAgentProviderInteractionsResponse = Message<"gestalt.provider.v1.ListAgentProviderInteractionsResponse"> & {
+  /**
+   * @generated from field: repeated gestalt.provider.v1.AgentInteraction interactions = 1;
+   */
+  interactions: AgentInteraction[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ListAgentProviderInteractionsResponse.
+ * Use `create(ListAgentProviderInteractionsResponseSchema)` to create a new message.
+ */
+export const ListAgentProviderInteractionsResponseSchema: GenMessage<ListAgentProviderInteractionsResponse> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 29);
+
+/**
+ * @generated from message gestalt.provider.v1.ResolveAgentProviderInteractionRequest
+ */
+export type ResolveAgentProviderInteractionRequest = Message<"gestalt.provider.v1.ResolveAgentProviderInteractionRequest"> & {
+  /**
+   * @generated from field: string interaction_id = 1;
+   */
+  interactionId: string;
+
+  /**
+   * @generated from field: google.protobuf.Struct resolution = 2;
+   */
+  resolution?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ResolveAgentProviderInteractionRequest.
+ * Use `create(ResolveAgentProviderInteractionRequestSchema)` to create a new message.
+ */
+export const ResolveAgentProviderInteractionRequestSchema: GenMessage<ResolveAgentProviderInteractionRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 30);
+
+/**
+ * @generated from message gestalt.provider.v1.ExecuteAgentToolRequest
+ */
+export type ExecuteAgentToolRequest = Message<"gestalt.provider.v1.ExecuteAgentToolRequest"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: string turn_id = 2;
+   */
+  turnId: string;
+
+  /**
+   * @generated from field: string tool_call_id = 3;
+   */
+  toolCallId: string;
+
+  /**
+   * @generated from field: string tool_id = 4;
+   */
+  toolId: string;
+
+  /**
+   * @generated from field: google.protobuf.Struct arguments = 5;
+   */
+  arguments?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ExecuteAgentToolRequest.
+ * Use `create(ExecuteAgentToolRequestSchema)` to create a new message.
+ */
+export const ExecuteAgentToolRequestSchema: GenMessage<ExecuteAgentToolRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 31);
+
+/**
+ * @generated from message gestalt.provider.v1.ExecuteAgentToolResponse
+ */
+export type ExecuteAgentToolResponse = Message<"gestalt.provider.v1.ExecuteAgentToolResponse"> & {
+  /**
+   * @generated from field: int32 status = 1;
+   */
+  status: number;
+
+  /**
+   * @generated from field: string body = 2;
+   */
+  body: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ExecuteAgentToolResponse.
+ * Use `create(ExecuteAgentToolResponseSchema)` to create a new message.
+ */
+export const ExecuteAgentToolResponseSchema: GenMessage<ExecuteAgentToolResponse> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 32);
+
+/**
+ * @generated from message gestalt.provider.v1.AgentManagerCreateSessionRequest
+ */
+export type AgentManagerCreateSessionRequest = Message<"gestalt.provider.v1.AgentManagerCreateSessionRequest"> & {
   /**
    * @generated from field: string provider_name = 2;
    */
   providerName: string;
+
+  /**
+   * @generated from field: string model = 3;
+   */
+  model: string;
+
+  /**
+   * @generated from field: string client_ref = 4;
+   */
+  clientRef: string;
+
+  /**
+   * @generated from field: google.protobuf.Struct metadata = 5;
+   */
+  metadata?: JsonObject | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Struct provider_options = 6;
+   */
+  providerOptions?: JsonObject | undefined;
+
+  /**
+   * @generated from field: string idempotency_key = 7;
+   */
+  idempotencyKey: string;
+
+  /**
+   * @generated from field: string invocation_token = 8;
+   */
+  invocationToken: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AgentManagerCreateSessionRequest.
+ * Use `create(AgentManagerCreateSessionRequestSchema)` to create a new message.
+ */
+export const AgentManagerCreateSessionRequestSchema: GenMessage<AgentManagerCreateSessionRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 33);
+
+/**
+ * @generated from message gestalt.provider.v1.AgentManagerGetSessionRequest
+ */
+export type AgentManagerGetSessionRequest = Message<"gestalt.provider.v1.AgentManagerGetSessionRequest"> & {
+  /**
+   * @generated from field: string session_id = 2;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: string invocation_token = 3;
+   */
+  invocationToken: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AgentManagerGetSessionRequest.
+ * Use `create(AgentManagerGetSessionRequestSchema)` to create a new message.
+ */
+export const AgentManagerGetSessionRequestSchema: GenMessage<AgentManagerGetSessionRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 34);
+
+/**
+ * @generated from message gestalt.provider.v1.AgentManagerListSessionsRequest
+ */
+export type AgentManagerListSessionsRequest = Message<"gestalt.provider.v1.AgentManagerListSessionsRequest"> & {
+  /**
+   * @generated from field: string provider_name = 2;
+   */
+  providerName: string;
+
+  /**
+   * @generated from field: string invocation_token = 3;
+   */
+  invocationToken: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AgentManagerListSessionsRequest.
+ * Use `create(AgentManagerListSessionsRequestSchema)` to create a new message.
+ */
+export const AgentManagerListSessionsRequestSchema: GenMessage<AgentManagerListSessionsRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 35);
+
+/**
+ * @generated from message gestalt.provider.v1.AgentManagerListSessionsResponse
+ */
+export type AgentManagerListSessionsResponse = Message<"gestalt.provider.v1.AgentManagerListSessionsResponse"> & {
+  /**
+   * @generated from field: repeated gestalt.provider.v1.AgentSession sessions = 1;
+   */
+  sessions: AgentSession[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AgentManagerListSessionsResponse.
+ * Use `create(AgentManagerListSessionsResponseSchema)` to create a new message.
+ */
+export const AgentManagerListSessionsResponseSchema: GenMessage<AgentManagerListSessionsResponse> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 36);
+
+/**
+ * @generated from message gestalt.provider.v1.AgentManagerUpdateSessionRequest
+ */
+export type AgentManagerUpdateSessionRequest = Message<"gestalt.provider.v1.AgentManagerUpdateSessionRequest"> & {
+  /**
+   * @generated from field: string session_id = 2;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: string client_ref = 3;
+   */
+  clientRef: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.AgentSessionState state = 4;
+   */
+  state: AgentSessionState;
+
+  /**
+   * @generated from field: google.protobuf.Struct metadata = 5;
+   */
+  metadata?: JsonObject | undefined;
+
+  /**
+   * @generated from field: string invocation_token = 6;
+   */
+  invocationToken: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AgentManagerUpdateSessionRequest.
+ * Use `create(AgentManagerUpdateSessionRequestSchema)` to create a new message.
+ */
+export const AgentManagerUpdateSessionRequestSchema: GenMessage<AgentManagerUpdateSessionRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 37);
+
+/**
+ * @generated from message gestalt.provider.v1.AgentManagerCreateTurnRequest
+ */
+export type AgentManagerCreateTurnRequest = Message<"gestalt.provider.v1.AgentManagerCreateTurnRequest"> & {
+  /**
+   * @generated from field: string session_id = 2;
+   */
+  sessionId: string;
 
   /**
    * @generated from field: string model = 3;
@@ -921,46 +1257,41 @@ export type AgentManagerRunRequest = Message<"gestalt.provider.v1.AgentManagerRu
   responseSchema?: JsonObject | undefined;
 
   /**
-   * @generated from field: string session_ref = 8;
-   */
-  sessionRef: string;
-
-  /**
-   * @generated from field: google.protobuf.Struct metadata = 9;
+   * @generated from field: google.protobuf.Struct metadata = 8;
    */
   metadata?: JsonObject | undefined;
 
   /**
-   * @generated from field: google.protobuf.Struct provider_options = 10;
+   * @generated from field: google.protobuf.Struct provider_options = 9;
    */
   providerOptions?: JsonObject | undefined;
 
   /**
-   * @generated from field: string idempotency_key = 11;
+   * @generated from field: string idempotency_key = 10;
    */
   idempotencyKey: string;
 
   /**
-   * @generated from field: string invocation_token = 12;
+   * @generated from field: string invocation_token = 11;
    */
   invocationToken: string;
 };
 
 /**
- * Describes the message gestalt.provider.v1.AgentManagerRunRequest.
- * Use `create(AgentManagerRunRequestSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.AgentManagerCreateTurnRequest.
+ * Use `create(AgentManagerCreateTurnRequestSchema)` to create a new message.
  */
-export const AgentManagerRunRequestSchema: GenMessage<AgentManagerRunRequest> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 25);
+export const AgentManagerCreateTurnRequestSchema: GenMessage<AgentManagerCreateTurnRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 38);
 
 /**
- * @generated from message gestalt.provider.v1.AgentManagerGetRunRequest
+ * @generated from message gestalt.provider.v1.AgentManagerGetTurnRequest
  */
-export type AgentManagerGetRunRequest = Message<"gestalt.provider.v1.AgentManagerGetRunRequest"> & {
+export type AgentManagerGetTurnRequest = Message<"gestalt.provider.v1.AgentManagerGetTurnRequest"> & {
   /**
-   * @generated from field: string run_id = 2;
+   * @generated from field: string turn_id = 2;
    */
-  runId: string;
+  turnId: string;
 
   /**
    * @generated from field: string invocation_token = 3;
@@ -969,54 +1300,59 @@ export type AgentManagerGetRunRequest = Message<"gestalt.provider.v1.AgentManage
 };
 
 /**
- * Describes the message gestalt.provider.v1.AgentManagerGetRunRequest.
- * Use `create(AgentManagerGetRunRequestSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.AgentManagerGetTurnRequest.
+ * Use `create(AgentManagerGetTurnRequestSchema)` to create a new message.
  */
-export const AgentManagerGetRunRequestSchema: GenMessage<AgentManagerGetRunRequest> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 26);
+export const AgentManagerGetTurnRequestSchema: GenMessage<AgentManagerGetTurnRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 39);
 
 /**
- * @generated from message gestalt.provider.v1.AgentManagerListRunsRequest
+ * @generated from message gestalt.provider.v1.AgentManagerListTurnsRequest
  */
-export type AgentManagerListRunsRequest = Message<"gestalt.provider.v1.AgentManagerListRunsRequest"> & {
+export type AgentManagerListTurnsRequest = Message<"gestalt.provider.v1.AgentManagerListTurnsRequest"> & {
   /**
-   * @generated from field: string invocation_token = 2;
+   * @generated from field: string session_id = 2;
+   */
+  sessionId: string;
+
+  /**
+   * @generated from field: string invocation_token = 3;
    */
   invocationToken: string;
 };
 
 /**
- * Describes the message gestalt.provider.v1.AgentManagerListRunsRequest.
- * Use `create(AgentManagerListRunsRequestSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.AgentManagerListTurnsRequest.
+ * Use `create(AgentManagerListTurnsRequestSchema)` to create a new message.
  */
-export const AgentManagerListRunsRequestSchema: GenMessage<AgentManagerListRunsRequest> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 27);
+export const AgentManagerListTurnsRequestSchema: GenMessage<AgentManagerListTurnsRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 40);
 
 /**
- * @generated from message gestalt.provider.v1.AgentManagerListRunsResponse
+ * @generated from message gestalt.provider.v1.AgentManagerListTurnsResponse
  */
-export type AgentManagerListRunsResponse = Message<"gestalt.provider.v1.AgentManagerListRunsResponse"> & {
+export type AgentManagerListTurnsResponse = Message<"gestalt.provider.v1.AgentManagerListTurnsResponse"> & {
   /**
-   * @generated from field: repeated gestalt.provider.v1.ManagedAgentRun runs = 1;
+   * @generated from field: repeated gestalt.provider.v1.AgentTurn turns = 1;
    */
-  runs: ManagedAgentRun[];
+  turns: AgentTurn[];
 };
 
 /**
- * Describes the message gestalt.provider.v1.AgentManagerListRunsResponse.
- * Use `create(AgentManagerListRunsResponseSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.AgentManagerListTurnsResponse.
+ * Use `create(AgentManagerListTurnsResponseSchema)` to create a new message.
  */
-export const AgentManagerListRunsResponseSchema: GenMessage<AgentManagerListRunsResponse> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 28);
+export const AgentManagerListTurnsResponseSchema: GenMessage<AgentManagerListTurnsResponse> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 41);
 
 /**
- * @generated from message gestalt.provider.v1.AgentManagerCancelRunRequest
+ * @generated from message gestalt.provider.v1.AgentManagerCancelTurnRequest
  */
-export type AgentManagerCancelRunRequest = Message<"gestalt.provider.v1.AgentManagerCancelRunRequest"> & {
+export type AgentManagerCancelTurnRequest = Message<"gestalt.provider.v1.AgentManagerCancelTurnRequest"> & {
   /**
-   * @generated from field: string run_id = 2;
+   * @generated from field: string turn_id = 2;
    */
-  runId: string;
+  turnId: string;
 
   /**
    * @generated from field: string reason = 3;
@@ -1030,11 +1366,131 @@ export type AgentManagerCancelRunRequest = Message<"gestalt.provider.v1.AgentMan
 };
 
 /**
- * Describes the message gestalt.provider.v1.AgentManagerCancelRunRequest.
- * Use `create(AgentManagerCancelRunRequestSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.AgentManagerCancelTurnRequest.
+ * Use `create(AgentManagerCancelTurnRequestSchema)` to create a new message.
  */
-export const AgentManagerCancelRunRequestSchema: GenMessage<AgentManagerCancelRunRequest> = /*@__PURE__*/
-  messageDesc(file_v1_agent, 29);
+export const AgentManagerCancelTurnRequestSchema: GenMessage<AgentManagerCancelTurnRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 42);
+
+/**
+ * @generated from message gestalt.provider.v1.AgentManagerListTurnEventsRequest
+ */
+export type AgentManagerListTurnEventsRequest = Message<"gestalt.provider.v1.AgentManagerListTurnEventsRequest"> & {
+  /**
+   * @generated from field: string turn_id = 2;
+   */
+  turnId: string;
+
+  /**
+   * @generated from field: int64 after_seq = 3;
+   */
+  afterSeq: bigint;
+
+  /**
+   * @generated from field: int32 limit = 4;
+   */
+  limit: number;
+
+  /**
+   * @generated from field: string invocation_token = 5;
+   */
+  invocationToken: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AgentManagerListTurnEventsRequest.
+ * Use `create(AgentManagerListTurnEventsRequestSchema)` to create a new message.
+ */
+export const AgentManagerListTurnEventsRequestSchema: GenMessage<AgentManagerListTurnEventsRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 43);
+
+/**
+ * @generated from message gestalt.provider.v1.AgentManagerListTurnEventsResponse
+ */
+export type AgentManagerListTurnEventsResponse = Message<"gestalt.provider.v1.AgentManagerListTurnEventsResponse"> & {
+  /**
+   * @generated from field: repeated gestalt.provider.v1.AgentTurnEvent events = 1;
+   */
+  events: AgentTurnEvent[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AgentManagerListTurnEventsResponse.
+ * Use `create(AgentManagerListTurnEventsResponseSchema)` to create a new message.
+ */
+export const AgentManagerListTurnEventsResponseSchema: GenMessage<AgentManagerListTurnEventsResponse> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 44);
+
+/**
+ * @generated from message gestalt.provider.v1.AgentManagerListInteractionsRequest
+ */
+export type AgentManagerListInteractionsRequest = Message<"gestalt.provider.v1.AgentManagerListInteractionsRequest"> & {
+  /**
+   * @generated from field: string turn_id = 2;
+   */
+  turnId: string;
+
+  /**
+   * @generated from field: string invocation_token = 3;
+   */
+  invocationToken: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AgentManagerListInteractionsRequest.
+ * Use `create(AgentManagerListInteractionsRequestSchema)` to create a new message.
+ */
+export const AgentManagerListInteractionsRequestSchema: GenMessage<AgentManagerListInteractionsRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 45);
+
+/**
+ * @generated from message gestalt.provider.v1.AgentManagerListInteractionsResponse
+ */
+export type AgentManagerListInteractionsResponse = Message<"gestalt.provider.v1.AgentManagerListInteractionsResponse"> & {
+  /**
+   * @generated from field: repeated gestalt.provider.v1.AgentInteraction interactions = 1;
+   */
+  interactions: AgentInteraction[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AgentManagerListInteractionsResponse.
+ * Use `create(AgentManagerListInteractionsResponseSchema)` to create a new message.
+ */
+export const AgentManagerListInteractionsResponseSchema: GenMessage<AgentManagerListInteractionsResponse> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 46);
+
+/**
+ * @generated from message gestalt.provider.v1.AgentManagerResolveInteractionRequest
+ */
+export type AgentManagerResolveInteractionRequest = Message<"gestalt.provider.v1.AgentManagerResolveInteractionRequest"> & {
+  /**
+   * @generated from field: string turn_id = 2;
+   */
+  turnId: string;
+
+  /**
+   * @generated from field: string interaction_id = 3;
+   */
+  interactionId: string;
+
+  /**
+   * @generated from field: google.protobuf.Struct resolution = 4;
+   */
+  resolution?: JsonObject | undefined;
+
+  /**
+   * @generated from field: string invocation_token = 5;
+   */
+  invocationToken: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.AgentManagerResolveInteractionRequest.
+ * Use `create(AgentManagerResolveInteractionRequestSchema)` to create a new message.
+ */
+export const AgentManagerResolveInteractionRequestSchema: GenMessage<AgentManagerResolveInteractionRequest> = /*@__PURE__*/
+  messageDesc(file_v1_agent, 47);
 
 /**
  * @generated from enum gestalt.provider.v1.AgentMessagePartType
@@ -1104,50 +1560,76 @@ export const AgentToolSourceModeSchema: GenEnum<AgentToolSourceMode> = /*@__PURE
   enumDesc(file_v1_agent, 1);
 
 /**
- * @generated from enum gestalt.provider.v1.AgentRunStatus
+ * @generated from enum gestalt.provider.v1.AgentExecutionStatus
  */
-export enum AgentRunStatus {
+export enum AgentExecutionStatus {
   /**
-   * @generated from enum value: AGENT_RUN_STATUS_UNSPECIFIED = 0;
+   * @generated from enum value: AGENT_EXECUTION_STATUS_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
-   * @generated from enum value: AGENT_RUN_STATUS_PENDING = 1;
+   * @generated from enum value: AGENT_EXECUTION_STATUS_PENDING = 1;
    */
   PENDING = 1,
 
   /**
-   * @generated from enum value: AGENT_RUN_STATUS_RUNNING = 2;
+   * @generated from enum value: AGENT_EXECUTION_STATUS_RUNNING = 2;
    */
   RUNNING = 2,
 
   /**
-   * @generated from enum value: AGENT_RUN_STATUS_SUCCEEDED = 3;
+   * @generated from enum value: AGENT_EXECUTION_STATUS_SUCCEEDED = 3;
    */
   SUCCEEDED = 3,
 
   /**
-   * @generated from enum value: AGENT_RUN_STATUS_FAILED = 4;
+   * @generated from enum value: AGENT_EXECUTION_STATUS_FAILED = 4;
    */
   FAILED = 4,
 
   /**
-   * @generated from enum value: AGENT_RUN_STATUS_CANCELED = 5;
+   * @generated from enum value: AGENT_EXECUTION_STATUS_CANCELED = 5;
    */
   CANCELED = 5,
 
   /**
-   * @generated from enum value: AGENT_RUN_STATUS_WAITING_FOR_INPUT = 6;
+   * @generated from enum value: AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT = 6;
    */
   WAITING_FOR_INPUT = 6,
 }
 
 /**
- * Describes the enum gestalt.provider.v1.AgentRunStatus.
+ * Describes the enum gestalt.provider.v1.AgentExecutionStatus.
  */
-export const AgentRunStatusSchema: GenEnum<AgentRunStatus> = /*@__PURE__*/
+export const AgentExecutionStatusSchema: GenEnum<AgentExecutionStatus> = /*@__PURE__*/
   enumDesc(file_v1_agent, 2);
+
+/**
+ * @generated from enum gestalt.provider.v1.AgentSessionState
+ */
+export enum AgentSessionState {
+  /**
+   * @generated from enum value: AGENT_SESSION_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: AGENT_SESSION_STATE_ACTIVE = 1;
+   */
+  ACTIVE = 1,
+
+  /**
+   * @generated from enum value: AGENT_SESSION_STATE_ARCHIVED = 2;
+   */
+  ARCHIVED = 2,
+}
+
+/**
+ * Describes the enum gestalt.provider.v1.AgentSessionState.
+ */
+export const AgentSessionStateSchema: GenEnum<AgentSessionState> = /*@__PURE__*/
+  enumDesc(file_v1_agent, 3);
 
 /**
  * @generated from enum gestalt.provider.v1.AgentInteractionType
@@ -1178,7 +1660,7 @@ export enum AgentInteractionType {
  * Describes the enum gestalt.provider.v1.AgentInteractionType.
  */
 export const AgentInteractionTypeSchema: GenEnum<AgentInteractionType> = /*@__PURE__*/
-  enumDesc(file_v1_agent, 3);
+  enumDesc(file_v1_agent, 4);
 
 /**
  * @generated from enum gestalt.provider.v1.AgentInteractionState
@@ -1209,43 +1691,107 @@ export enum AgentInteractionState {
  * Describes the enum gestalt.provider.v1.AgentInteractionState.
  */
 export const AgentInteractionStateSchema: GenEnum<AgentInteractionState> = /*@__PURE__*/
-  enumDesc(file_v1_agent, 4);
+  enumDesc(file_v1_agent, 5);
 
 /**
  * @generated from service gestalt.provider.v1.AgentProvider
  */
 export const AgentProvider: GenService<{
   /**
-   * @generated from rpc gestalt.provider.v1.AgentProvider.StartRun
+   * @generated from rpc gestalt.provider.v1.AgentProvider.CreateSession
    */
-  startRun: {
+  createSession: {
     methodKind: "unary";
-    input: typeof StartAgentProviderRunRequestSchema;
-    output: typeof BoundAgentRunSchema;
+    input: typeof CreateAgentProviderSessionRequestSchema;
+    output: typeof AgentSessionSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.AgentProvider.GetRun
+   * @generated from rpc gestalt.provider.v1.AgentProvider.GetSession
    */
-  getRun: {
+  getSession: {
     methodKind: "unary";
-    input: typeof GetAgentProviderRunRequestSchema;
-    output: typeof BoundAgentRunSchema;
+    input: typeof GetAgentProviderSessionRequestSchema;
+    output: typeof AgentSessionSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.AgentProvider.ListRuns
+   * @generated from rpc gestalt.provider.v1.AgentProvider.ListSessions
    */
-  listRuns: {
+  listSessions: {
     methodKind: "unary";
-    input: typeof ListAgentProviderRunsRequestSchema;
-    output: typeof ListAgentProviderRunsResponseSchema;
+    input: typeof ListAgentProviderSessionsRequestSchema;
+    output: typeof ListAgentProviderSessionsResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.AgentProvider.CancelRun
+   * @generated from rpc gestalt.provider.v1.AgentProvider.UpdateSession
    */
-  cancelRun: {
+  updateSession: {
     methodKind: "unary";
-    input: typeof CancelAgentProviderRunRequestSchema;
-    output: typeof BoundAgentRunSchema;
+    input: typeof UpdateAgentProviderSessionRequestSchema;
+    output: typeof AgentSessionSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentProvider.CreateTurn
+   */
+  createTurn: {
+    methodKind: "unary";
+    input: typeof CreateAgentProviderTurnRequestSchema;
+    output: typeof AgentTurnSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentProvider.GetTurn
+   */
+  getTurn: {
+    methodKind: "unary";
+    input: typeof GetAgentProviderTurnRequestSchema;
+    output: typeof AgentTurnSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentProvider.ListTurns
+   */
+  listTurns: {
+    methodKind: "unary";
+    input: typeof ListAgentProviderTurnsRequestSchema;
+    output: typeof ListAgentProviderTurnsResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentProvider.CancelTurn
+   */
+  cancelTurn: {
+    methodKind: "unary";
+    input: typeof CancelAgentProviderTurnRequestSchema;
+    output: typeof AgentTurnSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentProvider.ListTurnEvents
+   */
+  listTurnEvents: {
+    methodKind: "unary";
+    input: typeof ListAgentProviderTurnEventsRequestSchema;
+    output: typeof ListAgentProviderTurnEventsResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentProvider.GetInteraction
+   */
+  getInteraction: {
+    methodKind: "unary";
+    input: typeof GetAgentProviderInteractionRequestSchema;
+    output: typeof AgentInteractionSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentProvider.ListInteractions
+   */
+  listInteractions: {
+    methodKind: "unary";
+    input: typeof ListAgentProviderInteractionsRequestSchema;
+    output: typeof ListAgentProviderInteractionsResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentProvider.ResolveInteraction
+   */
+  resolveInteraction: {
+    methodKind: "unary";
+    input: typeof ResolveAgentProviderInteractionRequestSchema;
+    output: typeof AgentInteractionSchema;
   },
   /**
    * @generated from rpc gestalt.provider.v1.AgentProvider.GetCapabilities
@@ -1254,14 +1800,6 @@ export const AgentProvider: GenService<{
     methodKind: "unary";
     input: typeof GetAgentProviderCapabilitiesRequestSchema;
     output: typeof AgentProviderCapabilitiesSchema;
-  },
-  /**
-   * @generated from rpc gestalt.provider.v1.AgentProvider.ResumeRun
-   */
-  resumeRun: {
-    methodKind: "unary";
-    input: typeof ResumeAgentProviderRunRequestSchema;
-    output: typeof BoundAgentRunSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_agent, 0);
@@ -1278,22 +1816,6 @@ export const AgentHost: GenService<{
     input: typeof ExecuteAgentToolRequestSchema;
     output: typeof ExecuteAgentToolResponseSchema;
   },
-  /**
-   * @generated from rpc gestalt.provider.v1.AgentHost.EmitEvent
-   */
-  emitEvent: {
-    methodKind: "unary";
-    input: typeof EmitAgentEventRequestSchema;
-    output: typeof EmptySchema;
-  },
-  /**
-   * @generated from rpc gestalt.provider.v1.AgentHost.RequestInteraction
-   */
-  requestInteraction: {
-    methodKind: "unary";
-    input: typeof RequestAgentInteractionRequestSchema;
-    output: typeof AgentInteractionSchema;
-  },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_agent, 1);
 
@@ -1302,36 +1824,92 @@ export const AgentHost: GenService<{
  */
 export const AgentManagerHost: GenService<{
   /**
-   * @generated from rpc gestalt.provider.v1.AgentManagerHost.Run
+   * @generated from rpc gestalt.provider.v1.AgentManagerHost.CreateSession
    */
-  run: {
+  createSession: {
     methodKind: "unary";
-    input: typeof AgentManagerRunRequestSchema;
-    output: typeof ManagedAgentRunSchema;
+    input: typeof AgentManagerCreateSessionRequestSchema;
+    output: typeof AgentSessionSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.AgentManagerHost.GetRun
+   * @generated from rpc gestalt.provider.v1.AgentManagerHost.GetSession
    */
-  getRun: {
+  getSession: {
     methodKind: "unary";
-    input: typeof AgentManagerGetRunRequestSchema;
-    output: typeof ManagedAgentRunSchema;
+    input: typeof AgentManagerGetSessionRequestSchema;
+    output: typeof AgentSessionSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.AgentManagerHost.ListRuns
+   * @generated from rpc gestalt.provider.v1.AgentManagerHost.ListSessions
    */
-  listRuns: {
+  listSessions: {
     methodKind: "unary";
-    input: typeof AgentManagerListRunsRequestSchema;
-    output: typeof AgentManagerListRunsResponseSchema;
+    input: typeof AgentManagerListSessionsRequestSchema;
+    output: typeof AgentManagerListSessionsResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.AgentManagerHost.CancelRun
+   * @generated from rpc gestalt.provider.v1.AgentManagerHost.UpdateSession
    */
-  cancelRun: {
+  updateSession: {
     methodKind: "unary";
-    input: typeof AgentManagerCancelRunRequestSchema;
-    output: typeof ManagedAgentRunSchema;
+    input: typeof AgentManagerUpdateSessionRequestSchema;
+    output: typeof AgentSessionSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentManagerHost.CreateTurn
+   */
+  createTurn: {
+    methodKind: "unary";
+    input: typeof AgentManagerCreateTurnRequestSchema;
+    output: typeof AgentTurnSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentManagerHost.GetTurn
+   */
+  getTurn: {
+    methodKind: "unary";
+    input: typeof AgentManagerGetTurnRequestSchema;
+    output: typeof AgentTurnSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentManagerHost.ListTurns
+   */
+  listTurns: {
+    methodKind: "unary";
+    input: typeof AgentManagerListTurnsRequestSchema;
+    output: typeof AgentManagerListTurnsResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentManagerHost.CancelTurn
+   */
+  cancelTurn: {
+    methodKind: "unary";
+    input: typeof AgentManagerCancelTurnRequestSchema;
+    output: typeof AgentTurnSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentManagerHost.ListTurnEvents
+   */
+  listTurnEvents: {
+    methodKind: "unary";
+    input: typeof AgentManagerListTurnEventsRequestSchema;
+    output: typeof AgentManagerListTurnEventsResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentManagerHost.ListInteractions
+   */
+  listInteractions: {
+    methodKind: "unary";
+    input: typeof AgentManagerListInteractionsRequestSchema;
+    output: typeof AgentManagerListInteractionsResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.AgentManagerHost.ResolveInteraction
+   */
+  resolveInteraction: {
+    methodKind: "unary";
+    input: typeof AgentManagerResolveInteractionRequestSchema;
+    output: typeof AgentInteractionSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_agent, 2);

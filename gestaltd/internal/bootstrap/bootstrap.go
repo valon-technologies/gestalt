@@ -385,99 +385,158 @@ func (p *agentProviderWithCleanup) Close() error {
 	return errors.Join(errs...)
 }
 
-func (p *agentProviderWithCleanup) ManagesResumeRunInteractions() bool {
-	if p == nil || p.Provider == nil {
-		return false
-	}
-	manager, ok := p.Provider.(agentmanager.ResumeRunInteractionManagingProvider)
-	return ok && manager.ManagesResumeRunInteractions()
-}
-
 type agentProviderWithTracking struct {
 	delegate     coreagent.Provider
 	providerName string
 	runtime      *agentRuntime
 }
 
-func (p *agentProviderWithTracking) StartRun(ctx context.Context, req coreagent.StartRunRequest) (*coreagent.Run, error) {
+func (p *agentProviderWithTracking) CreateSession(ctx context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
+	if p == nil || p.delegate == nil {
+		return nil, fmt.Errorf("agent provider is not configured")
+	}
+	session, err := p.delegate.CreateSession(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	requestedID := strings.TrimSpace(req.SessionID)
+	if requestedID != "" && session != nil {
+		actualID := strings.TrimSpace(session.ID)
+		if actualID != "" && actualID != requestedID {
+			return nil, fmt.Errorf("%w: agent provider %q returned session id %q for requested session id %q", invocation.ErrInternal, p.providerName, actualID, requestedID)
+		}
+	}
+	return session, nil
+}
+
+func (p *agentProviderWithTracking) GetSession(ctx context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+	if p == nil || p.delegate == nil {
+		return nil, fmt.Errorf("agent provider is not configured")
+	}
+	return p.delegate.GetSession(ctx, req)
+}
+
+func (p *agentProviderWithTracking) ListSessions(ctx context.Context, req coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
+	if p == nil || p.delegate == nil {
+		return nil, fmt.Errorf("agent provider is not configured")
+	}
+	return p.delegate.ListSessions(ctx, req)
+}
+
+func (p *agentProviderWithTracking) UpdateSession(ctx context.Context, req coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
+	if p == nil || p.delegate == nil {
+		return nil, fmt.Errorf("agent provider is not configured")
+	}
+	return p.delegate.UpdateSession(ctx, req)
+}
+
+func (p *agentProviderWithTracking) CreateTurn(ctx context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
 	trackReq := req
-	trackReq.RunID = strings.TrimSpace(trackReq.RunID)
-	tracked := p.runtime != nil && trackReq.RunID != ""
+	trackReq.TurnID = strings.TrimSpace(trackReq.TurnID)
+	tracked := p.runtime != nil && trackReq.TurnID != ""
 	if tracked {
-		if err := p.runtime.TrackRun(ctx, p.providerName, trackReq); err != nil {
+		if err := p.runtime.TrackTurn(ctx, p.providerName, trackReq); err != nil {
 			return nil, err
 		}
 	}
-	run, err := p.delegate.StartRun(ctx, req)
+	turn, err := p.delegate.CreateTurn(ctx, req)
 	if err != nil {
 		if tracked {
-			if existing, getErr := p.delegate.GetRun(ctx, coreagent.GetRunRequest{RunID: trackReq.RunID}); getErr != nil || existing == nil {
-				_ = p.runtime.DeleteTrackedRun(context.Background(), trackReq.RunID)
+			if existing, getErr := p.delegate.GetTurn(ctx, coreagent.GetTurnRequest{TurnID: trackReq.TurnID}); getErr != nil || existing == nil {
+				_ = p.runtime.DeleteTrackedTurn(context.Background(), trackReq.TurnID)
 			}
 		}
 		return nil, err
 	}
-	if tracked && p.runtime != nil && run != nil {
-		actualRunID := strings.TrimSpace(run.ID)
-		if actualRunID != "" && actualRunID != trackReq.RunID {
-			trackErr := fmt.Errorf("%w: agent provider %q returned run id %q for requested run id %q", invocation.ErrInternal, p.providerName, actualRunID, trackReq.RunID)
-			_ = p.runtime.DeleteTrackedRun(context.Background(), trackReq.RunID)
-			cancelErr := p.cancelProviderRun(actualRunID, "agent provider returned mismatched run id")
+	requestedID := strings.TrimSpace(trackReq.TurnID)
+	if requestedID != "" && turn != nil {
+		actualID := strings.TrimSpace(turn.ID)
+		if actualID != "" && actualID != requestedID {
+			trackErr := fmt.Errorf("%w: agent provider %q returned turn id %q for requested turn id %q", invocation.ErrInternal, p.providerName, actualID, requestedID)
+			_ = p.runtime.DeleteTrackedTurn(context.Background(), requestedID)
+			cancelErr := p.cancelProviderTurn(actualID, "agent provider returned mismatched turn id")
 			if cancelErr != nil {
 				return nil, errors.Join(trackErr, cancelErr)
 			}
 			return nil, trackErr
 		}
 	}
-	if !tracked && p.runtime != nil && run != nil && strings.TrimSpace(run.ID) != "" {
-		trackReq.RunID = strings.TrimSpace(run.ID)
-		if trackErr := p.runtime.TrackRun(ctx, p.providerName, trackReq); trackErr != nil {
-			cancelErr := p.cancelTrackedRun(trackReq.RunID)
+	if !tracked && p.runtime != nil && turn != nil && strings.TrimSpace(turn.ID) != "" {
+		trackReq.TurnID = strings.TrimSpace(turn.ID)
+		if trackErr := p.runtime.TrackTurn(ctx, p.providerName, trackReq); trackErr != nil {
+			cancelErr := p.cancelTrackedTurn(trackReq.TurnID)
 			if cancelErr != nil {
 				return nil, errors.Join(trackErr, cancelErr)
 			}
 			return nil, trackErr
 		}
 	}
-	return run, nil
+	return turn, nil
 }
 
-func (p *agentProviderWithTracking) GetRun(ctx context.Context, req coreagent.GetRunRequest) (*coreagent.Run, error) {
+func (p *agentProviderWithTracking) GetTurn(ctx context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
-	return p.delegate.GetRun(ctx, req)
+	return p.delegate.GetTurn(ctx, req)
 }
 
-func (p *agentProviderWithTracking) ListRuns(ctx context.Context, req coreagent.ListRunsRequest) ([]*coreagent.Run, error) {
+func (p *agentProviderWithTracking) ListTurns(ctx context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
-	return p.delegate.ListRuns(ctx, req)
+	return p.delegate.ListTurns(ctx, req)
 }
 
-func (p *agentProviderWithTracking) CancelRun(ctx context.Context, req coreagent.CancelRunRequest) (*coreagent.Run, error) {
+func (p *agentProviderWithTracking) CancelTurn(ctx context.Context, req coreagent.CancelTurnRequest) (*coreagent.Turn, error) {
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
-	run, err := p.delegate.CancelRun(ctx, req)
+	turn, err := p.delegate.CancelTurn(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	if p.runtime != nil {
-		runID := strings.TrimSpace(req.RunID)
-		if runID == "" && run != nil && strings.TrimSpace(run.ID) != "" {
-			runID = strings.TrimSpace(run.ID)
+		turnID := strings.TrimSpace(req.TurnID)
+		if turnID == "" && turn != nil && strings.TrimSpace(turn.ID) != "" {
+			turnID = strings.TrimSpace(turn.ID)
 		}
-		if runID != "" {
-			_ = p.runtime.RevokeTrackedRun(context.Background(), runID)
-			_ = p.runtime.CancelInteractions(context.Background(), runID)
+		if turnID != "" {
+			_ = p.runtime.RevokeTrackedTurn(context.Background(), turnID)
 		}
 	}
-	return run, nil
+	return turn, nil
+}
+
+func (p *agentProviderWithTracking) ListTurnEvents(ctx context.Context, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+	if p == nil || p.delegate == nil {
+		return nil, fmt.Errorf("agent provider is not configured")
+	}
+	return p.delegate.ListTurnEvents(ctx, req)
+}
+
+func (p *agentProviderWithTracking) GetInteraction(ctx context.Context, req coreagent.GetInteractionRequest) (*coreagent.Interaction, error) {
+	if p == nil || p.delegate == nil {
+		return nil, fmt.Errorf("agent provider is not configured")
+	}
+	return p.delegate.GetInteraction(ctx, req)
+}
+
+func (p *agentProviderWithTracking) ListInteractions(ctx context.Context, req coreagent.ListInteractionsRequest) ([]*coreagent.Interaction, error) {
+	if p == nil || p.delegate == nil {
+		return nil, fmt.Errorf("agent provider is not configured")
+	}
+	return p.delegate.ListInteractions(ctx, req)
+}
+
+func (p *agentProviderWithTracking) ResolveInteraction(ctx context.Context, req coreagent.ResolveInteractionRequest) (*coreagent.Interaction, error) {
+	if p == nil || p.delegate == nil {
+		return nil, fmt.Errorf("agent provider is not configured")
+	}
+	return p.delegate.ResolveInteraction(ctx, req)
 }
 
 func (p *agentProviderWithTracking) GetCapabilities(ctx context.Context, req coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
@@ -487,31 +546,6 @@ func (p *agentProviderWithTracking) GetCapabilities(ctx context.Context, req cor
 	return p.delegate.GetCapabilities(ctx, req)
 }
 
-func (p *agentProviderWithTracking) ResumeRun(ctx context.Context, req coreagent.ResumeRunRequest) (*coreagent.Run, error) {
-	if p == nil || p.delegate == nil {
-		return nil, fmt.Errorf("agent provider is not configured")
-	}
-	if p.runtime != nil {
-		if _, err := p.runtime.ValidateInteraction(ctx, p.providerName, req.RunID, req.InteractionID); err != nil {
-			return nil, err
-		}
-	}
-	run, err := p.delegate.ResumeRun(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	if p.runtime != nil {
-		if _, err := p.runtime.ResolveInteraction(ctx, req.InteractionID, req.Resolution); err != nil && !errors.Is(err, core.ErrNotFound) {
-			return nil, err
-		}
-	}
-	return run, nil
-}
-
-func (p *agentProviderWithTracking) ManagesResumeRunInteractions() bool {
-	return p != nil && p.runtime != nil
-}
-
 func (p *agentProviderWithTracking) Ping(ctx context.Context) error {
 	if p == nil || p.delegate == nil {
 		return fmt.Errorf("agent provider is not configured")
@@ -519,23 +553,23 @@ func (p *agentProviderWithTracking) Ping(ctx context.Context) error {
 	return p.delegate.Ping(ctx)
 }
 
-func (p *agentProviderWithTracking) cancelTrackedRun(runID string) error {
+func (p *agentProviderWithTracking) cancelTrackedTurn(turnID string) error {
 	if p.runtime != nil {
-		_ = p.runtime.DeleteTrackedRun(context.Background(), runID)
+		_ = p.runtime.DeleteTrackedTurn(context.Background(), turnID)
 	}
-	return p.cancelProviderRun(runID, "agent run tracking failed")
+	return p.cancelProviderTurn(turnID, "agent turn tracking failed")
 }
 
-func (p *agentProviderWithTracking) cancelProviderRun(runID string, reason string) error {
+func (p *agentProviderWithTracking) cancelProviderTurn(turnID string, reason string) error {
 	if p == nil || p.delegate == nil {
 		return nil
 	}
-	runID = strings.TrimSpace(runID)
-	if runID == "" {
+	turnID = strings.TrimSpace(turnID)
+	if turnID == "" {
 		return nil
 	}
-	_, cancelErr := p.delegate.CancelRun(context.Background(), coreagent.CancelRunRequest{
-		RunID:  runID,
+	_, cancelErr := p.delegate.CancelTurn(context.Background(), coreagent.CancelTurnRequest{
+		TurnID: turnID,
 		Reason: strings.TrimSpace(reason),
 	})
 	if cancelErr != nil && !errors.Is(cancelErr, core.ErrNotFound) {
@@ -942,8 +976,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}
 	prepared.Deps.AgentRuntime.SetRunMetadata(prepared.Services.AgentRunMetadata)
-	prepared.Deps.AgentRuntime.SetRunEvents(prepared.Services.AgentRunEvents)
-	prepared.Deps.AgentRuntime.SetRunInteractions(prepared.Services.AgentRunInteractions)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, coredata.EffectiveExternalCredentialProvider(prepared.Services),
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
@@ -963,10 +995,9 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:         providers,
 		Agent:             prepared.Deps.AgentRuntime,
+		SessionMetadata:   prepared.Services.AgentSessions,
 		RunMetadata:       prepared.Services.AgentRunMetadata,
-		RunEvents:         prepared.Services.AgentRunEvents,
 		Tokens:            prepared.Services.Tokens,
-		RunInteractions:   prepared.Services.AgentRunInteractions,
 		Invoker:           sharedInvoker,
 		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,
@@ -1597,7 +1628,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		Name:   "agent_host",
 		EnvVar: providerhost.DefaultAgentHostSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAgentHostServer(srv, providerhost.NewAgentHostServer(name, deps.AgentRuntime.ExecuteTool, deps.AgentRuntime.EmitEvent, deps.AgentRuntime.RequestInteraction))
+			proto.RegisterAgentHostServer(srv, providerhost.NewAgentHostServer(name, deps.AgentRuntime.ExecuteTool))
 		},
 	}}
 	var cleanup func()

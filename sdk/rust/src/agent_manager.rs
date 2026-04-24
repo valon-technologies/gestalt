@@ -77,36 +77,92 @@ impl AgentManager {
         })
     }
 
-    pub async fn run(
+    pub async fn create_session(
         &mut self,
-        mut request: pb::AgentManagerRunRequest,
-    ) -> std::result::Result<pb::ManagedAgentRun, AgentManagerError> {
+        mut request: pb::AgentManagerCreateSessionRequest,
+    ) -> std::result::Result<pb::AgentSession, AgentManagerError> {
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.run(request).await?.into_inner())
+        Ok(self.client.create_session(request).await?.into_inner())
     }
 
-    pub async fn get_run(
+    pub async fn get_session(
         &mut self,
-        mut request: pb::AgentManagerGetRunRequest,
-    ) -> std::result::Result<pb::ManagedAgentRun, AgentManagerError> {
+        mut request: pb::AgentManagerGetSessionRequest,
+    ) -> std::result::Result<pb::AgentSession, AgentManagerError> {
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.get_run(request).await?.into_inner())
+        Ok(self.client.get_session(request).await?.into_inner())
     }
 
-    pub async fn list_runs(
+    pub async fn list_sessions(
         &mut self,
-        mut request: pb::AgentManagerListRunsRequest,
-    ) -> std::result::Result<pb::AgentManagerListRunsResponse, AgentManagerError> {
+        mut request: pb::AgentManagerListSessionsRequest,
+    ) -> std::result::Result<pb::AgentManagerListSessionsResponse, AgentManagerError> {
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.list_runs(request).await?.into_inner())
+        Ok(self.client.list_sessions(request).await?.into_inner())
     }
 
-    pub async fn cancel_run(
+    pub async fn update_session(
         &mut self,
-        mut request: pb::AgentManagerCancelRunRequest,
-    ) -> std::result::Result<pb::ManagedAgentRun, AgentManagerError> {
+        mut request: pb::AgentManagerUpdateSessionRequest,
+    ) -> std::result::Result<pb::AgentSession, AgentManagerError> {
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.cancel_run(request).await?.into_inner())
+        Ok(self.client.update_session(request).await?.into_inner())
+    }
+
+    pub async fn create_turn(
+        &mut self,
+        mut request: pb::AgentManagerCreateTurnRequest,
+    ) -> std::result::Result<pb::AgentTurn, AgentManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.create_turn(request).await?.into_inner())
+    }
+
+    pub async fn get_turn(
+        &mut self,
+        mut request: pb::AgentManagerGetTurnRequest,
+    ) -> std::result::Result<pb::AgentTurn, AgentManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.get_turn(request).await?.into_inner())
+    }
+
+    pub async fn list_turns(
+        &mut self,
+        mut request: pb::AgentManagerListTurnsRequest,
+    ) -> std::result::Result<pb::AgentManagerListTurnsResponse, AgentManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.list_turns(request).await?.into_inner())
+    }
+
+    pub async fn cancel_turn(
+        &mut self,
+        mut request: pb::AgentManagerCancelTurnRequest,
+    ) -> std::result::Result<pb::AgentTurn, AgentManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.cancel_turn(request).await?.into_inner())
+    }
+
+    pub async fn list_turn_events(
+        &mut self,
+        mut request: pb::AgentManagerListTurnEventsRequest,
+    ) -> std::result::Result<pb::AgentManagerListTurnEventsResponse, AgentManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.list_turn_events(request).await?.into_inner())
+    }
+
+    pub async fn list_interactions(
+        &mut self,
+        mut request: pb::AgentManagerListInteractionsRequest,
+    ) -> std::result::Result<pb::AgentManagerListInteractionsResponse, AgentManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.list_interactions(request).await?.into_inner())
+    }
+
+    pub async fn resolve_interaction(
+        &mut self,
+        mut request: pb::AgentManagerResolveInteractionRequest,
+    ) -> std::result::Result<pb::AgentInteraction, AgentManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.resolve_interaction(request).await?.into_inner())
     }
 }
 

@@ -45,21 +45,6 @@ impl AgentHost {
     ) -> std::result::Result<pb::ExecuteAgentToolResponse, AgentHostError> {
         Ok(self.client.execute_tool(request).await?.into_inner())
     }
-
-    pub async fn emit_event(
-        &mut self,
-        request: pb::EmitAgentEventRequest,
-    ) -> std::result::Result<(), AgentHostError> {
-        self.client.emit_event(request).await?;
-        Ok(())
-    }
-
-    pub async fn request_interaction(
-        &mut self,
-        request: pb::RequestAgentInteractionRequest,
-    ) -> std::result::Result<pb::AgentInteraction, AgentHostError> {
-        Ok(self.client.request_interaction(request).await?.into_inner())
-    }
 }
 
 async fn connect_unix(
@@ -116,32 +101,88 @@ impl<P> pb::agent_provider_server::AgentProvider for AgentServer<P>
 where
     P: AgentProvider,
 {
-    async fn start_run(
+    async fn create_session(
         &self,
-        request: GrpcRequest<pb::StartAgentProviderRunRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::BoundAgentRun>, Status> {
-        self.provider.start_run(request).await
+        request: GrpcRequest<pb::CreateAgentProviderSessionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
+        self.provider.create_session(request).await
     }
 
-    async fn get_run(
+    async fn get_session(
         &self,
-        request: GrpcRequest<pb::GetAgentProviderRunRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::BoundAgentRun>, Status> {
-        self.provider.get_run(request).await
+        request: GrpcRequest<pb::GetAgentProviderSessionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
+        self.provider.get_session(request).await
     }
 
-    async fn list_runs(
+    async fn list_sessions(
         &self,
-        request: GrpcRequest<pb::ListAgentProviderRunsRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderRunsResponse>, Status> {
-        self.provider.list_runs(request).await
+        request: GrpcRequest<pb::ListAgentProviderSessionsRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderSessionsResponse>, Status> {
+        self.provider.list_sessions(request).await
     }
 
-    async fn cancel_run(
+    async fn update_session(
         &self,
-        request: GrpcRequest<pb::CancelAgentProviderRunRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::BoundAgentRun>, Status> {
-        self.provider.cancel_run(request).await
+        request: GrpcRequest<pb::UpdateAgentProviderSessionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
+        self.provider.update_session(request).await
+    }
+
+    async fn create_turn(
+        &self,
+        request: GrpcRequest<pb::CreateAgentProviderTurnRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
+        self.provider.create_turn(request).await
+    }
+
+    async fn get_turn(
+        &self,
+        request: GrpcRequest<pb::GetAgentProviderTurnRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
+        self.provider.get_turn(request).await
+    }
+
+    async fn list_turns(
+        &self,
+        request: GrpcRequest<pb::ListAgentProviderTurnsRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderTurnsResponse>, Status> {
+        self.provider.list_turns(request).await
+    }
+
+    async fn cancel_turn(
+        &self,
+        request: GrpcRequest<pb::CancelAgentProviderTurnRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
+        self.provider.cancel_turn(request).await
+    }
+
+    async fn list_turn_events(
+        &self,
+        request: GrpcRequest<pb::ListAgentProviderTurnEventsRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderTurnEventsResponse>, Status> {
+        self.provider.list_turn_events(request).await
+    }
+
+    async fn get_interaction(
+        &self,
+        request: GrpcRequest<pb::GetAgentProviderInteractionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentInteraction>, Status> {
+        self.provider.get_interaction(request).await
+    }
+
+    async fn list_interactions(
+        &self,
+        request: GrpcRequest<pb::ListAgentProviderInteractionsRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderInteractionsResponse>, Status> {
+        self.provider.list_interactions(request).await
+    }
+
+    async fn resolve_interaction(
+        &self,
+        request: GrpcRequest<pb::ResolveAgentProviderInteractionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::AgentInteraction>, Status> {
+        self.provider.resolve_interaction(request).await
     }
 
     async fn get_capabilities(
@@ -149,12 +190,5 @@ where
         request: GrpcRequest<pb::GetAgentProviderCapabilitiesRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentProviderCapabilities>, Status> {
         self.provider.get_capabilities(request).await
-    }
-
-    async fn resume_run(
-        &self,
-        request: GrpcRequest<pb::ResumeAgentProviderRunRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::BoundAgentRun>, Status> {
-        self.provider.resume_run(request).await
     }
 }

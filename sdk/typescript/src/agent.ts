@@ -11,39 +11,53 @@ import {
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
+  AgentExecutionStatus,
   AgentHost as AgentHostService,
+  AgentInteractionSchema,
   AgentInteractionState,
   AgentInteractionType,
   AgentMessagePartType,
-  AgentInteractionSchema,
-  AgentProviderCapabilitiesSchema,
   AgentProvider as AgentProviderService,
-  AgentRunStatus,
+  AgentProviderCapabilitiesSchema,
+  AgentSessionSchema,
+  AgentSessionState,
   AgentToolSourceMode,
-  BoundAgentRunSchema,
+  AgentTurnEventSchema,
+  AgentTurnSchema,
   GetAgentProviderCapabilitiesRequestSchema,
-  ListAgentProviderRunsResponseSchema,
+  ListAgentProviderInteractionsResponseSchema,
+  ListAgentProviderSessionsResponseSchema,
+  ListAgentProviderTurnEventsResponseSchema,
+  ListAgentProviderTurnsResponseSchema,
   type AgentActor,
+  type AgentInteraction,
+  type AgentMessage,
   type AgentMessagePart,
   type AgentMessagePartImageRef,
   type AgentMessagePartToolCall,
   type AgentMessagePartToolResult,
-  type AgentInteraction,
-  type AgentMessage,
+  type AgentProviderCapabilities,
+  type AgentSession,
   type AgentToolRef,
-  type BoundAgentRun,
+  type AgentTurn,
+  type AgentTurnEvent,
   type BoundAgentToolTarget,
-  type CancelAgentProviderRunRequest,
-  type EmitAgentEventRequest,
+  type CancelAgentProviderTurnRequest,
+  type CreateAgentProviderSessionRequest,
+  type CreateAgentProviderTurnRequest,
   type ExecuteAgentToolRequest,
   type ExecuteAgentToolResponse,
   type GetAgentProviderCapabilitiesRequest,
-  type GetAgentProviderRunRequest,
-  type ListAgentProviderRunsRequest,
-  type RequestAgentInteractionRequest,
+  type GetAgentProviderInteractionRequest,
+  type GetAgentProviderSessionRequest,
+  type GetAgentProviderTurnRequest,
+  type ListAgentProviderInteractionsRequest,
+  type ListAgentProviderSessionsRequest,
+  type ListAgentProviderTurnEventsRequest,
+  type ListAgentProviderTurnsRequest,
+  type ResolveAgentProviderInteractionRequest,
   type ResolvedAgentTool,
-  type ResumeAgentProviderRunRequest,
-  type StartAgentProviderRunRequest,
+  type UpdateAgentProviderSessionRequest,
 } from "../gen/v1/agent_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
@@ -53,112 +67,250 @@ export const ENV_AGENT_HOST_SOCKET = "GESTALT_AGENT_HOST_SOCKET";
 export type {
   AgentActor,
   AgentInteraction,
+  AgentMessage,
   AgentMessagePart,
   AgentMessagePartImageRef,
   AgentMessagePartToolCall,
   AgentMessagePartToolResult,
-  AgentMessage,
+  AgentProviderCapabilities,
+  AgentSession,
   AgentToolRef,
-  BoundAgentRun,
+  AgentTurn,
+  AgentTurnEvent,
   BoundAgentToolTarget,
-  CancelAgentProviderRunRequest,
-  EmitAgentEventRequest,
+  CancelAgentProviderTurnRequest,
+  CreateAgentProviderSessionRequest,
+  CreateAgentProviderTurnRequest,
   ExecuteAgentToolRequest,
   ExecuteAgentToolResponse,
-  GetAgentProviderRunRequest,
-  ListAgentProviderRunsRequest,
-  RequestAgentInteractionRequest,
+  GetAgentProviderCapabilitiesRequest,
+  GetAgentProviderInteractionRequest,
+  GetAgentProviderSessionRequest,
+  GetAgentProviderTurnRequest,
+  ListAgentProviderInteractionsRequest,
+  ListAgentProviderSessionsRequest,
+  ListAgentProviderTurnEventsRequest,
+  ListAgentProviderTurnsRequest,
+  ResolveAgentProviderInteractionRequest,
   ResolvedAgentTool,
-  ResumeAgentProviderRunRequest,
-  StartAgentProviderRunRequest,
+  UpdateAgentProviderSessionRequest,
 };
 export {
+  AgentExecutionStatus,
   AgentInteractionState,
   AgentInteractionType,
   AgentMessagePartType,
-  AgentRunStatus,
+  AgentSessionState,
   AgentToolSourceMode,
 };
 
 export interface AgentProviderOptions extends RuntimeProviderOptions {
-  startRun: (
-    request: StartAgentProviderRunRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundAgentRunSchema>>;
-  getRun: (
-    request: GetAgentProviderRunRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundAgentRunSchema>>;
-  listRuns: (
-    request: ListAgentProviderRunsRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundAgentRunSchema>[]>;
-  cancelRun: (
-    request: CancelAgentProviderRunRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundAgentRunSchema>>;
+  createSession?: (
+    request: CreateAgentProviderSessionRequest,
+  ) => MaybePromise<MessageInitShape<typeof AgentSessionSchema>>;
+  getSession?: (
+    request: GetAgentProviderSessionRequest,
+  ) => MaybePromise<MessageInitShape<typeof AgentSessionSchema>>;
+  listSessions?: (
+    request: ListAgentProviderSessionsRequest,
+  ) => MaybePromise<MessageInitShape<typeof AgentSessionSchema>[]>;
+  updateSession?: (
+    request: UpdateAgentProviderSessionRequest,
+  ) => MaybePromise<MessageInitShape<typeof AgentSessionSchema>>;
+  createTurn?: (
+    request: CreateAgentProviderTurnRequest,
+  ) => MaybePromise<MessageInitShape<typeof AgentTurnSchema>>;
+  getTurn?: (
+    request: GetAgentProviderTurnRequest,
+  ) => MaybePromise<MessageInitShape<typeof AgentTurnSchema>>;
+  listTurns?: (
+    request: ListAgentProviderTurnsRequest,
+  ) => MaybePromise<MessageInitShape<typeof AgentTurnSchema>[]>;
+  cancelTurn?: (
+    request: CancelAgentProviderTurnRequest,
+  ) => MaybePromise<MessageInitShape<typeof AgentTurnSchema>>;
+  listTurnEvents?: (
+    request: ListAgentProviderTurnEventsRequest,
+  ) => MaybePromise<MessageInitShape<typeof AgentTurnEventSchema>[]>;
+  getInteraction?: (
+    request: GetAgentProviderInteractionRequest,
+  ) => MaybePromise<MessageInitShape<typeof AgentInteractionSchema>>;
+  listInteractions?: (
+    request: ListAgentProviderInteractionsRequest,
+  ) => MaybePromise<MessageInitShape<typeof AgentInteractionSchema>[]>;
+  resolveInteraction?: (
+    request: ResolveAgentProviderInteractionRequest,
+  ) => MaybePromise<MessageInitShape<typeof AgentInteractionSchema>>;
   getCapabilities?: (
     request: GetAgentProviderCapabilitiesRequest,
   ) => MaybePromise<MessageInitShape<typeof AgentProviderCapabilitiesSchema>>;
-  resumeRun?: (
-    request: ResumeAgentProviderRunRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundAgentRunSchema>>;
 }
 
 export class AgentProvider extends RuntimeProvider {
   readonly kind = "agent" as const;
 
-  private readonly startRunHandler: AgentProviderOptions["startRun"];
-  private readonly getRunHandler: AgentProviderOptions["getRun"];
-  private readonly listRunsHandler: AgentProviderOptions["listRuns"];
-  private readonly cancelRunHandler: AgentProviderOptions["cancelRun"];
+  private readonly createSessionHandler: AgentProviderOptions["createSession"];
+  private readonly getSessionHandler: AgentProviderOptions["getSession"];
+  private readonly listSessionsHandler: AgentProviderOptions["listSessions"];
+  private readonly updateSessionHandler: AgentProviderOptions["updateSession"];
+  private readonly createTurnHandler: AgentProviderOptions["createTurn"];
+  private readonly getTurnHandler: AgentProviderOptions["getTurn"];
+  private readonly listTurnsHandler: AgentProviderOptions["listTurns"];
+  private readonly cancelTurnHandler: AgentProviderOptions["cancelTurn"];
+  private readonly listTurnEventsHandler: AgentProviderOptions["listTurnEvents"];
+  private readonly getInteractionHandler: AgentProviderOptions["getInteraction"];
+  private readonly listInteractionsHandler: AgentProviderOptions["listInteractions"];
+  private readonly resolveInteractionHandler: AgentProviderOptions["resolveInteraction"];
   private readonly getCapabilitiesHandler: AgentProviderOptions["getCapabilities"];
-  private readonly resumeRunHandler: AgentProviderOptions["resumeRun"];
 
   constructor(options: AgentProviderOptions) {
     super(options);
-    this.startRunHandler = options.startRun;
-    this.getRunHandler = options.getRun;
-    this.listRunsHandler = options.listRuns;
-    this.cancelRunHandler = options.cancelRun;
+    this.createSessionHandler = options.createSession;
+    this.getSessionHandler = options.getSession;
+    this.listSessionsHandler = options.listSessions;
+    this.updateSessionHandler = options.updateSession;
+    this.createTurnHandler = options.createTurn;
+    this.getTurnHandler = options.getTurn;
+    this.listTurnsHandler = options.listTurns;
+    this.cancelTurnHandler = options.cancelTurn;
+    this.listTurnEventsHandler = options.listTurnEvents;
+    this.getInteractionHandler = options.getInteraction;
+    this.listInteractionsHandler = options.listInteractions;
+    this.resolveInteractionHandler = options.resolveInteraction;
     this.getCapabilitiesHandler = options.getCapabilities;
-    this.resumeRunHandler = options.resumeRun;
   }
 
-  async startRun(
-    request: StartAgentProviderRunRequest,
-  ): Promise<MessageInitShape<typeof BoundAgentRunSchema>> {
-    return await this.startRunHandler(request);
+  async createSession(
+    request: CreateAgentProviderSessionRequest,
+  ): Promise<MessageInitShape<typeof AgentSessionSchema>> {
+    return await requireAgentProviderHandler(
+      "create session",
+      this.createSessionHandler,
+      request,
+    );
   }
 
-  async getRun(
-    request: GetAgentProviderRunRequest,
-  ): Promise<MessageInitShape<typeof BoundAgentRunSchema>> {
-    return await this.getRunHandler(request);
+  async getSession(
+    request: GetAgentProviderSessionRequest,
+  ): Promise<MessageInitShape<typeof AgentSessionSchema>> {
+    return await requireAgentProviderHandler(
+      "get session",
+      this.getSessionHandler,
+      request,
+    );
   }
 
-  async listRuns(
-    request: ListAgentProviderRunsRequest,
-  ): Promise<MessageInitShape<typeof BoundAgentRunSchema>[]> {
-    return await this.listRunsHandler(request);
+  async listSessions(
+    request: ListAgentProviderSessionsRequest,
+  ): Promise<MessageInitShape<typeof AgentSessionSchema>[]> {
+    return await requireAgentProviderHandler(
+      "list sessions",
+      this.listSessionsHandler,
+      request,
+    );
   }
 
-  async cancelRun(
-    request: CancelAgentProviderRunRequest,
-  ): Promise<MessageInitShape<typeof BoundAgentRunSchema>> {
-    return await this.cancelRunHandler(request);
+  async updateSession(
+    request: UpdateAgentProviderSessionRequest,
+  ): Promise<MessageInitShape<typeof AgentSessionSchema>> {
+    return await requireAgentProviderHandler(
+      "update session",
+      this.updateSessionHandler,
+      request,
+    );
   }
 
-  async getCapabilities(): Promise<MessageInitShape<typeof AgentProviderCapabilitiesSchema>> {
-    if (!this.getCapabilitiesHandler) {
-      throw new ConnectError("agent provider get capabilities is not implemented", Code.Unimplemented);
-    }
-    return await this.getCapabilitiesHandler(create(GetAgentProviderCapabilitiesRequestSchema, {}));
+  async createTurn(
+    request: CreateAgentProviderTurnRequest,
+  ): Promise<MessageInitShape<typeof AgentTurnSchema>> {
+    return await requireAgentProviderHandler(
+      "create turn",
+      this.createTurnHandler,
+      request,
+    );
   }
 
-  async resumeRun(
-    request: ResumeAgentProviderRunRequest,
-  ): Promise<MessageInitShape<typeof BoundAgentRunSchema>> {
-    if (!this.resumeRunHandler) {
-      throw new ConnectError("agent provider resume run is not implemented", Code.Unimplemented);
-    }
-    return await this.resumeRunHandler(request);
+  async getTurn(
+    request: GetAgentProviderTurnRequest,
+  ): Promise<MessageInitShape<typeof AgentTurnSchema>> {
+    return await requireAgentProviderHandler(
+      "get turn",
+      this.getTurnHandler,
+      request,
+    );
+  }
+
+  async listTurns(
+    request: ListAgentProviderTurnsRequest,
+  ): Promise<MessageInitShape<typeof AgentTurnSchema>[]> {
+    return await requireAgentProviderHandler(
+      "list turns",
+      this.listTurnsHandler,
+      request,
+    );
+  }
+
+  async cancelTurn(
+    request: CancelAgentProviderTurnRequest,
+  ): Promise<MessageInitShape<typeof AgentTurnSchema>> {
+    return await requireAgentProviderHandler(
+      "cancel turn",
+      this.cancelTurnHandler,
+      request,
+    );
+  }
+
+  async listTurnEvents(
+    request: ListAgentProviderTurnEventsRequest,
+  ): Promise<MessageInitShape<typeof AgentTurnEventSchema>[]> {
+    return await requireAgentProviderHandler(
+      "list turn events",
+      this.listTurnEventsHandler,
+      request,
+    );
+  }
+
+  async getInteraction(
+    request: GetAgentProviderInteractionRequest,
+  ): Promise<MessageInitShape<typeof AgentInteractionSchema>> {
+    return await requireAgentProviderHandler(
+      "get interaction",
+      this.getInteractionHandler,
+      request,
+    );
+  }
+
+  async listInteractions(
+    request: ListAgentProviderInteractionsRequest,
+  ): Promise<MessageInitShape<typeof AgentInteractionSchema>[]> {
+    return await requireAgentProviderHandler(
+      "list interactions",
+      this.listInteractionsHandler,
+      request,
+    );
+  }
+
+  async resolveInteraction(
+    request: ResolveAgentProviderInteractionRequest,
+  ): Promise<MessageInitShape<typeof AgentInteractionSchema>> {
+    return await requireAgentProviderHandler(
+      "resolve interaction",
+      this.resolveInteractionHandler,
+      request,
+    );
+  }
+
+  async getCapabilities(
+    request: GetAgentProviderCapabilitiesRequest = create(
+      GetAgentProviderCapabilitiesRequestSchema,
+      {},
+    ),
+  ): Promise<MessageInitShape<typeof AgentProviderCapabilitiesSchema>> {
+    return await requireAgentProviderHandler(
+      "get capabilities",
+      this.getCapabilitiesHandler,
+      request,
+    );
   }
 }
 
@@ -173,10 +325,8 @@ export function isAgentProvider(value: unknown): value is AgentProvider {
       value !== null &&
       "kind" in value &&
       (value as { kind?: unknown }).kind === "agent" &&
-      "startRun" in value &&
-      "getRun" in value &&
-      "listRuns" in value &&
-      "cancelRun" in value)
+      "createSession" in value &&
+      "createTurn" in value)
   );
 }
 
@@ -203,57 +353,125 @@ export class AgentHost {
     return await this.client.executeTool(request);
   }
 
-  async emitEvent(request: EmitAgentEventRequest): Promise<void> {
-    await this.client.emitEvent(request);
-  }
-
-  async requestInteraction(
-    request: RequestAgentInteractionRequest,
-  ): Promise<AgentInteraction> {
-    return await this.client.requestInteraction(request);
-  }
 }
 
 export function createAgentProviderService(
   provider: AgentProvider,
 ): Partial<ServiceImpl<typeof AgentProviderService>> {
   return {
-    async startRun(request) {
+    async createSession(request) {
       return create(
-        BoundAgentRunSchema,
-        await invokeAgentProvider("start run", () => provider.startRun(request)),
+        AgentSessionSchema,
+        await invokeAgentProvider("create session", () =>
+          provider.createSession(request),
+        ),
       );
     },
-    async getRun(request) {
+    async getSession(request) {
       return create(
-        BoundAgentRunSchema,
-        await invokeAgentProvider("get run", () => provider.getRun(request)),
+        AgentSessionSchema,
+        await invokeAgentProvider("get session", () =>
+          provider.getSession(request),
+        ),
       );
     },
-    async listRuns(request) {
-      return create(ListAgentProviderRunsResponseSchema, {
-        runs: await invokeAgentProvider("list runs", () => provider.listRuns(request)),
+    async listSessions(request) {
+      return create(ListAgentProviderSessionsResponseSchema, {
+        sessions: await invokeAgentProvider("list sessions", () =>
+          provider.listSessions(request),
+        ),
       });
     },
-    async cancelRun(request) {
+    async updateSession(request) {
       return create(
-        BoundAgentRunSchema,
-        await invokeAgentProvider("cancel run", () => provider.cancelRun(request)),
+        AgentSessionSchema,
+        await invokeAgentProvider("update session", () =>
+          provider.updateSession(request),
+        ),
       );
     },
-    async getCapabilities() {
+    async createTurn(request) {
+      return create(
+        AgentTurnSchema,
+        await invokeAgentProvider("create turn", () =>
+          provider.createTurn(request),
+        ),
+      );
+    },
+    async getTurn(request) {
+      return create(
+        AgentTurnSchema,
+        await invokeAgentProvider("get turn", () => provider.getTurn(request)),
+      );
+    },
+    async listTurns(request) {
+      return create(ListAgentProviderTurnsResponseSchema, {
+        turns: await invokeAgentProvider("list turns", () =>
+          provider.listTurns(request),
+        ),
+      });
+    },
+    async cancelTurn(request) {
+      return create(
+        AgentTurnSchema,
+        await invokeAgentProvider("cancel turn", () =>
+          provider.cancelTurn(request),
+        ),
+      );
+    },
+    async listTurnEvents(request) {
+      return create(ListAgentProviderTurnEventsResponseSchema, {
+        events: await invokeAgentProvider("list turn events", () =>
+          provider.listTurnEvents(request),
+        ),
+      });
+    },
+    async getInteraction(request) {
+      return create(
+        AgentInteractionSchema,
+        await invokeAgentProvider("get interaction", () =>
+          provider.getInteraction(request),
+        ),
+      );
+    },
+    async listInteractions(request) {
+      return create(ListAgentProviderInteractionsResponseSchema, {
+        interactions: await invokeAgentProvider("list interactions", () =>
+          provider.listInteractions(request),
+        ),
+      });
+    },
+    async resolveInteraction(request) {
+      return create(
+        AgentInteractionSchema,
+        await invokeAgentProvider("resolve interaction", () =>
+          provider.resolveInteraction(request),
+        ),
+      );
+    },
+    async getCapabilities(request) {
       return create(
         AgentProviderCapabilitiesSchema,
-        await invokeAgentProvider("get capabilities", () => provider.getCapabilities()),
-      );
-    },
-    async resumeRun(request) {
-      return create(
-        BoundAgentRunSchema,
-        await invokeAgentProvider("resume run", () => provider.resumeRun(request)),
+        await invokeAgentProvider("get capabilities", () =>
+          provider.getCapabilities(request),
+        ),
       );
     },
   };
+}
+
+async function requireAgentProviderHandler<Request, Response>(
+  action: string,
+  fn: ((request: Request) => MaybePromise<Response>) | undefined,
+  request: Request,
+): Promise<Response> {
+  if (!fn) {
+    throw new ConnectError(
+      `agent provider ${action} is not implemented`,
+      Code.Unimplemented,
+    );
+  }
+  return await fn(request);
 }
 
 async function invokeAgentProvider<T>(
