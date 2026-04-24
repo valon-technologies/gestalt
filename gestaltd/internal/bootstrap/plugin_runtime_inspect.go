@@ -7,10 +7,12 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
+	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
 )
 
 type RuntimeInspector interface {
 	SnapshotPluginRuntimes(ctx context.Context) ([]RuntimeProviderSnapshot, error)
+	ListPluginRuntimeSessionLogs(ctx context.Context, providerName, sessionID string, afterSeq int64, limit int) ([]runtimelogs.Record, error)
 }
 
 type RuntimeProviderSnapshot struct {
@@ -93,4 +95,11 @@ func (r *pluginRuntimeRegistry) SnapshotPluginRuntimes(ctx context.Context) ([]R
 		out = append(out, snapshot)
 	}
 	return out, nil
+}
+
+func (r *pluginRuntimeRegistry) ListPluginRuntimeSessionLogs(ctx context.Context, providerName, sessionID string, afterSeq int64, limit int) ([]runtimelogs.Record, error) {
+	if r == nil || r.deps.Services == nil || r.deps.Services.RuntimeSessionLogs == nil {
+		return nil, nil
+	}
+	return r.deps.Services.RuntimeSessionLogs.ListSessionLogs(ctx, providerName, sessionID, afterSeq, limit)
 }

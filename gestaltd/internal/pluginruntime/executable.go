@@ -6,10 +6,12 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -23,7 +25,9 @@ type ExecutableConfig struct {
 	Config       map[string]any
 	AllowedHosts []string
 	HostBinary   string
+	HostServices []providerhost.HostService
 	Telemetry    metricutil.TelemetryProviders
+	SessionLogs  runtimelogs.Store
 }
 
 type executableProvider struct {
@@ -31,9 +35,11 @@ type executableProvider struct {
 	runtime   proto.PluginRuntimeProviderClient
 	lifecycle proto.ProviderLifecycleClient
 
-	telemetry metricutil.TelemetryProviders
-	mu        sync.Mutex
-	sessions  map[string]*Session
+	name        string
+	telemetry   metricutil.TelemetryProviders
+	sessionLogs runtimelogs.Store
+	mu          sync.Mutex
+	sessions    map[string]*Session
 }
 
 func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider, error) {
@@ -43,6 +49,7 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 		Env:          cfg.Env,
 		AllowedHosts: cfg.AllowedHosts,
 		HostBinary:   cfg.HostBinary,
+		HostServices: cfg.HostServices,
 		ProviderName: cfg.Name,
 		Telemetry:    cfg.Telemetry,
 	})
@@ -57,11 +64,13 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 	}
 
 	return &executableProvider{
-		proc:      proc,
-		runtime:   proto.NewPluginRuntimeProviderClient(proc.Conn()),
-		lifecycle: lifecycle,
-		telemetry: cfg.Telemetry,
-		sessions:  make(map[string]*Session),
+		proc:        proc,
+		runtime:     proto.NewPluginRuntimeProviderClient(proc.Conn()),
+		lifecycle:   lifecycle,
+		name:        cfg.Name,
+		telemetry:   cfg.Telemetry,
+		sessionLogs: cfg.SessionLogs,
+		sessions:    make(map[string]*Session),
 	}, nil
 }
 
@@ -85,6 +94,19 @@ func (p *executableProvider) StartSession(ctx context.Context, req StartSessionR
 	}
 	session := sessionFromProto(resp)
 	p.trackSession(session)
+	if p.sessionLogs != nil && session != nil {
+		metadata := cloneStringMap(session.Metadata)
+		if len(metadata) == 0 {
+			metadata = cloneStringMap(req.Metadata)
+		}
+		if err := p.sessionLogs.RegisterSession(ctx, runtimelogs.SessionRegistration{
+			RuntimeProviderName: p.name,
+			SessionID:           session.ID,
+			Metadata:            metadata,
+		}); err != nil {
+			return nil, fmt.Errorf("register runtime session logs: %w", err)
+		}
+	}
 	return session, nil
 }
 
@@ -157,6 +179,9 @@ func (p *executableProvider) StopSession(ctx context.Context, req StopSessionReq
 	p.mu.Lock()
 	delete(p.sessions, req.SessionID)
 	p.mu.Unlock()
+	if p.sessionLogs != nil {
+		_ = p.sessionLogs.MarkSessionStopped(ctx, p.name, req.SessionID, time.Now().UTC())
+	}
 	return nil
 }
 
@@ -191,7 +216,7 @@ func (p *executableProvider) StartPlugin(ctx context.Context, req StartPluginReq
 		HostBinary:    req.HostBinary,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("start hosted plugin: %w", err)
+		return nil, fmt.Errorf("start hosted plugin: %w", p.enrichStartPluginError(req.SessionID, err))
 	}
 	p.mu.Lock()
 	if session, ok := p.sessions[req.SessionID]; ok && session != nil {
@@ -204,6 +229,35 @@ func (p *executableProvider) StartPlugin(ctx context.Context, req StartPluginReq
 		PluginName: resp.GetPluginName(),
 		DialTarget: resp.GetDialTarget(),
 	}, nil
+}
+
+func (p *executableProvider) enrichStartPluginError(sessionID string, err error) error {
+	if p == nil || p.sessionLogs == nil || sessionID == "" {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	logs, logErr := p.sessionLogs.TailSessionLogs(ctx, p.name, sessionID, 20)
+	if logErr != nil || len(logs) == 0 {
+		return err
+	}
+	var b strings.Builder
+	for _, entry := range logs {
+		if entry.Message == "" {
+			continue
+		}
+		b.WriteString("[")
+		b.WriteString(string(entry.Stream))
+		b.WriteString("] ")
+		b.WriteString(entry.Message)
+		if !strings.HasSuffix(entry.Message, "\n") {
+			b.WriteByte('\n')
+		}
+	}
+	if b.Len() == 0 {
+		return err
+	}
+	return fmt.Errorf("%w\nrecent runtime logs:\n%s", err, b.String())
 }
 
 func (p *executableProvider) Close() error {

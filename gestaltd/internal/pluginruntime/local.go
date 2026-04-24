@@ -4,25 +4,30 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
 )
 
 type LocalProvider struct {
 	nextID uint64
 
-	telemetry metricutil.TelemetryProviders
-	mu        sync.Mutex
-	sessions  map[string]*localSession
-	closed    bool
+	runtimeProviderName string
+	telemetry           metricutil.TelemetryProviders
+	sessionLogs         runtimelogs.Store
+	mu                  sync.Mutex
+	sessions            map[string]*localSession
+	closed              bool
 }
 
 type localSession struct {
@@ -32,6 +37,7 @@ type localSession struct {
 	metadata map[string]string
 	bindings []localBinding
 	plugin   *localPlugin
+	logSeq   uint64
 }
 
 type localBinding struct {
@@ -52,6 +58,13 @@ type LocalOption func(*LocalProvider)
 func WithLocalTelemetry(telemetry metricutil.TelemetryProviders) LocalOption {
 	return func(p *LocalProvider) {
 		p.telemetry = telemetry
+	}
+}
+
+func WithLocalRuntimeSessionLogs(runtimeProviderName string, store runtimelogs.Store) LocalOption {
+	return func(p *LocalProvider) {
+		p.runtimeProviderName = runtimeProviderName
+		p.sessionLogs = store
 	}
 }
 
@@ -105,6 +118,16 @@ func (p *LocalProvider) StartSession(_ context.Context, req StartSessionRequest)
 	}
 	if session.metadata == nil {
 		session.metadata = map[string]string{}
+	}
+	if p.sessionLogs != nil {
+		if err := p.sessionLogs.RegisterSession(context.Background(), runtimelogs.SessionRegistration{
+			RuntimeProviderName: p.runtimeProviderName,
+			SessionID:           sessionID,
+			Metadata:            cloneStringMap(session.metadata),
+		}); err != nil {
+			_ = os.RemoveAll(rootDir)
+			return nil, fmt.Errorf("register runtime session logs: %w", err)
+		}
 	}
 	p.sessions[sessionID] = session
 	return cloneSession(session), nil
@@ -182,6 +205,9 @@ func (p *LocalProvider) StopSession(_ context.Context, req StopSessionRequest) e
 			errs = append(errs, fmt.Errorf("remove runtime session dir: %w", err))
 		}
 	}
+	if p.sessionLogs != nil {
+		_ = p.sessionLogs.MarkSessionStopped(context.Background(), p.runtimeProviderName, req.SessionID, time.Now().UTC())
+	}
 	return errors.Join(errs...)
 }
 
@@ -253,6 +279,19 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 		env[key] = value
 	}
 
+	stdout := io.Writer(nil)
+	stderr := io.Writer(nil)
+	if p.sessionLogs != nil {
+		stdout = newSessionLogWriter(p.sessionLogs, p.runtimeProviderName, req.SessionID, runtimelogs.StreamStdout, &session.logSeq)
+		stderr = newSessionLogWriter(p.sessionLogs, p.runtimeProviderName, req.SessionID, runtimelogs.StreamStderr, &session.logSeq)
+		_, _ = p.sessionLogs.AppendSessionLogs(context.Background(), p.runtimeProviderName, req.SessionID, []runtimelogs.AppendEntry{{
+			SourceSeq:  int64(atomic.AddUint64(&session.logSeq, 1)),
+			Stream:     runtimelogs.StreamRuntime,
+			Message:    fmt.Sprintf("starting plugin %q", req.PluginName),
+			ObservedAt: time.Now().UTC(),
+		}})
+	}
+
 	process, err := providerhost.StartPluginProcess(ctx, providerhost.ProcessConfig{
 		Command:       req.Command,
 		Args:          req.Args,
@@ -263,6 +302,8 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 		SocketDir:     rootDir,
 		ProviderName:  req.PluginName,
 		Telemetry:     p.telemetry,
+		Stdout:        stdout,
+		Stderr:        stderr,
 	})
 	if err != nil {
 		p.mu.Lock()
@@ -270,6 +311,14 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 			session.state = SessionStateFailed
 		}
 		p.mu.Unlock()
+		if p.sessionLogs != nil {
+			_, _ = p.sessionLogs.AppendSessionLogs(context.Background(), p.runtimeProviderName, req.SessionID, []runtimelogs.AppendEntry{{
+				SourceSeq:  int64(atomic.AddUint64(&session.logSeq, 1)),
+				Stream:     runtimelogs.StreamRuntime,
+				Message:    err.Error(),
+				ObservedAt: time.Now().UTC(),
+			}})
+		}
 		return nil, err
 	}
 

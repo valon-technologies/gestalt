@@ -57,6 +57,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
+	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/ui"
@@ -187,6 +188,7 @@ func (r *recordingExternalCredentialProvider) lookupCalls() int64 {
 
 type staticRuntimeInspector struct {
 	snapshots []bootstrap.RuntimeProviderSnapshot
+	logs      []runtimelogs.Record
 	err       error
 }
 
@@ -209,6 +211,26 @@ func (s *staticRuntimeInspector) SnapshotPluginRuntimes(context.Context) ([]boot
 			})
 		}
 		out = append(out, cloned)
+	}
+	return out, nil
+}
+
+func (s *staticRuntimeInspector) ListPluginRuntimeSessionLogs(_ context.Context, _ string, _ string, afterSeq int64, limit int) ([]runtimelogs.Record, error) {
+	if s == nil {
+		return nil, nil
+	}
+	if s.err != nil {
+		return nil, s.err
+	}
+	out := make([]runtimelogs.Record, 0, len(s.logs))
+	for _, entry := range s.logs {
+		if entry.Seq <= afterSeq {
+			continue
+		}
+		out = append(out, entry)
+		if limit > 0 && len(out) >= limit {
+			break
+		}
 	}
 	return out, nil
 }
@@ -2949,6 +2971,128 @@ func TestAdminAPI_RuntimeProviderSessionInspectionErrorKeepsProfile(t *testing.T
 	if effective["hostServiceAccess"] != "relay" {
 		t.Fatalf("runtime providers[0].profile.effective = %#v, want relay host-service access", effective)
 	}
+}
+
+func TestAdminAPI_RuntimeProviderSessionLogs(t *testing.T) {
+	t.Parallel()
+
+	observedAt := time.Date(2026, time.April, 23, 12, 0, 0, 0, time.UTC)
+	appendedAt := observedAt.Add(2 * time.Second)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.PluginRuntimes = &staticRuntimeInspector{
+			logs: []runtimelogs.Record{
+				{
+					Seq:        1,
+					SourceSeq:  10,
+					Stream:     runtimelogs.StreamRuntime,
+					Message:    "runtime boot",
+					ObservedAt: observedAt,
+					AppendedAt: appendedAt,
+				},
+				{
+					Seq:        2,
+					SourceSeq:  11,
+					Stream:     runtimelogs.StreamStdout,
+					Message:    "hello\n",
+					ObservedAt: observedAt.Add(time.Second),
+					AppendedAt: appendedAt.Add(time.Second),
+				},
+				{
+					Seq:        3,
+					SourceSeq:  12,
+					Stream:     runtimelogs.StreamStderr,
+					Message:    "boom\n",
+					ObservedAt: observedAt.Add(2 * time.Second),
+					AppendedAt: appendedAt.Add(2 * time.Second),
+				},
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/admin/api/v1/runtime/providers/modal/sessions/session-1/logs?after=1&limit=2")
+	if err != nil {
+		t.Fatalf("GET runtime provider session logs: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("runtime provider session logs status = %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	var logs []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&logs); err != nil {
+		t.Fatalf("decoding runtime provider session logs: %v", err)
+	}
+	if len(logs) != 2 {
+		t.Fatalf("runtime provider session logs len = %d, want 2", len(logs))
+	}
+	if got := logs[0]["seq"]; got != float64(2) {
+		t.Fatalf("runtime provider session logs[0].seq = %v, want 2", got)
+	}
+	if got := logs[0]["stream"]; got != string(runtimelogs.StreamStdout) {
+		t.Fatalf("runtime provider session logs[0].stream = %v, want stdout", got)
+	}
+	if got := logs[0]["message"]; got != "hello\n" {
+		t.Fatalf("runtime provider session logs[0].message = %v, want %q", got, "hello\n")
+	}
+	if got := logs[1]["seq"]; got != float64(3) {
+		t.Fatalf("runtime provider session logs[1].seq = %v, want 3", got)
+	}
+	if got := logs[1]["stream"]; got != string(runtimelogs.StreamStderr) {
+		t.Fatalf("runtime provider session logs[1].stream = %v, want stderr", got)
+	}
+	if got := logs[1]["message"]; got != "boom\n" {
+		t.Fatalf("runtime provider session logs[1].message = %v, want %q", got, "boom\n")
+	}
+	if _, ok := logs[0]["observedAt"]; !ok {
+		t.Fatalf("runtime provider session logs[0].observedAt missing: %#v", logs[0])
+	}
+	if _, ok := logs[0]["appendedAt"]; !ok {
+		t.Fatalf("runtime provider session logs[0].appendedAt missing: %#v", logs[0])
+	}
+}
+
+func TestAdminAPI_RuntimeProviderSessionLogsRejectsInvalidCursorAndMapsNotFound(t *testing.T) {
+	t.Parallel()
+
+	t.Run("invalid after", func(t *testing.T) {
+		t.Parallel()
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.PluginRuntimes = &staticRuntimeInspector{}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		resp, err := http.Get(ts.URL + "/admin/api/v1/runtime/providers/modal/sessions/session-1/logs?after=-1")
+		if err != nil {
+			t.Fatalf("GET runtime provider session logs: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusBadRequest {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("runtime provider session logs status = %d, want 400: %s", resp.StatusCode, body)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		t.Parallel()
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.PluginRuntimes = &staticRuntimeInspector{err: indexeddb.ErrNotFound}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		resp, err := http.Get(ts.URL + "/admin/api/v1/runtime/providers/modal/sessions/missing/logs")
+		if err != nil {
+			t.Fatalf("GET missing runtime provider session logs: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusNotFound {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("runtime provider session logs status = %d, want 404: %s", resp.StatusCode, body)
+		}
+	})
 }
 
 func TestAdminAPI_HumanAuthorizationOnManagementProfile(t *testing.T) {

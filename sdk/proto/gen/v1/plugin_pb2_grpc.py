@@ -31,6 +31,11 @@ class IntegrationProviderStub(object):
                 request_serializer=v1_dot_plugin__pb2.ExecuteRequest.SerializeToString,
                 response_deserializer=v1_dot_plugin__pb2.OperationResult.FromString,
                 _registered_method=True)
+        self.ResolveHTTPSubject = channel.unary_unary(
+                '/gestalt.provider.v1.IntegrationProvider/ResolveHTTPSubject',
+                request_serializer=v1_dot_plugin__pb2.ResolveHTTPSubjectRequest.SerializeToString,
+                response_deserializer=v1_dot_plugin__pb2.ResolveHTTPSubjectResponse.FromString,
+                _registered_method=True)
         self.GetSessionCatalog = channel.unary_unary(
                 '/gestalt.provider.v1.IntegrationProvider/GetSessionCatalog',
                 request_serializer=v1_dot_plugin__pb2.GetSessionCatalogRequest.SerializeToString,
@@ -65,6 +70,12 @@ class IntegrationProviderServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ResolveHTTPSubject(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def GetSessionCatalog(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -94,6 +105,11 @@ def add_IntegrationProviderServicer_to_server(servicer, server):
                     servicer.Execute,
                     request_deserializer=v1_dot_plugin__pb2.ExecuteRequest.FromString,
                     response_serializer=v1_dot_plugin__pb2.OperationResult.SerializeToString,
+            ),
+            'ResolveHTTPSubject': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResolveHTTPSubject,
+                    request_deserializer=v1_dot_plugin__pb2.ResolveHTTPSubjectRequest.FromString,
+                    response_serializer=v1_dot_plugin__pb2.ResolveHTTPSubjectResponse.SerializeToString,
             ),
             'GetSessionCatalog': grpc.unary_unary_rpc_method_handler(
                     servicer.GetSessionCatalog,
@@ -188,6 +204,33 @@ class IntegrationProvider(object):
             '/gestalt.provider.v1.IntegrationProvider/Execute',
             v1_dot_plugin__pb2.ExecuteRequest.SerializeToString,
             v1_dot_plugin__pb2.OperationResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ResolveHTTPSubject(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.IntegrationProvider/ResolveHTTPSubject',
+            v1_dot_plugin__pb2.ResolveHTTPSubjectRequest.SerializeToString,
+            v1_dot_plugin__pb2.ResolveHTTPSubjectResponse.FromString,
             options,
             channel_credentials,
             insecure,

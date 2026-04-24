@@ -1139,7 +1139,7 @@ func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, en
 			return runtimeConfig, runtimeProvider, false, nil
 		}
 		if runtimeConfig.Enabled {
-			return runtimeConfig, pluginruntime.NewLocalProvider(pluginruntime.WithLocalTelemetry(deps.Telemetry)), true, nil
+			return runtimeConfig, newLocalPluginRuntime(runtimeConfig.ProviderName, deps), true, nil
 		}
 	}
 	return config.EffectiveHostedRuntime{
@@ -1148,7 +1148,7 @@ func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, en
 		Template:     strings.TrimSpace(entry.Runtime.Template),
 		Image:        strings.TrimSpace(entry.Runtime.Image),
 		Metadata:     maps.Clone(entry.Runtime.Metadata),
-	}, pluginruntime.NewLocalProvider(pluginruntime.WithLocalTelemetry(deps.Telemetry)), true, nil
+	}, newLocalPluginRuntime(strings.TrimSpace(entry.Runtime.Provider), deps), true, nil
 }
 
 func effectivePluginRuntime(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (config.EffectiveHostedRuntime, pluginruntime.Provider, bool, error) {
@@ -1170,10 +1170,22 @@ func effectivePluginRuntime(ctx context.Context, name string, entry *config.Prov
 			return runtimeConfig, runtimeProvider, false, nil
 		}
 		if runtimeConfig.Enabled {
-			return runtimeConfig, pluginruntime.NewLocalProvider(pluginruntime.WithLocalTelemetry(deps.Telemetry)), true, nil
+			return runtimeConfig, newLocalPluginRuntime(runtimeConfig.ProviderName, deps), true, nil
 		}
 	}
-	return config.EffectiveHostedRuntime{}, pluginruntime.NewLocalProvider(pluginruntime.WithLocalTelemetry(deps.Telemetry)), true, nil
+	return config.EffectiveHostedRuntime{}, newLocalPluginRuntime("", deps), true, nil
+}
+
+func newLocalPluginRuntime(runtimeProviderName string, deps Deps) pluginruntime.Provider {
+	runtimeProviderName = strings.TrimSpace(runtimeProviderName)
+	if runtimeProviderName == "" {
+		runtimeProviderName = "local"
+	}
+	opts := []pluginruntime.LocalOption{pluginruntime.WithLocalTelemetry(deps.Telemetry)}
+	if deps.Services != nil && deps.Services.RuntimeSessionLogs != nil {
+		opts = append(opts, pluginruntime.WithLocalRuntimeSessionLogs(runtimeProviderName, deps.Services.RuntimeSessionLogs))
+	}
+	return pluginruntime.NewLocalProvider(opts...)
 }
 
 const (
