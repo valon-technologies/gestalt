@@ -44,7 +44,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "provider dev",
 			args:      []string{"provider", "dev", "--help"},
-			wantParts: []string{"gestaltd provider dev", "The built-in admin UI remains available at /admin", "--port PORT"},
+			wantParts: []string{"gestaltd provider dev", "Run one local provider-dev session around a target source plugin", "owned UI, or layered config changes", "--port PORT"},
 		},
 	}
 

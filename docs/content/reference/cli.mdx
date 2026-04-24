@@ -31,7 +31,7 @@ import { Callout } from 'nextra/components'
 
 | Command | Purpose |
 | --- | --- |
-| `gestaltd provider dev --path PATH` | Run a local source plugin inside a synthesized Gestalt config. Serves `/admin` and any configured or inferred public UIs. |
+| `gestaltd provider dev --path PATH` | Run one local provider-dev session around a target source plugin inside a synthesized Gestalt config. Serves `/admin` and any configured or inferred public UIs. |
 | `gestaltd provider dev --config PATH` | Layer supporting providers, plugins, and UI mounts on top of the synthesized local baseline. Repeat `--config` to merge left-to-right. |
 | `gestaltd provider validate --path PATH` | Validate a local source plugin inside the same synthesized Gestalt config used by `provider dev`. |
 | `gestaltd provider validate --config PATH` | Validate the target plugin together with selected supporting providers and `null` deletions from layered config overlays. |
@@ -58,6 +58,10 @@ gestaltd provider release --version 0.0.1-alpha.1
 gestaltd provider release --version 0.0.1-alpha.1 --platform all
 gestaltd provider release --version 0.0.1-alpha.1 --platform linux/amd64,linux/arm64
 ```
+
+`gestaltd provider dev` intentionally starts one local session in v1. Rerun it
+after changing provider code, owned UI assets, or layered config. Gestalt does
+not currently own file watching or automatic restarts for provider packages.
 
 When repeated, `--config` files merge left-to-right. Maps deep-merge, later
 scalar values win, lists replace inherited lists, and `null` deletes inherited

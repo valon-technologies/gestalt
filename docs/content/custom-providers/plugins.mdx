@@ -656,6 +656,12 @@ Run the plugin locally with browser-facing UI available:
 gestaltd provider dev --path ./slack
 ```
 
+`gestaltd provider dev` intentionally starts one local session in v1. Rerun it
+after changing provider code, owned UI assets, or layered config. Gestalt does
+not currently own file watching or automatic restarts for provider packages, so
+you should keep using your language/runtime's normal local build loop around
+it.
+
 When the plugin needs supporting providers, extra plugins, or explicit mounted
 UIs, layer real config overlays on top of the synthesized baseline:
 
