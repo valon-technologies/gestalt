@@ -9,11 +9,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
@@ -242,6 +247,88 @@ func TestTransport_TCPTargetTokenEnv(t *testing.T) {
 	}
 	if got["value"] != "token" {
 		t.Fatalf("value = %v, want token", got["value"])
+	}
+}
+
+type indexedDBSchemaTransportHarness struct {
+	proto.UnimplementedIndexedDBServer
+
+	mu       sync.Mutex
+	requests []*proto.CreateObjectStoreRequest
+}
+
+func (h *indexedDBSchemaTransportHarness) CreateObjectStore(_ context.Context, req *proto.CreateObjectStoreRequest) (*emptypb.Empty, error) {
+	h.mu.Lock()
+	h.requests = append(h.requests, gproto.Clone(req).(*proto.CreateObjectStoreRequest))
+	h.mu.Unlock()
+	return &emptypb.Empty{}, nil
+}
+
+func TestTransport_CreateObjectStorePreservesColumns(t *testing.T) {
+	address := reserveTCPAddress()
+	lis, err := net.Listen("tcp", address)
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	t.Cleanup(func() { _ = lis.Close() })
+
+	harness := &indexedDBSchemaTransportHarness{}
+	srv := grpc.NewServer()
+	proto.RegisterIndexedDBServer(srv, harness)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(srv.Stop)
+
+	t.Setenv(gestalt.EnvIndexedDBSocket, "tcp://"+address)
+	client, err := gestalt.IndexedDB()
+	if err != nil {
+		t.Fatalf("IndexedDB: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	err = client.CreateObjectStore(context.Background(), "agent_session_metadata", gestalt.ObjectStoreSchema{
+		Indexes: []gestalt.IndexSchema{
+			{Name: "by_subject", KeyPath: []string{"subject_id"}},
+			{Name: "by_subject_session", KeyPath: []string{"subject_id", "session_id"}, Unique: true},
+		},
+		Columns: []gestalt.ColumnDef{
+			{Name: "id", Type: gestalt.TypeString, PrimaryKey: true},
+			{Name: "subject_id", Type: gestalt.TypeString, NotNull: true},
+			{Name: "session_id", Type: gestalt.TypeString, NotNull: true, Unique: true},
+			{Name: "metadata_json", Type: gestalt.TypeJSON},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+
+	harness.mu.Lock()
+	defer harness.mu.Unlock()
+	if len(harness.requests) != 1 {
+		t.Fatalf("create object store requests len = %d, want 1", len(harness.requests))
+	}
+	req := harness.requests[0]
+	if req.GetName() != "agent_session_metadata" {
+		t.Fatalf("request name = %q, want agent_session_metadata", req.GetName())
+	}
+	if len(req.GetSchema().GetIndexes()) != 2 {
+		t.Fatalf("index count = %d, want 2", len(req.GetSchema().GetIndexes()))
+	}
+	if len(req.GetSchema().GetColumns()) != 4 {
+		t.Fatalf("column count = %d, want 4", len(req.GetSchema().GetColumns()))
+	}
+	gotID := req.GetSchema().GetColumns()[0]
+	if gotID.GetName() != "id" || gotID.GetType() != int32(gestalt.TypeString) || !gotID.GetPrimaryKey() {
+		t.Fatalf("id column = %#v, want primary string id column", gotID)
+	}
+	gotSession := req.GetSchema().GetColumns()[2]
+	if gotSession.GetName() != "session_id" || !gotSession.GetNotNull() || !gotSession.GetUnique() {
+		t.Fatalf("session column = %#v, want non-null unique session_id column", gotSession)
+	}
+	gotMetadata := req.GetSchema().GetColumns()[3]
+	if gotMetadata.GetName() != "metadata_json" || gotMetadata.GetType() != int32(gestalt.TypeJSON) {
+		t.Fatalf("metadata column = %#v, want json metadata_json column", gotMetadata)
 	}
 }
 
