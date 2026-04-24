@@ -67,7 +67,7 @@ import {
 } from "../gen/v1/runtime_pb.ts";
 import { S3 as S3Service } from "../gen/v1/s3_pb.ts";
 import { WorkflowProvider as WorkflowProviderService } from "../gen/v1/workflow_pb.ts";
-import { errorMessage, type Request } from "./api.ts";
+import { errorMessage, type Request, type Subject } from "./api.ts";
 import {
   AgentProvider,
   createAgentProviderService,
@@ -514,8 +514,8 @@ export function createProviderService(
             ]),
           ),
           staticCatalog: catalogToProto(provider.staticCatalog()),
-          supportsSessionCatalog: provider.supportsSessionCatalog(),
-          supportsPostConnect: provider.supportsPostConnect(),
+          supportsSessionCatalog: providerSupportsSessionCatalog(provider),
+          supportsPostConnect: providerSupportsPostConnect(provider),
           minProtocolVersion: CURRENT_PROTOCOL_VERSION,
           maxProtocolVersion: CURRENT_PROTOCOL_VERSION,
         });
@@ -555,7 +555,8 @@ export function createProviderService(
     async resolveHTTPSubject(request: ProtoResolveHTTPSubjectRequest) {
       let subject;
       try {
-        subject = await provider.resolveHTTPSubject(
+        subject = await providerResolveHTTPSubject(
+          provider,
           providerHTTPSubjectRequest(request.request),
           providerHTTPSubjectResolutionContext(request.context),
         );
@@ -585,7 +586,8 @@ export function createProviderService(
     async getSessionCatalog(request: GetSessionCatalogRequest) {
       let catalog: Catalog | Record<string, unknown> | null | undefined;
       try {
-        catalog = await provider.catalogForRequest(
+        catalog = await providerCatalogForRequest(
+          provider,
           providerRequest(
             request.token,
             request.connectionParams,
@@ -609,7 +611,7 @@ export function createProviderService(
       });
     },
     async postConnect(request) {
-      if (!provider.supportsPostConnect()) {
+      if (!providerSupportsPostConnect(provider)) {
         throw new ConnectError(
           "provider does not support post connect",
           Code.Unimplemented,
@@ -617,7 +619,8 @@ export function createProviderService(
       }
       let metadata: Record<string, string> | null | undefined;
       try {
-        metadata = await provider.postConnectMetadata(
+        metadata = await providerPostConnectMetadata(
+          provider,
           providerConnectedToken(request.token),
         );
       } catch (error) {
@@ -912,6 +915,78 @@ function providerRuntimeEntry(
 
 function providerRuntimeError(label: string, error: unknown): ConnectError {
   return new ConnectError(`${label}: ${errorMessage(error)}`, Code.Unknown);
+}
+
+function providerSupportsSessionCatalog(provider: LoadedProvider): boolean {
+  const candidate = provider as LoadedProvider & {
+    supportsSessionCatalog?: () => boolean;
+    sessionCatalogHandler?: unknown;
+    catalogForRequest?: (
+      request: Request,
+    ) => Promise<Catalog | Record<string, unknown> | null | undefined>;
+  };
+  if (typeof candidate.supportsSessionCatalog === "function") {
+    return candidate.supportsSessionCatalog();
+  }
+  if (Object.prototype.hasOwnProperty.call(candidate, "sessionCatalogHandler")) {
+    return candidate.sessionCatalogHandler !== undefined;
+  }
+  return typeof candidate.catalogForRequest === "function";
+}
+
+function providerSupportsPostConnect(provider: LoadedProvider): boolean {
+  const candidate = provider as LoadedProvider & {
+    supportsPostConnect?: () => boolean;
+    postConnectHandler?: unknown;
+    postConnectMetadata?: (
+      token: ConnectedToken,
+    ) => Promise<Record<string, string> | null | undefined>;
+  };
+  if (typeof candidate.supportsPostConnect === "function") {
+    return candidate.supportsPostConnect();
+  }
+  if (Object.prototype.hasOwnProperty.call(candidate, "postConnectHandler")) {
+    return candidate.postConnectHandler !== undefined;
+  }
+  return typeof candidate.postConnectMetadata === "function";
+}
+
+async function providerCatalogForRequest(
+  provider: LoadedProvider,
+  request: Request,
+): Promise<Catalog | Record<string, unknown> | null | undefined> {
+  const candidate = provider as LoadedProvider & {
+    catalogForRequest?: (
+      request: Request,
+    ) => Promise<Catalog | Record<string, unknown> | null | undefined>;
+  };
+  return await candidate.catalogForRequest?.(request);
+}
+
+async function providerPostConnectMetadata(
+  provider: LoadedProvider,
+  token: ConnectedToken,
+): Promise<Record<string, string> | null | undefined> {
+  const candidate = provider as LoadedProvider & {
+    postConnectMetadata?: (
+      token: ConnectedToken,
+    ) => Promise<Record<string, string> | null | undefined>;
+  };
+  return await candidate.postConnectMetadata?.(token);
+}
+
+async function providerResolveHTTPSubject(
+  provider: LoadedProvider,
+  request: HTTPSubjectRequest,
+  context: HTTPSubjectResolutionContext,
+): Promise<Subject | null | undefined> {
+  const candidate = provider as LoadedProvider & {
+    resolveHTTPSubject?: (
+      request: HTTPSubjectRequest,
+      context: HTTPSubjectResolutionContext,
+    ) => Promise<Subject | null | undefined>;
+  };
+  return await candidate.resolveHTTPSubject?.(request, context);
 }
 
 function resolveLoadedProvider(
