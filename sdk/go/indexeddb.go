@@ -96,9 +96,40 @@ type IndexSchema struct {
 	Unique  bool
 }
 
-// ObjectStoreSchema describes the indexes attached to an object store.
+// ColumnType describes a provider-preserved scalar column type.
+type ColumnType int32
+
+const (
+	// TypeString stores UTF-8 string values.
+	TypeString ColumnType = iota
+	// TypeInt stores 64-bit signed integer values.
+	TypeInt
+	// TypeFloat stores IEEE-754 double values.
+	TypeFloat
+	// TypeBool stores boolean values.
+	TypeBool
+	// TypeTime stores timestamp values.
+	TypeTime
+	// TypeBytes stores binary blob values.
+	TypeBytes
+	// TypeJSON stores JSON-like structured values.
+	TypeJSON
+)
+
+// ColumnDef describes one provider-preserved object-store column.
+type ColumnDef struct {
+	Name       string
+	Type       ColumnType
+	PrimaryKey bool
+	NotNull    bool
+	Unique     bool
+}
+
+// ObjectStoreSchema describes the indexes and columns attached to an object
+// store.
 type ObjectStoreSchema struct {
 	Indexes []IndexSchema
+	Columns []ColumnDef
 }
 
 // IndexedDBClient speaks to a running IndexedDB provider over a host-provided
@@ -249,8 +280,18 @@ func (db *IndexedDBClient) CreateObjectStore(ctx context.Context, name string, s
 	for i, idx := range schema.Indexes {
 		indexes[i] = &proto.IndexSchema{Name: idx.Name, KeyPath: idx.KeyPath, Unique: idx.Unique}
 	}
+	columns := make([]*proto.ColumnDef, len(schema.Columns))
+	for i, col := range schema.Columns {
+		columns[i] = &proto.ColumnDef{
+			Name:       col.Name,
+			Type:       int32(col.Type),
+			PrimaryKey: col.PrimaryKey,
+			NotNull:    col.NotNull,
+			Unique:     col.Unique,
+		}
+	}
 	_, err := db.client.CreateObjectStore(ctx, &proto.CreateObjectStoreRequest{
-		Name: name, Schema: &proto.ObjectStoreSchema{Indexes: indexes},
+		Name: name, Schema: &proto.ObjectStoreSchema{Indexes: indexes, Columns: columns},
 	})
 	return grpcErr(err)
 }
