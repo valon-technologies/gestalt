@@ -1412,7 +1412,7 @@ func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostSe
 			return pluginruntime.BindHostServiceRequest{}, nil, "", err
 		}
 		if !ok {
-			return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to relay %s without host service tunnels", providerName, serviceLabel)
+			return pluginruntime.BindHostServiceRequest{}, nil, "", fmt.Errorf("provider %q requires server.runtime.baseUrl (or server.baseURL) and server.encryptionKey to relay %s without host service tunnels", providerName, serviceLabel)
 		}
 		return pluginruntime.BindHostServiceRequest{
 			SessionID: sessionID,
@@ -1430,10 +1430,11 @@ func buildHostedRuntimeHostServiceBinding(providerName, sessionID string, hostSe
 }
 
 func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowedHosts []string, defaultAction egress.PolicyAction, deps Deps) (map[string]string, error) {
-	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
-		return nil, fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to enforce hostname-based egress on hosted runtimes without host service tunnels", providerName)
+	baseURL := hostedRuntimeRelayBaseURL(deps)
+	if baseURL == "" || len(deps.EncryptionKey) == 0 {
+		return nil, fmt.Errorf("provider %q requires server.runtime.baseUrl (or server.baseURL) and server.encryptionKey to enforce hostname-based egress on hosted runtimes without host service tunnels", providerName)
 	}
-	proxyBaseURL, _, err := pluginRuntimePublicProxyBaseURL(deps.BaseURL)
+	proxyBaseURL, _, err := pluginRuntimePublicProxyBaseURL(baseURL)
 	if err != nil {
 		return nil, err
 	}
@@ -1460,10 +1461,11 @@ func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowed
 }
 
 func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, hostService providerhost.StartedHostService, deps Deps, serviceKey, serviceLabel, methodPrefix string) (pluginruntime.HostServiceRelay, map[string]string, string, bool, error) {
-	if strings.TrimSpace(deps.BaseURL) == "" || len(deps.EncryptionKey) == 0 {
+	baseURL := hostedRuntimeRelayBaseURL(deps)
+	if baseURL == "" || len(deps.EncryptionKey) == 0 {
 		return pluginruntime.HostServiceRelay{}, nil, "", false, nil
 	}
-	dialTarget, relayHost, err := pluginRuntimePublicRelayTarget(deps.BaseURL)
+	dialTarget, relayHost, err := pluginRuntimePublicRelayTarget(baseURL)
 	if err != nil {
 		return pluginruntime.HostServiceRelay{}, nil, "", false, err
 	}
@@ -1489,6 +1491,13 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, ho
 		}, relayHost, true, nil
 }
 
+func hostedRuntimeRelayBaseURL(deps Deps) string {
+	if baseURL := strings.TrimSpace(deps.RuntimeBaseURL); baseURL != "" {
+		return baseURL
+	}
+	return strings.TrimSpace(deps.BaseURL)
+}
+
 func pluginRuntimePublicRelayTarget(baseURL string) (string, string, error) {
 	parsed, host, err := pluginRuntimePublicProxyBaseURL(baseURL)
 	if err != nil {
@@ -1504,20 +1513,20 @@ func pluginRuntimePublicRelayTarget(baseURL string) (string, string, error) {
 func pluginRuntimePublicProxyBaseURL(baseURL string) (*url.URL, string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil {
-		return nil, "", fmt.Errorf("parse server.baseURL for public runtime relay: %w", err)
+		return nil, "", fmt.Errorf("parse hosted runtime public relay base URL: %w", err)
 	}
 	host := strings.TrimSpace(parsed.Hostname())
 	if host == "" {
-		return nil, "", fmt.Errorf("server.baseURL %q is missing a hostname", baseURL)
+		return nil, "", fmt.Errorf("hosted runtime public relay base URL %q is missing a hostname", baseURL)
 	}
 	if path := strings.TrimSpace(parsed.EscapedPath()); path != "" && path != "/" {
-		return nil, "", fmt.Errorf("server.baseURL %q must not include a path for public runtime relay", baseURL)
+		return nil, "", fmt.Errorf("hosted runtime public relay base URL %q must not include a path", baseURL)
 	}
 	if parsed.RawQuery != "" || parsed.Fragment != "" {
-		return nil, "", fmt.Errorf("server.baseURL %q must not include a query or fragment for public runtime relay", baseURL)
+		return nil, "", fmt.Errorf("hosted runtime public relay base URL %q must not include a query or fragment", baseURL)
 	}
 	if !strings.EqualFold(parsed.Scheme, "https") {
-		return nil, "", fmt.Errorf("server.baseURL %q must use https for public runtime relay", baseURL)
+		return nil, "", fmt.Errorf("hosted runtime public relay base URL %q must use https", baseURL)
 	}
 	parsed.Path = ""
 	parsed.RawPath = ""

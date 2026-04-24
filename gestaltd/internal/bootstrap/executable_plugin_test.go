@@ -6111,6 +6111,125 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 	}
 }
 
+func TestPluginRuntimeConfigUsesRuntimeBaseURLForPublicIndexedDBRelay(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
+	runtimeProvider.fakeHosted = true
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.HostedRuntimeConfig{},
+				IndexedDB:            &config.PluginIndexedDBConfig{ObjectStores: []string{"tasks"}},
+			},
+		},
+	}
+
+	deps := Deps{
+		BaseURL:               "",
+		RuntimeBaseURL:        "https://runtime.example.test",
+		EncryptionKey:         []byte("0123456789abcdef0123456789abcdef"),
+		SelectedIndexedDBName: "memory",
+		IndexedDBDefs: map[string]*config.ProviderEntry{
+			"memory": {
+				Source: config.ProviderSource{Path: "./providers/datastore/memory"},
+				Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
+			},
+		},
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
+			return &coretesting.StubIndexedDB{}, nil
+		},
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+	checkEnv := func(envName string) string {
+		t.Helper()
+		result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": envName}, "")
+		if err != nil {
+			t.Fatalf("Execute read_env(%s): %v", envName, err)
+		}
+		var env struct {
+			Value string `json:"value"`
+			Found bool   `json:"found"`
+		}
+		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+			t.Fatalf("unmarshal env result for %s: %v", envName, err)
+		}
+		if !env.Found {
+			t.Fatalf("env %s not found", envName)
+		}
+		return env.Value
+	}
+
+	if got := checkEnv(providerhost.DefaultIndexedDBSocketEnv); got != "tls://runtime.example.test:443" {
+		t.Fatalf("plugin indexeddb socket env = %q, want %q", got, "tls://runtime.example.test:443")
+	}
+	if got := checkEnv(providerhost.IndexedDBSocketTokenEnv("")); got == "" {
+		t.Fatal("plugin indexeddb socket token env should be set for the public relay")
+	}
+
+	bindRequests := runtimeProvider.bindHostServiceRequests()
+	if len(bindRequests) != 1 {
+		t.Fatalf("BindHostService requests = %d, want 1", len(bindRequests))
+	}
+	if got := bindRequests[0].Relay.DialTarget; got != "tls://runtime.example.test:443" {
+		t.Fatalf("BindHostService relay target = %q, want %q", got, "tls://runtime.example.test:443")
+	}
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	if got := startRequests[0].Env[providerhost.IndexedDBSocketTokenEnv("")]; got == "" {
+		t.Fatal("StartPlugin env should include the IndexedDB relay token")
+	}
+	if !slices.Contains(startRequests[0].AllowedHosts, "runtime.example.test") {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host runtime.example.test", startRequests[0].AllowedHosts)
+	}
+	if slices.Contains(startRequests[0].AllowedHosts, "public.example.test") {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want runtime relay host only", startRequests[0].AllowedHosts)
+	}
+}
+
 func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testing.T) {
 	t.Parallel()
 
@@ -7617,6 +7736,95 @@ func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapa
 	}
 	if parsed.Host != "gestalt.example.test" {
 		t.Fatalf("HTTP_PROXY host = %q, want gestalt.example.test", parsed.Host)
+	}
+	if parsed.User == nil {
+		t.Fatal("HTTP_PROXY should include relay credentials")
+	}
+	if got := startRequests[0].AllowedHosts; !slices.Equal(got, []string{"api.github.com"}) {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want original allowedHosts only", got)
+	}
+}
+
+func TestPluginRuntimeConfigUsesRuntimeBaseURLForPublicEgressProxy(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	runtimeProvider := newCapturingBundlePluginRuntime()
+	runtimeProvider.support.EgressMode = pluginruntime.EgressModeHostname
+	runtimeProvider.support.LaunchMode = pluginruntime.LaunchModeHostPath
+	runtimeProvider.fakeHosted = true
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {
+					Driver: config.RuntimeProviderDriver("capture"),
+				},
+			},
+		},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Runtime:              &config.HostedRuntimeConfig{},
+				AllowedHosts:         []string{"api.github.com"},
+			},
+		},
+	}
+	deps := Deps{
+		BaseURL:        "",
+		RuntimeBaseURL: "https://runtime.example.test",
+		EncryptionKey:  []byte("0123456789abcdef0123456789abcdef"),
+		Egress:         EgressDeps{DefaultAction: egress.PolicyDeny},
+	}
+	deps.PluginRuntimeRegistry = newPluginRuntimeRegistry(cfg, factories.Runtime, deps)
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	startRequests := runtimeProvider.startPluginRequestsCopy()
+	if len(startRequests) != 1 {
+		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
+	}
+	httpProxy := startRequests[0].Env["HTTP_PROXY"]
+	httpsProxy := startRequests[0].Env["HTTPS_PROXY"]
+	if httpProxy == "" {
+		t.Fatal("StartPlugin env should include HTTP_PROXY")
+	}
+	if httpsProxy == "" {
+		t.Fatal("StartPlugin env should include HTTPS_PROXY")
+	}
+	if httpProxy != httpsProxy {
+		t.Fatalf("HTTP_PROXY = %q, HTTPS_PROXY = %q, want matching values", httpProxy, httpsProxy)
+	}
+	parsed, err := url.Parse(httpProxy)
+	if err != nil {
+		t.Fatalf("parse HTTP_PROXY: %v", err)
+	}
+	if parsed.Scheme != "https" {
+		t.Fatalf("HTTP_PROXY scheme = %q, want https", parsed.Scheme)
+	}
+	if parsed.Host != "runtime.example.test" {
+		t.Fatalf("HTTP_PROXY host = %q, want runtime.example.test", parsed.Host)
 	}
 	if parsed.User == nil {
 		t.Fatal("HTTP_PROXY should include relay credentials")

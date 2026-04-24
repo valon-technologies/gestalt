@@ -1013,6 +1013,50 @@ providers:
 		}
 	})
 
+	t.Run("runtime.baseUrl must use https", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  encryptionKey: server-key
+  runtime:
+    baseUrl: http://gestalt.example.test
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+`)
+
+		if _, err := Load(path); err == nil {
+			t.Fatal("Load: expected error, got nil")
+		} else if !strings.Contains(err.Error(), "server.runtime.baseUrl must use https") {
+			t.Fatalf("Load error = %v, want server.runtime.baseUrl https validation", err)
+		}
+	})
+
+	t.Run("runtime.baseUrl may not include a path", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  encryptionKey: server-key
+  runtime:
+    baseUrl: https://gestalt.example.test/runtime
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+`)
+
+		if _, err := Load(path); err == nil {
+			t.Fatal("Load: expected error, got nil")
+		} else if !strings.Contains(err.Error(), "server.runtime.baseUrl may not include a path") {
+			t.Fatalf("Load error = %v, want server.runtime.baseUrl path validation", err)
+		}
+	})
+
 	t.Run("invalid baseUrl is rejected for split built-in admin auth", func(t *testing.T) {
 		t.Parallel()
 

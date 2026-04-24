@@ -123,7 +123,7 @@ func hostCanRelayPluginRuntimeHostServices(deps Deps) bool {
 	if len(deps.EncryptionKey) == 0 {
 		return false
 	}
-	_, _, err := pluginRuntimePublicProxyBaseURL(deps.BaseURL)
+	_, _, err := pluginRuntimePublicProxyBaseURL(hostedRuntimeRelayBaseURL(deps))
 	return err == nil
 }
 

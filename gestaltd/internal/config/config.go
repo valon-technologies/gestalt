@@ -1028,6 +1028,7 @@ type ServerConfig struct {
 
 type ServerRuntimeConfig struct {
 	Provider string `yaml:"provider,omitempty"`
+	BaseURL  string `yaml:"baseUrl,omitempty"`
 }
 
 func (s ServerConfig) PublicListener() ListenerConfig {
@@ -1063,6 +1064,10 @@ func (s ServerConfig) ManagementAddr() string {
 
 func (s ServerConfig) ManagementBaseURL() string {
 	return strings.TrimRight(strings.TrimSpace(s.Management.BaseURL), "/")
+}
+
+func (s ServerConfig) RuntimeBaseURL() string {
+	return strings.TrimRight(strings.TrimSpace(s.Runtime.BaseURL), "/")
 }
 
 // ConnectionDef owns authentication and connection parameters for a named
@@ -2470,6 +2475,7 @@ func applyPluginMountBindings(cfg *Config) error {
 func resolveBaseURL(cfg *Config) {
 	cfg.Server.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.BaseURL), "/")
 	cfg.Server.Management.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Management.BaseURL), "/")
+	cfg.Server.Runtime.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Runtime.BaseURL), "/")
 }
 
 func resolveRelativePathsInValue(configPath string, root map[string]any, sourceSyntax providerSourceSyntaxMode) {

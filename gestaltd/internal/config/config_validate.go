@@ -414,6 +414,9 @@ func validateRuntimeConfig(cfg *Config) error {
 	if cfg == nil {
 		return nil
 	}
+	if _, err := validateHostedRuntimeBaseURL("server.runtime.baseUrl", cfg.Server.RuntimeBaseURL()); err != nil {
+		return err
+	}
 	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	cfg.Server.Runtime.Provider = strings.TrimSpace(cfg.Server.Runtime.Provider)
 	for name, entry := range cfg.Runtime.Providers {
@@ -939,6 +942,20 @@ func validateAbsoluteBaseURL(label, raw string) (*url.URL, error) {
 	}
 	if parsed.RawQuery != "" || parsed.Fragment != "" {
 		return nil, fmt.Errorf("config validation: %s may not include query or fragment", label)
+	}
+	return parsed, nil
+}
+
+func validateHostedRuntimeBaseURL(label, raw string) (*url.URL, error) {
+	parsed, err := validateAbsoluteBaseURL(label, raw)
+	if err != nil || parsed == nil {
+		return parsed, err
+	}
+	if !strings.EqualFold(parsed.Scheme, "https") {
+		return nil, fmt.Errorf("config validation: %s must use https", label)
+	}
+	if path := strings.TrimSpace(parsed.EscapedPath()); path != "" && path != "/" {
+		return nil, fmt.Errorf("config validation: %s may not include a path", label)
 	}
 	return parsed, nil
 }

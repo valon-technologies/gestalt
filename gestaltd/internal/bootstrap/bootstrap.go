@@ -136,6 +136,7 @@ func (m providerMetadata) descriptionOr(v string) string {
 type Deps struct {
 	EncryptionKey         []byte
 	BaseURL               string
+	RuntimeBaseURL        string
 	SecretManager         core.SecretManager
 	Services              *coredata.Services
 	SelectedIndexedDBName string
@@ -743,6 +744,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps := Deps{
 		EncryptionKey: encKey,
 		BaseURL:       cfg.Server.BaseURL,
+		RuntimeBaseURL: func() string {
+			if baseURL := cfg.Server.RuntimeBaseURL(); baseURL != "" {
+				return baseURL
+			}
+			return cfg.Server.BaseURL
+		}(),
 		SecretManager: sm,
 		Telemetry:     tp,
 	}
