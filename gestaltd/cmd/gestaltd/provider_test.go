@@ -1302,7 +1302,7 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 	if credential.CreatedAt.IsZero() || credential.UpdatedAt.IsZero() {
 		t.Fatalf("credential timestamps = created_at:%v updated_at:%v", credential.CreatedAt, credential.UpdatedAt)
 	}
-	raw, err := services.DB.ObjectStore(coredata.StoreIntegrationTokens).Get(context.Background(), credential.ID)
+	raw, err := services.DB.ObjectStore(coredata.StoreExternalCredentials).Get(context.Background(), credential.ID)
 	if err != nil {
 		t.Fatalf("stored credential raw Get: %v", err)
 	}

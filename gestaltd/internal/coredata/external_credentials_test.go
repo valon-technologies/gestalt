@@ -5,6 +5,20 @@ import "testing"
 func TestEffectiveExternalCredentialProviderHandlesTypedNilFallbacks(t *testing.T) {
 	t.Parallel()
 
+	t.Run("falls back from typed nil external credentials to local provider", func(t *testing.T) {
+		t.Parallel()
+
+		var missing *TokenService
+		local := &TokenService{}
+		got := EffectiveExternalCredentialProvider(&Services{
+			ExternalCredentials:      missing,
+			LocalExternalCredentials: local,
+		})
+		if got != local {
+			t.Fatalf("EffectiveExternalCredentialProvider returned %#v, want %#v", got, local)
+		}
+	})
+
 	t.Run("falls back from typed nil external credentials to tokens", func(t *testing.T) {
 		t.Parallel()
 

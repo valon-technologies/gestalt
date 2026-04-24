@@ -1225,7 +1225,7 @@ func TestGlobalAgentRunDefaultToolsSkipCredentialedProvidersWithoutStoredTokens(
 		AccessToken: testCatalogToken,
 	})
 	now := time.Now().UTC()
-	if err := services.DB.ObjectStore(coredata.StoreIntegrationTokens).Put(context.Background(), indexeddb.Record{
+	if err := services.DB.ObjectStore(coredata.StoreExternalCredentials).Put(context.Background(), indexeddb.Record{
 		"id":                      "tok-corrupt-other-connection",
 		"subject_id":              principal.UserSubjectID(user.ID),
 		"integration":             "connected",
