@@ -13,6 +13,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type roundTripProvider struct{}
@@ -404,5 +408,70 @@ func TestRemoteProviderManualAuthOnly(t *testing.T) {
 	}
 	if cat.Operations[0].Transport != catalog.TransportPlugin {
 		t.Fatalf("Transport = %q, want %q", cat.Operations[0].Transport, catalog.TransportPlugin)
+	}
+}
+
+type metadataFailureProviderServer struct {
+	proto.UnimplementedIntegrationProviderServer
+}
+
+func (s *metadataFailureProviderServer) GetMetadata(context.Context, *emptypb.Empty) (*proto.ProviderMetadata, error) {
+	return nil, status.Error(codes.Unknown, "provider metadata: metadata exploded")
+}
+
+type unavailableMetadataProviderServer struct {
+	cancel context.CancelFunc
+}
+
+func (c *unavailableMetadataProviderServer) GetMetadata(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.ProviderMetadata, error) {
+	if c.cancel != nil {
+		c.cancel()
+	}
+	return nil, status.Error(codes.Unavailable, "metadata warming up")
+}
+
+func (*unavailableMetadataProviderServer) StartProvider(context.Context, *proto.StartProviderRequest, ...grpc.CallOption) (*proto.StartProviderResponse, error) {
+	panic("unexpected StartProvider call")
+}
+
+func (*unavailableMetadataProviderServer) Execute(context.Context, *proto.ExecuteRequest, ...grpc.CallOption) (*proto.OperationResult, error) {
+	panic("unexpected Execute call")
+}
+
+func (*unavailableMetadataProviderServer) ResolveHTTPSubject(context.Context, *proto.ResolveHTTPSubjectRequest, ...grpc.CallOption) (*proto.ResolveHTTPSubjectResponse, error) {
+	panic("unexpected ResolveHTTPSubject call")
+}
+
+func (*unavailableMetadataProviderServer) GetSessionCatalog(context.Context, *proto.GetSessionCatalogRequest, ...grpc.CallOption) (*proto.GetSessionCatalogResponse, error) {
+	panic("unexpected GetSessionCatalog call")
+}
+
+func (*unavailableMetadataProviderServer) PostConnect(context.Context, *proto.PostConnectRequest, ...grpc.CallOption) (*proto.PostConnectResponse, error) {
+	panic("unexpected PostConnect call")
+}
+
+func TestNewRemoteProviderLabelsMetadataFailures(t *testing.T) {
+	t.Parallel()
+
+	client := newIntegrationProviderClient(t, &metadataFailureProviderServer{})
+	_, err := NewRemoteProvider(context.Background(), client, roundTripStaticSpec(), nil)
+	if err == nil {
+		t.Fatal("expected NewRemoteProvider to fail")
+	}
+	if got := err.Error(); got != `get provider metadata: rpc error: code = Unknown desc = provider metadata: metadata exploded` {
+		t.Fatalf("NewRemoteProvider error = %q", got)
+	}
+}
+
+func TestGetIntegrationProviderSupportWithRetryLabelsContextDoneFailures(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	_, err := getIntegrationProviderSupportWithRetry(ctx, &unavailableMetadataProviderServer{cancel: cancel})
+	if err == nil {
+		t.Fatal("expected getIntegrationProviderSupportWithRetry to fail")
+	}
+	if got := err.Error(); got != `get provider metadata: rpc error: code = Unavailable desc = metadata warming up` {
+		t.Fatalf("getIntegrationProviderSupportWithRetry error = %q", got)
 	}
 }

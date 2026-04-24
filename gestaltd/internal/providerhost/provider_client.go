@@ -127,12 +127,12 @@ func getIntegrationProviderSupportWithRetry(ctx context.Context, client proto.In
 			return &integrationProviderSupport{}, nil
 		}
 		if status.Code(err) != codes.Unavailable {
-			return nil, err
+			return nil, fmt.Errorf("get provider metadata: %w", err)
 		}
 
 		select {
 		case <-ctx.Done():
-			return nil, err
+			return nil, fmt.Errorf("get provider metadata: %w", err)
 		case <-ticker.C:
 		}
 	}

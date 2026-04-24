@@ -652,6 +652,33 @@ test("integration provider service exposes metadata, configure, execute, and ses
   });
 });
 
+test("integration provider service labels metadata failures", async () => {
+  const plugin = definePlugin({
+    operations: [
+      {
+        id: "noop",
+        handler() {
+          return { ok: true };
+        },
+      },
+    ],
+  });
+  (plugin as any).supportsPostConnect = () => {
+    throw new Error("metadata exploded");
+  };
+
+  try {
+    await (createProviderService(plugin).getMetadata as any)();
+    throw new Error("expected getMetadata to fail");
+  } catch (error) {
+    expect(error).toBeInstanceOf(ConnectError);
+    expect((error as ConnectError).code).toBe(Code.Unknown);
+    expect((error as ConnectError).message).toContain(
+      "provider metadata: metadata exploded",
+    );
+  }
+});
+
 test("integration provider service resolves hosted HTTP subjects through the plugin hook", async () => {
   let seenRequest:
     | import("../src/index.ts").HTTPSubjectRequest
@@ -1051,6 +1078,35 @@ test("authentication provider supports runtime metadata, login flows, and token 
     }),
   );
   expect(validated.email).toBe("api-token@example.com");
+});
+
+test("runtime lifecycle labels provider identity failures", async () => {
+  const plugin = definePlugin({
+    operations: [
+      {
+        id: "noop",
+        handler() {
+          return { ok: true };
+        },
+      },
+    ],
+  });
+  (plugin as any).warnings = async () => {
+    throw new Error("identity exploded");
+  };
+
+  try {
+    await (createRuntimeService(plugin).getProviderIdentity as any)(
+      create(EmptySchema, {}),
+    );
+    throw new Error("expected getProviderIdentity to fail");
+  } catch (error) {
+    expect(error).toBeInstanceOf(ConnectError);
+    expect((error as ConnectError).code).toBe(Code.Unknown);
+    expect((error as ConnectError).message).toContain(
+      "provider identity: identity exploded",
+    );
+  }
 });
 
 test("cache provider supports runtime metadata and cache operations", async () => {

@@ -435,16 +435,20 @@ export function createRuntimeService(
 ): Partial<ServiceImpl<typeof ProviderLifecycle>> {
   return {
     async getProviderIdentity() {
-      return create(ProviderIdentitySchema, {
-        kind: providerRuntimeEntry(provider.kind).protoKind,
-        name: provider.name,
-        displayName: provider.displayName,
-        description: provider.description,
-        version: provider.version,
-        warnings: await provider.warnings(),
-        minProtocolVersion: CURRENT_PROTOCOL_VERSION,
-        maxProtocolVersion: CURRENT_PROTOCOL_VERSION,
-      });
+      try {
+        return create(ProviderIdentitySchema, {
+          kind: providerRuntimeEntry(provider.kind).protoKind,
+          name: provider.name,
+          displayName: provider.displayName,
+          description: provider.description,
+          version: provider.version,
+          warnings: await provider.warnings(),
+          minProtocolVersion: CURRENT_PROTOCOL_VERSION,
+          maxProtocolVersion: CURRENT_PROTOCOL_VERSION,
+        });
+      } catch (error) {
+        throw providerRuntimeError("provider identity", error);
+      }
     },
     async configureProvider(request: ConfigureProviderRequest) {
       assertProtocolVersion(request.protocolVersion);
@@ -454,10 +458,7 @@ export function createRuntimeService(
           objectFromUnknown(request.config),
         );
       } catch (error) {
-        throw new ConnectError(
-          `configure provider: ${errorMessage(error)}`,
-          Code.Unknown,
-        );
+        throw providerRuntimeError("configure provider", error);
       }
       return create(ConfigureProviderResponseSchema, {
         protocolVersion: CURRENT_PROTOCOL_VERSION,
@@ -496,27 +497,31 @@ export function createProviderService(
     throw new Error("provider is not a plugin provider");
   }
   return {
-    getMetadata() {
-      return create(ProviderMetadataSchema, {
-        name: provider.name,
-        displayName: provider.displayName,
-        description: provider.description,
-        connectionMode: connectionModeToProtoValue(
-          provider.connectionMode,
-        ) as ProviderConnectionMode,
-        authTypes: [...provider.authTypes],
-        connectionParams: Object.fromEntries(
-          Object.entries(provider.connectionParams).map(([key, value]) => [
-            key,
-            connectionParamToProto(value),
-          ]),
-        ),
-        staticCatalog: catalogToProto(provider.staticCatalog()),
-        supportsSessionCatalog: provider.supportsSessionCatalog(),
-        supportsPostConnect: provider.supportsPostConnect(),
-        minProtocolVersion: CURRENT_PROTOCOL_VERSION,
-        maxProtocolVersion: CURRENT_PROTOCOL_VERSION,
-      });
+    async getMetadata() {
+      try {
+        return create(ProviderMetadataSchema, {
+          name: provider.name,
+          displayName: provider.displayName,
+          description: provider.description,
+          connectionMode: connectionModeToProtoValue(
+            provider.connectionMode,
+          ) as ProviderConnectionMode,
+          authTypes: [...provider.authTypes],
+          connectionParams: Object.fromEntries(
+            Object.entries(provider.connectionParams).map(([key, value]) => [
+              key,
+              connectionParamToProto(value),
+            ]),
+          ),
+          staticCatalog: catalogToProto(provider.staticCatalog()),
+          supportsSessionCatalog: provider.supportsSessionCatalog(),
+          supportsPostConnect: provider.supportsPostConnect(),
+          minProtocolVersion: CURRENT_PROTOCOL_VERSION,
+          maxProtocolVersion: CURRENT_PROTOCOL_VERSION,
+        });
+      } catch (error) {
+        throw providerRuntimeError("provider metadata", error);
+      }
     },
     async startProvider(request: StartProviderRequest) {
       assertProtocolVersion(request.protocolVersion);
@@ -526,10 +531,7 @@ export function createProviderService(
           objectFromUnknown(request.config),
         );
       } catch (error) {
-        throw new ConnectError(
-          `configure provider: ${errorMessage(error)}`,
-          Code.Unknown,
-        );
+        throw providerRuntimeError("configure provider", error);
       }
       return create(StartProviderResponseSchema, {
         protocolVersion: CURRENT_PROTOCOL_VERSION,
@@ -906,6 +908,10 @@ function providerRuntimeEntry(
     );
   }
   return entry;
+}
+
+function providerRuntimeError(label: string, error: unknown): ConnectError {
+  return new ConnectError(`${label}: ${errorMessage(error)}`, Code.Unknown);
 }
 
 function resolveLoadedProvider(
