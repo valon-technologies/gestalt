@@ -31,6 +31,10 @@ func runProvider(args []string) error {
 	case "-h", "--help", "help":
 		printProviderUsage(os.Stderr)
 		return flag.ErrHelp
+	case "dev":
+		return runProviderDev(args[1:])
+	case "validate":
+		return runProviderValidate(args[1:])
 	case "release":
 		return runProviderRelease(args[1:])
 	default:
@@ -599,7 +603,9 @@ func printProviderUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
+	writeUsageLine(w, "  dev         Run a local source plugin inside a synthesized Gestalt config")
 	writeUsageLine(w, "  release     Build provider release archives")
+	writeUsageLine(w, "  validate    Validate a local source plugin inside a synthesized Gestalt config")
 }
 
 func printProviderReleaseUsage(w io.Writer) {

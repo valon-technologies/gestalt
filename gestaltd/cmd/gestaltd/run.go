@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -9,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/sandbox"
@@ -162,7 +160,7 @@ func validateConfig(configFlags []string, lockfilePath string) error {
 	}
 	defer func() { _ = os.RemoveAll(scratchDir) }()
 
-	paths, cfg, err := loadConfigForValidationWithStatePaths(configFlags, operator.StatePaths{
+	result, err := validateConfigWithStatePaths(configFlags, operator.StatePaths{
 		ArtifactsDir: scratchDir,
 		LockfilePath: lockfilePath,
 	})
@@ -170,13 +168,8 @@ func validateConfig(configFlags []string, lockfilePath string) error {
 		return err
 	}
 
-	warnings, err := bootstrap.Validate(context.Background(), cfg, buildFactories())
-	if err != nil {
-		return err
-	}
-
-	logConfigSummary(paths, cfg)
-	for _, w := range warnings {
+	logConfigSummary(result.Paths, result.Config)
+	for _, w := range result.Warnings {
 		slog.Warn(w)
 	}
 	slog.Info("config ok")
@@ -250,7 +243,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
 	writeUsageLine(w, "  init        Resolve providers and plugins and write lock state")
-	writeUsageLine(w, "  provider    Build provider release archives")
+	writeUsageLine(w, "  provider    Develop, validate, or build provider release archives")
 	writeUsageLine(w, "  serve       Start the server (use --locked for production)")
 	writeUsageLine(w, "  validate    Load and validate configuration without starting the server")
 	writeUsageLine(w, "  version     Print the version and exit")
