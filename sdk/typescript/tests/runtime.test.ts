@@ -679,6 +679,113 @@ test("integration provider service labels metadata failures", async () => {
   }
 });
 
+test("integration provider service tolerates legacy plugin objects without newer optional hooks", async () => {
+  const plugin = definePlugin({
+    operations: [
+      {
+        id: "noop",
+        handler() {
+          return { ok: true };
+        },
+      },
+    ],
+  });
+  (plugin as any).supportsSessionCatalog = undefined;
+  (plugin as any).supportsPostConnect = undefined;
+  (plugin as any).resolveHTTPSubject = undefined;
+
+  const service = createProviderService(plugin as any);
+  const metadata = await (service.getMetadata as any)();
+  expect(metadata.supportsSessionCatalog).toBe(false);
+  expect(metadata.supportsPostConnect).toBe(false);
+
+  await expectConnectCode(
+    (service.postConnect as any)(
+      create(PostConnectRequestSchema, {
+        token: {
+          id: "tok-123",
+          integration: "legacy-plugin",
+        },
+      }),
+    ),
+    Code.Unimplemented,
+  );
+
+  const unresolved = await (service.resolveHTTPSubject as any)(
+    create(ResolveHTTPSubjectRequestSchema, {
+      request: create(HTTPSubjectRequestSchema, {
+        binding: "command",
+      }),
+    }),
+  );
+  expect(unresolved.subject).toBeUndefined();
+});
+
+test("integration provider service infers optional hooks for prototype-backed structural plugin objects", async () => {
+  class StructuralPlugin {
+    kind = "integration" as const;
+    name = "structural-plugin";
+    displayName = "Structural Plugin";
+    description = "structural plugin";
+    version = "1.0.0";
+    connectionMode = "unspecified" as const;
+    authTypes: string[] = [];
+    connectionParams: Record<string, unknown> = {};
+
+    staticCatalog() {
+      return {
+        name: "structural-plugin",
+        operations: [],
+      };
+    }
+
+    async execute() {
+      return {
+        status: 200,
+        body: "{}",
+      };
+    }
+
+    async catalogForRequest() {
+      return {
+        name: "structural-session",
+        operations: [],
+      };
+    }
+
+    async postConnectMetadata() {
+      return {
+        structural: "true",
+      };
+    }
+  }
+
+  const service = createProviderService(new StructuralPlugin() as any);
+
+  const metadata = await (service.getMetadata as any)();
+  expect(metadata.supportsSessionCatalog).toBe(true);
+  expect(metadata.supportsPostConnect).toBe(true);
+
+  const sessionCatalog = await (service.getSessionCatalog as any)(
+    create(GetSessionCatalogRequestSchema, {
+      token: "token-123",
+    }),
+  );
+  expect(sessionCatalog.catalog?.name).toBe("structural-session");
+
+  const postConnect = await (service.postConnect as any)(
+    create(PostConnectRequestSchema, {
+      token: {
+        id: "tok-123",
+        integration: "structural-plugin",
+      },
+    }),
+  );
+  expect(postConnect.metadata).toEqual({
+    structural: "true",
+  });
+});
+
 test("integration provider service resolves hosted HTTP subjects through the plugin hook", async () => {
   let seenRequest:
     | import("../src/index.ts").HTTPSubjectRequest
