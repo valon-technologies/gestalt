@@ -9,6 +9,8 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 		r.Get("/integrations", s.listIntegrations)
 		r.Delete("/integrations/{name}", s.disconnectIntegration)
 
+		r.Get("/workflow/schedules", s.listGlobalWorkflowSchedules)
+		r.Post("/workflow/schedules", s.createWorkflowSchedule)
 		r.Route("/workflow/schedules", func(r chi.Router) {
 			r.Get("/", s.listGlobalWorkflowSchedules)
 			r.Post("/", s.createWorkflowSchedule)
@@ -18,6 +20,8 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Post("/{scheduleID}/pause", s.pauseGlobalWorkflowSchedule)
 			r.Post("/{scheduleID}/resume", s.resumeGlobalWorkflowSchedule)
 		})
+		r.Get("/workflow/event-triggers", s.listGlobalWorkflowEventTriggers)
+		r.Post("/workflow/event-triggers", s.createGlobalWorkflowEventTrigger)
 		r.Route("/workflow/event-triggers", func(r chi.Router) {
 			r.Get("/", s.listGlobalWorkflowEventTriggers)
 			r.Post("/", s.createGlobalWorkflowEventTrigger)
@@ -28,11 +32,14 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Post("/{triggerID}/resume", s.resumeGlobalWorkflowEventTrigger)
 		})
 		r.Post("/workflow/events", s.publishWorkflowEvent)
+		r.Get("/workflow/runs", s.listGlobalWorkflowRuns)
 		r.Route("/workflow/runs", func(r chi.Router) {
 			r.Get("/", s.listGlobalWorkflowRuns)
 			r.Get("/{runID}", s.getGlobalWorkflowRun)
 			r.Post("/{runID}/cancel", s.cancelGlobalWorkflowRun)
 		})
+		r.Post("/agent/sessions", s.createAgentSession)
+		r.Get("/agent/sessions", s.listAgentSessions)
 		r.Route("/agent/sessions", func(r chi.Router) {
 			r.Post("/", s.createAgentSession)
 			r.Get("/", s.listAgentSessions)

@@ -338,7 +338,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4","clientRef":"cli-1"}`))
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4","clientRef":"cli-1"}`))
 	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	sessionResp, err := http.DefaultClient.Do(sessionReq)
 	if err != nil {
@@ -353,6 +353,25 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("decode session: %v", err)
 	}
 	sessionID := session["id"].(string)
+
+	listSessionsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/sessions", nil)
+	listSessionsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	listSessionsResp, err := http.DefaultClient.Do(listSessionsReq)
+	if err != nil {
+		t.Fatalf("list sessions: %v", err)
+	}
+	defer func() { _ = listSessionsResp.Body.Close() }()
+	if listSessionsResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(listSessionsResp.Body)
+		t.Fatalf("list sessions status = %d body=%s", listSessionsResp.StatusCode, body)
+	}
+	var sessions []map[string]any
+	if err := json.NewDecoder(listSessionsResp.Body).Decode(&sessions); err != nil {
+		t.Fatalf("decode sessions: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0]["id"] != sessionID {
+		t.Fatalf("sessions = %#v, want %q", sessions, sessionID)
+	}
 
 	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
