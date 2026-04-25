@@ -2198,6 +2198,35 @@ server:
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("local external credentials source is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v3
+providers:
+  externalCredentials:
+    default:
+      source: local
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+    externalCredentials: default
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `externalCredentials provider "default" does not support builtin providers`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestLoadConfigPluginIndexedDBBindings(t *testing.T) {

@@ -19,7 +19,6 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
-	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -1256,14 +1255,11 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 		t.Fatalf("expected %s in archive: %v", externalCredentialReleaseSchemaPath, err)
 	}
 
-	enc, err := corecrypto.NewAESGCM([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
-	if err != nil {
-		t.Fatalf("NewAESGCM: %v", err)
-	}
-	services, err := coredata.New(&coretesting.StubIndexedDB{}, enc)
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
 		t.Fatalf("coredata.New: %v", err)
 	}
+	coretesting.AttachStubExternalCredentials(services)
 
 	provider, err := providerhost.NewExecutableExternalCredentialProvider(context.Background(), providerhost.ExternalCredentialsExecConfig{
 		Command: filepath.Join(extractDir, binaryName),
@@ -1302,19 +1298,6 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 	}
 	if credential.CreatedAt.IsZero() || credential.UpdatedAt.IsZero() {
 		t.Fatalf("credential timestamps = created_at:%v updated_at:%v", credential.CreatedAt, credential.UpdatedAt)
-	}
-	raw, err := services.DB.ObjectStore(coredata.StoreExternalCredentials).Get(context.Background(), credential.ID)
-	if err != nil {
-		t.Fatalf("stored credential raw Get: %v", err)
-	}
-	if got, _ := raw["access_token_encrypted"].(string); got == "" {
-		t.Fatalf("access_token_encrypted = %q, want non-empty ciphertext", got)
-	}
-	if got, _ := raw["refresh_token_encrypted"].(string); got == "" {
-		t.Fatalf("refresh_token_encrypted = %q, want non-empty ciphertext", got)
-	}
-	if _, ok := raw["access_token"]; ok {
-		t.Fatalf("raw record should not store plaintext access_token: %+v", raw)
 	}
 
 	got, err := provider.GetCredential(context.Background(), credential.SubjectID, credential.Integration, credential.Connection, credential.Instance)
@@ -3080,8 +3063,13 @@ func writeManagedPluginConfigForTest(t *testing.T, dir, pluginKey, metadataURL, 
 	t.Helper()
 
 	indexedDBManifest := writeStubIndexedDBManifestForTest(t, dir)
+	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
 	configData := fmt.Sprintf(`apiVersion: %s
 providers:
+  externalCredentials:
+    default:
+      source:
+        path: %q
   indexeddb:
     sqlite:
       source:
@@ -3094,10 +3082,11 @@ plugins:
     mountPath: %q
 server:
   providers:
+    externalCredentials: default
     indexeddb: sqlite
   artifactsDir: %q
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`, config.APIVersionV3, indexedDBManifest, filepath.Join(dir, "gestalt.db"), pluginKey, metadataURL, mountPath, filepath.Join(dir, "prepared-artifacts"))
+`, config.APIVersionV3, externalCredentialsManifest, indexedDBManifest, filepath.Join(dir, "gestalt.db"), pluginKey, metadataURL, mountPath, filepath.Join(dir, "prepared-artifacts"))
 	configPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(configPath, []byte(configData), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)

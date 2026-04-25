@@ -5,21 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
-
-const testEncryptionKey = "0123456789abcdef0123456789abcdef"
 
 func newTestServices(t *testing.T) *coredata.Services {
 	t.Helper()
@@ -29,14 +25,11 @@ func newTestServices(t *testing.T) *coredata.Services {
 func newTestServicesWithDB(t *testing.T) (*coredata.Services, *coretesting.StubIndexedDB) {
 	t.Helper()
 	db := &coretesting.StubIndexedDB{}
-	enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
-	if err != nil {
-		t.Fatalf("NewAESGCM: %v", err)
-	}
-	svc, err := coredata.New(db, enc)
+	svc, err := coredata.New(db)
 	if err != nil {
 		t.Fatalf("coredata.New: %v", err)
 	}
+	coretesting.AttachStubExternalCredentials(svc)
 	return svc, db
 }
 
@@ -177,14 +170,10 @@ func TestNew(t *testing.T) {
 	t.Run("idempotent", func(t *testing.T) {
 		t.Parallel()
 		db := &coretesting.StubIndexedDB{}
-		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
-		if err != nil {
-			t.Fatalf("NewAESGCM: %v", err)
-		}
-		if _, err := coredata.New(db, enc); err != nil {
+		if _, err := coredata.New(db); err != nil {
 			t.Fatalf("first New: %v", err)
 		}
-		if _, err := coredata.New(db, enc); err != nil {
+		if _, err := coredata.New(db); err != nil {
 			t.Fatalf("second New: %v", err)
 		}
 	})
@@ -206,11 +195,7 @@ func TestNew(t *testing.T) {
 			t.Fatalf("seed legacy user: %v", err)
 		}
 
-		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
-		if err != nil {
-			t.Fatalf("NewAESGCM: %v", err)
-		}
-		svc, err := coredata.New(db, enc)
+		svc, err := coredata.New(db)
 		if err != nil {
 			t.Fatalf("coredata.New: %v", err)
 		}
@@ -252,11 +237,7 @@ func TestNew(t *testing.T) {
 			t.Fatalf("seed canonical legacy user: %v", err)
 		}
 
-		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
-		if err != nil {
-			t.Fatalf("NewAESGCM: %v", err)
-		}
-		svc, err := coredata.New(db, enc)
+		svc, err := coredata.New(db)
 		if err != nil {
 			t.Fatalf("coredata.New: %v", err)
 		}
@@ -312,11 +293,7 @@ func TestNew(t *testing.T) {
 			}
 		}
 
-		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
-		if err != nil {
-			t.Fatalf("NewAESGCM: %v", err)
-		}
-		svc, err := coredata.New(db, enc)
+		svc, err := coredata.New(db)
 		if err != nil {
 			t.Fatalf("coredata.New: %v", err)
 		}
@@ -394,11 +371,7 @@ func TestUserService(t *testing.T) {
 		t.Parallel()
 
 		db := newCountingIndexedDB(&coretesting.StubIndexedDB{})
-		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
-		if err != nil {
-			t.Fatalf("NewAESGCM: %v", err)
-		}
-		svc, err := coredata.New(db, enc)
+		svc, err := coredata.New(db)
 		if err != nil {
 			t.Fatalf("coredata.New: %v", err)
 		}
@@ -726,88 +699,6 @@ func TestTokenService(t *testing.T) {
 		}
 	})
 
-	t.Run("ListTokensForConnection_dedupes_legacy_duplicate_rows", func(t *testing.T) {
-		t.Parallel()
-		svc, db := newTestServicesWithDB(t)
-		ctx := context.Background()
-
-		user := mustCreateUser(t, svc, "dupes@test.com")
-		newest := &core.IntegrationToken{
-			ID:           "tok-primary",
-			SubjectID:    principal.UserSubjectID(user.ID),
-			Integration:  "svc",
-			Connection:   "default",
-			Instance:     "i1",
-			AccessToken:  "newest",
-			RefreshToken: "refresh-newest",
-		}
-		if err := svc.Tokens.StoreToken(ctx, newest); err != nil {
-			t.Fatalf("StoreToken newest: %v", err)
-		}
-
-		legacySource := &core.IntegrationToken{
-			ID:           "tok-legacy-source",
-			SubjectID:    principal.UserSubjectID(user.ID),
-			Integration:  "svc",
-			Connection:   "default",
-			Instance:     "legacy-source",
-			AccessToken:  "legacy",
-			RefreshToken: "refresh-legacy",
-		}
-		if err := svc.Tokens.StoreToken(ctx, legacySource); err != nil {
-			t.Fatalf("StoreToken legacy source: %v", err)
-		}
-
-		store := db.ObjectStore(coredata.StoreExternalCredentials)
-		primaryRaw, err := store.Get(ctx, newest.ID)
-		if err != nil {
-			t.Fatalf("Get primary raw: %v", err)
-		}
-		legacyRaw, err := store.Get(ctx, legacySource.ID)
-		if err != nil {
-			t.Fatalf("Get legacy raw: %v", err)
-		}
-		if err := store.Delete(ctx, legacySource.ID); err != nil {
-			t.Fatalf("Delete legacy source: %v", err)
-		}
-
-		duplicate := indexeddb.Record{}
-		for k, v := range legacyRaw {
-			duplicate[k] = v
-		}
-		duplicate["id"] = "tok-legacy-duplicate"
-		duplicate["subject_id"] = principal.UserSubjectID(user.ID)
-		duplicate["integration"] = "svc"
-		duplicate["connection"] = "default"
-		duplicate["instance"] = "i1"
-		duplicate["created_at"] = recOrNow(primaryRaw, "created_at").Add(-time.Minute)
-		duplicate["updated_at"] = recOrNow(primaryRaw, "updated_at").Add(-time.Minute)
-		if err := store.Put(ctx, duplicate); err != nil {
-			t.Fatalf("Put duplicate raw token: %v", err)
-		}
-
-		tokens, err := svc.Tokens.ListTokensForConnection(ctx, principal.UserSubjectID(user.ID), "svc", "default")
-		if err != nil {
-			t.Fatalf("ListTokensForConnection: %v", err)
-		}
-		if len(tokens) != 1 {
-			t.Fatalf("got %d tokens, want 1", len(tokens))
-		}
-		if tokens[0].ID != newest.ID {
-			t.Fatalf("ID = %q, want %q", tokens[0].ID, newest.ID)
-		}
-		if tokens[0].AccessToken != "newest" {
-			t.Fatalf("AccessToken = %q, want %q", tokens[0].AccessToken, "newest")
-		}
-
-		if err := svc.Tokens.DeleteToken(ctx, newest.ID); err != nil {
-			t.Fatalf("DeleteToken newest: %v", err)
-		}
-		if _, err := svc.Tokens.Token(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1"); err != core.ErrNotFound {
-			t.Fatalf("Token after deleting duplicate lookup = %v, want ErrNotFound", err)
-		}
-	})
-
 	t.Run("ConcurrentTokenWrites", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
@@ -850,200 +741,6 @@ func TestTokenService(t *testing.T) {
 		}
 	})
 
-	t.Run("EncryptsTokensAtRest", func(t *testing.T) {
-		t.Parallel()
-		svc, db := newTestServicesWithDB(t)
-		ctx := context.Background()
-
-		user := mustCreateUser(t, svc, "enc@test.com")
-		tok := &core.IntegrationToken{
-			ID:           "enc-tok",
-			SubjectID:    principal.UserSubjectID(user.ID),
-			Integration:  "svc",
-			Connection:   "default",
-			Instance:     "i1",
-			AccessToken:  "plaintext-access",
-			RefreshToken: "plaintext-refresh",
-		}
-		if err := svc.Tokens.StoreToken(ctx, tok); err != nil {
-			t.Fatalf("StoreToken: %v", err)
-		}
-
-		raw, err := db.ObjectStore(coredata.StoreExternalCredentials).Get(ctx, "enc-tok")
-		if err != nil {
-			t.Fatalf("raw Get: %v", err)
-		}
-		accessEncrypted, _ := raw["access_token_encrypted"].(string)
-		refreshEncrypted, _ := raw["refresh_token_encrypted"].(string)
-
-		if accessEncrypted == "plaintext-access" {
-			t.Error("access_token_encrypted stored as plaintext")
-		}
-		if refreshEncrypted == "plaintext-refresh" {
-			t.Error("refresh_token_encrypted stored as plaintext")
-		}
-		if accessEncrypted == "" {
-			t.Error("access_token_encrypted should not be empty")
-		}
-		if refreshEncrypted == "" {
-			t.Error("refresh_token_encrypted should not be empty")
-		}
-
-		got, err := svc.Tokens.Token(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
-		if err != nil {
-			t.Fatalf("Token: %v", err)
-		}
-		if got.AccessToken != "plaintext-access" {
-			t.Errorf("decrypted AccessToken = %q, want %q", got.AccessToken, "plaintext-access")
-		}
-		if got.RefreshToken != "plaintext-refresh" {
-			t.Errorf("decrypted RefreshToken = %q, want %q", got.RefreshToken, "plaintext-refresh")
-		}
-	})
-
-	t.Run("New_reads_existing_external_credentials", func(t *testing.T) {
-		t.Parallel()
-
-		db := &coretesting.StubIndexedDB{}
-		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
-		if err != nil {
-			t.Fatalf("NewAESGCM: %v", err)
-		}
-		ctx := context.Background()
-		if err := db.CreateObjectStore(ctx, coredata.StoreExternalCredentials, coredata.ExternalCredentialsSchema); err != nil {
-			t.Fatalf("CreateObjectStore(%s): %v", coredata.StoreExternalCredentials, err)
-		}
-		accessEncrypted, refreshEncrypted, err := enc.EncryptTokenPair("current-access", "current-refresh")
-		if err != nil {
-			t.Fatalf("EncryptTokenPair: %v", err)
-		}
-		if err := db.ObjectStore(coredata.StoreExternalCredentials).Put(ctx, indexeddb.Record{
-			"id":                      "current-token",
-			"subject_id":              "user:user-current",
-			"integration":             "slack",
-			"connection":              "default",
-			"instance":                "workspace-1",
-			"access_token_encrypted":  accessEncrypted,
-			"refresh_token_encrypted": refreshEncrypted,
-			"created_at":              time.Now().UTC(),
-			"updated_at":              time.Now().UTC(),
-		}); err != nil {
-			t.Fatalf("seed external credential: %v", err)
-		}
-
-		svc, err := coredata.New(db, enc)
-		if err != nil {
-			t.Fatalf("coredata.New: %v", err)
-		}
-
-		got, err := svc.Tokens.Token(ctx, "user:user-current", "slack", "default", "workspace-1")
-		if err != nil {
-			t.Fatalf("Token: %v", err)
-		}
-		if got.ID != "current-token" || got.AccessToken != "current-access" || got.RefreshToken != "current-refresh" {
-			t.Fatalf("Token = %+v, want current-token / current-access / current-refresh", got)
-		}
-	})
-
-	t.Run("New_rejects_legacy_integration_tokens_rows", func(t *testing.T) {
-		t.Parallel()
-
-		db := &coretesting.StubIndexedDB{}
-		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
-		if err != nil {
-			t.Fatalf("NewAESGCM: %v", err)
-		}
-		ctx := context.Background()
-		if err := db.CreateObjectStore(ctx, "integration_tokens", coredata.ExternalCredentialsSchema); err != nil {
-			t.Fatalf("CreateObjectStore(integration_tokens): %v", err)
-		}
-		accessEncrypted, refreshEncrypted, err := enc.EncryptTokenPair("legacy-access", "legacy-refresh")
-		if err != nil {
-			t.Fatalf("EncryptTokenPair: %v", err)
-		}
-		if err := db.ObjectStore("integration_tokens").Put(ctx, indexeddb.Record{
-			"id":                      "legacy-token",
-			"subject_id":              "user:user-legacy",
-			"integration":             "slack",
-			"connection":              "default",
-			"instance":                "workspace-1",
-			"access_token_encrypted":  accessEncrypted,
-			"refresh_token_encrypted": refreshEncrypted,
-			"created_at":              time.Now().UTC(),
-			"updated_at":              time.Now().UTC(),
-		}); err != nil {
-			t.Fatalf("seed legacy integration token: %v", err)
-		}
-
-		_, err = coredata.New(db, enc)
-		if err == nil {
-			t.Fatal("coredata.New succeeded, want legacy migration error")
-		}
-		if !strings.Contains(err.Error(), "manual external_credentials migration") {
-			t.Fatalf("coredata.New error = %v, want manual migration guidance", err)
-		}
-	})
-
-	t.Run("DeleteToken_removes_matching_external_credential_rows", func(t *testing.T) {
-		t.Parallel()
-
-		db := &coretesting.StubIndexedDB{}
-		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
-		if err != nil {
-			t.Fatalf("NewAESGCM: %v", err)
-		}
-		ctx := context.Background()
-		if err := db.CreateObjectStore(ctx, coredata.StoreExternalCredentials, coredata.ExternalCredentialsSchema); err != nil {
-			t.Fatalf("CreateObjectStore(%s): %v", coredata.StoreExternalCredentials, err)
-		}
-		currentAccessEncrypted, currentRefreshEncrypted, err := enc.EncryptTokenPair("current-access", "current-refresh")
-		if err != nil {
-			t.Fatalf("EncryptTokenPair current: %v", err)
-		}
-		currentRaw := indexeddb.Record{
-			"id":                      "current-token",
-			"subject_id":              "user:user-legacy",
-			"integration":             "slack",
-			"connection":              "default",
-			"instance":                "workspace-1",
-			"access_token_encrypted":  currentAccessEncrypted,
-			"refresh_token_encrypted": currentRefreshEncrypted,
-			"created_at":              time.Now().UTC(),
-			"updated_at":              time.Now().UTC(),
-		}
-		if err := db.ObjectStore(coredata.StoreExternalCredentials).Put(ctx, currentRaw); err != nil {
-			t.Fatalf("seed external credential: %v", err)
-		}
-
-		svc, err := coredata.New(db, enc)
-		if err != nil {
-			t.Fatalf("coredata.New: %v", err)
-		}
-
-		got, err := svc.Tokens.Token(ctx, "user:user-legacy", "slack", "default", "workspace-1")
-		if err != nil {
-			t.Fatalf("Token before delete: %v", err)
-		}
-		if got.ID != "current-token" || got.AccessToken != "current-access" || got.RefreshToken != "current-refresh" {
-			t.Fatalf("Token before delete = %+v, want current-token / current-access / current-refresh", got)
-		}
-		if err := svc.Tokens.DeleteToken(ctx, "current-token"); err != nil {
-			t.Fatalf("DeleteToken: %v", err)
-		}
-		if _, err := svc.Tokens.Token(ctx, "user:user-legacy", "slack", "default", "workspace-1"); err != core.ErrNotFound {
-			t.Fatalf("Token after delete = %v, want ErrNotFound", err)
-		}
-		if _, err := db.ObjectStore(coredata.StoreExternalCredentials).Get(ctx, "current-token"); err != indexeddb.ErrNotFound {
-			t.Fatalf("external credential raw Get = %v, want ErrNotFound", err)
-		}
-	})
-}
-
-func recOrNow(rec indexeddb.Record, key string) time.Time {
-	if v, ok := rec[key].(time.Time); ok && !v.IsZero() {
-		return v
-	}
-	return time.Now()
 }
 
 func TestAPITokenService(t *testing.T) {

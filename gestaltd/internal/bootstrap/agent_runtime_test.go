@@ -11,7 +11,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
-	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -163,16 +162,12 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	t.Parallel()
 
 	bin := buildAgentProviderBinary(t)
-	secret := []byte("0123456789abcdef0123456789abcdef")
 
-	encryptor, err := corecrypto.NewAESGCM(secret)
-	if err != nil {
-		t.Fatalf("corecrypto.NewAESGCM: %v", err)
-	}
-	services, err := coredata.New(&coretesting.StubIndexedDB{}, encryptor)
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
 		t.Fatalf("coredata.New: %v", err)
 	}
+	coretesting.AttachStubExternalCredentials(services)
 	invoker := &recordingAgentRuntimeInvoker{}
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
 	agentRuntime.SetInvoker(invoker)

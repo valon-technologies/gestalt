@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -778,16 +779,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if selectedIndexedDBName == "" || def == nil {
 		return nil, fmt.Errorf("bootstrap: datastore resource name is required")
 	}
-	enc, encErr := crypto.NewAESGCM(encKey)
-	if encErr != nil {
-		return nil, fmt.Errorf("bootstrap: create encryptor: %w", encErr)
-	}
 	store, storeErr := buildIndexedDB(def, factories)
 	if storeErr != nil {
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, storeErr)
 	}
 	store = metricutil.InstrumentIndexedDB(store, selectedIndexedDBName)
-	svc, svcErr := coredata.New(store, enc)
+	svc, svcErr := coredata.New(store)
 	if svcErr != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, svcErr)
@@ -861,6 +858,9 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 	svc.ExternalCredentials = externalCredentials
+	if svc.Tokens != nil {
+		svc.Tokens.SetProvider(externalCredentials)
+	}
 
 	authzProvider, err = buildAuthorization(cfg, factories, deps)
 	if err != nil {
@@ -1259,11 +1259,8 @@ func buildExternalCredentialsProvider(ctx context.Context, cfg *config.Config, f
 		return nil, err
 	}
 	if entry == nil {
-		provider := coredata.EffectiveExternalCredentialProvider(deps.Services)
-		if coredata.ExternalCredentialProviderMissing(provider) {
-			return nil, fmt.Errorf("bootstrap: external credentials provider is not available")
-		}
-		return provider, nil
+		name = config.DefaultProviderInstance
+		entry = defaultExternalCredentialsProviderEntry()
 	}
 	return buildNamedExternalCredentialsProvider(ctx, name, entry, factories, deps)
 }
@@ -1274,32 +1271,19 @@ func buildNamedExternalCredentialsProvider(ctx context.Context, name string, ent
 		logicalName = "external-credentials"
 	}
 	if entry == nil {
-		provider := coredata.EffectiveExternalCredentialProvider(deps.Services)
-		if coredata.ExternalCredentialProviderMissing(provider) {
-			return nil, fmt.Errorf("bootstrap: external credentials provider %q: local provider is not available", logicalName)
-		}
-		return provider, nil
-	}
-	if entry.Source.IsBuiltin() || (!entry.HasRemoteSource() && !entry.HasLocalSource() && !entry.HasLocalReleaseSource()) {
-		builtin := strings.TrimSpace(entry.Source.Builtin)
-		if builtin != "" && builtin != "local" {
-			return nil, fmt.Errorf("bootstrap: external credentials provider %q: unknown builtin %q", logicalName, builtin)
-		}
-		provider := coredata.EffectiveExternalCredentialProvider(deps.Services)
-		if coredata.ExternalCredentialProviderMissing(provider) {
-			return nil, fmt.Errorf("bootstrap: external credentials provider %q: local provider is not available", logicalName)
-		}
-		return provider, nil
+		return nil, fmt.Errorf("bootstrap: external credentials provider %q is not configured", logicalName)
 	}
 	if factories.ExternalCredentials == nil {
 		return nil, fmt.Errorf("bootstrap: external credentials provider factory is not registered")
 	}
-	node := entry.Config
+	node, err := buildExternalCredentialsRuntimeConfigNode(logicalName, entry, deps.EncryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
+	}
 	if !config.IsComponentRuntimeConfigNode(node) {
-		var buildErr error
-		node, buildErr = config.BuildComponentRuntimeConfigNode(logicalName, providermanifestv1.KindExternalCredentials, entry, entry.Config)
-		if buildErr != nil {
-			return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, buildErr)
+		node, err = config.BuildComponentRuntimeConfigNode(logicalName, providermanifestv1.KindExternalCredentials, entry, node)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
 		}
 	}
 	hostServices, err := buildExternalCredentialsHostServices(logicalName, deps)
@@ -1313,18 +1297,64 @@ func buildNamedExternalCredentialsProvider(ctx context.Context, name string, ent
 	return provider, nil
 }
 
-func buildExternalCredentialsHostServices(name string, deps Deps) ([]providerhost.HostService, error) {
-	provider := coredata.LocalExternalCredentialProvider(deps.Services)
-	if coredata.ExternalCredentialProviderMissing(provider) {
-		return nil, fmt.Errorf("local external credentials provider is not available")
+func defaultExternalCredentialsProviderEntry() *config.ProviderEntry {
+	return &config.ProviderEntry{
+		Default: true,
+		Source:  config.DefaultProviderSource(config.DefaultExternalCredentialsProvider, config.DefaultExternalCredentialsVersion),
 	}
-	return []providerhost.HostService{{
-		Name:   "external-credentials",
-		EnvVar: providerhost.DefaultExternalCredentialSocketEnv,
+}
+
+func buildExternalCredentialsRuntimeConfigNode(name string, entry *config.ProviderEntry, encryptionKey []byte) (yaml.Node, error) {
+	if entry == nil {
+		return yaml.Node{}, fmt.Errorf("external credentials provider %q is required", name)
+	}
+	cfg, err := config.NodeToMap(entry.Config)
+	if err != nil {
+		return yaml.Node{}, fmt.Errorf("decode config: %w", err)
+	}
+	if cfg == nil {
+		cfg = map[string]any{}
+	}
+	if _, ok := cfg["encryptionKey"]; !ok {
+		if len(encryptionKey) == 0 {
+			return yaml.Node{}, fmt.Errorf("config.encryptionKey is required")
+		}
+		cfg["encryptionKey"] = hex.EncodeToString(encryptionKey)
+	}
+	return mapToYAMLNode(cfg)
+}
+
+func buildExternalCredentialsHostServices(name string, deps Deps) ([]providerhost.HostService, error) {
+	if len(deps.IndexedDBs) == 0 || deps.SelectedIndexedDBName == "" {
+		return nil, fmt.Errorf("indexeddb host services are not available")
+	}
+	hostServices := make([]providerhost.HostService, 0, len(deps.IndexedDBs)+1)
+	if ds := deps.IndexedDBs[deps.SelectedIndexedDBName]; ds != nil {
+		hostServices = append(hostServices, externalCredentialsIndexedDBHostService(providerhost.DefaultIndexedDBSocketEnv, name, ds))
+	}
+	for _, indexedDBName := range slices.Sorted(maps.Keys(deps.IndexedDBs)) {
+		ds := deps.IndexedDBs[indexedDBName]
+		if ds == nil {
+			continue
+		}
+		hostServices = append(hostServices, externalCredentialsIndexedDBHostService(providerhost.IndexedDBSocketEnv(indexedDBName), name, ds))
+	}
+	if len(hostServices) == 0 {
+		return nil, fmt.Errorf("indexeddb %q is not available", deps.SelectedIndexedDBName)
+	}
+	return hostServices, nil
+}
+
+func externalCredentialsIndexedDBHostService(envVar, providerName string, ds indexeddb.IndexedDB) providerhost.HostService {
+	return providerhost.HostService{
+		Name:   "indexeddb",
+		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterExternalCredentialProviderServer(srv, providerhost.NewExternalCredentialProviderServer(provider))
+			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, providerName, providerhost.IndexedDBServerOptions{
+				AllowedStores: []string{"external_credentials"},
+			}))
 		},
-	}}, nil
+	}
 }
 
 func closeAuth(provider core.AuthenticationProvider) error {
@@ -1366,9 +1396,6 @@ func closeAuthorizationProvider(provider core.AuthorizationProvider) error {
 
 func closeExternalCredentialProviderCandidate(services *coredata.Services) error {
 	if services == nil || coredata.ExternalCredentialProviderMissing(services.ExternalCredentials) {
-		return nil
-	}
-	if coredata.SameExternalCredentialProvider(services.ExternalCredentials, coredata.LocalExternalCredentialProvider(services)) {
 		return nil
 	}
 	return closeExternalCredentialProvider(services.ExternalCredentials)

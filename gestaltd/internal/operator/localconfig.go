@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 )
@@ -110,11 +109,6 @@ func GenerateDefaultConfig(configDir string) (string, error) {
 	return configPath, nil
 }
 
-func defaultProviderMetadataURL(source, version string) string {
-	rel := strings.TrimPrefix(strings.TrimSpace(source), config.DefaultProviderRepo+"/")
-	return fmt.Sprintf("https://github.com/valon-technologies/gestalt-providers/releases/download/%s/v%s/provider-release.yaml", rel, strings.TrimSpace(version))
-}
-
 func defaultManagedConfig(dbPath, encryptionKey string) string {
 	return fmt.Sprintf(`apiVersion: gestaltd.config/v3
 server:
@@ -143,10 +137,10 @@ plugins:
     allowedHosts:
       - httpbin.org
 `, encryptionKey,
-		defaultProviderMetadataURL(config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion),
+		config.DefaultProviderMetadataURL(config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion),
 		"sqlite://"+dbPath,
-		defaultProviderMetadataURL(config.DefaultUIProvider, config.DefaultUIVersion),
-		defaultProviderMetadataURL(defaultHTTPBinProvider, defaultHTTPBinVersion))
+		config.DefaultProviderMetadataURL(config.DefaultUIProvider, config.DefaultUIVersion),
+		config.DefaultProviderMetadataURL(defaultHTTPBinProvider, defaultHTTPBinVersion))
 }
 
 func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string {
@@ -156,8 +150,13 @@ server:
     port: 8080
   encryptionKey: %q
   providers:
+    externalCredentials: default
     indexeddb: main
 providers:
+  externalCredentials:
+    default:
+      source:
+        path: %q
   indexeddb:
     main:
       source:
@@ -172,5 +171,9 @@ providers:
   secrets:
     env:
       source: env
-`, encryptionKey, filepath.Join(providersDir, "indexeddb", "relationaldb", "manifest.yaml"), "sqlite://"+dbPath, filepath.Join(providersDir, "ui", "default", "manifest.yaml"))
+`, encryptionKey,
+		config.DefaultLocalProviderManifestPath(providersDir, config.DefaultExternalCredentialsProvider),
+		config.DefaultLocalProviderManifestPath(providersDir, config.DefaultIndexedDBProvider),
+		"sqlite://"+dbPath,
+		config.DefaultLocalProviderManifestPath(providersDir, config.DefaultUIProvider))
 }

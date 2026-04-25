@@ -31,11 +31,13 @@ const (
 const (
 	DefaultProviderRepo = "github.com/valon-technologies/gestalt-providers"
 
-	DefaultIndexedDBProvider = DefaultProviderRepo + "/indexeddb/relationaldb"
-	DefaultIndexedDBVersion  = "0.0.1-alpha.4"
-	DefaultUIProvider        = DefaultProviderRepo + "/ui/default"
-	DefaultUIVersion         = "0.0.1-alpha.17"
-	DefaultProviderInstance  = "default"
+	DefaultIndexedDBProvider           = DefaultProviderRepo + "/indexeddb/relationaldb"
+	DefaultIndexedDBVersion            = "0.0.1-alpha.4"
+	DefaultExternalCredentialsProvider = DefaultProviderRepo + "/external_credentials/default"
+	DefaultExternalCredentialsVersion  = "0.0.1-alpha.1"
+	DefaultUIProvider                  = DefaultProviderRepo + "/ui/default"
+	DefaultUIVersion                   = "0.0.1-alpha.17"
+	DefaultProviderInstance            = "default"
 )
 
 // PluginConnectionName is the implicit connection name used when storing
@@ -263,6 +265,44 @@ func (s ProviderSource) GitHubReleaseLocation() string {
 
 func NewMetadataSource(rawURL string) ProviderSource {
 	return ProviderSource{metadataURL: strings.TrimSpace(rawURL)}
+}
+
+func DefaultProviderMetadataURL(source, version string) string {
+	rel := strings.TrimPrefix(strings.TrimSpace(source), DefaultProviderRepo+"/")
+	return fmt.Sprintf("https://github.com/valon-technologies/gestalt-providers/releases/download/%s/v%s/provider-release.yaml", rel, strings.TrimSpace(version))
+}
+
+func DefaultLocalProviderManifestPath(providersDir, source string) string {
+	return defaultLocalProviderPath(providersDir, source, "manifest.yaml")
+}
+
+func defaultLocalProviderMetadataPath(providersDir, source string) string {
+	metadataPath := defaultLocalProviderPath(providersDir, source, "provider-release.yaml")
+	if metadataPath == "" {
+		return ""
+	}
+	if _, err := os.Stat(metadataPath); err == nil {
+		return metadataPath
+	}
+	return ""
+}
+
+func defaultLocalProviderPath(providersDir, source, fileName string) string {
+	providersDir = strings.TrimSpace(providersDir)
+	if providersDir == "" {
+		return ""
+	}
+	if trimmed, ok := strings.CutPrefix(strings.TrimSpace(source), DefaultProviderRepo+"/"); ok {
+		source = trimmed
+	}
+	return filepath.Join(providersDir, filepath.FromSlash(source), fileName)
+}
+
+func DefaultProviderSource(source, version string) ProviderSource {
+	if metadataPath := defaultLocalProviderMetadataPath(os.Getenv("GESTALT_PROVIDERS_DIR"), source); metadataPath != "" {
+		return NewLocalReleaseMetadataSource(metadataPath)
+	}
+	return NewMetadataSource(DefaultProviderMetadataURL(source, version))
 }
 
 func NewLocalReleaseMetadataSource(rawPath string) ProviderSource {
@@ -2098,6 +2138,7 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.UI = nonNilUIEntryMap(cfg.Providers.UI)
 	cfg.Providers.Authentication = nonNilProviderEntryMap(cfg.Providers.Authentication)
 	cfg.Providers.Authorization = nonNilProviderEntryMap(cfg.Providers.Authorization)
+	cfg.Providers.ExternalCredentials = applyDefaultSourceProviderEntries(cfg.Providers.ExternalCredentials, DefaultProviderInstance, DefaultProviderSource(DefaultExternalCredentialsProvider, DefaultExternalCredentialsVersion))
 	cfg.Providers.Secrets = applyDefaultBuiltinProviderEntries(cfg.Providers.Secrets, DefaultProviderInstance, "env")
 	cfg.Providers.Telemetry = applyDefaultBuiltinProviderEntries(cfg.Providers.Telemetry, DefaultProviderInstance, "stdout")
 	cfg.Providers.Audit = applyDefaultBuiltinProviderEntries(cfg.Providers.Audit, DefaultProviderInstance, "inherit")
@@ -2195,6 +2236,11 @@ func normalizeProviderSource(kind string, source *ProviderSource, sourceSyntax p
 	if source.scalar == "" {
 		return
 	}
+	if kind == providermanifestv1.KindExternalCredentials && source.scalar == "local" {
+		source.Builtin = source.scalar
+		source.scalar = ""
+		return
+	}
 	switch {
 	case sourceSyntax == providerSourceSyntaxLegacy:
 		source.Builtin = source.scalar
@@ -2214,8 +2260,6 @@ func normalizeProviderSource(kind string, source *ProviderSource, sourceSyntax p
 
 func isBuiltinScalarSource(kind, source string) bool {
 	switch kind {
-	case providermanifestv1.KindExternalCredentials:
-		return source == "local"
 	case providermanifestv1.KindSecrets:
 		switch source {
 		case "env", "file":
@@ -2323,6 +2367,18 @@ func applyDefaultBuiltinProviderEntries(entries map[string]*ProviderEntry, defau
 			continue
 		}
 		entry.Source.Builtin = builtin
+	}
+	return entries
+}
+
+func applyDefaultSourceProviderEntries(entries map[string]*ProviderEntry, defaultName string, source ProviderSource) map[string]*ProviderEntry {
+	if len(entries) == 0 {
+		return map[string]*ProviderEntry{
+			defaultName: {
+				Source:  source,
+				Default: true,
+			},
+		}
 	}
 	return entries
 }

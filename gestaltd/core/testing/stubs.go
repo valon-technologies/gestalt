@@ -2,25 +2,167 @@ package coretesting
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
 
 func NewStubServices(t *testing.T) *coredata.Services {
 	t.Helper()
-	enc, err := corecrypto.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
-	if err != nil {
-		t.Fatalf("NewStubServices encryptor: %v", err)
-	}
-	svc, err := coredata.New(&StubIndexedDB{}, enc)
+	svc, err := coredata.New(&StubIndexedDB{})
 	if err != nil {
 		t.Fatalf("NewStubServices: %v", err)
 	}
+	AttachStubExternalCredentials(svc)
 	return svc
+}
+
+func AttachStubExternalCredentials(svc *coredata.Services) *StubExternalCredentialProvider {
+	if svc == nil {
+		return nil
+	}
+	provider := NewStubExternalCredentialProvider()
+	svc.ExternalCredentials = provider
+	if svc.Tokens != nil {
+		svc.Tokens.SetProvider(provider)
+	}
+	return provider
+}
+
+type StubExternalCredentialProvider struct {
+	mu           sync.Mutex
+	credentials  map[string]core.ExternalCredential
+	nextSequence int
+	PutErr       error
+	GetErr       error
+	ListErr      error
+	DeleteErr    error
+}
+
+func NewStubExternalCredentialProvider() *StubExternalCredentialProvider {
+	return &StubExternalCredentialProvider{credentials: make(map[string]core.ExternalCredential)}
+}
+
+func (p *StubExternalCredentialProvider) PutCredential(_ context.Context, credential *core.ExternalCredential) error {
+	if p != nil && p.PutErr != nil {
+		return p.PutErr
+	}
+	return p.storeCredential(credential, false)
+}
+
+func (p *StubExternalCredentialProvider) RestoreCredential(_ context.Context, credential *core.ExternalCredential) error {
+	if p != nil && p.PutErr != nil {
+		return p.PutErr
+	}
+	return p.storeCredential(credential, true)
+}
+
+func (p *StubExternalCredentialProvider) GetCredential(_ context.Context, subjectID, integration, connection, instance string) (*core.ExternalCredential, error) {
+	if p != nil && p.GetErr != nil {
+		return nil, p.GetErr
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, credential := range p.credentials {
+		if credential.SubjectID == subjectID && credential.Integration == integration && credential.Connection == connection && credential.Instance == instance {
+			return cloneExternalCredential(credential), nil
+		}
+	}
+	return nil, core.ErrNotFound
+}
+
+func (p *StubExternalCredentialProvider) ListCredentials(_ context.Context, subjectID string) ([]*core.ExternalCredential, error) {
+	return p.listCredentials(subjectID, "", "")
+}
+
+func (p *StubExternalCredentialProvider) ListCredentialsForProvider(_ context.Context, subjectID, integration string) ([]*core.ExternalCredential, error) {
+	return p.listCredentials(subjectID, integration, "")
+}
+
+func (p *StubExternalCredentialProvider) ListCredentialsForConnection(_ context.Context, subjectID, integration, connection string) ([]*core.ExternalCredential, error) {
+	return p.listCredentials(subjectID, integration, connection)
+}
+
+func (p *StubExternalCredentialProvider) DeleteCredential(_ context.Context, id string) error {
+	if p != nil && p.DeleteErr != nil {
+		return p.DeleteErr
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.credentials, id)
+	return nil
+}
+
+func (p *StubExternalCredentialProvider) storeCredential(credential *core.ExternalCredential, preserve bool) error {
+	if credential == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	cloned := *credential
+	for _, existing := range p.credentials {
+		if existing.SubjectID == cloned.SubjectID && existing.Integration == cloned.Integration && existing.Connection == cloned.Connection && existing.Instance == cloned.Instance {
+			cloned.ID = existing.ID
+			cloned.CreatedAt = existing.CreatedAt
+			break
+		}
+	}
+	now := time.Now().UTC()
+	if cloned.ID == "" {
+		p.nextSequence++
+		cloned.ID = "cred-" + time.Unix(0, int64(p.nextSequence)).UTC().Format("150405.000000000")
+	}
+	if cloned.CreatedAt.IsZero() {
+		cloned.CreatedAt = now
+	}
+	if preserve && !credential.UpdatedAt.IsZero() {
+		cloned.UpdatedAt = credential.UpdatedAt
+	} else {
+		cloned.UpdatedAt = now
+	}
+	p.credentials[cloned.ID] = cloned
+	*credential = cloned
+	return nil
+}
+
+func (p *StubExternalCredentialProvider) listCredentials(subjectID, integration, connection string) ([]*core.ExternalCredential, error) {
+	if p != nil && p.ListErr != nil {
+		return nil, p.ListErr
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]*core.ExternalCredential, 0, len(p.credentials))
+	for _, credential := range p.credentials {
+		if credential.SubjectID != subjectID {
+			continue
+		}
+		if integration != "" && credential.Integration != integration {
+			continue
+		}
+		if connection != "" && credential.Connection != connection {
+			continue
+		}
+		out = append(out, cloneExternalCredential(credential))
+	}
+	return out, nil
+}
+
+func cloneExternalCredential(src core.ExternalCredential) *core.ExternalCredential {
+	cloned := src
+	if cloned.ExpiresAt != nil {
+		value := *cloned.ExpiresAt
+		cloned.ExpiresAt = &value
+	}
+	if cloned.LastRefreshedAt != nil {
+		value := *cloned.LastRefreshedAt
+		cloned.LastRefreshedAt = &value
+	}
+	return &cloned
 }
 
 type StubSecretManager struct {

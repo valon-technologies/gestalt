@@ -36,7 +36,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/core/session"
@@ -1057,20 +1056,17 @@ func (s *putFailingObjectStore) Put(ctx context.Context, record indexeddb.Record
 
 func newTestServicesWithUsersPutFailure(t *testing.T) (*coredata.Services, *atomic.Bool) {
 	t.Helper()
-	enc, err := corecrypto.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
-	if err != nil {
-		t.Fatalf("newTestServicesWithUsersPutFailure encryptor: %v", err)
-	}
 	failPut := &atomic.Bool{}
 	svc, err := coredata.New(&putFailingIndexedDB{
 		IndexedDB: &coretesting.StubIndexedDB{},
 		failStorePuts: map[string]*atomic.Bool{
 			coredata.StoreUsers: failPut,
 		},
-	}, enc)
+	})
 	if err != nil {
 		t.Fatalf("newTestServicesWithUsersPutFailure: %v", err)
 	}
+	coretesting.AttachStubExternalCredentials(svc)
 	return svc, failPut
 }
 
@@ -6594,9 +6590,13 @@ func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordan
 		}
 	}
 
-	stubDB := svc.DB.(*coretesting.StubIndexedDB)
-	stubDB.Err = fmt.Errorf("token store unavailable")
-	t.Cleanup(func() { stubDB.Err = nil })
+	provider := svc.ExternalCredentials.(*coretesting.StubExternalCredentialProvider)
+	provider.ListErr = fmt.Errorf("token store unavailable")
+	provider.GetErr = provider.ListErr
+	t.Cleanup(func() {
+		provider.ListErr = nil
+		provider.GetErr = nil
+	})
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
 	req.Header.Set("Authorization", "Bearer "+workloadToken)
@@ -15238,7 +15238,7 @@ func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
-	stubDB := svc.DB.(*coretesting.StubIndexedDB)
+	provider := svc.ExternalCredentials.(*coretesting.StubExternalCredentialProvider)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	expired := time.Now().Add(-1 * time.Hour)
 	seedToken(t, svc, &core.IntegrationToken{
@@ -15253,7 +15253,7 @@ func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
 			ops:             []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
 		refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
-			stubDB.Err = fmt.Errorf("store unavailable")
+			provider.PutErr = fmt.Errorf("store unavailable")
 			return &core.TokenResponse{
 				AccessToken:  "new-access",
 				RefreshToken: "rotated-refresh",
@@ -15276,7 +15276,7 @@ func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
 		t.Fatalf("request: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	stubDB.Err = nil
+	provider.PutErr = nil
 
 	if resp.StatusCode != http.StatusBadGateway {
 		t.Fatalf("expected 502 when StoreToken fails after refresh, got %d", resp.StatusCode)

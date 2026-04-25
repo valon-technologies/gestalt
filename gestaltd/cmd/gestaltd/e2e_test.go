@@ -1113,9 +1113,12 @@ func authIndexedDBConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
 
 	authBlock := ""
 	indexedDBManifestPath := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	externalCredentialsManifestPath := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
+	const externalCredentialsName = "default"
 	serverProvidersBlock := fmt.Sprintf(`  providers:
     indexeddb: %s
-`, datastoreName)
+    externalCredentials: %s
+`, datastoreName, externalCredentialsName)
 	if authName != "" {
 		authManifestPath := componentProviderManifestPath(t, setupAuthProviderDir(t, dir, authName))
 		serverProvidersBlock += fmt.Sprintf("    authentication: %s\n", authName)
@@ -1127,13 +1130,17 @@ func authIndexedDBConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
 	}
 	return fmt.Sprintf(`%s
 providers:
-%s  indexeddb:
+%s  externalCredentials:
+    %s:
+      source:
+        path: %s
+  indexeddb:
     %s:
       source:
         path: %s
       config:
         dsn: %q
-`, serverProvidersBlock, authBlock, datastoreName, indexedDBManifestPath, "sqlite://"+dbPath)
+`, serverProvidersBlock, authBlock, externalCredentialsName, externalCredentialsManifestPath, datastoreName, indexedDBManifestPath, "sqlite://"+dbPath)
 }
 
 func writeManifestFile(t *testing.T, pluginDir string, manifest *providermanifestv1.Manifest) {
@@ -1179,6 +1186,38 @@ func setupIndexedDBProviderDir(t *testing.T, baseDir string) string {
 		Source:      "github.com/test/providers/indexeddb-inmem",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "In-Memory IndexedDB",
+		Spec:        &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{
+			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
+	})
+	return providerDir
+}
+
+func setupExternalCredentialsProviderDir(t *testing.T, baseDir string) string {
+	t.Helper()
+
+	providerDir := filepath.Join(baseDir, "external-credentials-provider")
+	if err := os.MkdirAll(providerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
+	}
+
+	binDest := filepath.Join(providerDir, filepath.Base(externalCredentialsBin))
+	data, err := os.ReadFile(externalCredentialsBin)
+	if err != nil {
+		t.Fatalf("read external credentials binary: %v", err)
+	}
+	if err := os.WriteFile(binDest, data, 0o755); err != nil {
+		t.Fatalf("write external credentials binary: %v", err)
+	}
+
+	artifactRel := filepath.Base(binDest)
+	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindExternalCredentials,
+		Source:      "github.com/test/providers/external-credentials-default",
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Default External Credentials",
 		Spec:        &providermanifestv1.Spec{},
 		Artifacts: []providermanifestv1.Artifact{
 			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
@@ -1335,6 +1374,30 @@ func setupDefaultLocalProvidersDir(t *testing.T, baseDir string) string {
 			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: filepath.Base(indexedDBBinDest)},
 		},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(indexedDBBinDest)},
+	})
+
+	externalCredentialsDir := filepath.Join(providersDir, "external_credentials", "default")
+	if err := os.MkdirAll(externalCredentialsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", externalCredentialsDir, err)
+	}
+	externalCredentialsBinDest := filepath.Join(externalCredentialsDir, filepath.Base(externalCredentialsBin))
+	externalCredentialsData, err := os.ReadFile(externalCredentialsBin)
+	if err != nil {
+		t.Fatalf("read external credentials binary: %v", err)
+	}
+	if err := os.WriteFile(externalCredentialsBinDest, externalCredentialsData, 0o755); err != nil {
+		t.Fatalf("write external credentials binary: %v", err)
+	}
+	writeManifestFile(t, externalCredentialsDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindExternalCredentials,
+		Source:      "github.com/test/providers/external-credentials-default",
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Default External Credentials",
+		Spec:        &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{
+			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: filepath.Base(externalCredentialsBinDest)},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(externalCredentialsBinDest)},
 	})
 
 	rootUIDir := filepath.Join(providersDir, "ui", "default")
@@ -2479,6 +2542,7 @@ func writeValidValidateConfig(t *testing.T, dir string) string {
 	t.Helper()
 
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
 	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -2486,7 +2550,12 @@ func writeValidValidateConfig(t *testing.T, dir string) string {
   encryptionKey: valid-config-e2e-key
   providers:
     indexeddb: inmem
+    externalCredentials: default
 providers:
+  externalCredentials:
+    default:
+      source:
+        path: %s
   indexeddb:
     inmem:
       source:
@@ -2495,7 +2564,7 @@ plugins:
   example:
     source:
       path: %s
-`, indexedDBManifest, pluginManifest)
+`, externalCredentialsManifest, indexedDBManifest, pluginManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write valid config: %v", err)
 	}
@@ -2507,11 +2576,17 @@ func writeInvalidValidateConfig(t *testing.T, path string) {
 
 	dir := filepath.Dir(path)
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
 	cfg := fmt.Sprintf(`server:
   encryptionKey: invalid-config-e2e-key
   providers:
     indexeddb: inmem
+    externalCredentials: default
 providers:
+  externalCredentials:
+    default:
+      source:
+        path: %s
   indexeddb:
     inmem:
       source:
@@ -2520,7 +2595,7 @@ plugins:
   example:
     source:
       path: %s
-`, indexedDBManifest, filepath.Join(dir, "missing-plugin", "manifest.yaml"))
+`, externalCredentialsManifest, indexedDBManifest, filepath.Join(dir, "missing-plugin", "manifest.yaml"))
 	if err := os.WriteFile(path, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write invalid config: %v", err)
 	}
@@ -2536,6 +2611,7 @@ func writeLayeredE2EConfigs(t *testing.T, dir string, port int) (string, string,
 	}
 
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
 	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
 	authManifest := componentProviderManifestPath(t, setupAuthProviderDir(t, dir, "local"))
 
@@ -2560,7 +2636,12 @@ func writeLayeredE2EConfigs(t *testing.T, dir string, port int) (string, string,
   encryptionKey: test-layered-e2e-key
   providers:
     indexeddb: inmem
+    externalCredentials: default
 providers:
+  externalCredentials:
+    default:
+      source:
+        path: %s
   indexeddb:
     inmem:
       source:
@@ -2569,7 +2650,7 @@ plugins:
   example:
     source:
       path: %s
-`, port, filepath.ToSlash(indexedDBRel), filepath.ToSlash(pluginRel))
+`, port, filepath.ToSlash(externalCredentialsManifest), filepath.ToSlash(indexedDBRel), filepath.ToSlash(pluginRel))
 	overrideCfg := fmt.Sprintf(`server:
   providers:
     authentication: local

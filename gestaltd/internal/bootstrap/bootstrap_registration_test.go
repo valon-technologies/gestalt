@@ -29,7 +29,7 @@ func TestBuildRegistrationStorePrefersIndexedDBRegistrationStore(t *testing.T) {
 	t.Parallel()
 
 	db := &registrationAwareDB{}
-	svc, err := coredata.New(db, nil)
+	svc, err := coredata.New(db)
 	if err != nil {
 		t.Fatalf("coredata.New: %v", err)
 	}
