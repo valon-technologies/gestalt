@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -52,6 +53,7 @@ func (s *stubAgentControl) ProviderNames() []string {
 
 type memoryAgentProvider struct {
 	coreagent.UnimplementedProvider
+	mu           sync.Mutex
 	sessions     map[string]*coreagent.Session
 	turns        map[string]*coreagent.Turn
 	turnEvents   map[string][]*coreagent.TurnEvent
@@ -68,6 +70,9 @@ func newMemoryAgentProvider() *memoryAgentProvider {
 }
 
 func (p *memoryAgentProvider) CreateSession(_ context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	now := time.Now().UTC().Truncate(time.Second)
 	session := &coreagent.Session{
 		ID:           req.SessionID,
@@ -85,6 +90,9 @@ func (p *memoryAgentProvider) CreateSession(_ context.Context, req coreagent.Cre
 }
 
 func (p *memoryAgentProvider) GetSession(_ context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	session, ok := p.sessions[req.SessionID]
 	if !ok {
 		return nil, core.ErrNotFound
@@ -93,6 +101,9 @@ func (p *memoryAgentProvider) GetSession(_ context.Context, req coreagent.GetSes
 }
 
 func (p *memoryAgentProvider) ListSessions(context.Context, coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	out := make([]*coreagent.Session, 0, len(p.sessions))
 	for _, session := range p.sessions {
 		out = append(out, cloneSession(session))
@@ -101,6 +112,9 @@ func (p *memoryAgentProvider) ListSessions(context.Context, coreagent.ListSessio
 }
 
 func (p *memoryAgentProvider) UpdateSession(_ context.Context, req coreagent.UpdateSessionRequest) (*coreagent.Session, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	session, ok := p.sessions[req.SessionID]
 	if !ok {
 		return nil, core.ErrNotFound
@@ -120,6 +134,9 @@ func (p *memoryAgentProvider) UpdateSession(_ context.Context, req coreagent.Upd
 }
 
 func (p *memoryAgentProvider) CreateTurn(_ context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	now := time.Now().UTC().Truncate(time.Second)
 	turn := &coreagent.Turn{
 		ID:           req.TurnID,
@@ -136,7 +153,7 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req coreagent.Create
 		OutputText:   "turn completed",
 	}
 	p.turns[turn.ID] = turn
-	p.appendTurnEvent(turn.ID, "turn.started", map[string]any{"session_id": req.SessionID})
+	p.appendTurnEventLocked(turn.ID, "turn.started", map[string]any{"session_id": req.SessionID})
 	if requireInteraction, _ := req.Metadata["requireInteraction"].(bool); requireInteraction {
 		turn.Status = coreagent.ExecutionStatusWaitingForInput
 		turn.CompletedAt = nil
@@ -153,10 +170,10 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req coreagent.Create
 			Request:   map[string]any{"ticket": "RD-42"},
 			CreatedAt: &now,
 		}
-		p.appendTurnEvent(turn.ID, "interaction.requested", map[string]any{"interaction_id": interactionID})
+		p.appendTurnEventLocked(turn.ID, "interaction.requested", map[string]any{"interaction_id": interactionID})
 	} else {
-		p.appendTurnEvent(turn.ID, "assistant.completed", map[string]any{"text": "turn completed"})
-		p.appendTurnEvent(turn.ID, "turn.completed", map[string]any{"status": "succeeded"})
+		p.appendTurnEventLocked(turn.ID, "assistant.completed", map[string]any{"text": "turn completed"})
+		p.appendTurnEventLocked(turn.ID, "turn.completed", map[string]any{"status": "succeeded"})
 	}
 	if session := p.sessions[req.SessionID]; session != nil {
 		session.LastTurnAt = &now
@@ -166,6 +183,9 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req coreagent.Create
 }
 
 func (p *memoryAgentProvider) GetTurn(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	turn, ok := p.turns[req.TurnID]
 	if !ok {
 		return nil, core.ErrNotFound
@@ -174,6 +194,9 @@ func (p *memoryAgentProvider) GetTurn(_ context.Context, req coreagent.GetTurnRe
 }
 
 func (p *memoryAgentProvider) ListTurns(_ context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	out := make([]*coreagent.Turn, 0, len(p.turns))
 	for _, turn := range p.turns {
 		if req.SessionID == "" || turn.SessionID == req.SessionID {
@@ -184,6 +207,9 @@ func (p *memoryAgentProvider) ListTurns(_ context.Context, req coreagent.ListTur
 }
 
 func (p *memoryAgentProvider) CancelTurn(_ context.Context, req coreagent.CancelTurnRequest) (*coreagent.Turn, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	turn, ok := p.turns[req.TurnID]
 	if !ok {
 		return nil, core.ErrNotFound
@@ -192,11 +218,14 @@ func (p *memoryAgentProvider) CancelTurn(_ context.Context, req coreagent.Cancel
 	turn.Status = coreagent.ExecutionStatusCanceled
 	turn.StatusMessage = req.Reason
 	turn.CompletedAt = &now
-	p.appendTurnEvent(turn.ID, "turn.canceled", map[string]any{"reason": req.Reason})
+	p.appendTurnEventLocked(turn.ID, "turn.canceled", map[string]any{"reason": req.Reason})
 	return cloneTurn(turn), nil
 }
 
 func (p *memoryAgentProvider) ListTurnEvents(_ context.Context, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	events := p.turnEvents[req.TurnID]
 	out := make([]*coreagent.TurnEvent, 0, len(events))
 	for _, event := range events {
@@ -212,6 +241,9 @@ func (p *memoryAgentProvider) ListTurnEvents(_ context.Context, req coreagent.Li
 }
 
 func (p *memoryAgentProvider) GetInteraction(_ context.Context, req coreagent.GetInteractionRequest) (*coreagent.Interaction, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	interaction, ok := p.interactions[req.InteractionID]
 	if !ok {
 		return nil, core.ErrNotFound
@@ -220,6 +252,9 @@ func (p *memoryAgentProvider) GetInteraction(_ context.Context, req coreagent.Ge
 }
 
 func (p *memoryAgentProvider) ListInteractions(_ context.Context, req coreagent.ListInteractionsRequest) ([]*coreagent.Interaction, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	out := make([]*coreagent.Interaction, 0, len(p.interactions))
 	for _, interaction := range p.interactions {
 		if req.TurnID == "" || interaction.TurnID == req.TurnID {
@@ -230,6 +265,9 @@ func (p *memoryAgentProvider) ListInteractions(_ context.Context, req coreagent.
 }
 
 func (p *memoryAgentProvider) ResolveInteraction(_ context.Context, req coreagent.ResolveInteractionRequest) (*coreagent.Interaction, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	interaction, ok := p.interactions[req.InteractionID]
 	if !ok {
 		return nil, core.ErrNotFound
@@ -242,8 +280,8 @@ func (p *memoryAgentProvider) ResolveInteraction(_ context.Context, req coreagen
 		turn.Status = coreagent.ExecutionStatusSucceeded
 		turn.CompletedAt = &now
 		turn.StatusMessage = "resolved"
-		p.appendTurnEvent(turn.ID, "interaction.resolved", map[string]any{"interaction_id": interaction.ID})
-		p.appendTurnEvent(turn.ID, "turn.completed", map[string]any{"status": "succeeded"})
+		p.appendTurnEventLocked(turn.ID, "interaction.resolved", map[string]any{"interaction_id": interaction.ID})
+		p.appendTurnEventLocked(turn.ID, "turn.completed", map[string]any{"status": "succeeded"})
 	}
 	return cloneInteraction(interaction), nil
 }
@@ -261,7 +299,7 @@ func (p *memoryAgentProvider) GetCapabilities(context.Context, coreagent.GetCapa
 func (p *memoryAgentProvider) Ping(context.Context) error { return nil }
 func (p *memoryAgentProvider) Close() error               { return nil }
 
-func (p *memoryAgentProvider) appendTurnEvent(turnID, eventType string, data map[string]any) {
+func (p *memoryAgentProvider) appendTurnEventLocked(turnID, eventType string, data map[string]any) {
 	events := p.turnEvents[turnID]
 	now := time.Now().UTC().Truncate(time.Second)
 	p.turnEvents[turnID] = append(events, &coreagent.TurnEvent{
