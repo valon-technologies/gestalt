@@ -7106,6 +7106,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CanonicalIdentityIDForUser(first): %v", err)
 		}
+		waitForCanonicalAuthorizationState(t, ctx, result, canonicalIdentityID, "calendar", "admin")
 		if err := result.Services.IdentityPluginAccess.DeleteAccess(ctx, canonicalIdentityID, "calendar"); err != nil {
 			t.Fatalf("DeleteAccess(calendar): %v", err)
 		}
@@ -7152,6 +7153,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CanonicalIdentityIDForUser: %v", err)
 		}
+		waitForCanonicalAuthorizationState(t, ctx, result, canonicalIdentityID, "calendar", "admin")
 		pluginAccess, err := result.Services.IdentityPluginAccess.GetAccess(ctx, canonicalIdentityID, "calendar")
 		if err != nil {
 			t.Fatalf("GetAccess(calendar): %v", err)
@@ -7605,6 +7607,42 @@ func TestBootstrapWorkloadAuthorizationRejectsEitherProvider(t *testing.T) {
 	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
 	if err == nil || !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
 		t.Fatalf("Bootstrap error = %v, want unsupported connection mode either", err)
+	}
+}
+
+func waitForCanonicalAuthorizationState(t *testing.T, ctx context.Context, result *bootstrap.Result, identityID, plugin, role string) {
+	t.Helper()
+
+	deadline := time.Now().Add(3 * time.Second)
+	var lastPluginAccessErr, lastWorkspaceRoleErr error
+	for {
+		pluginReady := false
+		if access, err := result.Services.IdentityPluginAccess.GetAccess(ctx, identityID, plugin); err == nil && access.InvokeAllOperations {
+			pluginReady = true
+		} else {
+			lastPluginAccessErr = err
+		}
+
+		roleReady := false
+		roles, err := result.Services.WorkspaceRoles.ListByPrincipal(ctx, identityID)
+		if err == nil {
+			for _, existing := range roles {
+				if existing != nil && existing.Role == role {
+					roleReady = true
+					break
+				}
+			}
+		} else {
+			lastWorkspaceRoleErr = err
+		}
+
+		if pluginReady && roleReady {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("canonical authorization state for identity %q was not synced; pluginErr=%v roleErr=%v", identityID, lastPluginAccessErr, lastWorkspaceRoleErr)
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
 }
 
