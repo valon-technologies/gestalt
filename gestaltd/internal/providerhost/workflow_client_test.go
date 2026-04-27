@@ -22,13 +22,13 @@ func TestNewExecutableWorkflowForwardsDefaultEgressAction(t *testing.T) {
 	}
 
 	_, err := NewExecutableWorkflow(context.Background(), WorkflowExecConfig{
-		Command:       "/bin/true",
-		DefaultAction: egress.PolicyDeny,
+		Command: "/bin/true",
+		Egress:  egress.Policy{DefaultAction: egress.PolicyDeny},
 	})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("NewExecutableWorkflow error = %v, want %v", err, wantErr)
 	}
-	if got.DefaultAction != egress.PolicyDeny {
-		t.Fatalf("default action = %q, want %q", got.DefaultAction, egress.PolicyDeny)
+	if got.Egress.DefaultAction != egress.PolicyDeny {
+		t.Fatalf("default action = %q, want %q", got.Egress.DefaultAction, egress.PolicyDeny)
 	}
 }

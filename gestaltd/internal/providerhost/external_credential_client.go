@@ -9,6 +9,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -18,7 +19,7 @@ type ExternalCredentialsExecConfig struct {
 	Args         []string
 	Env          map[string]string
 	Config       map[string]any
-	AllowedHosts []string
+	Egress       egress.Policy
 	HostBinary   string
 	Cleanup      func()
 	HostServices []HostService
@@ -36,7 +37,7 @@ func NewExecutableExternalCredentialProvider(ctx context.Context, cfg ExternalCr
 		Args:         cfg.Args,
 		Env:          cfg.Env,
 		Config:       cfg.Config,
-		AllowedHosts: cfg.AllowedHosts,
+		Egress:       cloneEgressPolicy(cfg.Egress),
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
 		HostServices: cfg.HostServices,

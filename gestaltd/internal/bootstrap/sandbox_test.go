@@ -66,7 +66,7 @@ func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
 			"sandboxed": {
 				Command:              bin,
 				Args:                 []string{"provider"},
-				AllowedHosts:         []string{"localhost"},
+				Egress:               &config.ProviderEgressConfig{AllowedHosts: []string{"localhost"}},
 				HostBinary:           hostBin,
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
@@ -110,7 +110,7 @@ func TestSandboxedPluginCanCommunicateViaGRPC(t *testing.T) {
 			"sandboxed": {
 				Command:              bin,
 				Args:                 []string{"provider"},
-				AllowedHosts:         []string{"localhost"},
+				Egress:               &config.ProviderEgressConfig{AllowedHosts: []string{"localhost"}},
 				HostBinary:           hostBin,
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
@@ -155,7 +155,7 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 	cfg := &config.Config{
 		Plugins: map[string]*config.ProviderEntry{
 			"example": {
-				AllowedHosts:         []string{"localhost"},
+				Egress:               &config.ProviderEgressConfig{AllowedHosts: []string{"localhost"}},
 				HostBinary:           hostBin,
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: manifestPath,
@@ -256,7 +256,7 @@ func TestSandboxedPluginHTTPProxyAllowsConfiguredHosts(t *testing.T) {
 			"proxied": {
 				Command:              bin,
 				Args:                 []string{"provider"},
-				AllowedHosts:         []string{host},
+				Egress:               &config.ProviderEgressConfig{AllowedHosts: []string{host}},
 				HostBinary:           hostBin,
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
@@ -312,7 +312,7 @@ func TestSandboxedPluginHTTPProxyBlocksUnconfiguredHosts(t *testing.T) {
 			"blocked": {
 				Command:              bin,
 				Args:                 []string{"provider"},
-				AllowedHosts:         []string{"not-a-real-host.example.com"},
+				Egress:               &config.ProviderEgressConfig{AllowedHosts: []string{"not-a-real-host.example.com"}},
 				HostBinary:           hostBin,
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),

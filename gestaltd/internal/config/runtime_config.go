@@ -14,7 +14,6 @@ type componentRuntimeConfig struct {
 	Args         []string              `yaml:"args,omitempty"`
 	Env          map[string]string     `yaml:"env,omitempty"`
 	Egress       *ProviderEgressConfig `yaml:"egress,omitempty"`
-	AllowedHosts []string              `yaml:"allowedHosts,omitempty"`
 	HostBinary   string                `yaml:"hostBinary,omitempty"`
 	ManifestPath string                `yaml:"manifestPath,omitempty"`
 	Config       yaml.Node             `yaml:"config,omitempty"`
@@ -35,7 +34,6 @@ func BuildComponentRuntimeConfigNode(name, kind string, entry *ProviderEntry, pr
 		Args:         append([]string(nil), entry.Args...),
 		Env:          entry.Env,
 		Egress:       cloneProviderEgressConfig(entry.Egress),
-		AllowedHosts: entry.EffectiveAllowedHosts(),
 		HostBinary:   entry.HostBinary,
 		ManifestPath: entry.ResolvedManifestPath,
 		Config:       providerConfig,

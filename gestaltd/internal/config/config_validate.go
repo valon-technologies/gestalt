@@ -415,11 +415,7 @@ func validateRuntimeConfig(cfg *Config) error {
 		return nil
 	}
 	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
-	cfg.Server.Runtime.Provider = strings.TrimSpace(cfg.Server.Runtime.Provider)
 	cfg.Server.Runtime.DefaultHostedProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultHostedProvider)
-	if cfg.Server.Runtime.Provider != "" && cfg.Server.Runtime.DefaultHostedProvider != "" && cfg.Server.Runtime.Provider != cfg.Server.Runtime.DefaultHostedProvider {
-		return fmt.Errorf("config validation: server.runtime.provider and server.runtime.defaultHostedProvider must match when both are set")
-	}
 	for name, entry := range cfg.Runtime.Providers {
 		if entry == nil {
 			return fmt.Errorf("config validation: runtime.providers.%s is required", name)
@@ -484,13 +480,6 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 	if entry.Execution != nil {
 		if err := normalizeExecutionConfig("plugins."+name, entry.Execution, false); err != nil {
 			return err
-		}
-	} else if entry.Runtime != nil {
-		if err := normalizeHostedRuntimeConfig("plugins."+name, entry.Runtime); err != nil {
-			return err
-		}
-		if entry.Runtime.LifecyclePolicyFieldsSet() {
-			return fmt.Errorf("config validation: plugins.%s.runtime lifecycle fields are only supported on providers.agent.*.runtime", name)
 		}
 	}
 	seenInvokes := make(map[string]int, len(entry.Invokes))
@@ -674,10 +663,6 @@ func validateAgentConfig(cfg *Config) error {
 			if err := normalizeExecutionConfig("providers.agent."+name, entry.Execution, true); err != nil {
 				return err
 			}
-		} else if entry.Runtime != nil {
-			if err := normalizeHostedRuntimeConfig("providers.agent."+name, entry.Runtime); err != nil {
-				return err
-			}
 		}
 		if err := validateAgentProviderFields(cfg, name, entry); err != nil {
 			return err
@@ -755,9 +740,6 @@ func normalizeHostedRuntimeConfig(subject string, runtimeCfg *HostedRuntimeConfi
 		return nil
 	}
 	if runtimeCfg.Pool != nil {
-		if runtimeCfg.flatLifecyclePolicyFieldsSet() {
-			return fmt.Errorf("config validation: %s.runtime.pool cannot be combined with flat runtime lifecycle fields", subject)
-		}
 		runtimeCfg.Pool.StartupTimeout = strings.TrimSpace(runtimeCfg.Pool.StartupTimeout)
 		runtimeCfg.Pool.HealthCheckInterval = strings.TrimSpace(runtimeCfg.Pool.HealthCheckInterval)
 		runtimeCfg.Pool.RestartPolicy = HostedRuntimeRestartPolicy(strings.TrimSpace(string(runtimeCfg.Pool.RestartPolicy)))
@@ -766,10 +748,6 @@ func normalizeHostedRuntimeConfig(subject string, runtimeCfg *HostedRuntimeConfi
 	runtimeCfg.Provider = strings.TrimSpace(runtimeCfg.Provider)
 	runtimeCfg.Template = strings.TrimSpace(runtimeCfg.Template)
 	runtimeCfg.Image = strings.TrimSpace(runtimeCfg.Image)
-	runtimeCfg.StartupTimeout = strings.TrimSpace(runtimeCfg.StartupTimeout)
-	runtimeCfg.HealthCheckInterval = strings.TrimSpace(runtimeCfg.HealthCheckInterval)
-	runtimeCfg.RestartPolicy = HostedRuntimeRestartPolicy(strings.TrimSpace(string(runtimeCfg.RestartPolicy)))
-	runtimeCfg.DrainTimeout = strings.TrimSpace(runtimeCfg.DrainTimeout)
 	trimmed := make(map[string]string, len(runtimeCfg.Metadata))
 	for key, value := range runtimeCfg.Metadata {
 		trimmedKey := strings.TrimSpace(key)
@@ -830,10 +808,7 @@ func hostedRuntimeConfigAndPath(subject string, entry *ProviderEntry) (*HostedRu
 	if entry != nil && entry.Execution != nil {
 		return entry.Execution.Runtime, subject + ".execution.runtime"
 	}
-	if entry != nil {
-		return entry.Runtime, subject + ".runtime"
-	}
-	return nil, subject + ".runtime"
+	return nil, subject + ".execution.runtime"
 }
 
 func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEntry) error {
@@ -861,9 +836,6 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	}
 	if entry.Execution != nil {
 		return fmt.Errorf("config validation: %s.execution is only supported on plugins.* and providers.agent.*", subject)
-	}
-	if entry.Runtime != nil {
-		return fmt.Errorf("config validation: %s.runtime is only supported on plugins.*", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
@@ -918,9 +890,6 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	}
 	if entry.Execution != nil {
 		return fmt.Errorf("config validation: %s.execution is only supported on plugins.* and providers.agent.*", subject)
-	}
-	if entry.Runtime != nil {
-		return fmt.Errorf("config validation: %s.runtime is only supported on plugins.*", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)

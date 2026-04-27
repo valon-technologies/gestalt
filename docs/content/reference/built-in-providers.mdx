@@ -91,7 +91,7 @@ providers:
 
 Runtime providers manage hosted execution backends for executable plugins. They
 are configured under top-level `runtime.providers`, and plugins opt into them
-with `plugins.<name>.runtime`.
+with `plugins.<name>.execution.mode: hosted`.
 
 ```yaml
 runtime:
@@ -105,8 +105,10 @@ runtime:
 plugins:
   support:
     source: ./plugins/support/manifest.yaml
-    runtime:
-      image: ghcr.io/example/support-plugin:2026-04-21
+    execution:
+      mode: hosted
+      runtime:
+        image: ghcr.io/example/support-plugin:2026-04-21
 ```
 
 | Name | Purpose |

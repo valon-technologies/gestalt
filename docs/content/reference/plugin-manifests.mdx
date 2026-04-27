@@ -112,7 +112,7 @@ Plugins that back mounted apps may declare their UI artifact in the plugin manif
 | `version`    | string | Optional version for `ref`. Defaults to the plugin manifest version when omitted.                                                                                                  |
 | `auth.token` | string | Optional source token used when resolving a private managed `ref`. Only valid with `ref`.                                                                                          |
 
-When a deployment sets `plugins.<name>.mountPath` and omits `plugins.<name>.ui`, Gestalt synthesizes the mounted UI binding from this block.
+When a deployment sets `plugins.<name>.ui.path` and omits `plugins.<name>.ui.bundle`, Gestalt synthesizes the mounted UI binding from this block.
 
 Source-manifest example:
 

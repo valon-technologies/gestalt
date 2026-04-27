@@ -316,14 +316,10 @@ func ResolveEffectiveExecution(configPath string, entry *ProviderEntry, selected
 	if entry == nil {
 		return EffectiveExecution{Mode: ExecutionModeLocal}, nil
 	}
-	runtimeCfg := entry.Runtime
 	mode := ExecutionModeLocal
-	providerPath := "runtime.provider"
-	if runtimeCfg != nil {
-		mode = ExecutionModeHosted
-	}
+	providerPath := "execution.runtime.provider"
+	var runtimeCfg *HostedRuntimeConfig
 	if entry.Execution != nil {
-		providerPath = "execution.runtime.provider"
 		mode = entry.Execution.Mode
 		if mode == "" {
 			if entry.Execution.Runtime != nil {
@@ -371,10 +367,7 @@ func ResolveEffectiveExecution(configPath string, entry *ProviderEntry, selected
 }
 
 func (s ServerRuntimeConfig) SelectedDefaultHostedProvider() string {
-	if provider := strings.TrimSpace(s.DefaultHostedProvider); provider != "" {
-		return provider
-	}
-	return strings.TrimSpace(s.Provider)
+	return strings.TrimSpace(s.DefaultHostedProvider)
 }
 func ResolveSelectedHostProvider(kind HostProviderKind, explicit string, entries map[string]*ProviderEntry) (string, *ProviderEntry, error) {
 	if len(entries) == 0 {
@@ -421,11 +414,11 @@ func ResolveSelectedRuntimeProvider(explicit string, entries map[string]*Runtime
 	explicit = strings.TrimSpace(explicit)
 	if explicit != "" {
 		if len(entries) == 0 {
-			return "", nil, fmt.Errorf("config validation: server.runtime.provider references unknown runtime %q", explicit)
+			return "", nil, fmt.Errorf("config validation: server.runtime.defaultHostedProvider references unknown runtime %q", explicit)
 		}
 		entry, ok := entries[explicit]
 		if !ok || entry == nil {
-			return "", nil, fmt.Errorf("config validation: server.runtime.provider references unknown runtime %q", explicit)
+			return "", nil, fmt.Errorf("config validation: server.runtime.defaultHostedProvider references unknown runtime %q", explicit)
 		}
 		return explicit, entry, nil
 	}

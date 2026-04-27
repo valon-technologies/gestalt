@@ -29,15 +29,14 @@ var Factory bootstrap.WorkflowFactory = func(ctx context.Context, name string, n
 	cfg = prepared.YAMLConfig
 
 	return providerhost.NewExecutableWorkflow(ctx, providerhost.WorkflowExecConfig{
-		Command:       cfg.Command,
-		Args:          cfg.Args,
-		Env:           cfg.Env,
-		Config:        cfg.Config,
-		AllowedHosts:  cfg.AllowedHosts,
-		DefaultAction: deps.Egress.DefaultAction,
-		HostBinary:    cfg.HostBinary,
-		Cleanup:       prepared.Cleanup,
-		HostServices:  hostServices,
-		Name:          name,
+		Command:      cfg.Command,
+		Args:         cfg.Args,
+		Env:          cfg.Env,
+		Config:       cfg.Config,
+		Egress:       cfg.EgressPolicy(deps.Egress.DefaultAction),
+		HostBinary:   cfg.HostBinary,
+		Cleanup:      prepared.Cleanup,
+		HostServices: hostServices,
+		Name:         name,
 	})
 }

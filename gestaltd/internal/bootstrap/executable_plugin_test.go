@@ -406,16 +406,14 @@ func (r *capturingBundlePluginRuntime) BindHostService(ctx context.Context, req 
 func (r *capturingBundlePluginRuntime) StartPlugin(ctx context.Context, req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
 	r.mu.Lock()
 	r.startPluginRequests = append(r.startPluginRequests, pluginruntime.StartPluginRequest{
-		SessionID:     req.SessionID,
-		PluginName:    req.PluginName,
-		Command:       req.Command,
-		Args:          slices.Clone(req.Args),
-		Env:           cloneRuntimeMetadata(req.Env),
-		BundleDir:     req.BundleDir,
-		Egress:        cloneRuntimeEgressPolicy(req.Egress),
-		AllowedHosts:  cloneLegacyStartPluginAllowedHosts(req),
-		DefaultAction: legacyStartPluginDefaultAction(req),
-		HostBinary:    req.HostBinary,
+		SessionID:  req.SessionID,
+		PluginName: req.PluginName,
+		Command:    req.Command,
+		Args:       slices.Clone(req.Args),
+		Env:        cloneRuntimeMetadata(req.Env),
+		BundleDir:  req.BundleDir,
+		Egress:     cloneRuntimeEgressPolicy(req.Egress),
+		HostBinary: req.HostBinary,
 	})
 	r.mu.Unlock()
 
@@ -1282,16 +1280,14 @@ func (r *capturingBundlePluginRuntime) startPluginRequestsCopy() []pluginruntime
 	out := make([]pluginruntime.StartPluginRequest, len(r.startPluginRequests))
 	for i, req := range r.startPluginRequests {
 		out[i] = pluginruntime.StartPluginRequest{
-			SessionID:     req.SessionID,
-			PluginName:    req.PluginName,
-			Command:       req.Command,
-			Args:          slices.Clone(req.Args),
-			Env:           cloneRuntimeMetadata(req.Env),
-			BundleDir:     req.BundleDir,
-			Egress:        cloneRuntimeEgressPolicy(req.Egress),
-			AllowedHosts:  cloneLegacyStartPluginAllowedHosts(req),
-			DefaultAction: legacyStartPluginDefaultAction(req),
-			HostBinary:    req.HostBinary,
+			SessionID:  req.SessionID,
+			PluginName: req.PluginName,
+			Command:    req.Command,
+			Args:       slices.Clone(req.Args),
+			Env:        cloneRuntimeMetadata(req.Env),
+			BundleDir:  req.BundleDir,
+			Egress:     cloneRuntimeEgressPolicy(req.Egress),
+			HostBinary: req.HostBinary,
 		}
 	}
 	return out
@@ -1325,12 +1321,11 @@ func cloneRuntimeEgressPolicy(policy pluginruntime.RuntimeEgressPolicy) pluginru
 	}
 }
 
-func cloneLegacyStartPluginAllowedHosts(req pluginruntime.StartPluginRequest) []string {
-	return slices.Clone(req.AllowedHosts) //nolint:staticcheck // Tests assert deprecated runtime compatibility fields remain populated.
-}
-
-func legacyStartPluginDefaultAction(req pluginruntime.StartPluginRequest) pluginruntime.PolicyAction {
-	return req.DefaultAction //nolint:staticcheck // Tests assert deprecated runtime compatibility fields remain populated.
+func hostedExecutionConfig(runtimeCfg *config.HostedRuntimeConfig) *config.ExecutionConfig {
+	return &config.ExecutionConfig{
+		Mode:    config.ExecutionModeHosted,
+		Runtime: runtimeCfg,
+	}
 }
 
 func assertStartPluginEgressPolicy(t *testing.T, req pluginruntime.StartPluginRequest, allowedHosts []string, action pluginruntime.PolicyAction) {
@@ -1340,12 +1335,6 @@ func assertStartPluginEgressPolicy(t *testing.T, req pluginruntime.StartPluginRe
 	}
 	if got := req.Egress.DefaultAction; got != action {
 		t.Fatalf("StartPlugin egress default action = %q, want %q", got, action)
-	}
-	if got := cloneLegacyStartPluginAllowedHosts(req); !slices.Equal(got, allowedHosts) {
-		t.Fatalf("StartPlugin legacy allowed hosts = %#v, want %#v", got, allowedHosts)
-	}
-	if got := legacyStartPluginDefaultAction(req); got != action {
-		t.Fatalf("StartPlugin legacy default action = %q, want %q", got, action)
 	}
 }
 
@@ -3756,7 +3745,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 				Invokes: []config.PluginInvocationDependency{{
 					Plugin:    "roadmap",
 					Operation: "sync",
@@ -5355,7 +5344,7 @@ func TestPluginRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *te
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -5480,7 +5469,7 @@ func TestPluginRuntimeStagesBundleForNonHostPathExecution(t *testing.T) {
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -5495,7 +5484,7 @@ func TestPluginRuntimeStagesBundleForNonHostPathExecution(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: manifestPath,
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 			},
 		},
 	}
@@ -5588,7 +5577,7 @@ func TestPluginRuntimeDropsSourceStyleArgsForNonHostPathExecution(t *testing.T) 
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -5602,7 +5591,7 @@ func TestPluginRuntimeDropsSourceStyleArgsForNonHostPathExecution(t *testing.T) 
 				Args:                 []string{"-m", "gestalt._runtime", "/host/source", "pkg.provider", "integration"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: manifestPath,
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 			},
 		},
 	}
@@ -5688,7 +5677,7 @@ func TestPluginRuntimeRewritesHostPathArgsForNonHostPathExecution(t *testing.T) 
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -5703,7 +5692,7 @@ func TestPluginRuntimeRewritesHostPathArgsForNonHostPathExecution(t *testing.T) 
 				Args:                 []string{"--config", configPath, "--name", "example"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: manifestPath,
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 			},
 		},
 	}
@@ -5773,7 +5762,7 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 				S3:                   []string{"main"},
 			},
 		},
@@ -5851,7 +5840,7 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 			t.Fatalf("StartPlugin env should include s3 relay token %s", providerhost.S3SocketTokenEnv(binding))
 		}
 	}
-	if allowedHosts := cloneLegacyStartPluginAllowedHosts(startRequests[0]); !slices.Contains(allowedHosts, "gestalt.example.test") {
+	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
 }
@@ -5959,7 +5948,7 @@ func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnel
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -5974,7 +5963,7 @@ func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnel
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: manifestPath,
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 			},
 		},
 	}
@@ -6038,7 +6027,7 @@ func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnel
 	if got := startRequests[0].Env[providerhost.AuthorizationSocketTokenEnv()]; got == "" {
 		t.Fatal("StartPlugin env should include the authorization relay token")
 	}
-	if allowedHosts := cloneLegacyStartPluginAllowedHosts(startRequests[0]); !slices.Contains(allowedHosts, "gestalt.example.test") {
+	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
 }
@@ -6064,7 +6053,7 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -6080,7 +6069,7 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 				IndexedDB:            &config.PluginIndexedDBConfig{ObjectStores: []string{"tasks"}},
 			},
 		},
@@ -6153,7 +6142,7 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 	if got := startRequests[0].Env[providerhost.IndexedDBSocketTokenEnv("")]; got == "" {
 		t.Fatal("StartPlugin env should include the IndexedDB relay token")
 	}
-	if allowedHosts := cloneLegacyStartPluginAllowedHosts(startRequests[0]); !slices.Contains(allowedHosts, "gestalt.example.test") {
+	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
 }
@@ -6195,7 +6184,7 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -6208,7 +6197,7 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 				IndexedDB:            &config.PluginIndexedDBConfig{ObjectStores: []string{"tasks"}},
 			},
 		},
@@ -6304,7 +6293,7 @@ func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapabili
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -6320,7 +6309,7 @@ func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapabili
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 				Cache:                []string{"session", "rate_limit"},
 			},
 		},
@@ -6398,7 +6387,7 @@ func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapabili
 			t.Fatalf("StartPlugin env should include cache relay token %s", providerhost.CacheSocketTokenEnv(binding))
 		}
 	}
-	if allowedHosts := cloneLegacyStartPluginAllowedHosts(startRequests[0]); !slices.Contains(allowedHosts, "gestalt.example.test") {
+	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
 }
@@ -6439,7 +6428,7 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -6452,7 +6441,7 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 				Cache:                []string{"session"},
 			},
 		},
@@ -6567,7 +6556,7 @@ func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -6580,7 +6569,7 @@ func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 				S3:                   []string{"main"},
 			},
 		},
@@ -6719,7 +6708,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	bridge := newLazyInvoker()
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -6732,7 +6721,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 				Args:                 []string{"provider"},
 				ResolvedManifest:     callerManifest,
 				ResolvedManifestPath: filepath.Join(callerRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 				Invokes: []config.PluginInvocationDependency{
 					{Plugin: "example", Operation: "request_context"},
 				},
@@ -6839,7 +6828,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	if got := startRequests[0].Env[providerhost.PluginInvokerSocketTokenEnv()]; got == "" {
 		t.Fatal("StartPlugin env should include the plugin invoker relay token")
 	}
-	if allowedHosts := cloneLegacyStartPluginAllowedHosts(startRequests[0]); !slices.Contains(allowedHosts, relayURL.Hostname()) {
+	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, relayURL.Hostname()) {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host %q", allowedHosts, relayURL.Hostname())
 	}
 	bindRequests := runtimeProvider.bindHostServiceRequests()
@@ -6875,7 +6864,7 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -6891,7 +6880,7 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 			},
 		},
 	}
@@ -6954,7 +6943,7 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 	if got := startRequests[0].Env[providerhost.WorkflowManagerSocketTokenEnv()]; got == "" {
 		t.Fatal("StartPlugin env should include the workflow manager relay token")
 	}
-	if allowedHosts := cloneLegacyStartPluginAllowedHosts(startRequests[0]); !slices.Contains(allowedHosts, "gestalt.example.test") {
+	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
 }
@@ -6983,7 +6972,7 @@ func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T)
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -7036,7 +7025,7 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -7051,7 +7040,7 @@ func TestPluginRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 				Cache:                []string{"session"},
 			},
 		},
@@ -7334,7 +7323,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -7349,7 +7338,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 			},
 		},
 	}
@@ -7483,7 +7472,7 @@ func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *t
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -7498,7 +7487,7 @@ func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *t
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 			},
 		},
 	}
@@ -7603,7 +7592,7 @@ func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapa
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -7619,8 +7608,8 @@ func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapa
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
-				AllowedHosts:         []string{"api.github.com"},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Egress:               &config.ProviderEgressConfig{AllowedHosts: []string{"api.github.com"}},
 			},
 		},
 	}
@@ -7689,7 +7678,7 @@ func TestPluginRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequire
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyAllow)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -7705,7 +7694,7 @@ func TestPluginRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequire
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 			},
 		},
 	}
@@ -7756,7 +7745,7 @@ func TestPluginRuntimeConfigUsesDirectHostServiceBindingsAndSkipsPublicEgressPro
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -7772,8 +7761,8 @@ func TestPluginRuntimeConfigUsesDirectHostServiceBindingsAndSkipsPublicEgressPro
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
-				AllowedHosts:         []string{"api.github.com"},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Egress:               &config.ProviderEgressConfig{AllowedHosts: []string{"api.github.com"}},
 				Cache:                []string{"session"},
 			},
 		},
@@ -7858,7 +7847,7 @@ func TestPluginRuntimePublicEgressProxyRoundTripsThroughHostedPlugin(t *testing.
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -7873,8 +7862,8 @@ func TestPluginRuntimePublicEgressProxyRoundTripsThroughHostedPlugin(t *testing.
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
-				AllowedHosts:         []string{"127.0.0.1", "localhost"},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
+				Egress:               &config.ProviderEgressConfig{AllowedHosts: []string{"127.0.0.1", "localhost"}},
 			},
 		},
 	}
@@ -7949,7 +7938,7 @@ func TestPluginRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t 
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -7965,7 +7954,7 @@ func TestPluginRuntimeConfigRejectsDefaultDenyWithoutHostnameEgressCapability(t 
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
+				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
 			},
 		},
 	}

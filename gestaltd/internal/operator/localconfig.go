@@ -134,8 +134,9 @@ plugins:
   httpbin:
     displayName: HTTPBin
     source: %s
-    allowedHosts:
-      - httpbin.org
+    egress:
+      allowedHosts:
+        - httpbin.org
 `, encryptionKey,
 		config.DefaultProviderMetadataURL(config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion),
 		"sqlite://"+dbPath,

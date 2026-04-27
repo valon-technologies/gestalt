@@ -7,17 +7,18 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 )
 
 type SecretsExecConfig struct {
-	Command      string
-	Args         []string
-	Env          map[string]string
-	Config       map[string]any
-	AllowedHosts []string
-	HostBinary   string
-	Cleanup      func()
-	Name         string
+	Command    string
+	Args       []string
+	Env        map[string]string
+	Config     map[string]any
+	Egress     egress.Policy
+	HostBinary string
+	Cleanup    func()
+	Name       string
 }
 
 type remoteSecretManager struct {
@@ -31,7 +32,7 @@ func NewExecutableSecretManager(ctx context.Context, cfg SecretsExecConfig) (cor
 		Args:         cfg.Args,
 		Env:          cfg.Env,
 		Config:       cfg.Config,
-		AllowedHosts: cfg.AllowedHosts,
+		Egress:       cloneEgressPolicy(cfg.Egress),
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
 		ProviderName: cfg.Name,

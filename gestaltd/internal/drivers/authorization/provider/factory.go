@@ -33,7 +33,7 @@ var Factory bootstrap.AuthorizationFactory = func(node yaml.Node, hostServices [
 		Args:         cfg.Args,
 		Env:          cfg.Env,
 		Config:       cfg.Config,
-		AllowedHosts: cfg.AllowedHosts,
+		Egress:       cfg.EgressPolicy(""),
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      prepared.Cleanup,
 		HostServices: hostServices,

@@ -123,29 +123,12 @@ type StartPluginRequest struct {
 	Env        map[string]string
 	BundleDir  string
 	Egress     RuntimeEgressPolicy
-	// Deprecated: use Egress.AllowedHosts.
-	AllowedHosts []string
-	// Deprecated: use Egress.DefaultAction.
-	DefaultAction PolicyAction
-	HostBinary    string
+	HostBinary string
 }
 
 type RuntimeEgressPolicy struct {
 	AllowedHosts  []string
 	DefaultAction PolicyAction
-}
-
-func (r StartPluginRequest) EgressPolicy() RuntimeEgressPolicy {
-	if len(r.Egress.AllowedHosts) > 0 || r.Egress.DefaultAction != "" {
-		return RuntimeEgressPolicy{
-			AllowedHosts:  append([]string(nil), r.Egress.AllowedHosts...),
-			DefaultAction: r.Egress.DefaultAction,
-		}
-	}
-	return RuntimeEgressPolicy{
-		AllowedHosts:  append([]string(nil), r.AllowedHosts...),
-		DefaultAction: r.DefaultAction,
-	}
 }
 
 type HostedPlugin struct {

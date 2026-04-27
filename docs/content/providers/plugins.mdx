@@ -96,9 +96,7 @@ plugins:
 ```
 
 By default, executable plugins run on the same machine as `gestaltd`. A plugin
-only uses a hosted runtime when it sets `execution.mode: hosted`. The legacy
-`plugins.<name>.runtime` field is still accepted as an alias for hosted
-execution.
+only uses a hosted runtime when it sets `execution.mode: hosted`. Use `execution.mode: hosted` with `execution.runtime`; legacy `plugins.<name>.runtime` is no longer accepted.
 
 ## Choosing a runtime
 
@@ -197,8 +195,8 @@ plugins:
 
 For executable plugins, `egress.allowedHosts` is only a complete security
 boundary when the plugin is running inside a runtime backend that preserves
-Gestalt's hostname-based policy model. The legacy `allowedHosts` field is still
-accepted as an alias. The current host-local wrappers are OS-dependent, so
+Gestalt's hostname-based policy model. Provider-level `allowedHosts` is no
+longer accepted; use `egress.allowedHosts`. The current host-local wrappers are OS-dependent, so
 operators should treat `egress.allowedHosts` as declarative policy plus
 best-effort enforcement unless the selected runtime explicitly supports
 hostname-based egress controls.
