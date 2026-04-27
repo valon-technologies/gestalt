@@ -17,7 +17,7 @@ type DeleteExternalCredentialRequest = proto.DeleteExternalCredentialRequest
 // ExternalCredentialProvider serves CRUD operations for host-managed external
 // credentials.
 type ExternalCredentialProvider interface {
-	PluginProvider
+	Provider
 	UpsertCredential(ctx context.Context, req *UpsertExternalCredentialRequest) (*ExternalCredential, error)
 	GetCredential(ctx context.Context, req *GetExternalCredentialRequest) (*ExternalCredential, error)
 	ListCredentials(ctx context.Context, req *ListExternalCredentialsRequest) (*ListExternalCredentialsResponse, error)

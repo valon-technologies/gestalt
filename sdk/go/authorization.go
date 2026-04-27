@@ -40,7 +40,7 @@ type ListModelsResponse = proto.ListModelsResponse
 type WriteModelRequest = proto.WriteModelRequest
 
 type AuthorizationProvider interface {
-	PluginProvider
+	Provider
 	Evaluate(ctx context.Context, req *AccessEvaluationRequest) (*AccessDecision, error)
 	EvaluateMany(ctx context.Context, req *AccessEvaluationsRequest) (*AccessEvaluationsResponse, error)
 	SearchResources(ctx context.Context, req *ResourceSearchRequest) (*ResourceSearchResponse, error)

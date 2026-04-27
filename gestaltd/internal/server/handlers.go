@@ -258,7 +258,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	for _, param := range []string{"instance", "connection"} {
 		if _, ok := query[param]; ok {
-			auditErr = errors.New("legacy connection parameter")
+			auditErr = errors.New("unsupported connection parameter")
 			writeError(w, http.StatusBadRequest, "use _connection and _instance query parameters")
 			return
 		}

@@ -23,7 +23,7 @@ type CompleteLoginRequest = proto.CompleteLoginRequest
 
 // AuthenticationProvider serves the Gestalt authentication protocol.
 type AuthenticationProvider interface {
-	PluginProvider
+	Provider
 	BeginLogin(ctx context.Context, req *BeginLoginRequest) (*BeginLoginResponse, error)
 	CompleteLogin(ctx context.Context, req *CompleteLoginRequest) (*AuthenticatedUser, error)
 }
