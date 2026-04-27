@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func TestWorkflowTargetToProtoKeepsFlatPluginFieldsForProviderCompatibility(t *testing.T) {
+func TestWorkflowTargetToProtoUsesNestedPluginTarget(t *testing.T) {
 	t.Parallel()
 
 	target, err := workflowTargetToProto(coreworkflow.Target{
@@ -32,25 +32,13 @@ func TestWorkflowTargetToProtoKeepsFlatPluginFieldsForProviderCompatibility(t *t
 	if got := target.GetPlugin().GetPluginName(); got != "demo" {
 		t.Fatalf("nested plugin_name = %q, want %q", got, "demo")
 	}
-	if got := target.GetPluginName(); got != "demo" {
-		t.Fatalf("flat plugin_name = %q, want %q", got, "demo")
-	}
-	if got := target.GetOperation(); got != "refresh" {
-		t.Fatalf("flat operation = %q, want %q", got, "refresh")
-	}
-	if got := target.GetConnection(); got != "workspace" {
-		t.Fatalf("flat connection = %q, want %q", got, "workspace")
-	}
-	if got := target.GetInstance(); got != "primary" {
-		t.Fatalf("flat instance = %q, want %q", got, "primary")
-	}
-	input := mapFromStruct(target.GetInput())
+	input := mapFromStruct(target.GetPlugin().GetInput())
 	if got := input["customer_id"]; got != "cust_123" {
-		t.Fatalf("flat input customer_id = %#v, want %q", got, "cust_123")
+		t.Fatalf("nested input customer_id = %#v, want %q", got, "cust_123")
 	}
 }
 
-func TestWorkflowTargetFromProtoAcceptsFlatPluginFieldsForProviderCompatibility(t *testing.T) {
+func TestWorkflowTargetFromProtoAcceptsNestedPluginFields(t *testing.T) {
 	t.Parallel()
 
 	input, err := structpb.NewStruct(map[string]any{
@@ -60,11 +48,13 @@ func TestWorkflowTargetFromProtoAcceptsFlatPluginFieldsForProviderCompatibility(
 		t.Fatalf("NewStruct: %v", err)
 	}
 	target := workflowTargetFromProto(&proto.BoundWorkflowTarget{
-		PluginName: " demo ",
-		Operation:  " refresh ",
-		Connection: " workspace ",
-		Instance:   " primary ",
-		Input:      input,
+		Plugin: &proto.BoundWorkflowPluginTarget{
+			PluginName: " demo ",
+			Operation:  " refresh ",
+			Connection: " workspace ",
+			Instance:   " primary ",
+			Input:      input,
+		},
 	})
 	if target.Plugin == nil {
 		t.Fatal("plugin target is nil")
@@ -86,11 +76,13 @@ func TestWorkflowTargetFromProtoAcceptsFlatPluginFieldsForProviderCompatibility(
 	}
 }
 
-func TestWorkflowTargetFromProtoRejectsFlatPluginAndAgent(t *testing.T) {
+func TestWorkflowTargetFromProtoRejectsNestedPluginAndAgent(t *testing.T) {
 	t.Parallel()
 
 	_, err := workflowTargetFromProtoStrict(&proto.BoundWorkflowTarget{
-		PluginName: "demo",
+		Plugin: &proto.BoundWorkflowPluginTarget{
+			PluginName: "demo",
+		},
 		Agent: &proto.BoundWorkflowAgentTarget{
 			ProviderName: "openai",
 		},

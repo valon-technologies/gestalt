@@ -10,13 +10,8 @@ import "google/protobuf/timestamp.proto";
 import "v1/agent.proto";
 
 message BoundWorkflowTarget {
-  // Compatibility fields kept for previously released workflow providers. New
-  // SDKs should use plugin instead.
-  string plugin_name = 1;
-  string operation = 2;
-  google.protobuf.Struct input = 3;
-  string connection = 4;
-  string instance = 5;
+  reserved 1 to 5;
+  reserved "plugin_name", "operation", "input", "connection", "instance";
   BoundWorkflowPluginTarget plugin = 6;
   BoundWorkflowAgentTarget agent = 7;
 }

@@ -320,7 +320,6 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
                     ..Default::default()
                 }),
                 agent: None,
-                ..Default::default()
             }),
             idempotency_key: "run-42".to_string(),
             ..Default::default()
@@ -347,7 +346,6 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
                 ..Default::default()
             }),
             agent: None,
-            ..Default::default()
         }
     );
 
@@ -417,7 +415,6 @@ async fn workflow_host_client_round_trip_over_unix_socket() {
                     ..Default::default()
                 }),
                 agent: None,
-                ..Default::default()
             }),
             run_id: "run-42".to_string(),
             ..Default::default()
