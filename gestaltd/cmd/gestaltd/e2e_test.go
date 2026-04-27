@@ -339,7 +339,7 @@ func TestE2EValidateRejectsInvalidConfigInput(t *testing.T) {
       path: /roadmap
     mountPath: /roadmap
 `,
-			wantError: "ui object cannot be combined with mountPath",
+			wantError: "mountPath is no longer supported; use ui.path",
 		},
 	}
 
@@ -487,8 +487,9 @@ plugins:
   support:
     source:
       path: %s
-    ui: roadmap
-    mountPath: /provider
+    ui:
+      bundle: roadmap
+      path: /provider
 `, filepath.ToSlash(uiRel), filepath.ToSlash(supportRel))
 	if err := os.WriteFile(baseCfgPath, []byte(baseCfg), 0o644); err != nil {
 		t.Fatalf("write support config: %v", err)

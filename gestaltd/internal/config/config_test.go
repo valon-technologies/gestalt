@@ -1895,7 +1895,7 @@ server:
 		}
 	})
 
-	t.Run("plugin mount path binds an explicit ui entry", func(t *testing.T) {
+	t.Run("plugin ui object binds an explicit ui entry", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1912,8 +1912,9 @@ plugins:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
-    ui: roadmap
-    mountPath: /create-customer-roadmap-review/
+    ui:
+      bundle: roadmap
+      path: /create-customer-roadmap-review/
     authorizationPolicy: roadmap_policy
 authorization:
   policies:
@@ -2041,7 +2042,7 @@ server:
 		}
 	})
 
-	t.Run("plugin-owned ui overlay still validates reserved mount paths", func(t *testing.T) {
+	t.Run("plugin-owned ui overlay still validates reserved paths", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2049,7 +2050,8 @@ plugins:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
-    mountPath: /api
+    ui:
+      path: /api
 providers:
   ui:
     roadmap:
@@ -2069,12 +2071,12 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `plugins.roadmap.mountPath "/api" conflicts with reserved path "/api"`) {
+		if !strings.Contains(err.Error(), `plugins.roadmap.ui.path "/api" conflicts with reserved path "/api"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
-	t.Run("same-name plugin-owned ui overlay only suppresses duplicate mount checks", func(t *testing.T) {
+	t.Run("same-name plugin-owned ui overlay only suppresses duplicate path checks", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2082,7 +2084,8 @@ plugins:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
-    mountPath: /api
+    ui:
+      path: /api
 providers:
   ui:
     roadmap:
@@ -2103,12 +2106,12 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `plugins.roadmap.mountPath "/api" conflicts with reserved path "/api"`) {
+		if !strings.Contains(err.Error(), `plugins.roadmap.ui.path "/api" conflicts with reserved path "/api"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
-	t.Run("plugin mount path prefix collision with mounted ui is rejected", func(t *testing.T) {
+	t.Run("plugin ui path prefix collision with mounted ui is rejected", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2126,7 +2129,8 @@ plugins:
   admin:
     source:
       path: ./plugin/manifest.yaml
-    mountPath: /tools/admin
+    ui:
+      path: /tools/admin
 server:
   providers:
     indexeddb: sqlite
@@ -2137,7 +2141,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `ui.docs.path "/tools" conflicts with plugins.admin.mountPath "/tools/admin"`) {
+		if !strings.Contains(err.Error(), `ui.docs.path "/tools" conflicts with plugins.admin.ui.path "/tools/admin"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2491,7 +2495,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `ui.root.mountPath is only supported on plugins.*`) {
+		if !strings.Contains(err.Error(), `field mountPath not found`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2873,22 +2877,26 @@ workflows:
   schedules:
     nightly:
       provider: temporal
-      plugin: roadmap
       cron: "0 2 * * *"
-      operation: nightly_sync
-      input:
-        source: yaml
+      target:
+        plugin:
+          name: roadmap
+          operation: nightly_sync
+          input:
+            source: yaml
   eventTriggers:
     task_updated:
       provider: temporal
-      plugin: roadmap
       match:
         type: roadmap.task.updated
         source: roadmap
-      operation: backfill_items
+      target:
+        plugin:
+          name: roadmap
+          operation: backfill_items
+          input:
+            source: event
       paused: true
-      input:
-        source: event
 providers:
   workflow:
     temporal:
@@ -2936,6 +2944,151 @@ server:
 		}
 		if got := cfg.Workflows.EventTriggers["task_updated"]; !reflect.DeepEqual(got, wantTrigger) {
 			t.Fatalf("Workflows.EventTriggers[task_updated] = %#v, want %#v", got, wantTrigger)
+		}
+	})
+
+	t.Run("legacy top-level workflow target fields are rejected", func(t *testing.T) {
+		t.Parallel()
+
+		cases := []struct {
+			name string
+			yaml string
+			want string
+		}{
+			{
+				name: "schedule",
+				yaml: `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      plugin: roadmap
+      operation: nightly_sync
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `field plugin not found in type config.WorkflowScheduleConfig`,
+			},
+			{
+				name: "event trigger",
+				yaml: `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+workflows:
+  eventTriggers:
+    task_updated:
+      provider: temporal
+      match:
+        type: roadmap.task.updated
+      plugin: roadmap
+      operation: backfill_items
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `field plugin not found in type config.WorkflowEventTriggerConfig`,
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				path := mustWriteConfigFile(t, tc.yaml)
+				_, err := Load(path)
+				if err == nil {
+					t.Fatal("Load succeeded, want error")
+				}
+				if !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("Load error = %v, want %q", err, tc.want)
+				}
+			})
+		}
+	})
+
+	t.Run("workflow target validation errors use canonical paths", func(t *testing.T) {
+		t.Parallel()
+
+		cases := []struct {
+			name string
+			yaml string
+			want string
+		}{
+			{
+				name: "unknown schedule plugin",
+				yaml: `
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      target:
+        plugin:
+          name: missing
+          operation: nightly_sync
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.schedules.nightly.target.plugin.name references unknown plugin "missing"`,
+			},
+			{
+				name: "event trigger agent missing provider",
+				yaml: `
+workflows:
+  eventTriggers:
+    task_updated:
+      provider: temporal
+      match:
+        type: roadmap.task.updated
+      target:
+        agent:
+          model: gpt-5.5
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.eventTriggers.task_updated.target.agent.provider is required`,
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				path := mustWriteConfigFile(t, tc.yaml)
+				_, err := Load(path)
+				if err == nil {
+					t.Fatal("Load succeeded, want error")
+				}
+				if !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("Load error = %v, want %q", err, tc.want)
+				}
+			})
 		}
 	})
 
@@ -2987,9 +3140,11 @@ workflows:
   schedules:
     nightly:
       provider: temporal
-      plugin: roadmap
       cron: "0 2 * * *"
-      operation: nightly_sync
+      target:
+        plugin:
+          name: roadmap
+          operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -3070,9 +3225,11 @@ workflows:
   schedules:
     nightly:
       provider: missing
-      plugin: roadmap
       cron: "0 2 * * *"
-      operation: nightly_sync
+      target:
+        plugin:
+          name: roadmap
+          operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -3109,9 +3266,11 @@ workflows:
   schedules:
     nightly:
       provider: temporal
-      plugin: roadmap
       cron: "0 2 * * *"
-      operation: nightly_sync
+      target:
+        plugin:
+          name: roadmap
+          operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -3153,9 +3312,11 @@ workflows:
   schedules:
     invalid:
       provider: temporal
-      plugin: roadmap
       cron: "*/5 * * * *"
-      operation: backfill_items
+      target:
+        plugin:
+          name: roadmap
+          operation: backfill_items
 providers:
   workflow:
     temporal:
@@ -3189,10 +3350,12 @@ workflows:
   eventTriggers:
     invalid:
       provider: temporal
-      plugin: roadmap
       match:
         type: roadmap.task.updated
-      operation: backfill_items
+      target:
+        plugin:
+          name: roadmap
+          operation: backfill_items
 providers:
   workflow:
     temporal:
@@ -3226,10 +3389,12 @@ workflows:
   eventTriggers:
     invalid:
       provider: temporal
-      plugin: roadmap
       match:
         source: roadmap
-      operation: nightly_sync
+      target:
+        plugin:
+          name: roadmap
+          operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -3266,10 +3431,12 @@ workflows:
   schedules:
     invalid:
       provider: temporal
-      plugin: roadmap
       cron: "0 0 0 * * *"
       timezone: Mars/Olympus
-      operation: nightly_sync
+      target:
+        plugin:
+          name: roadmap
+          operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -3490,55 +3657,7 @@ providers:
       indexeddb: agent_state
       runtime:
         provider: hosted
-        minReadyInstances: 1
-        maxReadyInstances: 2
-        startupTimeout: 5m
-        healthCheckInterval: 30s
-        restartPolicy: always
-        drainTimeout: 2m
-  indexeddb:
-    agent_state:
-      source:
-        path: ./providers/datastore/sqlite
-runtime:
-  providers:
-    hosted:
-      source:
-        path: ./providers/runtime/modal
-server:
-  encryptionKey: server-key
-`
-	t.Run("accepts required lifecycle fields directly under agent runtime", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, base)
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		runtimeCfg := cfg.Providers.Agent["simple"].Runtime
-		if runtimeCfg.MinReadyInstances != 1 || runtimeCfg.MaxReadyInstances != 2 {
-			t.Fatalf("runtime ready instances = %d/%d, want 1/2", runtimeCfg.MinReadyInstances, runtimeCfg.MaxReadyInstances)
-		}
-		if runtimeCfg.RestartPolicy != HostedRuntimeRestartPolicyAlways {
-			t.Fatalf("restartPolicy = %q, want %q", runtimeCfg.RestartPolicy, HostedRuntimeRestartPolicyAlways)
-		}
-	})
-
-	t.Run("accepts required lifecycle fields under agent execution runtime", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-providers:
-  agent:
-    simple:
-      source:
-        path: ./providers/agent/simple
-      indexeddb: agent_state
-      execution:
-        mode: hosted
-        runtime:
-          provider: hosted
+        pool:
           minReadyInstances: 1
           maxReadyInstances: 2
           startupTimeout: 5m
@@ -3556,17 +3675,73 @@ runtime:
         path: ./providers/runtime/modal
 server:
   encryptionKey: server-key
+`
+	t.Run("accepts required lifecycle fields under agent runtime pool", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, base)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		runtimeCfg := cfg.Providers.Agent["simple"].Runtime
+		if runtimeCfg.Pool == nil {
+			t.Fatal("runtime pool = nil")
+		}
+		if runtimeCfg.Pool.MinReadyInstances != 1 || runtimeCfg.Pool.MaxReadyInstances != 2 {
+			t.Fatalf("runtime pool ready instances = %d/%d, want 1/2", runtimeCfg.Pool.MinReadyInstances, runtimeCfg.Pool.MaxReadyInstances)
+		}
+		if runtimeCfg.Pool.RestartPolicy != HostedRuntimeRestartPolicyAlways {
+			t.Fatalf("restartPolicy = %q, want %q", runtimeCfg.Pool.RestartPolicy, HostedRuntimeRestartPolicyAlways)
+		}
+	})
+
+	t.Run("accepts required lifecycle fields under agent execution runtime", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      indexeddb: agent_state
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          pool:
+            minReadyInstances: 1
+            maxReadyInstances: 2
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: always
+            drainTimeout: 2m
+  indexeddb:
+    agent_state:
+      source:
+        path: ./providers/datastore/sqlite
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
 `)
 		cfg, err := Load(path)
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
 		runtimeCfg := cfg.Providers.Agent["simple"].Execution.Runtime
-		if runtimeCfg.MinReadyInstances != 1 || runtimeCfg.MaxReadyInstances != 2 {
-			t.Fatalf("execution runtime ready instances = %d/%d, want 1/2", runtimeCfg.MinReadyInstances, runtimeCfg.MaxReadyInstances)
+		if runtimeCfg.Pool == nil {
+			t.Fatal("execution runtime pool = nil")
 		}
-		if runtimeCfg.RestartPolicy != HostedRuntimeRestartPolicyAlways {
-			t.Fatalf("execution restartPolicy = %q, want %q", runtimeCfg.RestartPolicy, HostedRuntimeRestartPolicyAlways)
+		if runtimeCfg.Pool.MinReadyInstances != 1 || runtimeCfg.Pool.MaxReadyInstances != 2 {
+			t.Fatalf("execution runtime pool ready instances = %d/%d, want 1/2", runtimeCfg.Pool.MinReadyInstances, runtimeCfg.Pool.MaxReadyInstances)
+		}
+		if runtimeCfg.Pool.RestartPolicy != HostedRuntimeRestartPolicyAlways {
+			t.Fatalf("execution restartPolicy = %q, want %q", runtimeCfg.Pool.RestartPolicy, HostedRuntimeRestartPolicyAlways)
 		}
 	})
 
@@ -3575,6 +3750,26 @@ server:
 		yaml string
 		want string
 	}{
+		{
+			name: "rejects missing runtime pool",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      runtime:
+        provider: hosted
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`,
+			want: "providers.agent.simple.runtime.pool.minReadyInstances is required",
+		},
 		{
 			name: "rejects missing lifecycle fields",
 			yaml: `
@@ -3585,11 +3780,12 @@ providers:
         path: ./providers/agent/simple
       runtime:
         provider: hosted
-        minReadyInstances: 1
-        startupTimeout: 5m
-        healthCheckInterval: 30s
-        restartPolicy: always
-        drainTimeout: 2m
+        pool:
+          minReadyInstances: 1
+          startupTimeout: 5m
+          healthCheckInterval: 30s
+          restartPolicy: always
+          drainTimeout: 2m
 runtime:
   providers:
     hosted:
@@ -3598,7 +3794,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "providers.agent.simple.runtime.maxReadyInstances is required",
+			want: "providers.agent.simple.runtime.pool.maxReadyInstances is required",
 		},
 		{
 			name: "rejects missing execution runtime on hosted agent",
@@ -3632,7 +3828,35 @@ providers:
         mode: hosted
         runtime:
           provider: hosted
-          minReadyInstances: 1
+          pool:
+            minReadyInstances: 1
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: always
+            drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`,
+			want: "providers.agent.simple.execution.runtime.pool.maxReadyInstances is required",
+		},
+		{
+			name: "rejects max below min",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      runtime:
+        provider: hosted
+        pool:
+          minReadyInstances: 2
+          maxReadyInstances: 1
           startupTimeout: 5m
           healthCheckInterval: 30s
           restartPolicy: always
@@ -3645,33 +3869,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "providers.agent.simple.execution.runtime.maxReadyInstances is required",
-		},
-		{
-			name: "rejects max below min",
-			yaml: `
-providers:
-  agent:
-    simple:
-      source:
-        path: ./providers/agent/simple
-      runtime:
-        provider: hosted
-        minReadyInstances: 2
-        maxReadyInstances: 1
-        startupTimeout: 5m
-        healthCheckInterval: 30s
-        restartPolicy: always
-        drainTimeout: 2m
-runtime:
-  providers:
-    hosted:
-      source:
-        path: ./providers/runtime/modal
-server:
-  encryptionKey: server-key
-`,
-			want: "providers.agent.simple.runtime.maxReadyInstances must be greater than or equal to minReadyInstances",
+			want: "providers.agent.simple.runtime.pool.maxReadyInstances must be greater than or equal to minReadyInstances",
 		},
 		{
 			name: "rejects unknown restart policy",
@@ -3683,12 +3881,13 @@ providers:
         path: ./providers/agent/simple
       runtime:
         provider: hosted
-        minReadyInstances: 1
-        maxReadyInstances: 2
-        startupTimeout: 5m
-        healthCheckInterval: 30s
-        restartPolicy: sometimes
-        drainTimeout: 2m
+        pool:
+          minReadyInstances: 1
+          maxReadyInstances: 2
+          startupTimeout: 5m
+          healthCheckInterval: 30s
+          restartPolicy: sometimes
+          drainTimeout: 2m
 runtime:
   providers:
     hosted:
@@ -3697,7 +3896,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "providers.agent.simple.runtime.restartPolicy must be one of",
+			want: "providers.agent.simple.runtime.pool.restartPolicy must be one of",
 		},
 		{
 			name: "rejects restart without agent indexeddb",
@@ -3709,12 +3908,13 @@ providers:
         path: ./providers/agent/simple
       runtime:
         provider: hosted
-        minReadyInstances: 1
-        maxReadyInstances: 2
-        startupTimeout: 5m
-        healthCheckInterval: 30s
-        restartPolicy: always
-        drainTimeout: 2m
+        pool:
+          minReadyInstances: 1
+          maxReadyInstances: 2
+          startupTimeout: 5m
+          healthCheckInterval: 30s
+          restartPolicy: always
+          drainTimeout: 2m
 runtime:
   providers:
     hosted:
@@ -3723,7 +3923,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: `providers.agent.simple.runtime.restartPolicy "always" requires providers.agent.simple.indexeddb as the provider persistence hook`,
+			want: `providers.agent.simple.runtime.pool.restartPolicy "always" requires providers.agent.simple.indexeddb as the provider persistence hook`,
 		},
 		{
 			name: "rejects lifecycle fields on plugin runtime",
@@ -3734,12 +3934,13 @@ plugins:
       path: ./plugins/service/manifest.yaml
     runtime:
       provider: hosted
-      minReadyInstances: 1
-      maxReadyInstances: 2
-      startupTimeout: 5m
-      healthCheckInterval: 30s
-      restartPolicy: always
-      drainTimeout: 2m
+      pool:
+        minReadyInstances: 1
+        maxReadyInstances: 2
+        startupTimeout: 5m
+        healthCheckInterval: 30s
+        restartPolicy: always
+        drainTimeout: 2m
 runtime:
   providers:
     hosted:

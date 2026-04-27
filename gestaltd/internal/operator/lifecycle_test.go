@@ -1196,7 +1196,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedUIWithoutLockfile(t *testing
 			wantPath: "/create-customer-roadmap-review",
 		},
 		{
-			name: "plugin mount binds explicit ui",
+			name: "plugin ui object binds explicit ui",
 			uiConfigYAML: `  ui:
     roadmap:
       source:
@@ -1205,8 +1205,9 @@ plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
-      ui: roadmap
-      mountPath: /create-customer-roadmap-review
+      ui:
+        bundle: roadmap
+        path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_policy
 `,
 			extraYAML: `authorization:
@@ -1236,8 +1237,9 @@ plugins:
       disabled: true
       source:
         path: ./plugin/manifest.yaml
-      ui: roadmap
-      mountPath: /create-customer-roadmap-review
+      ui:
+        bundle: roadmap
+        path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_policy
 `,
 			uiKey:   "roadmap",
@@ -1254,17 +1256,19 @@ plugins:
       disabled: true
       source:
         path: ./plugin/manifest.yaml
-      mountPath: /create-customer-roadmap-review
+      ui:
+        path: /create-customer-roadmap-review
 `,
 			wantErr: "field disabled not found",
 		},
 		{
-			name: "plugin owned ui via plugin mount",
+			name: "plugin owned ui via plugin ui path",
 			uiConfigYAML: `plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
-      mountPath: /create-customer-roadmap-review
+      ui:
+        path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_policy
 `,
 			extraYAML: `authorization:
@@ -1281,12 +1285,13 @@ plugins:
 			ownedUIPath: "../ui/manifest.yaml",
 		},
 		{
-			name: "plugin owned ui via plugin mount with noncanonical manifest filename",
+			name: "plugin owned ui via plugin ui path with noncanonical manifest filename",
 			uiConfigYAML: `plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
-      mountPath: /create-customer-roadmap-review
+      ui:
+        path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_policy
 `,
 			extraYAML: `authorization:
@@ -1313,7 +1318,8 @@ plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
-      mountPath: /create-customer-roadmap-review
+      ui:
+        path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_policy
 `,
 			extraYAML: `authorization:
@@ -1340,7 +1346,8 @@ plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
-      mountPath: /create-customer-roadmap-review
+      ui:
+        path: /create-customer-roadmap-review
 `,
 			wantErr:     "field disabled not found",
 			ownedUIPath: "../ui/manifest.yaml",
@@ -1659,9 +1666,10 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
-    roadmap:
-      source: ` + srv.URL + `/providers/roadmap-plugin/v` + version + `/provider-release.yaml
-      mountPath: /create-customer-roadmap-review
+  roadmap:
+    source: ` + srv.URL + `/providers/roadmap-plugin/v` + version + `/provider-release.yaml
+    ui:
+      path: /create-customer-roadmap-review
 ` + `server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
@@ -2145,9 +2153,10 @@ func TestInitAtPath_RejectsManagedPluginOwnedUIPathOutsidePackage(t *testing.T) 
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := requiredComponentConfigV3YAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
-    roadmap:
-      source: ` + srv.URL + `/providers/roadmap-plugin/v` + version + `/provider-release.yaml
-      mountPath: /create-customer-roadmap-review
+  roadmap:
+    source: ` + srv.URL + `/providers/roadmap-plugin/v` + version + `/provider-release.yaml
+    ui:
+      path: /create-customer-roadmap-review
 server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `

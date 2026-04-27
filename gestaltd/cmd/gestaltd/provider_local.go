@@ -880,11 +880,15 @@ func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string,
 		"source":  providerLocalSourceOverride(manifestPath),
 		"runtime": nil,
 	}
-	if mountPath != "" {
-		pluginEntry["mountPath"] = mountPath
-	}
-	if uiName != "" {
-		pluginEntry["ui"] = uiName
+	if mountPath != "" || uiName != "" {
+		ui := map[string]any{}
+		if mountPath != "" {
+			ui["path"] = mountPath
+		}
+		if uiName != "" {
+			ui["bundle"] = uiName
+		}
+		pluginEntry["ui"] = ui
 	}
 
 	cfg := map[string]any{
@@ -987,7 +991,7 @@ func ensureNoPublicUIPathCollision(cfg *config.Config, pluginKey, mountPath stri
 			continue
 		}
 		if strings.TrimSpace(entry.MountPath) == mountPath {
-			return fmt.Errorf("auto-mounted ui path %q for plugins.%s collides with plugins.%s.mountPath", mountPath, pluginKey, name)
+			return fmt.Errorf("auto-mounted ui path %q for plugins.%s collides with plugins.%s.ui.path", mountPath, pluginKey, name)
 		}
 	}
 	return nil

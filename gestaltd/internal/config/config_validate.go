@@ -374,7 +374,7 @@ func ValidateResolvedStructure(cfg *Config) error {
 			continue
 		}
 		if entry.ResolvedManifest == nil || entry.ManifestSpec() == nil || entry.ManifestSpec().UI == nil {
-			return fmt.Errorf("config validation: plugins.%s.mountPath requires plugins.%s.ui or plugin spec.ui", name, name)
+			return fmt.Errorf("config validation: plugins.%s.ui.path requires plugins.%s.ui.bundle or plugin spec.ui", name, name)
 		}
 	}
 	for name, entry := range cfg.Providers.UI {
@@ -518,7 +518,7 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 		seenInvokes[key] = i
 	}
 	if entry.UI != "" && entry.MountPath == "" {
-		return fmt.Errorf("config validation: plugins.%s.ui requires plugins.%s.mountPath", name, name)
+		return fmt.Errorf("config validation: plugins.%s.ui.bundle requires plugins.%s.ui.path", name, name)
 	}
 	if err := validateProviderEntrySource("plugin", name, entry, sourceSyntax); err != nil {
 		return err
@@ -793,10 +793,7 @@ func validateHostedAgentRuntimeLifecyclePolicy(subject string, entry *ProviderEn
 		return fmt.Errorf("config validation: %s is required for hosted agent providers", runtimePath)
 	}
 	lifecycle := runtimeCfg.lifecyclePolicyConfig()
-	lifecycleSubject := runtimePath
-	if runtimeCfg.Pool != nil {
-		lifecycleSubject += ".pool"
-	}
+	lifecycleSubject := runtimePath + ".pool"
 	if lifecycle.MinReadyInstances <= 0 {
 		return fmt.Errorf("config validation: %s.minReadyInstances is required and must be greater than 0", lifecycleSubject)
 	}
@@ -1237,44 +1234,46 @@ func validateWorkflowScheduleTarget(cfg *Config, key string, schedule *WorkflowS
 	if schedule == nil {
 		return fmt.Errorf("config validation: workflows.schedules.%s is required", key)
 	}
+	targetPath := "workflows.schedules." + key + ".target"
 	hasAgent := schedule.Agent != nil
 	schedule.Plugin = strings.TrimSpace(schedule.Plugin)
 	hasPlugin := schedule.Plugin != ""
 	if hasAgent == hasPlugin {
-		return fmt.Errorf("config validation: workflows.schedules.%s must set exactly one of plugin or agent", key)
+		return fmt.Errorf("config validation: %s must set exactly one of plugin or agent", targetPath)
 	}
 	if hasAgent && workflowSchedulePluginFieldsSet(schedule) {
-		return fmt.Errorf("config validation: workflows.schedules.%s cannot set plugin target fields with agent", key)
+		return fmt.Errorf("config validation: %s cannot set plugin target fields with agent", targetPath)
 	}
 	if hasPlugin {
 		if _, ok := cfg.Plugins[schedule.Plugin]; !ok {
-			return fmt.Errorf("config validation: workflows.schedules.%s.plugin references unknown plugin %q", key, schedule.Plugin)
+			return fmt.Errorf("config validation: %s.plugin.name references unknown plugin %q", targetPath, schedule.Plugin)
 		}
 		return nil
 	}
-	return validateWorkflowAgentConfig(cfg, "workflows.schedules."+key+".agent", schedule.Agent)
+	return validateWorkflowAgentConfig(cfg, targetPath+".agent", schedule.Agent)
 }
 
 func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *WorkflowEventTriggerConfig) error {
 	if trigger == nil {
 		return fmt.Errorf("config validation: workflows.eventTriggers.%s is required", key)
 	}
+	targetPath := "workflows.eventTriggers." + key + ".target"
 	hasAgent := trigger.Agent != nil
 	trigger.Plugin = strings.TrimSpace(trigger.Plugin)
 	hasPlugin := trigger.Plugin != ""
 	if hasAgent == hasPlugin {
-		return fmt.Errorf("config validation: workflows.eventTriggers.%s must set exactly one of plugin or agent", key)
+		return fmt.Errorf("config validation: %s must set exactly one of plugin or agent", targetPath)
 	}
 	if hasAgent && workflowEventTriggerPluginFieldsSet(trigger) {
-		return fmt.Errorf("config validation: workflows.eventTriggers.%s cannot set plugin target fields with agent", key)
+		return fmt.Errorf("config validation: %s cannot set plugin target fields with agent", targetPath)
 	}
 	if hasPlugin {
 		if _, ok := cfg.Plugins[trigger.Plugin]; !ok {
-			return fmt.Errorf("config validation: workflows.eventTriggers.%s.plugin references unknown plugin %q", key, trigger.Plugin)
+			return fmt.Errorf("config validation: %s.plugin.name references unknown plugin %q", targetPath, trigger.Plugin)
 		}
 		return nil
 	}
-	return validateWorkflowAgentConfig(cfg, "workflows.eventTriggers."+key+".agent", trigger.Agent)
+	return validateWorkflowAgentConfig(cfg, targetPath+".agent", trigger.Agent)
 }
 
 func normalizeWorkflowTargets(cfg *Config) error {
@@ -1587,7 +1586,7 @@ func validateMountedUICollisions(cfg *Config, pluginOwnedUIBindings map[string]s
 			}
 		}
 		subjects = append(subjects, mountedPathSubject{
-			label: "plugins." + name + ".mountPath",
+			label: "plugins." + name + ".ui.path",
 			path:  entry.MountPath,
 		})
 	}
