@@ -383,7 +383,7 @@ func cloneWorkflowExecutionReference(ref *coreworkflow.ExecutionReference) *core
 		return nil
 	}
 	cloned := *ref
-	cloned.Target.Input = cloneMap(ref.Target.Input)
+	cloned.Target = cloneWorkflowTarget(ref.Target)
 	cloned.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
 	for i := range cloned.Permissions {
 		cloned.Permissions[i].Operations = append([]string(nil), cloned.Permissions[i].Operations...)
@@ -404,7 +404,7 @@ func cloneWorkflowSchedule(schedule *coreworkflow.Schedule) *coreworkflow.Schedu
 		return nil
 	}
 	cloned := *schedule
-	cloned.Target.Input = cloneMap(schedule.Target.Input)
+	cloned.Target = cloneWorkflowTarget(schedule.Target)
 	if schedule.CreatedAt != nil {
 		value := *schedule.CreatedAt
 		cloned.CreatedAt = &value
@@ -425,7 +425,7 @@ func cloneWorkflowRun(run *coreworkflow.Run) *coreworkflow.Run {
 		return nil
 	}
 	cloned := *run
-	cloned.Target.Input = cloneMap(run.Target.Input)
+	cloned.Target = cloneWorkflowTarget(run.Target)
 	if run.Trigger.Event != nil {
 		event := *run.Trigger.Event
 		event.Event.Data = cloneMap(run.Trigger.Event.Event.Data)
@@ -464,7 +464,7 @@ func cloneWorkflowEventTrigger(trigger *coreworkflow.EventTrigger) *coreworkflow
 		return nil
 	}
 	cloned := *trigger
-	cloned.Target.Input = cloneMap(trigger.Target.Input)
+	cloned.Target = cloneWorkflowTarget(trigger.Target)
 	if trigger.CreatedAt != nil {
 		value := *trigger.CreatedAt
 		cloned.CreatedAt = &value
@@ -474,6 +474,33 @@ func cloneWorkflowEventTrigger(trigger *coreworkflow.EventTrigger) *coreworkflow
 		cloned.UpdatedAt = &value
 	}
 	return &cloned
+}
+
+func cloneWorkflowTarget(target coreworkflow.Target) coreworkflow.Target {
+	cloned := coreworkflow.Target{}
+	if target.Plugin != nil {
+		plugin := *target.Plugin
+		plugin.Input = cloneMap(plugin.Input)
+		cloned.Plugin = &plugin
+	}
+	if target.Agent != nil {
+		agent := *target.Agent
+		agent.Messages = slices.Clone(agent.Messages)
+		agent.ToolRefs = slices.Clone(agent.ToolRefs)
+		agent.ResponseSchema = cloneMap(agent.ResponseSchema)
+		agent.ProviderOptions = cloneMap(agent.ProviderOptions)
+		agent.Metadata = cloneMap(agent.Metadata)
+		cloned.Agent = &agent
+	}
+	return cloned
+}
+
+func requireCoreWorkflowPluginTarget(t *testing.T, target coreworkflow.Target) *coreworkflow.PluginTarget {
+	t.Helper()
+	if target.Plugin == nil {
+		t.Fatalf("target plugin is nil: %#v", target)
+	}
+	return target.Plugin
 }
 
 func cloneWorkflowEvent(event coreworkflow.Event) coreworkflow.Event {
@@ -650,7 +677,8 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
 	}
 	createUpsert := provider.upsertReqs[len(provider.upsertReqs)-1]
-	if createUpsert.Target.PluginName != "roadmap" || createUpsert.Target.Operation != "sync" {
+	createUpsertPlugin := requireCoreWorkflowPluginTarget(t, createUpsert.Target)
+	if createUpsertPlugin.PluginName != "roadmap" || createUpsertPlugin.Operation != "sync" {
 		t.Fatalf("upsert target = %#v", createUpsert.Target)
 	}
 	if createUpsert.ExecutionRef == "" {
@@ -870,7 +898,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	provider.schedules["sched-ada"] = &coreworkflow.Schedule{
 		ID:           "sched-ada",
 		Cron:         "*/5 * * * *",
-		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		Target:       workflowPluginTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-ada:ref-ada",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -878,7 +906,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	provider.schedules["sched-grace"] = &coreworkflow.Schedule{
 		ID:           "sched-grace",
 		Cron:         "0 * * * *",
-		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		Target:       workflowPluginTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-grace:ref-grace",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -886,7 +914,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	provider.schedules["sched-analytics"] = &coreworkflow.Schedule{
 		ID:           "sched-analytics",
 		Cron:         "15 * * * *",
-		Target:       coreworkflow.Target{PluginName: "analytics", Operation: "sync"},
+		Target:       workflowPluginTarget("analytics", "sync"),
 		ExecutionRef: "workflow_schedule:sched-analytics:ref-analytics",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -1068,7 +1096,7 @@ func TestCreateWorkflowScheduleAllowsAuthorizedCatalogOperation(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, body)
 	}
-	if len(provider.upsertReqs) != 1 || provider.upsertReqs[0].Target.Operation != "export" {
+	if len(provider.upsertReqs) != 1 || requireCoreWorkflowPluginTarget(t, provider.upsertReqs[0].Target).Operation != "export" {
 		t.Fatalf("upsert requests = %#v", provider.upsertReqs)
 	}
 }
@@ -1101,7 +1129,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 	provider.schedules["sched-sync"] = &coreworkflow.Schedule{
 		ID:           "sched-sync",
 		Cron:         "*/5 * * * *",
-		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		Target:       workflowPluginTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-sync:ref-sync",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -1109,7 +1137,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 	provider.schedules["sched-export"] = &coreworkflow.Schedule{
 		ID:           "sched-export",
 		Cron:         "0 * * * *",
-		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "export"},
+		Target:       workflowPluginTarget("roadmap", "export"),
 		ExecutionRef: "workflow_schedule:sched-export:ref-export",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -1223,10 +1251,12 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 	user := seedUser(t, services, "ada@example.test")
 	provider := newMemoryWorkflowProvider()
 	oldTarget := coreworkflow.Target{
-		PluginName: "roadmap",
-		Operation:  "sync",
-		Connection: "analytics",
-		Instance:   "tenant-a",
+		Plugin: &coreworkflow.PluginTarget{
+			PluginName: "roadmap",
+			Operation:  "sync",
+			Connection: "analytics",
+			Instance:   "tenant-a",
+		},
 	}
 	now := time.Now().UTC().Truncate(time.Second)
 	provider.schedules["sched-ada"] = &coreworkflow.Schedule{
@@ -1298,7 +1328,7 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 	if provider.schedules["sched-ada"].ExecutionRef != "workflow_schedule:sched-ada:ref-old" {
 		t.Fatalf("schedule execution ref = %q, want workflow_schedule:sched-ada:ref-old", provider.schedules["sched-ada"].ExecutionRef)
 	}
-	if provider.schedules["sched-ada"].Target.Instance != "tenant-a" {
+	if requireCoreWorkflowPluginTarget(t, provider.schedules["sched-ada"].Target).Instance != "tenant-a" {
 		t.Fatalf("schedule target after failed update = %#v", provider.schedules["sched-ada"].Target)
 	}
 	oldRef, err := provider.GetExecutionReference(context.Background(), "workflow_schedule:sched-ada:ref-old")
@@ -1454,7 +1484,7 @@ func TestWorkflowScheduleCreatePinsResolvedInstance(t *testing.T) {
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
 	}
-	if provider.upsertReqs[0].Target.Instance != "tenant-a" {
+	if requireCoreWorkflowPluginTarget(t, provider.upsertReqs[0].Target).Instance != "tenant-a" {
 		t.Fatalf("stored target = %#v, want resolved instance tenant-a", provider.upsertReqs[0].Target)
 	}
 }
@@ -1473,7 +1503,7 @@ func TestGlobalWorkflowScheduleLookupIgnoresUnrelatedProviderFailures(t *testing
 	basicProvider.schedules["sched-ada-basic"] = &coreworkflow.Schedule{
 		ID:           "sched-ada-basic",
 		Cron:         "*/5 * * * *",
-		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		Target:       workflowPluginTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-ada-basic:ref-basic",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -1572,7 +1602,7 @@ func TestGlobalWorkflowScheduleRejectsDuplicateActiveExecutionRefs(t *testing.T)
 	schedule := &coreworkflow.Schedule{
 		ID:           "sched-ada",
 		Cron:         "*/5 * * * *",
-		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		Target:       workflowPluginTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-ada:active-ref-1",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -1723,7 +1753,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	if len(basicProvider.upsertReqs) != 1 {
 		t.Fatalf("basic upsert requests = %d, want 1", len(basicProvider.upsertReqs))
 	}
-	if basicProvider.upsertReqs[0].Target.PluginName != "roadmap" {
+	if requireCoreWorkflowPluginTarget(t, basicProvider.upsertReqs[0].Target).PluginName != "roadmap" {
 		t.Fatalf("basic create target = %#v", basicProvider.upsertReqs[0].Target)
 	}
 	initialExecutionRef := basicProvider.upsertReqs[0].ExecutionRef
@@ -1863,7 +1893,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 	basicProvider.schedules["sched-ada-basic"] = &coreworkflow.Schedule{
 		ID:           "sched-ada-basic",
 		Cron:         "*/5 * * * *",
-		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		Target:       workflowPluginTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-ada-basic:ref-basic",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -1871,7 +1901,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 	advancedProvider.schedules["sched-ada-advanced"] = &coreworkflow.Schedule{
 		ID:           "sched-ada-advanced",
 		Cron:         "0 * * * *",
-		Target:       coreworkflow.Target{PluginName: "analytics", Operation: "sync"},
+		Target:       workflowPluginTarget("analytics", "sync"),
 		ExecutionRef: "workflow_schedule:sched-ada-advanced:ref-advanced",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -1879,7 +1909,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 	advancedProvider.schedules["sched-grace-advanced"] = &coreworkflow.Schedule{
 		ID:           "sched-grace-advanced",
 		Cron:         "15 * * * *",
-		Target:       coreworkflow.Target{PluginName: "analytics", Operation: "sync"},
+		Target:       workflowPluginTarget("analytics", "sync"),
 		ExecutionRef: "workflow_schedule:sched-grace-advanced:ref-grace-advanced",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -2093,7 +2123,7 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	if len(basicProvider.upsertTriggerReqs) != 1 {
 		t.Fatalf("basic trigger upsert requests = %d, want 1", len(basicProvider.upsertTriggerReqs))
 	}
-	if basicProvider.upsertTriggerReqs[0].Target.PluginName != "roadmap" {
+	if requireCoreWorkflowPluginTarget(t, basicProvider.upsertTriggerReqs[0].Target).PluginName != "roadmap" {
 		t.Fatalf("basic create target = %#v", basicProvider.upsertTriggerReqs[0].Target)
 	}
 	initialExecutionRef := basicProvider.upsertTriggerReqs[0].ExecutionRef
@@ -2308,7 +2338,7 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 	basicProvider.triggers["trg-ada-basic"] = &coreworkflow.EventTrigger{
 		ID:           "trg-ada-basic",
 		Match:        coreworkflow.EventMatch{Type: "roadmap.item.updated"},
-		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		Target:       workflowPluginTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_event_trigger:trg-ada-basic:ref-basic",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -2316,7 +2346,7 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 	advancedProvider.triggers["trg-ada-advanced"] = &coreworkflow.EventTrigger{
 		ID:           "trg-ada-advanced",
 		Match:        coreworkflow.EventMatch{Type: "analytics.item.synced"},
-		Target:       coreworkflow.Target{PluginName: "analytics", Operation: "sync"},
+		Target:       workflowPluginTarget("analytics", "sync"),
 		ExecutionRef: "workflow_event_trigger:trg-ada-advanced:ref-advanced",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -2324,7 +2354,7 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 	advancedProvider.triggers["trg-grace-advanced"] = &coreworkflow.EventTrigger{
 		ID:           "trg-grace-advanced",
 		Match:        coreworkflow.EventMatch{Type: "analytics.item.failed"},
-		Target:       coreworkflow.Target{PluginName: "analytics", Operation: "sync"},
+		Target:       workflowPluginTarget("analytics", "sync"),
 		ExecutionRef: "workflow_event_trigger:trg-grace-advanced:ref-grace-advanced",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,

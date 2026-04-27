@@ -369,7 +369,10 @@ func workflowManagerScheduleUpsert(
 		return workflowmanager.ScheduleUpsert{}, status.Errorf(codes.InvalidArgument, "target: %v", err)
 	}
 	if target.Agent == nil {
-		pluginTarget := target.PluginTarget()
+		if target.Plugin == nil {
+			return workflowmanager.ScheduleUpsert{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")
+		}
+		pluginTarget := *target.Plugin
 		if strings.TrimSpace(pluginTarget.PluginName) == "" {
 			return workflowmanager.ScheduleUpsert{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")
 		}
@@ -399,7 +402,10 @@ func workflowManagerEventTriggerUpsert(
 		return workflowmanager.EventTriggerUpsert{}, status.Errorf(codes.InvalidArgument, "target: %v", err)
 	}
 	if target.Agent == nil {
-		pluginTarget := target.PluginTarget()
+		if target.Plugin == nil {
+			return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")
+		}
+		pluginTarget := *target.Plugin
 		if strings.TrimSpace(pluginTarget.PluginName) == "" {
 			return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")
 		}

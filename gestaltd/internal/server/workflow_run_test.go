@@ -32,6 +32,21 @@ type workflowRunResponse struct {
 	} `json:"trigger"`
 }
 
+func workflowPluginTarget(pluginName, operation string) coreworkflow.Target {
+	return workflowPluginTargetWithRouting(pluginName, operation, "", "")
+}
+
+func workflowPluginTargetWithRouting(pluginName, operation, connection, instance string) coreworkflow.Target {
+	return coreworkflow.Target{
+		Plugin: &coreworkflow.PluginTarget{
+			PluginName: pluginName,
+			Operation:  operation,
+			Connection: connection,
+			Instance:   instance,
+		},
+	}
+}
+
 func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) {
 	t.Parallel()
 
@@ -46,7 +61,7 @@ func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) 
 	provider.runs["run-new"] = &coreworkflow.Run{
 		ID:           "run-new",
 		Status:       coreworkflow.RunStatusRunning,
-		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		Target:       workflowPluginTarget("roadmap", "sync"),
 		Trigger:      coreworkflow.RunTrigger{Schedule: &coreworkflow.ScheduleTrigger{ScheduleID: "sched-new"}},
 		ExecutionRef: "workflow_schedule:sched-new:ref-active",
 		CreatedAt:    &now,
@@ -54,7 +69,7 @@ func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) 
 	provider.runs["run-old"] = &coreworkflow.Run{
 		ID:            "run-old",
 		Status:        coreworkflow.RunStatusSucceeded,
-		Target:        coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		Target:        workflowPluginTarget("roadmap", "sync"),
 		Trigger:       coreworkflow.RunTrigger{Schedule: &coreworkflow.ScheduleTrigger{ScheduleID: "sched-old"}},
 		ExecutionRef:  "workflow_schedule:sched-old:ref-revoked",
 		CreatedAt:     &older,
@@ -65,7 +80,7 @@ func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) 
 	provider.runs["run-other"] = &coreworkflow.Run{
 		ID:           "run-other",
 		Status:       coreworkflow.RunStatusSucceeded,
-		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		Target:       workflowPluginTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-other:ref-other",
 		CreatedAt:    &now,
 	}
@@ -195,14 +210,14 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 	provider.runs["run-sync"] = &coreworkflow.Run{
 		ID:           "run-sync",
 		Status:       coreworkflow.RunStatusSucceeded,
-		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		Target:       workflowPluginTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-sync:ref-sync",
 		CreatedAt:    &now,
 	}
 	provider.runs["run-export"] = &coreworkflow.Run{
 		ID:           "run-export",
 		Status:       coreworkflow.RunStatusFailed,
-		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "export"},
+		Target:       workflowPluginTarget("roadmap", "export"),
 		ExecutionRef: "workflow_schedule:sched-export:ref-export",
 		CreatedAt:    &now,
 	}
@@ -292,7 +307,7 @@ func TestGlobalWorkflowRunCancelUpdatesOwnedRun(t *testing.T) {
 	run := &coreworkflow.Run{
 		ID:           "run-cancel",
 		Status:       coreworkflow.RunStatusRunning,
-		Target:       coreworkflow.Target{PluginName: "roadmap", Operation: "sync"},
+		Target:       workflowPluginTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-cancel:ref-active",
 		CreatedAt:    &now,
 		StartedAt:    &now,

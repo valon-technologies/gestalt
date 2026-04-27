@@ -2036,13 +2036,22 @@ func cloneManagedEventTrigger(value *workflowmanager.ManagedEventTrigger) *workf
 }
 
 func cloneWorkflowTarget(value coreworkflow.Target) coreworkflow.Target {
-	return coreworkflow.Target{
-		PluginName: value.PluginName,
-		Operation:  value.Operation,
-		Connection: value.Connection,
-		Instance:   value.Instance,
-		Input:      maps.Clone(value.Input),
+	out := coreworkflow.Target{}
+	if value.Plugin != nil {
+		plugin := *value.Plugin
+		plugin.Input = maps.Clone(plugin.Input)
+		out.Plugin = &plugin
 	}
+	if value.Agent != nil {
+		agent := *value.Agent
+		agent.Messages = slices.Clone(agent.Messages)
+		agent.ToolRefs = slices.Clone(agent.ToolRefs)
+		agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
+		agent.ProviderOptions = maps.Clone(agent.ProviderOptions)
+		agent.Metadata = maps.Clone(agent.Metadata)
+		out.Agent = &agent
+	}
+	return out
 }
 
 func cloneWorkflowEventMatch(value coreworkflow.EventMatch) coreworkflow.EventMatch {
@@ -7493,7 +7502,11 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	if len(schedules) != 1 {
 		t.Fatalf("manager schedules len = %d, want 1", len(schedules))
 	}
-	if got := schedules[0].Schedule.Target.Operation; got != "sync" {
+	scheduleTarget := schedules[0].Schedule.Target.Plugin
+	if scheduleTarget == nil {
+		t.Fatalf("stored target plugin is nil: %#v", schedules[0].Schedule.Target)
+	}
+	if got := scheduleTarget.Operation; got != "sync" {
 		t.Fatalf("stored target operation = %q, want %q", got, "sync")
 	}
 	if got := manager.Subjects(); !slices.Equal(got, []string{"user:user-123", "user:user-123"}) {

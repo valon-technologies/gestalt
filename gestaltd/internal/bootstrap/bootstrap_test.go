@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -55,6 +56,10 @@ import (
 
 func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, providerName string, target coreworkflow.Target) string {
 	t.Helper()
+	pluginTarget := target.Plugin
+	if pluginTarget == nil {
+		t.Fatalf("workflow target plugin is nil: %#v", target)
+	}
 	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
 	if err != nil {
 		t.Fatalf("resolve workflow provider %q: %v", providerName, err)
@@ -64,13 +69,13 @@ func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, provi
 		t.Fatalf("workflow provider %q does not support execution refs", providerName)
 	}
 	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, target.Operation),
+		ID:           fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
 		ProviderName: providerName,
 		Target:       target,
 		SubjectID:    "system:config",
 		Permissions: []core.AccessPermission{{
-			Plugin:     target.PluginName,
-			Operations: []string{target.Operation},
+			Plugin:     pluginTarget.PluginName,
+			Operations: []string{pluginTarget.Operation},
 		}},
 	})
 	if err != nil {
@@ -1376,9 +1381,7 @@ func cloneBootstrapWorkflowExecutionRef(ref *coreworkflow.ExecutionReference) *c
 		return nil
 	}
 	clone := *ref
-	if ref.Target.Input != nil {
-		clone.Target.Input = maps.Clone(ref.Target.Input)
-	}
+	clone.Target = cloneBootstrapWorkflowTarget(ref.Target)
 	clone.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
 	for i := range clone.Permissions {
 		clone.Permissions[i].Operations = append([]string(nil), clone.Permissions[i].Operations...)
@@ -1392,6 +1395,25 @@ func cloneBootstrapWorkflowExecutionRef(ref *coreworkflow.ExecutionReference) *c
 		clone.RevokedAt = &revokedAt
 	}
 	return &clone
+}
+
+func cloneBootstrapWorkflowTarget(target coreworkflow.Target) coreworkflow.Target {
+	clone := coreworkflow.Target{}
+	if target.Plugin != nil {
+		plugin := *target.Plugin
+		plugin.Input = maps.Clone(plugin.Input)
+		clone.Plugin = &plugin
+	}
+	if target.Agent != nil {
+		agent := *target.Agent
+		agent.Messages = slices.Clone(agent.Messages)
+		agent.ToolRefs = slices.Clone(agent.ToolRefs)
+		agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
+		agent.ProviderOptions = maps.Clone(agent.ProviderOptions)
+		agent.Metadata = maps.Clone(agent.Metadata)
+		clone.Agent = &agent
+	}
+	return clone
 }
 
 type trackedIndexedDB struct {
@@ -1672,6 +1694,23 @@ func workflowFixtureTarget(plugin, operation string, input map[string]any) *conf
 			Name:      plugin,
 			Operation: operation,
 			Input:     maps.Clone(input),
+		},
+	}
+}
+
+func requireCoreWorkflowPluginTarget(t *testing.T, target coreworkflow.Target) *coreworkflow.PluginTarget {
+	t.Helper()
+	if target.Plugin == nil {
+		t.Fatalf("target plugin is nil: %#v", target)
+	}
+	return target.Plugin
+}
+
+func coreWorkflowPluginTarget(pluginName, operation string) coreworkflow.Target {
+	return coreworkflow.Target{
+		Plugin: &coreworkflow.PluginTarget{
+			PluginName: pluginName,
+			Operation:  operation,
 		},
 	}
 }
@@ -3563,11 +3602,8 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 	if _, err := executionRefs.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "workflow_schedule:sched-test:ref-test",
 		ProviderName: "basic",
-		Target: coreworkflow.Target{
-			PluginName: "roadmap",
-			Operation:  "sync",
-		},
-		SubjectID: "user:ada",
+		Target:       coreWorkflowPluginTarget("roadmap", "sync"),
+		SubjectID:    "user:ada",
 	}); err != nil {
 		t.Fatalf("PutExecutionReference: %v", err)
 	}
@@ -3674,11 +3710,12 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	if got.Cron != "0 2 * * *" || got.Timezone != "America/New_York" {
 		t.Fatalf("schedule timing = %#v", got)
 	}
-	if got.Target.PluginName != "roadmap" || got.Target.Operation != "sync" {
+	gotPlugin := requireCoreWorkflowPluginTarget(t, got.Target)
+	if gotPlugin.PluginName != "roadmap" || gotPlugin.Operation != "sync" {
 		t.Fatalf("target = %#v", got.Target)
 	}
-	if got.Target.Input["source"] != "yaml" {
-		t.Fatalf("target input = %#v", got.Target.Input)
+	if gotPlugin.Input["source"] != "yaml" {
+		t.Fatalf("target input = %#v", gotPlugin.Input)
 	}
 	if got.RequestedBy.SubjectID != "system:config" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", got.RequestedBy)
@@ -4192,7 +4229,7 @@ func TestBootstrapReAdoptsManagedSchedulesWhenOwnershipStateIsMissing(t *testing
 		t.Fatalf("initial upserted schedules = %d, want 1", len(provider.upsertedSchedules))
 	}
 	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
-	provider.schedules[workflowConfigScheduleID("nightly_sync")].Target.Input = map[string]any{
+	provider.schedules[workflowConfigScheduleID("nightly_sync")].Target.Plugin.Input = map[string]any{
 		"limit": float64(1),
 	}
 
@@ -4519,11 +4556,12 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	if got.Match.Type != "task.updated" || got.Match.Source != "roadmap" || got.Match.Subject != "" {
 		t.Fatalf("match = %#v", got.Match)
 	}
-	if got.Target.PluginName != "roadmap" || got.Target.Operation != "sync" {
+	gotPlugin := requireCoreWorkflowPluginTarget(t, got.Target)
+	if gotPlugin.PluginName != "roadmap" || gotPlugin.Operation != "sync" {
 		t.Fatalf("target = %#v", got.Target)
 	}
-	if got.Target.Input["source"] != "yaml" {
-		t.Fatalf("target input = %#v", got.Target.Input)
+	if gotPlugin.Input["source"] != "yaml" {
+		t.Fatalf("target input = %#v", gotPlugin.Input)
 	}
 	if got.RequestedBy.SubjectID != "system:config" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
 		t.Fatalf("requestedBy = %#v", got.RequestedBy)
@@ -4885,7 +4923,7 @@ func TestBootstrapReAdoptsManagedEventTriggersWhenOwnershipStateIsMissing(t *tes
 	if len(provider.upsertedEventTriggers) != 1 {
 		t.Fatalf("initial upserted event triggers = %d, want 1", len(provider.upsertedEventTriggers))
 	}
-	provider.eventTriggers[workflowConfigEventTriggerID("task_updated")].Target.Input = map[string]any{
+	provider.eventTriggers[workflowConfigEventTriggerID("task_updated")].Target.Plugin.Input = map[string]any{
 		"limit": float64(1),
 	}
 
@@ -5082,10 +5120,7 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
-		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreworkflow.Target{
-			PluginName: "roadmap",
-			Operation:  "sync",
-		})
+		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowPluginTarget("roadmap", "sync"))
 		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
 				Plugin: &proto.BoundWorkflowPluginTarget{
@@ -5143,10 +5178,7 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
-		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreworkflow.Target{
-			PluginName: "roadmap",
-			Operation:  "sync",
-		})
+		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowPluginTarget("roadmap", "sync"))
 		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
 				Plugin: &proto.BoundWorkflowPluginTarget{
@@ -5691,10 +5723,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 				}); err != nil {
 					return nil, fmt.Errorf("store startup token: %w", err)
 				}
-				executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreworkflow.Target{
-					PluginName: "roadmap",
-					Operation:  "sync",
-				})
+				executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowPluginTarget("roadmap", "sync"))
 				resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 					Target: &proto.BoundWorkflowTarget{
 						Plugin: &proto.BoundWorkflowPluginTarget{
@@ -5794,10 +5823,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 		}
 		req := coreworkflow.InvokeOperationRequest{
 			ProviderName: name,
-			Target: coreworkflow.Target{
-				PluginName: "roadmap",
-				Operation:  "sync",
-			},
+			Target:       coreWorkflowPluginTarget("roadmap", "sync"),
 		}
 		configPrincipal := &principal.Principal{
 			SubjectID:           "system:config",

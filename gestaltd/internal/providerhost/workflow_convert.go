@@ -33,7 +33,11 @@ func workflowRunStatusFromProto(status proto.WorkflowRunStatus) (coreworkflow.Ru
 }
 
 func workflowTargetToProto(target coreworkflow.Target) (*proto.BoundWorkflowTarget, error) {
-	plugin, err := workflowPluginTargetToProto(target.PluginTarget())
+	var pluginTarget coreworkflow.PluginTarget
+	if target.Plugin != nil {
+		pluginTarget = *target.Plugin
+	}
+	plugin, err := workflowPluginTargetToProto(pluginTarget)
 	if err != nil {
 		return nil, err
 	}
@@ -67,12 +71,7 @@ func workflowTargetFromProto(target *proto.BoundWorkflowTarget) coreworkflow.Tar
 		plugin = workflowPluginTargetFromProtoFields(target)
 	}
 	out := coreworkflow.Target{
-		PluginName: plugin.PluginName,
-		Operation:  plugin.Operation,
-		Connection: plugin.Connection,
-		Instance:   plugin.Instance,
-		Input:      plugin.Input,
-		Agent:      workflowAgentTargetFromProto(target.GetAgent()),
+		Agent: workflowAgentTargetFromProto(target.GetAgent()),
 	}
 	if coreworkflow.PluginTargetSet(plugin) {
 		out.Plugin = &plugin

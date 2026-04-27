@@ -80,7 +80,7 @@ func (s *Server) listGlobalWorkflowRuns(w http.ResponseWriter, r *http.Request) 
 		if managed == nil || managed.Run == nil {
 			continue
 		}
-		if pluginFilter != "" && strings.TrimSpace(managed.Run.Target.PluginTarget().PluginName) != pluginFilter {
+		if pluginFilter != "" && (managed.Run.Target.Plugin == nil || strings.TrimSpace(managed.Run.Target.Plugin.PluginName) != pluginFilter) {
 			continue
 		}
 		if statusFilter != "" && strings.TrimSpace(string(managed.Run.Status)) != statusFilter {

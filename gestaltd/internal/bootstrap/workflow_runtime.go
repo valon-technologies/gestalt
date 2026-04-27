@@ -207,8 +207,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 	if invoker == nil {
 		return nil, fmt.Errorf("workflow runtime invoker is not configured")
 	}
-	targetPluginName := strings.TrimSpace(req.Target.PluginTarget().PluginName)
-	if targetPluginName == "" {
+	if req.Target.Plugin == nil || strings.TrimSpace(req.Target.Plugin.PluginName) == "" {
 		return nil, fmt.Errorf("workflow target plugin is required")
 	}
 	principalValue := principal.Canonicalized(principal.FromContext(ctx))
@@ -222,9 +221,10 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		}
 		principalValue = executionReferencePrincipal(resolvedRef.SubjectID, resolvedRef.CredentialSubjectID, resolvedRef.Permissions)
 		target = resolvedRef.Target
-		pluginTarget := target.PluginTarget()
-		invokeConnection = strings.TrimSpace(pluginTarget.Connection)
-		invokeInstance = strings.TrimSpace(pluginTarget.Instance)
+		if target.Plugin != nil {
+			invokeConnection = strings.TrimSpace(target.Plugin.Connection)
+			invokeInstance = strings.TrimSpace(target.Plugin.Instance)
+		}
 	} else if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: workflow execution principal is required when execution_ref is omitted", invocation.ErrInternal)
 	}
@@ -235,7 +235,10 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		ctx = invocation.WithConnection(ctx, invokeConnection)
 	}
 	params := workflowInvocationParams(req)
-	pluginTarget := target.PluginTarget()
+	if target.Plugin == nil {
+		return nil, fmt.Errorf("workflow target plugin is required")
+	}
+	pluginTarget := target.Plugin
 	result, err := invoker.Invoke(ctx, principalValue, pluginTarget.PluginName, invokeInstance, pluginTarget.Operation, params)
 	if err != nil {
 		return nil, err
@@ -292,8 +295,11 @@ func (r *workflowRuntime) resolveWorkflowExecutionRef(ctx context.Context, req c
 	if ref.Target.Agent != nil || req.Target.Agent != nil {
 		return nil, fmt.Errorf("%w: workflow execution ref %q target fingerprint is required for agent targets", invocation.ErrAuthorizationDenied, refID)
 	}
-	left := ref.Target.PluginTarget()
-	right := req.Target.PluginTarget()
+	if ref.Target.Plugin == nil || req.Target.Plugin == nil {
+		return nil, fmt.Errorf("%w: workflow execution ref %q target does not match the scheduled invocation", invocation.ErrAuthorizationDenied, refID)
+	}
+	left := *ref.Target.Plugin
+	right := *req.Target.Plugin
 	if strings.TrimSpace(left.PluginName) != strings.TrimSpace(right.PluginName) ||
 		strings.TrimSpace(left.Operation) != strings.TrimSpace(right.Operation) ||
 		strings.TrimSpace(left.Connection) != strings.TrimSpace(right.Connection) ||
@@ -304,7 +310,7 @@ func (r *workflowRuntime) resolveWorkflowExecutionRef(ctx context.Context, req c
 }
 
 func workflowTargetHasMixedKinds(target coreworkflow.Target) bool {
-	return target.Agent != nil && coreworkflow.PluginTargetSet(target.PluginTarget())
+	return target.Agent != nil && target.Plugin != nil && coreworkflow.PluginTargetSet(*target.Plugin)
 }
 
 func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service) (*coreworkflow.InvokeOperationResponse, error) {
@@ -326,7 +332,10 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	} else if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: workflow execution principal is required when execution_ref is omitted", invocation.ErrInternal)
 	}
-	agentTarget := target.AgentTarget()
+	if target.Agent == nil {
+		return nil, fmt.Errorf("workflow agent target is required")
+	}
+	agentTarget := *target.Agent
 	timeout := workflowAgentTimeout(agentTarget.TimeoutSeconds)
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -429,7 +438,10 @@ func waitForWorkflowAgentTurn(ctx context.Context, agentManager agentmanager.Ser
 }
 
 func workflowInvocationParams(req coreworkflow.InvokeOperationRequest) map[string]any {
-	params := maps.Clone(req.Target.PluginTarget().Input)
+	var params map[string]any
+	if req.Target.Plugin != nil {
+		params = maps.Clone(req.Target.Plugin.Input)
+	}
 	if req.Input != nil {
 		if params == nil {
 			params = map[string]any{}
@@ -473,7 +485,7 @@ func workflowInvocationContext(req coreworkflow.InvokeOperationRequest) map[stri
 func workflowTargetContext(target coreworkflow.Target) map[string]any {
 	value := map[string]any{}
 	if target.Agent != nil {
-		agentTarget := target.AgentTarget()
+		agentTarget := *target.Agent
 		value["kind"] = "agent"
 		if providerName := strings.TrimSpace(agentTarget.ProviderName); providerName != "" {
 			value["agentProvider"] = providerName
@@ -499,7 +511,10 @@ func workflowTargetContext(target coreworkflow.Target) map[string]any {
 		}
 		return value
 	}
-	pluginTarget := target.PluginTarget()
+	if target.Plugin == nil {
+		return value
+	}
+	pluginTarget := *target.Plugin
 	plugin := map[string]any{}
 	if pluginName := strings.TrimSpace(pluginTarget.PluginName); pluginName != "" {
 		value["kind"] = "plugin"

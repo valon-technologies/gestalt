@@ -36,12 +36,15 @@ func (s *WorkflowHostServer) InvokeOperation(ctx context.Context, req *proto.Inv
 		return nil, status.Errorf(codes.InvalidArgument, "workflow invoke operation: %v", err)
 	}
 	if value.Target.Agent == nil {
-		value.Target.PluginName = strings.TrimSpace(value.Target.PluginTarget().PluginName)
-		if value.Target.PluginName == "" {
+		if value.Target.Plugin == nil {
 			return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.plugin.plugin_name is required")
 		}
-		value.Target.Operation = strings.TrimSpace(value.Target.PluginTarget().Operation)
-		if value.Target.Operation == "" {
+		value.Target.Plugin.PluginName = strings.TrimSpace(value.Target.Plugin.PluginName)
+		if value.Target.Plugin.PluginName == "" {
+			return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.plugin.plugin_name is required")
+		}
+		value.Target.Plugin.Operation = strings.TrimSpace(value.Target.Plugin.Operation)
+		if value.Target.Plugin.Operation == "" {
 			return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.plugin.operation is required")
 		}
 	} else if strings.TrimSpace(value.Target.Agent.ProviderName) == "" {
