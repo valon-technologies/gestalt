@@ -15,6 +15,12 @@ import (
 const envWriteCatalog = "GESTALT_PLUGIN_WRITE_CATALOG"
 
 func PrepareSourceManifest(manifestPath string) ([]byte, *providermanifestv1.Manifest, error) {
+	absoluteManifestPath, err := filepath.Abs(manifestPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve manifest path: %w", err)
+	}
+	manifestPath = absoluteManifestPath
+
 	data, manifest, err := ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		return nil, nil, err

@@ -91,11 +91,17 @@ func StagePreparedInstallDir(manifestPath, stagingDir string, opts StagePrepared
 		return nil, fmt.Errorf("staging directory is required")
 	}
 
+	absoluteManifestPath, err := filepath.Abs(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve manifest path: %w", err)
+	}
+	manifestPath = absoluteManifestPath
+
 	sourceDir := filepath.Dir(manifestPath)
 	manifestFormat := ManifestFormatFromPath(manifestPath)
 	manifestFile := preparedManifestFileName(manifestFormat)
 
-	_, _, err := ReadSourceManifestFile(manifestPath)
+	_, _, err = ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", manifestPath, err)
 	}

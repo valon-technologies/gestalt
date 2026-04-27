@@ -604,6 +604,7 @@ func TestRun_ProviderReleaseBuildsTypeScriptSourcePluginForCurrentPlatform(t *te
 	t.Setenv("GESTALT_TYPESCRIPT_SDK_DIR", sdkDir)
 	bunPath := writeFakeTypeScriptProviderReleaseBun(
 		t,
+		pluginDir,
 		typeScriptReleasePluginName,
 		typeScriptReleaseTarget,
 		runtime.GOOS,
@@ -789,6 +790,7 @@ func TestRun_ProviderReleaseBuildsRequestedPlatformSets(t *testing.T) {
 		defaultPlatforms := defaultReleasePlatformsForTest(t)
 		bunPath := writeFakeTypeScriptComponentReleaseBunForPlatforms(
 			t,
+			pluginDir,
 			authReleaseTypeScriptTarget,
 			authReleasePluginName,
 			defaultPlatforms,
@@ -1597,7 +1599,7 @@ func TestRun_ProviderReleaseBuildsExecutableAuthProviders(t *testing.T) {
 				pluginDir := newTypeScriptSourceAuthReleaseFixture(t, t.TempDir())
 				sdkDir := writeFakeTypeScriptReleaseSDKDir(t, t.TempDir())
 				t.Setenv("GESTALT_TYPESCRIPT_SDK_DIR", sdkDir)
-				bunPath := writeFakeTypeScriptComponentReleaseBun(t, authReleaseTypeScriptTarget, authReleasePluginName, runtime.GOOS, runtime.GOARCH, builtBinary)
+				bunPath := writeFakeTypeScriptComponentReleaseBun(t, pluginDir, authReleaseTypeScriptTarget, authReleasePluginName, runtime.GOOS, runtime.GOARCH, builtBinary)
 				t.Setenv("PATH", pathWithoutGo(t))
 				t.Setenv("GESTALT_BUN", bunPath)
 				return pluginDir
@@ -2675,15 +2677,15 @@ authentication = "provider:auth_provider"
 	return pluginDir
 }
 
-func writeFakeTypeScriptComponentReleaseBun(t *testing.T, expectedTarget, expectedPluginName, expectedGOOS, expectedGOARCH, builtBinaryPath string) string {
+func writeFakeTypeScriptComponentReleaseBun(t *testing.T, sourceDir, expectedTarget, expectedPluginName, expectedGOOS, expectedGOARCH, builtBinaryPath string) string {
 	t.Helper()
-	return writeFakeTypeScriptComponentReleaseBunForPlatforms(t, expectedTarget, expectedPluginName, []releasePlatform{{
+	return writeFakeTypeScriptComponentReleaseBunForPlatforms(t, sourceDir, expectedTarget, expectedPluginName, []releasePlatform{{
 		GOOS:   expectedGOOS,
 		GOARCH: expectedGOARCH,
 	}}, builtBinaryPath)
 }
 
-func writeFakeTypeScriptComponentReleaseBunForPlatforms(t *testing.T, expectedTarget, expectedPluginName string, expectedPlatforms []releasePlatform, builtBinaryPath string) string {
+func writeFakeTypeScriptComponentReleaseBunForPlatforms(t *testing.T, sourceDir, expectedTarget, expectedPluginName string, expectedPlatforms []releasePlatform, builtBinaryPath string) string {
 	t.Helper()
 
 	allowedPlatforms := make([]fakebun.Platform, 0, len(expectedPlatforms))
@@ -2699,7 +2701,6 @@ func writeFakeTypeScriptComponentReleaseBunForPlatforms(t *testing.T, expectedTa
 		t.Fatal("GESTALT_TYPESCRIPT_SDK_DIR must be set for TypeScript release tests")
 	}
 
-	sourceDir := "."
 	return fakebun.NewExecutable(t, fakebun.Config{
 		Install: &fakebun.InstallConfig{
 			ExpectedCwds:          []string{sourceDir, sdkPath},
@@ -2730,7 +2731,7 @@ func writeFakeTypeScriptReleaseSDKDir(t *testing.T, root string) string {
 	return root
 }
 
-func writeFakeTypeScriptProviderReleaseBun(t *testing.T, expectedPluginName, expectedTarget, expectedGOOS, expectedGOARCH string) string {
+func writeFakeTypeScriptProviderReleaseBun(t *testing.T, sourceDir, expectedPluginName, expectedTarget, expectedGOOS, expectedGOARCH string) string {
 	t.Helper()
 
 	sdkPath := strings.TrimSpace(os.Getenv("GESTALT_TYPESCRIPT_SDK_DIR"))
@@ -2738,7 +2739,6 @@ func writeFakeTypeScriptProviderReleaseBun(t *testing.T, expectedPluginName, exp
 		t.Fatal("GESTALT_TYPESCRIPT_SDK_DIR must be set for TypeScript release tests")
 	}
 
-	sourceDir := "."
 	return fakebun.NewExecutable(t, fakebun.Config{
 		Install: &fakebun.InstallConfig{
 			ExpectedCwds:          []string{sourceDir, sdkPath},

@@ -116,6 +116,10 @@ func runProviderRelease(args []string) (err error) {
 	if err != nil {
 		return err
 	}
+	manifestPath, err = filepath.Abs(manifestPath)
+	if err != nil {
+		return fmt.Errorf("resolve manifest path: %w", err)
+	}
 	sourceDir := filepath.Dir(manifestPath)
 	catalogSnapshot, err := snapshotSourceStaticCatalog(sourceDir)
 	if err != nil {
