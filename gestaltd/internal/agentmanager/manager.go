@@ -170,6 +170,10 @@ func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req 
 	if err != nil {
 		return nil, err
 	}
+	refs, err = m.applyCallerInvokeCredentialModes(req.CallerPluginName, refs)
+	if err != nil {
+		return nil, err
+	}
 	candidates, err := m.searchToolCandidates(ctx, p, refs, "")
 	if err != nil {
 		return nil, err
@@ -407,10 +411,11 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	if err != nil {
 		return nil, err
 	}
-	if err := requireNativeToolSearch(ctx, provider); err != nil {
+	toolRefs, err := normalizeToolRefs(req.ToolRefs)
+	if err != nil {
 		return nil, err
 	}
-	toolRefs, err := normalizeToolRefs(req.ToolRefs)
+	toolRefs, err = m.applyCallerInvokeCredentialModes(req.CallerPluginName, toolRefs)
 	if err != nil {
 		return nil, err
 	}
@@ -418,6 +423,16 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		return nil, err
 	}
 	var tools []coreagent.Tool
+	nativeToolSearch, err := agentProviderSupportsNativeToolSearch(ctx, provider)
+	if err != nil {
+		return nil, err
+	}
+	if !nativeToolSearch && len(toolRefs) > 0 {
+		tools, err = m.resolveExactAgentToolRefs(ctx, p, toolRefs)
+		if err != nil {
+			return nil, err
+		}
+	}
 	turnID := uuid.NewString()
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	if idempotencyKey != "" {
@@ -911,6 +926,29 @@ func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.P
 	return tools, nil
 }
 
+func (m *Manager) resolveExactAgentToolRefs(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) ([]coreagent.Tool, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	out := make([]coreagent.Tool, 0, len(refs))
+	seen := make(map[string]struct{}, len(refs))
+	for i := range refs {
+		if strings.TrimSpace(refs[i].Operation) == "" {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d] requires native tool search", invocation.ErrInternal, i)
+		}
+		tool, err := m.resolveTool(ctx, p, refs[i])
+		if err != nil {
+			return nil, fmt.Errorf("agent tool_refs[%d]: %w", i, err)
+		}
+		if _, ok := seen[tool.ID]; ok {
+			continue
+		}
+		seen[tool.ID] = struct{}{}
+		out = append(out, tool)
+	}
+	return out, nil
+}
+
 func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error) {
 	if m == nil || m.providers == nil {
 		return coreagent.Tool{}, fmt.Errorf("%w: agent providers are not configured", invocation.ErrInternal)
@@ -942,6 +980,16 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	instance := strings.TrimSpace(ref.Instance)
 	if instance != "" && !config.SafeInstanceValue(instance) {
 		return coreagent.Tool{}, fmt.Errorf("instance name contains invalid characters")
+	}
+	credentialMode, err := normalizeAgentToolCredentialMode(ref.CredentialMode)
+	if err != nil {
+		return coreagent.Tool{}, err
+	}
+	if credentialMode != "" {
+		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
+	}
+	if m.authorizer != nil && principal.IsWorkloadPrincipal(p) && (connection != "" || instance != "") {
+		return coreagent.Tool{}, fmt.Errorf("%w: workloads may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
 	}
 
 	ctx = invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, pluginName))
@@ -994,15 +1042,16 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		description = strings.TrimSpace(opMeta.Description)
 	}
 	return coreagent.Tool{
-		ID:               agentToolID(pluginName, opMeta.ID, connection, sessionInstance),
+		ID:               agentToolID(pluginName, opMeta.ID, connection, sessionInstance, credentialMode),
 		Name:             name,
 		Description:      description,
 		ParametersSchema: parametersSchema,
 		Target: coreagent.ToolTarget{
-			Plugin:     pluginName,
-			Operation:  opMeta.ID,
-			Connection: connection,
-			Instance:   sessionInstance,
+			Plugin:         pluginName,
+			Operation:      opMeta.ID,
+			Connection:     connection,
+			Instance:       sessionInstance,
+			CredentialMode: credentialMode,
 		},
 	}, nil
 }
@@ -1052,6 +1101,9 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 				if operation == "" || !agentToolSearchRefAllows(searchRef, operation) {
 					continue
 				}
+				if strings.TrimSpace(searchRef.Operation) == "" && !catalog.OperationVisibleByDefault(op) {
+					continue
+				}
 				if !m.allowOperation(ctx, p, pluginName, operation) || !principal.AllowsOperationPermission(p, pluginName, operation) {
 					continue
 				}
@@ -1093,6 +1145,16 @@ func (m *Manager) catalogForAgentToolSearch(ctx context.Context, p *principal.Pr
 	instance := strings.TrimSpace(ref.Instance)
 	if instance != "" && !config.SafeInstanceValue(instance) {
 		return nil, fmt.Errorf("instance name contains invalid characters")
+	}
+	credentialMode, err := normalizeAgentToolCredentialMode(ref.CredentialMode)
+	if err != nil {
+		return nil, err
+	}
+	if credentialMode != "" {
+		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
+	}
+	if m.authorizer != nil && principal.IsWorkloadPrincipal(p) && (connection != "" || instance != "") {
+		return nil, fmt.Errorf("%w: workloads may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
 	}
 	var resolver invocation.TokenResolver
 	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
@@ -1287,8 +1349,8 @@ func (m *Manager) allowRun(ctx context.Context, p *principal.Principal, ref *cor
 	if len(ref.Tools) == 0 {
 		return true
 	}
-	for _, tool := range ref.Tools {
-		if !m.allowTool(ctx, p, tool) {
+	for i := range ref.Tools {
+		if !m.allowTool(ctx, p, ref.Tools[i]) {
 			return false
 		}
 	}
@@ -1453,7 +1515,7 @@ func operationInputSchema(op catalog.CatalogOperation) (map[string]any, error) {
 	return out, nil
 }
 
-func agentToolID(pluginName, operation, connection, instance string) string {
+func agentToolID(pluginName, operation, connection, instance string, credentialMode core.ConnectionMode) string {
 	id := strings.TrimSpace(pluginName) + "/" + strings.TrimSpace(operation)
 	if strings.TrimSpace(connection) != "" {
 		id += "?connection=" + strings.TrimSpace(connection)
@@ -1464,6 +1526,13 @@ func agentToolID(pluginName, operation, connection, instance string) string {
 			sep = "&"
 		}
 		id += sep + "instance=" + strings.TrimSpace(instance)
+	}
+	if credentialMode != "" {
+		sep := "?"
+		if strings.Contains(id, "?") {
+			sep = "&"
+		}
+		id += sep + "credentialMode=" + string(credentialMode)
 	}
 	return id
 }
@@ -1495,6 +1564,11 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 		ref.Instance = strings.TrimSpace(ref.Instance)
 		ref.Title = strings.TrimSpace(ref.Title)
 		ref.Description = strings.TrimSpace(ref.Description)
+		credentialMode, err := normalizeAgentToolCredentialMode(ref.CredentialMode)
+		if err != nil {
+			return nil, err
+		}
+		ref.CredentialMode = credentialMode
 		if ref.Plugin == "" {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d].plugin is required", invocation.ErrProviderNotFound, idx)
 		}
@@ -1503,18 +1577,84 @@ func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
 	return out, nil
 }
 
-func requireNativeToolSearch(ctx context.Context, provider coreagent.Provider) error {
+func (m *Manager) applyCallerInvokeCredentialModes(callerPluginName string, refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
+	callerPluginName = strings.TrimSpace(callerPluginName)
+	if len(refs) == 0 || m == nil {
+		return refs, nil
+	}
+	modes := make(map[string]core.ConnectionMode)
+	if callerPluginName != "" {
+		for _, invoke := range m.pluginInvokes[callerPluginName] {
+			if strings.TrimSpace(invoke.Surface) != "" {
+				continue
+			}
+			pluginName := strings.TrimSpace(invoke.Plugin)
+			operation := strings.TrimSpace(invoke.Operation)
+			if pluginName == "" || operation == "" {
+				continue
+			}
+			mode, err := normalizeAgentToolCredentialMode(core.ConnectionMode(invoke.CredentialMode))
+			if err != nil {
+				return nil, err
+			}
+			if mode != "" {
+				modes[agentToolInvokeKey(pluginName, operation)] = mode
+			}
+		}
+	}
+	out := append([]coreagent.ToolRef(nil), refs...)
+	for i := range out {
+		operation := strings.TrimSpace(out[i].Operation)
+		if out[i].CredentialMode != "" && callerPluginName == "" {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a caller plugin declaration", invocation.ErrAuthorizationDenied, i)
+		}
+		if operation == "" {
+			if out[i].CredentialMode != "" {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires an exact operation", invocation.ErrAuthorizationDenied, i)
+			}
+			continue
+		}
+		mode, ok := modes[agentToolInvokeKey(out[i].Plugin, operation)]
+		if !ok {
+			if out[i].CredentialMode != "" {
+				return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a declared invoke mode", invocation.ErrAuthorizationDenied, i)
+			}
+			continue
+		}
+		if out[i].CredentialMode != "" && out[i].CredentialMode != mode {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode %q exceeds declared invoke mode %q", invocation.ErrAuthorizationDenied, i, out[i].CredentialMode, mode)
+		}
+		out[i].CredentialMode = mode
+	}
+	return out, nil
+}
+
+func agentToolInvokeKey(pluginName, operation string) string {
+	return strings.TrimSpace(pluginName) + "\x00" + strings.TrimSpace(operation)
+}
+
+func agentProviderSupportsNativeToolSearch(ctx context.Context, provider coreagent.Provider) (bool, error) {
 	if provider == nil {
-		return ErrAgentProviderNotAvailable
+		return false, ErrAgentProviderNotAvailable
 	}
 	caps, err := provider.GetCapabilities(ctx, coreagent.GetCapabilitiesRequest{})
 	if err != nil {
-		return err
+		return false, err
 	}
-	if caps == nil || !caps.NativeToolSearch {
-		return fmt.Errorf("%w: agent provider does not support native tool search", invocation.ErrInternal)
+	return caps != nil && caps.NativeToolSearch, nil
+}
+
+func normalizeAgentToolCredentialMode(mode core.ConnectionMode) (core.ConnectionMode, error) {
+	switch core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(mode)))) {
+	case "":
+		return "", nil
+	case core.ConnectionModeNone:
+		return core.ConnectionModeNone, nil
+	case core.ConnectionModeUser:
+		return core.ConnectionModeUser, nil
+	default:
+		return "", fmt.Errorf("unsupported agent tool credential mode %q", mode)
 	}
-	return nil
 }
 
 func agentActorFromPrincipal(p *principal.Principal) coreagent.Actor {

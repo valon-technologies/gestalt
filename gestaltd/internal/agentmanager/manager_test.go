@@ -9,9 +9,11 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 type catalogCountingProvider struct {
@@ -96,6 +98,54 @@ func TestSearchToolsRestrictsToDefinedRefs(t *testing.T) {
 	}
 	if resp.Tools[0].Target.Plugin != "docs" || resp.Tools[0].Target.Operation != "search" {
 		t.Fatalf("tool target = %#v, want docs.search", resp.Tools[0].Target)
+	}
+}
+
+func TestSearchToolsOmitsHiddenOperationsUnlessExplicitlyScoped(t *testing.T) {
+	t.Parallel()
+
+	hidden := false
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{
+				{
+					ID:       "chat.postMessage",
+					Title:    "Post Message",
+					ReadOnly: false,
+				},
+				{
+					ID:      "events.reply",
+					Title:   "Reply to Event",
+					Visible: &hidden,
+				},
+			}},
+		},
+	}
+	manager := New(Config{Providers: testutil.NewProviderRegistry(t, provider)})
+	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.SearchToolsRequest{
+		Query: "reply",
+	})
+	if err != nil {
+		t.Fatalf("SearchTools: %v", err)
+	}
+	if len(resp.Tools) != 0 {
+		t.Fatalf("SearchTools returned %d hidden tools, want 0", len(resp.Tools))
+	}
+
+	tools, err := manager.ResolveTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.ResolveToolsRequest{
+		ToolRefs: []coreagent.ToolRef{{Plugin: "slack", Operation: "events.reply"}},
+	})
+	if err != nil {
+		t.Fatalf("ResolveTools: %v", err)
+	}
+	if len(tools) != 1 || tools[0].Target.Operation != "events.reply" {
+		t.Fatalf("ResolveTools = %#v, want explicit hidden events.reply", tools)
 	}
 }
 
@@ -227,5 +277,106 @@ func TestResolveToolsExpandsPluginOnlyRefs(t *testing.T) {
 	}
 	if tools[0].Target.Operation != "search" || tools[1].Target.Operation != "summarize" {
 		t.Fatalf("ResolveTools operations = %q, %q; want search, summarize", tools[0].Target.Operation, tools[1].Target.Operation)
+	}
+}
+
+func TestResolveToolsAppliesDeclaredInvokeCredentialMode(t *testing.T) {
+	t.Parallel()
+
+	hidden := false
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:      "events.reply",
+				Title:   "Reply",
+				Visible: &hidden,
+			}}},
+		},
+	}
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, provider),
+		PluginInvokes: map[string][]config.PluginInvocationDependency{
+			"slackbot": {{
+				Plugin:         "slack",
+				Operation:      "events.reply",
+				CredentialMode: providermanifestv1.ConnectionModeNone,
+			}},
+		},
+	})
+
+	tools, err := manager.ResolveTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.ResolveToolsRequest{
+		CallerPluginName: "slackbot",
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:    "slack",
+			Operation: "events.reply",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("ResolveTools: %v", err)
+	}
+	if len(tools) != 1 {
+		t.Fatalf("ResolveTools returned %d tools, want 1", len(tools))
+	}
+	if tools[0].Target.Plugin != "slack" || tools[0].Target.Operation != "events.reply" {
+		t.Fatalf("tool target = %#v, want slack.events.reply", tools[0].Target)
+	}
+	if tools[0].Target.CredentialMode != core.ConnectionModeNone {
+		t.Fatalf("tool credential mode = %q, want %q", tools[0].Target.CredentialMode, core.ConnectionModeNone)
+	}
+}
+
+func TestResolveToolsRejectsUndeclaredCredentialMode(t *testing.T) {
+	t.Parallel()
+
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:    "events.reply",
+				Title: "Reply",
+			}}},
+		},
+	}
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, provider),
+		PluginInvokes: map[string][]config.PluginInvocationDependency{
+			"slackbot": {{
+				Plugin:         "slack",
+				Operation:      "chat.postMessage",
+				CredentialMode: providermanifestv1.ConnectionModeNone,
+			}},
+		},
+	})
+
+	for _, tc := range []struct {
+		name             string
+		callerPluginName string
+	}{
+		{name: "public request"},
+		{name: "caller without matching invoke", callerPluginName: "slackbot"},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := manager.ResolveTools(context.Background(), &principal.Principal{
+				SubjectID: principal.UserSubjectID("user-1"),
+			}, coreagent.ResolveToolsRequest{
+				CallerPluginName: tc.callerPluginName,
+				ToolRefs: []coreagent.ToolRef{{
+					Plugin:         "slack",
+					Operation:      "events.reply",
+					CredentialMode: core.ConnectionModeNone,
+				}},
+			})
+			if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+				t.Fatalf("ResolveTools error = %v, want ErrAuthorizationDenied", err)
+			}
+		})
 	}
 }

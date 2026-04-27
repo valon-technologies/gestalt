@@ -13874,6 +13874,168 @@ func TestHostedHTTPBinding_APIKeySyncInvokesOperation(t *testing.T) {
 	}
 }
 
+func TestVisibleFalseHidesOperationFromHTTPSurfacesButAllowsHostedBinding(t *testing.T) {
+	t.Parallel()
+
+	hidden := false
+	invocations := make(chan string, 1)
+	provider := &stubIntegrationWithCatalog{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "events",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				invocations <- op
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		catalog: serverTestCatalog("events", []catalog.CatalogOperation{
+			{ID: "visible_status", Method: http.MethodGet, Path: "/visible_status", Transport: catalog.TransportREST},
+			{ID: "handle_event", Method: http.MethodPost, Path: "/handle_event", Transport: catalog.TransportREST, Visible: &hidden},
+		}),
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"events": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"eventKey": {
+						Type:   providermanifestv1.HTTPSecuritySchemeTypeAPIKey,
+						Name:   "X-Webhook-Key",
+						In:     providermanifestv1.HTTPInHeader,
+						Secret: &providermanifestv1.HTTPSecretRef{Secret: "shared-key"},
+					},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:     "/event",
+						Method:   http.MethodPost,
+						Security: "eventKey",
+						Target:   "handle_event",
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/api/v1/integrations/events/operations")
+	if err != nil {
+		t.Fatalf("list operations: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("list operations status = %d, want %d: %s", resp.StatusCode, http.StatusOK, body)
+	}
+	var ops []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		_ = resp.Body.Close()
+		t.Fatalf("decode operations: %v", err)
+	}
+	_ = resp.Body.Close()
+	if len(ops) != 1 || ops[0]["id"] != "visible_status" {
+		t.Fatalf("operations = %#v, want only visible_status", ops)
+	}
+
+	resp, err = http.Post(ts.URL+"/api/v1/events/handle_event", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatalf("generic hidden operation request: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("generic hidden operation status = %d, want %d: %s", resp.StatusCode, http.StatusNotFound, body)
+	}
+	select {
+	case op := <-invocations:
+		t.Fatalf("generic hidden operation unexpectedly invoked %q", op)
+	default:
+	}
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/events/event", strings.NewReader(`{"event":"opened"}`))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Webhook-Key", "shared-key")
+
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("hosted binding request: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("hosted binding status = %d, want %d: %s", resp.StatusCode, http.StatusOK, body)
+	}
+	select {
+	case op := <-invocations:
+		if op != "handle_event" {
+			t.Fatalf("hosted binding invoked %q, want handle_event", op)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for hosted binding invocation")
+	}
+}
+
+func TestVisibleFalseGenericRouteSkipsSessionCatalogCredentialResolution(t *testing.T) {
+	t.Parallel()
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	svc := coretesting.NewStubServices(t)
+	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
+	seedUser(t, svc, "viewer-user@test.local")
+
+	hidden := false
+	var sessionCatalogCalls atomic.Int64
+	provider := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "events",
+				ConnMode: core.ConnectionModeUser,
+			},
+		},
+		catalog: serverTestCatalog("events", []catalog.CatalogOperation{
+			{ID: "handle_event", Method: http.MethodPost, Path: "/handle_event", Transport: catalog.TransportREST, Visible: &hidden},
+		}),
+		catalogForRequestFn: func(context.Context, string) (*catalog.Catalog, error) {
+			sessionCatalogCalls.Add(1)
+			return nil, fmt.Errorf("session catalog should not be resolved for static hidden operations")
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/events/handle_event", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("generic hidden operation request: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("generic hidden operation status = %d, want %d: %s", resp.StatusCode, http.StatusNotFound, body)
+	}
+	if calls := sessionCatalogCalls.Load(); calls != 0 {
+		t.Fatalf("session catalog calls = %d, want 0", calls)
+	}
+}
+
 func TestHostedHTTPBinding_APIKeyQueryDoesNotLeakCredentialParam(t *testing.T) {
 	t.Parallel()
 

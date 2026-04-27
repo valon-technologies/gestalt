@@ -375,6 +375,9 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	if connection := strings.TrimSpace(tool.Target.Connection); connection != "" {
 		ctx = invocation.WithConnection(ctx, connection)
 	}
+	if mode := tool.Target.CredentialMode; mode != "" {
+		ctx = invocation.WithCredentialModeOverride(ctx, mode)
+	}
 	params := maps.Clone(req.Arguments)
 	result, err := invoker.Invoke(ctx, principalValue, tool.Target.Plugin, strings.TrimSpace(tool.Target.Instance), tool.Target.Operation, params)
 	if err != nil {
@@ -490,9 +493,9 @@ func (r *agentRuntime) SearchTools(ctx context.Context, req coreagent.SearchTool
 
 func lookupAgentTool(tools []coreagent.Tool, toolID string) (coreagent.Tool, bool) {
 	toolID = strings.TrimSpace(toolID)
-	for _, tool := range tools {
-		if strings.TrimSpace(tool.ID) == toolID {
-			return tool, true
+	for i := range tools {
+		if strings.TrimSpace(tools[i].ID) == toolID {
+			return tools[i], true
 		}
 	}
 	return coreagent.Tool{}, false
@@ -504,13 +507,13 @@ func mergeAgentTools(existing []coreagent.Tool, loaded []coreagent.Tool) []corea
 	}
 	out := append([]coreagent.Tool(nil), existing...)
 	seen := make(map[string]struct{}, len(out)+len(loaded))
-	for _, tool := range out {
-		if id := strings.TrimSpace(tool.ID); id != "" {
+	for i := range out {
+		if id := strings.TrimSpace(out[i].ID); id != "" {
 			seen[id] = struct{}{}
 		}
 	}
-	for _, tool := range loaded {
-		id := strings.TrimSpace(tool.ID)
+	for i := range loaded {
+		id := strings.TrimSpace(loaded[i].ID)
 		if id == "" {
 			continue
 		}
@@ -518,7 +521,7 @@ func mergeAgentTools(existing []coreagent.Tool, loaded []coreagent.Tool) []corea
 			continue
 		}
 		seen[id] = struct{}{}
-		out = append(out, tool)
+		out = append(out, loaded[i])
 	}
 	return out
 }
@@ -534,21 +537,21 @@ func validateAgentToolSearchResults(p *principal.Principal, refs []coreagent.Too
 	if source != coreagent.ToolSourceModeNativeSearch {
 		return fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInternal, source)
 	}
-	for _, tool := range tools {
-		if strings.TrimSpace(tool.ID) == "" {
+	for i := range tools {
+		if strings.TrimSpace(tools[i].ID) == "" {
 			return fmt.Errorf("%w: searched agent tool id is required", invocation.ErrAuthorizationDenied)
 		}
-		target := tool.Target
+		target := tools[i].Target
 		pluginName := strings.TrimSpace(target.Plugin)
 		operation := strings.TrimSpace(target.Operation)
 		if pluginName == "" || operation == "" {
 			return fmt.Errorf("%w: searched agent tool target is incomplete", invocation.ErrAuthorizationDenied)
 		}
 		if !principal.AllowsProviderPermission(p, pluginName) || !principal.AllowsOperationPermission(p, pluginName, operation) {
-			return fmt.Errorf("%w: searched agent tool %q is not authorized", invocation.ErrAuthorizationDenied, tool.ID)
+			return fmt.Errorf("%w: searched agent tool %q is not authorized", invocation.ErrAuthorizationDenied, tools[i].ID)
 		}
 		if len(refs) > 0 && !agentToolMatchesRefs(target, refs) {
-			return fmt.Errorf("%w: searched agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, tool.ID)
+			return fmt.Errorf("%w: searched agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, tools[i].ID)
 		}
 	}
 	return nil
@@ -569,6 +572,9 @@ func agentToolMatchesRefs(target coreagent.ToolTarget, refs []coreagent.ToolRef)
 		if instance := strings.TrimSpace(ref.Instance); instance != "" && instance != strings.TrimSpace(target.Instance) {
 			continue
 		}
+		if ref.CredentialMode != "" && ref.CredentialMode != target.CredentialMode {
+			continue
+		}
 		return true
 	}
 	return false
@@ -579,9 +585,9 @@ func permissionsForAgentTools(tools []coreagent.Tool) []core.AccessPermission {
 		return nil
 	}
 	operationsByPlugin := make(map[string]map[string]struct{}, len(tools))
-	for _, tool := range tools {
-		pluginName := strings.TrimSpace(tool.Target.Plugin)
-		operation := strings.TrimSpace(tool.Target.Operation)
+	for i := range tools {
+		pluginName := strings.TrimSpace(tools[i].Target.Plugin)
+		operation := strings.TrimSpace(tools[i].Target.Operation)
 		if pluginName == "" || operation == "" {
 			continue
 		}

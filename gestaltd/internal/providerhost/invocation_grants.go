@@ -5,12 +5,13 @@ import (
 	"strings"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
 type invocationGrant struct {
 	AllOperations bool
-	Operations    map[string]struct{}
+	Operations    map[string]core.ConnectionMode
 	Surfaces      map[string]struct{}
 }
 
@@ -20,9 +21,10 @@ type InvocationGrant = invocationGrant
 type InvocationGrants = invocationGrants
 
 type invocationGrantClaims struct {
-	AllOperations bool     `json:"all_operations,omitempty"`
-	Operations    []string `json:"operations,omitempty"`
-	Surfaces      []string `json:"surfaces,omitempty"`
+	AllOperations  bool              `json:"all_operations,omitempty"`
+	Operations     []string          `json:"operations,omitempty"`
+	OperationModes map[string]string `json:"operation_modes,omitempty"`
+	Surfaces       []string          `json:"surfaces,omitempty"`
 }
 
 func InvocationDependencyGrants(deps []config.PluginInvocationDependency) InvocationGrants {
@@ -40,9 +42,9 @@ func InvocationDependencyGrants(deps []config.PluginInvocationDependency) Invoca
 		grant := grants[plugin]
 		if operation != "" {
 			if grant.Operations == nil {
-				grant.Operations = make(map[string]struct{})
+				grant.Operations = make(map[string]core.ConnectionMode)
 			}
-			grant.Operations[operation] = struct{}{}
+			grant.Operations[operation] = core.ConnectionMode(dep.CredentialMode)
 		}
 		if surface != "" {
 			if grant.Surfaces == nil {
@@ -81,9 +83,9 @@ func decodePluginInvocationGrantProto(grants []*proto.PluginInvocationGrant) inv
 				continue
 			}
 			if decodedGrant.Operations == nil {
-				decodedGrant.Operations = make(map[string]struct{})
+				decodedGrant.Operations = make(map[string]core.ConnectionMode)
 			}
-			decodedGrant.Operations[operation] = struct{}{}
+			decodedGrant.Operations[operation] = ""
 		}
 		for _, surface := range grant.GetSurfaces() {
 			surface = strings.ToLower(strings.TrimSpace(surface))
@@ -118,9 +120,9 @@ func cloneInvocationGrants(src invocationGrants) invocationGrants {
 			AllOperations: grant.AllOperations,
 		}
 		if len(grant.Operations) > 0 {
-			cloned.Operations = make(map[string]struct{}, len(grant.Operations))
-			for operation := range grant.Operations {
-				cloned.Operations[operation] = struct{}{}
+			cloned.Operations = make(map[string]core.ConnectionMode, len(grant.Operations))
+			for operation, mode := range grant.Operations {
+				cloned.Operations[operation] = mode
 			}
 		}
 		if len(grant.Surfaces) > 0 {
@@ -141,9 +143,10 @@ func encodeInvocationGrantClaims(src invocationGrants) map[string]invocationGran
 	out := make(map[string]invocationGrantClaims, len(src))
 	for plugin, grant := range src {
 		out[plugin] = invocationGrantClaims{
-			AllOperations: grant.AllOperations,
-			Operations:    sortedGrantKeys(grant.Operations),
-			Surfaces:      sortedGrantKeys(grant.Surfaces),
+			AllOperations:  grant.AllOperations,
+			Operations:     sortedGrantKeys(grant.Operations),
+			OperationModes: grantOperationModes(grant.Operations),
+			Surfaces:       sortedGrantKeys(grant.Surfaces),
 		}
 	}
 	return out
@@ -164,9 +167,19 @@ func decodeInvocationGrantClaims(src map[string]invocationGrantClaims) invocatio
 				continue
 			}
 			if decoded.Operations == nil {
-				decoded.Operations = make(map[string]struct{})
+				decoded.Operations = make(map[string]core.ConnectionMode)
 			}
-			decoded.Operations[operation] = struct{}{}
+			decoded.Operations[operation] = ""
+		}
+		for operation, mode := range grant.OperationModes {
+			operation = strings.TrimSpace(operation)
+			if operation == "" {
+				continue
+			}
+			if _, ok := decoded.Operations[operation]; !ok {
+				continue
+			}
+			decoded.Operations[operation] = core.ConnectionMode(strings.TrimSpace(mode))
 		}
 		for _, surface := range grant.Surfaces {
 			surface = strings.ToLower(strings.TrimSpace(surface))
@@ -199,8 +212,12 @@ func invocationGrantSubset(candidate, allowed invocationGrants) bool {
 			return false
 		}
 		if len(grant.Operations) > 0 && !allowedGrant.AllOperations {
-			for operation := range grant.Operations {
-				if _, ok := allowedGrant.Operations[operation]; !ok {
+			for operation, mode := range grant.Operations {
+				allowedMode, ok := allowedGrant.Operations[operation]
+				if !ok {
+					return false
+				}
+				if mode != "" && allowedMode != "" && mode != allowedMode {
 					return false
 				}
 			}
@@ -212,6 +229,23 @@ func invocationGrantSubset(candidate, allowed invocationGrants) bool {
 		}
 	}
 	return true
+}
+
+func inheritInvocationGrantModes(candidate, parent invocationGrants) invocationGrants {
+	out := cloneInvocationGrants(candidate)
+	for plugin, grant := range out {
+		parentGrant, ok := parent[plugin]
+		if !ok || len(grant.Operations) == 0 {
+			continue
+		}
+		for operation, mode := range grant.Operations {
+			if mode == "" {
+				grant.Operations[operation] = parentGrant.Operations[operation]
+			}
+		}
+		out[plugin] = grant
+	}
+	return out
 }
 
 func allowsOperation(grants invocationGrants, plugin, operation string) bool {
@@ -229,6 +263,17 @@ func allowsOperation(grants invocationGrants, plugin, operation string) bool {
 	return ok
 }
 
+func operationCredentialMode(grants invocationGrants, plugin, operation string) core.ConnectionMode {
+	if len(grants) == 0 {
+		return ""
+	}
+	grant, ok := grants[plugin]
+	if !ok || grant.AllOperations {
+		return ""
+	}
+	return grant.Operations[operation]
+}
+
 func allowsSurface(grants invocationGrants, plugin, surface string) bool {
 	if len(grants) == 0 {
 		return false
@@ -241,7 +286,7 @@ func allowsSurface(grants invocationGrants, plugin, surface string) bool {
 	return ok
 }
 
-func sortedGrantKeys(values map[string]struct{}) []string {
+func sortedGrantKeys[V any](values map[string]V) []string {
 	if len(values) == 0 {
 		return nil
 	}
@@ -251,4 +296,20 @@ func sortedGrantKeys(values map[string]struct{}) []string {
 	}
 	slices.Sort(keys)
 	return keys
+}
+
+func grantOperationModes(operations map[string]core.ConnectionMode) map[string]string {
+	if len(operations) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(operations))
+	for operation, mode := range operations {
+		if mode != "" {
+			out[operation] = string(mode)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

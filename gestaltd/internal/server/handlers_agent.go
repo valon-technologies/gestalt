@@ -64,12 +64,13 @@ type agentMessagePartImageRefRequest struct {
 }
 
 type agentToolRefRequest struct {
-	Plugin      string `json:"plugin,omitempty"`
-	Operation   string `json:"operation,omitempty"`
-	Connection  string `json:"connection,omitempty"`
-	Instance    string `json:"instance,omitempty"`
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty"`
+	Plugin         string `json:"plugin,omitempty"`
+	Operation      string `json:"operation,omitempty"`
+	Connection     string `json:"connection,omitempty"`
+	Instance       string `json:"instance,omitempty"`
+	CredentialMode string `json:"credentialMode,omitempty"`
+	Title          string `json:"title,omitempty"`
+	Description    string `json:"description,omitempty"`
 }
 
 type agentSessionCreateRequest struct {
@@ -657,12 +658,13 @@ func agentToolRefsFromRequest(refs []agentToolRefRequest) []coreagent.ToolRef {
 	out := make([]coreagent.ToolRef, 0, len(refs))
 	for _, ref := range refs {
 		out = append(out, coreagent.ToolRef{
-			Plugin:      strings.TrimSpace(ref.Plugin),
-			Operation:   strings.TrimSpace(ref.Operation),
-			Connection:  strings.TrimSpace(ref.Connection),
-			Instance:    strings.TrimSpace(ref.Instance),
-			Title:       strings.TrimSpace(ref.Title),
-			Description: strings.TrimSpace(ref.Description),
+			Plugin:         strings.TrimSpace(ref.Plugin),
+			Operation:      strings.TrimSpace(ref.Operation),
+			Connection:     strings.TrimSpace(ref.Connection),
+			Instance:       strings.TrimSpace(ref.Instance),
+			CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(ref.CredentialMode))),
+			Title:          strings.TrimSpace(ref.Title),
+			Description:    strings.TrimSpace(ref.Description),
 		})
 	}
 	return out
@@ -675,12 +677,13 @@ func agentToolRefsToRequest(refs []coreagent.ToolRef) []agentToolRefRequest {
 	out := make([]agentToolRefRequest, 0, len(refs))
 	for _, ref := range refs {
 		out = append(out, agentToolRefRequest{
-			Plugin:      strings.TrimSpace(ref.Plugin),
-			Operation:   strings.TrimSpace(ref.Operation),
-			Connection:  strings.TrimSpace(ref.Connection),
-			Instance:    strings.TrimSpace(ref.Instance),
-			Title:       strings.TrimSpace(ref.Title),
-			Description: strings.TrimSpace(ref.Description),
+			Plugin:         strings.TrimSpace(ref.Plugin),
+			Operation:      strings.TrimSpace(ref.Operation),
+			Connection:     strings.TrimSpace(ref.Connection),
+			Instance:       strings.TrimSpace(ref.Instance),
+			CredentialMode: string(ref.CredentialMode),
+			Title:          strings.TrimSpace(ref.Title),
+			Description:    strings.TrimSpace(ref.Description),
 		})
 	}
 	return out
@@ -690,6 +693,11 @@ func validateAgentToolRefs(refs []agentToolRefRequest) error {
 	for idx, ref := range refs {
 		if strings.TrimSpace(ref.Plugin) == "" {
 			return fmt.Errorf("toolRefs[%d].plugin is required", idx)
+		}
+		switch strings.ToLower(strings.TrimSpace(ref.CredentialMode)) {
+		case "":
+		default:
+			return fmt.Errorf("toolRefs[%d].credentialMode is not supported on public agent requests", idx)
 		}
 	}
 	return nil

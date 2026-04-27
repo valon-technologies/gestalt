@@ -70,13 +70,14 @@ type invocationClaims struct {
 }
 
 type invocationTokenContext struct {
-	principal   *principal.Principal
-	requestMeta invocation.RequestMeta
-	credential  invocation.CredentialContext
-	invocation  *invocation.InvocationMeta
-	surface     invocation.InvocationSurface
-	connection  string
-	grants      invocationGrants
+	principal              *principal.Principal
+	requestMeta            invocation.RequestMeta
+	credential             invocation.CredentialContext
+	credentialModeOverride core.ConnectionMode
+	invocation             *invocation.InvocationMeta
+	surface                invocation.InvocationSurface
+	connection             string
+	grants                 invocationGrants
 }
 
 func NewInvocationTokenManager(secret []byte) (*InvocationTokenManager, error) {
@@ -121,6 +122,8 @@ func (m *InvocationTokenManager) ExchangeToken(parentToken, pluginName string, g
 		grants = parentGrants
 	case !invocationGrantSubset(grants, parentGrants):
 		return "", fmt.Errorf("requested invocation grants exceed the parent token")
+	default:
+		grants = inheritInvocationGrantModes(grants, parentGrants)
 	}
 	child := *claims
 	child.ID = uuid.NewString()
@@ -301,6 +304,9 @@ func restoreInvocationTokenContext(ctx context.Context, tokenCtx invocationToken
 	}
 	if tokenCtx.credential != (invocation.CredentialContext{}) {
 		ctx = invocation.WithCredentialContext(ctx, tokenCtx.credential)
+	}
+	if tokenCtx.credentialModeOverride != "" {
+		ctx = invocation.WithCredentialModeOverride(ctx, tokenCtx.credentialModeOverride)
 	}
 	if tokenCtx.surface != "" {
 		ctx = invocation.WithInvocationSurface(ctx, tokenCtx.surface)

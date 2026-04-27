@@ -487,6 +487,7 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 		entry.Invokes[i].Plugin = strings.TrimSpace(entry.Invokes[i].Plugin)
 		entry.Invokes[i].Operation = strings.TrimSpace(entry.Invokes[i].Operation)
 		entry.Invokes[i].Surface = strings.ToLower(strings.TrimSpace(entry.Invokes[i].Surface))
+		entry.Invokes[i].CredentialMode = providermanifestv1.ConnectionMode(strings.ToLower(strings.TrimSpace(string(entry.Invokes[i].CredentialMode))))
 		switch {
 		case entry.Invokes[i].Plugin == "":
 			return fmt.Errorf("config validation: plugins.%s.invokes[%d].plugin is required", name, i)
@@ -496,6 +497,8 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 			return fmt.Errorf("config validation: plugins.%s.invokes[%d] may set only one of .operation or .surface", name, i)
 		case entry.Invokes[i].Surface != "" && entry.Invokes[i].Surface != string(SpecSurfaceGraphQL):
 			return fmt.Errorf("config validation: plugins.%s.invokes[%d].surface %q is not supported", name, i, entry.Invokes[i].Surface)
+		case entry.Invokes[i].CredentialMode != "" && entry.Invokes[i].CredentialMode != providermanifestv1.ConnectionModeNone && entry.Invokes[i].CredentialMode != providermanifestv1.ConnectionModeUser:
+			return fmt.Errorf("config validation: plugins.%s.invokes[%d].credentialMode %q is not supported", name, i, entry.Invokes[i].CredentialMode)
 		}
 		key := entry.Invokes[i].Plugin + "\x00op:" + entry.Invokes[i].Operation + "\x00surface:" + entry.Invokes[i].Surface
 		if prev, ok := seenInvokes[key]; ok {

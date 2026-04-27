@@ -38,7 +38,7 @@ func TestInvocationTokenExchangePreservesAbsoluteDelegationExpiry(t *testing.T) 
 		&invocation.InvocationMeta{RequestID: "req-1"},
 	)
 	rootToken, err := manager.MintRootToken(ctx, "caller", invocationGrants{
-		"example": {Operations: map[string]struct{}{"request_context": {}}},
+		"example": {Operations: map[string]core.ConnectionMode{"request_context": ""}},
 	})
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
@@ -104,7 +104,7 @@ func TestInvocationTokenExchangeAllowsNarrowingWildcardGrants(t *testing.T) {
 	}
 
 	if _, err := manager.ExchangeToken(rootToken, "caller", invocationGrants{
-		"example": {Operations: map[string]struct{}{"request_context": {}}},
+		"example": {Operations: map[string]core.ConnectionMode{"request_context": ""}},
 	}, time.Minute); err != nil {
 		t.Fatalf("ExchangeToken should allow narrowing wildcard grants: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestInvocationTokenResolvePreservesEmailOnlyPrincipals(t *testing.T) {
 		},
 	)
 	token, err := manager.MintRootToken(ctx, "caller", invocationGrants{
-		"example": {Operations: map[string]struct{}{"request_context": {}}},
+		"example": {Operations: map[string]core.ConnectionMode{"request_context": ""}},
 	})
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
@@ -148,5 +148,27 @@ func TestInvocationTokenResolvePreservesEmailOnlyPrincipals(t *testing.T) {
 	}
 	if got := tokenCtx.principal.Identity.Email; got != "ada@example.com" {
 		t.Fatalf("resolved email = %q, want ada@example.com", got)
+	}
+}
+
+func TestDecodeInvocationGrantClaimsIgnoresModesForUndeclaredOperations(t *testing.T) {
+	t.Parallel()
+
+	grants := decodeInvocationGrantClaims(map[string]invocationGrantClaims{
+		"slack": {
+			Operations: []string{"chat.postMessage"},
+			OperationModes: map[string]string{
+				"chat.postMessage": "user",
+				"events.reply":     "none",
+			},
+		},
+	})
+
+	slackGrant := grants["slack"]
+	if _, ok := slackGrant.Operations["events.reply"]; ok {
+		t.Fatal("decodeInvocationGrantClaims should not add operations that only appear in operation_modes")
+	}
+	if got := slackGrant.Operations["chat.postMessage"]; got != core.ConnectionModeUser {
+		t.Fatalf("chat.postMessage mode = %q, want %q", got, core.ConnectionModeUser)
 	}
 }
