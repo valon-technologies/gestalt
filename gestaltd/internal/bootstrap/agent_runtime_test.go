@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -76,6 +77,46 @@ func cloneAnyMap(src map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
+}
+
+type pingAgentProvider struct {
+	coreagent.UnimplementedProvider
+	calls *int
+	err   error
+}
+
+func (p *pingAgentProvider) Ping(context.Context) error {
+	if p.calls != nil {
+		(*p.calls)++
+	}
+	return p.err
+}
+
+func TestAgentRuntimePingChecksSelectedProviderOnly(t *testing.T) {
+	t.Parallel()
+
+	defaultCalls := 0
+	canaryCalls := 0
+	runtime := &agentRuntime{
+		defaultProviderName: "simple",
+		providers: map[string]coreagent.Provider{
+			"canary": &pingAgentProvider{
+				calls: &canaryCalls,
+				err:   errors.New("canary down"),
+			},
+			"simple": &pingAgentProvider{calls: &defaultCalls},
+		},
+	}
+
+	if err := runtime.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+	if defaultCalls != 1 {
+		t.Fatalf("default provider Ping calls = %d, want 1", defaultCalls)
+	}
+	if canaryCalls != 0 {
+		t.Fatalf("canary provider Ping calls = %d, want 0", canaryCalls)
+	}
 }
 
 func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *testing.T) {

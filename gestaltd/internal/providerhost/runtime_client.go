@@ -3,6 +3,7 @@ package providerhost
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -77,6 +78,29 @@ func ConfigureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycl
 		Version:     configuredMeta.GetVersion(),
 		Warnings:    append([]string(nil), configuredMeta.GetWarnings()...),
 	}, nil
+}
+
+func CheckRuntimeProviderHealth(ctx context.Context, client proto.ProviderLifecycleClient) error {
+	if client == nil {
+		return fmt.Errorf("runtime client is required")
+	}
+	healthCtx, cancel := providerCallContext(ctx)
+	defer cancel()
+	resp, err := client.HealthCheck(healthCtx, &emptypb.Empty{})
+	if err != nil {
+		return err
+	}
+	if resp == nil {
+		return fmt.Errorf("provider health check returned nil response")
+	}
+	if !resp.GetReady() {
+		message := strings.TrimSpace(resp.GetMessage())
+		if message == "" {
+			message = "not ready"
+		}
+		return fmt.Errorf("provider health check failed: %s", message)
+	}
+	return nil
 }
 
 func validateRuntimeProtocol(meta *proto.ProviderIdentity) error {

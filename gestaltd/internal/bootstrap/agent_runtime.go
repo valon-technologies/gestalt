@@ -216,6 +216,29 @@ func (r *agentRuntime) ProviderNames() []string {
 	return names
 }
 
+func (r *agentRuntime) Ping(ctx context.Context) error {
+	if r == nil {
+		return fmt.Errorf("agent runtime is not configured")
+	}
+	r.mu.RLock()
+	hasProviders := len(r.providers) > 0
+	defaultProviderName := strings.TrimSpace(r.defaultProviderName)
+	r.mu.RUnlock()
+
+	if !hasProviders && defaultProviderName == "" {
+		return nil
+	}
+
+	providerName, provider, err := r.ResolveProviderSelection("")
+	if err != nil {
+		return err
+	}
+	if err := provider.Ping(ctx); err != nil {
+		return fmt.Errorf("agent provider %q unavailable: %w", providerName, err)
+	}
+	return nil
+}
+
 func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
 	if r == nil {
 		return nil, fmt.Errorf("agent runtime is not configured")

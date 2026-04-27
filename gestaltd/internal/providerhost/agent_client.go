@@ -10,7 +10,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type AgentExecConfig struct {
@@ -310,10 +309,19 @@ func (r *remoteAgent) GetCapabilities(ctx context.Context, req coreagent.GetCapa
 }
 
 func (r *remoteAgent) Ping(ctx context.Context) error {
-	ctx, cancel := providerCallContext(ctx)
+	if err := CheckRuntimeProviderHealth(ctx, r.runtime); err != nil {
+		return err
+	}
+	capabilitiesCtx, cancel := providerCallContext(ctx)
 	defer cancel()
-	_, err := r.runtime.HealthCheck(ctx, &emptypb.Empty{})
-	return err
+	resp, err := r.client.GetCapabilities(capabilitiesCtx, &proto.GetAgentProviderCapabilitiesRequest{})
+	if err != nil {
+		return fmt.Errorf("agent provider capabilities check failed: %w", err)
+	}
+	if resp == nil {
+		return fmt.Errorf("agent provider capabilities check returned nil response")
+	}
+	return nil
 }
 
 func (r *remoteAgent) Close() error {
