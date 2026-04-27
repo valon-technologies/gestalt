@@ -83,7 +83,7 @@ func TestProviderRemoteConfigPathSynthesizesSourcePlugin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config.LoadPaths: %v", err)
 	}
-	targets, err := collectProviderRemoteTargets(cfg, "")
+	targets, err := collectProviderRemoteTargets(cfg, "", true)
 	if err != nil {
 		t.Fatalf("collectProviderRemoteTargets: %v", err)
 	}
@@ -92,6 +92,12 @@ func TestProviderRemoteConfigPathSynthesizesSourcePlugin(t *testing.T) {
 	}
 	if targets[0].Entry.ResolvedManifestPath == "" {
 		t.Fatal("target resolved manifest path is empty")
+	}
+	if targets[0].Source != "github.com/test/plugins/provider" {
+		t.Fatalf("target source = %q, want manifest source", targets[0].Source)
+	}
+	if !targets[0].InheritRemoteConfig {
+		t.Fatal("target InheritRemoteConfig = false, want true")
 	}
 }
 

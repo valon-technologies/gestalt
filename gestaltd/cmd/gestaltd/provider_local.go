@@ -159,8 +159,10 @@ func runProviderDev(args []string) error {
 }
 
 type providerRemoteTarget struct {
-	Name  string
-	Entry *config.ProviderEntry
+	Name                string
+	Source              string
+	Entry               *config.ProviderEntry
+	InheritRemoteConfig bool
 }
 
 func runProviderRemoteDev(opts providerLocalCommandOptions) error {
@@ -174,7 +176,8 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	if err != nil {
 		return fmt.Errorf("loading provider dev remote config: %w", err)
 	}
-	targets, err := collectProviderRemoteTargets(cfg, opts.Name)
+	inheritRemoteConfig := opts.Path != "" && len(opts.ConfigPaths) == 0
+	targets, err := collectProviderRemoteTargets(cfg, opts.Name, inheritRemoteConfig)
 	if err != nil {
 		return err
 	}
@@ -198,20 +201,30 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		Token:   token,
 	}
 	requestedProviders := make([]providerdev.AttachProvider, 0, len(targets))
-	localUIHandlers := make(map[string]http.Handler)
-	for _, target := range targets {
+	localUIHandlersByTarget := map[int]http.Handler{}
+	for i, target := range targets {
 		spec, _, err := bootstrap.BuildStartupProviderSpec(target.Name, target.Entry)
 		if err != nil {
 			return fmt.Errorf("build provider dev remote spec for plugins.%s: %w", target.Name, err)
 		}
-		pluginConfig, err := config.NodeToMap(target.Entry.Config)
-		if err != nil {
-			return fmt.Errorf("build provider dev remote config for plugins.%s: %w", target.Name, err)
+		attachName := target.Name
+		if target.InheritRemoteConfig && opts.Name == "" {
+			attachName = ""
 		}
 		requested := providerdev.AttachProvider{
-			Name:   target.Name,
+			Name:   attachName,
+			Source: target.Source,
 			Spec:   spec,
-			Config: pluginConfig,
+		}
+		if !target.InheritRemoteConfig {
+			pluginConfig, err := config.NodeToMap(target.Entry.Config)
+			if err != nil {
+				return fmt.Errorf("build provider dev remote config for plugins.%s: %w", target.Name, err)
+			}
+			if pluginConfig == nil {
+				pluginConfig = map[string]any{}
+			}
+			requested.Config = &pluginConfig
 		}
 		uiHandler, hasUI, err := providerRemoteUIHandler(cfg, target)
 		if err != nil {
@@ -219,7 +232,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		}
 		if hasUI {
 			requested.UI = &providerdev.AttachUI{}
-			localUIHandlers[target.Name] = uiHandler
+			localUIHandlersByTarget[i] = uiHandler
 		}
 		requestedProviders = append(requestedProviders, requested)
 	}
@@ -232,6 +245,20 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	sessionProviders := make(map[string]providerdev.CreateSessionProvider, len(session.Providers))
 	for _, provider := range session.Providers {
 		sessionProviders[provider.Name] = provider
+	}
+	localUIHandlers := make(map[string]http.Handler, len(localUIHandlersByTarget))
+	for i := range targets {
+		remoteName := targets[i].Name
+		if targets[i].InheritRemoteConfig && opts.Name == "" {
+			if len(targets) != 1 || len(session.Providers) != 1 {
+				return fmt.Errorf("remote provider dev could not resolve unique provider for source %q; pass --name", targets[i].Source)
+			}
+			remoteName = session.Providers[0].Name
+			targets[i].Name = remoteName
+		}
+		if handler, ok := localUIHandlersByTarget[i]; ok {
+			localUIHandlers[remoteName] = handler
+		}
 	}
 
 	processes := make([]*providerhost.PluginProcess, 0, len(targets))
@@ -536,7 +563,7 @@ func prepareProviderRemoteConfigPaths(opts providerLocalCommandOptions) ([]strin
 	return configPaths, cleanup, nil
 }
 
-func collectProviderRemoteTargets(cfg *config.Config, explicitName string) ([]providerRemoteTarget, error) {
+func collectProviderRemoteTargets(cfg *config.Config, explicitName string, inheritRemoteConfig bool) ([]providerRemoteTarget, error) {
 	if cfg == nil {
 		return nil, nil
 	}
@@ -568,7 +595,16 @@ func collectProviderRemoteTargets(cfg *config.Config, explicitName string) ([]pr
 		if kind != providermanifestv1.KindPlugin {
 			return nil, fmt.Errorf("provider dev --remote only supports plugins in v1 (plugins.%s has kind %q)", name, kind)
 		}
-		targets = append(targets, providerRemoteTarget{Name: name, Entry: entry})
+		source := strings.TrimSpace(manifest.Source)
+		if inheritRemoteConfig && explicitName == "" && source == "" {
+			return nil, fmt.Errorf("plugins.%s manifest source is required for provider dev --remote --path without --name", name)
+		}
+		targets = append(targets, providerRemoteTarget{
+			Name:                name,
+			Source:              source,
+			Entry:               entry,
+			InheritRemoteConfig: inheritRemoteConfig,
+		})
 	}
 	if explicitName != "" && len(targets) == 0 {
 		return nil, fmt.Errorf("no source-backed plugins.%s entry found in provider dev remote config", explicitName)

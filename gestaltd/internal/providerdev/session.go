@@ -48,6 +48,7 @@ type RuntimeEnvBuilder func(sessionID string) (RuntimeEnv, error)
 
 type Target struct {
 	Name       string
+	Source     string
 	Spec       providerhost.StaticProviderSpec
 	Config     map[string]any
 	UI         *AttachUI
@@ -67,8 +68,9 @@ type CreateSessionRequest struct {
 
 type AttachProvider struct {
 	Name   string                          `json:"name"`
+	Source string                          `json:"source,omitempty"`
 	Spec   providerhost.StaticProviderSpec `json:"spec"`
-	Config map[string]any                  `json:"config,omitempty"`
+	Config *map[string]any                 `json:"config,omitempty"`
 	UI     *AttachUI                       `json:"ui,omitempty"`
 }
 
@@ -199,22 +201,10 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		return nil, status.Error(codes.InvalidArgument, "at least one provider is required")
 	}
 
-	m.mu.RLock()
-	targets := make([]Target, 0, len(requestedProviders))
-	for i := range requestedProviders {
-		requested := requestedProviders[i]
-		remoteTarget, ok := m.targets[requested.Name]
-		if !ok {
-			m.mu.RUnlock()
-			return nil, status.Errorf(codes.NotFound, "provider %q is not configured on this server", requested.Name)
-		}
-		target := remoteTarget
-		target.Spec = buildAttachSpec(remoteTarget.Spec, requested.Spec)
-		target.Config = requested.Config
-		target.UI = cloneAttachUI(requested.UI)
-		targets = append(targets, target)
+	targets, err := m.resolveAttachTargets(requestedProviders)
+	if err != nil {
+		return nil, err
 	}
-	m.mu.RUnlock()
 
 	sessionID, err := randomID()
 	if err != nil {
@@ -308,6 +298,84 @@ func (m *Manager) PollSession(ctx context.Context, p *principal.Principal, sessi
 			return nil, false, ctx.Err()
 		}
 	}
+}
+
+func (m *Manager) ResolveAttachProviderNames(req CreateSessionRequest) ([]string, error) {
+	if m == nil {
+		return nil, status.Error(codes.FailedPrecondition, "provider dev is not configured")
+	}
+	requestedProviders, err := normalizeAttachProviders(req.Providers)
+	if err != nil {
+		return nil, err
+	}
+	targets, err := m.resolveAttachTargets(requestedProviders)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(targets))
+	for i := range targets {
+		names = append(names, targets[i].Name)
+	}
+	slices.Sort(names)
+	names = slices.Compact(names)
+	return names, nil
+}
+
+func (m *Manager) resolveAttachTargets(requestedProviders []AttachProvider) ([]Target, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	targets := make([]Target, 0, len(requestedProviders))
+	for i := range requestedProviders {
+		requested := requestedProviders[i]
+		remoteTarget, err := m.resolveAttachTargetLocked(requested)
+		if err != nil {
+			return nil, err
+		}
+		target := remoteTarget
+		target.Spec = buildAttachSpec(remoteTarget.Spec, requested.Spec)
+		if requested.Config != nil {
+			target.Config = cloneAnyMap(*requested.Config)
+		}
+		target.UI = cloneAttachUI(requested.UI)
+		targets = append(targets, target)
+	}
+	return targets, nil
+}
+
+func (m *Manager) resolveAttachTargetLocked(requested AttachProvider) (Target, error) {
+	name := strings.TrimSpace(requested.Name)
+	if name != "" {
+		remoteTarget, ok := m.targets[name]
+		if !ok {
+			return Target{}, status.Errorf(codes.NotFound, "provider %q is not configured on this server", name)
+		}
+		return remoteTarget, nil
+	}
+
+	source := strings.TrimSpace(requested.Source)
+	if source == "" {
+		return Target{}, status.Error(codes.InvalidArgument, "provider name or source is required")
+	}
+	var matches []Target
+	for name := range m.targets {
+		target := m.targets[name]
+		if strings.TrimSpace(target.Source) == source {
+			matches = append(matches, target)
+		}
+	}
+	if len(matches) == 0 {
+		return Target{}, status.Errorf(codes.NotFound, "provider source %q is not configured on this server", source)
+	}
+	if len(matches) > 1 {
+		names := make([]string, 0, len(matches))
+		for i := range matches {
+			names = append(names, matches[i].Name)
+		}
+		slices.Sort(names)
+		return Target{}, status.Errorf(codes.InvalidArgument, "provider source %q matches multiple providers (%s); pass --name to choose one", source, strings.Join(names, ", "))
+	}
+	return matches[0], nil
 }
 
 func (m *Manager) CompleteCall(p *principal.Principal, sessionID, callID string, req CompleteCallRequest) error {
@@ -1178,35 +1246,62 @@ func encodeRPCError(err error) *RPCError {
 }
 
 func normalizeAttachProviders(values []AttachProvider) ([]AttachProvider, error) {
-	out := make([]string, 0, len(values))
-	seen := map[string]struct{}{}
+	type requestKey struct {
+		name   string
+		source string
+	}
+
+	keys := make([]requestKey, 0, len(values))
+	seen := map[requestKey]struct{}{}
 	for i := range values {
 		value := values[i]
 		name := strings.TrimSpace(value.Name)
+		source := strings.TrimSpace(value.Source)
+		key := requestKey{name: name}
 		if name == "" {
+			key.source = source
+		}
+		if name == "" && source == "" {
 			continue
 		}
-		if _, ok := seen[name]; ok {
+		if _, ok := seen[key]; ok {
 			continue
 		}
-		if specName := strings.TrimSpace(value.Spec.Name); specName != "" && specName != name {
+		if specName := strings.TrimSpace(value.Spec.Name); name != "" && specName != "" && specName != name {
 			return nil, status.Errorf(codes.InvalidArgument, "provider spec name %q must match requested provider name %q", specName, name)
 		}
 		value.Name = name
-		value.Spec.Name = name
-		seen[name] = struct{}{}
-		out = append(out, name)
+		value.Source = source
+		if name != "" {
+			value.Spec.Name = name
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
 	}
-	slices.Sort(out)
-	requests := make([]AttachProvider, 0, len(out))
-	for _, name := range out {
+	slices.SortFunc(keys, func(a, b requestKey) int {
+		if c := strings.Compare(a.name, b.name); c != 0 {
+			return c
+		}
+		return strings.Compare(a.source, b.source)
+	})
+	requests := make([]AttachProvider, 0, len(keys))
+	for _, key := range keys {
 		for i := range values {
 			value := values[i]
-			if strings.TrimSpace(value.Name) != name {
+			name := strings.TrimSpace(value.Name)
+			source := strings.TrimSpace(value.Source)
+			valueKey := requestKey{name: name}
+			if name == "" {
+				valueKey.source = source
+			}
+			if valueKey != key {
 				continue
 			}
 			value.Name = name
-			value.Spec.Name = name
+			value.Source = source
+			if name != "" {
+				value.Spec.Name = name
+			}
 			requests = append(requests, value)
 			break
 		}
@@ -1331,6 +1426,17 @@ func cloneStringMap(values map[string]string) map[string]string {
 		return nil
 	}
 	out := make(map[string]string, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
+}
+
+func cloneAnyMap(values map[string]any) map[string]any {
+	if values == nil {
+		return nil
+	}
+	out := make(map[string]any, len(values))
 	for key, value := range values {
 		out[key] = value
 	}

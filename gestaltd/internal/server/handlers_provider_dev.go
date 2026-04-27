@@ -40,9 +40,13 @@ func (s *Server) authorizeProviderDevSessionRequest(w http.ResponseWriter, r *ht
 	if err := rejectWorkloadCaller(w, p); err != nil {
 		return err
 	}
-	for i := range req.Providers {
-		provider := req.Providers[i]
-		name := strings.TrimSpace(provider.Name)
+	names, err := s.providerDevSessions.ResolveAttachProviderNames(req)
+	if err != nil {
+		writeProviderDevError(w, err)
+		return err
+	}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}

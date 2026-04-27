@@ -1054,7 +1054,10 @@ source: ./manifest.yaml
 When a remote `gestaltd` instance is running the provider-dev endpoints,
 authenticated developers can attach a local implementation for configured
 plugins that are registered on the remote server and that they are authorized to
-access with `gestaltd provider dev --remote`.
+access with `gestaltd provider dev --remote`. A path-only attach matches the
+local manifest `source` to the remote configured plugin and preserves the
+remote plugin config; layered `--config` files are only needed for explicit
+local config overrides or multi-plugin attach sessions.
 
 Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source providers from the module declared in `[tool.gestalt].provider` or the legacy `[tool.gestalt].plugin`.
 

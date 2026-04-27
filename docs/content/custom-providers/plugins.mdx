@@ -829,14 +829,14 @@ suppressing others for a local session.
 
 Use remote provider dev when you want a remote Gestalt instance to handle auth,
 authorization, connections, secrets, and host services, but route a selected
-plugin implementation to your local machine. For a plugin that does not need
-provider config, a path-only attach is enough:
+plugin implementation to your local machine. For the normal single-plugin case,
+a path-only attach is enough:
 
 ```sh
 export GESTALT_URL=https://gestalt.example.com
 export GESTALT_API_KEY=vat_...
 
-gestaltd provider dev --remote "$GESTALT_URL" --path ./slack --name slack
+gestaltd provider dev --remote "$GESTALT_URL" --path ./slack
 ```
 
 The remote URL is environment-agnostic; it can point at any `gestaltd` instance
@@ -845,10 +845,19 @@ source plugin attached by your authenticated session. Providers that are not
 attached locally continue to run through the remote server and its existing
 configuration.
 
-The attached plugin's config comes from the local command, not by copying the
-remote server's plugin config. If the plugin needs config values, invokes,
-mounted UI settings, or secret references, pass the same layered configs you
-would use for a real deployment and add the local source override on top:
+For `--remote --path` without `--config`, Gestalt matches the local manifest
+`source` to a configured plugin on the remote server. The remote plugin's
+configured auth, authorization, connections, plugin config, mounted UI settings,
+secret references, and host services are preserved; only the implementation is
+routed to your local source tree. If more than one remote plugin uses the same
+manifest `source`, or the manifest has no `source`, pass `--name`:
+
+```sh
+gestaltd provider dev --remote "$GESTALT_URL" --path ./slack --name slack
+```
+
+Use layered config files only when you want explicit local config overrides or
+when you want to attach multiple local plugins in one session:
 
 ```sh
 gestaltd provider dev \
@@ -869,10 +878,11 @@ gestaltd provider dev \
   --config ./dev/local-plugins.yaml
 ```
 
-This uses the same merge behavior as local development, so overlays can choose
-which plugins are local by adding source-backed plugin entries, and choose which
-remote/supporting providers are disabled by setting inherited config entries to
-`null`.
+Config-driven remote attach uses the same merge behavior as local development,
+so overlays can choose which plugins are local by adding source-backed plugin
+entries, choose which remote/supporting providers are disabled by setting
+inherited config entries to `null`, and send explicit local plugin config to the
+remote session.
 Unlike local `provider dev` and `provider validate`, remote provider dev allows
 missing local environment substitutions while loading config. That keeps
 unrelated deployment-only env vars from blocking attach; if the attached plugin
@@ -887,11 +897,11 @@ not tunneled in v1.
 
 For TypeScript plugins, `provider dev` runs `bun install` automatically when the
 plugin has a `package.json` but no `node_modules`. Source UI release builds use
-the same dependency bootstrap before `release.build.command` when that build
-workdir has a `package.json`. Keep `@valon-technologies/gestalt` current enough
-for the host-service features your plugin uses; for example, remote IndexedDB
-host-service calls require an SDK version with `tls://` host-service transport
-support.
+the same dependency bootstrap for Bun-managed build workdirs before
+`release.build.command` when dependencies are missing. Keep
+`@valon-technologies/gestalt` current enough for the host-service features your
+plugin uses; for example, remote IndexedDB host-service calls require an SDK
+version with `tls://` host-service transport support.
 
 Hosted HTTP bindings stay layered on top of operations. A plugin defines an
 operation like `handle_command` in code, then attaches `/command` by declaring a
