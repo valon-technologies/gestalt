@@ -863,10 +863,11 @@ func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, 
 	switch {
 	case errors.Is(err, agentmanager.ErrAgentNotConfigured),
 		errors.Is(err, agentmanager.ErrAgentProviderRequired),
-		errors.Is(err, agentmanager.ErrAgentProviderNotAvailable),
 		errors.Is(err, agentmanager.ErrAgentSessionMetadataNotConfigured),
 		errors.Is(err, agentmanager.ErrAgentTurnMetadataNotConfigured):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
+	case errors.Is(err, agentmanager.ErrAgentProviderNotAvailable):
+		writeError(w, http.StatusServiceUnavailable, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentSubjectRequired):
 		writeError(w, http.StatusUnauthorized, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentSessionCreationInProgress),

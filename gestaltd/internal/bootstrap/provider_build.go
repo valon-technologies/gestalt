@@ -1076,7 +1076,10 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	cfg := launch.cfg
 	runtimePlan := launch.runtimePlan
 	name := launch.name
+
+	phaseStarted := time.Now()
 	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindAgent, name, launch.runtimeConfig))
+	recordHostedAgentRuntimeStartPhase(ctx, name, "runtime_session_start", phaseStarted, err)
 	if err != nil {
 		if closeRuntime {
 			_ = runtimeProvider.Close()
@@ -1101,15 +1104,20 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 			cleanup()
 		}
 	}()
+	phaseStarted = time.Now()
 	if err := waitForPluginRuntimeSessionReady(ctx, runtimeProvider, sessionID); err != nil {
+		recordHostedAgentRuntimeStartPhase(ctx, name, "runtime_session_ready", phaseStarted, err)
 		return nil, fmt.Errorf("wait for hosted agent runtime session %q ready: %w", sessionID, err)
 	}
+	recordHostedAgentRuntimeStartPhase(ctx, name, "runtime_session_ready", phaseStarted, nil)
 
+	phaseStarted = time.Now()
 	startedHostServices, err := providerhost.StartHostServices(
 		hostServices,
 		providerhost.WithHostServicesProviderName(name),
 		providerhost.WithHostServicesTelemetry(deps.Telemetry),
 	)
+	recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_start", phaseStarted, err)
 	if err != nil {
 		return nil, fmt.Errorf("start agent runtime host services: %w", err)
 	}
@@ -1119,12 +1127,15 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 
 	startEnv := maps.Clone(cfg.Env)
 	allowedHosts := hostedAgentAllowedHosts(cfg.AllowedHosts, runtimePlan)
+	phaseStarted = time.Now()
 	for _, hostService := range startedHostServices.Bindings() {
 		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect)
 		if err != nil {
+			recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_bind", phaseStarted, err)
 			return nil, err
 		}
 		if _, err := runtimeProvider.BindHostService(ctx, bindingReq); err != nil {
+			recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_bind", phaseStarted, err)
 			return nil, fmt.Errorf("bind host service %q: %w", hostService.EnvVar, err)
 		}
 		if len(bindingEnv) > 0 {
@@ -1137,8 +1148,11 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 			allowedHosts = appendAllowedHost(allowedHosts, relayHost)
 		}
 	}
+	recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_bind", phaseStarted, nil)
 	if runtimePlan.HostnameEgressDelivery == RuntimeHostnameEgressDeliveryPublicProxy {
+		phaseStarted = time.Now()
 		proxyEnv, err := buildHostedRuntimePublicEgressProxy(name, sessionID, cfg.AllowedHosts, deps.Egress.DefaultAction, deps)
+		recordHostedAgentRuntimeStartPhase(ctx, name, "public_egress_proxy", phaseStarted, err)
 		if err != nil {
 			return nil, err
 		}
@@ -1150,6 +1164,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		}
 	}
 
+	phaseStarted = time.Now()
 	hostedPlugin, err := runtimeProvider.StartPlugin(ctx, pluginruntime.StartPluginRequest{
 		SessionID:     sessionID,
 		PluginName:    name,
@@ -1161,16 +1176,20 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
 		HostBinary:    cfg.HostBinary,
 	})
+	recordHostedAgentRuntimeStartPhase(ctx, name, "plugin_start", phaseStarted, err)
 	if err != nil {
 		return nil, fmt.Errorf("start hosted agent provider: %w", err)
 	}
+	phaseStarted = time.Now()
 	conn, err := pluginruntime.DialHostedAgent(ctx, hostedPlugin.DialTarget,
 		pluginruntime.WithProviderName(name),
 		pluginruntime.WithTelemetry(deps.Telemetry),
 	)
+	recordHostedAgentRuntimeStartPhase(ctx, name, "provider_dial", phaseStarted, err)
 	if err != nil {
 		return nil, fmt.Errorf("dial hosted agent provider: %w", err)
 	}
+	phaseStarted = time.Now()
 	provider, err := providerhost.NewRemoteAgent(ctx, providerhost.RemoteAgentConfig{
 		Client:  conn.Agent(),
 		Runtime: conn.Lifecycle(),
@@ -1184,6 +1203,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		Config: cfg.Config,
 		Name:   name,
 	})
+	recordHostedAgentRuntimeStartPhase(ctx, name, "provider_configure", phaseStarted, err)
 	if err != nil {
 		_ = conn.Close()
 		return nil, err

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -125,8 +126,7 @@ func (p *LocalProvider) StartSession(_ context.Context, req StartSessionRequest)
 			SessionID:           sessionID,
 			Metadata:            cloneStringMap(session.metadata),
 		}); err != nil {
-			_ = os.RemoveAll(rootDir)
-			return nil, fmt.Errorf("register runtime session logs: %w", err)
+			slog.Warn("failed to register runtime session logs", "runtime_provider", p.runtimeProviderName, "session", sessionID, "error", err)
 		}
 	}
 	p.sessions[sessionID] = session

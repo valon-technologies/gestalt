@@ -61,6 +61,15 @@ func NewInt64Counter(meter metric.Meter, name, desc string) metric.Int64Counter 
 	return counter
 }
 
+func NewInt64Gauge(meter metric.Meter, name, desc string) metric.Int64Gauge {
+	gauge, err := meter.Int64Gauge(name, metric.WithDescription(desc))
+	if err != nil {
+		otel.Handle(err)
+		return noopmetric.Int64Gauge{}
+	}
+	return gauge
+}
+
 func NewFloat64Histogram(meter metric.Meter, name, desc, unit string) metric.Float64Histogram {
 	histogram, err := meter.Float64Histogram(
 		name,
