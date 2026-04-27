@@ -101,7 +101,7 @@ server:
     port: ...
 ```
 
-ProviderEntry-backed entries accept `source` (where to load it from), `config` (provider-specific settings), `allowedHosts`, and optional metadata fields. Plugin entries additionally support plugin-only fields such as `connections`, `allowedOperations`, `mountPath`, `ui`, and `runtime`. See the [Config File](/reference/config-file) reference for every field.
+ProviderEntry-backed entries accept `source` (where to load it from), `config` (provider-specific settings), `allowedHosts`, and optional metadata fields. Plugin entries additionally support plugin-only fields such as `connections`, `allowedOperations`, `ui.path`, `ui.bundle`, and `runtime`. See the [Config File](/reference/config-file) reference for every field.
 
 ## Key concepts
 
@@ -115,7 +115,7 @@ Gestalt has ten core concepts you configure in YAML:
 - **[Authentication.](/providers/authentication)** Platform login for the Gestalt server. Separate from connection authentication, which is per-plugin and per-upstream.
 - **[Secrets.](/providers/secrets)** Resolves structured secret refs in the config at startup. Backed by environment variables, files, or cloud secret managers.
 - **[Workflow.](/providers/workflow)** Global workflow runs, schedules, and triggers backed by a workflow provider and optional host IndexedDB storage.
-- **[UI.](/providers/ui)** Public static UI bundles served under configured path prefixes, either directly from `providers.ui` or through `plugins.<name>.mountPath`. Omit `providers.ui` to run headless.
+- **[UI.](/providers/ui)** Public static UI bundles served under configured path prefixes, either directly from `providers.ui` or through `plugins.<name>.ui.path`. Omit `providers.ui` to run headless.
 - **Runtime.** Optional execution backends for executable plugins. Plugins stay host-local by default; `plugins.<name>.runtime` opts a plugin into hosted execution and `runtime.providers` names the available backends.
 
 ## Adding a plugin
@@ -130,8 +130,9 @@ plugins:
     surfaces:
       openapi:
         baseUrl: https://api.github.com
-    mountPath: /github
-    ui: github_console
+    ui:
+      path: /github
+      bundle: github_console
 ```
 
 For published providers, `source` usually points at a `provider-release.yaml` metadata URL. When the release is hosted in GitHub and you want checked-in config to stay readable, use `source.githubRelease` instead. Gestalt resolves the matching platform archive during `init` and records the exact release in the lockfile. First-party providers are published from `github.com/valon-technologies/gestalt-providers/`.
@@ -518,23 +519,28 @@ workflows:
   schedules:
     nightly_sync:
       provider: local
-      plugin: roadmap
       cron: "0 3 * * *"
       timezone: America/New_York
-      operation: sync_items
+      target:
+        plugin:
+          name: roadmap
+          operation: sync_items
   eventTriggers:
     item_updated:
       provider: local
-      plugin: roadmap
       match:
         type: roadmap.item.updated
-      operation: sync_items
+      target:
+        plugin:
+          name: roadmap
+          operation: sync_items
 ```
 
-Workflow targets are always explicit: `plugin`, `operation`, and optional
-`connection`, `instance`, and `input`. Config-managed schedules and event
-triggers are reconciled into the provider at startup. See
-[Workflow](/providers/workflow) for the user-facing and provider model.
+Workflow targets are always explicit through `target.plugin` or `target.agent`.
+For plugin targets, set `name`, `operation`, and optional `connection`,
+`instance`, and `input`. Config-managed schedules and event triggers are
+reconciled into the provider at startup. See [Workflow](/providers/workflow)
+for the user-facing and provider model.
 
 ## Configuring agent providers
 

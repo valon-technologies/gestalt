@@ -2756,7 +2756,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `plugin indexeddb must be a mapping or scalar provider name`) {
+		if !strings.Contains(err.Error(), `indexeddb must be a mapping or scalar provider name`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

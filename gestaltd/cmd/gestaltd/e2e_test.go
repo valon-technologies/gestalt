@@ -187,6 +187,116 @@ plugins:
 	}
 }
 
+func TestE2EValidateAcceptsCanonicalConfigShapes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, filepath.Join(dir, "plugin")))
+	ui := setupMountedUIDir(t, dir)
+	workflowManifest := componentProviderManifestPath(t, setupExecutableProviderDir(t, dir, providermanifestv1.KindWorkflow, "workflow-indexeddb"))
+	agentManifest := componentProviderManifestPath(t, setupExecutableProviderDir(t, dir, providermanifestv1.KindAgent, "agent-simple"))
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`server:
+  encryptionKey: canonical-config-shapes-key
+  providers:
+    indexeddb: inmem
+  runtime:
+    provider: hosted
+providers:
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+  ui:
+    roadmap:
+      source:
+        path: %s
+  workflow:
+    local:
+      source:
+        path: %s
+      default: true
+      indexeddb:
+        provider: inmem
+        db: workflow_state
+  agent:
+    simple:
+      source:
+        path: %s
+      default: true
+      indexeddb:
+        provider: inmem
+        db: agent_state
+      runtime:
+        provider: hosted
+        image: ghcr.io/example/agent:latest
+        pool:
+          minReadyInstances: 1
+          maxReadyInstances: 2
+          startupTimeout: 5m
+          healthCheckInterval: 30s
+          restartPolicy: always
+          drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      driver: local
+plugins:
+  roadmap:
+    source:
+      path: %s
+    ui:
+      path: /roadmap
+      bundle: roadmap
+workflows:
+  schedules:
+    nightly_sync:
+      cron: "0 2 * * *"
+      target:
+        plugin:
+          name: roadmap
+          operation: sync
+          connection: default
+          instance: tenant-a
+          input:
+            mode: incremental
+    nightly_summary:
+      cron: "0 3 * * *"
+      target:
+        agent:
+          provider: simple
+          model: fast
+          prompt: Summarize yesterday.
+          tools:
+            - plugin: roadmap
+              operation: sync
+  eventTriggers:
+    roadmap_updated:
+      match:
+        type: roadmap.item.updated
+        source: roadmap
+      target:
+        plugin:
+          name: roadmap
+          operation: sync
+          input:
+            mode: event
+`, indexedDBManifest, ui.ManifestPath, workflowManifest, agentManifest, pluginManifest)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd validate failed: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(string(out), "config ok") {
+		t.Fatalf("expected config ok, got: %s", out)
+	}
+}
+
 func TestE2EValidateRejectsInvalidConfigInput(t *testing.T) {
 	t.Parallel()
 
@@ -207,6 +317,29 @@ func TestE2EValidateRejectsInvalidConfigInput(t *testing.T) {
   bogus: true
 `,
 			wantError: "bogus",
+		},
+		{
+			name: "ui object requires path",
+			cfg: `plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    ui:
+      bundle: roadmap
+`,
+			wantError: "ui.path is required when ui is an object",
+		},
+		{
+			name: "ui object rejects legacy mountPath",
+			cfg: `plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    ui:
+      path: /roadmap
+    mountPath: /roadmap
+`,
+			wantError: "ui object cannot be combined with mountPath",
 		},
 	}
 
@@ -969,6 +1102,79 @@ func setupCacheProviderDir(t *testing.T, baseDir, name string) string {
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	})
 	return providerDir
+}
+
+func setupExecutableProviderDir(t *testing.T, baseDir, kind, name string) string {
+	t.Helper()
+
+	providerDir := filepath.Join(baseDir, kind, name)
+	if err := os.MkdirAll(providerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
+	}
+
+	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "gestalt-"+name))
+	binDest := filepath.Join(providerDir, filepath.FromSlash(artifactRel))
+	if err := os.MkdirAll(filepath.Dir(binDest), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(binDest), err)
+	}
+
+	switch kind {
+	case providermanifestv1.KindWorkflow:
+		writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/workflow/"+name)), 0o644)
+		writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
+		writeTestFile(t, providerDir, "workflow.go", []byte(testutil.GeneratedWorkflowPackageSource()), 0o644)
+		if _, err := providerpkg.BuildSourceComponentReleaseBinary(providerDir, binDest, providermanifestv1.KindWorkflow, runtime.GOOS, runtime.GOARCH); err != nil {
+			t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
+		}
+	case providermanifestv1.KindAgent:
+		if err := buildTarget(gestaltdRootForE2E(t), "./internal/testplugins/agent", binDest); err != nil {
+			t.Fatalf("build agent provider fixture: %v", err)
+		}
+	default:
+		binData, err := os.ReadFile(pluginBin)
+		if err != nil {
+			t.Fatalf("read provider binary: %v", err)
+		}
+		if err := os.WriteFile(binDest, binData, 0o755); err != nil {
+			t.Fatalf("write provider binary: %v", err)
+		}
+	}
+	binData, err := os.ReadFile(binDest)
+	if err != nil {
+		t.Fatalf("read provider artifact: %v", err)
+	}
+	sum := sha256.Sum256(binData)
+	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
+		Kind:        kind,
+		Source:      "github.com/test/providers/" + name,
+		Version:     "0.0.1-alpha.1",
+		DisplayName: name,
+		Spec:        &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{
+			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel, SHA256: hex.EncodeToString(sum[:])},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
+	})
+	return providerDir
+}
+
+func gestaltdRootForE2E(t *testing.T) string {
+	t.Helper()
+
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "internal", "testplugins", "agent")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatalf("could not find gestaltd root from %s", dir)
+		}
+		dir = parent
+	}
 }
 
 func authProviderSource(name string) string {
@@ -2044,13 +2250,13 @@ providers:
     roadmap:
       source:
         path: %s
-      path: /roadmap
 plugins:
   example:
     source:
       path: %s
-    ui: roadmap
-    mountPath: /roadmap
+    ui:
+      bundle: roadmap
+      path: /roadmap
 `, publicPort, indexedDBManifest, mountedUI.ManifestPath, pluginManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write owned-ui config: %v", err)

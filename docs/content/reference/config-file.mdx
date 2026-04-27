@@ -435,17 +435,21 @@ workflows:
   schedules:
     nightly_sync:
       provider: local
-      plugin: roadmap
       cron: "0 3 * * *"
       timezone: America/New_York
-      operation: sync_items
+      target:
+        plugin:
+          name: roadmap
+          operation: sync_items
   eventTriggers:
     item_updated:
       provider: local
-      plugin: roadmap
       match:
         type: roadmap.item.updated
-      operation: sync_items
+      target:
+        plugin:
+          name: roadmap
+          operation: sync_items
 ```
 
 `providers.workflow.<name>.indexeddb` is optional. When present, it binds a
@@ -481,6 +485,16 @@ providers:
       indexeddb:
         provider: default
         db: simple_agent
+      runtime:
+        provider: modal
+        image: ghcr.io/valon/gestalt-python-runtime:latest
+        pool:
+          minReadyInstances: 1
+          maxReadyInstances: 4
+          startupTimeout: 2m
+          healthCheckInterval: 30s
+          restartPolicy: always
+          drainTimeout: 1m
       config:
         runStore: runs
         idempotencyStore: run_idempotency
@@ -511,15 +525,15 @@ socket, and `allowedHosts` remains the operator-facing egress policy.
 | `indexeddb` | Optional agent IndexedDB config. `indexeddb.provider` selects the named `providers.indexeddb` entry backing the agent's single IndexedDB SDK socket; unlike plugins, agents do not inherit the selected/default host IndexedDB automatically. `indexeddb.db` overrides the provider-visible database name and defaults to the agent provider key. `indexeddb.objectStores` optionally allowlists logical object stores the agent may use. |
 | `config` | Provider-specific config passed into the agent provider. |
 | `env` | Extra environment variables passed to the provider process. |
-| `runtime` | Optional hosted runtime selection for this agent provider. Supports `provider`, `template`, `image`, and `metadata`, matching the executable-plugin runtime config shape. |
+| `runtime` | Optional hosted runtime selection for this agent provider. Supports `provider`, `template`, `image`, `metadata`, and `pool`. `pool` contains hosted agent lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. The older flat lifecycle fields are still accepted, but cannot be combined with `pool`. |
 | `allowedHosts` | Outbound host allowlist. For executable providers, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `workflows`
 
 Top-level `workflows` declares config-managed schedules and triggers.
 These objects are reconciled into the selected workflow provider at startup and
-invoke explicit workflow targets: `plugin`, `operation`, and optional
-`connection`, `instance`, and `input`.
+invoke an explicit `target`. A target is exactly one of `target.plugin` or
+`target.agent`.
 
 Config-managed workflows are deployment-owned. They are created from YAML at
 startup, updated when config changes, and removed when deleted from config.
@@ -532,41 +546,50 @@ workflows:
   schedules:
     nightly_sync:
       provider: local
-      plugin: roadmap
       cron: "0 3 * * *"
       timezone: America/New_York
-      operation: sync_items
-      connection: default
-      instance: tenant-a
-      input:
-        mode: incremental
+      target:
+        plugin:
+          name: roadmap
+          operation: sync_items
+          connection: default
+          instance: tenant-a
+          input:
+            mode: incremental
       paused: false
 
   eventTriggers:
     item_updated:
       provider: local
-      plugin: roadmap
       match:
         type: roadmap.item.updated
         source: roadmap
-      operation: sync_items
-      input:
-        reason: sync
+      target:
+        plugin:
+          name: roadmap
+          operation: sync_items
+          input:
+            reason: sync
       paused: false
 ```
+
+For compatibility, schedules and triggers still accept the previous flat
+plugin fields (`plugin`, `operation`, `connection`, `instance`, `input`) and
+flat `agent`. Do not combine those fields with `target`.
 
 ### `workflows.schedules.*`
 
 | Field | Description |
 | --- | --- |
 | `provider` | Optional named `providers.workflow` entry. When omitted, Gestalt uses the sole/default workflow provider. |
-| `plugin` | **Required.** Target plugin key from `plugins`. |
+| `target.plugin.name` | Target plugin key from `plugins`. Required when `target.plugin` is used. |
+| `target.plugin.operation` | Target operation ID. Required when `target.plugin` is used. |
+| `target.plugin.connection` | Optional target connection name. |
+| `target.plugin.instance` | Optional target instance name. |
+| `target.plugin.input` | Optional static input merged into the invocation payload. |
+| `target.agent` | Optional agent target using the same shape as workflow agent requests: `provider`, `model`, `prompt`, `messages`, `tools`, `responseSchema`, `metadata`, `providerOptions`, and `timeout`. |
 | `cron` | **Required.** Five-field cron expression. |
 | `timezone` | IANA timezone name. Defaults to `UTC`. |
-| `operation` | **Required.** Target operation ID. |
-| `connection` | Optional target connection name. |
-| `instance` | Optional target instance name. |
-| `input` | Optional static input merged into the invocation payload. |
 | `paused` | When `true`, Gestalt reconciles the schedule in a paused state. |
 
 ### `workflows.eventTriggers.*`
@@ -574,14 +597,15 @@ workflows:
 | Field | Description |
 | --- | --- |
 | `provider` | Optional named `providers.workflow` entry. When omitted, Gestalt uses the sole/default workflow provider. |
-| `plugin` | **Required.** Target plugin key from `plugins`. |
+| `target.plugin.name` | Target plugin key from `plugins`. Required when `target.plugin` is used. |
+| `target.plugin.operation` | Target operation ID. Required when `target.plugin` is used. |
+| `target.plugin.connection` | Optional target connection name. |
+| `target.plugin.instance` | Optional target instance name. |
+| `target.plugin.input` | Optional static input merged into the invocation payload. |
+| `target.agent` | Optional agent target using the same shape as workflow agent requests. |
 | `match.type` | **Required.** Event type matcher. |
 | `match.source` | Optional event source matcher. |
 | `match.subject` | Optional event subject matcher. |
-| `operation` | **Required.** Target operation ID. |
-| `connection` | Optional target connection name. |
-| `instance` | Optional target instance name. |
-| `input` | Optional static input merged into the invocation payload. |
 | `paused` | When `true`, Gestalt reconciles the trigger in a paused state. |
 
 Event trigger matching is exact string matching. `match.type` is required;
@@ -915,8 +939,9 @@ plugins:
     description: Public GitHub operations
     iconFile: ./icons/github.svg
     authorizationPolicy: support_staff
-    mountPath: /github
-    ui: github_console
+    ui:
+      path: /github
+      bundle: github_console
     source: https://artifacts.example.com/plugin/github/v1.2.3/provider-release.yaml
     surfaces:
       openapi:
@@ -947,8 +972,8 @@ plugins:
 | `description` | Short description of the plugin. |
 | `iconFile` | SVG icon path, resolved relative to the config directory. |
 | `authorizationPolicy` | Optional shared subject access policy from `authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this plugin, and the built-in admin UI / admin API can manage plugin-scoped dynamic grants for additional members. Static policy members still take precedence. |
-| `mountPath` | Optional public path prefix for a plugin-backed mounted UI. When set, Gestalt mounts either `plugins.<name>.ui` or the plugin manifest's `spec.ui`. |
-| `ui` | Optional UI key from `providers.ui` used with `mountPath`. Omit it to mount the plugin manifest's owned `spec.ui`. |
+| `ui` | Optional plugin-backed mounted UI binding. The canonical object form is `ui.path` plus optional `ui.bundle`. `ui.bundle` names a `providers.ui` entry; omit it to mount the plugin manifest's owned `spec.ui`. The older scalar `ui: <bundle>` plus `mountPath` form remains accepted. |
+| `mountPath` | Compatibility field for the older plugin-backed UI shape. Prefer `ui.path` for new config. |
 | `source` | **Required.** The backing provider source. See [source shape](#pluginssource) below. |
 | `source.auth` | Optional metadata-fetch auth for release sources. Use this for `source.url`, `source.githubRelease`, or local `provider-release.yaml` metadata. |
 | `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on plugin HTTP operation routes (`/api/v1/integrations/{name}/operations` and `/api/v1/{integration}/{operation}`) and on plugin-backed mounted UIs, including browser-login flows whose `next` path resolves into that plugin's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
@@ -1274,7 +1299,7 @@ providers:
         brandName: Acme
 ```
 
-`providers.ui` is a map of `ui` bundles. Entries may mount directly by setting `path`, or they may act as named UI bundles that `plugins.<name>.ui` binds to `plugins.<name>.mountPath`. When a plugin manifest declares `spec.ui`, `plugins.<name>.ui` may be omitted entirely and Gestalt synthesizes the mounted UI entry from the plugin-owned reference. `/admin` remains available regardless. A selected `server.admin.ui` bundle, or the root-mounted UI bundle when it contains `admin/index.html`, may also supply the static admin shell while Gestalt keeps the existing `/admin` auth and API semantics. Omit `providers.ui` entirely to run headless with no public UI bundles.
+`providers.ui` is a map of `ui` bundles. Entries may mount directly by setting `path`, or they may act as named UI bundles that `plugins.<name>.ui.bundle` binds to `plugins.<name>.ui.path`. When a plugin manifest declares `spec.ui`, `plugins.<name>.ui.bundle` may be omitted entirely and Gestalt synthesizes the mounted UI entry from the plugin-owned reference. `/admin` remains available regardless. A selected `server.admin.ui` bundle, or the root-mounted UI bundle when it contains `admin/index.html`, may also supply the static admin shell while Gestalt keeps the existing `/admin` auth and API semantics. Omit `providers.ui` entirely to run headless with no public UI bundles.
 
 Plugin-backed mounted UIs inherit the owning plugin's dynamic authorization grants when that plugin sets `authorizationPolicy`. Direct `providers.ui.<name>.authorizationPolicy` bindings remain static-only.
 
@@ -1282,8 +1307,8 @@ When `authorizationPolicy` is set on a mounted UI, the referenced UI manifest mu
 
 | Field | Description |
 | --- | --- |
-| `path` | Direct mount prefix for this UI when not bound through `plugins.<name>.mountPath`. |
-| `authorizationPolicy` | Direct policy binding for this UI when not bound through `plugins.<name>.mountPath`. |
+| `path` | Direct mount prefix for this UI when not bound through `plugins.<name>.ui.path`. |
+| `authorizationPolicy` | Direct policy binding for this UI when not bound through `plugins.<name>.ui.path`. |
 | `source` | A local UI manifest path, a published `provider-release.yaml` metadata URL, or `source.githubRelease` for a GitHub-hosted release asset. |
 | `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Optional UI-provider config validated against the bundle schema when present. |
@@ -1308,7 +1333,7 @@ Only `connections.default` may define `params` or `discovery`. All connections i
 
 Each `providers.ui.<name>` entry must set `source` to exactly one loading mode: a local UI manifest path or a published `provider-release.yaml` metadata URL. `providers.ui.<name>.config` is only allowed when `providers.ui.<name>.source` is set.
 
-Each `plugins.<name>` entry may set `mountPath` to publish a plugin-backed UI. When `plugins.<name>.ui` is set, it must reference an existing UI bundle. When `plugins.<name>.ui` is omitted and `plugins.<name>.mountPath` is set, the plugin manifest must declare `spec.ui`. A given UI may be bound by at most one plugin entry. `plugins.<name>.mountPath` must use the same path rules as a directly mounted UI.
+Each `plugins.<name>` entry may set `ui.path` to publish a plugin-backed UI. When `ui.bundle` is set, it must reference an existing UI bundle. When `ui.bundle` is omitted, the plugin manifest must declare `spec.ui`. A given UI may be bound by at most one plugin entry. `ui.path` and the compatibility `mountPath` must use the same path rules as a directly mounted UI.
 
 When `server.admin.ui` is set, it must reference an existing `providers.ui.<name>` entry. Runtime startup then requires that entry's prepared asset root to include `admin/index.html`.
 

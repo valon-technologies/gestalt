@@ -39,6 +39,9 @@ func CanonicalizeStructure(cfg *Config) error {
 	if err := NormalizeCompatibility(cfg); err != nil {
 		return err
 	}
+	if err := normalizeWorkflowTargets(cfg); err != nil {
+		return err
+	}
 	pluginOwnedUIBindings := pluginOwnedUIBindings(cfg)
 	if err := normalizeMountedUIPaths(cfg, pluginOwnedUIBindings); err != nil {
 		return err
@@ -739,6 +742,15 @@ func normalizeHostedRuntimeConfig(subject string, runtimeCfg *HostedRuntimeConfi
 	if runtimeCfg == nil {
 		return nil
 	}
+	if runtimeCfg.Pool != nil {
+		if runtimeCfg.flatLifecyclePolicyFieldsSet() {
+			return fmt.Errorf("config validation: %s.runtime.pool cannot be combined with flat runtime lifecycle fields", subject)
+		}
+		runtimeCfg.Pool.StartupTimeout = strings.TrimSpace(runtimeCfg.Pool.StartupTimeout)
+		runtimeCfg.Pool.HealthCheckInterval = strings.TrimSpace(runtimeCfg.Pool.HealthCheckInterval)
+		runtimeCfg.Pool.RestartPolicy = HostedRuntimeRestartPolicy(strings.TrimSpace(string(runtimeCfg.Pool.RestartPolicy)))
+		runtimeCfg.Pool.DrainTimeout = strings.TrimSpace(runtimeCfg.Pool.DrainTimeout)
+	}
 	runtimeCfg.Provider = strings.TrimSpace(runtimeCfg.Provider)
 	runtimeCfg.Template = strings.TrimSpace(runtimeCfg.Template)
 	runtimeCfg.Image = strings.TrimSpace(runtimeCfg.Image)
@@ -765,34 +777,39 @@ func validateHostedAgentRuntimeLifecyclePolicy(subject string, entry *ProviderEn
 		return nil
 	}
 	runtimeCfg := entry.Runtime
-	if runtimeCfg.MinReadyInstances <= 0 {
-		return fmt.Errorf("config validation: %s.runtime.minReadyInstances is required and must be greater than 0", subject)
+	lifecycle := runtimeCfg.lifecyclePolicyConfig()
+	lifecycleSubject := subject + ".runtime"
+	if runtimeCfg.Pool != nil {
+		lifecycleSubject += ".pool"
 	}
-	if runtimeCfg.MaxReadyInstances <= 0 {
-		return fmt.Errorf("config validation: %s.runtime.maxReadyInstances is required and must be greater than 0", subject)
+	if lifecycle.MinReadyInstances <= 0 {
+		return fmt.Errorf("config validation: %s.minReadyInstances is required and must be greater than 0", lifecycleSubject)
 	}
-	if runtimeCfg.MaxReadyInstances < runtimeCfg.MinReadyInstances {
-		return fmt.Errorf("config validation: %s.runtime.maxReadyInstances must be greater than or equal to minReadyInstances", subject)
+	if lifecycle.MaxReadyInstances <= 0 {
+		return fmt.Errorf("config validation: %s.maxReadyInstances is required and must be greater than 0", lifecycleSubject)
 	}
-	if strings.TrimSpace(runtimeCfg.StartupTimeout) == "" {
-		return fmt.Errorf("config validation: %s.runtime.startupTimeout is required", subject)
+	if lifecycle.MaxReadyInstances < lifecycle.MinReadyInstances {
+		return fmt.Errorf("config validation: %s.maxReadyInstances must be greater than or equal to minReadyInstances", lifecycleSubject)
 	}
-	if strings.TrimSpace(runtimeCfg.HealthCheckInterval) == "" {
-		return fmt.Errorf("config validation: %s.runtime.healthCheckInterval is required", subject)
+	if strings.TrimSpace(lifecycle.StartupTimeout) == "" {
+		return fmt.Errorf("config validation: %s.startupTimeout is required", lifecycleSubject)
 	}
-	if strings.TrimSpace(runtimeCfg.DrainTimeout) == "" {
-		return fmt.Errorf("config validation: %s.runtime.drainTimeout is required", subject)
+	if strings.TrimSpace(lifecycle.HealthCheckInterval) == "" {
+		return fmt.Errorf("config validation: %s.healthCheckInterval is required", lifecycleSubject)
 	}
-	switch runtimeCfg.RestartPolicy {
+	if strings.TrimSpace(lifecycle.DrainTimeout) == "" {
+		return fmt.Errorf("config validation: %s.drainTimeout is required", lifecycleSubject)
+	}
+	switch lifecycle.RestartPolicy {
 	case HostedRuntimeRestartPolicyAlways, HostedRuntimeRestartPolicyNever:
 	default:
-		return fmt.Errorf("config validation: %s.runtime.restartPolicy must be one of %q or %q", subject, HostedRuntimeRestartPolicyAlways, HostedRuntimeRestartPolicyNever)
+		return fmt.Errorf("config validation: %s.restartPolicy must be one of %q or %q", lifecycleSubject, HostedRuntimeRestartPolicyAlways, HostedRuntimeRestartPolicyNever)
 	}
-	if runtimeCfg.RestartPolicy == HostedRuntimeRestartPolicyAlways && entry.IndexedDB == nil {
-		return fmt.Errorf("config validation: %s.runtime.restartPolicy %q requires %s.indexeddb as the provider persistence hook; runtime replacement does not make backend-local state durable", subject, HostedRuntimeRestartPolicyAlways, subject)
+	if lifecycle.RestartPolicy == HostedRuntimeRestartPolicyAlways && entry.IndexedDB == nil {
+		return fmt.Errorf("config validation: %s.restartPolicy %q requires %s.indexeddb as the provider persistence hook; runtime replacement does not make backend-local state durable", lifecycleSubject, HostedRuntimeRestartPolicyAlways, subject)
 	}
 	if _, err := runtimeCfg.LifecyclePolicy(); err != nil {
-		return fmt.Errorf("config validation: %s.runtime.%w", subject, err)
+		return fmt.Errorf("config validation: %s.%w", lifecycleSubject, err)
 	}
 	return nil
 }
@@ -1202,6 +1219,125 @@ func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *Workfl
 		return nil
 	}
 	return validateWorkflowAgentConfig(cfg, "workflows.eventTriggers."+key+".agent", trigger.Agent)
+}
+
+func normalizeWorkflowTargets(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	for key, schedule := range cfg.Workflows.Schedules {
+		if err := normalizeWorkflowScheduleTarget(key, &schedule); err != nil {
+			return err
+		}
+		cfg.Workflows.Schedules[key] = schedule
+	}
+	for key, trigger := range cfg.Workflows.EventTriggers {
+		if err := normalizeWorkflowEventTriggerTarget(key, &trigger); err != nil {
+			return err
+		}
+		cfg.Workflows.EventTriggers[key] = trigger
+	}
+	return nil
+}
+
+func normalizeWorkflowScheduleTarget(key string, schedule *WorkflowScheduleConfig) error {
+	if schedule == nil || schedule.Target == nil {
+		return nil
+	}
+	if workflowScheduleLegacyTargetFieldsSet(schedule) {
+		return fmt.Errorf("config validation: workflows.schedules.%s cannot combine target with legacy plugin or agent target fields", key)
+	}
+	err := normalizeWorkflowTarget(
+		"workflows.schedules."+key+".target",
+		schedule.Target,
+		func(target WorkflowPluginTargetConfig) {
+			schedule.Plugin = target.Name
+			schedule.Operation = target.Operation
+			schedule.Connection = target.Connection
+			schedule.Instance = target.Instance
+			schedule.Input = target.Input
+		},
+		func(agent *WorkflowAgentConfig) {
+			schedule.Agent = agent
+		},
+	)
+	if err != nil {
+		return err
+	}
+	schedule.Target = nil
+	return nil
+}
+
+func normalizeWorkflowEventTriggerTarget(key string, trigger *WorkflowEventTriggerConfig) error {
+	if trigger == nil || trigger.Target == nil {
+		return nil
+	}
+	if workflowEventTriggerLegacyTargetFieldsSet(trigger) {
+		return fmt.Errorf("config validation: workflows.eventTriggers.%s cannot combine target with legacy plugin or agent target fields", key)
+	}
+	err := normalizeWorkflowTarget(
+		"workflows.eventTriggers."+key+".target",
+		trigger.Target,
+		func(target WorkflowPluginTargetConfig) {
+			trigger.Plugin = target.Name
+			trigger.Operation = target.Operation
+			trigger.Connection = target.Connection
+			trigger.Instance = target.Instance
+			trigger.Input = target.Input
+		},
+		func(agent *WorkflowAgentConfig) {
+			trigger.Agent = agent
+		},
+	)
+	if err != nil {
+		return err
+	}
+	trigger.Target = nil
+	return nil
+}
+
+func normalizeWorkflowTarget(path string, target *WorkflowTargetConfig, applyPlugin func(WorkflowPluginTargetConfig), applyAgent func(*WorkflowAgentConfig)) error {
+	if target == nil {
+		return nil
+	}
+	hasPlugin := target.Plugin != nil
+	hasAgent := target.Agent != nil
+	if hasPlugin == hasAgent {
+		return fmt.Errorf("config validation: %s must set exactly one of plugin or agent", path)
+	}
+	if hasPlugin {
+		plugin := *target.Plugin
+		plugin.Name = strings.TrimSpace(plugin.Name)
+		plugin.Operation = strings.TrimSpace(plugin.Operation)
+		plugin.Connection = strings.TrimSpace(plugin.Connection)
+		plugin.Instance = strings.TrimSpace(plugin.Instance)
+		if plugin.Name == "" {
+			return fmt.Errorf("config validation: %s.plugin.name is required", path)
+		}
+		if plugin.Operation == "" {
+			return fmt.Errorf("config validation: %s.plugin.operation is required", path)
+		}
+		if applyPlugin != nil {
+			applyPlugin(plugin)
+		}
+		return nil
+	}
+	if applyAgent != nil {
+		applyAgent(target.Agent)
+	}
+	return nil
+}
+
+func workflowScheduleLegacyTargetFieldsSet(schedule *WorkflowScheduleConfig) bool {
+	return schedule.Agent != nil ||
+		strings.TrimSpace(schedule.Plugin) != "" ||
+		workflowSchedulePluginFieldsSet(schedule)
+}
+
+func workflowEventTriggerLegacyTargetFieldsSet(trigger *WorkflowEventTriggerConfig) bool {
+	return trigger.Agent != nil ||
+		strings.TrimSpace(trigger.Plugin) != "" ||
+		workflowEventTriggerPluginFieldsSet(trigger)
 }
 
 func workflowSchedulePluginFieldsSet(schedule *WorkflowScheduleConfig) bool {

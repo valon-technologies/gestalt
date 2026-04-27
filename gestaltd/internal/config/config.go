@@ -97,6 +97,27 @@ type RuntimeProviderEntry struct {
 	Driver        RuntimeProviderDriver `yaml:"driver,omitempty"`
 }
 
+type runtimeProviderEntryYAML struct {
+	providerEntryYAML `yaml:",inline"`
+	Driver            RuntimeProviderDriver `yaml:"driver,omitempty"`
+}
+
+func (e *RuntimeProviderEntry) UnmarshalYAML(value *yaml.Node) error {
+	var raw runtimeProviderEntryYAML
+	if err := decodeYAMLNodeKnownFields(value, &raw); err != nil {
+		return err
+	}
+	entry, err := raw.providerEntryYAML.decode()
+	if err != nil {
+		return err
+	}
+	*e = RuntimeProviderEntry{
+		ProviderEntry: entry,
+		Driver:        raw.Driver,
+	}
+	return nil
+}
+
 type HostProviderKind string
 
 const (
@@ -369,7 +390,7 @@ type ProviderEntry struct {
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
 	Invokes           []PluginInvocationDependency  `yaml:"invokes,omitempty"`
-	IndexedDB         *PluginIndexedDBConfig        `yaml:"indexeddb,omitempty"`
+	IndexedDB         *HostIndexedDBBindingConfig   `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
 	S3                []string                      `yaml:"s3,omitempty"`
 	Runtime           *HostedRuntimeConfig          `yaml:"runtime,omitempty"`
@@ -415,13 +436,31 @@ type uiEntryMarshalYAML struct {
 }
 
 func (e *ProviderEntry) UnmarshalYAML(value *yaml.Node) error {
+	normalized := cloneYAMLNode(value)
+	uiBinding, err := normalizeProviderEntryUINode(normalized)
+	if err != nil {
+		return err
+	}
 	var raw providerEntryYAML
-	if err := decodeYAMLNodeKnownFields(value, &raw); err != nil {
+	if err := decodeYAMLNodeKnownFields(normalized, &raw); err != nil {
 		return err
 	}
 	decoded, err := raw.decode()
 	if err != nil {
 		return err
+	}
+	if uiBinding != nil {
+		uiBinding.Path = strings.TrimSpace(uiBinding.Path)
+		uiBinding.Bundle = strings.TrimSpace(uiBinding.Bundle)
+		if uiBinding.Bundle != "" {
+			decoded.UI = uiBinding.Bundle
+		}
+		if uiBinding.Path != "" {
+			if strings.TrimSpace(decoded.MountPath) != "" && !providerEntryUIPathsEqual(decoded.MountPath, uiBinding.Path) {
+				return fmt.Errorf("ui.path conflicts with mountPath")
+			}
+			decoded.MountPath = uiBinding.Path
+		}
 	}
 	*e = decoded
 	return nil
@@ -444,10 +483,20 @@ type ProviderSurfaceOverrides struct {
 type HTTPSecurityScheme = providermanifestv1.HTTPSecurityScheme
 type HTTPBinding = providermanifestv1.HTTPBinding
 
-type PluginIndexedDBConfig struct {
+type HostIndexedDBBindingConfig struct {
 	Provider     string   `yaml:"provider,omitempty"`
 	DB           string   `yaml:"db,omitempty"`
 	ObjectStores []string `yaml:"objectStores,omitempty"`
+}
+
+// PluginIndexedDBConfig is kept as a source-compatible alias for older code and
+// tests. The binding is no longer plugin-specific: plugins, workflow providers,
+// and agent providers all use the same host IndexedDB service shape.
+type PluginIndexedDBConfig = HostIndexedDBBindingConfig
+
+type pluginUIBindingConfig struct {
+	Path   string `yaml:"path,omitempty"`
+	Bundle string `yaml:"bundle,omitempty"`
 }
 
 type HostedRuntimeConfig struct {
@@ -455,6 +504,16 @@ type HostedRuntimeConfig struct {
 	Template            string                     `yaml:"template,omitempty"`
 	Image               string                     `yaml:"image,omitempty"`
 	Metadata            map[string]string          `yaml:"metadata,omitempty"`
+	Pool                *HostedRuntimePoolConfig   `yaml:"pool,omitempty"`
+	MinReadyInstances   int                        `yaml:"minReadyInstances,omitempty"`
+	MaxReadyInstances   int                        `yaml:"maxReadyInstances,omitempty"`
+	StartupTimeout      string                     `yaml:"startupTimeout,omitempty"`
+	HealthCheckInterval string                     `yaml:"healthCheckInterval,omitempty"`
+	RestartPolicy       HostedRuntimeRestartPolicy `yaml:"restartPolicy,omitempty"`
+	DrainTimeout        string                     `yaml:"drainTimeout,omitempty"`
+}
+
+type HostedRuntimePoolConfig struct {
 	MinReadyInstances   int                        `yaml:"minReadyInstances,omitempty"`
 	MaxReadyInstances   int                        `yaml:"maxReadyInstances,omitempty"`
 	StartupTimeout      string                     `yaml:"startupTimeout,omitempty"`
@@ -483,6 +542,26 @@ func (c *HostedRuntimeConfig) LifecyclePolicyFieldsSet() bool {
 	if c == nil {
 		return false
 	}
+	return c.flatLifecyclePolicyFieldsSet() ||
+		(c.Pool != nil && c.Pool.lifecyclePolicyFieldsSet())
+}
+
+func (c *HostedRuntimeConfig) flatLifecyclePolicyFieldsSet() bool {
+	if c == nil {
+		return false
+	}
+	return c.MinReadyInstances != 0 ||
+		c.MaxReadyInstances != 0 ||
+		strings.TrimSpace(c.StartupTimeout) != "" ||
+		strings.TrimSpace(c.HealthCheckInterval) != "" ||
+		strings.TrimSpace(string(c.RestartPolicy)) != "" ||
+		strings.TrimSpace(c.DrainTimeout) != ""
+}
+
+func (c *HostedRuntimePoolConfig) lifecyclePolicyFieldsSet() bool {
+	if c == nil {
+		return false
+	}
 	return c.MinReadyInstances != 0 ||
 		c.MaxReadyInstances != 0 ||
 		strings.TrimSpace(c.StartupTimeout) != "" ||
@@ -495,26 +574,44 @@ func (c *HostedRuntimeConfig) LifecyclePolicy() (HostedRuntimeLifecyclePolicy, e
 	if c == nil {
 		return HostedRuntimeLifecyclePolicy{}, fmt.Errorf("runtime config is required")
 	}
-	startupTimeout, err := ParseDuration(strings.TrimSpace(c.StartupTimeout))
+	lifecycle := c.lifecyclePolicyConfig()
+	startupTimeout, err := ParseDuration(strings.TrimSpace(lifecycle.StartupTimeout))
 	if err != nil {
 		return HostedRuntimeLifecyclePolicy{}, fmt.Errorf("startupTimeout: %w", err)
 	}
-	healthCheckInterval, err := ParseDuration(strings.TrimSpace(c.HealthCheckInterval))
+	healthCheckInterval, err := ParseDuration(strings.TrimSpace(lifecycle.HealthCheckInterval))
 	if err != nil {
 		return HostedRuntimeLifecyclePolicy{}, fmt.Errorf("healthCheckInterval: %w", err)
 	}
-	drainTimeout, err := ParseDuration(strings.TrimSpace(c.DrainTimeout))
+	drainTimeout, err := ParseDuration(strings.TrimSpace(lifecycle.DrainTimeout))
 	if err != nil {
 		return HostedRuntimeLifecyclePolicy{}, fmt.Errorf("drainTimeout: %w", err)
 	}
 	return HostedRuntimeLifecyclePolicy{
-		MinReadyInstances:   c.MinReadyInstances,
-		MaxReadyInstances:   c.MaxReadyInstances,
+		MinReadyInstances:   lifecycle.MinReadyInstances,
+		MaxReadyInstances:   lifecycle.MaxReadyInstances,
 		StartupTimeout:      startupTimeout,
 		HealthCheckInterval: healthCheckInterval,
-		RestartPolicy:       HostedRuntimeRestartPolicy(strings.TrimSpace(string(c.RestartPolicy))),
+		RestartPolicy:       HostedRuntimeRestartPolicy(strings.TrimSpace(string(lifecycle.RestartPolicy))),
 		DrainTimeout:        drainTimeout,
 	}, nil
+}
+
+func (c *HostedRuntimeConfig) lifecyclePolicyConfig() HostedRuntimePoolConfig {
+	if c == nil {
+		return HostedRuntimePoolConfig{}
+	}
+	if c.Pool != nil {
+		return *c.Pool
+	}
+	return HostedRuntimePoolConfig{
+		MinReadyInstances:   c.MinReadyInstances,
+		MaxReadyInstances:   c.MaxReadyInstances,
+		StartupTimeout:      c.StartupTimeout,
+		HealthCheckInterval: c.HealthCheckInterval,
+		RestartPolicy:       c.RestartPolicy,
+		DrainTimeout:        c.DrainTimeout,
+	}
 }
 
 type WorkflowsConfig struct {
@@ -523,28 +620,43 @@ type WorkflowsConfig struct {
 }
 
 type WorkflowScheduleConfig struct {
-	Provider   string               `yaml:"provider,omitempty"`
-	Plugin     string               `yaml:"plugin,omitempty"`
-	Agent      *WorkflowAgentConfig `yaml:"agent,omitempty"`
-	Cron       string               `yaml:"cron,omitempty"`
-	Timezone   string               `yaml:"timezone,omitempty"`
-	Operation  string               `yaml:"operation,omitempty"`
-	Connection string               `yaml:"connection,omitempty"`
-	Instance   string               `yaml:"instance,omitempty"`
-	Input      map[string]any       `yaml:"input,omitempty"`
-	Paused     bool                 `yaml:"paused,omitempty"`
+	Provider   string                `yaml:"provider,omitempty"`
+	Target     *WorkflowTargetConfig `yaml:"target,omitempty"`
+	Plugin     string                `yaml:"plugin,omitempty"`
+	Agent      *WorkflowAgentConfig  `yaml:"agent,omitempty"`
+	Cron       string                `yaml:"cron,omitempty"`
+	Timezone   string                `yaml:"timezone,omitempty"`
+	Operation  string                `yaml:"operation,omitempty"`
+	Connection string                `yaml:"connection,omitempty"`
+	Instance   string                `yaml:"instance,omitempty"`
+	Input      map[string]any        `yaml:"input,omitempty"`
+	Paused     bool                  `yaml:"paused,omitempty"`
 }
 
 type WorkflowEventTriggerConfig struct {
-	Provider   string               `yaml:"provider,omitempty"`
-	Plugin     string               `yaml:"plugin,omitempty"`
-	Agent      *WorkflowAgentConfig `yaml:"agent,omitempty"`
-	Match      WorkflowEventMatch   `yaml:"match,omitempty"`
-	Operation  string               `yaml:"operation,omitempty"`
-	Connection string               `yaml:"connection,omitempty"`
-	Instance   string               `yaml:"instance,omitempty"`
-	Input      map[string]any       `yaml:"input,omitempty"`
-	Paused     bool                 `yaml:"paused,omitempty"`
+	Provider   string                `yaml:"provider,omitempty"`
+	Target     *WorkflowTargetConfig `yaml:"target,omitempty"`
+	Plugin     string                `yaml:"plugin,omitempty"`
+	Agent      *WorkflowAgentConfig  `yaml:"agent,omitempty"`
+	Match      WorkflowEventMatch    `yaml:"match,omitempty"`
+	Operation  string                `yaml:"operation,omitempty"`
+	Connection string                `yaml:"connection,omitempty"`
+	Instance   string                `yaml:"instance,omitempty"`
+	Input      map[string]any        `yaml:"input,omitempty"`
+	Paused     bool                  `yaml:"paused,omitempty"`
+}
+
+type WorkflowTargetConfig struct {
+	Plugin *WorkflowPluginTargetConfig `yaml:"plugin,omitempty"`
+	Agent  *WorkflowAgentConfig        `yaml:"agent,omitempty"`
+}
+
+type WorkflowPluginTargetConfig struct {
+	Name       string         `yaml:"name,omitempty"`
+	Operation  string         `yaml:"operation,omitempty"`
+	Connection string         `yaml:"connection,omitempty"`
+	Instance   string         `yaml:"instance,omitempty"`
+	Input      map[string]any `yaml:"input,omitempty"`
 }
 
 type WorkflowAgentConfig struct {
@@ -580,20 +692,20 @@ type WorkflowEventMatch struct {
 	Subject string `yaml:"subject,omitempty"`
 }
 
-func (c *PluginIndexedDBConfig) UnmarshalYAML(value *yaml.Node) error {
+func (c *HostIndexedDBBindingConfig) UnmarshalYAML(value *yaml.Node) error {
 	switch value.Kind {
 	case yaml.ScalarNode:
 		c.Provider = strings.TrimSpace(value.Value)
 		return nil
 	case yaml.SequenceNode:
-		return fmt.Errorf("plugin indexeddb must be a mapping or scalar provider name")
+		return fmt.Errorf("indexeddb must be a mapping or scalar provider name")
 	default:
 		for i := 0; i+1 < len(value.Content); i += 2 {
 			if key := value.Content[i]; key != nil && key.Value == "disabled" {
 				return fmt.Errorf("field disabled not found in type config.raw")
 			}
 		}
-		type raw PluginIndexedDBConfig
+		type raw HostIndexedDBBindingConfig
 		return value.Decode((*raw)(c))
 	}
 }
@@ -669,6 +781,68 @@ func decodeYAMLNodeKnownFields(node *yaml.Node, out any) error {
 		return err
 	}
 	return nil
+}
+
+func cloneYAMLNode(node *yaml.Node) *yaml.Node {
+	if node == nil {
+		return nil
+	}
+	cloned := *node
+	if len(node.Content) > 0 {
+		cloned.Content = make([]*yaml.Node, len(node.Content))
+		for i, child := range node.Content {
+			cloned.Content[i] = cloneYAMLNode(child)
+		}
+	}
+	return &cloned
+}
+
+func normalizeProviderEntryUINode(node *yaml.Node) (*pluginUIBindingConfig, error) {
+	raw := documentValueNode(node)
+	if raw == nil || raw.Kind != yaml.MappingNode {
+		return nil, nil
+	}
+	for i := 0; i+1 < len(raw.Content); i += 2 {
+		key := raw.Content[i]
+		value := raw.Content[i+1]
+		if key == nil || strings.TrimSpace(key.Value) != "ui" || value == nil || value.Kind != yaml.MappingNode {
+			continue
+		}
+		var binding pluginUIBindingConfig
+		if err := decodeYAMLNodeKnownFields(value, &binding); err != nil {
+			return nil, err
+		}
+		binding.Path = strings.TrimSpace(binding.Path)
+		binding.Bundle = strings.TrimSpace(binding.Bundle)
+		if binding.Path == "" {
+			return nil, fmt.Errorf("ui.path is required when ui is an object")
+		}
+		if mappingValueNode(raw, "mountPath") != nil {
+			return nil, fmt.Errorf("ui object cannot be combined with mountPath")
+		}
+		if binding.Bundle == "" {
+			raw.Content = append(raw.Content[:i], raw.Content[i+2:]...)
+		} else {
+			raw.Content[i+1] = &yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Tag:   "!!str",
+				Value: binding.Bundle,
+			}
+		}
+		return &binding, nil
+	}
+	return nil, nil
+}
+
+func providerEntryUIPathsEqual(left, right string) bool {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	if left == right {
+		return true
+	}
+	normalizedLeft, leftErr := normalizeMountedUIPath(left)
+	normalizedRight, rightErr := normalizeMountedUIPath(right)
+	return leftErr == nil && rightErr == nil && normalizedLeft == normalizedRight
 }
 
 func cloneRouteAuthDef(src *RouteAuthDef) *RouteAuthDef {
