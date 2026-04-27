@@ -15,6 +15,19 @@ const (
 	PolicyDeny  PolicyAction = "deny"
 )
 
+type Policy struct {
+	AllowedHosts  []string
+	DefaultAction PolicyAction
+}
+
+func (p Policy) CheckHost(host string) error {
+	return CheckHost(p.AllowedHosts, host, p.DefaultAction)
+}
+
+func (p Policy) RequiresHostnameEnforcement() bool {
+	return len(p.AllowedHosts) > 0 || p.DefaultAction == PolicyDeny
+}
+
 // ErrEgressDenied is returned when an outbound request is blocked by policy.
 var ErrEgressDenied = errors.New("egress denied")
 

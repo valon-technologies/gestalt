@@ -525,7 +525,7 @@ func buildConfiguredSpecComposite(ctx context.Context, name string, entry *confi
 	cfg := specProviderConfig{
 		manifestPlugin:       manifestPlugin,
 		allowedOperations:    allowedOperations,
-		allowedHosts:         entry.AllowedHosts,
+		allowedHosts:         entry.EffectiveAllowedHosts(),
 		baseURL:              config.EffectiveProviderSpecBaseURL(entry, manifestPlugin),
 		applyResponseMapping: true,
 		providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
@@ -870,7 +870,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		})
 	}
 	startEnv := maps.Clone(env)
-	allowedHosts := slices.Clone(entry.AllowedHosts)
+	allowedHosts := entry.EffectiveAllowedHosts()
 	for _, hostService := range startedHostServices.Bindings() {
 		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect)
 		if err != nil {
@@ -887,27 +887,29 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		}
 		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
 	}
-	if runtimePlan.HostnameEgressDelivery == RuntimeHostnameEgressDeliveryPublicProxy {
-		proxyEnv, err := buildHostedRuntimePublicEgressProxy(name, sessionID, entry.AllowedHosts, deps.Egress.DefaultAction, deps)
-		if err != nil {
-			return nil, err
+	egressPlan, err := buildHostedRuntimeEgressLaunchPlan(name, sessionID, deps.Egress.ProviderPolicy(entry), allowedHosts, runtimePlan, deps)
+	if err != nil {
+		return nil, err
+	}
+	if len(egressPlan.Env) > 0 {
+		if startEnv == nil {
+			startEnv = make(map[string]string, len(egressPlan.Env))
 		}
-		if len(proxyEnv) > 0 {
-			if startEnv == nil {
-				startEnv = make(map[string]string, len(proxyEnv))
-			}
-			maps.Copy(startEnv, proxyEnv)
-		}
+		maps.Copy(startEnv, egressPlan.Env)
 	}
 
 	hostedPlugin, err := runtimeProvider.StartPlugin(ctx, pluginruntime.StartPluginRequest{
-		SessionID:     sessionID,
-		PluginName:    name,
-		Command:       command,
-		Args:          args,
-		Env:           startEnv,
-		BundleDir:     launch.bundleDir,
-		AllowedHosts:  allowedHosts,
+		SessionID:  sessionID,
+		PluginName: name,
+		Command:    command,
+		Args:       args,
+		Env:        startEnv,
+		BundleDir:  launch.bundleDir,
+		Egress: pluginruntime.RuntimeEgressPolicy{
+			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
+			DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
+		},
+		AllowedHosts:  egressPlan.RuntimeAllowedHosts,
 		DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
 		HostBinary:    entry.HostBinary,
 	})
@@ -949,7 +951,8 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 	if err != nil {
 		return nil, err
 	}
-	policy, err := entry.Runtime.LifecyclePolicy()
+	runtimeCfg := entry.HostedRuntimeConfig()
+	policy, err := runtimeCfg.LifecyclePolicy()
 	if err != nil {
 		launch.close()
 		return nil, fmt.Errorf("parse hosted agent runtime lifecycle policy: %w", err)
@@ -968,6 +971,7 @@ type hostedAgentProviderLaunch struct {
 	runtimeOwned    bool
 	runtimePlan     HostedRuntimePlan
 	cfg             componentprovider.YAMLConfig
+	allowedHosts    []string
 	launch          pluginRuntimeLaunch
 	cleanup         func()
 }
@@ -1065,6 +1069,7 @@ func prepareHostedAgentProviderLaunch(ctx context.Context, name string, entry *c
 		runtimeOwned:    runtimeOwned,
 		runtimePlan:     runtimePlan,
 		cfg:             cfg,
+		allowedHosts:    entry.EffectiveAllowedHosts(),
 		launch:          launch,
 		cleanup:         cleanup,
 	}
@@ -1134,7 +1139,11 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	})
 
 	startEnv := maps.Clone(cfg.Env)
-	allowedHosts := hostedAgentAllowedHosts(cfg.AllowedHosts, runtimePlan)
+	agentAllowedHosts := slices.Clone(cfg.AllowedHosts)
+	if len(agentAllowedHosts) == 0 {
+		agentAllowedHosts = slices.Clone(launch.allowedHosts)
+	}
+	allowedHosts := hostedAgentAllowedHosts(agentAllowedHosts, runtimePlan)
 	phaseStarted = time.Now()
 	for _, hostService := range startedHostServices.Bindings() {
 		bindingReq, bindingEnv, relayHost, err := buildHostedRuntimeHostServiceBinding(name, sessionID, hostService, deps, runtimePlan.Resolved.HostServiceAccess == RuntimeHostServiceAccessDirect)
@@ -1157,30 +1166,34 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		}
 	}
 	recordHostedAgentRuntimeStartPhase(ctx, name, "host_services_bind", phaseStarted, nil)
+	phaseStarted = time.Now()
+	egressPlan, err := buildHostedRuntimeEgressLaunchPlan(name, sessionID, deps.Egress.Policy(agentAllowedHosts), allowedHosts, runtimePlan, deps)
 	if runtimePlan.HostnameEgressDelivery == RuntimeHostnameEgressDeliveryPublicProxy {
-		phaseStarted = time.Now()
-		proxyEnv, err := buildHostedRuntimePublicEgressProxy(name, sessionID, cfg.AllowedHosts, deps.Egress.DefaultAction, deps)
 		recordHostedAgentRuntimeStartPhase(ctx, name, "public_egress_proxy", phaseStarted, err)
-		if err != nil {
-			return nil, err
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(egressPlan.Env) > 0 {
+		if startEnv == nil {
+			startEnv = make(map[string]string, len(egressPlan.Env))
 		}
-		if len(proxyEnv) > 0 {
-			if startEnv == nil {
-				startEnv = make(map[string]string, len(proxyEnv))
-			}
-			maps.Copy(startEnv, proxyEnv)
-		}
+		maps.Copy(startEnv, egressPlan.Env)
 	}
 
 	phaseStarted = time.Now()
 	hostedPlugin, err := runtimeProvider.StartPlugin(ctx, pluginruntime.StartPluginRequest{
-		SessionID:     sessionID,
-		PluginName:    name,
-		Command:       launch.launch.command,
-		Args:          launch.launch.args,
-		Env:           startEnv,
-		BundleDir:     launch.launch.bundleDir,
-		AllowedHosts:  allowedHosts,
+		SessionID:  sessionID,
+		PluginName: name,
+		Command:    launch.launch.command,
+		Args:       launch.launch.args,
+		Env:        startEnv,
+		BundleDir:  launch.launch.bundleDir,
+		Egress: pluginruntime.RuntimeEgressPolicy{
+			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
+			DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
+		},
+		AllowedHosts:  egressPlan.RuntimeAllowedHosts,
 		DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
 		HostBinary:    cfg.HostBinary,
 	})
@@ -1229,17 +1242,12 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 }
 
 func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, entry *config.ProviderEntry, deps Deps) (config.EffectiveHostedRuntime, pluginruntime.Provider, bool, error) {
-	if entry == nil || entry.Runtime == nil {
+	if entry == nil || !entry.UsesHostedExecution() {
 		return config.EffectiveHostedRuntime{}, nil, false, nil
 	}
+	explicitRuntimeConfig := providerEntryHostedRuntimeConfig(entry)
 	if deps.PluginRuntime != nil {
-		return config.EffectiveHostedRuntime{
-			Enabled:      true,
-			ProviderName: strings.TrimSpace(entry.Runtime.Provider),
-			Template:     strings.TrimSpace(entry.Runtime.Template),
-			Image:        strings.TrimSpace(entry.Runtime.Image),
-			Metadata:     maps.Clone(entry.Runtime.Metadata),
-		}, deps.PluginRuntime, false, nil
+		return explicitRuntimeConfig, deps.PluginRuntime, false, nil
 	}
 	if deps.PluginRuntimeRegistry != nil {
 		runtimeConfig, runtimeProvider, err := deps.PluginRuntimeRegistry.Resolve(ctx, configPath, entry)
@@ -1253,24 +1261,12 @@ func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, en
 			return runtimeConfig, newLocalPluginRuntime(runtimeConfig.ProviderName, deps), true, nil
 		}
 	}
-	return config.EffectiveHostedRuntime{
-		Enabled:      true,
-		ProviderName: strings.TrimSpace(entry.Runtime.Provider),
-		Template:     strings.TrimSpace(entry.Runtime.Template),
-		Image:        strings.TrimSpace(entry.Runtime.Image),
-		Metadata:     maps.Clone(entry.Runtime.Metadata),
-	}, newLocalPluginRuntime(strings.TrimSpace(entry.Runtime.Provider), deps), true, nil
+	return explicitRuntimeConfig, newLocalPluginRuntime(explicitRuntimeConfig.ProviderName, deps), true, nil
 }
 
 func effectivePluginRuntime(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (config.EffectiveHostedRuntime, pluginruntime.Provider, bool, error) {
 	if deps.PluginRuntime != nil {
-		runtimeConfig := config.EffectiveHostedRuntime{}
-		if entry != nil && entry.Runtime != nil {
-			runtimeConfig.Template = strings.TrimSpace(entry.Runtime.Template)
-			runtimeConfig.Image = strings.TrimSpace(entry.Runtime.Image)
-			runtimeConfig.Metadata = maps.Clone(entry.Runtime.Metadata)
-		}
-		return runtimeConfig, deps.PluginRuntime, false, nil
+		return providerEntryHostedRuntimeConfig(entry), deps.PluginRuntime, false, nil
 	}
 	if deps.PluginRuntimeRegistry != nil {
 		runtimeConfig, runtimeProvider, err := deps.PluginRuntimeRegistry.Resolve(ctx, "plugins."+name, entry)
@@ -1285,6 +1281,23 @@ func effectivePluginRuntime(ctx context.Context, name string, entry *config.Prov
 		}
 	}
 	return config.EffectiveHostedRuntime{}, newLocalPluginRuntime("", deps), true, nil
+}
+
+func providerEntryHostedRuntimeConfig(entry *config.ProviderEntry) config.EffectiveHostedRuntime {
+	if entry == nil {
+		return config.EffectiveHostedRuntime{}
+	}
+	runtimeCfg := entry.HostedRuntimeConfig()
+	if runtimeCfg == nil {
+		return config.EffectiveHostedRuntime{Enabled: entry.UsesHostedExecution()}
+	}
+	return config.EffectiveHostedRuntime{
+		Enabled:      entry.UsesHostedExecution(),
+		ProviderName: strings.TrimSpace(runtimeCfg.Provider),
+		Template:     strings.TrimSpace(runtimeCfg.Template),
+		Image:        strings.TrimSpace(runtimeCfg.Image),
+		Metadata:     maps.Clone(runtimeCfg.Metadata),
+	}
 }
 
 func newLocalPluginRuntime(runtimeProviderName string, deps Deps) pluginruntime.Provider {
@@ -1303,6 +1316,13 @@ const (
 	pluginRuntimeHostServiceRelayTokenTTL = 30 * 24 * time.Hour
 	pluginRuntimeEgressProxyTokenTTL      = 30 * 24 * time.Hour
 )
+
+type RuntimeEgressLaunchPlan struct {
+	Policy              egress.Policy
+	Delivery            RuntimeHostnameEgressDelivery
+	Env                 map[string]string
+	RuntimeAllowedHosts []string
+}
 
 func hostedRuntimeLabel(runtimeConfig config.EffectiveHostedRuntime) string {
 	if name := strings.TrimSpace(runtimeConfig.ProviderName); name != "" {
@@ -1328,6 +1348,26 @@ func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig conf
 		Image:      runtimeConfig.Image,
 		Metadata:   metadata,
 	}
+}
+
+func buildHostedRuntimeEgressLaunchPlan(providerName, sessionID string, policy egress.Policy, runtimeAllowedHosts []string, runtimePlan HostedRuntimePlan, deps Deps) (RuntimeEgressLaunchPlan, error) {
+	plan := RuntimeEgressLaunchPlan{
+		Policy: egress.Policy{
+			AllowedHosts:  slices.Clone(policy.AllowedHosts),
+			DefaultAction: policy.DefaultAction,
+		},
+		Delivery:            runtimePlan.HostnameEgressDelivery,
+		RuntimeAllowedHosts: slices.Clone(runtimeAllowedHosts),
+	}
+	if runtimePlan.HostnameEgressDelivery != RuntimeHostnameEgressDeliveryPublicProxy {
+		return plan, nil
+	}
+	env, err := buildHostedRuntimePublicEgressProxy(providerName, sessionID, policy.AllowedHosts, policy.DefaultAction, deps)
+	if err != nil {
+		return RuntimeEgressLaunchPlan{}, err
+	}
+	plan.Env = env
+	return plan, nil
 }
 
 const pluginRuntimeStopTimeout = 3 * time.Second

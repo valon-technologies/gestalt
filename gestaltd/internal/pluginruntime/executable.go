@@ -227,6 +227,7 @@ func (p *executableProvider) BindHostService(ctx context.Context, req BindHostSe
 }
 
 func (p *executableProvider) StartPlugin(ctx context.Context, req StartPluginRequest) (*HostedPlugin, error) {
+	egressPolicy := req.EgressPolicy()
 	resp, err := p.runtime.StartPlugin(ctx, &proto.StartHostedPluginRequest{
 		SessionId:     req.SessionID,
 		PluginName:    req.PluginName,
@@ -234,8 +235,8 @@ func (p *executableProvider) StartPlugin(ctx context.Context, req StartPluginReq
 		Args:          append([]string(nil), req.Args...),
 		Env:           cloneStringMap(req.Env),
 		BundleDir:     req.BundleDir,
-		AllowedHosts:  append([]string(nil), req.AllowedHosts...),
-		DefaultAction: string(req.DefaultAction),
+		AllowedHosts:  append([]string(nil), egressPolicy.AllowedHosts...),
+		DefaultAction: string(egressPolicy.DefaultAction),
 		HostBinary:    req.HostBinary,
 	})
 	if err != nil {

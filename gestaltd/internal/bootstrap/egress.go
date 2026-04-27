@@ -19,10 +19,23 @@ func newEgressDeps(cfg *config.Config) EgressDeps {
 	return EgressDeps{DefaultAction: action}
 }
 
+func (d EgressDeps) Policy(allowedHosts []string) egress.Policy {
+	return egress.Policy{
+		AllowedHosts:  allowedHosts,
+		DefaultAction: d.DefaultAction,
+	}
+}
+
+func (d EgressDeps) ProviderPolicy(entry *config.ProviderEntry) egress.Policy {
+	if entry == nil {
+		return d.Policy(nil)
+	}
+	return d.Policy(entry.EffectiveAllowedHosts())
+}
+
 // CheckFunc returns an egress check function scoped to a particular
 // provider's allowed host list.
 func (d EgressDeps) CheckFunc(allowedHosts []string) func(string) error {
-	return func(host string) error {
-		return egress.CheckHost(allowedHosts, host, d.DefaultAction)
-	}
+	policy := d.Policy(allowedHosts)
+	return policy.CheckHost
 }

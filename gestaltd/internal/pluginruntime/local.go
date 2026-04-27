@@ -292,18 +292,21 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 		}})
 	}
 
+	egressPolicy := req.EgressPolicy()
 	process, err := providerhost.StartPluginProcess(ctx, providerhost.ProcessConfig{
-		Command:       req.Command,
-		Args:          req.Args,
-		Env:           env,
-		AllowedHosts:  req.AllowedHosts,
-		DefaultAction: egress.PolicyAction(req.DefaultAction),
-		HostBinary:    req.HostBinary,
-		SocketDir:     rootDir,
-		ProviderName:  req.PluginName,
-		Telemetry:     p.telemetry,
-		Stdout:        stdout,
-		Stderr:        stderr,
+		Command: req.Command,
+		Args:    req.Args,
+		Env:     env,
+		Egress: egress.Policy{
+			AllowedHosts:  append([]string(nil), egressPolicy.AllowedHosts...),
+			DefaultAction: egress.PolicyAction(egressPolicy.DefaultAction),
+		},
+		HostBinary:   req.HostBinary,
+		SocketDir:    rootDir,
+		ProviderName: req.PluginName,
+		Telemetry:    p.telemetry,
+		Stdout:       stdout,
+		Stderr:       stderr,
 	})
 	if err != nil {
 		p.mu.Lock()

@@ -412,8 +412,9 @@ func (r *capturingBundlePluginRuntime) StartPlugin(ctx context.Context, req plug
 		Args:          slices.Clone(req.Args),
 		Env:           cloneRuntimeMetadata(req.Env),
 		BundleDir:     req.BundleDir,
-		AllowedHosts:  slices.Clone(req.AllowedHosts),
-		DefaultAction: req.DefaultAction,
+		Egress:        cloneRuntimeEgressPolicy(req.Egress),
+		AllowedHosts:  cloneLegacyStartPluginAllowedHosts(req),
+		DefaultAction: legacyStartPluginDefaultAction(req),
 		HostBinary:    req.HostBinary,
 	})
 	r.mu.Unlock()
@@ -1287,8 +1288,9 @@ func (r *capturingBundlePluginRuntime) startPluginRequestsCopy() []pluginruntime
 			Args:          slices.Clone(req.Args),
 			Env:           cloneRuntimeMetadata(req.Env),
 			BundleDir:     req.BundleDir,
-			AllowedHosts:  slices.Clone(req.AllowedHosts),
-			DefaultAction: req.DefaultAction,
+			Egress:        cloneRuntimeEgressPolicy(req.Egress),
+			AllowedHosts:  cloneLegacyStartPluginAllowedHosts(req),
+			DefaultAction: legacyStartPluginDefaultAction(req),
 			HostBinary:    req.HostBinary,
 		}
 	}
@@ -1314,6 +1316,37 @@ func cloneRuntimeMetadata(values map[string]string) map[string]string {
 		out[key] = value
 	}
 	return out
+}
+
+func cloneRuntimeEgressPolicy(policy pluginruntime.RuntimeEgressPolicy) pluginruntime.RuntimeEgressPolicy {
+	return pluginruntime.RuntimeEgressPolicy{
+		AllowedHosts:  slices.Clone(policy.AllowedHosts),
+		DefaultAction: policy.DefaultAction,
+	}
+}
+
+func cloneLegacyStartPluginAllowedHosts(req pluginruntime.StartPluginRequest) []string {
+	return slices.Clone(req.AllowedHosts) //nolint:staticcheck // Tests assert deprecated runtime compatibility fields remain populated.
+}
+
+func legacyStartPluginDefaultAction(req pluginruntime.StartPluginRequest) pluginruntime.PolicyAction {
+	return req.DefaultAction //nolint:staticcheck // Tests assert deprecated runtime compatibility fields remain populated.
+}
+
+func assertStartPluginEgressPolicy(t *testing.T, req pluginruntime.StartPluginRequest, allowedHosts []string, action pluginruntime.PolicyAction) {
+	t.Helper()
+	if got := req.Egress.AllowedHosts; !slices.Equal(got, allowedHosts) {
+		t.Fatalf("StartPlugin egress allowed hosts = %#v, want %#v", got, allowedHosts)
+	}
+	if got := req.Egress.DefaultAction; got != action {
+		t.Fatalf("StartPlugin egress default action = %q, want %q", got, action)
+	}
+	if got := cloneLegacyStartPluginAllowedHosts(req); !slices.Equal(got, allowedHosts) {
+		t.Fatalf("StartPlugin legacy allowed hosts = %#v, want %#v", got, allowedHosts)
+	}
+	if got := legacyStartPluginDefaultAction(req); got != action {
+		t.Fatalf("StartPlugin legacy default action = %q, want %q", got, action)
+	}
 }
 
 func cloneBindHostServiceRequest(req pluginruntime.BindHostServiceRequest) pluginruntime.BindHostServiceRequest {
@@ -3708,7 +3741,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 		},
 		Runtime: config.RuntimeConfig{
 			Providers: map[string]*config.RuntimeProviderEntry{
@@ -5337,10 +5370,13 @@ func TestPluginRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *te
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime: &config.HostedRuntimeConfig{
-					Template: "python-dev",
-					Image:    "ghcr.io/valon/gestalt-python-runtime:latest",
-					Metadata: map[string]string{"tenant": "eng"},
+				Execution: &config.ExecutionConfig{
+					Mode: config.ExecutionModeHosted,
+					Runtime: &config.HostedRuntimeConfig{
+						Template: "python-dev",
+						Image:    "ghcr.io/valon/gestalt-python-runtime:latest",
+						Metadata: map[string]string{"tenant": "eng"},
+					},
 				},
 			},
 		},
@@ -5721,7 +5757,7 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 	}
 	cfg := &config.Config{
 		Server: config.ServerConfig{
-			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+			Runtime: config.ServerRuntimeConfig{DefaultHostedProvider: "hosted"},
 			Egress:  config.EgressConfig{DefaultAction: string(egress.PolicyDeny)},
 		},
 		Runtime: config.RuntimeConfig{
@@ -5815,8 +5851,8 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 			t.Fatalf("StartPlugin env should include s3 relay token %s", providerhost.S3SocketTokenEnv(binding))
 		}
 	}
-	if !slices.Contains(startRequests[0].AllowedHosts, "gestalt.example.test") {
-		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", startRequests[0].AllowedHosts)
+	if allowedHosts := cloneLegacyStartPluginAllowedHosts(startRequests[0]); !slices.Contains(allowedHosts, "gestalt.example.test") {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
 }
 
@@ -6002,8 +6038,8 @@ func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnel
 	if got := startRequests[0].Env[providerhost.AuthorizationSocketTokenEnv()]; got == "" {
 		t.Fatal("StartPlugin env should include the authorization relay token")
 	}
-	if !slices.Contains(startRequests[0].AllowedHosts, "gestalt.example.test") {
-		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", startRequests[0].AllowedHosts)
+	if allowedHosts := cloneLegacyStartPluginAllowedHosts(startRequests[0]); !slices.Contains(allowedHosts, "gestalt.example.test") {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
 }
 
@@ -6117,8 +6153,8 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 	if got := startRequests[0].Env[providerhost.IndexedDBSocketTokenEnv("")]; got == "" {
 		t.Fatal("StartPlugin env should include the IndexedDB relay token")
 	}
-	if !slices.Contains(startRequests[0].AllowedHosts, "gestalt.example.test") {
-		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", startRequests[0].AllowedHosts)
+	if allowedHosts := cloneLegacyStartPluginAllowedHosts(startRequests[0]); !slices.Contains(allowedHosts, "gestalt.example.test") {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
 }
 
@@ -6362,8 +6398,8 @@ func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapabili
 			t.Fatalf("StartPlugin env should include cache relay token %s", providerhost.CacheSocketTokenEnv(binding))
 		}
 	}
-	if !slices.Contains(startRequests[0].AllowedHosts, "gestalt.example.test") {
-		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", startRequests[0].AllowedHosts)
+	if allowedHosts := cloneLegacyStartPluginAllowedHosts(startRequests[0]); !slices.Contains(allowedHosts, "gestalt.example.test") {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
 }
 
@@ -6803,8 +6839,8 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	if got := startRequests[0].Env[providerhost.PluginInvokerSocketTokenEnv()]; got == "" {
 		t.Fatal("StartPlugin env should include the plugin invoker relay token")
 	}
-	if !slices.Contains(startRequests[0].AllowedHosts, relayURL.Hostname()) {
-		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host %q", startRequests[0].AllowedHosts, relayURL.Hostname())
+	if allowedHosts := cloneLegacyStartPluginAllowedHosts(startRequests[0]); !slices.Contains(allowedHosts, relayURL.Hostname()) {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host %q", allowedHosts, relayURL.Hostname())
 	}
 	bindRequests := runtimeProvider.bindHostServiceRequests()
 	if len(bindRequests) != 1 {
@@ -6918,8 +6954,8 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 	if got := startRequests[0].Env[providerhost.WorkflowManagerSocketTokenEnv()]; got == "" {
 		t.Fatal("StartPlugin env should include the workflow manager relay token")
 	}
-	if !slices.Contains(startRequests[0].AllowedHosts, "gestalt.example.test") {
-		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", startRequests[0].AllowedHosts)
+	if allowedHosts := cloneLegacyStartPluginAllowedHosts(startRequests[0]); !slices.Contains(allowedHosts, "gestalt.example.test") {
+		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
 }
 
@@ -6962,8 +6998,8 @@ func TestPluginRuntimeConfigRejectsMissingHostnameEgressCapability(t *testing.T)
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				Runtime:              &config.HostedRuntimeConfig{},
-				AllowedHosts:         []string{"api.github.com"},
+				Execution:            &config.ExecutionConfig{Mode: config.ExecutionModeHosted},
+				Egress:               &config.ProviderEgressConfig{AllowedHosts: []string{"api.github.com"}},
 			},
 		},
 	}
@@ -7629,9 +7665,7 @@ func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapa
 	if parsed.User == nil {
 		t.Fatal("HTTP_PROXY should include relay credentials")
 	}
-	if got := startRequests[0].AllowedHosts; !slices.Equal(got, []string{"api.github.com"}) {
-		t.Fatalf("StartPlugin allowed hosts = %#v, want original allowedHosts only", got)
-	}
+	assertStartPluginEgressPolicy(t, startRequests[0], []string{"api.github.com"}, pluginruntime.PolicyDeny)
 }
 
 func TestPluginRuntimeConfigSkipsPublicEgressProxyWhenHostnameEgressIsNotRequired(t *testing.T) {
@@ -7776,9 +7810,7 @@ func TestPluginRuntimeConfigUsesDirectHostServiceBindingsAndSkipsPublicEgressPro
 	if got := startRequests[0].Env[providerhost.CacheSocketTokenEnv("session")]; got != "" {
 		t.Fatalf("StartPlugin cache token env = %q, want empty for direct host service bindings", got)
 	}
-	if got := startRequests[0].AllowedHosts; !slices.Equal(got, []string{"api.github.com"}) {
-		t.Fatalf("StartPlugin allowed hosts = %#v, want original allowedHosts only", got)
-	}
+	assertStartPluginEgressPolicy(t, startRequests[0], []string{"api.github.com"}, pluginruntime.PolicyDeny)
 
 	bindRequests := runtimeProvider.bindHostServiceRequests()
 	if len(bindRequests) == 0 {
