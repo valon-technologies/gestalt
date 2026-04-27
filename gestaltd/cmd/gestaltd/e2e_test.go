@@ -1907,6 +1907,37 @@ func TestE2EServeAndHealthCheck(t *testing.T) {
 	baseURL := startGestaltd(t, dir, nil)
 
 	client := &http.Client{Timeout: 2 * time.Second}
+	for _, tc := range []struct {
+		path string
+		want string
+	}{
+		{path: "/health", want: "ok"},
+		{path: "/ready", want: "ok"},
+	} {
+		tc := tc
+		t.Run(tc.path, func(t *testing.T) {
+			t.Parallel()
+
+			resp, err := client.Get(baseURL + tc.path)
+			if err != nil {
+				t.Fatalf("GET %s: %v", tc.path, err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("expected %s 200, got %d: %s", tc.path, resp.StatusCode, body)
+			}
+
+			var body map[string]string
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				t.Fatalf("decode %s response: %v", tc.path, err)
+			}
+			if body["status"] != tc.want {
+				t.Fatalf("%s status = %q, want %q", tc.path, body["status"], tc.want)
+			}
+		})
+	}
+
 	intResp, err := client.Get(baseURL + "/api/v1/integrations")
 	if err != nil {
 		t.Fatalf("GET /api/v1/integrations: %v", err)

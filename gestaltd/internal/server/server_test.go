@@ -1498,30 +1498,6 @@ func TestNewServerAdminAuthorizationRequiresValidSplitBaseURLs(t *testing.T) {
 	}
 }
 
-func TestHealthCheck(t *testing.T) {
-	t.Parallel()
-	ts := newTestServer(t)
-	testutil.CloseOnCleanup(t, ts)
-
-	resp, err := http.Get(ts.URL + "/health")
-	if err != nil {
-		t.Fatalf("GET /health: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	var body map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decoding response: %v", err)
-	}
-	if body["status"] != "ok" {
-		t.Fatalf("expected status ok, got %q", body["status"])
-	}
-}
-
 func TestMountedUIRoutes(t *testing.T) {
 	t.Parallel()
 
@@ -5737,30 +5713,6 @@ func TestSecurityHeaders(t *testing.T) {
 			t.Errorf("Strict-Transport-Security = %q, want %q", got, wantHSTS)
 		}
 	})
-}
-
-func TestReadinessCheck(t *testing.T) {
-	t.Parallel()
-	ts := newTestServer(t)
-	testutil.CloseOnCleanup(t, ts)
-
-	resp, err := http.Get(ts.URL + "/ready")
-	if err != nil {
-		t.Fatalf("GET /ready: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	var body map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("decoding response: %v", err)
-	}
-	if body["status"] != "ok" {
-		t.Fatalf("expected status ok, got %q", body["status"])
-	}
 }
 
 func TestReadinessCheck_NotReady(t *testing.T) {
