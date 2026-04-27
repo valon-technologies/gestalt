@@ -225,7 +225,11 @@ pub struct AgentArgs {
     #[arg(long)]
     pub session: Option<String>,
 
-    /// Agent provider name for a new session
+    /// Resume the most recently updated active agent session
+    #[arg(long, visible_alias = "continue", conflicts_with = "session")]
+    pub resume: bool,
+
+    /// Agent provider name for a new session, or provider filter when resuming
     #[arg(long)]
     pub provider: Option<String>,
 
