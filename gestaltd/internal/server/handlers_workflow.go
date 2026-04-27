@@ -95,12 +95,16 @@ type workflowScheduleUpsertRequest struct {
 }
 
 type workflowScheduleTargetInfo struct {
-	Plugin     string                   `json:"plugin,omitempty"`
-	Operation  string                   `json:"operation"`
-	Connection string                   `json:"connection,omitempty"`
-	Instance   string                   `json:"instance,omitempty"`
-	Input      map[string]any           `json:"input,omitempty"`
-	Agent      *workflowAgentTargetInfo `json:"agent,omitempty"`
+	Plugin *workflowPluginTargetInfo `json:"plugin,omitempty"`
+	Agent  *workflowAgentTargetInfo  `json:"agent,omitempty"`
+}
+
+type workflowPluginTargetInfo struct {
+	Name       string         `json:"name"`
+	Operation  string         `json:"operation"`
+	Connection string         `json:"connection,omitempty"`
+	Instance   string         `json:"instance,omitempty"`
+	Input      map[string]any `json:"input,omitempty"`
 }
 
 type workflowAgentTargetInfo struct {
@@ -398,11 +402,13 @@ func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowSche
 	}
 	pluginTarget := target.PluginTarget()
 	return workflowScheduleTargetInfo{
-		Plugin:     pluginTarget.PluginName,
-		Operation:  pluginTarget.Operation,
-		Connection: userFacingConnectionName(pluginTarget.Connection),
-		Instance:   pluginTarget.Instance,
-		Input:      maps.Clone(pluginTarget.Input),
+		Plugin: &workflowPluginTargetInfo{
+			Name:       pluginTarget.PluginName,
+			Operation:  pluginTarget.Operation,
+			Connection: userFacingConnectionName(pluginTarget.Connection),
+			Instance:   pluginTarget.Instance,
+			Input:      maps.Clone(pluginTarget.Input),
+		},
 	}
 }
 

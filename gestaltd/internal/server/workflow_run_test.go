@@ -21,8 +21,10 @@ type workflowRunResponse struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
 	Target struct {
-		Plugin    string `json:"plugin"`
-		Operation string `json:"operation"`
+		Plugin *struct {
+			Name      string `json:"name"`
+			Operation string `json:"operation"`
+		} `json:"plugin"`
 	} `json:"target"`
 	Trigger struct {
 		Kind       string `json:"kind"`

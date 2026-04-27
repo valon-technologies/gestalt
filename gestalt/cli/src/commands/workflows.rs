@@ -251,7 +251,7 @@ fn filter_by_plugin(value: Value, plugin: Option<&str>) -> Value {
     Value::Array(
         items
             .into_iter()
-            .filter(|item| item["target"]["plugin"].as_str() == Some(plugin))
+            .filter(|item| target_plugin(item) == Some(plugin))
             .collect(),
     )
 }
@@ -265,7 +265,7 @@ fn filter_runs(value: Value, plugin: Option<&str>, status: Option<&str>) -> Valu
             .into_iter()
             .filter(|item| {
                 plugin
-                    .map(|plugin| item["target"]["plugin"].as_str() == Some(plugin))
+                    .map(|plugin| target_plugin(item) == Some(plugin))
                     .unwrap_or(true)
                     && status
                         .map(|status| item["status"].as_str() == Some(status))
@@ -284,7 +284,7 @@ fn filter_triggers(value: Value, plugin: Option<&str>, event_type: Option<&str>)
             .into_iter()
             .filter(|item| {
                 plugin
-                    .map(|plugin| item["target"]["plugin"].as_str() == Some(plugin))
+                    .map(|plugin| target_plugin(item) == Some(plugin))
                     .unwrap_or(true)
                     && event_type
                         .map(|event_type| item["match"]["type"].as_str() == Some(event_type))
@@ -424,35 +424,28 @@ fn merge_update(args: &WorkflowScheduleUpdateArgs, existing: &Value) -> Result<V
 
     let plugin = match args.plugin.as_deref() {
         Some(value) => value.to_string(),
-        None => existing["target"]["plugin"]
-            .as_str()
+        None => target_plugin(existing)
             .ok_or_else(|| anyhow!("existing schedule is missing target.plugin; pass --plugin"))?
             .to_string(),
     };
     let operation = match args.operation.as_deref() {
         Some(value) => value.to_string(),
-        None => existing["target"]["operation"]
-            .as_str()
+        None => target_operation(existing)
             .ok_or_else(|| {
                 anyhow!("existing schedule is missing target.operation; pass --operation")
             })?
             .to_string(),
     };
-    let connection = resolve_optional_string(
-        args.connection.as_deref(),
-        existing["target"]["connection"].as_str(),
-    );
-    let instance = resolve_optional_string(
-        args.instance.as_deref(),
-        existing["target"]["instance"].as_str(),
-    );
+    let connection =
+        resolve_optional_string(args.connection.as_deref(), target_connection(existing));
+    let instance = resolve_optional_string(args.instance.as_deref(), target_instance(existing));
 
     let input = if args.clear_input {
         None
     } else if !args.params.is_empty() || args.input_file.is_some() {
         build_optional_map(&args.params, args.input_file.as_deref())?
     } else {
-        existing["target"]["input"].as_object().cloned()
+        target_input(existing).cloned()
     };
 
     let paused = if args.paused {
@@ -491,35 +484,28 @@ fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> R
     );
     let plugin = match args.plugin.as_deref() {
         Some(value) => value.to_string(),
-        None => existing["target"]["plugin"]
-            .as_str()
+        None => target_plugin(existing)
             .ok_or_else(|| anyhow!("existing trigger is missing target.plugin; pass --plugin"))?
             .to_string(),
     };
     let operation = match args.operation.as_deref() {
         Some(value) => value.to_string(),
-        None => existing["target"]["operation"]
-            .as_str()
+        None => target_operation(existing)
             .ok_or_else(|| {
                 anyhow!("existing trigger is missing target.operation; pass --operation")
             })?
             .to_string(),
     };
-    let connection = resolve_optional_string(
-        args.connection.as_deref(),
-        existing["target"]["connection"].as_str(),
-    );
-    let instance = resolve_optional_string(
-        args.instance.as_deref(),
-        existing["target"]["instance"].as_str(),
-    );
+    let connection =
+        resolve_optional_string(args.connection.as_deref(), target_connection(existing));
+    let instance = resolve_optional_string(args.instance.as_deref(), target_instance(existing));
 
     let input = if args.clear_input {
         None
     } else if !args.params.is_empty() || args.input_file.is_some() {
         build_optional_map(&args.params, args.input_file.as_deref())?
     } else {
-        existing["target"]["input"].as_object().cloned()
+        target_input(existing).cloned()
     };
 
     let paused = if args.paused {
@@ -559,25 +545,79 @@ fn build_target_object(
     instance: Option<&str>,
     input: Option<&Map<String, Value>>,
 ) -> Value {
-    let mut target = Map::new();
-    target.insert("plugin".to_string(), Value::String(plugin.to_string()));
-    target.insert(
+    let mut plugin_target = Map::new();
+    plugin_target.insert("name".to_string(), Value::String(plugin.to_string()));
+    plugin_target.insert(
         "operation".to_string(),
         Value::String(operation.to_string()),
     );
     if let Some(connection) = connection {
-        target.insert(
+        plugin_target.insert(
             "connection".to_string(),
             Value::String(connection.to_string()),
         );
     }
     if let Some(instance) = instance {
-        target.insert("instance".to_string(), Value::String(instance.to_string()));
+        plugin_target.insert("instance".to_string(), Value::String(instance.to_string()));
     }
     if let Some(input) = input {
-        target.insert("input".to_string(), Value::Object(input.clone()));
+        plugin_target.insert("input".to_string(), Value::Object(input.clone()));
     }
+    let mut target = Map::new();
+    target.insert("plugin".to_string(), Value::Object(plugin_target));
     Value::Object(target)
+}
+
+fn target_plugin(value: &Value) -> Option<&str> {
+    match value.get("target")?.get("plugin")? {
+        Value::String(plugin) => Some(plugin.as_str()),
+        Value::Object(plugin) => plugin.get("name").and_then(Value::as_str),
+        _ => None,
+    }
+}
+
+fn target_operation(value: &Value) -> Option<&str> {
+    let target = value.get("target")?;
+    target
+        .get("plugin")
+        .and_then(|plugin| plugin.get("operation"))
+        .and_then(Value::as_str)
+        .or_else(|| target.get("operation").and_then(Value::as_str))
+}
+
+fn target_connection(value: &Value) -> Option<&str> {
+    target_plugin_field(value, "connection").or_else(|| {
+        value
+            .get("target")
+            .and_then(|target| target.get("connection"))
+            .and_then(Value::as_str)
+    })
+}
+
+fn target_instance(value: &Value) -> Option<&str> {
+    target_plugin_field(value, "instance").or_else(|| {
+        value
+            .get("target")
+            .and_then(|target| target.get("instance"))
+            .and_then(Value::as_str)
+    })
+}
+
+fn target_input(value: &Value) -> Option<&Map<String, Value>> {
+    let target = value.get("target")?;
+    target
+        .get("plugin")
+        .and_then(|plugin| plugin.get("input"))
+        .and_then(Value::as_object)
+        .or_else(|| target.get("input").and_then(Value::as_object))
+}
+
+fn target_plugin_field<'a>(value: &'a Value, field: &str) -> Option<&'a str> {
+    value
+        .get("target")?
+        .get("plugin")?
+        .get(field)
+        .and_then(Value::as_str)
 }
 
 fn build_event_match(event_type: &str, source: Option<&str>, subject: Option<&str>) -> Value {
@@ -688,14 +728,8 @@ fn trigger_row(value: &Value) -> Vec<String> {
             .as_str()
             .unwrap_or("-")
             .to_string(),
-        value["target"]["plugin"]
-            .as_str()
-            .unwrap_or("-")
-            .to_string(),
-        value["target"]["operation"]
-            .as_str()
-            .unwrap_or("-")
-            .to_string(),
+        target_plugin(value).unwrap_or("-").to_string(),
+        target_operation(value).unwrap_or("-").to_string(),
         format_bool(value["paused"].as_bool()),
         value["createdAt"].as_str().unwrap_or("-").to_string(),
     ]
@@ -717,14 +751,8 @@ fn schedule_headers() -> [&'static str; 8] {
 fn schedule_row(value: &Value) -> Vec<String> {
     vec![
         value["id"].as_str().unwrap_or("-").to_string(),
-        value["target"]["plugin"]
-            .as_str()
-            .unwrap_or("-")
-            .to_string(),
-        value["target"]["operation"]
-            .as_str()
-            .unwrap_or("-")
-            .to_string(),
+        target_plugin(value).unwrap_or("-").to_string(),
+        target_operation(value).unwrap_or("-").to_string(),
         value["cron"].as_str().unwrap_or("-").to_string(),
         value["timezone"].as_str().unwrap_or("-").to_string(),
         format_bool(value["paused"].as_bool()),
@@ -762,14 +790,8 @@ fn published_event_row(value: &Value) -> Vec<String> {
 fn run_row(value: &Value) -> Vec<String> {
     vec![
         value["id"].as_str().unwrap_or("-").to_string(),
-        value["target"]["plugin"]
-            .as_str()
-            .unwrap_or("-")
-            .to_string(),
-        value["target"]["operation"]
-            .as_str()
-            .unwrap_or("-")
-            .to_string(),
+        target_plugin(value).unwrap_or("-").to_string(),
+        target_operation(value).unwrap_or("-").to_string(),
         value["status"].as_str().unwrap_or("-").to_string(),
         run_trigger_label(value),
         value["startedAt"]

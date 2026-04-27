@@ -8,9 +8,11 @@ const SCHEDULE_JSON: &str = r#"{
     "cron":"0 0 * * *",
     "timezone":"UTC",
     "target":{
-        "plugin":"dummy",
-        "operation":"doit",
-        "input":{"k":"v"}
+        "plugin":{
+            "name":"dummy",
+            "operation":"doit",
+            "input":{"k":"v"}
+        }
     },
     "paused":false,
     "createdAt":"2026-04-20T00:00:00Z",
@@ -23,9 +25,11 @@ const TRIGGER_JSON: &str = r#"{
     "provider":"test-provider",
     "match":{"type":"dummy.event","source":"dummy","subject":"item"},
     "target":{
-        "plugin":"dummy",
-        "operation":"doit",
-        "input":{"k":"v"}
+        "plugin":{
+            "name":"dummy",
+            "operation":"doit",
+            "input":{"k":"v"}
+        }
     },
     "paused":false,
     "createdAt":"2026-04-20T00:00:00Z",
@@ -37,9 +41,11 @@ const RUN_JSON: &str = r#"{
     "provider":"test-provider",
     "status":"succeeded",
     "target":{
-        "plugin":"dummy",
-        "operation":"doit",
-        "input":{"k":"v"}
+        "plugin":{
+            "name":"dummy",
+            "operation":"doit",
+            "input":{"k":"v"}
+        }
     },
     "trigger":{"kind":"schedule","scheduleId":"sched-1"},
     "createdAt":"2026-04-20T00:00:00Z",
@@ -103,8 +109,8 @@ fn test_cli_lists_schedules() {
 #[test]
 fn test_cli_list_schedules_filters_by_plugin() {
     let body = r#"[
-        {"id":"sched-a","provider":"p","cron":"* * * * *","target":{"plugin":"alpha","operation":"x"},"paused":false},
-        {"id":"sched-b","provider":"p","cron":"* * * * *","target":{"plugin":"beta","operation":"y"},"paused":false}
+        {"id":"sched-a","provider":"p","cron":"* * * * *","target":{"plugin":{"name":"alpha","operation":"x"}},"paused":false},
+        {"id":"sched-b","provider":"p","cron":"* * * * *","target":{"plugin":{"name":"beta","operation":"y"}},"paused":false}
     ]"#;
     let mut server = Server::new();
     let _mock = authed_json_mock!(
@@ -123,6 +129,31 @@ fn test_cli_list_schedules_filters_by_plugin() {
         .success()
         .stdout(predicate::str::contains("sched-b"))
         .stdout(predicate::str::contains("sched-a").not());
+}
+
+#[test]
+fn test_cli_list_schedules_accepts_legacy_flat_response_target() {
+    let body = r#"[
+        {"id":"sched1","provider":"p","cron":"* * * * *","target":{"plugin":"legacy","operation":"sync"},"paused":false}
+    ]"#;
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/workflow/schedules",
+        StatusCode::OK
+    )
+    .with_body(body)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["workflow", "schedules", "list", "--plugin", "legacy"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("sched1"))
+        .stdout(predicate::str::contains("legacy"))
+        .stdout(predicate::str::contains("sync"));
 }
 
 #[test]
@@ -160,7 +191,7 @@ fn test_cli_creates_schedule() {
         r#"{
             "cron":"0 */5 * * *",
             "timezone":"UTC",
-            "target":{"plugin":"dummy","operation":"doit","input":{"channel":"C1","text":"hi"}},
+            "target":{"plugin":{"name":"dummy","operation":"doit","input":{"channel":"C1","text":"hi"}}},
             "paused":false
         }"#
         .to_string(),
@@ -215,7 +246,7 @@ fn test_cli_updates_schedule_merges_existing_fields() {
         r#"{
             "cron":"15 * * * *",
             "timezone":"UTC",
-            "target":{"plugin":"dummy","operation":"doit","input":{"k":"v"}},
+            "target":{"plugin":{"name":"dummy","operation":"doit","input":{"k":"v"}}},
             "paused":true
         }"#
         .to_string(),
@@ -233,6 +264,65 @@ fn test_cli_updates_schedule_merges_existing_fields() {
             "--cron",
             "15 * * * *",
             "--paused",
+        ])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_cli_updates_schedule_merges_legacy_flat_existing_target() {
+    let legacy_schedule = r#"{
+        "id":"sched-legacy",
+        "provider":"test-provider",
+        "cron":"0 0 * * *",
+        "timezone":"UTC",
+        "target":{
+            "plugin":"legacy",
+            "operation":"sync",
+            "connection":"analytics",
+            "instance":"tenant-a",
+            "input":{"k":"v"}
+        },
+        "paused":false
+    }"#;
+    let mut server = Server::new();
+    let _get = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/workflow/schedules/sched-legacy",
+        StatusCode::OK
+    )
+    .with_body(legacy_schedule)
+    .create();
+
+    let _put = authed_json_mock!(
+        server,
+        Method::PUT,
+        "/api/v1/workflow/schedules/sched-legacy",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{
+            "cron":"15 * * * *",
+            "timezone":"UTC",
+            "target":{"plugin":{"name":"legacy","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"k":"v"}}},
+            "paused":false
+        }"#
+        .to_string(),
+    ))
+    .with_body(SCHEDULE_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "workflow",
+            "schedules",
+            "update",
+            "sched-legacy",
+            "--cron",
+            "15 * * * *",
         ])
         .assert()
         .success();
@@ -318,7 +408,7 @@ fn test_cli_list_schedules_json_format() {
         .assert()
         .success()
         .stdout(predicate::str::contains(r#""id": "sched-1""#))
-        .stdout(predicate::str::contains(r#""plugin": "dummy""#));
+        .stdout(predicate::str::contains(r#""name": "dummy""#));
 }
 
 #[test]
@@ -346,8 +436,8 @@ fn test_cli_lists_event_triggers() {
 #[test]
 fn test_cli_list_event_triggers_filters() {
     let body = r#"[
-        {"id":"trg-a","match":{"type":"alpha.created"},"target":{"plugin":"alpha","operation":"x"},"paused":false},
-        {"id":"trg-b","match":{"type":"beta.failed"},"target":{"plugin":"beta","operation":"y"},"paused":false}
+        {"id":"trg-a","match":{"type":"alpha.created"},"target":{"plugin":{"name":"alpha","operation":"x"}},"paused":false},
+        {"id":"trg-b","match":{"type":"beta.failed"},"target":{"plugin":{"name":"beta","operation":"y"}},"paused":false}
     ]"#;
     let mut server = Server::new();
     let _mock = authed_json_mock!(
@@ -410,7 +500,7 @@ fn test_cli_creates_event_trigger() {
     .match_body(Matcher::JsonString(
         r#"{
             "match":{"type":"dummy.event","source":"dummy","subject":"item"},
-            "target":{"plugin":"dummy","operation":"doit","input":{"channel":"C1","text":"hi"}},
+            "target":{"plugin":{"name":"dummy","operation":"doit","input":{"channel":"C1","text":"hi"}}},
             "paused":false
         }"#
         .to_string(),
@@ -467,7 +557,7 @@ fn test_cli_updates_event_trigger_merges_existing_fields() {
         r#"{
             "provider":"test-provider",
             "match":{"type":"dummy.event.updated","source":"dummy","subject":"item"},
-            "target":{"plugin":"dummy","operation":"doit","input":{"k":"v"}},
+            "target":{"plugin":{"name":"dummy","operation":"doit","input":{"k":"v"}}},
             "paused":true
         }"#
         .to_string(),
@@ -570,8 +660,8 @@ fn test_cli_lists_runs() {
 #[test]
 fn test_cli_list_runs_filters() {
     let body = r#"[
-        {"id":"run-a","status":"running","target":{"plugin":"alpha","operation":"x"},"trigger":{"kind":"manual"}},
-        {"id":"run-b","status":"failed","target":{"plugin":"beta","operation":"y"},"trigger":{"kind":"event","triggerId":"evt-1"}}
+        {"id":"run-a","status":"running","target":{"plugin":{"name":"alpha","operation":"x"}},"trigger":{"kind":"manual"}},
+        {"id":"run-b","status":"failed","target":{"plugin":{"name":"beta","operation":"y"}},"trigger":{"kind":"event","triggerId":"evt-1"}}
     ]"#;
     let mut server = Server::new();
     let _mock = authed_json_mock!(server, Method::GET, "/api/v1/workflow/runs", StatusCode::OK)
@@ -628,7 +718,7 @@ fn test_cli_cancels_run() {
             "id":"run-1",
             "provider":"test-provider",
             "status":"canceled",
-            "target":{"plugin":"dummy","operation":"doit"},
+            "target":{"plugin":{"name":"dummy","operation":"doit"}},
             "statusMessage":"operator requested"
         }"#,
     )

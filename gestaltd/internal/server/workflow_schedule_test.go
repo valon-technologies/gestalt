@@ -499,28 +499,12 @@ func cloneMap(src map[string]any) map[string]any {
 }
 
 type workflowScheduleResponse struct {
-	ID       string `json:"id"`
-	Provider string `json:"provider"`
-	Cron     string `json:"cron"`
-	Timezone string `json:"timezone"`
-	Target   struct {
-		Plugin     string         `json:"plugin"`
-		Operation  string         `json:"operation"`
-		Connection string         `json:"connection"`
-		Instance   string         `json:"instance"`
-		Input      map[string]any `json:"input"`
-		Agent      *struct {
-			ProviderName   string `json:"provider"`
-			Model          string `json:"model"`
-			Prompt         string `json:"prompt"`
-			TimeoutSeconds int    `json:"timeoutSeconds"`
-			ToolRefs       []struct {
-				Plugin    string `json:"plugin"`
-				Operation string `json:"operation"`
-			} `json:"toolRefs"`
-		} `json:"agent"`
-	} `json:"target"`
-	Paused bool `json:"paused"`
+	ID       string                 `json:"id"`
+	Provider string                 `json:"provider"`
+	Cron     string                 `json:"cron"`
+	Timezone string                 `json:"timezone"`
+	Target   workflowTargetResponse `json:"target"`
+	Paused   bool                   `json:"paused"`
 }
 
 type workflowEventTriggerResponse struct {
@@ -531,23 +515,71 @@ type workflowEventTriggerResponse struct {
 		Source  string `json:"source"`
 		Subject string `json:"subject"`
 	} `json:"match"`
-	Target struct {
-		Plugin     string         `json:"plugin"`
-		Operation  string         `json:"operation"`
-		Connection string         `json:"connection"`
-		Instance   string         `json:"instance"`
-		Input      map[string]any `json:"input"`
-		Agent      *struct {
-			ProviderName string `json:"provider"`
-			Model        string `json:"model"`
-			Prompt       string `json:"prompt"`
-			ToolRefs     []struct {
-				Plugin    string `json:"plugin"`
-				Operation string `json:"operation"`
-			} `json:"toolRefs"`
-		} `json:"agent"`
-	} `json:"target"`
-	Paused bool `json:"paused"`
+	Target workflowTargetResponse `json:"target"`
+	Paused bool                   `json:"paused"`
+}
+
+type workflowTargetResponse struct {
+	Plugin *workflowPluginTargetResponse `json:"plugin"`
+	Agent  *workflowAgentTargetResponse  `json:"agent"`
+}
+
+type workflowPluginTargetResponse struct {
+	Name       string         `json:"name"`
+	Operation  string         `json:"operation"`
+	Connection string         `json:"connection"`
+	Instance   string         `json:"instance"`
+	Input      map[string]any `json:"input"`
+}
+
+type workflowAgentTargetResponse struct {
+	ProviderName   string `json:"provider"`
+	Model          string `json:"model"`
+	Prompt         string `json:"prompt"`
+	TimeoutSeconds int    `json:"timeoutSeconds"`
+	ToolRefs       []struct {
+		Plugin    string `json:"plugin"`
+		Operation string `json:"operation"`
+	} `json:"toolRefs"`
+}
+
+func requireWorkflowPluginTarget(t *testing.T, target workflowTargetResponse) *workflowPluginTargetResponse {
+	t.Helper()
+	if target.Plugin == nil {
+		t.Fatalf("target plugin is nil: %#v", target)
+	}
+	return target.Plugin
+}
+
+func requireCanonicalPluginTargetJSON(t *testing.T, body []byte) workflowPluginTargetResponse {
+	t.Helper()
+
+	var envelope struct {
+		Target map[string]json.RawMessage `json:"target"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		t.Fatalf("decode response envelope: %v", err)
+	}
+	if len(envelope.Target) == 0 {
+		t.Fatalf("response target is empty: %s", body)
+	}
+	for _, field := range []string{"operation", "connection", "instance", "input"} {
+		if _, ok := envelope.Target[field]; ok {
+			t.Fatalf("response target contains legacy flat field %q: %s", field, body)
+		}
+	}
+	rawPlugin, ok := envelope.Target["plugin"]
+	if !ok {
+		t.Fatalf("response target missing plugin object: %s", body)
+	}
+	var plugin workflowPluginTargetResponse
+	if err := json.Unmarshal(rawPlugin, &plugin); err != nil {
+		t.Fatalf("decode response target plugin: %v", err)
+	}
+	if plugin.Name == "" || plugin.Operation == "" {
+		t.Fatalf("response target plugin = %#v, want name and operation", plugin)
+	}
+	return plugin
 }
 
 func TestWorkflowScheduleCRUD(t *testing.T) {
@@ -598,15 +630,21 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 		t.Fatalf("expected 201, got %d: %s", createResp.StatusCode, body)
 	}
 
+	createRespBody, err := io.ReadAll(createResp.Body)
+	if err != nil {
+		t.Fatalf("read create response: %v", err)
+	}
+	requireCanonicalPluginTargetJSON(t, createRespBody)
 	var created workflowScheduleResponse
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+	if err := json.Unmarshal(createRespBody, &created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
-	if created.Provider != "basic" || created.Target.Operation != "sync" || created.Target.Connection != "analytics" || created.Target.Instance != "tenant-a" {
+	createdPlugin := requireWorkflowPluginTarget(t, created.Target)
+	if created.Provider != "basic" || createdPlugin.Operation != "sync" || createdPlugin.Connection != "analytics" || createdPlugin.Instance != "tenant-a" {
 		t.Fatalf("created schedule = %#v", created)
 	}
-	if created.Target.Plugin != "roadmap" {
-		t.Fatalf("created target plugin = %q, want roadmap", created.Target.Plugin)
+	if createdPlugin.Name != "roadmap" {
+		t.Fatalf("created target plugin = %q, want roadmap", createdPlugin.Name)
 	}
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
@@ -643,8 +681,9 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	if len(listed) != 1 || listed[0].ID != created.ID {
 		t.Fatalf("listed schedules = %#v", listed)
 	}
-	if listed[0].Target.Plugin != "roadmap" {
-		t.Fatalf("listed target plugin = %q, want roadmap", listed[0].Target.Plugin)
+	listedPlugin := requireWorkflowPluginTarget(t, listed[0].Target)
+	if listedPlugin.Name != "roadmap" {
+		t.Fatalf("listed target plugin = %q, want roadmap", listedPlugin.Name)
 	}
 
 	updateBody := bytes.NewBufferString(`{"cron":"0 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"full"}}},"paused":true}`)
@@ -1408,8 +1447,9 @@ func TestWorkflowScheduleCreatePinsResolvedInstance(t *testing.T) {
 	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
-	if created.Target.Instance != "tenant-a" {
-		t.Fatalf("created schedule target instance = %q, want tenant-a", created.Target.Instance)
+	createdPlugin := requireWorkflowPluginTarget(t, created.Target)
+	if createdPlugin.Instance != "tenant-a" {
+		t.Fatalf("created schedule target instance = %q, want tenant-a", createdPlugin.Instance)
 	}
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
@@ -1676,7 +1716,8 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
-	if created.Provider != "basic" || created.Target.Plugin != "roadmap" || created.Target.Operation != "sync" {
+	createdPlugin := requireWorkflowPluginTarget(t, created.Target)
+	if created.Provider != "basic" || createdPlugin.Name != "roadmap" || createdPlugin.Operation != "sync" {
 		t.Fatalf("created schedule = %#v", created)
 	}
 	if len(basicProvider.upsertReqs) != 1 {
@@ -1702,7 +1743,11 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
 		t.Fatalf("decode list response: %v", err)
 	}
-	if len(listed) != 1 || listed[0].ID != created.ID || listed[0].Provider != "basic" || listed[0].Target.Plugin != "roadmap" {
+	if len(listed) != 1 || listed[0].ID != created.ID || listed[0].Provider != "basic" {
+		t.Fatalf("listed schedules = %#v", listed)
+	}
+	listedPlugin := requireWorkflowPluginTarget(t, listed[0].Target)
+	if listedPlugin.Name != "roadmap" {
 		t.Fatalf("listed schedules = %#v", listed)
 	}
 
@@ -1727,7 +1772,8 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	if err := json.NewDecoder(updateResp.Body).Decode(&updated); err != nil {
 		t.Fatalf("decode update response: %v", err)
 	}
-	if updated.Provider != "advanced" || updated.Target.Plugin != "analytics" || !updated.Paused {
+	updatedPlugin := requireWorkflowPluginTarget(t, updated.Target)
+	if updated.Provider != "advanced" || updatedPlugin.Name != "analytics" || !updated.Paused {
 		t.Fatalf("updated schedule = %#v", updated)
 	}
 	if len(advancedProvider.upsertReqs) != 1 {
@@ -2031,11 +2077,17 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 		t.Fatalf("expected 201, got %d: %s", createResp.StatusCode, body)
 	}
 
+	createRespBody, err := io.ReadAll(createResp.Body)
+	if err != nil {
+		t.Fatalf("read create response: %v", err)
+	}
+	requireCanonicalPluginTargetJSON(t, createRespBody)
 	var created workflowEventTriggerResponse
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+	if err := json.Unmarshal(createRespBody, &created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
-	if created.Provider != "basic" || created.Match.Type != "roadmap.item.updated" || created.Target.Plugin != "roadmap" || created.Target.Operation != "sync" {
+	createdPlugin := requireWorkflowPluginTarget(t, created.Target)
+	if created.Provider != "basic" || created.Match.Type != "roadmap.item.updated" || createdPlugin.Name != "roadmap" || createdPlugin.Operation != "sync" {
 		t.Fatalf("created trigger = %#v", created)
 	}
 	if len(basicProvider.upsertTriggerReqs) != 1 {
@@ -2086,7 +2138,8 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	if err := json.NewDecoder(updateResp.Body).Decode(&updated); err != nil {
 		t.Fatalf("decode update response: %v", err)
 	}
-	if updated.Provider != "advanced" || updated.Match.Type != "analytics.item.synced" || updated.Target.Plugin != "analytics" || !updated.Paused {
+	updatedPlugin := requireWorkflowPluginTarget(t, updated.Target)
+	if updated.Provider != "advanced" || updated.Match.Type != "analytics.item.synced" || updatedPlugin.Name != "analytics" || !updated.Paused {
 		t.Fatalf("updated trigger = %#v", updated)
 	}
 	if len(advancedProvider.upsertTriggerReqs) != 1 {
@@ -2215,11 +2268,17 @@ func TestGlobalWorkflowEventTriggerLegacyFlatTargetStillAccepted(t *testing.T) {
 		body, _ := io.ReadAll(createResp.Body)
 		t.Fatalf("expected 201, got %d: %s", createResp.StatusCode, body)
 	}
+	createRespBody, err := io.ReadAll(createResp.Body)
+	if err != nil {
+		t.Fatalf("read create response: %v", err)
+	}
+	requireCanonicalPluginTargetJSON(t, createRespBody)
 	var created workflowEventTriggerResponse
-	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+	if err := json.Unmarshal(createRespBody, &created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
-	if created.Target.Plugin != "roadmap" || created.Target.Operation != "sync" {
+	createdPlugin := requireWorkflowPluginTarget(t, created.Target)
+	if createdPlugin.Name != "roadmap" || createdPlugin.Operation != "sync" {
 		t.Fatalf("created trigger = %#v", created)
 	}
 	if len(provider.upsertTriggerReqs) != 1 {
