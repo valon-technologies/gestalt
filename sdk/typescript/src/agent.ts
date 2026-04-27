@@ -1,6 +1,13 @@
 import { connect } from "node:net";
 
-import { create, type MessageInitShape } from "@bufbuild/protobuf";
+import {
+  create,
+  fromJson,
+  isMessage,
+  type JsonValue,
+  type MessageInitShape,
+} from "@bufbuild/protobuf";
+import { ValueSchema, type Value } from "@bufbuild/protobuf/wkt";
 import {
   Code,
   ConnectError,
@@ -22,6 +29,7 @@ import {
   AgentSessionSchema,
   AgentSessionState,
   AgentToolSourceMode,
+  AgentTurnDisplaySchema,
   AgentTurnEventSchema,
   AgentTurnSchema,
   GetAgentProviderCapabilitiesRequestSchema,
@@ -40,6 +48,7 @@ import {
   type AgentSession,
   type AgentToolRef,
   type AgentTurn,
+  type AgentTurnDisplay,
   type AgentTurnEvent,
   type BoundAgentToolTarget,
   type CancelAgentProviderTurnRequest,
@@ -78,6 +87,7 @@ export type {
   AgentSession,
   AgentToolRef,
   AgentTurn,
+  AgentTurnDisplay,
   AgentTurnEvent,
   BoundAgentToolTarget,
   CancelAgentProviderTurnRequest,
@@ -108,6 +118,27 @@ export {
   AgentToolSourceMode,
 };
 
+export type AgentTurnDisplayValue =
+  | JsonValue
+  | Value
+  | MessageInitShape<typeof ValueSchema>;
+
+export type AgentTurnDisplayInit = Omit<
+  MessageInitShape<typeof AgentTurnDisplaySchema>,
+  "$typeName" | "input" | "output" | "error"
+> & {
+  input?: AgentTurnDisplayValue | undefined;
+  output?: AgentTurnDisplayValue | undefined;
+  error?: AgentTurnDisplayValue | undefined;
+};
+
+export type AgentTurnEventInit = Omit<
+  MessageInitShape<typeof AgentTurnEventSchema>,
+  "$typeName" | "display"
+> & {
+  display?: AgentTurnDisplayInit | undefined;
+};
+
 export interface AgentProviderOptions extends RuntimeProviderOptions {
   createSession?: (
     request: CreateAgentProviderSessionRequest,
@@ -135,7 +166,7 @@ export interface AgentProviderOptions extends RuntimeProviderOptions {
   ) => MaybePromise<MessageInitShape<typeof AgentTurnSchema>>;
   listTurnEvents?: (
     request: ListAgentProviderTurnEventsRequest,
-  ) => MaybePromise<MessageInitShape<typeof AgentTurnEventSchema>[]>;
+  ) => MaybePromise<AgentTurnEventInit[]>;
   getInteraction?: (
     request: GetAgentProviderInteractionRequest,
   ) => MaybePromise<MessageInitShape<typeof AgentInteractionSchema>>;
@@ -266,7 +297,7 @@ export class AgentProvider extends RuntimeProvider {
 
   async listTurnEvents(
     request: ListAgentProviderTurnEventsRequest,
-  ): Promise<MessageInitShape<typeof AgentTurnEventSchema>[]> {
+  ): Promise<AgentTurnEventInit[]> {
     return await requireAgentProviderHandler(
       "list turn events",
       this.listTurnEventsHandler,
@@ -320,6 +351,56 @@ export class AgentProvider extends RuntimeProvider {
 
 export function defineAgentProvider(options: AgentProviderOptions): AgentProvider {
   return new AgentProvider(options);
+}
+
+function normalizeAgentTurnEvents(
+  events: AgentTurnEventInit[],
+): MessageInitShape<typeof AgentTurnEventSchema>[] {
+  return events.map((event) => normalizeAgentTurnEvent(event));
+}
+
+function normalizeAgentTurnEvent(
+  event: AgentTurnEventInit,
+): MessageInitShape<typeof AgentTurnEventSchema> {
+  const display = event.display;
+  if (!display) {
+    return event as MessageInitShape<typeof AgentTurnEventSchema>;
+  }
+  return {
+    ...event,
+    display: {
+      ...display,
+      input: normalizeAgentTurnDisplayValue(display.input),
+      output: normalizeAgentTurnDisplayValue(display.output),
+      error: normalizeAgentTurnDisplayValue(display.error),
+    },
+  } as MessageInitShape<typeof AgentTurnEventSchema>;
+}
+
+function normalizeAgentTurnDisplayValue(value: unknown): Value | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (isMessage(value, ValueSchema)) {
+    return value;
+  }
+  if (isValueInit(value)) {
+    return create(ValueSchema, value);
+  }
+  return fromJson(ValueSchema, value as JsonValue);
+}
+
+function isValueInit(value: unknown): value is MessageInitShape<typeof ValueSchema> {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+  const kind = (value as { kind?: unknown }).kind;
+  return (
+    kind !== null &&
+    typeof kind === "object" &&
+    typeof (kind as { case?: unknown }).case === "string" &&
+    "value" in kind
+  );
 }
 
 export function isAgentProvider(value: unknown): value is AgentProvider {
@@ -430,8 +511,10 @@ export function createAgentProviderService(
     },
     async listTurnEvents(request) {
       return create(ListAgentProviderTurnEventsResponseSchema, {
-        events: await invokeAgentProvider("list turn events", () =>
-          provider.listTurnEvents(request),
+        events: normalizeAgentTurnEvents(
+          await invokeAgentProvider("list turn events", () =>
+            provider.listTurnEvents(request),
+          ),
         ),
       });
     },

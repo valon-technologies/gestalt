@@ -179,6 +179,39 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req coreagent.Create
 		}
 		p.appendTurnEventLocked(turn.ID, "interaction.requested", map[string]any{"interaction_id": interactionID})
 	} else {
+		if emitToolEvents, _ := req.Metadata["emitToolEvents"].(bool); emitToolEvents {
+			startedData := map[string]any{
+				"toolName":   "lookup",
+				"toolCallId": "call-1",
+				"arguments": map[string]any{
+					"query": "docs",
+				},
+			}
+			completedData := map[string]any{
+				"toolName":   "lookup",
+				"toolCallId": "call-1",
+				"statusCode": 200,
+				"output": map[string]any{
+					"hits": float64(2),
+				},
+			}
+			var failedData map[string]any
+			if nilDisplayAliases, _ := req.Metadata["nilDisplayAliases"].(bool); nilDisplayAliases {
+				startedData["display_input"] = nil
+				completedData["display_output"] = nil
+				failedData = map[string]any{
+					"toolName":      "lookup",
+					"toolCallId":    "call-2",
+					"display_error": nil,
+					"error":         "denied",
+				}
+			}
+			p.appendTurnEventLocked(turn.ID, "tool.started", startedData)
+			p.appendTurnEventLocked(turn.ID, "tool.completed", completedData)
+			if failedData != nil {
+				p.appendTurnEventLocked(turn.ID, "tool.failed", failedData)
+			}
+		}
 		p.appendTurnEventLocked(turn.ID, "assistant.completed", map[string]any{"text": "turn completed"})
 		p.appendTurnEventLocked(turn.ID, "turn.completed", map[string]any{"status": "succeeded"})
 	}
@@ -368,6 +401,10 @@ func cloneTurnEvent(src *coreagent.TurnEvent) *coreagent.TurnEvent {
 	}
 	dst := *src
 	dst.Data = cloneMap(src.Data)
+	if src.Display != nil {
+		display := *src.Display
+		dst.Display = &display
+	}
 	return &dst
 }
 
@@ -379,6 +416,37 @@ func cloneInteraction(src *coreagent.Interaction) *coreagent.Interaction {
 	dst.Request = cloneMap(src.Request)
 	dst.Resolution = cloneMap(src.Resolution)
 	return &dst
+}
+
+func assertHTTPAgentEventDisplay(t *testing.T, event map[string]any, kind, phase, label, text string) {
+	t.Helper()
+	display, ok := event["display"].(map[string]any)
+	if !ok {
+		t.Fatalf("event display = %#v, want object", event["display"])
+	}
+	if display["kind"] != kind {
+		t.Fatalf("display kind = %#v, want %q", display["kind"], kind)
+	}
+	if display["phase"] != phase {
+		t.Fatalf("display phase = %#v, want %q", display["phase"], phase)
+	}
+	if label != "" && display["label"] != label {
+		t.Fatalf("display label = %#v, want %q", display["label"], label)
+	}
+	if text != "" && display["text"] != text {
+		t.Fatalf("display text = %#v, want %q", display["text"], text)
+	}
+}
+
+func findHTTPAgentEvent(t *testing.T, events []map[string]any, eventType string) map[string]any {
+	t.Helper()
+	for _, event := range events {
+		if event["type"] == eventType {
+			return event
+		}
+	}
+	t.Fatalf("events = %#v, want type %q", events, eventType)
+	return nil
 }
 
 func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
@@ -486,6 +554,11 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if len(events) != 3 {
 		t.Fatalf("events len = %d, want 3", len(events))
 	}
+	assertHTTPAgentEventDisplay(t, events[0], "status", "started", "turn", "")
+	assertHTTPAgentEventDisplay(t, events[1], "text", "completed", "", "turn completed")
+	if _, ok := events[2]["display"]; ok {
+		t.Fatalf("turn.completed display = %#v, want omitted", events[2]["display"])
+	}
 
 	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", nil)
 	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -512,6 +585,83 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if cancelResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(cancelResp.Body)
 		t.Fatalf("cancel turn status = %d body=%s", cancelResp.StatusCode, body)
+	}
+}
+
+func TestAgentTurnEventsNormalizeToolPayloads(t *testing.T) {
+	t.Parallel()
+
+	provider := newMemoryAgentProvider()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		services := coretesting.NewStubServices(t)
+		cfg.Auth = nil
+		cfg.Services = services
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent:           &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			SessionMetadata: services.AgentSessions,
+			RunMetadata:     services.AgentRunMetadata,
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
+	sessionResp, err := http.DefaultClient.Do(sessionReq)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+	var session map[string]any
+	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	sessionID := session["id"].(string)
+
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"metadata":{"emitToolEvents":true,"nilDisplayAliases":true},"messages":[{"role":"user","text":"lookup"}]}`))
+	turnResp, err := http.DefaultClient.Do(turnReq)
+	if err != nil {
+		t.Fatalf("create turn: %v", err)
+	}
+	defer func() { _ = turnResp.Body.Close() }()
+	var turn map[string]any
+	if err := json.NewDecoder(turnResp.Body).Decode(&turn); err != nil {
+		t.Fatalf("decode turn: %v", err)
+	}
+	turnID := turn["id"].(string)
+
+	eventsResp, err := http.Get(ts.URL + "/api/v1/agent/turns/" + turnID + "/events?after=0&limit=10")
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	defer func() { _ = eventsResp.Body.Close() }()
+	var events []map[string]any
+	if err := json.NewDecoder(eventsResp.Body).Decode(&events); err != nil {
+		t.Fatalf("decode events: %v", err)
+	}
+
+	started := findHTTPAgentEvent(t, events, "tool.started")
+	assertHTTPAgentEventDisplay(t, started, "tool", "started", "lookup", "")
+	startedDisplay := started["display"].(map[string]any)
+	if startedDisplay["ref"] != "call-1" {
+		t.Fatalf("tool.started display ref = %#v, want call-1", startedDisplay["ref"])
+	}
+	startedInput, ok := startedDisplay["input"].(map[string]any)
+	if !ok || startedInput["query"] != "docs" {
+		t.Fatalf("tool.started display input = %#v, want query docs", startedDisplay["input"])
+	}
+
+	completed := findHTTPAgentEvent(t, events, "tool.completed")
+	assertHTTPAgentEventDisplay(t, completed, "tool", "completed", "lookup", "")
+	completedDisplay := completed["display"].(map[string]any)
+	completedOutput, ok := completedDisplay["output"].(map[string]any)
+	if !ok || completedOutput["hits"] != float64(2) {
+		t.Fatalf("tool.completed display output = %#v, want hits 2", completedDisplay["output"])
+	}
+
+	failed := findHTTPAgentEvent(t, events, "tool.failed")
+	assertHTTPAgentEventDisplay(t, failed, "tool", "failed", "lookup", "denied")
+	failedDisplay := failed["display"].(map[string]any)
+	if failedDisplay["error"] != "denied" {
+		t.Fatalf("tool.failed display error = %#v, want denied", failedDisplay["error"])
 	}
 }
 
@@ -716,6 +866,21 @@ func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 	if !strings.Contains(strings.Join(blocked, "\n"), "interaction.requested") {
 		t.Fatalf("blocked stream events = %#v, want interaction.requested", blocked)
 	}
+	var blockedEvent map[string]any
+	for _, rawEvent := range blocked {
+		var candidate map[string]any
+		if err := json.Unmarshal([]byte(rawEvent), &candidate); err != nil {
+			t.Fatalf("decode blocked event: %v", err)
+		}
+		if candidate["type"] == "interaction.requested" {
+			blockedEvent = candidate
+			break
+		}
+	}
+	if blockedEvent == nil {
+		t.Fatalf("blocked stream events = %#v, want interaction.requested object", blocked)
+	}
+	assertHTTPAgentEventDisplay(t, blockedEvent, "interaction", "requested", "interaction", "")
 	if strings.Contains(strings.Join(blocked, "\n"), "turn.completed") {
 		t.Fatalf("blocked stream events = %#v, did not expect turn.completed", blocked)
 	}

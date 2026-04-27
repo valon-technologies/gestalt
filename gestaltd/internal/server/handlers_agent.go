@@ -138,14 +138,27 @@ type agentTurnInfo struct {
 }
 
 type agentTurnEventInfo struct {
-	ID         string         `json:"id"`
-	TurnID     string         `json:"turnId"`
-	Seq        int64          `json:"seq"`
-	Type       string         `json:"type"`
-	Source     string         `json:"source"`
-	Visibility string         `json:"visibility"`
-	Data       map[string]any `json:"data"`
-	CreatedAt  *time.Time     `json:"createdAt"`
+	ID         string                `json:"id"`
+	TurnID     string                `json:"turnId"`
+	Seq        int64                 `json:"seq"`
+	Type       string                `json:"type"`
+	Source     string                `json:"source"`
+	Visibility string                `json:"visibility"`
+	Data       map[string]any        `json:"data"`
+	CreatedAt  *time.Time            `json:"createdAt"`
+	Display    *agentTurnDisplayInfo `json:"display,omitempty"`
+}
+
+type agentTurnDisplayInfo struct {
+	Kind      string `json:"kind,omitempty"`
+	Phase     string `json:"phase,omitempty"`
+	Text      string `json:"text,omitempty"`
+	Label     string `json:"label,omitempty"`
+	Ref       string `json:"ref,omitempty"`
+	ParentRef string `json:"parentRef,omitempty"`
+	Input     any    `json:"input,omitempty"`
+	Output    any    `json:"output,omitempty"`
+	Error     any    `json:"error,omitempty"`
 }
 
 type agentInteractionInfo struct {
@@ -784,6 +797,24 @@ func agentTurnEventInfoFromCore(event *coreagent.TurnEvent) agentTurnEventInfo {
 		Visibility: strings.TrimSpace(event.Visibility),
 		Data:       data,
 		CreatedAt:  event.CreatedAt,
+		Display:    agentTurnDisplayInfoFromCore(event.Display),
+	}
+}
+
+func agentTurnDisplayInfoFromCore(display *coreagent.TurnDisplay) *agentTurnDisplayInfo {
+	if display == nil {
+		return nil
+	}
+	return &agentTurnDisplayInfo{
+		Kind:      strings.TrimSpace(display.Kind),
+		Phase:     strings.TrimSpace(display.Phase),
+		Text:      display.Text,
+		Label:     display.Label,
+		Ref:       display.Ref,
+		ParentRef: display.ParentRef,
+		Input:     display.Input,
+		Output:    display.Output,
+		Error:     display.Error,
 	}
 }
 

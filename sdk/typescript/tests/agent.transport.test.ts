@@ -3,20 +3,88 @@ import { createServer } from "node:http2";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { create } from "@bufbuild/protobuf";
+import { create, toJson } from "@bufbuild/protobuf";
 import { type ServiceImpl } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { expect, test } from "bun:test";
 
 import {
+  AgentTurnEventSchema,
   AgentHost as AgentHostService,
   ExecuteAgentToolRequestSchema,
   ExecuteAgentToolResponseSchema,
+  ListAgentProviderTurnEventsRequestSchema,
   SearchAgentToolsRequestSchema,
   SearchAgentToolsResponseSchema,
 } from "../gen/v1/agent_pb.ts";
-import { AgentHost, ENV_AGENT_HOST_SOCKET } from "../src/index.ts";
+import {
+  AgentHost,
+  createAgentProviderService,
+  defineAgentProvider,
+  ENV_AGENT_HOST_SOCKET,
+} from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
+
+test("AgentProvider accepts JSON display payloads for turn events", async () => {
+  const provider = defineAgentProvider({
+    displayName: "Agent transport fixture",
+    async listTurnEvents() {
+      return [
+        {
+          id: "event-1",
+          turnId: "turn-1",
+          seq: 1n,
+          type: "tool.started",
+          source: "fixture-agent",
+          visibility: "public",
+          display: {
+            kind: "tool",
+            phase: "started",
+            label: "Search docs",
+            ref: "call-1",
+            input: {
+              query: "docs",
+            },
+            output: ["hit-1"],
+            error: "none",
+          },
+        },
+      ];
+    },
+  });
+  const service = createAgentProviderService(provider);
+  const response = await (service.listTurnEvents as any)(
+    create(ListAgentProviderTurnEventsRequestSchema, {
+      turnId: "turn-1",
+      afterSeq: 0n,
+      limit: 10,
+    }),
+  );
+
+  const event = response.events[0]!;
+  expect(event?.display?.input?.kind.case).toBe("structValue");
+  expect(event?.display?.output?.kind.case).toBe("listValue");
+  expect(event?.display?.error?.kind.case).toBe("stringValue");
+  expect(toJson(AgentTurnEventSchema, event!)).toEqual({
+    id: "event-1",
+    turnId: "turn-1",
+    seq: "1",
+    type: "tool.started",
+    source: "fixture-agent",
+    visibility: "public",
+    display: {
+      kind: "tool",
+      phase: "started",
+      label: "Search docs",
+      ref: "call-1",
+      input: {
+        query: "docs",
+      },
+      output: ["hit-1"],
+      error: "none",
+    },
+  });
+});
 
 test("AgentHost executes tools through the configured unix socket", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-agent-host-"));

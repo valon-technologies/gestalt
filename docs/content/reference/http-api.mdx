@@ -102,6 +102,16 @@ optional `metadata`. `parts[]` supports `type: text | json | tool_call |
 tool_result | image_ref` plus the corresponding `text`, `json`, `toolCall`,
 `toolResult`, or `imageRef` payload.
 
+Turn event responses include raw `type`, `source`, `visibility`, and `data`
+fields. They may also include an optional `display` projection with `kind`,
+`phase`, `text`, `label`, `ref`, `parentRef`, `input`, `output`, and `error`.
+Clients should prefer `display` when it is usable and fall back to the raw event
+fields otherwise. Initial `kind` values are `text`, `reasoning`, `tool`,
+`interaction`, `status`, and `error`; initial `phase` values are `delta`,
+`completed`, `started`, `progress`, `failed`, `requested`, `resolved`, and
+`canceled`. The `display` projection is not a privacy boundary; clients must
+still honor each event's `visibility`.
+
 ### API Tokens
 
 | Method | Path | Purpose |

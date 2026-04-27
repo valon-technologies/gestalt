@@ -243,6 +243,27 @@ pub struct AgentTurn {
     pub execution_ref: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentTurnDisplay {
+    #[prost(string, tag = "1")]
+    pub kind: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub phase: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub text: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub label: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub r#ref: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub parent_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "7")]
+    pub input: ::core::option::Option<::prost_types::Value>,
+    #[prost(message, optional, tag = "8")]
+    pub output: ::core::option::Option<::prost_types::Value>,
+    #[prost(message, optional, tag = "9")]
+    pub error: ::core::option::Option<::prost_types::Value>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateAgentProviderTurnRequest {
     #[prost(string, tag = "1")]
     pub turn_id: ::prost::alloc::string::String,
@@ -311,6 +332,8 @@ pub struct AgentTurnEvent {
     pub data: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "8")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "9")]
+    pub display: ::core::option::Option<AgentTurnDisplay>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListAgentProviderTurnEventsRequest {
