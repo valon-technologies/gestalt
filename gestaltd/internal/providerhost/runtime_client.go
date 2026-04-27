@@ -125,6 +125,24 @@ func providerCallContext(parent context.Context) (context.Context, context.Cance
 	return context.WithTimeout(parent, providerRPCTimeout)
 }
 
+type providerMigrationTimeoutContextKey struct{}
+
+func WithProviderMigrationTimeout(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, providerMigrationTimeoutContextKey{}, true)
+}
+
+func providerSchemaChangeContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent != nil {
+		if useMigrationTimeout, _ := parent.Value(providerMigrationTimeoutContextKey{}).(bool); useMigrationTimeout {
+			return providerMigrationContext(parent)
+		}
+	}
+	return providerCallContext(parent)
+}
+
 func providerMigrationContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()

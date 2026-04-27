@@ -25,36 +25,48 @@ func (c *deadlineIndexedDBClient) DeleteObjectStore(ctx context.Context, req *pr
 	return c.deleteObjectStore(ctx, req, opts...)
 }
 
-func TestRemoteIndexedDBSchemaChangesUseMigrationTimeout(t *testing.T) {
+func TestRemoteIndexedDBSchemaChangesUseMigrationTimeoutWhenRequested(t *testing.T) {
 	t.Parallel()
 
-	assertMigrationDeadline := func(t *testing.T, ctx context.Context) {
+	assertDeadline := func(t *testing.T, ctx context.Context, want time.Duration) {
 		t.Helper()
 		deadline, ok := ctx.Deadline()
 		if !ok {
 			t.Fatal("schema change context has no deadline")
 		}
-		if remaining := time.Until(deadline); remaining <= providerRPCTimeout {
-			t.Fatalf("schema change deadline remaining = %s, want greater than provider RPC timeout %s", remaining, providerRPCTimeout)
+		remaining := time.Until(deadline)
+		if remaining <= want-2*time.Second || remaining > want {
+			t.Fatalf("schema change deadline remaining = %s, want within 2s of %s", remaining, want)
 		}
 	}
 
+	var wantDeadline time.Duration
 	client := &deadlineIndexedDBClient{
 		createObjectStore: func(ctx context.Context, _ *proto.CreateObjectStoreRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
-			assertMigrationDeadline(t, ctx)
+			assertDeadline(t, ctx, wantDeadline)
 			return &emptypb.Empty{}, nil
 		},
 		deleteObjectStore: func(ctx context.Context, _ *proto.DeleteObjectStoreRequest, _ ...grpc.CallOption) (*emptypb.Empty, error) {
-			assertMigrationDeadline(t, ctx)
+			assertDeadline(t, ctx, wantDeadline)
 			return &emptypb.Empty{}, nil
 		},
 	}
 	db := &remoteIndexedDB{client: client}
 
+	wantDeadline = providerRPCTimeout
 	if err := db.CreateObjectStore(context.Background(), "api_tokens", indexeddb.ObjectStoreSchema{}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)
 	}
 	if err := db.DeleteObjectStore(context.Background(), "api_tokens"); err != nil {
 		t.Fatalf("DeleteObjectStore: %v", err)
+	}
+
+	migrationCtx := WithProviderMigrationTimeout(context.Background())
+	wantDeadline = providerMigrateTimeout
+	if err := db.CreateObjectStore(migrationCtx, "api_tokens", indexeddb.ObjectStoreSchema{}); err != nil {
+		t.Fatalf("CreateObjectStore with migration context: %v", err)
+	}
+	if err := db.DeleteObjectStore(migrationCtx, "api_tokens"); err != nil {
+		t.Fatalf("DeleteObjectStore with migration context: %v", err)
 	}
 }

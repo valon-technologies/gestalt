@@ -826,7 +826,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, storeErr)
 	}
 	store = metricutil.InstrumentIndexedDB(store, selectedIndexedDBName)
-	svc, svcErr := coredata.New(store)
+	svc, svcErr := coredata.NewWithContext(providerhost.WithProviderMigrationTimeout(ctx), store)
 	if svcErr != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, svcErr)

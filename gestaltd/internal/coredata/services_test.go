@@ -105,6 +105,47 @@ func (d *countingIndexedDB) getAllCount(name string) int {
 	return d.getAllCounts[name]
 }
 
+type createContextRecordingIndexedDB struct {
+	inner          indexeddb.IndexedDB
+	mu             sync.Mutex
+	createContexts map[string]context.Context
+}
+
+func newCreateContextRecordingIndexedDB(inner indexeddb.IndexedDB) *createContextRecordingIndexedDB {
+	return &createContextRecordingIndexedDB{
+		inner:          inner,
+		createContexts: make(map[string]context.Context),
+	}
+}
+
+func (d *createContextRecordingIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
+	return d.inner.ObjectStore(name)
+}
+
+func (d *createContextRecordingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+	d.mu.Lock()
+	d.createContexts[name] = ctx
+	d.mu.Unlock()
+	return d.inner.CreateObjectStore(ctx, name, schema)
+}
+
+func (d *createContextRecordingIndexedDB) DeleteObjectStore(ctx context.Context, name string) error {
+	return d.inner.DeleteObjectStore(ctx, name)
+}
+
+func (d *createContextRecordingIndexedDB) Ping(ctx context.Context) error { return d.inner.Ping(ctx) }
+func (d *createContextRecordingIndexedDB) Close() error                   { return d.inner.Close() }
+
+func (d *createContextRecordingIndexedDB) createdStoreContexts() map[string]context.Context {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	contexts := make(map[string]context.Context, len(d.createContexts))
+	for name, ctx := range d.createContexts {
+		contexts[name] = ctx
+	}
+	return contexts
+}
+
 type countingObjectStore struct {
 	name  string
 	db    *countingIndexedDB
@@ -175,6 +216,33 @@ func TestNew(t *testing.T) {
 		}
 		if _, err := coredata.New(db); err != nil {
 			t.Fatalf("second New: %v", err)
+		}
+	})
+
+	t.Run("new_with_context_uses_caller_context_for_schema_creation", func(t *testing.T) {
+		t.Parallel()
+
+		type schemaContextKey struct{}
+		const marker = "schema-migration"
+		ctx := context.WithValue(context.Background(), schemaContextKey{}, marker)
+		db := newCreateContextRecordingIndexedDB(&coretesting.StubIndexedDB{})
+		if _, err := coredata.NewWithContext(ctx, db); err != nil {
+			t.Fatalf("coredata.NewWithContext: %v", err)
+		}
+
+		contexts := db.createdStoreContexts()
+		if len(contexts) == 0 {
+			t.Fatal("NewWithContext did not create any object stores")
+		}
+		for _, store := range []string{coredata.StoreUsers, coredata.StoreRuntimeSessionLogs} {
+			if _, ok := contexts[store]; !ok {
+				t.Fatalf("NewWithContext did not create store %q", store)
+			}
+		}
+		for store, createCtx := range contexts {
+			if got := createCtx.Value(schemaContextKey{}); got != marker {
+				t.Fatalf("CreateObjectStore(%q) context marker = %v, want %q", store, got, marker)
+			}
 		}
 	})
 
