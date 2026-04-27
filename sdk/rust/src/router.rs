@@ -13,7 +13,6 @@ use serde_json::Value;
 use crate::api::{IntoResponse, Request};
 use crate::catalog::{Catalog, CatalogOperation, schema_json, schema_parameters};
 use crate::error::{Error, INTERNAL_ERROR_MESSAGE, Result};
-use crate::manifest_metadata::{HTTPBinding, HTTPSecurityScheme, PluginManifestMetadata};
 use crate::provider_server::OperationResult;
 
 #[derive(Clone, Debug)]
@@ -105,7 +104,6 @@ type Handler<P> = Arc<
 /// Dispatches typed operations and exposes the corresponding static catalog.
 pub struct Router<P> {
     catalog: Catalog,
-    manifest_metadata: PluginManifestMetadata,
     handlers: BTreeMap<String, Handler<P>>,
 }
 
@@ -113,7 +111,6 @@ impl<P> Clone for Router<P> {
     fn clone(&self) -> Self {
         Self {
             catalog: self.catalog.clone(),
-            manifest_metadata: self.manifest_metadata.clone(),
             handlers: self.handlers.clone(),
         }
     }
@@ -130,7 +127,6 @@ impl<P> Router<P> {
     pub fn new() -> Self {
         Self {
             catalog: Catalog::default(),
-            manifest_metadata: PluginManifestMetadata::default(),
             handlers: BTreeMap::new(),
         }
     }
@@ -147,29 +143,6 @@ impl<P> Router<P> {
     /// Returns the router's derived static catalog.
     pub fn catalog(&self) -> &Catalog {
         &self.catalog
-    }
-
-    /// Returns the router's generated manifest metadata.
-    pub fn manifest_metadata(&self) -> &PluginManifestMetadata {
-        &self.manifest_metadata
-    }
-
-    /// Replaces the router's generated manifest metadata.
-    pub fn with_manifest_metadata(mut self, manifest_metadata: PluginManifestMetadata) -> Self {
-        self.manifest_metadata = manifest_metadata;
-        self
-    }
-
-    /// Inserts or replaces one named HTTP security scheme.
-    pub fn security_scheme(mut self, name: impl Into<String>, scheme: HTTPSecurityScheme) -> Self {
-        self.manifest_metadata = self.manifest_metadata.security_scheme(name, scheme);
-        self
-    }
-
-    /// Inserts or replaces one named hosted HTTP binding.
-    pub fn http_binding(mut self, name: impl Into<String>, binding: HTTPBinding) -> Self {
-        self.manifest_metadata = self.manifest_metadata.http_binding(name, binding);
-        self
     }
 
     /// Executes one named operation against provider.

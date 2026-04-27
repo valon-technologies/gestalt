@@ -625,32 +625,8 @@ func TestRun_ProviderReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.
 		ExpectedServeExport:  "__gestalt_serve",
 		ExpectedCatalogWrite: true,
 		GeneratedCatalog:     rustReleasePluginName,
-		GeneratedManifestMetadata: `securitySchemes:
-  signed:
-    type: hmac
-    secret:
-      env: REQUEST_SIGNING_SECRET
-    signatureHeader: X-Request-Signature
-    signaturePrefix: v0=
-    payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
-    timestampHeader: X-Request-Timestamp
-    maxAgeSeconds: 300
-http:
-  command:
-    path: /command
-    method: POST
-    security: signed
-    target: greet
-    requestBody:
-      required: true
-      content:
-        application/x-www-form-urlencoded: {}
-    ack:
-      status: 200
-      body:
-        status: accepted`,
-		DelegateBinary: pluginBin,
-		AllowedTargets: []string{hostTarget},
+		DelegateBinary:       pluginBin,
+		AllowedTargets:       []string{hostTarget},
 	})
 	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
@@ -740,32 +716,8 @@ func TestRun_ProviderReleaseBuildsRustSourcePluginForExplicitLinuxTarget(t *test
 		ExpectedServeExport:  "__gestalt_serve",
 		ExpectedCatalogWrite: true,
 		GeneratedCatalog:     rustReleasePluginName,
-		GeneratedManifestMetadata: `securitySchemes:
-  signed:
-    type: hmac
-    secret:
-      env: REQUEST_SIGNING_SECRET
-    signatureHeader: X-Request-Signature
-    signaturePrefix: v0=
-    payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
-    timestampHeader: X-Request-Timestamp
-    maxAgeSeconds: 300
-http:
-  command:
-    path: /command
-    method: POST
-    security: signed
-    target: greet
-    requestBody:
-      required: true
-      content:
-        application/x-www-form-urlencoded: {}
-    ack:
-      status: 200
-      body:
-        status: accepted`,
-		DelegateBinary: pluginBin,
-		AllowedTargets: []string{hostTarget, explicitTarget},
+		DelegateBinary:       pluginBin,
+		AllowedTargets:       []string{hostTarget, explicitTarget},
 	})
 	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
@@ -2380,40 +2332,7 @@ class GreetOutput(gestalt.Model):
     message: str
 
 
-plugin = gestalt.Plugin(
-    "python-release",
-    securitySchemes={
-        "signed": {
-            "type": "hmac",
-            "secret": {"env": "REQUEST_SIGNING_SECRET"},
-            "signatureHeader": "X-Request-Signature",
-            "signaturePrefix": "v0=",
-            "payloadTemplate": "v0:{header:X-Request-Timestamp}:{raw_body}",
-            "timestampHeader": "X-Request-Timestamp",
-            "maxAgeSeconds": 300,
-        }
-    },
-    http={
-        "command": {
-            "path": "/command",
-            "method": "POST",
-            "security": "signed",
-            "target": "greet",
-            "requestBody": {
-                "required": True,
-                "content": {
-                    "application/x-www-form-urlencoded": {},
-                },
-            },
-            "ack": {
-                "status": 200,
-                "body": {
-                    "status": "accepted",
-                },
-            },
-        }
-    },
-)
+plugin = gestalt.Plugin("python-release")
 
 
 @plugin.operation(method="GET", read_only=True)
@@ -2438,13 +2357,7 @@ def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
 		Kind:    providermanifestv1.KindPlugin,
 		Source:  "github.com/testowner/plugins/python-release",
 		Version: "0.0.1",
-		Spec: &providermanifestv1.Spec{
-			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-				"default": {
-					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-				},
-			},
-		},
+		Spec:    hostedHTTPMetadataSpec("greet"),
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)
@@ -2458,29 +2371,24 @@ func newManifestBackedPythonSourceReleaseFixture(t *testing.T, dir string) strin
 	t.Helper()
 
 	pluginDir := newPythonSourceReleaseFixture(t, dir)
+	spec := hostedHTTPMetadataSpec("greet")
+	spec.Surfaces = &providermanifestv1.ProviderSurfaces{
+		REST: &providermanifestv1.RESTSurface{
+			BaseURL: "https://api.example.test",
+			Operations: []providermanifestv1.ProviderOperation{
+				{
+					Name:   "list_widgets",
+					Method: "GET",
+					Path:   "/widgets",
+				},
+			},
+		},
+	}
 	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
 		Kind:    providermanifestv1.KindPlugin,
 		Source:  "github.com/testowner/plugins/python-release",
 		Version: "0.0.1",
-		Spec: &providermanifestv1.Spec{
-			Surfaces: &providermanifestv1.ProviderSurfaces{
-				REST: &providermanifestv1.RESTSurface{
-					BaseURL: "https://api.example.test",
-					Operations: []providermanifestv1.ProviderOperation{
-						{
-							Name:   "list_widgets",
-							Method: "GET",
-							Path:   "/widgets",
-						},
-					},
-				},
-			},
-			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-				"default": {
-					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-				},
-			},
-		},
+		Spec:    spec,
 	})
 	return pluginDir
 }
@@ -2639,31 +2547,6 @@ operations:
   - id: greet
     method: GET
 `,
-			ManifestMetadata: `securitySchemes:
-  signed:
-    type: hmac
-    secret:
-      env: REQUEST_SIGNING_SECRET
-    signatureHeader: X-Request-Signature
-    signaturePrefix: v0=
-    payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
-    timestampHeader: X-Request-Timestamp
-    maxAgeSeconds: 300
-http:
-  command:
-    path: /command
-    method: POST
-    security: signed
-    target: greet
-    requestBody:
-      required: true
-      content:
-        application/x-www-form-urlencoded: {}
-    ack:
-      status: 200
-      body:
-        status: accepted
-`,
 		},
 		Build: &fakebun.BuildConfig{
 			ExpectedCwd:        sdkPath,
@@ -2764,46 +2647,16 @@ if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._runtime" ]; then
     echo "unexpected runtime kind: $runtime_kind" >&2
     exit 1
   fi
-  if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ] && [ -z "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
-    echo "missing catalog or manifest metadata export path" >&2
+  if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
+    echo "missing catalog export path" >&2
     exit 1
   fi
-  if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
-    cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
+  cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
 name: python-release
 operations:
   - id: greet
     method: GET
 EOF
-  fi
-  if [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
-    cat > "$GESTALT_PLUGIN_WRITE_MANIFEST_METADATA" <<'EOF'
-securitySchemes:
-  signed:
-    type: hmac
-    secret:
-      env: REQUEST_SIGNING_SECRET
-    signatureHeader: X-Request-Signature
-    signaturePrefix: v0=
-    payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
-    timestampHeader: X-Request-Timestamp
-    maxAgeSeconds: 300
-http:
-  command:
-    path: /command
-    method: POST
-    security: signed
-    target: greet
-    requestBody:
-      required: true
-      content:
-        application/x-www-form-urlencoded: {}
-    ack:
-      status: 200
-      body:
-        status: accepted
-EOF
-  fi
   exit 0
 fi
 
@@ -2958,7 +2811,7 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 
 	scheme := manifest.Spec.SecuritySchemes["signed"]
 	if scheme == nil {
-		t.Fatal(`manifest.Spec.SecuritySchemes["signed"] = nil, want generated scheme`)
+		t.Fatal(`manifest.Spec.SecuritySchemes["signed"] = nil, want manifest scheme`)
 		return
 	}
 	if scheme.Type != providermanifestv1.HTTPSecuritySchemeTypeHMAC {
@@ -2986,7 +2839,7 @@ func assertReleasedManifestHasHostedHTTPMetadata(t *testing.T, manifest *provide
 
 	binding := manifest.Spec.HTTP["command"]
 	if binding == nil {
-		t.Fatal(`manifest.Spec.HTTP["command"] = nil, want generated HTTP binding`)
+		t.Fatal(`manifest.Spec.HTTP["command"] = nil, want manifest HTTP binding`)
 		return
 	}
 	if binding.Path != "/command" {
@@ -3198,11 +3051,60 @@ func pathWithoutGo(t *testing.T) string {
 	return dir
 }
 
+func hostedHTTPMetadataSpec(target string) *providermanifestv1.Spec {
+	return &providermanifestv1.Spec{
+		Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+			"default": {
+				Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			},
+		},
+		SecuritySchemes: map[string]*providermanifestv1.HTTPSecurityScheme{
+			"signed": {
+				Type:            providermanifestv1.HTTPSecuritySchemeTypeHMAC,
+				Secret:          &providermanifestv1.HTTPSecretRef{Env: "REQUEST_SIGNING_SECRET"},
+				SignatureHeader: "X-Request-Signature",
+				SignaturePrefix: "v0=",
+				PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
+				TimestampHeader: "X-Request-Timestamp",
+				MaxAgeSeconds:   300,
+			},
+		},
+		HTTP: map[string]*providermanifestv1.HTTPBinding{
+			"command": {
+				Path:     "/command",
+				Method:   http.MethodPost,
+				Security: "signed",
+				Target:   target,
+				RequestBody: &providermanifestv1.HTTPRequestBody{
+					Required: true,
+					Content: map[string]*providermanifestv1.HTTPMediaType{
+						"application/x-www-form-urlencoded": {},
+					},
+				},
+				Ack: &providermanifestv1.HTTPAck{
+					Status: 200,
+					Body: map[string]any{
+						"status": "accepted",
+					},
+				},
+			},
+		},
+	}
+}
+
 func newRustSourceReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
 	pluginDir := filepath.Join(dir, rustReleasePluginName)
 	copyFixtureTree(t, rustProviderFixturePath(t), pluginDir)
+	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      "github.com/valon-technologies/gestalt/provider-rust",
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Example Rust Provider",
+		Description: "A minimal example provider built with the public Rust SDK",
+		Spec:        hostedHTTPMetadataSpec("greet"),
+	})
 	return pluginDir
 }
 
@@ -3252,15 +3154,8 @@ func newGoSourceReleaseFixture(t *testing.T, dir string) string {
 		Source:      releaseTestSource,
 		Version:     "0.0.1",
 		DisplayName: "Release Test",
-		Spec: &providermanifestv1.Spec{
-			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-				"default": {
-					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-				},
-			},
-		},
+		Spec:        hostedHTTPMetadataSpec("echo"),
 	})
-	injectGoManifestMetadata(t, filepath.Join(pluginDir, "provider.go"))
 	return pluginDir
 }
 
@@ -3276,13 +3171,7 @@ func newTypeScriptSourceReleaseFixture(t *testing.T, dir string) string {
 		Source:      typeScriptReleaseSource,
 		Version:     "0.0.1",
 		DisplayName: "TypeScript Release",
-		Spec: &providermanifestv1.Spec{
-			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-				"default": {
-					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-				},
-			},
-		},
+		Spec:        hostedHTTPMetadataSpec("greet"),
 	})
 	if err := os.Remove(filepath.Join(pluginDir, providerpkg.StaticCatalogFile)); err != nil {
 		t.Fatalf("Remove(%s): %v", providerpkg.StaticCatalogFile, err)
@@ -3298,39 +3187,6 @@ func newTypeScriptSourceReleaseFixture(t *testing.T, dir string) string {
 	writeTestFile(t, pluginDir, "provider.ts", []byte(`import { definePlugin } from "@valon-technologies/gestalt";
 
 export const provider = definePlugin({
-  securitySchemes: {
-    signed: {
-      type: "hmac",
-      secret: {
-        env: "REQUEST_SIGNING_SECRET",
-      },
-      signatureHeader: "X-Request-Signature",
-      signaturePrefix: "v0=",
-      payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
-      timestampHeader: "X-Request-Timestamp",
-      maxAgeSeconds: 300,
-    },
-  },
-  http: {
-    command: {
-      path: "/command",
-      method: "POST",
-      security: "signed",
-      target: "greet",
-      requestBody: {
-        required: true,
-        content: {
-          "application/x-www-form-urlencoded": {},
-        },
-      },
-      ack: {
-        status: 200,
-        body: {
-          status: "accepted",
-        },
-      },
-    },
-  },
   operations: [
     {
       id: "greet",
@@ -3395,24 +3251,6 @@ func writeStaticCatalogProviderMain(t *testing.T, dir string) {
 func writeStaticCatalogProviderMainAt(t *testing.T, dir, rel string) {
 	t.Helper()
 	writeTestFile(t, dir, rel, []byte(testutil.GeneratedProviderPackageSource()), 0644)
-}
-
-func injectGoManifestMetadata(t *testing.T, providerPath string) {
-	t.Helper()
-
-	data, err := os.ReadFile(providerPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", providerPath, err)
-	}
-	old := "\t)\n)"
-	new := "\t).WithManifestMetadata(gestalt.ManifestMetadata{\n\t\tSecuritySchemes: map[string]gestalt.HTTPSecurityScheme{\n\t\t\t\"signed\": {\n\t\t\t\tType:            gestalt.HTTPSecuritySchemeTypeHMAC,\n\t\t\t\tSecret:          &gestalt.HTTPSecretRef{Env: \"REQUEST_SIGNING_SECRET\"},\n\t\t\t\tSignatureHeader: \"X-Request-Signature\",\n\t\t\t\tSignaturePrefix: \"v0=\",\n\t\t\t\tPayloadTemplate: \"v0:{header:X-Request-Timestamp}:{raw_body}\",\n\t\t\t\tTimestampHeader: \"X-Request-Timestamp\",\n\t\t\t\tMaxAgeSeconds:   300,\n\t\t\t},\n\t\t},\n\t\tHTTP: map[string]gestalt.HTTPBinding{\n\t\t\t\"command\": {\n\t\t\t\tPath:     \"/command\",\n\t\t\t\tMethod:   http.MethodPost,\n\t\t\t\tSecurity: \"signed\",\n\t\t\t\tTarget:   \"echo\",\n\t\t\t\tRequestBody: &gestalt.HTTPRequestBody{\n\t\t\t\t\tRequired: true,\n\t\t\t\t\tContent: map[string]gestalt.HTTPMediaType{\n\t\t\t\t\t\t\"application/x-www-form-urlencoded\": {},\n\t\t\t\t\t},\n\t\t\t\t},\n\t\t\t\tAck: &gestalt.HTTPAck{\n\t\t\t\t\tStatus: 200,\n\t\t\t\t\tBody: map[string]any{\n\t\t\t\t\t\t\"status\": \"accepted\",\n\t\t\t\t\t},\n\t\t\t\t},\n\t\t\t},\n\t\t},\n\t})\n)"
-	updated := strings.Replace(string(data), old, new, 1)
-	if updated == string(data) {
-		t.Fatalf("provider fixture %s missing router terminator %q", providerPath, old)
-	}
-	if err := os.WriteFile(providerPath, []byte(updated), 0o644); err != nil {
-		t.Fatalf("WriteFile(%s): %v", providerPath, err)
-	}
 }
 
 func rustProviderFixturePath(t *testing.T) string {
@@ -3482,13 +3320,12 @@ func copyFixtureTree(t *testing.T, src, dst string) {
 }
 
 type fakeRustCargoConfig struct {
-	ExpectedPluginName        string
-	ExpectedServeExport       string
-	ExpectedCatalogWrite      bool
-	GeneratedCatalog          string
-	GeneratedManifestMetadata string
-	DelegateBinary            string
-	AllowedTargets            []string
+	ExpectedPluginName   string
+	ExpectedServeExport  string
+	ExpectedCatalogWrite bool
+	GeneratedCatalog     string
+	DelegateBinary       string
+	AllowedTargets       []string
 }
 
 func writeFakeRustReleaseCargo(t *testing.T, path string, cfg fakeRustCargoConfig) {
@@ -3564,26 +3401,13 @@ mkdir -p "$(dirname "$binary")"
 cat > "$binary" <<'EOF'
 #!/bin/sh
 set -eu
-if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ] || [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
-  if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
+if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
   cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'YAML'
 name: ` + cfg.GeneratedCatalog + `
 operations:
   - id: greet
     method: GET
 YAML
-  fi
-` + func() string {
-		if strings.TrimSpace(cfg.GeneratedManifestMetadata) == "" {
-			return ""
-		}
-		return `  if [ -n "${GESTALT_PLUGIN_WRITE_MANIFEST_METADATA:-}" ]; then
-  cat > "$GESTALT_PLUGIN_WRITE_MANIFEST_METADATA" <<'YAML'
-` + cfg.GeneratedManifestMetadata + `
-YAML
-  fi
-`
-	}() + `
   exit 0
 fi
 exec ` + shellSingleQuoted(cfg.DelegateBinary) + ` "$@"

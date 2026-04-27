@@ -234,63 +234,6 @@ class PluginCatalogTests(unittest.TestCase):
             content = path.read_text(encoding="utf-8")
             self.assertIn("test-plugin", content)
 
-    def test_static_manifest_metadata(self) -> None:
-        plugin = Plugin(
-            "test-plugin",
-            securitySchemes={
-                "signed": {
-                    "type": "hmac",
-                    "secret": {"env": "REQUEST_SIGNING_SECRET"},
-                    "signatureHeader": "X-Request-Signature",
-                    "signaturePrefix": "v0=",
-                    "payloadTemplate": "v0:{header:X-Request-Timestamp}:{raw_body}",
-                    "timestampHeader": "X-Request-Timestamp",
-                    "maxAgeSeconds": 300,
-                }
-            },
-            http={
-                "command": {
-                    "path": "/command",
-                    "method": "POST",
-                    "security": "signed",
-                    "target": "handle_command",
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/x-www-form-urlencoded": {},
-                        },
-                    },
-                    "ack": {
-                        "status": 200,
-                        "body": {
-                            "status": "accepted",
-                        },
-                    },
-                }
-            },
-        )
-
-        self.assertTrue(plugin.supports_manifest_metadata())
-        self.assertEqual(
-            plugin.securitySchemes["signed"]["secret"]["env"],
-            "REQUEST_SIGNING_SECRET",
-        )
-        self.assertEqual(plugin.http["command"]["path"], "/command")
-
-        metadata = plugin.static_manifest_metadata()
-        self.assertEqual(
-            metadata["securitySchemes"]["signed"]["type"],
-            "hmac",
-        )
-        self.assertEqual(metadata["http"]["command"]["target"], "handle_command")
-
-        metadata["securitySchemes"]["signed"]["type"] = "none"
-        self.assertEqual(
-            plugin.static_manifest_metadata()["securitySchemes"]["signed"]["type"],
-            "hmac",
-        )
-
-
 class PluginNameTests(unittest.TestCase):
     """Tests for plugin name normalization."""
 

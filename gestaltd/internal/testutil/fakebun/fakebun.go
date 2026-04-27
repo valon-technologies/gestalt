@@ -31,16 +31,14 @@ type InstallConfig struct {
 }
 
 type RuntimeConfig struct {
-	Mode                    InvocationMode `json:"mode,omitempty"`
-	ExpectedCwd             string         `json:"expected_cwd,omitempty"`
-	ExpectedEntry           string         `json:"expected_entry,omitempty"`
-	ExpectedRoot            string         `json:"expected_root,omitempty"`
-	ExpectedTarget          string         `json:"expected_target,omitempty"`
-	RequireAnyOutput        bool           `json:"require_any_output,omitempty"`
-	RequireCatalog          bool           `json:"require_catalog,omitempty"`
-	Catalog                 string         `json:"catalog,omitempty"`
-	RequireManifestMetadata bool           `json:"require_manifest_metadata,omitempty"`
-	ManifestMetadata        string         `json:"manifest_metadata,omitempty"`
+	Mode             InvocationMode `json:"mode,omitempty"`
+	ExpectedCwd      string         `json:"expected_cwd,omitempty"`
+	ExpectedEntry    string         `json:"expected_entry,omitempty"`
+	ExpectedRoot     string         `json:"expected_root,omitempty"`
+	ExpectedTarget   string         `json:"expected_target,omitempty"`
+	RequireAnyOutput bool           `json:"require_any_output,omitempty"`
+	RequireCatalog   bool           `json:"require_catalog,omitempty"`
+	Catalog          string         `json:"catalog,omitempty"`
 }
 
 type BuildConfig struct {

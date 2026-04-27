@@ -12,9 +12,7 @@
 //  1. Implement [Provider.Configure].
 //  2. Define typed operations and handlers in Go with [Operation], [Register],
 //     and [Router].
-//  3. Optionally attach hosted HTTP/security metadata with
-//     [Router.WithManifestMetadata].
-//  4. Export `New()` plus `Router` from the provider package.
+//  3. Export `New()` plus `Router` from the provider package.
 //
 // This keeps the runtime contract single-source and manifest-backed while still
 // giving provider authors typed Go definitions for executable helper

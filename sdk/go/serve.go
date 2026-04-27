@@ -15,7 +15,6 @@ import (
 )
 
 const envWriteCatalog = "GESTALT_PLUGIN_WRITE_CATALOG"
-const envWriteManifestMetadata = "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA"
 
 type providerCloserContextKey struct{}
 
@@ -29,33 +28,16 @@ func ServeProvider[P any, PP interface {
 	Provider
 }](ctx context.Context, provider PP, router *Router[P]) error {
 	catalogPath := os.Getenv(envWriteCatalog)
-	manifestMetadataPath := os.Getenv(envWriteManifestMetadata)
-	if catalogPath != "" || manifestMetadataPath != "" {
-		if catalogPath != "" {
-			cat := router.Catalog()
-			if cat == nil {
-				cat = &proto.Catalog{}
-			}
-			if err := ensureOutputDir("catalog", catalogPath); err != nil {
-				return err
-			}
-			if err := writeCatalogYAML(cat, catalogPath); err != nil {
-				return err
-			}
+	if catalogPath != "" {
+		cat := router.Catalog()
+		if cat == nil {
+			cat = &proto.Catalog{}
 		}
-		if manifestMetadataPath != "" {
-			var metadata ManifestMetadata
-			if router != nil {
-				metadata = router.ManifestMetadata()
-			}
-			if hasManifestMetadata(metadata) {
-				if err := ensureOutputDir("manifest metadata", manifestMetadataPath); err != nil {
-					return err
-				}
-				if err := writeManifestMetadataYAML(metadata, manifestMetadataPath); err != nil {
-					return err
-				}
-			}
+		if err := ensureOutputDir("catalog", catalogPath); err != nil {
+			return err
+		}
+		if err := writeCatalogYAML(cat, catalogPath); err != nil {
+			return err
 		}
 		return nil
 	}

@@ -454,12 +454,12 @@ They are useful for webhooks, Slack slash commands, Slack event callbacks, and
 other inbound requests whose path, signature verification, body shape, or
 acknowledgment response needs to match the calling product.
 
-The endpoint declaration usually belongs to the plugin package, either in
-`spec.http` / `spec.securitySchemes` in the manifest or as SDK-generated
-metadata. Deployment config selects the plugin and may override fields, but
-most deployments do not need a separate route declaration. If the configured
-plugin key is `slack` and the binding path is `/commands/support`, Gestalt
-mounts the route at `/api/v1/slack/commands/support` on `server.baseUrl`.
+The endpoint declaration belongs in the plugin manifest under `spec.http` and
+`spec.securitySchemes`. Deployment config selects the plugin and may override
+fields, but most deployments do not need a separate route declaration. If the
+configured plugin key is `slack` and the binding path is `/commands/support`,
+Gestalt mounts the route at `/api/v1/slack/commands/support` on
+`server.baseUrl`.
 
 Each binding names a security scheme. Use `type: none` only for routes that are
 intentionally unsigned; signed production webhooks should use `hmac`, `apiKey`,
@@ -467,7 +467,7 @@ or `http` verification. The binding then targets an operation ID. Gestalt
 verifies the request, decodes query/body parameters, optionally resolves a more
 specific subject, and invokes the target operation.
 
-<Tabs items={['Manifest', 'Python', 'TypeScript']}>
+<Tabs items={['Manifest', 'Python Handler', 'TypeScript Handler']}>
   <Tabs.Tab>
     ```yaml
     kind: plugin
@@ -506,34 +506,7 @@ specific subject, and invokes the target operation.
     import gestalt
 
 
-    plugin = gestalt.Plugin(
-        "slack",
-        security_schemes={
-            "slack_signed": {
-                "type": "hmac",
-                "secret": {"env": "SLACK_SIGNING_SECRET"},
-                "signatureHeader": "X-Slack-Signature",
-                "signaturePrefix": "v0=",
-                "payloadTemplate": "v0:{header:X-Slack-Request-Timestamp}:{raw_body}",
-                "timestampHeader": "X-Slack-Request-Timestamp",
-                "maxAgeSeconds": 300,
-            },
-        },
-        http={
-            "support_command": {
-                "path": "/commands/support",
-                "method": "POST",
-                "credentialMode": "none",
-                "security": "slack_signed",
-                "target": "handle_support_command",
-                "requestBody": {
-                    "required": True,
-                    "content": {"application/x-www-form-urlencoded": {}},
-                },
-                "ack": {"status": 200, "body": {"status": "accepted"}},
-            },
-        },
-    )
+    plugin = gestalt.Plugin("slack")
 
 
     class SlackCommandInput(gestalt.Model):
@@ -578,31 +551,6 @@ specific subject, and invokes the target operation.
     } from "@valon-technologies/gestalt";
 
     export const plugin = definePlugin({
-      securitySchemes: {
-        slack_signed: {
-          type: "hmac",
-          secret: { env: "SLACK_SIGNING_SECRET" },
-          signatureHeader: "X-Slack-Signature",
-          signaturePrefix: "v0=",
-          payloadTemplate: "v0:{header:X-Slack-Request-Timestamp}:{raw_body}",
-          timestampHeader: "X-Slack-Request-Timestamp",
-          maxAgeSeconds: 300,
-        },
-      },
-      http: {
-        support_command: {
-          path: "/commands/support",
-          method: "POST",
-          credentialMode: "none",
-          security: "slack_signed",
-          target: "handle_support_command",
-          requestBody: {
-            required: true,
-            content: { "application/x-www-form-urlencoded": {} },
-          },
-          ack: { status: 200, body: { status: "accepted" } },
-        },
-      },
       resolveHTTPSubject(request) {
         const teamID = String(request.params.team_id ?? "");
         const userID = String(request.params.user_id ?? "");
@@ -877,13 +825,12 @@ Repeated `--config` flags merge left-to-right, and `null` deletes inherited
 entries. That makes it possible to boot some supporting providers while
 suppressing others for a local session.
 
-Hosted HTTP bindings stay layered on top of operations. A plugin can define an
-operation like `handle_command` in code, then attach `/command` with generated
-`securitySchemes` / `http` metadata. Gestalt writes that metadata into the
-effective manifest during local source execution and `gestaltd provider release`.
-Hand-authored manifest `spec.securitySchemes` / `spec.http` entries are still
-valid, but source-generated metadata is merged first and manifest values then
-override populated fields rather than replacing the generated binding wholesale.
+Hosted HTTP bindings stay layered on top of operations. A plugin defines an
+operation like `handle_command` in code, then attaches `/command` by declaring a
+manifest `spec.http` binding that targets that operation. Local source
+execution and `gestaltd provider release` preserve those manifest
+`spec.securitySchemes` / `spec.http` entries in the effective packaged
+manifest.
 
 Once the local server is running, invoke an operation:
 

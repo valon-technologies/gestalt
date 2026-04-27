@@ -71,11 +71,11 @@ plugins:
 ```
 
 Hosted HTTP endpoints, such as webhooks and Slack slash-command routes, are
-normally declared by the plugin package in its manifest or generated SDK
-metadata. Server config selects the package and provides deployment-specific
-settings; the mounted URL is built from the configured plugin key and the
-binding path. For example, a `plugins.slack` entry with a binding path of
-`/commands/support` is served at `/api/v1/slack/commands/support`.
+declared by the plugin package in its manifest. Server config selects the
+package and provides deployment-specific settings; the mounted URL is built
+from the configured plugin key and the binding path. For example, a
+`plugins.slack` entry with a binding path of `/commands/support` is served at
+`/api/v1/slack/commands/support`.
 
 Use `plugins.<name>.securitySchemes` or `plugins.<name>.http` only when the
 deployment needs to override package-provided hosted HTTP metadata or add a

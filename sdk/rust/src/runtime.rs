@@ -19,7 +19,6 @@ use tonic::transport::Server;
 use crate::catalog::write_catalog;
 use crate::env::{
     ENV_PROVIDER_NAME, ENV_PROVIDER_PARENT_PID, ENV_PROVIDER_SOCKET, ENV_WRITE_CATALOG,
-    ENV_WRITE_MANIFEST_METADATA,
 };
 use crate::error::{Error, Result};
 #[cfg(unix)]
@@ -38,7 +37,6 @@ use crate::generated::v1::s3_server::S3Server;
 use crate::generated::v1::secrets_provider_server::SecretsProviderServer;
 #[cfg(unix)]
 use crate::generated::v1::workflow_provider_server::WorkflowProviderServer as WorkflowRpcServer;
-use crate::manifest_metadata::write_manifest_metadata;
 use crate::provider_server::ProviderServer;
 use crate::{
     AgentProvider, AuthenticationProvider, CacheProvider, Provider, Router, S3Provider,
@@ -102,14 +100,6 @@ pub fn write_catalog_path<P>(router: &Router<P>, path: impl AsRef<Path>) -> Resu
     write_catalog(router.catalog(), path)
 }
 
-/// Writes the router's generated manifest metadata to path when configured.
-pub fn write_manifest_metadata_path<P>(router: &Router<P>, path: impl AsRef<Path>) -> Result<()> {
-    if router.manifest_metadata().is_empty() {
-        return Ok(());
-    }
-    write_manifest_metadata(router.manifest_metadata(), path)
-}
-
 /// Writes the router's derived catalog when `GESTALT_PLUGIN_WRITE_CATALOG` is
 /// set, returning whether anything was written.
 pub fn maybe_write_catalog<P>(router: &Router<P>) -> Result<bool> {
@@ -127,22 +117,8 @@ pub fn maybe_write_catalog<P>(router: &Router<P>) -> Result<bool> {
     Ok(true)
 }
 
-/// Writes generated manifest metadata when
-/// `GESTALT_PLUGIN_WRITE_MANIFEST_METADATA` is set, returning whether the
-/// export path was requested.
-#[doc(hidden)]
-pub fn maybe_write_manifest_metadata<P>(router: &Router<P>) -> Result<bool> {
-    let Some(path) = env::var_os(ENV_WRITE_MANIFEST_METADATA) else {
-        return Ok(false);
-    };
-    write_manifest_metadata_path(router, PathBuf::from(path))?;
-    Ok(true)
-}
-
-fn maybe_write_generated_metadata<P>(router: &Router<P>) -> Result<bool> {
-    let wrote_catalog = maybe_write_catalog(router)?;
-    let wrote_manifest_metadata = maybe_write_manifest_metadata(router)?;
-    Ok(wrote_catalog || wrote_manifest_metadata)
+fn maybe_write_static_catalog<P>(router: &Router<P>) -> Result<bool> {
+    maybe_write_catalog(router)
 }
 
 #[cfg(unix)]
@@ -151,7 +127,7 @@ pub async fn serve_provider<P>(provider: Arc<P>, router: Router<P>) -> Result<()
 where
     P: Provider,
 {
-    if maybe_write_generated_metadata(&router)? {
+    if maybe_write_static_catalog(&router)? {
         return Ok(());
     }
     let server = ProviderServer::new(Arc::clone(&provider), router);
@@ -314,7 +290,7 @@ pub async fn serve_provider<P>(_provider: Arc<P>, router: Router<P>) -> Result<(
 where
     P: Provider,
 {
-    if maybe_write_generated_metadata(&router)? {
+    if maybe_write_static_catalog(&router)? {
         return Ok(());
     }
     Err(Error::internal(

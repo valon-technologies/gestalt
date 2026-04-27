@@ -63,7 +63,6 @@ workflow_pb2_grpc: Any = cast(Any, None)
 
 ENV_PROVIDER_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
 ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
-ENV_WRITE_MANIFEST_METADATA: Final[str] = "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA"
 CURRENT_PROTOCOL_VERSION: Final[int] = 3
 GRPC_SERVER_MAX_WORKERS: Final[int] = 4
 GRPC_SHUTDOWN_GRACE_SECONDS: Final[int] = 2
@@ -213,16 +212,10 @@ def main(argv: list[str] | None = None) -> int:
         target.name = runtime_args.plugin_name
 
     catalog_path = os.environ.get(ENV_WRITE_CATALOG)
-    manifest_metadata_path = os.environ.get(ENV_WRITE_MANIFEST_METADATA)
-    if catalog_path or manifest_metadata_path:
+    if catalog_path:
         if not isinstance(target, Plugin):
-            raise RuntimeError(
-                "catalog and manifest metadata export are only supported for integration plugins"
-            )
-        if catalog_path:
-            target.write_catalog(catalog_path)
-        if manifest_metadata_path:
-            target.write_manifest_metadata(manifest_metadata_path)
+            raise RuntimeError("catalog export is only supported for integration plugins")
+        target.write_catalog(catalog_path)
         return 0
 
     serve(target, runtime_kind=runtime_args.runtime_kind)

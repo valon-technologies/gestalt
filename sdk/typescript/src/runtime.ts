@@ -126,11 +126,6 @@ export const ENV_PROVIDER_PARENT_PID = "GESTALT_PLUGIN_PARENT_PID";
  */
 export const ENV_WRITE_CATALOG = "GESTALT_PLUGIN_WRITE_CATALOG";
 /**
- * Environment variable used to request generated manifest metadata export.
- */
-export const ENV_WRITE_MANIFEST_METADATA =
-  "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA";
-/**
  * Protocol version currently implemented by the TypeScript runtime.
  */
 export const CURRENT_PROTOCOL_VERSION = 3;
@@ -324,19 +319,11 @@ export async function runLoadedProvider(
   }
 
   const catalogPath = process.env[ENV_WRITE_CATALOG];
-  const manifestMetadataPath = process.env[ENV_WRITE_MANIFEST_METADATA];
-  if (catalogPath || manifestMetadataPath) {
+  if (catalogPath) {
     if (!isPluginProvider(provider)) {
-      throw new Error(
-        "static catalog and manifest metadata generation are only supported for plugin providers",
-      );
+      throw new Error("static catalog generation is only supported for plugin providers");
     }
-    if (catalogPath) {
-      writeFileSync(catalogPath, catalogToYaml(provider.staticCatalog()), "utf8");
-    }
-    if (manifestMetadataPath && provider.supportsManifestMetadata()) {
-      provider.writeManifestMetadata(manifestMetadataPath);
-    }
+    writeFileSync(catalogPath, catalogToYaml(provider.staticCatalog()), "utf8");
     return;
   }
 

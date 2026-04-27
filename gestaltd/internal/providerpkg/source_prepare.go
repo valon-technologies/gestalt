@@ -13,7 +13,6 @@ import (
 )
 
 const envWriteCatalog = "GESTALT_PLUGIN_WRITE_CATALOG"
-const envWriteManifestMetadata = "GESTALT_PLUGIN_WRITE_MANIFEST_METADATA"
 
 func PrepareSourceManifest(manifestPath string) ([]byte, *providermanifestv1.Manifest, error) {
 	data, manifest, err := ReadSourceManifestFile(manifestPath)
@@ -52,31 +51,8 @@ func EnsureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1
 	if err != nil {
 		return fmt.Errorf("resolve static catalog path %q: %w", catalogPath, err)
 	}
-	metadataDir, err := os.MkdirTemp("", "gestalt-source-manifest-metadata-")
-	if err != nil {
-		return fmt.Errorf("create generated source manifest metadata dir: %w", err)
-	}
-	defer func() {
-		_ = os.RemoveAll(metadataDir)
-	}()
-	metadataPath := filepath.Join(metadataDir, "manifest-metadata.yaml")
-	if err := generateSourceStaticCatalog(rootDir, absoluteCatalogPath, metadataPath); err != nil {
+	if err := generateSourceStaticCatalog(rootDir, absoluteCatalogPath); err != nil {
 		return err
-	}
-	if _, err := os.Stat(metadataPath); err == nil {
-		metadata, readErr := readGeneratedSourceManifestMetadata(metadataPath)
-		if readErr != nil {
-			return readErr
-		}
-		if manifest.Spec == nil {
-			manifest.Spec = &providermanifestv1.Spec{}
-		}
-		mergeGeneratedSourceManifestMetadata(manifest.Spec, metadata)
-		if err := validateExecutableProviderMetadata(manifest.Spec); err != nil {
-			return fmt.Errorf("generated source manifest metadata: %w", err)
-		}
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("stat generated source manifest metadata %q: %w", metadataPath, err)
 	}
 	if _, err := os.Stat(absoluteCatalogPath); err != nil {
 		if os.IsNotExist(err) && !StaticCatalogRequired(manifest) {
@@ -87,7 +63,7 @@ func EnsureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1
 	return nil
 }
 
-func generateSourceStaticCatalog(rootDir, catalogPath, manifestMetadataPath string) error {
+func generateSourceStaticCatalog(rootDir, catalogPath string) error {
 	command, args, cleanup, err := SourceProviderExecutionCommand(rootDir, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		if errors.Is(err, ErrNoSourceProviderPackage) {
@@ -103,7 +79,6 @@ func generateSourceStaticCatalog(rootDir, catalogPath, manifestMetadataPath stri
 	cmd.Env = append(
 		os.Environ(),
 		envWriteCatalog+"="+catalogPath,
-		envWriteManifestMetadata+"="+manifestMetadataPath,
 	)
 	execEnv, err := SourceProviderExecutionEnv(rootDir, runtime.GOOS, runtime.GOARCH)
 	if err != nil {

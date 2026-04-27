@@ -115,24 +115,14 @@ func runRuntime(cfg fakebun.RuntimeConfig, args []string) error {
 	}
 
 	catalogPath := os.Getenv("GESTALT_PLUGIN_WRITE_CATALOG")
-	manifestMetadataPath := os.Getenv("GESTALT_PLUGIN_WRITE_MANIFEST_METADATA")
-	if cfg.RequireAnyOutput && catalogPath == "" && manifestMetadataPath == "" {
-		return fmt.Errorf("missing catalog or manifest metadata export path")
+	if cfg.RequireAnyOutput && catalogPath == "" {
+		return fmt.Errorf("missing catalog export path")
 	}
 	if cfg.RequireCatalog && catalogPath == "" {
 		return fmt.Errorf("missing GESTALT_PLUGIN_WRITE_CATALOG")
 	}
 	if catalogPath != "" && cfg.Catalog != "" {
 		if err := os.WriteFile(catalogPath, []byte(cfg.Catalog), 0o644); err != nil {
-			return err
-		}
-	}
-
-	if cfg.RequireManifestMetadata && manifestMetadataPath == "" {
-		return fmt.Errorf("missing GESTALT_PLUGIN_WRITE_MANIFEST_METADATA")
-	}
-	if manifestMetadataPath != "" && cfg.ManifestMetadata != "" {
-		if err := os.WriteFile(manifestMetadataPath, []byte(cfg.ManifestMetadata), 0o644); err != nil {
 			return err
 		}
 	}
