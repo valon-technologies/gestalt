@@ -122,10 +122,34 @@ func (p *pingAgentProvider) Ping(ctx context.Context) error {
 type listSessionsAgentProvider struct {
 	coreagent.UnimplementedProvider
 	sessions []*coreagent.Session
+	err      error
 }
 
 func (p *listSessionsAgentProvider) ListSessions(context.Context, coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
 	return append([]*coreagent.Session(nil), p.sessions...), nil
+}
+
+type routingAgentProvider struct {
+	coreagent.UnimplementedProvider
+	createTurn func(context.Context, coreagent.CreateTurnRequest) (*coreagent.Turn, error)
+	getTurn    func(context.Context, coreagent.GetTurnRequest) (*coreagent.Turn, error)
+}
+
+func (p *routingAgentProvider) CreateTurn(ctx context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+	if p.createTurn == nil {
+		return nil, core.ErrNotFound
+	}
+	return p.createTurn(ctx, req)
+}
+
+func (p *routingAgentProvider) GetTurn(ctx context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+	if p.getTurn == nil {
+		return nil, core.ErrNotFound
+	}
+	return p.getTurn(ctx, req)
 }
 
 func TestAgentRuntimePingChecksConfiguredProviders(t *testing.T) {
@@ -856,6 +880,7 @@ func TestHostedAgentProviderPoolListSessionsDeduplicatesSharedStoreSessions(t *t
 	}
 	pool := &hostedAgentProviderPool{
 		name:            "simple",
+		ctx:             context.Background(),
 		sessionBackends: map[string]*hostedAgentPoolBackend{},
 		backends: []*hostedAgentPoolBackend{
 			{
@@ -890,6 +915,148 @@ func TestHostedAgentProviderPoolListSessionsDeduplicatesSharedStoreSessions(t *t
 	}
 	if backend := pool.sessionBackend("session-2"); backend != pool.backends[1] {
 		t.Fatalf("session-2 backend = %#v, want second backend", backend)
+	}
+}
+
+func TestHostedAgentProviderPoolSkipsPastDrainBackendForNewTurn(t *testing.T) {
+	t.Parallel()
+
+	firstCalls := 0
+	secondCalls := 0
+	pastDrainAt := time.Now().UTC().Add(-time.Second)
+	first := &hostedAgentPoolBackend{
+		id: 1,
+		provider: &routingAgentProvider{
+			createTurn: func(context.Context, coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+				firstCalls++
+				return nil, errors.New("past-drain backend should not receive new work")
+			},
+		},
+		runtimeDrainAt: &pastDrainAt,
+		liveTurns:      map[string]struct{}{},
+	}
+	second := &hostedAgentPoolBackend{
+		id: 2,
+		provider: &routingAgentProvider{
+			createTurn: func(_ context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
+				secondCalls++
+				return &coreagent.Turn{
+					ID:        req.TurnID,
+					SessionID: req.SessionID,
+					Status:    coreagent.ExecutionStatusRunning,
+				}, nil
+			},
+		},
+		liveTurns: map[string]struct{}{},
+	}
+	pool := &hostedAgentProviderPool{
+		name:            "simple",
+		ctx:             context.Background(),
+		sessionBackends: map[string]*hostedAgentPoolBackend{"session-1": first},
+		turnBackends:    map[string]*hostedAgentPoolBackend{},
+		backends:        []*hostedAgentPoolBackend{first, second},
+	}
+
+	turn, err := pool.CreateTurn(context.Background(), coreagent.CreateTurnRequest{
+		TurnID:    "turn-1",
+		SessionID: "session-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if turn == nil || turn.ID != "turn-1" {
+		t.Fatalf("CreateTurn = %#v, want turn-1", turn)
+	}
+	if firstCalls != 0 || secondCalls != 1 {
+		t.Fatalf("CreateTurn calls: first=%d second=%d, want first=0 second=1", firstCalls, secondCalls)
+	}
+	if backend := pool.turnBackend("turn-1"); backend != second {
+		t.Fatalf("turn backend = %#v, want second backend", backend)
+	}
+}
+
+func TestHostedAgentProviderPoolGetTurnRetriesAfterPreferredTimeout(t *testing.T) {
+	t.Parallel()
+
+	firstCalls := 0
+	secondCalls := 0
+	first := &hostedAgentPoolBackend{
+		id: 1,
+		provider: &routingAgentProvider{
+			getTurn: func(context.Context, coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+				firstCalls++
+				return nil, context.DeadlineExceeded
+			},
+		},
+		liveTurns: map[string]struct{}{"turn-1": {}},
+	}
+	second := &hostedAgentPoolBackend{
+		id: 2,
+		provider: &routingAgentProvider{
+			getTurn: func(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+				secondCalls++
+				return &coreagent.Turn{
+					ID:        req.TurnID,
+					SessionID: "session-1",
+					Status:    coreagent.ExecutionStatusRunning,
+				}, nil
+			},
+		},
+		liveTurns: map[string]struct{}{},
+	}
+	pool := &hostedAgentProviderPool{
+		name:            "simple",
+		ctx:             context.Background(),
+		sessionBackends: map[string]*hostedAgentPoolBackend{},
+		turnBackends:    map[string]*hostedAgentPoolBackend{"turn-1": first},
+		backends:        []*hostedAgentPoolBackend{first, second},
+	}
+
+	turn, err := pool.GetTurn(context.Background(), coreagent.GetTurnRequest{TurnID: "turn-1"})
+	if err != nil {
+		t.Fatalf("GetTurn: %v", err)
+	}
+	if turn == nil || turn.ID != "turn-1" {
+		t.Fatalf("GetTurn = %#v, want turn-1", turn)
+	}
+	if firstCalls != 1 || secondCalls != 1 {
+		t.Fatalf("GetTurn calls: first=%d second=%d, want first=1 second=1", firstCalls, secondCalls)
+	}
+	if backend := pool.turnBackend("turn-1"); backend != second {
+		t.Fatalf("turn backend = %#v, want second backend after retry", backend)
+	}
+}
+
+func TestHostedAgentProviderPoolListSessionsContinuesAfterTransientBackendFailure(t *testing.T) {
+	t.Parallel()
+
+	pool := &hostedAgentProviderPool{
+		name:            "simple",
+		ctx:             context.Background(),
+		sessionBackends: map[string]*hostedAgentPoolBackend{},
+		backends: []*hostedAgentPoolBackend{
+			{
+				id:        1,
+				provider:  &listSessionsAgentProvider{err: context.DeadlineExceeded},
+				liveTurns: map[string]struct{}{},
+			},
+			{
+				id:        2,
+				provider:  &listSessionsAgentProvider{sessions: []*coreagent.Session{{ID: "session-1", State: coreagent.SessionStateActive}}},
+				liveTurns: map[string]struct{}{},
+			},
+		},
+	}
+
+	sessions, err := pool.ListSessions(context.Background(), coreagent.ListSessionsRequest{})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != "session-1" {
+		t.Fatalf("ListSessions = %#v, want session-1", sessions)
+	}
+	if backend := pool.sessionBackend("session-1"); backend != pool.backends[1] {
+		t.Fatalf("session backend = %#v, want second backend", backend)
 	}
 }
 
