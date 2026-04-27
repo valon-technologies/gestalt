@@ -83,7 +83,7 @@ func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "missing authorization")
 			return
 		}
-		if err := rejectWorkloadCaller(w, p); err != nil {
+		if err := requireUserCaller(w, p); err != nil {
 			return
 		}
 

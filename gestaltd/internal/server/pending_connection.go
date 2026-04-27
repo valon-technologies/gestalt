@@ -257,8 +257,8 @@ func (s *Server) resolvePendingConnectionUserID(r *http.Request) (string, bool, 
 	if p == nil {
 		return "", false, nil
 	}
-	if principal.IsWorkloadPrincipal(p) {
-		return "", true, errWorkloadForbidden
+	if principal.IsNonUserPrincipal(p) {
+		return "", true, errUserRequired
 	}
 	subjectID := strings.TrimSpace(p.SubjectID)
 	if subjectID == "" && strings.TrimSpace(p.UserID) != "" {
@@ -294,8 +294,8 @@ func (s *Server) authorizePendingConnectionByCookie(r *http.Request, state *pend
 func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Request, state *pendingConnectionState) bool {
 	subjectID, authenticated, err := s.resolvePendingConnectionUserID(r)
 	if err != nil {
-		if errors.Is(err, errWorkloadForbidden) {
-			writeError(w, http.StatusForbidden, errWorkloadForbidden.Error())
+		if errors.Is(err, errUserRequired) {
+			writeError(w, http.StatusForbidden, errUserRequired.Error())
 			return false
 		}
 		if errors.Is(err, principal.ErrInvalidToken) {

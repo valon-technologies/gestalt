@@ -250,7 +250,7 @@ func (s *Server) mcpOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p, err := s.resolveRequestPrincipalWithResolver(r, auth.resolver)
-	if err != nil || p == nil || p.Identity == nil || p.Identity.Email == "" || principal.IsWorkloadPrincipal(p) {
+	if err != nil || p == nil || p.Identity == nil || p.Identity.Email == "" || principal.IsNonUserPrincipal(p) {
 		if strings.EqualFold(strings.TrimSpace(query.Get("prompt")), "none") {
 			redirectMCPOAuthError(w, r, redirectURI, state, "login_required", "user login is required")
 			return

@@ -37,7 +37,7 @@ func (s *Server) createProviderDevSession(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) authorizeProviderDevSessionRequest(w http.ResponseWriter, r *http.Request, p *principal.Principal, req providerdev.CreateSessionRequest) error {
-	if err := rejectWorkloadCaller(w, p); err != nil {
+	if err := requireUserCaller(w, p); err != nil {
 		return err
 	}
 	names, err := s.providerDevSessions.ResolveAttachProviderNames(req)

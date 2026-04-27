@@ -39,10 +39,10 @@ const sessionCookieName = "session_token"
 const defaultSessionCookieTTL = 24 * time.Hour
 
 var (
-	errNotAuthenticated  = errors.New("not authenticated")
-	errResolveUser       = errors.New("failed to resolve user")
-	errWorkloadForbidden = errors.New("workload callers are not allowed on this route")
-	errOperationAccess   = errors.New("operation access denied")
+	errNotAuthenticated = errors.New("not authenticated")
+	errResolveUser      = errors.New("failed to resolve user")
+	errUserRequired     = errors.New("user caller is required on this route")
+	errOperationAccess  = errors.New("operation access denied")
 )
 
 var (
@@ -89,8 +89,8 @@ type connectionParamInfo struct {
 }
 
 func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, error) {
-	if err := rejectWorkloadCaller(w, PrincipalFromContext(r.Context())); err != nil {
-		return "", errWorkloadForbidden
+	if err := requireUserCaller(w, PrincipalFromContext(r.Context())); err != nil {
+		return "", errUserRequired
 	}
 	user := UserFromContext(r.Context())
 	if user == nil || user.Email == "" {
@@ -110,7 +110,7 @@ func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, 
 
 func (s *Server) resolveCredentialSubjectID(w http.ResponseWriter, r *http.Request) (string, error) {
 	p := PrincipalFromContext(r.Context())
-	if principal.IsWorkloadPrincipal(p) {
+	if principal.IsNonUserPrincipal(p) {
 		subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
 		if subjectID == "" {
 			writeError(w, http.StatusUnauthorized, "not authenticated")
@@ -198,7 +198,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) subjectConnectedIntegrations(r *http.Request) (map[string][]instanceInfo, error) {
 	p := PrincipalFromContext(r.Context())
-	if principal.IsWorkloadPrincipal(p) {
+	if principal.IsNonUserPrincipal(p) {
 		subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
 		if subjectID == "" {
 			return nil, nil

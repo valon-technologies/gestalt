@@ -31,10 +31,10 @@ func (s *Server) providerOverrideForContext(ctx context.Context, p *principal.Pr
 	return s.providerDevSessions.ResolveProviderOverride(ctx, p, provider)
 }
 
-func rejectWorkloadCaller(w http.ResponseWriter, p *principal.Principal) error {
-	if !principal.IsWorkloadPrincipal(p) {
+func requireUserCaller(w http.ResponseWriter, p *principal.Principal) error {
+	if !principal.IsNonUserPrincipal(p) {
 		return nil
 	}
-	writeError(w, http.StatusForbidden, errWorkloadForbidden.Error())
-	return errWorkloadForbidden
+	writeError(w, http.StatusForbidden, errUserRequired.Error())
+	return errUserRequired
 }
