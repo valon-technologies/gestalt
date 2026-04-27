@@ -30,6 +30,12 @@ type agentRuntime struct {
 	providers           map[string]coreagent.Provider
 	invoker             invocation.Invoker
 	runMetadata         *coredata.AgentRunMetadataService
+	toolSearcher        agentToolSearcher
+	toolMergeMu         sync.Mutex
+}
+
+type agentToolSearcher interface {
+	SearchTools(ctx context.Context, p *principal.Principal, req coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error)
 }
 
 func newAgentRuntime(cfg *config.Config) (*agentRuntime, error) {
@@ -101,6 +107,15 @@ func (r *agentRuntime) SetRunMetadata(service *coredata.AgentRunMetadataService)
 	r.runMetadata = service
 }
 
+func (r *agentRuntime) SetToolSearcher(searcher agentToolSearcher) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.toolSearcher = searcher
+}
+
 func (r *agentRuntime) TrackTurn(ctx context.Context, providerName string, req coreagent.CreateTurnRequest) error {
 	if r == nil {
 		return nil
@@ -133,6 +148,14 @@ func (r *agentRuntime) TrackTurn(ctx context.Context, providerName string, req c
 		}
 		return fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
+	principalValue := principal.Canonicalized(principal.FromContext(ctx))
+	var permissions []core.AccessPermission
+	if principalValue != nil {
+		permissions = principal.PermissionsToAccessPermissions(principalValue.TokenPermissions)
+	}
+	if permissions == nil && len(req.Tools) > 0 {
+		permissions = permissionsForAgentTools(req.Tools)
+	}
 	startedAt := time.Now()
 	attrs := []attribute.KeyValue{
 		observability.AttrAgentProvider.String(strings.TrimSpace(providerName)),
@@ -146,7 +169,9 @@ func (r *agentRuntime) TrackTurn(ctx context.Context, providerName string, req c
 		SubjectID:           subjectID,
 		CredentialSubjectID: credentialSubjectID,
 		IdempotencyKey:      strings.TrimSpace(req.IdempotencyKey),
-		Permissions:         permissionsForAgentTools(req.Tools),
+		Permissions:         permissions,
+		ToolRefs:            append([]coreagent.ToolRef(nil), req.ToolRefs...),
+		ToolSource:          normalizeAgentToolSource(req.ToolSource),
 		Tools:               append([]coreagent.Tool(nil), req.Tools...),
 	})
 	observability.EndSpan(span, err)
@@ -351,7 +376,7 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 		ctx = invocation.WithConnection(ctx, connection)
 	}
 	params := maps.Clone(req.Arguments)
-	result, err := invoker.Invoke(ctx, principalValue, tool.Target.PluginName, strings.TrimSpace(tool.Target.Instance), tool.Target.Operation, params)
+	result, err := invoker.Invoke(ctx, principalValue, tool.Target.Plugin, strings.TrimSpace(tool.Target.Instance), tool.Target.Operation, params)
 	if err != nil {
 		return nil, err
 	}
@@ -364,6 +389,105 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	}, nil
 }
 
+func (r *agentRuntime) SearchTools(ctx context.Context, req coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error) {
+	if r == nil {
+		return nil, fmt.Errorf("agent runtime is not configured")
+	}
+	r.mu.RLock()
+	runMetadata := r.runMetadata
+	searcher := r.toolSearcher
+	r.mu.RUnlock()
+	if runMetadata == nil {
+		return nil, fmt.Errorf("%w: agent run metadata is not configured", invocation.ErrInternal)
+	}
+	if searcher == nil {
+		return nil, fmt.Errorf("%w: agent tool search is not configured", invocation.ErrInternal)
+	}
+	turnID := strings.TrimSpace(req.TurnID)
+	if turnID == "" {
+		return nil, fmt.Errorf("%w: turn id is required", invocation.ErrAuthorizationDenied)
+	}
+	sessionID := strings.TrimSpace(req.SessionID)
+	if sessionID == "" {
+		return nil, fmt.Errorf("%w: session id is required", invocation.ErrAuthorizationDenied)
+	}
+	ref, err := runMetadata.Get(ctx, turnID)
+	if err != nil {
+		if errors.Is(err, indexeddb.ErrNotFound) {
+			return nil, fmt.Errorf("%w: agent turn %q was not found", invocation.ErrAuthorizationDenied, turnID)
+		}
+		return nil, fmt.Errorf("%w: agent turn %q lookup failed: %v", invocation.ErrInternal, turnID, err)
+	}
+	if ref == nil {
+		return nil, fmt.Errorf("%w: agent turn %q was not found", invocation.ErrAuthorizationDenied, turnID)
+	}
+	if ref.RevokedAt != nil && !ref.RevokedAt.IsZero() {
+		return nil, fmt.Errorf("%w: agent turn %q is revoked", invocation.ErrAuthorizationDenied, turnID)
+	}
+	if providerName := strings.TrimSpace(req.ProviderName); providerName != "" && strings.TrimSpace(ref.ProviderName) != providerName {
+		return nil, fmt.Errorf("%w: agent turn %q is not valid for provider %q", invocation.ErrAuthorizationDenied, turnID, providerName)
+	}
+	if strings.TrimSpace(ref.SessionID) != sessionID {
+		return nil, fmt.Errorf("%w: agent turn %q is not valid for session %q", invocation.ErrAuthorizationDenied, turnID, sessionID)
+	}
+	principalValue := executionReferencePrincipal(ref.SubjectID, ref.CredentialSubjectID, ref.Permissions)
+	if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
+		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
+	}
+	resp, err := searcher.SearchTools(ctx, principalValue, coreagent.SearchToolsRequest{
+		ProviderName: strings.TrimSpace(ref.ProviderName),
+		SessionID:    sessionID,
+		TurnID:       turnID,
+		Query:        strings.TrimSpace(req.Query),
+		MaxResults:   req.MaxResults,
+		ToolRefs:     append([]coreagent.ToolRef(nil), ref.ToolRefs...),
+		ToolSource:   normalizeAgentToolSource(ref.ToolSource),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil || len(resp.Tools) == 0 {
+		return &coreagent.SearchToolsResponse{}, nil
+	}
+	if err := validateAgentToolSearchResults(principalValue, ref.ToolRefs, normalizeAgentToolSource(ref.ToolSource), resp.Tools); err != nil {
+		return nil, err
+	}
+
+	r.toolMergeMu.Lock()
+	defer r.toolMergeMu.Unlock()
+	latestRef, err := runMetadata.Get(ctx, turnID)
+	if err != nil {
+		if errors.Is(err, indexeddb.ErrNotFound) {
+			return nil, fmt.Errorf("%w: agent turn %q was not found", invocation.ErrAuthorizationDenied, turnID)
+		}
+		return nil, fmt.Errorf("%w: agent turn %q lookup failed: %v", invocation.ErrInternal, turnID, err)
+	}
+	if latestRef == nil {
+		return nil, fmt.Errorf("%w: agent turn %q was not found", invocation.ErrAuthorizationDenied, turnID)
+	}
+	if latestRef.RevokedAt != nil && !latestRef.RevokedAt.IsZero() {
+		return nil, fmt.Errorf("%w: agent turn %q is revoked", invocation.ErrAuthorizationDenied, turnID)
+	}
+	if strings.TrimSpace(latestRef.ProviderName) != strings.TrimSpace(ref.ProviderName) {
+		return nil, fmt.Errorf("%w: agent turn %q changed provider while searching tools", invocation.ErrAuthorizationDenied, turnID)
+	}
+	if strings.TrimSpace(latestRef.SessionID) != sessionID {
+		return nil, fmt.Errorf("%w: agent turn %q is not valid for session %q", invocation.ErrAuthorizationDenied, turnID, sessionID)
+	}
+	latestPrincipal := executionReferencePrincipal(latestRef.SubjectID, latestRef.CredentialSubjectID, latestRef.Permissions)
+	if latestPrincipal == nil || strings.TrimSpace(latestPrincipal.SubjectID) == "" {
+		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
+	}
+	if err := validateAgentToolSearchResults(latestPrincipal, latestRef.ToolRefs, normalizeAgentToolSource(latestRef.ToolSource), resp.Tools); err != nil {
+		return nil, err
+	}
+	latestRef.Tools = mergeAgentTools(latestRef.Tools, resp.Tools)
+	if _, err := runMetadata.Put(ctx, latestRef); err != nil {
+		return nil, err
+	}
+	return &coreagent.SearchToolsResponse{Tools: append([]coreagent.Tool(nil), resp.Tools...)}, nil
+}
+
 func lookupAgentTool(tools []coreagent.Tool, toolID string) (coreagent.Tool, bool) {
 	toolID = strings.TrimSpace(toolID)
 	for _, tool := range tools {
@@ -374,13 +498,89 @@ func lookupAgentTool(tools []coreagent.Tool, toolID string) (coreagent.Tool, boo
 	return coreagent.Tool{}, false
 }
 
+func mergeAgentTools(existing []coreagent.Tool, loaded []coreagent.Tool) []coreagent.Tool {
+	if len(existing) == 0 {
+		return append([]coreagent.Tool(nil), loaded...)
+	}
+	out := append([]coreagent.Tool(nil), existing...)
+	seen := make(map[string]struct{}, len(out)+len(loaded))
+	for _, tool := range out {
+		if id := strings.TrimSpace(tool.ID); id != "" {
+			seen[id] = struct{}{}
+		}
+	}
+	for _, tool := range loaded {
+		id := strings.TrimSpace(tool.ID)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, tool)
+	}
+	return out
+}
+
+func normalizeAgentToolSource(source coreagent.ToolSourceMode) coreagent.ToolSourceMode {
+	if strings.TrimSpace(string(source)) == "" {
+		return coreagent.ToolSourceModeNativeSearch
+	}
+	return source
+}
+
+func validateAgentToolSearchResults(p *principal.Principal, refs []coreagent.ToolRef, source coreagent.ToolSourceMode, tools []coreagent.Tool) error {
+	if source != coreagent.ToolSourceModeNativeSearch {
+		return fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInternal, source)
+	}
+	for _, tool := range tools {
+		if strings.TrimSpace(tool.ID) == "" {
+			return fmt.Errorf("%w: searched agent tool id is required", invocation.ErrAuthorizationDenied)
+		}
+		target := tool.Target
+		pluginName := strings.TrimSpace(target.Plugin)
+		operation := strings.TrimSpace(target.Operation)
+		if pluginName == "" || operation == "" {
+			return fmt.Errorf("%w: searched agent tool target is incomplete", invocation.ErrAuthorizationDenied)
+		}
+		if !principal.AllowsProviderPermission(p, pluginName) || !principal.AllowsOperationPermission(p, pluginName, operation) {
+			return fmt.Errorf("%w: searched agent tool %q is not authorized", invocation.ErrAuthorizationDenied, tool.ID)
+		}
+		if len(refs) > 0 && !agentToolMatchesRefs(target, refs) {
+			return fmt.Errorf("%w: searched agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, tool.ID)
+		}
+	}
+	return nil
+}
+
+func agentToolMatchesRefs(target coreagent.ToolTarget, refs []coreagent.ToolRef) bool {
+	targetConnection := config.ResolveConnectionAlias(strings.TrimSpace(target.Connection))
+	for _, ref := range refs {
+		if strings.TrimSpace(ref.Plugin) != strings.TrimSpace(target.Plugin) {
+			continue
+		}
+		if operation := strings.TrimSpace(ref.Operation); operation != "" && operation != strings.TrimSpace(target.Operation) {
+			continue
+		}
+		if connection := strings.TrimSpace(ref.Connection); connection != "" && config.ResolveConnectionAlias(connection) != targetConnection {
+			continue
+		}
+		if instance := strings.TrimSpace(ref.Instance); instance != "" && instance != strings.TrimSpace(target.Instance) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 func permissionsForAgentTools(tools []coreagent.Tool) []core.AccessPermission {
 	if len(tools) == 0 {
 		return nil
 	}
 	operationsByPlugin := make(map[string]map[string]struct{}, len(tools))
 	for _, tool := range tools {
-		pluginName := strings.TrimSpace(tool.Target.PluginName)
+		pluginName := strings.TrimSpace(tool.Target.Plugin)
 		operation := strings.TrimSpace(tool.Target.Operation)
 		if pluginName == "" || operation == "" {
 			continue

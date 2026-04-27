@@ -13,18 +13,58 @@ import (
 )
 
 type agentExecuteToolFunc func(context.Context, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error)
+type agentSearchToolsFunc func(context.Context, coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error)
 
 type AgentHostServer struct {
 	proto.UnimplementedAgentHostServer
 	providerName string
+	searchTools  agentSearchToolsFunc
 	executeTool  agentExecuteToolFunc
 }
 
-func NewAgentHostServer(providerName string, executeTool agentExecuteToolFunc) *AgentHostServer {
+func NewAgentHostServer(providerName string, searchTools agentSearchToolsFunc, executeTool agentExecuteToolFunc) *AgentHostServer {
 	return &AgentHostServer{
 		providerName: providerName,
+		searchTools:  searchTools,
 		executeTool:  executeTool,
 	}
+}
+
+func (s *AgentHostServer) SearchTools(ctx context.Context, req *proto.SearchAgentToolsRequest) (*proto.SearchAgentToolsResponse, error) {
+	if s == nil || s.searchTools == nil {
+		return nil, status.Error(codes.FailedPrecondition, "agent host tool search is not configured")
+	}
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	sessionID := strings.TrimSpace(req.GetSessionId())
+	if sessionID == "" {
+		return nil, status.Error(codes.InvalidArgument, "session_id is required")
+	}
+	turnID := strings.TrimSpace(req.GetTurnId())
+	if turnID == "" {
+		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
+	}
+	resp, err := s.searchTools(ctx, coreagent.SearchToolsRequest{
+		ProviderName: strings.TrimSpace(s.providerName),
+		SessionID:    sessionID,
+		TurnID:       turnID,
+		Query:        strings.TrimSpace(req.GetQuery()),
+		MaxResults:   int(req.GetMaxResults()),
+	})
+	if err != nil {
+		return nil, status.Errorf(agentHostErrorCode(err), "agent search tools: %v", err)
+	}
+	out := &proto.SearchAgentToolsResponse{}
+	if resp == nil || len(resp.Tools) == 0 {
+		return out, nil
+	}
+	tools, err := agentToolsToProto(resp.Tools)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode agent search tools: %v", err)
+	}
+	out.Tools = tools
+	return out, nil
 }
 
 func (s *AgentHostServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {

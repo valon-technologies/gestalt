@@ -308,6 +308,7 @@ func (p *memoryAgentProvider) GetCapabilities(context.Context, coreagent.GetCapa
 	return &coreagent.ProviderCapabilities{
 		StreamingText:    true,
 		ToolCalls:        true,
+		NativeToolSearch: true,
 		Interactions:     true,
 		ResumableTurns:   true,
 		StructuredOutput: true,
@@ -584,9 +585,6 @@ func TestAgentSessionAndTurnMetrics(t *testing.T) {
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.agent.provider.operation.count", 1, map[string]string{
 		"gestalt.agent.provider":  "managed",
 		"gestalt.agent.operation": "create_turn",
-	})
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.agent.tool.resolve.count", 1, map[string]string{
-		"gestalt.agent.tool.source": "explicit",
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.agent.run_metadata.write.count", 1, map[string]string{
 		"gestalt.agent.provider":  "managed",

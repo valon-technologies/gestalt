@@ -69,6 +69,7 @@ type AgentControl interface {
 type Service interface {
 	Available() bool
 	ResolveTools(ctx context.Context, p *principal.Principal, req coreagent.ResolveToolsRequest) ([]coreagent.Tool, error)
+	SearchTools(ctx context.Context, p *principal.Principal, req coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error)
 	CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error)
 	GetSession(ctx context.Context, p *principal.Principal, sessionID string) (*coreagent.Session, error)
 	ListSessions(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.Session, error)
@@ -158,7 +159,27 @@ func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req 
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrAgentSubjectRequired
 	}
-	return m.resolveTools(ctx, p, strings.TrimSpace(req.CallerPluginName), req.ToolRefs, req.ToolSource)
+	if len(req.ToolRefs) == 0 {
+		return nil, nil
+	}
+	toolSource, err := validateToolSource(req.ToolSource)
+	if err != nil {
+		return nil, err
+	}
+	refs, err := normalizeToolRefs(req.ToolRefs)
+	if err != nil {
+		return nil, err
+	}
+	candidates, err := m.searchToolCandidates(ctx, p, refs, "")
+	if err != nil {
+		return nil, err
+	}
+	tools, err = m.resolveAgentToolCandidates(ctx, p, candidates, 0)
+	if err != nil {
+		return nil, err
+	}
+	observability.SetSpanAttributes(ctx, observability.AttrAgentToolSource.String(string(toolSource)))
+	return tools, nil
 }
 
 func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (session *coreagent.Session, err error) {
@@ -382,10 +403,21 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	if err != nil {
 		return nil, err
 	}
-	tools, err := m.resolveTools(ctx, p, req.CallerPluginName, req.ToolRefs, req.ToolSource)
+	toolSource, err := validateToolSource(req.ToolSource)
 	if err != nil {
 		return nil, err
 	}
+	if err := requireNativeToolSearch(ctx, provider); err != nil {
+		return nil, err
+	}
+	toolRefs, err := normalizeToolRefs(req.ToolRefs)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.authorizeToolRefs(ctx, p, toolRefs); err != nil {
+		return nil, err
+	}
+	var tools []coreagent.Tool
 	turnID := uuid.NewString()
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	if idempotencyKey != "" {
@@ -437,6 +469,8 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
 		IdempotencyKey:      idempotencyKey,
 		Permissions:         principal.PermissionsToAccessPermissions(p.TokenPermissions),
+		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
+		ToolSource:          toolSource,
 		Tools:               tools,
 	})
 	observability.EndSpan(metadataSpan, err)
@@ -453,6 +487,8 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		IdempotencyKey:  idempotencyKey,
 		Model:           strings.TrimSpace(req.Model),
 		Messages:        append([]coreagent.Message(nil), req.Messages...),
+		ToolRefs:        append([]coreagent.ToolRef(nil), toolRefs...),
+		ToolSource:      toolSource,
 		Tools:           append([]coreagent.Tool(nil), tools...),
 		ResponseSchema:  maps.Clone(req.ResponseSchema),
 		Metadata:        maps.Clone(req.Metadata),
@@ -798,50 +834,88 @@ func (m *Manager) requireOwnedTurnMetadata(ctx context.Context, turnID string, p
 	return ref, nil
 }
 
-func (m *Manager) resolveTools(ctx context.Context, p *principal.Principal, callerPluginName string, explicit []coreagent.ToolRef, source coreagent.ToolSourceMode) (tools []coreagent.Tool, err error) {
+func (m *Manager) SearchTools(ctx context.Context, p *principal.Principal, req coreagent.SearchToolsRequest) (resp *coreagent.SearchToolsResponse, err error) {
+	ctx, finish := startAgentOperation(ctx, "search_tools")
+	defer func() { finish(err) }()
+
+	p = principal.Canonicalized(p)
+	if strings.TrimSpace(principalSubjectID(p)) == "" {
+		return nil, ErrAgentSubjectRequired
+	}
+	return m.searchTools(ctx, p, req)
+}
+
+func (m *Manager) searchTools(ctx context.Context, p *principal.Principal, req coreagent.SearchToolsRequest) (resp *coreagent.SearchToolsResponse, err error) {
 	startedAt := time.Now()
-	toolSource := string(source)
-	if strings.TrimSpace(toolSource) == "" {
-		toolSource = string(coreagent.ToolSourceModeExplicit)
+	toolSource, err := validateToolSource(req.ToolSource)
+	if err != nil {
+		return nil, err
 	}
 	attrs := []attribute.KeyValue{
-		observability.AttrAgentToolSource.String(toolSource),
+		observability.AttrAgentToolSource.String(string(toolSource)),
 	}
-	ctx, span := observability.StartSpan(ctx, "agent.tool.resolve", attrs...)
+	ctx, span := observability.StartSpan(ctx, "agent.tool.search", attrs...)
 	defer func() {
 		observability.EndSpan(span, err)
 		observability.RecordAgentToolResolve(ctx, startedAt, err != nil, attrs...)
 	}()
 
-	refs := make([]coreagent.ToolRef, 0, len(explicit)+4)
-	refs = append(refs, explicit...)
-	if source == coreagent.ToolSourceModeInheritInvokes {
-		callerPluginName = strings.TrimSpace(callerPluginName)
-		if callerPluginName == "" {
-			return nil, ErrAgentCallerPluginRequired
-		}
-		for _, invoke := range m.pluginInvokes[callerPluginName] {
-			if strings.TrimSpace(invoke.Surface) != "" {
-				return nil, fmt.Errorf("%w: %s.%s", ErrAgentInheritedSurfaceTool, callerPluginName, invoke.Surface)
-			}
-			refs = append(refs, coreagent.ToolRef{
-				PluginName: invoke.Plugin,
-				Operation:  invoke.Operation,
-			})
-		}
+	if m == nil || m.providers == nil {
+		return nil, fmt.Errorf("%w: agent providers are not configured", invocation.ErrInternal)
 	}
-	explicitTools, err := m.resolveExplicitTools(ctx, p, refs)
+	refs, err := normalizeToolRefs(req.ToolRefs)
 	if err != nil {
 		return nil, err
 	}
-	return explicitTools, nil
+	candidates, err := m.searchToolCandidates(ctx, p, refs, req.Query)
+	if err != nil {
+		return nil, err
+	}
+	maxResults := req.MaxResults
+	if maxResults <= 0 {
+		maxResults = 8
+	}
+	if maxResults > 20 {
+		maxResults = 20
+	}
+	tools, err := m.resolveAgentToolCandidates(ctx, p, candidates, maxResults)
+	if err != nil {
+		return nil, err
+	}
+	return &coreagent.SearchToolsResponse{Tools: tools}, nil
+}
+
+func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.Principal, candidates []agentToolSearchCandidate, maxResults int) ([]coreagent.Tool, error) {
+	tools := make([]coreagent.Tool, 0, len(candidates))
+	if maxResults > 0 {
+		tools = make([]coreagent.Tool, 0, min(maxResults, len(candidates)))
+	}
+	seen := map[string]struct{}{}
+	for _, candidate := range candidates {
+		if maxResults > 0 && len(tools) >= maxResults {
+			break
+		}
+		tool, err := m.resolveTool(ctx, p, candidate.ref)
+		if err != nil {
+			if errors.Is(err, invocation.ErrAuthorizationDenied) || errors.Is(err, invocation.ErrProviderNotFound) || errors.Is(err, invocation.ErrOperationNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		if _, ok := seen[tool.ID]; ok {
+			continue
+		}
+		seen[tool.ID] = struct{}{}
+		tools = append(tools, tool)
+	}
+	return tools, nil
 }
 
 func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error) {
 	if m == nil || m.providers == nil {
 		return coreagent.Tool{}, fmt.Errorf("%w: agent providers are not configured", invocation.ErrInternal)
 	}
-	pluginName := strings.TrimSpace(ref.PluginName)
+	pluginName := strings.TrimSpace(ref.Plugin)
 	if pluginName == "" {
 		return coreagent.Tool{}, fmt.Errorf("%w: agent tool plugin is required", invocation.ErrProviderNotFound)
 	}
@@ -934,7 +1008,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		Description:      description,
 		ParametersSchema: parametersSchema,
 		Target: coreagent.ToolTarget{
-			PluginName: pluginName,
+			Plugin:     pluginName,
 			Operation:  opMeta.ID,
 			Connection: connection,
 			Instance:   sessionInstance,
@@ -942,24 +1016,258 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	}, nil
 }
 
-func (m *Manager) resolveExplicitTools(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) ([]coreagent.Tool, error) {
-	if len(refs) == 0 {
-		return nil, nil
-	}
-	out := make([]coreagent.Tool, 0, len(refs))
-	seen := make(map[string]struct{}, len(refs))
-	for _, ref := range refs {
-		tool, err := m.resolveTool(ctx, p, ref)
-		if err != nil {
-			return nil, err
+type agentToolSearchCandidate struct {
+	ref   coreagent.ToolRef
+	score int
+}
+
+func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef, query string) ([]agentToolSearchCandidate, error) {
+	scope := newAgentToolSearchScope(refs)
+	providerNames := scope.providerNames()
+	if len(providerNames) == 0 {
+		if !scope.all {
+			return nil, nil
 		}
-		if _, ok := seen[tool.ID]; ok {
+		providerNames = m.providers.List()
+	}
+	query = strings.TrimSpace(query)
+	candidates := make([]agentToolSearchCandidate, 0)
+	for _, pluginName := range providerNames {
+		pluginName = strings.TrimSpace(pluginName)
+		if pluginName == "" {
 			continue
 		}
-		seen[tool.ID] = struct{}{}
-		out = append(out, tool)
+		prov, err := m.providers.Get(pluginName)
+		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				continue
+			}
+			return nil, fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
+		}
+		if !m.allowProvider(ctx, p, pluginName) {
+			continue
+		}
+		for _, searchRef := range scope.refsForProvider(pluginName) {
+			cat, err := m.catalogForAgentToolSearch(ctx, p, prov, pluginName, searchRef)
+			if err != nil {
+				return nil, err
+			}
+			if cat == nil {
+				continue
+			}
+			for i := range cat.Operations {
+				op := cat.Operations[i]
+				operation := strings.TrimSpace(op.ID)
+				if operation == "" || !agentToolSearchRefAllows(searchRef, operation) {
+					continue
+				}
+				if !m.allowOperation(ctx, p, pluginName, operation) || !principal.AllowsOperationPermission(p, pluginName, operation) {
+					continue
+				}
+				if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, pluginName, op) {
+					continue
+				}
+				score := scoreAgentToolSearch(query, pluginName, cat, op)
+				if query != "" && score <= 0 {
+					continue
+				}
+				ref := searchRef
+				if strings.TrimSpace(ref.Operation) == "" {
+					ref.Title = ""
+					ref.Description = ""
+				}
+				ref.Plugin = pluginName
+				ref.Operation = operation
+				candidates = append(candidates, agentToolSearchCandidate{ref: ref, score: score})
+			}
+		}
 	}
-	return out, nil
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].score != candidates[j].score {
+			return candidates[i].score > candidates[j].score
+		}
+		if candidates[i].ref.Plugin != candidates[j].ref.Plugin {
+			return candidates[i].ref.Plugin < candidates[j].ref.Plugin
+		}
+		return candidates[i].ref.Operation < candidates[j].ref.Operation
+	})
+	return candidates, nil
+}
+
+func (m *Manager) catalogForAgentToolSearch(ctx context.Context, p *principal.Principal, prov core.Provider, pluginName string, ref coreagent.ToolRef) (*catalog.Catalog, error) {
+	connection := strings.TrimSpace(ref.Connection)
+	if connection != "" && !config.SafeConnectionValue(connection) {
+		return nil, fmt.Errorf("connection name contains invalid characters")
+	}
+	instance := strings.TrimSpace(ref.Instance)
+	if instance != "" && !config.SafeInstanceValue(instance) {
+		return nil, fmt.Errorf("instance name contains invalid characters")
+	}
+	if m.authorizer != nil && principal.IsWorkloadPrincipal(p) && (connection != "" || instance != "") {
+		return nil, fmt.Errorf("%w: workloads may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
+	}
+	var resolver invocation.TokenResolver
+	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
+		resolver = tr
+	}
+	catalogCtx := invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, pluginName))
+	cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(
+		catalogCtx,
+		prov,
+		pluginName,
+		resolver,
+		p,
+		m.catalogSelectorConfig().BoundSessionCatalogTargets(pluginName, p, connection, instance),
+		core.SupportsSessionCatalog(prov) || connection != "" || instance != "",
+	)
+	return cat, err
+}
+
+type agentToolSearchScope struct {
+	all      bool
+	plugins  map[string]coreagent.ToolRef
+	exactOps map[string]map[string]coreagent.ToolRef
+}
+
+func newAgentToolSearchScope(refs []coreagent.ToolRef) agentToolSearchScope {
+	if len(refs) == 0 {
+		return agentToolSearchScope{all: true}
+	}
+	scope := agentToolSearchScope{
+		plugins:  map[string]coreagent.ToolRef{},
+		exactOps: map[string]map[string]coreagent.ToolRef{},
+	}
+	for _, ref := range refs {
+		pluginName := strings.TrimSpace(ref.Plugin)
+		if pluginName == "" {
+			continue
+		}
+		ref.Plugin = pluginName
+		ref.Operation = strings.TrimSpace(ref.Operation)
+		if ref.Operation == "" {
+			scope.plugins[pluginName] = ref
+			continue
+		}
+		if scope.exactOps[pluginName] == nil {
+			scope.exactOps[pluginName] = map[string]coreagent.ToolRef{}
+		}
+		scope.exactOps[pluginName][ref.Operation] = ref
+	}
+	return scope
+}
+
+func (s agentToolSearchScope) providerNames() []string {
+	if s.all {
+		return nil
+	}
+	set := map[string]struct{}{}
+	for pluginName := range s.plugins {
+		set[pluginName] = struct{}{}
+	}
+	for pluginName := range s.exactOps {
+		set[pluginName] = struct{}{}
+	}
+	names := make([]string, 0, len(set))
+	for pluginName := range set {
+		names = append(names, pluginName)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func (s agentToolSearchScope) refsForProvider(pluginName string) []coreagent.ToolRef {
+	if s.all {
+		return []coreagent.ToolRef{{Plugin: pluginName}}
+	}
+	refs := []coreagent.ToolRef{}
+	if ops := s.exactOps[pluginName]; len(ops) > 0 {
+		operations := make([]string, 0, len(ops))
+		for operation := range ops {
+			operations = append(operations, operation)
+		}
+		sort.Strings(operations)
+		for _, operation := range operations {
+			refs = append(refs, ops[operation])
+		}
+	}
+	if ref, ok := s.plugins[pluginName]; ok {
+		refs = append(refs, ref)
+	}
+	return refs
+}
+
+func agentToolSearchRefAllows(ref coreagent.ToolRef, operation string) bool {
+	refOperation := strings.TrimSpace(ref.Operation)
+	return refOperation == "" || refOperation == strings.TrimSpace(operation)
+}
+
+func scoreAgentToolSearch(query, pluginName string, cat *catalog.Catalog, op catalog.CatalogOperation) int {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return 1
+	}
+	haystacks := []struct {
+		value  string
+		weight int
+	}{
+		{pluginName, 8},
+		{op.ID, 8},
+		{op.Title, 6},
+		{cat.DisplayName, 4},
+		{cat.Description, 2},
+		{op.Description, 2},
+	}
+	score := 0
+	for _, term := range strings.Fields(query) {
+		for _, haystack := range haystacks {
+			if strings.Contains(strings.ToLower(haystack.value), term) {
+				score += haystack.weight
+			}
+		}
+	}
+	if strings.Contains(strings.ToLower(pluginName+" "+op.ID+" "+op.Title), query) {
+		score += 12
+	}
+	return score
+}
+
+func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) error {
+	if len(refs) == 0 {
+		return nil
+	}
+	for _, ref := range refs {
+		pluginName := strings.TrimSpace(ref.Plugin)
+		if pluginName == "" {
+			continue
+		}
+		if strings.TrimSpace(ref.Operation) != "" {
+			if _, err := m.resolveTool(ctx, p, ref); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, err := m.providers.Get(pluginName); err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				return fmt.Errorf("%w: %q", invocation.ErrProviderNotFound, pluginName)
+			}
+			return fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
+		}
+		if !m.allowProvider(ctx, p, pluginName) || !principal.AllowsProviderPermission(p, pluginName) {
+			return fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, pluginName)
+		}
+		connection := strings.TrimSpace(ref.Connection)
+		if connection != "" && !config.SafeConnectionValue(connection) {
+			return fmt.Errorf("connection name contains invalid characters")
+		}
+		instance := strings.TrimSpace(ref.Instance)
+		if instance != "" && !config.SafeInstanceValue(instance) {
+			return fmt.Errorf("instance name contains invalid characters")
+		}
+		if principal.IsWorkloadPrincipal(p) && (connection != "" || instance != "") {
+			return fmt.Errorf("%w: workloads may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
+		}
+	}
+	return nil
 }
 
 func (m *Manager) allowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
@@ -1003,7 +1311,7 @@ func (m *Manager) allowRun(ctx context.Context, p *principal.Principal, ref *cor
 }
 
 func (m *Manager) allowTool(ctx context.Context, p *principal.Principal, tool coreagent.Tool) bool {
-	pluginName := strings.TrimSpace(tool.Target.PluginName)
+	pluginName := strings.TrimSpace(tool.Target.Plugin)
 	operation := strings.TrimSpace(tool.Target.Operation)
 	if pluginName == "" || operation == "" {
 		return false
@@ -1174,6 +1482,55 @@ func agentToolID(pluginName, operation, connection, instance string) string {
 		id += sep + "instance=" + strings.TrimSpace(instance)
 	}
 	return id
+}
+
+func validateToolSource(source coreagent.ToolSourceMode) (coreagent.ToolSourceMode, error) {
+	source = normalizeToolSource(source)
+	if source != coreagent.ToolSourceModeNativeSearch {
+		return "", fmt.Errorf("unsupported agent tool source %q", source)
+	}
+	return source, nil
+}
+
+func normalizeToolSource(source coreagent.ToolSourceMode) coreagent.ToolSourceMode {
+	if strings.TrimSpace(string(source)) == "" {
+		return coreagent.ToolSourceModeNativeSearch
+	}
+	return source
+}
+
+func normalizeToolRefs(refs []coreagent.ToolRef) ([]coreagent.ToolRef, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	out := make([]coreagent.ToolRef, 0, len(refs))
+	for idx, ref := range refs {
+		ref.Plugin = strings.TrimSpace(ref.Plugin)
+		ref.Operation = strings.TrimSpace(ref.Operation)
+		ref.Connection = strings.TrimSpace(ref.Connection)
+		ref.Instance = strings.TrimSpace(ref.Instance)
+		ref.Title = strings.TrimSpace(ref.Title)
+		ref.Description = strings.TrimSpace(ref.Description)
+		if ref.Plugin == "" {
+			return nil, fmt.Errorf("%w: agent tool_refs[%d].plugin is required", invocation.ErrProviderNotFound, idx)
+		}
+		out = append(out, ref)
+	}
+	return out, nil
+}
+
+func requireNativeToolSearch(ctx context.Context, provider coreagent.Provider) error {
+	if provider == nil {
+		return ErrAgentProviderNotAvailable
+	}
+	caps, err := provider.GetCapabilities(ctx, coreagent.GetCapabilitiesRequest{})
+	if err != nil {
+		return err
+	}
+	if caps == nil || !caps.NativeToolSearch {
+		return fmt.Errorf("%w: agent provider does not support native tool search", invocation.ErrInternal)
+	}
+	return nil
 }
 
 func agentActorFromPrincipal(p *principal.Principal) coreagent.Actor {

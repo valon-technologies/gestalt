@@ -44,3 +44,7 @@ func (c *AgentHostClient) Close() error {
 func (c *AgentHostClient) ExecuteTool(ctx context.Context, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {
 	return c.client.ExecuteTool(ctx, req)
 }
+
+func (c *AgentHostClient) SearchTools(ctx context.Context, req *proto.SearchAgentToolsRequest) (*proto.SearchAgentToolsResponse, error) {
+	return c.client.SearchTools(ctx, req)
+}

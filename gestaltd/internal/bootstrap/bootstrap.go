@@ -1074,6 +1074,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		CatalogConnection: connMaps.APIConnection,
 		PluginInvokes:     agentPluginInvokes(cfg),
 	}))
+	prepared.Deps.AgentRuntime.SetToolSearcher(agentManager)
 	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
 		return nil, err
@@ -1737,7 +1738,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		Name:   "agent_host",
 		EnvVar: providerhost.DefaultAgentHostSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAgentHostServer(srv, providerhost.NewAgentHostServer(name, deps.AgentRuntime.ExecuteTool))
+			proto.RegisterAgentHostServer(srv, providerhost.NewAgentHostServer(name, deps.AgentRuntime.SearchTools, deps.AgentRuntime.ExecuteTool))
 		},
 	}}
 	var cleanup func()

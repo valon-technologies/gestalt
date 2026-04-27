@@ -83,6 +83,13 @@ func bootstrapGraphQLStringPtr(value string) *string {
 	return &value
 }
 
+func protoStructToBootstrapMap(value *structpb.Struct) map[string]any {
+	if value == nil {
+		return nil
+	}
+	return value.AsMap()
+}
+
 func bootstrapGraphQLSchema() graphqlschema.Schema {
 	return graphqlschema.Schema{
 		QueryType: &graphqlschema.TypeName{Name: "Query"},
@@ -768,6 +775,7 @@ func (p *recordingAgentProvider) GetCapabilities(context.Context, coreagent.GetC
 	return &coreagent.ProviderCapabilities{
 		StreamingText:    true,
 		ToolCalls:        true,
+		NativeToolSearch: true,
 		Interactions:     true,
 		ResumableTurns:   true,
 		StructuredOutput: true,
@@ -846,7 +854,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 			}
 		}
 	}
-	if len(req.Tools) > 0 {
+	if req.ToolSource == coreagent.ToolSourceModeNativeSearch || len(req.Tools) > 0 {
 		conn, err := grpc.NewClient(
 			"passthrough:///localhost",
 			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
@@ -860,12 +868,38 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 		}
 		defer func() { _ = conn.Close() }()
 		client := proto.NewAgentHostClient(conn)
-		if len(req.Tools) > 0 {
+		tools := append([]coreagent.Tool(nil), req.Tools...)
+		if len(tools) == 0 {
+			resp, err := client.SearchTools(ctx, &proto.SearchAgentToolsRequest{
+				SessionId:  req.SessionID,
+				TurnId:     turnID,
+				Query:      "roadmap sync",
+				MaxResults: 5,
+			})
+			if err != nil {
+				return nil, err
+			}
+			for _, tool := range resp.GetTools() {
+				tools = append(tools, coreagent.Tool{
+					ID:          tool.GetId(),
+					Name:        tool.GetName(),
+					Description: tool.GetDescription(),
+					Target: coreagent.ToolTarget{
+						Plugin:     tool.GetTarget().GetPlugin(),
+						Operation:  tool.GetTarget().GetOperation(),
+						Connection: tool.GetTarget().GetConnection(),
+						Instance:   tool.GetTarget().GetInstance(),
+					},
+					ParametersSchema: protoStructToBootstrapMap(tool.GetParametersSchema()),
+				})
+			}
+		}
+		if len(tools) > 0 {
 			resp, err := client.ExecuteTool(ctx, &proto.ExecuteAgentToolRequest{
 				SessionId:  req.SessionID,
 				TurnId:     turnID,
 				ToolCallId: "tool-call-1",
-				ToolId:     req.Tools[0].ID,
+				ToolId:     tools[0].ID,
 				Arguments: func() *structpb.Struct {
 					value, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
 					if err != nil {
@@ -956,6 +990,7 @@ func (p *callbackAgentProvider) GetCapabilities(context.Context, coreagent.GetCa
 	return &coreagent.ProviderCapabilities{
 		StreamingText:    true,
 		ToolCalls:        true,
+		NativeToolSearch: true,
 		Interactions:     true,
 		ResumableTurns:   true,
 		StructuredOutput: true,
@@ -1029,7 +1064,7 @@ func (p *generatedIDAgentProvider) CancelTurn(_ context.Context, req coreagent.C
 }
 
 func (p *generatedIDAgentProvider) GetCapabilities(context.Context, coreagent.GetCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
-	return &coreagent.ProviderCapabilities{StreamingText: true, Interactions: true, ResumableTurns: true}, nil
+	return &coreagent.ProviderCapabilities{StreamingText: true, NativeToolSearch: true, Interactions: true, ResumableTurns: true}, nil
 }
 
 func (p *generatedIDAgentProvider) Ping(context.Context) error { return nil }
@@ -2246,9 +2281,9 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
 		ToolRefs: []coreagent.ToolRef{{
-			PluginName: "roadmap",
-			Operation:  "sync",
-			Title:      "Roadmap sync",
+			Plugin:    "roadmap",
+			Operation: "sync",
+			Title:     "Roadmap sync",
 		}},
 	}
 
@@ -2288,11 +2323,14 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if createTurnReq.CreatedBy.SubjectID != p.SubjectID {
 		t.Fatalf("CreateTurn created_by.subject_id = %q, want %q", createTurnReq.CreatedBy.SubjectID, p.SubjectID)
 	}
-	if len(createTurnReq.Tools) != 1 {
-		t.Fatalf("CreateTurn tools = %#v, want 1 tool", createTurnReq.Tools)
+	if len(createTurnReq.Tools) != 0 {
+		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.Tools)
 	}
-	if createTurnReq.Tools[0].Target.PluginName != "roadmap" || createTurnReq.Tools[0].Target.Operation != "sync" {
-		t.Fatalf("CreateTurn tool target = %#v", createTurnReq.Tools[0].Target)
+	if createTurnReq.ToolSource != coreagent.ToolSourceModeNativeSearch {
+		t.Fatalf("CreateTurn tool source = %q, want native search", createTurnReq.ToolSource)
+	}
+	if len(createTurnReq.ToolRefs) != 1 || createTurnReq.ToolRefs[0].Plugin != "roadmap" || createTurnReq.ToolRefs[0].Operation != "sync" {
+		t.Fatalf("CreateTurn tool refs = %#v", createTurnReq.ToolRefs)
 	}
 	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"subject":"user:user-123"`) || !strings.Contains(toolBodies[0], `"taskId":"task-123"`) {
 		t.Fatalf("tool callback bodies = %#v", toolBodies)
@@ -2308,8 +2346,11 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if ref.SessionID != session.ID {
 		t.Fatalf("stored session id = %q, want %q", ref.SessionID, session.ID)
 	}
-	if len(ref.Tools) != 1 || ref.Tools[0].ID != createTurnReq.Tools[0].ID {
-		t.Fatalf("stored tools = %#v, want tool id %q", ref.Tools, createTurnReq.Tools[0].ID)
+	if len(ref.ToolRefs) != 1 || ref.ToolRefs[0].Plugin != "roadmap" || ref.ToolSource != coreagent.ToolSourceModeNativeSearch {
+		t.Fatalf("stored tool source/refs = %q %#v", ref.ToolSource, ref.ToolRefs)
+	}
+	if len(ref.Tools) != 1 || ref.Tools[0].Target.Plugin != "roadmap" || ref.Tools[0].Target.Operation != "sync" {
+		t.Fatalf("stored searched tools = %#v", ref.Tools)
 	}
 	if ref.CredentialSubjectID != principal.WorkloadSubjectID("agent-credential") {
 		t.Fatalf("stored credential subject = %q, want %q", ref.CredentialSubjectID, principal.WorkloadSubjectID("agent-credential"))
@@ -2974,8 +3015,8 @@ func TestBootstrapAgentManagerIdempotentTurnReplayDoesNotDeleteMetadataWhenCalle
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
 		ToolRefs: []coreagent.ToolRef{{
-			PluginName: "roadmap",
-			Operation:  "sync",
+			Plugin:    "roadmap",
+			Operation: "sync",
 		}},
 	})
 	if err != nil {
@@ -3001,8 +3042,8 @@ func TestBootstrapAgentManagerIdempotentTurnReplayDoesNotDeleteMetadataWhenCalle
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
 		ToolRefs: []coreagent.ToolRef{{
-			PluginName: "roadmap",
-			Operation:  "sync",
+			Plugin:    "roadmap",
+			Operation: "sync",
 		}},
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
@@ -5156,8 +5197,8 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 	tool := coreagent.Tool{
 		ID: "roadmap.sync",
 		Target: coreagent.ToolTarget{
-			PluginName: "roadmap",
-			Operation:  "sync",
+			Plugin:    "roadmap",
+			Operation: "sync",
 		},
 	}
 	if _, err := provider.CreateSession(startCtx, coreagent.CreateSessionRequest{
@@ -5276,8 +5317,8 @@ func TestBootstrapAgentProviderAssignedTurnIDCancelsOnTrackingFailure(t *testing
 		Tools: []coreagent.Tool{{
 			ID: "roadmap.sync",
 			Target: coreagent.ToolTarget{
-				PluginName: "roadmap",
-				Operation:  "sync",
+				Plugin:    "roadmap",
+				Operation: "sync",
 			},
 		}},
 	})
@@ -5355,8 +5396,8 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 	tool := coreagent.Tool{
 		ID: "roadmap.sync",
 		Target: coreagent.ToolTarget{
-			PluginName: "roadmap",
-			Operation:  "sync",
+			Plugin:    "roadmap",
+			Operation: "sync",
 		},
 	}
 	if _, err := provider.CreateSession(startCtx, coreagent.CreateSessionRequest{

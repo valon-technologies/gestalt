@@ -419,8 +419,8 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 			ProviderName:   "managed",
 			Model:          "deep",
 			Prompt:         "Send the status summary",
-			ToolSource:     coreagent.ToolSourceModeExplicit,
-			ToolRefs:       []coreagent.ToolRef{{PluginName: "roadmap", Operation: "sync"}},
+			ToolSource:     coreagent.ToolSourceModeNativeSearch,
+			ToolRefs:       []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
 			TimeoutSeconds: 5,
 		}},
 		Trigger: coreworkflow.RunTrigger{Manual: true},
@@ -457,8 +457,14 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	if len(turnReq.Messages) != 1 || turnReq.Messages[0].Text != "Send the status summary" {
 		t.Fatalf("turn messages = %#v", turnReq.Messages)
 	}
-	if len(turnReq.Tools) != 1 || turnReq.Tools[0].Target.PluginName != "roadmap" || turnReq.Tools[0].Target.Operation != "sync" {
-		t.Fatalf("turn tools = %#v", turnReq.Tools)
+	if len(turnReq.Tools) != 0 {
+		t.Fatalf("turn tools = %#v, want no preloaded tools", turnReq.Tools)
+	}
+	if turnReq.ToolSource != coreagent.ToolSourceModeNativeSearch {
+		t.Fatalf("turn tool source = %q, want native search", turnReq.ToolSource)
+	}
+	if len(turnReq.ToolRefs) != 1 || turnReq.ToolRefs[0].Plugin != "roadmap" || turnReq.ToolRefs[0].Operation != "sync" {
+		t.Fatalf("turn tool refs = %#v", turnReq.ToolRefs)
 	}
 }
 
@@ -474,7 +480,7 @@ func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefIgnoresWhitespaceLegacy
 			ProviderName:   "managed",
 			Model:          "deep",
 			Prompt:         "Send the status summary",
-			ToolSource:     coreagent.ToolSourceModeExplicit,
+			ToolSource:     coreagent.ToolSourceModeNativeSearch,
 			TimeoutSeconds: 5,
 		},
 	}
@@ -533,7 +539,7 @@ func TestWorkflowRuntimeInvokeAgentTargetHandlesMissingTurn(t *testing.T) {
 			ProviderName:   "managed",
 			Model:          "deep",
 			Prompt:         "Send the status summary",
-			ToolSource:     coreagent.ToolSourceModeExplicit,
+			ToolSource:     coreagent.ToolSourceModeNativeSearch,
 			TimeoutSeconds: 5,
 		}},
 	})
@@ -574,7 +580,7 @@ func TestWorkflowRuntimeRejectsMixedAgentPluginTargetWithLegacyExecutionRef(t *t
 			Agent: &coreworkflow.AgentTarget{
 				ProviderName:   "managed",
 				Prompt:         "send reminder",
-				ToolSource:     coreagent.ToolSourceModeExplicit,
+				ToolSource:     coreagent.ToolSourceModeNativeSearch,
 				TimeoutSeconds: 5,
 			},
 		},
@@ -591,7 +597,7 @@ func TestWorkflowRuntimeRejectsAgentExecutionRefWithoutFingerprint(t *testing.T)
 	target := coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 		ProviderName: "managed",
 		Prompt:       "send reminder",
-		ToolSource:   coreagent.ToolSourceModeExplicit,
+		ToolSource:   coreagent.ToolSourceModeNativeSearch,
 	}}
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "agent-ref-without-fingerprint",

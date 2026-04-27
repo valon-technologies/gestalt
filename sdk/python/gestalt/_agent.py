@@ -39,6 +39,9 @@ class AgentHost:
     def execute_tool(self, request: Any) -> Any:
         return _grpc_call(self._stub.ExecuteTool, request)
 
+    def search_tools(self, request: Any) -> Any:
+        return _grpc_call(self._stub.SearchTools, request)
+
     def __enter__(self) -> AgentHost:
         return self
 

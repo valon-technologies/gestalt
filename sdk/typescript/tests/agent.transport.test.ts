@@ -12,6 +12,8 @@ import {
   AgentHost as AgentHostService,
   ExecuteAgentToolRequestSchema,
   ExecuteAgentToolResponseSchema,
+  SearchAgentToolsRequestSchema,
+  SearchAgentToolsResponseSchema,
 } from "../gen/v1/agent_pb.ts";
 import { AgentHost, ENV_AGENT_HOST_SOCKET } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
@@ -21,6 +23,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
   const socketPath = join(tempDir, "agent-host.sock");
   const previousSocket = process.env[ENV_AGENT_HOST_SOCKET];
   const calls: Array<{ turnId: string; toolCallId: string; toolId: string }> = [];
+  const searches: Array<{ turnId: string; query: string; maxResults: number }> = [];
 
   const handler = connectNodeAdapter({
     grpc: true,
@@ -40,6 +43,26 @@ test("AgentHost executes tools through the configured unix socket", async () => 
               arguments: input.arguments,
               toolId: input.toolId,
             }),
+          });
+        },
+        async searchTools(input) {
+          searches.push({
+            turnId: input.turnId,
+            query: input.query,
+            maxResults: input.maxResults,
+          });
+          return create(SearchAgentToolsResponseSchema, {
+            tools: [
+              {
+                id: "slack.send_message",
+                name: "Send Slack message",
+                description: "Send a direct message",
+                target: {
+                  plugin: "slack",
+                  operation: "send_message",
+                },
+              },
+            ],
           });
         },
       } satisfies Partial<ServiceImpl<typeof AgentHostService>>);
@@ -84,6 +107,26 @@ test("AgentHost executes tools through the configured unix socket", async () => 
         turnId: "turn-123",
         toolCallId: "call-123",
         toolId: "lookup-status",
+      },
+    ]);
+
+    const searchResponse = await host.searchTools(
+      create(SearchAgentToolsRequestSchema, {
+        sessionId: "session-123",
+        turnId: "turn-123",
+        query: "send slack dm",
+        maxResults: 3,
+      }),
+    );
+
+    expect(searchResponse.tools).toHaveLength(1);
+    expect(searchResponse.tools[0]?.target?.plugin).toBe("slack");
+    expect(searchResponse.tools[0]?.target?.operation).toBe("send_message");
+    expect(searches).toEqual([
+      {
+        turnId: "turn-123",
+        query: "send slack dm",
+        maxResults: 3,
       },
     ]);
   } finally {

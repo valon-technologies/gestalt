@@ -64,7 +64,7 @@ type agentMessagePartImageRefRequest struct {
 }
 
 type agentToolRefRequest struct {
-	PluginName  string `json:"pluginName,omitempty"`
+	Plugin      string `json:"plugin,omitempty"`
 	Operation   string `json:"operation,omitempty"`
 	Connection  string `json:"connection,omitempty"`
 	Instance    string `json:"instance,omitempty"`
@@ -643,7 +643,7 @@ func agentToolRefsFromRequest(refs []agentToolRefRequest) []coreagent.ToolRef {
 	out := make([]coreagent.ToolRef, 0, len(refs))
 	for _, ref := range refs {
 		out = append(out, coreagent.ToolRef{
-			PluginName:  strings.TrimSpace(ref.PluginName),
+			Plugin:      strings.TrimSpace(ref.Plugin),
 			Operation:   strings.TrimSpace(ref.Operation),
 			Connection:  strings.TrimSpace(ref.Connection),
 			Instance:    strings.TrimSpace(ref.Instance),
@@ -661,7 +661,7 @@ func agentToolRefsToRequest(refs []coreagent.ToolRef) []agentToolRefRequest {
 	out := make([]agentToolRefRequest, 0, len(refs))
 	for _, ref := range refs {
 		out = append(out, agentToolRefRequest{
-			PluginName:  strings.TrimSpace(ref.PluginName),
+			Plugin:      strings.TrimSpace(ref.Plugin),
 			Operation:   strings.TrimSpace(ref.Operation),
 			Connection:  strings.TrimSpace(ref.Connection),
 			Instance:    strings.TrimSpace(ref.Instance),
@@ -674,11 +674,8 @@ func agentToolRefsToRequest(refs []coreagent.ToolRef) []agentToolRefRequest {
 
 func validateAgentToolRefs(refs []agentToolRefRequest) error {
 	for idx, ref := range refs {
-		if strings.TrimSpace(ref.PluginName) == "" {
-			return fmt.Errorf("toolRefs[%d].pluginName is required", idx)
-		}
-		if strings.TrimSpace(ref.Operation) == "" {
-			return fmt.Errorf("toolRefs[%d].operation is required", idx)
+		if strings.TrimSpace(ref.Plugin) == "" {
+			return fmt.Errorf("toolRefs[%d].plugin is required", idx)
 		}
 	}
 	return nil
@@ -688,10 +685,8 @@ func agentToolSourceModeFromRequest(value string) (coreagent.ToolSourceMode, err
 	switch strings.TrimSpace(value) {
 	case "":
 		return coreagent.ToolSourceModeUnspecified, nil
-	case string(coreagent.ToolSourceModeExplicit):
-		return coreagent.ToolSourceModeExplicit, nil
-	case string(coreagent.ToolSourceModeInheritInvokes):
-		return coreagent.ToolSourceModeInheritInvokes, nil
+	case string(coreagent.ToolSourceModeNativeSearch):
+		return coreagent.ToolSourceModeNativeSearch, nil
 	default:
 		return "", fmt.Errorf("unsupported agent tool source %q", value)
 	}
@@ -935,7 +930,7 @@ func (s *Server) writeAgentProviderError(ctx context.Context, w http.ResponseWri
 
 func firstAgentToolTarget(refs []agentToolRefRequest) (string, string) {
 	for _, ref := range refs {
-		pluginName := strings.TrimSpace(ref.PluginName)
+		pluginName := strings.TrimSpace(ref.Plugin)
 		operation := strings.TrimSpace(ref.Operation)
 		if pluginName == "" && operation == "" {
 			continue

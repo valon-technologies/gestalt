@@ -262,7 +262,7 @@ func workflowAgentTargetFromRequest(target *workflowAgentTargetRequest) corework
 		Prompt:          strings.TrimSpace(target.Prompt),
 		Messages:        agentMessagesFromRequest(target.Messages),
 		ToolRefs:        agentToolRefsFromRequest(toolRefs),
-		ToolSource:      coreagent.ToolSourceModeExplicit,
+		ToolSource:      coreagent.ToolSourceModeNativeSearch,
 		ResponseSchema:  maps.Clone(target.ResponseSchema),
 		Metadata:        maps.Clone(target.Metadata),
 		ProviderOptions: maps.Clone(target.ProviderOptions),

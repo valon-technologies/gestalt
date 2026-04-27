@@ -16,9 +16,10 @@ import (
 type agentHostTransportHarness struct {
 	proto.UnimplementedAgentHostServer
 
-	mu           sync.Mutex
-	toolRequests []*proto.ExecuteAgentToolRequest
-	tokens       []string
+	mu             sync.Mutex
+	toolRequests   []*proto.ExecuteAgentToolRequest
+	searchRequests []*proto.SearchAgentToolsRequest
+	tokens         []string
 }
 
 func (h *agentHostTransportHarness) ExecuteTool(ctx context.Context, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {
@@ -31,6 +32,28 @@ func (h *agentHostTransportHarness) ExecuteTool(ctx context.Context, req *proto.
 	h.toolRequests = append(h.toolRequests, gproto.Clone(req).(*proto.ExecuteAgentToolRequest))
 	h.mu.Unlock()
 	return &proto.ExecuteAgentToolResponse{Status: 207, Body: `{"ok":true}`}, nil
+}
+
+func (h *agentHostTransportHarness) SearchTools(ctx context.Context, req *proto.SearchAgentToolsRequest) (*proto.SearchAgentToolsResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+
+	h.mu.Lock()
+	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
+		h.tokens = append(h.tokens, values...)
+	}
+	h.searchRequests = append(h.searchRequests, gproto.Clone(req).(*proto.SearchAgentToolsRequest))
+	h.mu.Unlock()
+	return &proto.SearchAgentToolsResponse{
+		Tools: []*proto.ResolvedAgentTool{{
+			Id:          "slack.send_message",
+			Name:        "Send Slack message",
+			Description: "Send a direct message",
+			Target: &proto.BoundAgentToolTarget{
+				Plugin:    "slack",
+				Operation: "send_message",
+			},
+		}},
+	}, nil
 }
 
 func TestTransport_AgentHostUnixSocket(t *testing.T) {
@@ -70,6 +93,18 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if resp.GetStatus() != 207 || resp.GetBody() != `{"ok":true}` {
 		t.Fatalf("response = %#v", resp)
 	}
+	searchResp, err := client.SearchTools(context.Background(), &proto.SearchAgentToolsRequest{
+		SessionId:  "session-1",
+		TurnId:     "turn-1",
+		Query:      "send slack dm",
+		MaxResults: 3,
+	})
+	if err != nil {
+		t.Fatalf("SearchTools: %v", err)
+	}
+	if len(searchResp.GetTools()) != 1 || searchResp.GetTools()[0].GetTarget().GetPlugin() != "slack" || searchResp.GetTools()[0].GetTarget().GetOperation() != "send_message" {
+		t.Fatalf("search response = %#v", searchResp)
+	}
 
 	harness.mu.Lock()
 	defer harness.mu.Unlock()
@@ -79,7 +114,13 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if harness.toolRequests[0].GetSessionId() != "session-1" || harness.toolRequests[0].GetTurnId() != "turn-1" || harness.toolRequests[0].GetToolCallId() != "call-1" || harness.toolRequests[0].GetToolId() != "tool-1" {
 		t.Fatalf("tool request = %#v", harness.toolRequests[0])
 	}
-	if len(harness.tokens) != 1 || harness.tokens[0] != "relay-token-go" {
-		t.Fatalf("relay tokens = %#v, want one relay-token-go value", harness.tokens)
+	if len(harness.searchRequests) != 1 {
+		t.Fatalf("searchRequests len = %d, want 1", len(harness.searchRequests))
+	}
+	if harness.searchRequests[0].GetSessionId() != "session-1" || harness.searchRequests[0].GetTurnId() != "turn-1" || harness.searchRequests[0].GetQuery() != "send slack dm" || harness.searchRequests[0].GetMaxResults() != 3 {
+		t.Fatalf("search request = %#v", harness.searchRequests[0])
+	}
+	if len(harness.tokens) != 2 || harness.tokens[0] != "relay-token-go" || harness.tokens[1] != "relay-token-go" {
+		t.Fatalf("relay tokens = %#v, want two relay-token-go values", harness.tokens)
 	}
 }

@@ -318,8 +318,10 @@ export {
   type ListAgentProviderSessionsRequest,
   type ListAgentProviderTurnEventsRequest,
   type ListAgentProviderTurnsRequest,
-  type ResolvedAgentTool,
   type ResolveAgentProviderInteractionRequest,
+  type ResolvedAgentTool,
+  type SearchAgentToolsRequest,
+  type SearchAgentToolsResponse,
   type UpdateAgentProviderSessionRequest,
 } from "./agent.ts";
 export {

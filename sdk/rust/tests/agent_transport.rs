@@ -318,12 +318,38 @@ impl AgentProviderGrpc for TestAgentProvider {
             interactions: true,
             resumable_turns: true,
             reasoning_summaries: false,
+            native_tool_search: true,
         }))
     }
 }
 
 #[tonic::async_trait]
 impl AgentHostRpc for TestAgentHostService {
+    async fn search_tools(
+        &self,
+        request: GrpcRequest<pb::SearchAgentToolsRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::SearchAgentToolsResponse>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(pb::SearchAgentToolsResponse {
+            tools: vec![pb::ResolvedAgentTool {
+                id: format!("{}:{}:lookup", request.session_id, request.turn_id),
+                name: "lookup".to_string(),
+                description: request.query,
+                target: Some(pb::BoundAgentToolTarget {
+                    plugin: "search".to_string(),
+                    operation: "lookup".to_string(),
+                    ..Default::default()
+                }),
+                parameters_schema: Some(helpers::struct_from_json(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "query": { "type": "string" }
+                    }
+                }))),
+            }],
+        }))
+    }
+
     async fn execute_tool(
         &self,
         request: GrpcRequest<pb::ExecuteAgentToolRequest>,
@@ -569,6 +595,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
     assert!(capabilities.tool_calls);
     assert!(capabilities.interactions);
     assert!(capabilities.resumable_turns);
+    assert!(capabilities.native_tool_search);
 
     assert_eq!(
         *provider
@@ -603,6 +630,26 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     helpers::wait_for_socket(&host_socket).await;
 
     let mut host = AgentHost::connect().await.expect("connect agent host");
+    let searched = host
+        .search_tools(pb::SearchAgentToolsRequest {
+            session_id: "session-1".to_string(),
+            turn_id: "turn-1".to_string(),
+            query: "look up people".to_string(),
+            max_results: 3,
+        })
+        .await
+        .expect("search tools");
+    assert_eq!(searched.tools.len(), 1);
+    assert_eq!(searched.tools[0].id, "session-1:turn-1:lookup");
+    assert_eq!(
+        searched.tools[0]
+            .target
+            .as_ref()
+            .expect("tool target")
+            .plugin,
+        "search"
+    );
+
     let invoked = host
         .execute_tool(pb::ExecuteAgentToolRequest {
             session_id: "session-1".to_string(),

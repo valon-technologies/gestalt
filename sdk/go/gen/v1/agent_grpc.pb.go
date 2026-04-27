@@ -577,6 +577,7 @@ var AgentProvider_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
+	AgentHost_SearchTools_FullMethodName = "/gestalt.provider.v1.AgentHost/SearchTools"
 	AgentHost_ExecuteTool_FullMethodName = "/gestalt.provider.v1.AgentHost/ExecuteTool"
 )
 
@@ -584,6 +585,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AgentHostClient interface {
+	SearchTools(ctx context.Context, in *SearchAgentToolsRequest, opts ...grpc.CallOption) (*SearchAgentToolsResponse, error)
 	ExecuteTool(ctx context.Context, in *ExecuteAgentToolRequest, opts ...grpc.CallOption) (*ExecuteAgentToolResponse, error)
 }
 
@@ -593,6 +595,16 @@ type agentHostClient struct {
 
 func NewAgentHostClient(cc grpc.ClientConnInterface) AgentHostClient {
 	return &agentHostClient{cc}
+}
+
+func (c *agentHostClient) SearchTools(ctx context.Context, in *SearchAgentToolsRequest, opts ...grpc.CallOption) (*SearchAgentToolsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchAgentToolsResponse)
+	err := c.cc.Invoke(ctx, AgentHost_SearchTools_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *agentHostClient) ExecuteTool(ctx context.Context, in *ExecuteAgentToolRequest, opts ...grpc.CallOption) (*ExecuteAgentToolResponse, error) {
@@ -609,6 +621,7 @@ func (c *agentHostClient) ExecuteTool(ctx context.Context, in *ExecuteAgentToolR
 // All implementations must embed UnimplementedAgentHostServer
 // for forward compatibility.
 type AgentHostServer interface {
+	SearchTools(context.Context, *SearchAgentToolsRequest) (*SearchAgentToolsResponse, error)
 	ExecuteTool(context.Context, *ExecuteAgentToolRequest) (*ExecuteAgentToolResponse, error)
 	mustEmbedUnimplementedAgentHostServer()
 }
@@ -620,6 +633,9 @@ type AgentHostServer interface {
 // pointer dereference when methods are called.
 type UnimplementedAgentHostServer struct{}
 
+func (UnimplementedAgentHostServer) SearchTools(context.Context, *SearchAgentToolsRequest) (*SearchAgentToolsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SearchTools not implemented")
+}
 func (UnimplementedAgentHostServer) ExecuteTool(context.Context, *ExecuteAgentToolRequest) (*ExecuteAgentToolResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ExecuteTool not implemented")
 }
@@ -642,6 +658,24 @@ func RegisterAgentHostServer(s grpc.ServiceRegistrar, srv AgentHostServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&AgentHost_ServiceDesc, srv)
+}
+
+func _AgentHost_SearchTools_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchAgentToolsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentHostServer).SearchTools(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentHost_SearchTools_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentHostServer).SearchTools(ctx, req.(*SearchAgentToolsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _AgentHost_ExecuteTool_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -669,6 +703,10 @@ var AgentHost_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "gestalt.provider.v1.AgentHost",
 	HandlerType: (*AgentHostServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "SearchTools",
+			Handler:    _AgentHost_SearchTools_Handler,
+		},
 		{
 			MethodName: "ExecuteTool",
 			Handler:    _AgentHost_ExecuteTool_Handler,

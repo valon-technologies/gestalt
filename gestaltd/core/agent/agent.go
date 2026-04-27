@@ -78,7 +78,7 @@ type MessagePart struct {
 }
 
 type ToolTarget struct {
-	PluginName string
+	Plugin     string
 	Operation  string
 	Connection string
 	Instance   string
@@ -93,7 +93,7 @@ type Tool struct {
 }
 
 type ToolRef struct {
-	PluginName  string
+	Plugin      string
 	Operation   string
 	Connection  string
 	Instance    string
@@ -110,9 +110,8 @@ type ResolveToolsRequest struct {
 type ToolSourceMode string
 
 const (
-	ToolSourceModeUnspecified    ToolSourceMode = ""
-	ToolSourceModeExplicit       ToolSourceMode = "explicit"
-	ToolSourceModeInheritInvokes ToolSourceMode = "inherit_invokes"
+	ToolSourceModeUnspecified  ToolSourceMode = ""
+	ToolSourceModeNativeSearch ToolSourceMode = "native_search"
 )
 
 type Session struct {
@@ -174,6 +173,8 @@ type CreateTurnRequest struct {
 	IdempotencyKey  string
 	Model           string
 	Messages        []Message
+	ToolRefs        []ToolRef
+	ToolSource      ToolSourceMode
 	Tools           []Tool
 	ResponseSchema  map[string]any
 	Metadata        map[string]any
@@ -222,6 +223,7 @@ type ProviderCapabilities struct {
 	Interactions       bool
 	ResumableTurns     bool
 	ReasoningSummaries bool
+	NativeToolSearch   bool
 }
 
 type GetInteractionRequest struct {
@@ -249,6 +251,20 @@ type ExecuteToolRequest struct {
 type ExecuteToolResponse struct {
 	Status int
 	Body   string
+}
+
+type SearchToolsRequest struct {
+	ProviderName string
+	SessionID    string
+	TurnID       string
+	Query        string
+	MaxResults   int
+	ToolRefs     []ToolRef
+	ToolSource   ToolSourceMode
+}
+
+type SearchToolsResponse struct {
+	Tools []Tool
 }
 
 type InteractionType string
@@ -341,6 +357,8 @@ type ExecutionReference struct {
 	CredentialSubjectID string
 	IdempotencyKey      string
 	Permissions         []core.AccessPermission
+	ToolRefs            []ToolRef
+	ToolSource          ToolSourceMode
 	Tools               []Tool
 	CreatedAt           *time.Time
 	RevokedAt           *time.Time
@@ -365,6 +383,7 @@ type Provider interface {
 }
 
 type Host interface {
+	SearchTools(ctx context.Context, req SearchToolsRequest) (*SearchToolsResponse, error)
 	ExecuteTool(ctx context.Context, req ExecuteToolRequest) (*ExecuteToolResponse, error)
 }
 

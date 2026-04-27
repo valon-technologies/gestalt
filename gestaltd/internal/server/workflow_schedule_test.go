@@ -515,8 +515,8 @@ type workflowScheduleResponse struct {
 			Prompt         string `json:"prompt"`
 			TimeoutSeconds int    `json:"timeoutSeconds"`
 			ToolRefs       []struct {
-				PluginName string `json:"pluginName"`
-				Operation  string `json:"operation"`
+				Plugin    string `json:"plugin"`
+				Operation string `json:"operation"`
 			} `json:"toolRefs"`
 		} `json:"agent"`
 	} `json:"target"`
@@ -542,8 +542,8 @@ type workflowEventTriggerResponse struct {
 			Model        string `json:"model"`
 			Prompt       string `json:"prompt"`
 			ToolRefs     []struct {
-				PluginName string `json:"pluginName"`
-				Operation  string `json:"operation"`
+				Plugin    string `json:"plugin"`
+				Operation string `json:"operation"`
 			} `json:"toolRefs"`
 		} `json:"agent"`
 	} `json:"target"`
@@ -760,7 +760,7 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"provider":"managed","model":"deep","prompt":"Send the status summary","timeoutSeconds":90,"toolRefs":[{"pluginName":"roadmap","operation":"sync"}]}}}`)
+	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"provider":"managed","model":"deep","prompt":"Send the status summary","timeoutSeconds":90,"toolRefs":[{"plugin":"roadmap","operation":"sync"}]}}}`)
 	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", createBody)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -780,14 +780,14 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	if created.Target.Agent == nil || created.Target.Agent.ProviderName != "managed" || created.Target.Agent.Model != "deep" {
 		t.Fatalf("created agent target = %#v", created.Target.Agent)
 	}
-	if len(created.Target.Agent.ToolRefs) != 1 || created.Target.Agent.ToolRefs[0].PluginName != "roadmap" || created.Target.Agent.ToolRefs[0].Operation != "sync" {
+	if len(created.Target.Agent.ToolRefs) != 1 || created.Target.Agent.ToolRefs[0].Plugin != "roadmap" || created.Target.Agent.ToolRefs[0].Operation != "sync" {
 		t.Fatalf("created agent tools = %#v", created.Target.Agent.ToolRefs)
 	}
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
 	}
 	storedTarget := provider.upsertReqs[0].Target
-	if storedTarget.Agent == nil || storedTarget.Agent.ToolSource != coreagent.ToolSourceModeExplicit {
+	if storedTarget.Agent == nil || storedTarget.Agent.ToolSource != coreagent.ToolSourceModeNativeSearch {
 		t.Fatalf("stored target = %#v", storedTarget)
 	}
 	if provider.upsertReqs[0].ExecutionRef == "" {

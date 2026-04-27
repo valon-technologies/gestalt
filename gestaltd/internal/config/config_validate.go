@@ -1240,20 +1240,13 @@ func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentC
 	for i := range agent.Tools {
 		tool := &agent.Tools[i]
 		tool.Plugin = strings.TrimSpace(tool.Plugin)
-		tool.PluginName = strings.TrimSpace(tool.PluginName)
-		if tool.PluginName == "" {
-			tool.PluginName = tool.Plugin
-		}
-		if tool.PluginName == "" {
+		if tool.Plugin == "" {
 			return fmt.Errorf("config validation: %s.tools[%d].plugin is required", path, i)
 		}
-		if _, ok := cfg.Plugins[tool.PluginName]; !ok {
-			return fmt.Errorf("config validation: %s.tools[%d].plugin references unknown plugin %q", path, i, tool.PluginName)
+		if _, ok := cfg.Plugins[tool.Plugin]; !ok {
+			return fmt.Errorf("config validation: %s.tools[%d].plugin references unknown plugin %q", path, i, tool.Plugin)
 		}
 		tool.Operation = strings.TrimSpace(tool.Operation)
-		if tool.Operation == "" {
-			return fmt.Errorf("config validation: %s.tools[%d].operation is required", path, i)
-		}
 		tool.Connection = strings.TrimSpace(tool.Connection)
 		tool.Instance = strings.TrimSpace(tool.Instance)
 		tool.Title = strings.TrimSpace(tool.Title)

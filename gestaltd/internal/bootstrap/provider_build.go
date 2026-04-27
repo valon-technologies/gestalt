@@ -1978,6 +1978,10 @@ func (unavailableAgentManager) ResolveTools(context.Context, *principal.Principa
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
+func (unavailableAgentManager) SearchTools(context.Context, *principal.Principal, coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error) {
+	return nil, fmt.Errorf("agent manager is not available")
+}
+
 func (unavailableAgentManager) CreateSession(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
