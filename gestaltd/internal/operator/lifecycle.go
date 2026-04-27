@@ -49,7 +49,6 @@ type Lockfile struct {
 	Version             int                          `json:"version"`
 	Providers           map[string]LockProviderEntry `json:"providers"`
 	Authentication      map[string]LockEntry         `json:"authentication,omitempty"`
-	LegacyAuth          map[string]LockEntry         `json:"auth,omitempty"`
 	Authorization       map[string]LockEntry         `json:"authorization,omitempty"`
 	ExternalCredentials map[string]LockEntry         `json:"externalCredentials,omitempty"`
 	IndexedDBs          map[string]LockEntry         `json:"indexeddbs,omitempty"`
@@ -1076,6 +1075,9 @@ func ReadLockfile(path string) (*Lockfile, error) {
 	if err := json.Unmarshal(data, &header); err != nil {
 		return nil, fmt.Errorf("parsing lockfile %s: %w", path, err)
 	}
+	if err := rejectLegacyAuthLockBucket(data, header.Schema != ""); err != nil {
+		return nil, err
+	}
 
 	if header.Schema != "" {
 		var lock providerLockfile
@@ -1097,6 +1099,26 @@ func ReadLockfile(path string) (*Lockfile, error) {
 		return nil, fmt.Errorf("parsing lockfile %s: %w", path, err)
 	}
 	return normalizeLockfile(&lock), nil
+}
+
+func rejectLegacyAuthLockBucket(data []byte, rejectProviderAuthBucket bool) error {
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("parsing lockfile fields: %w", err)
+	}
+	if _, ok := raw["auth"]; ok {
+		return fmt.Errorf(`unsupported lockfile field "auth"; run ` + "`gestaltd init`" + ` to rewrite authentication providers under "authentication"`)
+	}
+	if rejectProviderAuthBucket {
+		providers, ok := raw["providers"].(map[string]any)
+		if !ok {
+			return nil
+		}
+		if _, ok := providers["auth"]; ok {
+			return fmt.Errorf(`unsupported lockfile field "providers.auth"; run ` + "`gestaltd init`" + ` to rewrite authentication providers under "providers.authentication"`)
+		}
+	}
+	return nil
 }
 
 func WriteLockfile(path string, lock *Lockfile) error {

@@ -3557,6 +3557,102 @@ func TestReadLockfile_RejectsUnsupportedVersion(t *testing.T) {
 	}
 }
 
+func TestReadLockfile_RejectsLegacyAuthLockBuckets(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		lock    string
+		wantErr string
+	}{
+		{
+			name: "runtime lockfile",
+			lock: `{
+  "version": 10,
+  "providers": {},
+  "auth": {
+    "oauth": {
+      "fingerprint": "auth-fp",
+      "source": "github.com/example/auth",
+      "manifest": ".gestaltd/auth/oauth/manifest.yaml"
+    }
+  }
+}
+`,
+			wantErr: `unsupported lockfile field "auth"`,
+		},
+		{
+			name: "provider lockfile",
+			lock: `{
+  "schema": "gestaltd-provider-lock",
+  "schemaVersion": 5,
+  "revision": 0,
+  "providers": {
+    "auth": {
+      "oauth": {
+        "inputDigest": "auth-fp",
+        "package": "github.com/example/auth",
+        "kind": "authentication",
+        "runtime": "executable"
+      }
+    }
+  }
+}
+`,
+			wantErr: `unsupported lockfile field "providers.auth"`,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			lockPath := filepath.Join(dir, InitLockfileName)
+			if err := os.WriteFile(lockPath, []byte(tt.lock), 0o644); err != nil {
+				t.Fatalf("WriteFile: %v", err)
+			}
+
+			_, err := ReadLockfile(lockPath)
+			if err == nil {
+				t.Fatal("expected error for legacy auth lock bucket")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestReadLockfile_AllowsRuntimeProviderNamedAuth(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, InitLockfileName)
+	if err := os.WriteFile(lockPath, []byte(`{
+  "version": 10,
+  "providers": {
+    "auth": {
+      "fingerprint": "plugin-fp",
+      "source": "github.com/example/auth-plugin",
+      "manifest": ".gestaltd/providers/auth/manifest.yaml"
+    }
+  }
+}
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	lock, err := ReadLockfile(lockPath)
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	if got := lock.Providers["auth"].Source; got != "github.com/example/auth-plugin" {
+		t.Fatalf("provider auth source = %q, want %q", got, "github.com/example/auth-plugin")
+	}
+}
+
 func TestReadLockfile_RejectsLegacyUILockShapeBeforeUnmarshal(t *testing.T) {
 	t.Parallel()
 

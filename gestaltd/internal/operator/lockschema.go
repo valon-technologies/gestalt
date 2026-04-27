@@ -34,7 +34,6 @@ type providerLockfile struct {
 type providerLockBuckets struct {
 	Plugin              map[string]portableLockEntry `json:"plugin,omitempty"`
 	Authentication      map[string]portableLockEntry `json:"authentication,omitempty"`
-	LegacyAuth          map[string]portableLockEntry `json:"auth,omitempty"`
 	Authorization       map[string]portableLockEntry `json:"authorization,omitempty"`
 	ExternalCredentials map[string]portableLockEntry `json:"externalCredentials,omitempty"`
 	IndexedDB           map[string]portableLockEntry `json:"indexeddb,omitempty"`
@@ -83,8 +82,6 @@ func normalizeLockfile(lock *Lockfile) *Lockfile {
 	if lock == nil {
 		return newLockfile()
 	}
-	lock.Authentication = mergeLockEntries(lock.Authentication, lock.LegacyAuth)
-	lock.LegacyAuth = nil
 	if lock.Version == 0 {
 		lock.Version = LockVersion
 	}
@@ -131,44 +128,6 @@ func normalizeLockfile(lock *Lockfile) *Lockfile {
 		lock.UIs = make(map[string]LockUIEntry)
 	}
 	return lock
-}
-
-func mergeLockEntries(primary, legacy map[string]LockEntry) map[string]LockEntry {
-	switch {
-	case primary == nil && legacy == nil:
-		return nil
-	case primary == nil:
-		return maps.Clone(legacy)
-	case legacy == nil:
-		return primary
-	default:
-		for name := range legacy {
-			if _, exists := primary[name]; exists {
-				continue
-			}
-			primary[name] = legacy[name]
-		}
-		return primary
-	}
-}
-
-func mergePortableLockEntries(primary, legacy map[string]portableLockEntry) map[string]portableLockEntry {
-	switch {
-	case primary == nil && legacy == nil:
-		return nil
-	case primary == nil:
-		return maps.Clone(legacy)
-	case legacy == nil:
-		return primary
-	default:
-		for name, entry := range legacy {
-			if _, exists := primary[name]; exists {
-				continue
-			}
-			primary[name] = entry
-		}
-		return primary
-	}
 }
 
 func providerLockKinds() []string {
@@ -259,7 +218,7 @@ func (lock *providerLockfile) toLockfile() *Lockfile {
 		return runtimeLock
 	}
 	runtimeLock.Providers = lockEntriesFromPortableEntries(lock.Providers.Plugin)
-	runtimeLock.Authentication = lockEntriesFromPortableEntries(mergePortableLockEntries(lock.Providers.Authentication, lock.Providers.LegacyAuth))
+	runtimeLock.Authentication = lockEntriesFromPortableEntries(lock.Providers.Authentication)
 	runtimeLock.Authorization = lockEntriesFromPortableEntries(lock.Providers.Authorization)
 	runtimeLock.ExternalCredentials = lockEntriesFromPortableEntries(lock.Providers.ExternalCredentials)
 	runtimeLock.IndexedDBs = lockEntriesFromPortableEntries(lock.Providers.IndexedDB)
