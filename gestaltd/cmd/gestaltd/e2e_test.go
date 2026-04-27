@@ -1660,6 +1660,44 @@ func startCommandAndWaitReadyAndFile(t *testing.T, cmd *exec.Cmd, baseURL, requi
 	}
 }
 
+func waitForHTTPBody(t *testing.T, client *http.Client, url, wantBody string) string {
+	t.Helper()
+
+	tick := time.NewTicker(250 * time.Millisecond)
+	defer tick.Stop()
+	timeout := time.After(60 * time.Second)
+	var lastStatus int
+	var lastBody string
+	var lastErr error
+	for {
+		select {
+		case <-timeout:
+			if lastErr != nil {
+				t.Fatalf("GET %s did not become ready within 60 seconds; last error: %v", url, lastErr)
+			}
+			t.Fatalf("GET %s did not return expected body within 60 seconds; last status=%d body=%s", url, lastStatus, lastBody)
+		case <-tick.C:
+			resp, err := client.Get(url)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			body, readErr := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			if readErr != nil {
+				lastErr = readErr
+				continue
+			}
+			lastErr = nil
+			lastStatus = resp.StatusCode
+			lastBody = string(body)
+			if resp.StatusCode == http.StatusOK && strings.Contains(lastBody, wantBody) {
+				return lastBody
+			}
+		}
+	}
+}
+
 func startGestaltdWithConfig(t *testing.T, cfgPath string) string {
 	t.Helper()
 	return startGestaltdWithConfigs(t, []string{cfgPath}, false)
@@ -1767,18 +1805,7 @@ func TestE2EProviderDevAutoMountsOwnedUI(t *testing.T) {
 	startCommandAndWaitReady(t, cmd, baseURL)
 
 	client := &http.Client{Timeout: 2 * time.Second}
-	uiResp, err := client.Get(baseURL + "/provider/sync")
-	if err != nil {
-		t.Fatalf("GET /provider/sync: %v", err)
-	}
-	defer func() { _ = uiResp.Body.Close() }()
-	uiBody, _ := io.ReadAll(uiResp.Body)
-	if uiResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /provider/sync 200, got %d: %s", uiResp.StatusCode, uiBody)
-	}
-	if !strings.Contains(string(uiBody), "Roadmap Review UI") {
-		t.Fatalf("expected owned ui body marker, got: %s", uiBody)
-	}
+	_ = waitForHTTPBody(t, client, baseURL+"/provider/sync", "Roadmap Review UI")
 
 	integrationsResp, err := client.Get(baseURL + "/api/v1/integrations")
 	if err != nil {
@@ -1826,18 +1853,7 @@ func TestE2EProviderDevServesSourceUI(t *testing.T) {
 	startCommandAndWaitReady(t, cmd, baseURL)
 
 	client := &http.Client{Timeout: 2 * time.Second}
-	uiResp, err := client.Get(baseURL + "/roadmap_review/sync")
-	if err != nil {
-		t.Fatalf("GET /roadmap_review/sync: %v", err)
-	}
-	defer func() { _ = uiResp.Body.Close() }()
-	uiBody, _ := io.ReadAll(uiResp.Body)
-	if uiResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /roadmap_review/sync 200, got %d: %s", uiResp.StatusCode, uiBody)
-	}
-	if !strings.Contains(string(uiBody), "Roadmap Review UI") {
-		t.Fatalf("expected direct ui body marker, got: %s", uiBody)
-	}
+	_ = waitForHTTPBody(t, client, baseURL+"/roadmap_review/sync", "Roadmap Review UI")
 }
 
 func TestE2EProviderDevAutoMountsSiblingUIForPlugin(t *testing.T) {
@@ -1864,18 +1880,7 @@ func TestE2EProviderDevAutoMountsSiblingUIForPlugin(t *testing.T) {
 	startCommandAndWaitReady(t, cmd, baseURL)
 
 	client := &http.Client{Timeout: 2 * time.Second}
-	uiResp, err := client.Get(baseURL + "/provider/sync")
-	if err != nil {
-		t.Fatalf("GET /provider/sync: %v", err)
-	}
-	defer func() { _ = uiResp.Body.Close() }()
-	uiBody, _ := io.ReadAll(uiResp.Body)
-	if uiResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected /provider/sync 200, got %d: %s", uiResp.StatusCode, uiBody)
-	}
-	if !strings.Contains(string(uiBody), "Roadmap Review UI") {
-		t.Fatalf("expected sibling ui body marker, got: %s", uiBody)
-	}
+	_ = waitForHTTPBody(t, client, baseURL+"/provider/sync", "Roadmap Review UI")
 }
 
 //nolint:paralleltest // Uses the default 8080 startup path intentionally.

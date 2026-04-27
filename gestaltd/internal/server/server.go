@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/internal/providerdev"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
@@ -117,6 +118,7 @@ type Server struct {
 	mcpHandler             http.Handler
 	hostServiceRelayTokens *providerhost.HostServiceRelayTokenManager
 	egressProxyTokens      *providerhost.EgressProxyTokenManager
+	providerDevSessions    *providerdev.Manager
 	mountedHTTPBindings    []MountedHTTPBinding
 	mountedUIs             []MountedUI
 	adminRoute             AdminRouteConfig
@@ -162,6 +164,7 @@ type Config struct {
 	Readiness             ReadinessChecker
 	PrometheusMetrics     http.Handler
 	MCPHandler            http.Handler
+	ProviderDevSessions   *providerdev.Manager
 	MountedUIs            []MountedUI
 	Admin                 AdminRouteConfig
 	AdminUIProvider       string
@@ -333,6 +336,7 @@ func New(cfg Config) (*Server, error) {
 		mcpHandler:             cfg.MCPHandler,
 		hostServiceRelayTokens: hostServiceRelayTokens,
 		egressProxyTokens:      egressProxyTokens,
+		providerDevSessions:    cfg.ProviderDevSessions,
 		mountedHTTPBindings:    mountedHTTPBindings,
 		mountedUIs:             mountedUIs,
 		adminRoute:             adminRoute,

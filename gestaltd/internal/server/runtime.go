@@ -114,7 +114,8 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 			}
 			return ""
 		},
-		PrometheusMetrics: result.Telemetry.PrometheusHandler(),
+		PrometheusMetrics:   result.Telemetry.PrometheusHandler(),
+		ProviderDevSessions: result.ProviderDevSessions,
 		Admin: AdminRouteConfig{
 			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),

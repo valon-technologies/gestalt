@@ -5838,6 +5838,42 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 	}
 }
 
+func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
+	t.Parallel()
+
+	env, err := buildProviderDevRuntimeEnv("echoext", &config.ProviderEntry{
+		S3: []string{"main"},
+	}, Deps{
+		BaseURL:       "https://gestalt.example.test",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+		S3: map[string]s3store.Client{
+			"main": &coretesting.StubS3{},
+		},
+	}, "provider-dev-session")
+	if err != nil {
+		t.Fatalf("buildProviderDevRuntimeEnv: %v", err)
+	}
+	t.Cleanup(func() {
+		if env.Cleanup != nil {
+			env.Cleanup()
+		}
+	})
+
+	for _, binding := range []string{"", "main"} {
+		socketEnv := providerhost.S3SocketEnv(binding)
+		if got := env.Env[socketEnv]; got != "tls://gestalt.example.test:443" {
+			t.Fatalf("runtime env %s = %q, want %q", socketEnv, got, "tls://gestalt.example.test:443")
+		}
+		tokenEnv := providerhost.S3SocketTokenEnv(binding)
+		if got := env.Env[tokenEnv]; got == "" {
+			t.Fatalf("runtime env %s is empty, want relay token", tokenEnv)
+		}
+	}
+	if !slices.Contains(env.AllowedHosts, "gestalt.example.test") {
+		t.Fatalf("allowed hosts = %#v, want gestalt.example.test", env.AllowedHosts)
+	}
+}
+
 func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCapability(t *testing.T) {
 	t.Parallel()
 

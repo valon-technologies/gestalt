@@ -29,6 +29,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
+	"github.com/valon-technologies/gestalt/server/internal/providerdev"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
@@ -219,6 +220,7 @@ type Result struct {
 	SecretManager         core.SecretManager
 	Telemetry             core.TelemetryProvider
 	PluginRuntimes        RuntimeInspector
+	ProviderDevSessions   *providerdev.Manager
 
 	pluginRuntimeRegistry *pluginRuntimeRegistry
 	auditClose            func(context.Context) error
@@ -313,6 +315,7 @@ func (r *Result) Close(ctx context.Context) error {
 		authCloseErr,
 		closeAuthorizationProvider(r.AuthorizationProvider),
 		externalCredentialsCloseErr,
+		closeProviderDevSessions(r.ProviderDevSessions),
 		CloseProviders(r.Providers),
 		r.Services.Close(),
 		closeIndexedDBs(r.ExtraIndexedDBs...),
@@ -1016,11 +1019,17 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}
 	prepared.Deps.AgentRuntime.SetRunMetadata(prepared.Services.AgentRunMetadata)
+	providerDevSessions, err := buildProviderDevManager(cfg, providers, prepared.Deps)
+	if err != nil {
+		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		return nil, err
+	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, coredata.EffectiveExternalCredentialProvider(prepared.Services),
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
+		invocation.WithProviderOverrides(providerDevSessions),
 	)
 	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)
 	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
@@ -1112,6 +1121,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		SecretManager:         prepared.SecretManager,
 		Telemetry:             prepared.Telemetry,
 		PluginRuntimes:        prepared.pluginRuntimeRegistry,
+		ProviderDevSessions:   providerDevSessions,
 		pluginRuntimeRegistry: prepared.pluginRuntimeRegistry,
 		auditClose:            auditClose,
 	}, nil

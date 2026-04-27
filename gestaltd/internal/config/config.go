@@ -373,6 +373,7 @@ type ProviderEntry struct {
 	Cache             []string                      `yaml:"cache,omitempty"`
 	S3                []string                      `yaml:"s3,omitempty"`
 	Runtime           *HostedRuntimeConfig          `yaml:"runtime,omitempty"`
+	ProviderDev       bool                          `yaml:"providerDev,omitempty"`
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 	MCP               bool                          `yaml:"mcp,omitempty"`
 
