@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	legacySecretRefPrefix    = "secret://"
 	secretRefTransportPrefix = "__GESTALT_SECRET_REF__:"
 )
 
@@ -22,10 +21,6 @@ type SecretRef struct {
 }
 
 type ConfigStringTransformer func(string) (string, error)
-
-func IsLegacySecretRefString(value string) bool {
-	return strings.HasPrefix(strings.TrimSpace(value), legacySecretRefPrefix)
-}
 
 func EncodeSecretRefTransport(ref SecretRef) string {
 	payload, err := json.Marshal(ref)
@@ -77,11 +72,8 @@ func normalizeSecretRefsNode(node *yaml.Node, path []string, allowSecretRefs boo
 	case yaml.ScalarNode:
 		if node.Tag == "!!str" || node.Tag == "" {
 			value := strings.TrimSpace(node.Value)
-			switch {
-			case strings.HasPrefix(value, secretRefTransportPrefix):
+			if strings.HasPrefix(value, secretRefTransportPrefix) {
 				return fmt.Errorf("parsing config YAML: %s uses reserved internal secret ref syntax", formatSecretRefPath(path))
-			case strings.HasPrefix(value, legacySecretRefPrefix):
-				return fmt.Errorf("parsing config YAML: %s uses legacy secret:// syntax; use secret.provider and secret.name", formatSecretRefPath(path))
 			}
 		}
 		return nil

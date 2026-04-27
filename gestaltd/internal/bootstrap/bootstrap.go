@@ -705,9 +705,6 @@ func ResolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *Fa
 			return "", err
 		}
 		if !ok {
-			if config.IsLegacySecretRefString(val) {
-				return "", fmt.Errorf("legacy secret:// syntax should have been rejected during config load")
-			}
 			return val, nil
 		}
 		resolved, err := resolver.resolve(ref)

@@ -46,41 +46,6 @@ type workflowAgentTargetRequest struct {
 	TimeoutSeconds  int                   `json:"timeoutSeconds,omitempty"`
 }
 
-type legacyWorkflowTargetFieldError struct {
-	field string
-}
-
-func (e *legacyWorkflowTargetFieldError) Error() string {
-	return fmt.Sprintf("workflow target field %q is no longer supported; use target.plugin.%s", e.field, e.field)
-}
-
-func workflowJSONDecodeErrorMessage(err error) string {
-	var legacyTargetErr *legacyWorkflowTargetFieldError
-	if errors.As(err, &legacyTargetErr) {
-		return legacyTargetErr.Error()
-	}
-	return "invalid JSON body"
-}
-
-func (target *workflowScheduleTargetRequest) UnmarshalJSON(data []byte) error {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return fmt.Errorf("invalid workflow target: %w", err)
-	}
-	for _, field := range []string{"operation", "connection", "instance", "input"} {
-		if _, ok := fields[field]; ok {
-			return &legacyWorkflowTargetFieldError{field: field}
-		}
-	}
-	type workflowScheduleTargetRequestAlias workflowScheduleTargetRequest
-	var decoded workflowScheduleTargetRequestAlias
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		return fmt.Errorf("invalid workflow target: %w", err)
-	}
-	*target = workflowScheduleTargetRequest(decoded)
-	return nil
-}
-
 type workflowScheduleUpsertRequest struct {
 	Provider string                        `json:"provider,omitempty"`
 	Cron     string                        `json:"cron"`
@@ -151,7 +116,7 @@ func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 
 	var req workflowScheduleUpsertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, workflowJSONDecodeErrorMessage(err))
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
@@ -194,7 +159,7 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 
 	var req workflowScheduleUpsertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, workflowJSONDecodeErrorMessage(err))
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {

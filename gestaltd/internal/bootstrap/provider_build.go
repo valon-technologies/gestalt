@@ -2106,14 +2106,12 @@ func (unavailableAgentManager) ResolveInteraction(context.Context, *principal.Pr
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func buildPluginScopedIndexedDB(pluginName string, effective config.EffectiveHostIndexedDBBinding, deps Deps) (indexeddb.IndexedDB, error) {
+func buildPluginScopedIndexedDB(_ string, effective config.EffectiveHostIndexedDBBinding, deps Deps) (indexeddb.IndexedDB, error) {
 	return buildScopedIndexedDB(scopedIndexedDBBuildOptions{
-		MetricsName:        effective.ProviderName,
-		ProviderName:       effective.ProviderName,
-		DB:                 effective.DB,
-		AllowedStores:      effective.ObjectStores,
-		LegacyStorePrefix:  legacyPluginIndexedDBPrefix(pluginName),
-		LegacyConfigPrefix: legacyPluginIndexedDBPrefix(pluginName),
+		MetricsName:   effective.ProviderName,
+		ProviderName:  effective.ProviderName,
+		DB:            effective.DB,
+		AllowedStores: effective.ObjectStores,
 	}, deps)
 }
 
@@ -2136,12 +2134,10 @@ func buildAgentScopedIndexedDB(name string, effective config.EffectiveHostIndexe
 }
 
 type scopedIndexedDBBuildOptions struct {
-	MetricsName        string
-	ProviderName       string
-	DB                 string
-	AllowedStores      []string
-	LegacyStorePrefix  string
-	LegacyConfigPrefix string
+	MetricsName   string
+	ProviderName  string
+	DB            string
+	AllowedStores []string
 }
 
 func buildScopedIndexedDB(opts scopedIndexedDBBuildOptions, deps Deps) (indexeddb.IndexedDB, error) {
@@ -2150,8 +2146,7 @@ func buildScopedIndexedDB(opts scopedIndexedDBBuildOptions, deps Deps) (indexedd
 		return nil, fmt.Errorf("indexeddb %q is not available", opts.ProviderName)
 	}
 	scopedDef, transportPrefix, err := newScopedIndexedDBDef(def, scopedIndexedDBDefOptions{
-		DB:                 opts.DB,
-		LegacyConfigPrefix: opts.LegacyConfigPrefix,
+		DB: opts.DB,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("indexeddb %q: %w", opts.ProviderName, err)
@@ -2161,16 +2156,14 @@ func buildScopedIndexedDB(opts scopedIndexedDBBuildOptions, deps Deps) (indexedd
 		return nil, fmt.Errorf("indexeddb %q: %w", opts.ProviderName, err)
 	}
 	ds = newPluginIndexedDBTransport(ds, pluginIndexedDBTransportOptions{
-		StorePrefix:       transportPrefix,
-		LegacyStorePrefix: opts.LegacyStorePrefix,
-		AllowedStores:     opts.AllowedStores,
+		StorePrefix:   transportPrefix,
+		AllowedStores: opts.AllowedStores,
 	})
 	return metricutil.InstrumentIndexedDB(ds, opts.MetricsName), nil
 }
 
 type scopedIndexedDBDefOptions struct {
-	DB                 string
-	LegacyConfigPrefix string
+	DB string
 }
 
 func newScopedIndexedDBDef(entry *config.ProviderEntry, opts scopedIndexedDBDefOptions) (*config.ProviderEntry, string, error) {
@@ -2187,13 +2180,6 @@ func newScopedIndexedDBDef(entry *config.ProviderEntry, opts scopedIndexedDBDefO
 
 	transportPrefix := ""
 	if pluginIndexedDBUsesScopedProviderConfig(entry, cfg) {
-		if opts.LegacyConfigPrefix != "" {
-			cfg["legacy_table_prefix"] = opts.LegacyConfigPrefix
-		} else {
-			delete(cfg, "legacy_table_prefix")
-		}
-		delete(cfg, "legacy_prefix")
-		delete(cfg, "namespace")
 		if isSQLiteIndexedDBConfig(cfg) {
 			delete(cfg, "schema")
 			cfg["table_prefix"] = opts.DB + "_"
@@ -2247,14 +2233,6 @@ func isRelationalIndexedDBEntry(entry *config.ProviderEntry) bool {
 			strings.HasSuffix(path, "/relationaldb/manifest.yaml")
 	}
 	return false
-}
-
-func legacyPluginIndexedDBPrefix(pluginName string) string {
-	pluginName = strings.TrimSpace(pluginName)
-	if pluginName == "" {
-		return ""
-	}
-	return "plugin_" + pluginName + "_"
 }
 
 func isSQLiteIndexedDBConfig(cfg map[string]any) bool {

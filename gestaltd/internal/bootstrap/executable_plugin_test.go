@@ -8205,33 +8205,24 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 		"postgres": {
 			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 			Config: mustNode(t, map[string]any{
-				"dsn":                 "postgres://db.example.test/gestalt",
-				"schema":              "host_schema",
-				"namespace":           "host_schema_alias_should_be_removed",
-				"legacy_table_prefix": "host_legacy_should_be_replaced_",
-				"legacy_prefix":       "host_legacy_alias_should_be_removed_",
+				"dsn":    "postgres://db.example.test/gestalt",
+				"schema": "host_schema",
 			}),
 		},
 		"sqlite": {
 			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 			Config: mustNode(t, map[string]any{
-				"dsn":                 "sqlite://plugin-state.db",
-				"table_prefix":        "host_",
-				"prefix":              "host_",
-				"schema":              "should_be_removed",
-				"namespace":           "should_be_removed",
-				"legacy_table_prefix": "host_legacy_should_be_replaced_",
-				"legacy_prefix":       "host_legacy_alias_should_be_removed_",
+				"dsn":          "sqlite://plugin-state.db",
+				"table_prefix": "host_",
+				"prefix":       "host_",
+				"schema":       "should_be_removed",
 			}),
 		},
 		"local-postgres": {
 			Source: config.ProviderSource{Path: "./relationaldb/manifest.yaml"},
 			Config: mustNode(t, map[string]any{
-				"dsn":                 "postgres://local.example.test/gestalt",
-				"schema":              "host_local",
-				"namespace":           "host_local_alias_should_be_removed",
-				"legacy_table_prefix": "host_local_legacy_should_be_replaced_",
-				"legacy_prefix":       "host_local_legacy_alias_should_be_removed_",
+				"dsn":    "postgres://local.example.test/gestalt",
+				"schema": "host_local",
 			}),
 		},
 	}
@@ -8322,16 +8313,6 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 					t.Fatalf("prefix should be removed, got %#v", cfg.Config["prefix"])
 				}
 			}
-			if _, ok := cfg.Config["namespace"]; ok {
-				t.Fatalf("namespace should be removed, got %#v", cfg.Config["namespace"])
-			}
-			if got := cfg.Config["legacy_table_prefix"]; got != "plugin_echoext_" {
-				t.Fatalf("legacy_table_prefix = %#v, want %q", got, "plugin_echoext_")
-			}
-			if _, ok := cfg.Config["legacy_prefix"]; ok {
-				t.Fatalf("legacy_prefix should be removed, got %#v", cfg.Config["legacy_prefix"])
-			}
-
 			_ = CloseProviders(providers)
 			providers = nil
 			if got := closeCount.Load(); got != 1 {
@@ -8512,9 +8493,8 @@ func TestPluginIndexedDBRouteObjectStoresWithoutTransportPrefix(t *testing.T) {
 			"postgres": {
 				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 				Config: mustNode(t, map[string]any{
-					"dsn":                 "postgres://db.example.test/gestalt",
-					"schema":              "host_schema",
-					"legacy_table_prefix": "host_legacy_",
+					"dsn":    "postgres://db.example.test/gestalt",
+					"schema": "host_schema",
 				}),
 			},
 		},
@@ -8557,9 +8537,6 @@ func TestPluginIndexedDBRouteObjectStoresWithoutTransportPrefix(t *testing.T) {
 	if _, err := boundDB.ObjectStore("roadmap_tasks").Get(context.Background(), "task-1"); err == nil {
 		t.Fatal("transport-prefixed backing store should remain empty when scoped provider config is used")
 	}
-	if _, err := boundDB.ObjectStore("plugin_echoext_tasks").Get(context.Background(), "task-1"); err == nil {
-		t.Fatal("legacy transport-prefixed backing store should remain empty when scoped provider config is used")
-	}
 
 	if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
 		"store": "events",
@@ -8573,92 +8550,6 @@ func TestPluginIndexedDBRouteObjectStoresWithoutTransportPrefix(t *testing.T) {
 	providers = nil
 	if got := closeCount.Load(); got != 1 {
 		t.Fatalf("closeCount after provider shutdown = %d, want 1", got)
-	}
-}
-
-func TestPluginIndexedDBPreserveLegacyTransportPrefixedData(t *testing.T) {
-	t.Parallel()
-
-	bin := buildEchoPluginBinary(t)
-	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "echoext",
-		Operations: []catalog.CatalogOperation{
-			{
-				ID:     "indexeddb_roundtrip",
-				Method: http.MethodPost,
-				Parameters: []catalog.CatalogParameter{
-					{Name: "store", Type: "string", Required: true},
-					{Name: "id", Type: "string", Required: true},
-					{Name: "value", Type: "string", Required: true},
-				},
-			},
-		},
-	})
-	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-
-	var boundDB *trackedIndexedDB
-	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
-		Plugins: map[string]*config.ProviderEntry{
-			"echoext": {
-				Command:              bin,
-				Args:                 []string{"provider"},
-				ResolvedManifest:     manifest,
-				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				IndexedDB: &config.HostIndexedDBBindingConfig{
-					Provider:     "memory",
-					DB:           "roadmap",
-					ObjectStores: []string{"tasks"},
-				},
-			},
-		},
-	}, NewFactoryRegistry(), Deps{
-		SelectedIndexedDBName: "memory",
-		IndexedDBDefs: map[string]*config.ProviderEntry{
-			"memory": {
-				Source: config.ProviderSource{Path: "./providers/datastore/memory"},
-				Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
-			},
-		},
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
-			boundDB = &trackedIndexedDB{StubIndexedDB: coretesting.StubIndexedDB{}}
-			return boundDB, nil
-		},
-	})
-	if err != nil {
-		t.Fatalf("buildProvidersStrict: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseProviders(providers) })
-
-	if err := boundDB.CreateObjectStore(context.Background(), "plugin_echoext_tasks", indexeddb.ObjectStoreSchema{}); err != nil {
-		t.Fatalf("CreateObjectStore legacy tasks: %v", err)
-	}
-	if err := boundDB.ObjectStore("plugin_echoext_tasks").Put(context.Background(), indexeddb.Record{
-		"id":    "legacy-task",
-		"value": "already-there",
-	}); err != nil {
-		t.Fatalf("Put legacy task: %v", err)
-	}
-
-	prov, err := providers.Get("echoext")
-	if err != nil {
-		t.Fatalf("providers.Get: %v", err)
-	}
-	if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
-		"store": "tasks",
-		"id":    "task-1",
-		"value": "ship-it",
-	}, ""); err != nil {
-		t.Fatalf("Execute indexeddb_roundtrip: %v", err)
-	}
-
-	if _, err := boundDB.ObjectStore("plugin_echoext_tasks").Get(context.Background(), "task-1"); err != nil {
-		t.Fatalf("legacy backing store should receive new writes: %v", err)
-	}
-	if _, err := boundDB.ObjectStore("plugin_echoext_tasks").Get(context.Background(), "legacy-task"); err != nil {
-		t.Fatalf("legacy backing store should keep old rows: %v", err)
-	}
-	if _, err := boundDB.ObjectStore("roadmap_tasks").Get(context.Background(), "task-1"); err == nil {
-		t.Fatal("new transport-prefixed store should remain unused while only legacy data exists")
 	}
 }
 

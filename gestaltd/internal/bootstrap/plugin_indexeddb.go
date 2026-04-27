@@ -2,23 +2,20 @@ package bootstrap
 
 import (
 	"context"
-	"errors"
-	"sync"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
 type pluginIndexedDBTransportOptions struct {
-	StorePrefix       string
-	LegacyStorePrefix string
-	AllowedStores     []string
+	StorePrefix   string
+	AllowedStores []string
 }
 
 func newPluginIndexedDBTransport(ds indexeddb.IndexedDB, opts pluginIndexedDBTransportOptions) indexeddb.IndexedDB {
 	if ds == nil {
 		return nil
 	}
-	needsStoreTranslation := opts.StorePrefix != "" || opts.LegacyStorePrefix != ""
+	needsStoreTranslation := opts.StorePrefix != ""
 	needsStoreFiltering := len(opts.AllowedStores) > 0
 	if !needsStoreTranslation && !needsStoreFiltering {
 		return ds
@@ -31,81 +28,52 @@ func newPluginIndexedDBTransport(ds indexeddb.IndexedDB, opts pluginIndexedDBTra
 		allowed = nil
 	}
 	return &pluginIndexedDBTransport{
-		inner:        ds,
-		prefix:       opts.StorePrefix,
-		legacyPrefix: opts.LegacyStorePrefix,
-		allowed:      allowed,
-		resolved:     make(map[string]string),
+		inner:   ds,
+		prefix:  opts.StorePrefix,
+		allowed: allowed,
 	}
 }
 
 type pluginIndexedDBTransport struct {
-	inner        indexeddb.IndexedDB
-	prefix       string
-	legacyPrefix string
-	allowed      map[string]struct{}
-	mu           sync.RWMutex
-	resolved     map[string]string
+	inner   indexeddb.IndexedDB
+	prefix  string
+	allowed map[string]struct{}
 }
 
-func (d *pluginIndexedDBTransport) translateStore(name string) (string, string, error) {
+func (d *pluginIndexedDBTransport) translateStore(name string) (string, error) {
 	if len(d.allowed) > 0 {
 		if _, ok := d.allowed[name]; !ok {
-			return "", "", indexeddb.ErrNotFound
+			return "", indexeddb.ErrNotFound
 		}
 	}
-	return d.prefix + name, d.legacyPrefix + name, nil
+	return d.prefix + name, nil
 }
 
 func (d *pluginIndexedDBTransport) ObjectStore(name string) indexeddb.ObjectStore {
-	primary, legacy, err := d.translateStore(name)
+	storeName, err := d.translateStore(name)
 	if err != nil {
 		return missingObjectStore{}
 	}
 	return &pluginIndexedDBObjectStore{
 		transport: d,
-		name:      name,
-		primary:   primary,
-		legacy:    legacy,
+		storeName: storeName,
 	}
 }
 
 func (d *pluginIndexedDBTransport) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
-	primary, legacy, err := d.translateStore(name)
+	storeName, err := d.translateStore(name)
 	if err != nil {
 		return err
 	}
-	storeName, exists, err := resolveActiveStoreName(ctx, d.inner, primary, legacy)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		storeName = primary
-	}
-	if err := d.inner.CreateObjectStore(ctx, storeName, schema); err != nil {
-		return err
-	}
-	d.cacheResolvedStore(name, storeName)
-	return nil
+	return d.inner.CreateObjectStore(ctx, storeName, schema)
 }
 
 func (d *pluginIndexedDBTransport) DeleteObjectStore(ctx context.Context, name string) error {
-	primary, legacy, err := d.translateStore(name)
+	storeName, err := d.translateStore(name)
 	if err != nil {
 		return err
 	}
-	storeName, exists, err := resolveActiveStoreName(ctx, d.inner, primary, legacy)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		storeName = primary
-	}
-	if err := d.inner.DeleteObjectStore(ctx, storeName); err != nil {
-		return err
-	}
-	d.clearResolvedStore(name)
-	return nil
+	return d.inner.DeleteObjectStore(ctx, storeName)
 }
 
 func (d *pluginIndexedDBTransport) Ping(ctx context.Context) error {
@@ -118,17 +86,11 @@ func (d *pluginIndexedDBTransport) Close() error {
 
 type pluginIndexedDBObjectStore struct {
 	transport *pluginIndexedDBTransport
-	name      string
-	primary   string
-	legacy    string
+	storeName string
 }
 
 func (s *pluginIndexedDBObjectStore) resolve(ctx context.Context) (indexeddb.ObjectStore, error) {
-	storeName, err := s.transport.resolveStoreName(ctx, s.name, s.primary, s.legacy)
-	if err != nil {
-		return nil, err
-	}
-	return s.transport.inner.ObjectStore(storeName), nil
+	return s.transport.inner.ObjectStore(s.storeName), nil
 }
 
 func (s *pluginIndexedDBObjectStore) Get(ctx context.Context, id string) (indexeddb.Record, error) {
@@ -309,80 +271,6 @@ func (i *pluginIndexedDBIndex) OpenKeyCursor(ctx context.Context, r *indexeddb.K
 		return nil, err
 	}
 	return index.OpenKeyCursor(ctx, r, dir, values...)
-}
-
-func (d *pluginIndexedDBTransport) resolveStoreName(ctx context.Context, name, primary, legacy string) (string, error) {
-	if storeName, ok := d.cachedResolvedStore(name); ok {
-		return storeName, nil
-	}
-	storeName, exists, err := resolveActiveStoreName(ctx, d.inner, primary, legacy)
-	if err != nil {
-		return "", err
-	}
-	if exists {
-		d.cacheResolvedStore(name, storeName)
-		return storeName, nil
-	}
-	return primary, nil
-}
-
-func (d *pluginIndexedDBTransport) cachedResolvedStore(name string) (string, bool) {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	storeName, ok := d.resolved[name]
-	return storeName, ok
-}
-
-func (d *pluginIndexedDBTransport) cacheResolvedStore(name, storeName string) {
-	if storeName == "" {
-		return
-	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.resolved[name] = storeName
-}
-
-func (d *pluginIndexedDBTransport) clearResolvedStore(name string) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	delete(d.resolved, name)
-}
-
-func resolveActiveStoreName(ctx context.Context, db indexeddb.IndexedDB, primary, legacy string) (string, bool, error) {
-	if exists, err := storeExists(ctx, db, primary); err != nil {
-		return "", false, err
-	} else if exists {
-		return primary, true, nil
-	}
-	if legacy != "" && legacy != primary {
-		if exists, err := storeExists(ctx, db, legacy); err != nil {
-			return "", false, err
-		} else if exists {
-			return legacy, true, nil
-		}
-	}
-	return primary, false, nil
-}
-
-func storeExists(ctx context.Context, db indexeddb.IndexedDB, storeName string) (bool, error) {
-	if storeName == "" {
-		return false, nil
-	}
-	type objectStoreExistenceChecker interface {
-		HasObjectStore(name string) bool
-	}
-	if checker, ok := db.(objectStoreExistenceChecker); ok {
-		return checker.HasObjectStore(storeName), nil
-	}
-	_, err := db.ObjectStore(storeName).Count(ctx, nil)
-	switch {
-	case err == nil:
-		return true, nil
-	case errors.Is(err, indexeddb.ErrNotFound):
-		return false, nil
-	default:
-		return false, err
-	}
 }
 
 type missingObjectStore struct{}
