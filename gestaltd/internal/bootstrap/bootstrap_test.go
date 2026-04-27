@@ -3323,9 +3323,10 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		}
 		return boundDB, nil
 	}
+	workflowProvider := &recordingWorkflowProvider{}
 	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
 		hostEnv = append([]providerhost.HostService(nil), hostServices...)
-		return &stubWorkflowProvider{}, nil
+		return workflowProvider, nil
 	}
 
 	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
@@ -3348,6 +3349,29 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 	}
 	if indexedDBHost.EnvVar == "" {
 		t.Fatal("missing workflow indexeddb host service")
+	}
+
+	provider, err := result.WorkflowControl.ResolveProvider("basic")
+	if err != nil {
+		t.Fatalf("ResolveProvider(basic): %v", err)
+	}
+	executionRefs, ok := provider.(coreworkflow.ExecutionReferenceStore)
+	if !ok {
+		t.Fatal("workflow provider with indexeddb cleanup does not preserve execution reference store")
+	}
+	if _, err := executionRefs.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:           "workflow_schedule:sched-test:ref-test",
+		ProviderName: "basic",
+		Target: coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "sync",
+		},
+		SubjectID: "user:ada",
+	}); err != nil {
+		t.Fatalf("PutExecutionReference: %v", err)
+	}
+	if _, err := workflowProvider.GetExecutionReference(context.Background(), "workflow_schedule:sched-test:ref-test"); err != nil {
+		t.Fatalf("underlying workflow provider missing execution ref: %v", err)
 	}
 
 	withIndexedDBHostClient(t, indexedDBHost, func(client proto.IndexedDBClient) {
