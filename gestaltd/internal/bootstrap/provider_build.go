@@ -1732,7 +1732,7 @@ func isLoopbackAllowedHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func buildPluginIndexedDBHostServices(pluginName string, effective config.EffectivePluginIndexedDB, deps Deps) ([]providerhost.HostService, func(), error) {
+func buildPluginIndexedDBHostServices(pluginName string, effective config.EffectiveHostIndexedDBBinding, deps Deps) ([]providerhost.HostService, func(), error) {
 	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
 		return nil, nil, fmt.Errorf("indexeddb host services are not available")
 	}
@@ -1834,7 +1834,7 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 	return hostServices, nil
 }
 
-func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveWorkflowIndexedDB, deps Deps) ([]providerhost.HostService, func(), error) {
+func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveHostIndexedDBBinding, deps Deps) ([]providerhost.HostService, func(), error) {
 	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
 		return nil, nil, fmt.Errorf("indexeddb host services are not available")
 	}
@@ -1858,7 +1858,7 @@ func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveW
 	}, nil
 }
 
-func buildAgentIndexedDBHostServices(name string, effective config.EffectiveAgentIndexedDB, deps Deps) ([]providerhost.HostService, func(), error) {
+func buildAgentIndexedDBHostServices(name string, effective config.EffectiveHostIndexedDBBinding, deps Deps) ([]providerhost.HostService, func(), error) {
 	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
 		return nil, nil, fmt.Errorf("indexeddb host services are not available")
 	}
@@ -2075,7 +2075,7 @@ func (unavailableAgentManager) ResolveInteraction(context.Context, *principal.Pr
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func buildPluginScopedIndexedDB(pluginName string, effective config.EffectivePluginIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {
+func buildPluginScopedIndexedDB(pluginName string, effective config.EffectiveHostIndexedDBBinding, deps Deps) (indexeddb.IndexedDB, error) {
 	return buildScopedIndexedDB(scopedIndexedDBBuildOptions{
 		MetricsName:        effective.ProviderName,
 		ProviderName:       effective.ProviderName,
@@ -2086,7 +2086,7 @@ func buildPluginScopedIndexedDB(pluginName string, effective config.EffectivePlu
 	}, deps)
 }
 
-func buildWorkflowScopedIndexedDB(name string, effective config.EffectiveWorkflowIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {
+func buildWorkflowScopedIndexedDB(name string, effective config.EffectiveHostIndexedDBBinding, deps Deps) (indexeddb.IndexedDB, error) {
 	return buildScopedIndexedDB(scopedIndexedDBBuildOptions{
 		MetricsName:   name,
 		ProviderName:  effective.ProviderName,
@@ -2095,7 +2095,7 @@ func buildWorkflowScopedIndexedDB(name string, effective config.EffectiveWorkflo
 	}, deps)
 }
 
-func buildAgentScopedIndexedDB(name string, effective config.EffectiveAgentIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {
+func buildAgentScopedIndexedDB(name string, effective config.EffectiveHostIndexedDBBinding, deps Deps) (indexeddb.IndexedDB, error) {
 	return buildScopedIndexedDB(scopedIndexedDBBuildOptions{
 		MetricsName:   name,
 		ProviderName:  effective.ProviderName,
