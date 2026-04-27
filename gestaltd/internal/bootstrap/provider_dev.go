@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -21,43 +22,122 @@ func buildProviderDevManager(cfg *config.Config, providers *registry.ProviderMap
 
 	targets := make([]providerdev.Target, 0, len(cfg.Plugins))
 	for name, entry := range cfg.Plugins {
-		if entry == nil || !entry.HasResolvedManifest() {
-			continue
-		}
-		if _, err := providers.Get(name); err != nil {
-			continue
-		}
-		spec, _, err := buildStartupProviderSpec(name, entry)
-		if err != nil {
-			if !providerDevEntryIsLocal(entry) {
-				slog.Warn("skipping provider dev target", "provider", name, "error", err)
-				continue
+		result := deriveProviderDevTarget(name, entry, providers, deps)
+		switch result.state {
+		case providerDevTargetAttachable:
+			targets = append(targets, result.target)
+		case providerDevTargetUnsupported:
+			if result.err != nil {
+				slog.Debug("skipping provider dev target", "provider", name, "reason", result.reason, "error", result.err)
+			} else {
+				slog.Debug("skipping provider dev target", "provider", name, "reason", result.reason)
 			}
-			return nil, fmt.Errorf("provider dev target %q: %w", name, err)
+		case providerDevTargetInvalid:
+			return nil, fmt.Errorf("provider dev target %q: %w", name, result.err)
 		}
-		pluginConfig, err := config.NodeToMap(entry.Config)
-		if err != nil {
-			if !providerDevEntryIsLocal(entry) {
-				slog.Warn("skipping provider dev target config", "provider", name, "error", err)
-				continue
-			}
-			return nil, fmt.Errorf("provider dev target %q config: %w", name, err)
-		}
-		targetName := name
-		targetEntry := entry
-		targets = append(targets, providerdev.Target{
-			Name:   targetName,
-			Spec:   spec,
-			Config: pluginConfig,
-			RuntimeEnv: func(sessionID string) (providerdev.RuntimeEnv, error) {
-				return buildProviderDevRuntimeEnv(targetName, targetEntry, deps, sessionID)
-			},
-		})
 	}
 	if len(targets) == 0 {
 		return nil, nil
 	}
 	return providerdev.NewManager(targets)
+}
+
+type providerDevTargetState int
+
+const (
+	providerDevTargetUnsupported providerDevTargetState = iota
+	providerDevTargetAttachable
+	providerDevTargetInvalid
+)
+
+type providerDevTargetResult struct {
+	state  providerDevTargetState
+	target providerdev.Target
+	reason string
+	err    error
+}
+
+func deriveProviderDevTarget(name string, entry *config.ProviderEntry, providers *registry.ProviderMap[core.Provider], deps Deps) providerDevTargetResult {
+	if entry == nil {
+		return providerDevTargetResult{state: providerDevTargetUnsupported, reason: "missing config entry"}
+	}
+	if !entry.HasResolvedManifest() {
+		return providerDevTargetResult{state: providerDevTargetUnsupported, reason: "manifest is not resolved"}
+	}
+	if providers == nil {
+		if providerDevEntryIsLocal(entry) {
+			return providerDevTargetResult{state: providerDevTargetInvalid, err: errors.New("provider registry is unavailable")}
+		}
+		return providerDevTargetResult{state: providerDevTargetUnsupported, reason: "provider registry is unavailable"}
+	}
+	provider, err := providers.Get(name)
+	if err != nil {
+		if providerDevEntryIsLocal(entry) {
+			return providerDevTargetResult{state: providerDevTargetInvalid, err: fmt.Errorf("provider is not registered: %w", err)}
+		}
+		return providerDevTargetResult{state: providerDevTargetUnsupported, reason: "provider is not registered", err: err}
+	}
+	if provider == nil {
+		if providerDevEntryIsLocal(entry) {
+			return providerDevTargetResult{state: providerDevTargetInvalid, err: errors.New("provider is nil")}
+		}
+		return providerDevTargetResult{state: providerDevTargetUnsupported, reason: "provider is nil"}
+	}
+	pluginConfig, err := config.NodeToMap(entry.Config)
+	if err != nil {
+		if providerDevEntryIsLocal(entry) {
+			return providerDevTargetResult{state: providerDevTargetInvalid, err: fmt.Errorf("config: %w", err)}
+		}
+		return providerDevTargetResult{state: providerDevTargetUnsupported, reason: "config cannot be converted", err: err}
+	}
+
+	targetName := name
+	targetEntry := entry
+	return providerDevTargetResult{
+		state: providerDevTargetAttachable,
+		target: providerdev.Target{
+			Name:   targetName,
+			Spec:   providerDevStaticSpecFromProvider(targetName, entry, provider),
+			Config: pluginConfig,
+			RuntimeEnv: func(sessionID string) (providerdev.RuntimeEnv, error) {
+				return buildProviderDevRuntimeEnv(targetName, targetEntry, deps, sessionID)
+			},
+		},
+	}
+}
+
+func providerDevStaticSpecFromProvider(name string, entry *config.ProviderEntry, provider core.Provider) providerhost.StaticProviderSpec {
+	meta := resolveProviderMetadata(entry)
+	spec := providerhost.StaticProviderSpec{
+		Name:             name,
+		DisplayName:      provider.DisplayName(),
+		Description:      provider.Description(),
+		IconSVG:          meta.iconSVG,
+		ConnectionMode:   provider.ConnectionMode(),
+		AuthTypes:        slices.Clone(provider.AuthTypes()),
+		ConnectionParams: maps.Clone(provider.ConnectionParamDefs()),
+		CredentialFields: slices.Clone(provider.CredentialFields()),
+		DiscoveryConfig:  cloneProviderDevDiscoveryConfig(provider.DiscoveryConfig()),
+	}
+	if spec.DisplayName == "" {
+		spec.DisplayName = name
+	}
+	if cat := provider.Catalog(); cat != nil {
+		if spec.IconSVG == "" {
+			spec.IconSVG = cat.IconSVG
+		}
+		spec.Catalog = cat.Clone()
+	}
+	return spec
+}
+
+func cloneProviderDevDiscoveryConfig(discovery *core.DiscoveryConfig) *core.DiscoveryConfig {
+	if discovery == nil {
+		return nil
+	}
+	out := *discovery
+	out.Metadata = maps.Clone(discovery.Metadata)
+	return &out
 }
 
 func providerDevEntryIsLocal(entry *config.ProviderEntry) bool {
