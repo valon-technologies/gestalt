@@ -37,11 +37,9 @@ type AccessPermission struct {
 
 type APIToken struct {
 	ID                  string
-	IdentityID          string
 	OwnerKind           string
 	OwnerID             string
 	CredentialSubjectID string
-	TokenKind           string
 	Name                string
 	HashedToken         string
 	Scopes              string
@@ -54,99 +52,6 @@ type APIToken struct {
 const (
 	APITokenOwnerKindUser = "user"
 )
-
-const (
-	APITokenKindAPI = "api"
-)
-
-type Identity struct {
-	ID                  string
-	Status              string
-	DisplayName         string
-	CreatedByIdentityID string
-	MetadataJSON        string
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
-}
-
-type IdentityAuthBinding struct {
-	ID          string
-	IdentityID  string
-	BindingKind string
-	Authority   string
-	LookupKey   string
-	BindingJSON string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
-
-const (
-	IdentityAuthBindingKindOIDCSubject          = "oidc_subject"
-	IdentityAuthBindingKindEmail                = "email"
-	IdentityAuthBindingKindSPIFFE               = "spiffe"
-	IdentityAuthBindingKindKubernetesServiceAcc = "kubernetes_serviceaccount"
-)
-
-const (
-	IdentityManagementRoleViewer = "viewer"
-	IdentityManagementRoleEditor = "editor"
-	IdentityManagementRoleAdmin  = "admin"
-)
-
-type IdentityManagementGrant struct {
-	ID                string
-	ManagerIdentityID string
-	TargetIdentityID  string
-	Role              string
-	ExpiresAt         *time.Time
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-}
-
-const (
-	WorkspaceRoleAdmin    = "admin"
-	WorkspaceRoleOperator = "operator"
-)
-
-type WorkspaceRole struct {
-	ID         string
-	IdentityID string
-	Role       string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-}
-
-type IdentityPluginAccess struct {
-	ID                  string
-	IdentityID          string
-	Plugin              string
-	InvokeAllOperations bool
-	Operations          []string
-	ExpiresAt           *time.Time
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
-}
-
-type IdentityDelegation struct {
-	ID               string
-	ActorIdentityID  string
-	TargetIdentityID string
-	Plugin           string
-	ExpiresAt        *time.Time
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
-type APITokenAccess struct {
-	ID                  string
-	TokenID             string
-	Plugin              string
-	InvokeAllOperations bool
-	Operations          []string
-	ExpiresAt           *time.Time
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
-}
 
 type UserIdentity struct {
 	Email       string

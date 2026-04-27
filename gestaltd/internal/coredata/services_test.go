@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -277,111 +276,6 @@ func TestNew(t *testing.T) {
 		}
 	})
 
-	t.Run("backfills_one_canonical_identity_for_case_insensitive_duplicate_legacy_users", func(t *testing.T) {
-		t.Parallel()
-
-		db := &coretesting.StubIndexedDB{}
-		ctx := context.Background()
-		older := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-		newer := older.Add(time.Hour)
-		if err := db.ObjectStore(coredata.StoreUsers).Add(ctx, indexeddb.Record{
-			"id":               "legacy-mixed",
-			"email":            "User@Example.com",
-			"normalized_email": "user@example.com",
-			"display_name":     "",
-			"created_at":       older,
-			"updated_at":       older,
-		}); err != nil {
-			t.Fatalf("seed mixed-case legacy user: %v", err)
-		}
-		if err := db.ObjectStore(coredata.StoreUsers).Add(ctx, indexeddb.Record{
-			"id":               "legacy-canonical",
-			"email":            "user@example.com",
-			"normalized_email": "user@example.com",
-			"display_name":     "",
-			"created_at":       newer,
-			"updated_at":       newer,
-		}); err != nil {
-			t.Fatalf("seed canonical legacy user: %v", err)
-		}
-
-		svc, err := coredata.New(db)
-		if err != nil {
-			t.Fatalf("coredata.New: %v", err)
-		}
-
-		if _, err := svc.Identities.GetIdentity(ctx, "legacy-canonical"); err != nil {
-			t.Fatalf("GetIdentity(canonical winner): %v", err)
-		}
-		if _, err := svc.Identities.GetIdentity(ctx, "legacy-mixed"); err != core.ErrNotFound {
-			t.Fatalf("GetIdentity(mixed-case loser) = %v, want ErrNotFound", err)
-		}
-		binding, err := svc.IdentityAuthBindings.GetBinding(ctx, core.IdentityAuthBindingKindEmail, "legacy", "user@example.com")
-		if err != nil {
-			t.Fatalf("GetBinding(canonical email): %v", err)
-		}
-		if binding.IdentityID != "legacy-canonical" {
-			t.Fatalf("binding.IdentityID = %q, want %q", binding.IdentityID, "legacy-canonical")
-		}
-		count, err := svc.DB.ObjectStore(coredata.StoreIdentities).Count(ctx, nil)
-		if err != nil {
-			t.Fatalf("Count identities: %v", err)
-		}
-		if count != 1 {
-			t.Fatalf("identities count = %d, want 1", count)
-		}
-	})
-
-	t.Run("backfills_multiple_identity_bindings_without_blank_auth_subject_keys", func(t *testing.T) {
-		t.Parallel()
-
-		db := &coretesting.StubIndexedDB{}
-		ctx := context.Background()
-		createdAt := time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC)
-		for _, rec := range []indexeddb.Record{
-			{
-				"id":               "legacy-a",
-				"email":            "alice@example.com",
-				"normalized_email": "alice@example.com",
-				"display_name":     "",
-				"created_at":       createdAt,
-				"updated_at":       createdAt,
-			},
-			{
-				"id":               "legacy-b",
-				"email":            "bob@example.com",
-				"normalized_email": "bob@example.com",
-				"display_name":     "",
-				"created_at":       createdAt.Add(time.Minute),
-				"updated_at":       createdAt.Add(time.Minute),
-			},
-		} {
-			if err := db.ObjectStore(coredata.StoreUsers).Add(ctx, rec); err != nil {
-				t.Fatalf("seed legacy user %q: %v", rec["id"], err)
-			}
-		}
-
-		svc, err := coredata.New(db)
-		if err != nil {
-			t.Fatalf("coredata.New: %v", err)
-		}
-
-		bindings, err := svc.DB.ObjectStore(coredata.StoreIdentityAuthBindings).GetAll(ctx, nil)
-		if err != nil {
-			t.Fatalf("GetAll identity auth bindings: %v", err)
-		}
-		if len(bindings) != 2 {
-			t.Fatalf("identity auth bindings len = %d, want 2", len(bindings))
-		}
-		for _, rec := range bindings {
-			if got := rec["binding_kind"]; got != core.IdentityAuthBindingKindEmail {
-				t.Fatalf("binding_kind = %v, want %q", got, core.IdentityAuthBindingKindEmail)
-			}
-			if got := rec["authority"]; got != "legacy" {
-				t.Fatalf("authority = %v, want %q", got, "legacy")
-			}
-		}
-	})
 }
 
 func TestUserService(t *testing.T) {
@@ -853,19 +747,6 @@ func TestAPITokenService(t *testing.T) {
 		if got.Scopes != "read:tokens" {
 			t.Errorf("Scopes = %q, want %q", got.Scopes, "read:tokens")
 		}
-		access, err := svc.APITokenAccess.ListByToken(ctx, token.ID)
-		if err != nil {
-			t.Fatalf("ListByToken: %v", err)
-		}
-		if len(access) != 2 {
-			t.Fatalf("token access len = %d, want 2", len(access))
-		}
-		if access[0].Plugin != "other" || !access[0].InvokeAllOperations {
-			t.Fatalf("first token access = %+v, want plugin other with invoke-all", access[0])
-		}
-		if access[1].Plugin != "sample" || access[1].InvokeAllOperations || !reflect.DeepEqual(access[1].Operations, []string{"read"}) {
-			t.Fatalf("second token access = %+v, want sample [read]", access[1])
-		}
 	})
 
 	t.Run("ValidateAPIToken_not_found", func(t *testing.T) {
@@ -983,13 +864,6 @@ func TestAPITokenService(t *testing.T) {
 		if err != core.ErrNotFound {
 			t.Fatalf("ValidateAPIToken after revoke = %v, want ErrNotFound", err)
 		}
-		access, err := svc.APITokenAccess.ListByToken(ctx, token.ID)
-		if err != nil {
-			t.Fatalf("ListByToken after revoke: %v", err)
-		}
-		if len(access) != 0 {
-			t.Fatalf("token access after revoke = %+v, want none", access)
-		}
 	})
 
 	t.Run("RevokeAPIToken_nonexistent", func(t *testing.T) {
@@ -1039,7 +913,7 @@ func TestAPITokenService(t *testing.T) {
 		}
 	})
 
-	t.Run("RevokeAllAPITokens_preserves_access_for_other_owners", func(t *testing.T) {
+	t.Run("RevokeAllAPITokens_preserves_other_owners", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 		ctx := context.Background()
@@ -1096,53 +970,6 @@ func TestAPITokenService(t *testing.T) {
 			t.Fatalf("remaining other-owner tokens = %+v, want survivor", otherTokens)
 		}
 
-		access, err := svc.APITokenAccess.ListByToken(ctx, otherOwner.ID)
-		if err != nil {
-			t.Fatalf("ListByToken other-token: %v", err)
-		}
-		if len(access) != 1 || access[0].Plugin != "other" {
-			t.Fatalf("other token access = %+v, want surviving access", access)
-		}
-	})
-
-	t.Run("BackfillTokenAccess_uses_scopes_when_permissions_are_empty", func(t *testing.T) {
-		t.Parallel()
-		svc := newTestServices(t)
-		ctx := context.Background()
-
-		user := mustCreateUser(t, svc, "scoped@test.com")
-		now := time.Now().UTC()
-		if err := svc.DB.ObjectStore(coredata.StoreAPITokens).Add(ctx, indexeddb.Record{
-			"id":                    "scoped-token",
-			"owner_kind":            core.APITokenOwnerKindUser,
-			"owner_id":              user.ID,
-			"credential_subject_id": principal.UserSubjectID(user.ID),
-			"name":                  "scoped",
-			"hashed_token":          "sha256:scoped",
-			"scopes":                "alpha beta alpha",
-			"created_at":            now,
-			"updated_at":            now,
-		}); err != nil {
-			t.Fatalf("seed scoped api token: %v", err)
-		}
-		if err := svc.APITokens.BackfillTokenAccess(ctx); err != nil {
-			t.Fatalf("BackfillTokenAccess: %v", err)
-		}
-
-		access, err := svc.APITokenAccess.ListByToken(ctx, "scoped-token")
-		if err != nil {
-			t.Fatalf("ListByToken: %v", err)
-		}
-		if len(access) != 2 {
-			t.Fatalf("scope-backed access len = %d, want 2: %+v", len(access), access)
-		}
-		got := make(map[string]bool, len(access))
-		for _, row := range access {
-			got[row.Plugin] = row.InvokeAllOperations
-		}
-		if !reflect.DeepEqual(got, map[string]bool{"alpha": true, "beta": true}) {
-			t.Fatalf("scope-backed access = %+v, want alpha/beta invoke-all", got)
-		}
 	})
 
 	t.Run("StoreAPIToken_generates_ID", func(t *testing.T) {

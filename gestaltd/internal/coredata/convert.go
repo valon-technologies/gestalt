@@ -40,25 +40,6 @@ func recInt64(rec indexeddb.Record, key string) int64 {
 	}
 }
 
-func recBool(rec indexeddb.Record, key string) bool {
-	v, ok := rec[key]
-	if !ok || v == nil {
-		return false
-	}
-	switch b := v.(type) {
-	case bool:
-		return b
-	case int:
-		return b != 0
-	case int64:
-		return b != 0
-	case float64:
-		return b != 0
-	default:
-		return false
-	}
-}
-
 func recTime(rec indexeddb.Record, key string) time.Time {
 	v, ok := rec[key]
 	if !ok || v == nil {

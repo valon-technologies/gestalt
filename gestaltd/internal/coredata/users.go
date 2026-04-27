@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -15,17 +14,11 @@ import (
 )
 
 type UserService struct {
-	store        indexeddb.ObjectStore
-	identities   *IdentityService
-	authBindings *IdentityAuthBindingService
+	store indexeddb.ObjectStore
 }
 
-func NewUserService(ds indexeddb.IndexedDB, identities *IdentityService, authBindings *IdentityAuthBindingService) *UserService {
-	return &UserService{
-		store:        ds.ObjectStore(StoreUsers),
-		identities:   identities,
-		authBindings: authBindings,
-	}
+func NewUserService(ds indexeddb.IndexedDB) *UserService {
+	return &UserService{store: ds.ObjectStore(StoreUsers)}
 }
 
 func (s *UserService) BackfillNormalizedEmails(ctx context.Context) error {
@@ -58,31 +51,6 @@ func (s *UserService) GetUser(ctx context.Context, id string) (*core.User, error
 	return recordToUser(rec), nil
 }
 
-func (s *UserService) BackfillCanonicalIdentities(ctx context.Context) error {
-	if s.identities == nil || s.authBindings == nil {
-		return nil
-	}
-	recs, err := s.store.GetAll(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("list users for canonical backfill: %w", err)
-	}
-	winners := preferredCanonicalUserRecords(recs)
-	for _, rec := range winners {
-		if err := s.syncCanonicalIdentity(ctx, recordToUser(rec)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *UserService) CanonicalIdentityIDForUser(ctx context.Context, userID string) (string, error) {
-	rec, err := s.canonicalUserRecordForUserID(ctx, strings.TrimSpace(userID))
-	if err != nil {
-		return "", err
-	}
-	return recString(rec, "id"), nil
-}
-
 func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core.User, error) {
 	rawEmail := strings.TrimSpace(email)
 	email = emailutil.Normalize(email)
@@ -93,9 +61,6 @@ func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core
 	user, err := s.findUserByNormalizedEmail(ctx, rawEmail, email)
 	switch {
 	case err == nil:
-		if err := s.syncCanonicalIdentity(ctx, user); err != nil {
-			return nil, err
-		}
 		return user, nil
 	case !errors.Is(err, core.ErrNotFound):
 		return nil, err
@@ -115,16 +80,9 @@ func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core
 		if retryErr != nil {
 			return nil, fmt.Errorf("create user: %w", err)
 		}
-		if err := s.syncCanonicalIdentity(ctx, user); err != nil {
-			return nil, err
-		}
 		return user, nil
 	}
-	user = recordToUser(newRec)
-	if err := s.syncCanonicalIdentity(ctx, user); err != nil {
-		return nil, err
-	}
-	return user, nil
+	return recordToUser(newRec), nil
 }
 
 func (s *UserService) FindUserByEmail(ctx context.Context, email string) (*core.User, error) {
@@ -190,38 +148,6 @@ func (s *UserService) findUserByNormalizedEmail(ctx context.Context, rawEmail, n
 	return recordToUser(match), nil
 }
 
-func (s *UserService) canonicalUserRecordForUserID(ctx context.Context, userID string) (indexeddb.Record, error) {
-	if userID == "" {
-		return nil, core.ErrNotFound
-	}
-	rec, err := s.store.Get(ctx, userID)
-	if err != nil {
-		if err == indexeddb.ErrNotFound {
-			return nil, core.ErrNotFound
-		}
-		return nil, fmt.Errorf("lookup canonical user record: %w", err)
-	}
-	normalizedEmail := emailutil.Normalize(recString(rec, "normalized_email"))
-	if normalizedEmail == "" {
-		normalizedEmail = emailutil.Normalize(recString(rec, "email"))
-	}
-	if normalizedEmail == "" {
-		return rec, nil
-	}
-	recs, err := s.store.Index("by_normalized_email").GetAll(ctx, nil, normalizedEmail)
-	if err != nil {
-		return nil, fmt.Errorf("lookup canonical user record: %w", err)
-	}
-	if len(recs) == 0 {
-		return rec, nil
-	}
-	winner := preferredCanonicalUserRecord(recs, normalizedEmail)
-	if winner == nil {
-		return rec, nil
-	}
-	return winner, nil
-}
-
 func preferUserRecord(candidate, current indexeddb.Record) bool {
 	if current == nil {
 		return true
@@ -252,101 +178,4 @@ func recordToUser(rec indexeddb.Record) *core.User {
 		CreatedAt:   recTime(rec, "created_at"),
 		UpdatedAt:   recTime(rec, "updated_at"),
 	}
-}
-
-func (s *UserService) syncCanonicalIdentity(ctx context.Context, user *core.User) error {
-	if s.identities == nil || s.authBindings == nil || user == nil || user.ID == "" {
-		return nil
-	}
-	canonicalRec, err := s.canonicalUserRecordForUserID(ctx, user.ID)
-	if err != nil {
-		return err
-	}
-	canonicalUser := recordToUser(canonicalRec)
-	displayName := strings.TrimSpace(canonicalUser.DisplayName)
-	if displayName == "" {
-		displayName = canonicalUser.Email
-	}
-	if _, err := s.identities.UpsertIdentity(ctx, &core.Identity{
-		ID:          canonicalUser.ID,
-		Status:      identityStatusActive,
-		DisplayName: displayName,
-		MetadataJSON: legacyIdentityMetadataJSON("user", map[string]string{
-			"email": emailutil.Normalize(canonicalUser.Email),
-		}),
-		CreatedAt: canonicalUser.CreatedAt,
-		UpdatedAt: canonicalUser.UpdatedAt,
-	}); err != nil {
-		return fmt.Errorf("sync canonical identity %q: %w", canonicalUser.ID, err)
-	}
-	lookupKey := emailutil.Normalize(canonicalUser.Email)
-	if lookupKey == "" {
-		return nil
-	}
-	if _, err := s.authBindings.UpsertBinding(ctx, &core.IdentityAuthBinding{
-		IdentityID:  canonicalUser.ID,
-		BindingKind: core.IdentityAuthBindingKindEmail,
-		Authority:   legacyIdentityBindingAuthority,
-		LookupKey:   lookupKey,
-		BindingJSON: legacyIdentityMetadataJSON("email", map[string]string{"email": lookupKey}),
-		CreatedAt:   canonicalUser.CreatedAt,
-		UpdatedAt:   canonicalUser.UpdatedAt,
-	}); err != nil {
-		return fmt.Errorf("sync canonical identity auth binding %q: %w", canonicalUser.ID, err)
-	}
-	return nil
-}
-
-func preferredCanonicalUserRecords(recs []indexeddb.Record) []indexeddb.Record {
-	if len(recs) == 0 {
-		return nil
-	}
-	grouped := make(map[string][]indexeddb.Record, len(recs))
-	groupNormalized := make(map[string]string, len(recs))
-	for _, rec := range recs {
-		normalizedEmail := emailutil.Normalize(recString(rec, "normalized_email"))
-		if normalizedEmail == "" {
-			normalizedEmail = emailutil.Normalize(recString(rec, "email"))
-		}
-		key := normalizedEmail
-		if key == "" {
-			key = "id:" + recString(rec, "id")
-		}
-		grouped[key] = append(grouped[key], rec)
-		groupNormalized[key] = normalizedEmail
-	}
-	out := make([]indexeddb.Record, 0, len(grouped))
-	keys := make([]string, 0, len(grouped))
-	for key := range grouped {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		if winner := preferredCanonicalUserRecord(grouped[key], groupNormalized[key]); winner != nil {
-			out = append(out, winner)
-		}
-	}
-	return out
-}
-
-func preferredCanonicalUserRecord(recs []indexeddb.Record, normalizedEmail string) indexeddb.Record {
-	var canonicalMatch indexeddb.Record
-	var fallbackMatch indexeddb.Record
-	for _, rec := range recs {
-		email := strings.TrimSpace(recString(rec, "email"))
-		switch {
-		case normalizedEmail != "" && email == normalizedEmail:
-			if preferUserRecord(rec, canonicalMatch) {
-				canonicalMatch = rec
-			}
-		default:
-			if preferUserRecord(rec, fallbackMatch) {
-				fallbackMatch = rec
-			}
-		}
-	}
-	if canonicalMatch != nil {
-		return canonicalMatch
-	}
-	return fallbackMatch
 }

@@ -2,13 +2,11 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
 type providerPluginAuthorizationMembership struct {
@@ -33,22 +31,15 @@ func (s *Server) upsertProviderPluginAuthorization(ctx context.Context, subject 
 		Type: authorization.ProviderResourceTypePluginDynamic,
 		Id:   strings.TrimSpace(plugin),
 	}
-	_, rollback, err := s.replaceProviderDynamicMembership(ctx, resource, subject.SubjectID, strings.TrimSpace(role))
+	_, _, err := s.replaceProviderDynamicMembership(ctx, resource, subject.SubjectID, strings.TrimSpace(role))
 	if err != nil {
 		return nil, err
 	}
-	membership := &providerPluginAuthorizationMembership{
+	return &providerPluginAuthorizationMembership{
 		Plugin:    plugin,
 		SubjectID: strings.TrimSpace(subject.SubjectID),
 		Role:      role,
-	}
-	if subject.User != nil {
-		if err := s.syncProviderPluginCanonicalAccess(ctx, subject.User.ID, membership.Plugin); err != nil {
-			rollback(ctx)
-			return nil, err
-		}
-	}
-	return membership, nil
+	}, nil
 }
 
 func (s *Server) deleteProviderPluginAuthorization(ctx context.Context, plugin, subjectID string) error {
@@ -59,35 +50,14 @@ func (s *Server) deleteProviderPluginAuthorization(ctx context.Context, plugin, 
 		Type: authorization.ProviderResourceTypePluginDynamic,
 		Id:   strings.TrimSpace(plugin),
 	}
-	existing, rollback, err := s.deleteProviderDynamicMembership(ctx, resource, subjectID)
+	existing, _, err := s.deleteProviderDynamicMembership(ctx, resource, subjectID)
 	if err != nil {
 		return err
 	}
-	userID := strings.TrimSpace(principal.UserIDFromSubjectID(subjectID))
-	if userID == "" {
-		if len(existing) == 0 {
-			return core.ErrNotFound
-		}
-		return nil
+	if len(existing) == 0 {
+		return core.ErrNotFound
 	}
-	err = s.deleteProviderPluginCanonicalAccess(ctx, userID, strings.TrimSpace(plugin))
-	switch {
-	case err == nil:
-		if len(existing) == 0 {
-			return core.ErrNotFound
-		}
-		return nil
-	case errors.Is(err, core.ErrNotFound):
-		if len(existing) == 0 {
-			return core.ErrNotFound
-		}
-		return nil
-	default:
-		if rollback != nil {
-			rollback(ctx)
-		}
-		return err
-	}
+	return nil
 }
 
 func (s *Server) upsertProviderAdminAuthorization(ctx context.Context, subject *adminAuthorizationWriteSubject, role string) (*providerAdminAuthorizationMembership, error) {
@@ -101,21 +71,14 @@ func (s *Server) upsertProviderAdminAuthorization(ctx context.Context, subject *
 		Type: authorization.ProviderResourceTypeAdminDynamic,
 		Id:   authorization.ProviderResourceIDAdminDynamicGlobal,
 	}
-	existing, rollback, err := s.replaceProviderDynamicMembership(ctx, resource, subject.SubjectID, strings.TrimSpace(role))
+	_, _, err := s.replaceProviderDynamicMembership(ctx, resource, subject.SubjectID, strings.TrimSpace(role))
 	if err != nil {
 		return nil, err
 	}
-	membership := &providerAdminAuthorizationMembership{
+	return &providerAdminAuthorizationMembership{
 		SubjectID: strings.TrimSpace(subject.SubjectID),
 		Role:      role,
-	}
-	if subject.User != nil {
-		if err := s.syncProviderAdminCanonicalRole(ctx, subject.User.ID, membership.Role, providerRelationshipRelations(existing)); err != nil {
-			rollback(ctx)
-			return nil, err
-		}
-	}
-	return membership, nil
+	}, nil
 }
 
 func (s *Server) deleteProviderAdminAuthorization(ctx context.Context, subjectID string) error {
@@ -126,35 +89,14 @@ func (s *Server) deleteProviderAdminAuthorization(ctx context.Context, subjectID
 		Type: authorization.ProviderResourceTypeAdminDynamic,
 		Id:   authorization.ProviderResourceIDAdminDynamicGlobal,
 	}
-	existing, rollback, err := s.deleteProviderDynamicMembership(ctx, resource, subjectID)
+	existing, _, err := s.deleteProviderDynamicMembership(ctx, resource, subjectID)
 	if err != nil {
 		return err
 	}
-	userID := strings.TrimSpace(principal.UserIDFromSubjectID(subjectID))
-	if userID == "" {
-		if len(existing) == 0 {
-			return core.ErrNotFound
-		}
-		return nil
+	if len(existing) == 0 {
+		return core.ErrNotFound
 	}
-	err = s.deleteProviderAdminCanonicalRoles(ctx, userID, providerRelationshipRelations(existing))
-	switch {
-	case err == nil:
-		if len(existing) == 0 {
-			return core.ErrNotFound
-		}
-		return nil
-	case errors.Is(err, core.ErrNotFound):
-		if len(existing) == 0 {
-			return core.ErrNotFound
-		}
-		return nil
-	default:
-		if rollback != nil {
-			rollback(ctx)
-		}
-		return err
-	}
+	return nil
 }
 
 func (s *Server) replaceProviderDynamicMembership(ctx context.Context, resource *core.ResourceRef, subjectID string, role string) ([]*core.Relationship, func(context.Context), error) {
@@ -378,136 +320,4 @@ func cloneResourceRef(resource *core.ResourceRef) *core.ResourceRef {
 		Type: resource.GetType(),
 		Id:   resource.GetId(),
 	}
-}
-
-func (s *Server) syncProviderPluginCanonicalAccess(ctx context.Context, userID, plugin string) error {
-	if s.identityPluginAccess == nil {
-		return nil
-	}
-	identityID, err := s.canonicalIdentityIDForUser(ctx, userID)
-	if err != nil {
-		return err
-	}
-	_, err = s.identityPluginAccess.UpsertAccess(ctx, &core.IdentityPluginAccess{
-		IdentityID:          identityID,
-		Plugin:              plugin,
-		InvokeAllOperations: true,
-	})
-	if err != nil {
-		return fmt.Errorf("sync canonical identity plugin access %q/%q: %w", identityID, plugin, err)
-	}
-	return nil
-}
-
-func (s *Server) deleteProviderPluginCanonicalAccess(ctx context.Context, userID, plugin string) error {
-	if s.identityPluginAccess == nil {
-		return nil
-	}
-	identityID, err := s.canonicalIdentityIDForUser(ctx, userID)
-	switch {
-	case err == nil:
-	case errors.Is(err, core.ErrNotFound):
-		return nil
-	default:
-		return err
-	}
-	if err := s.identityPluginAccess.DeleteAccess(ctx, identityID, plugin); err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			return core.ErrNotFound
-		}
-		return fmt.Errorf("delete canonical identity plugin access %q/%q: %w", identityID, plugin, err)
-	}
-	return nil
-}
-
-func (s *Server) syncProviderAdminCanonicalRole(ctx context.Context, userID, role string, staleRoles []string) error {
-	if s.workspaceRoles == nil {
-		return nil
-	}
-	identityID, err := s.canonicalIdentityIDForUser(ctx, userID)
-	if err != nil {
-		return err
-	}
-	if _, err := s.workspaceRoles.UpsertRole(ctx, &core.WorkspaceRole{
-		IdentityID: identityID,
-		Role:       strings.TrimSpace(role),
-	}); err != nil {
-		return fmt.Errorf("sync canonical workspace role %q/%q: %w", identityID, role, err)
-	}
-	for _, staleRole := range staleRoles {
-		staleRole = strings.TrimSpace(staleRole)
-		if staleRole == "" || staleRole == strings.TrimSpace(role) {
-			continue
-		}
-		if err := s.workspaceRoles.DeleteRole(ctx, identityID, staleRole); err != nil && !errors.Is(err, core.ErrNotFound) {
-			return fmt.Errorf("delete stale canonical workspace role %q/%q: %w", identityID, staleRole, err)
-		}
-	}
-	return nil
-}
-
-func (s *Server) deleteProviderAdminCanonicalRoles(ctx context.Context, userID string, roles []string) error {
-	if s.workspaceRoles == nil {
-		return nil
-	}
-	identityID, err := s.canonicalIdentityIDForUser(ctx, userID)
-	switch {
-	case err == nil:
-	case errors.Is(err, core.ErrNotFound):
-		return nil
-	default:
-		return err
-	}
-	deleted := false
-	for _, role := range roles {
-		role = strings.TrimSpace(role)
-		if role == "" {
-			continue
-		}
-		if err := s.workspaceRoles.DeleteRole(ctx, identityID, role); err != nil {
-			if errors.Is(err, core.ErrNotFound) {
-				continue
-			}
-			return fmt.Errorf("delete canonical workspace role %q/%q: %w", identityID, role, err)
-		}
-		deleted = true
-	}
-	if !deleted && len(roles) > 0 {
-		return core.ErrNotFound
-	}
-	return nil
-}
-
-func (s *Server) canonicalIdentityIDForUser(ctx context.Context, userID string) (string, error) {
-	userID = strings.TrimSpace(userID)
-	if userID == "" {
-		return "", fmt.Errorf("user id is required")
-	}
-	if s.users == nil {
-		return userID, nil
-	}
-	return s.users.CanonicalIdentityIDForUser(ctx, userID)
-}
-
-func providerRelationshipRelations(rels []*core.Relationship) []string {
-	if len(rels) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(rels))
-	out := make([]string, 0, len(rels))
-	for _, rel := range rels {
-		if rel == nil {
-			continue
-		}
-		relation := strings.TrimSpace(rel.GetRelation())
-		if relation == "" {
-			continue
-		}
-		if _, ok := seen[relation]; ok {
-			continue
-		}
-		seen[relation] = struct{}{}
-		out = append(out, relation)
-	}
-	return out
 }

@@ -3848,17 +3848,6 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("put dynamic member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	canonicalIdentityID, err := svc.Users.CanonicalIdentityIDForUser(context.Background(), dynamicUser.ID)
-	if err != nil {
-		t.Fatalf("CanonicalIdentityIDForUser(dynamic): %v", err)
-	}
-	pluginAccess, err := svc.IdentityPluginAccess.GetAccess(context.Background(), canonicalIdentityID, "sample_plugin")
-	if err != nil {
-		t.Fatalf("GetAccess(sample_plugin): %v", err)
-	}
-	if !pluginAccess.InvokeAllOperations {
-		t.Fatal("expected provider-backed plugin write to sync canonical invoke-all access")
-	}
 	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
 		t.Fatalf("ReloadAuthorizationState after provider-backed plugin write: %v", err)
 	}
@@ -4037,7 +4026,6 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
-	ctx := context.Background()
 	seedUser(t, svc, "static-admin@example.test")
 	const adminRole = "owner"
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
@@ -4187,14 +4175,6 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("put static admin conflict status = %d, want 409: %s", resp.StatusCode, respBody)
 	}
 
-	roles, err := svc.WorkspaceRoles.ListByPrincipal(ctx, dynamicAdmin.ID)
-	if err != nil {
-		t.Fatalf("ListByPrincipal(dynamic admin): %v", err)
-	}
-	if len(roles) != 1 || roles[0].Role != "owner" {
-		t.Fatalf("workspace roles = %+v, want [owner]", roles)
-	}
-
 	body = bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"operator"}`, principal.UserSubjectID(dynamicAdmin.ID)))
 	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
 	req.Header.Set("Content-Type", "application/json")
@@ -4209,13 +4189,6 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("put dynamic admin role change status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	roles, err = svc.WorkspaceRoles.ListByPrincipal(ctx, dynamicAdmin.ID)
-	if err != nil {
-		t.Fatalf("ListByPrincipal(dynamic admin) after role change: %v", err)
-	}
-	if len(roles) != 1 || roles[0].Role != "operator" {
-		t.Fatalf("workspace roles after role change = %+v, want [operator]", roles)
-	}
 	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/admins/members/"+url.PathEscape(principal.UserSubjectID(dynamicAdmin.ID)), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
@@ -4244,13 +4217,6 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	}
 	if len(members) != 1 || members[0]["source"] != "static" {
 		t.Fatalf("admin members after delete = %+v, want only static row", members)
-	}
-	roles, err = svc.WorkspaceRoles.ListByPrincipal(ctx, dynamicAdmin.ID)
-	if err != nil {
-		t.Fatalf("ListByPrincipal(dynamic admin) after delete: %v", err)
-	}
-	if len(roles) != 0 {
-		t.Fatalf("workspace roles after delete = %+v, want none", roles)
 	}
 }
 
@@ -4312,17 +4278,6 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 		t.Fatalf("put admin member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
-	canonicalIdentityID, err := svc.Users.CanonicalIdentityIDForUser(context.Background(), dynamicAdmin.ID)
-	if err != nil {
-		t.Fatalf("CanonicalIdentityIDForUser(dynamic admin): %v", err)
-	}
-	roles, err := svc.WorkspaceRoles.ListByPrincipal(context.Background(), canonicalIdentityID)
-	if err != nil {
-		t.Fatalf("ListByPrincipal(dynamic admin): %v", err)
-	}
-	if len(roles) != 1 || roles[0].Role != "owner" {
-		t.Fatalf("workspace roles after provider-backed write = %+v, want [owner]", roles)
-	}
 	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
 		t.Fatalf("ReloadAuthorizationState after provider-backed admin write: %v", err)
 	}
