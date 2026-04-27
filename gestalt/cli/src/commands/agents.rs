@@ -1128,7 +1128,7 @@ fn build_messages(system: &[String], messages: &[String]) -> Vec<Value> {
 
 fn agent_tool_ref_value(tool: &AgentToolArg) -> Value {
     json!({
-        "pluginName": tool.plugin,
+        "plugin": tool.plugin,
         "operation": tool.operation,
     })
 }
