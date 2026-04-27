@@ -2,6 +2,7 @@ package pluginruntime
 
 import (
 	"context"
+	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -64,9 +65,18 @@ type Support struct {
 }
 
 type Session struct {
-	ID       string
-	State    SessionState
-	Metadata map[string]string
+	ID           string
+	State        SessionState
+	Metadata     map[string]string
+	Lifecycle    *SessionLifecycle
+	StateReason  string
+	StateMessage string
+}
+
+type SessionLifecycle struct {
+	StartedAt          *time.Time
+	RecommendedDrainAt *time.Time
+	ExpiresAt          *time.Time
 }
 
 type StartSessionRequest struct {

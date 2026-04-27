@@ -13,8 +13,11 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 )
+
+const hostedAgentRuntimeLifecycleSafetyMargin = 5 * time.Second
 
 type hostedAgentProviderPool struct {
 	name         string
@@ -39,13 +42,18 @@ type hostedAgentProviderPool struct {
 }
 
 type hostedAgentPoolBackend struct {
-	id        int
-	provider  coreagent.Provider
-	active    int
-	liveTurns map[string]struct{}
-	draining  bool
-	closing   bool
-	closed    bool
+	id               int
+	provider         coreagent.Provider
+	runtimeProvider  pluginruntime.Provider
+	runtimeSessionID string
+	runtimeSession   *pluginruntime.Session
+	runtimeDrainAt   *time.Time
+	forceCloseAt     *time.Time
+	active           int
+	liveTurns        map[string]struct{}
+	draining         bool
+	closing          bool
+	closed           bool
 }
 
 func newHostedAgentProviderPool(ctx context.Context, launch *hostedAgentProviderLaunch, hostServices []providerhost.HostService, deps Deps, policy config.HostedRuntimeLifecyclePolicy) (coreagent.Provider, error) {
@@ -178,10 +186,11 @@ func (p *hostedAgentProviderPool) UpdateSession(ctx context.Context, req coreage
 
 func (p *hostedAgentProviderPool) CreateTurn(ctx context.Context, req coreagent.CreateTurnRequest) (*coreagent.Turn, error) {
 	preferred := p.turnBackend(req.TurnID)
+	allowDraining := preferred != nil
 	if preferred == nil {
 		preferred = p.sessionBackend(req.SessionID)
 	}
-	backend, release, err := p.acquireBackend(ctx, preferred, preferred != nil)
+	backend, release, err := p.acquireBackendForNewWork(ctx, preferred, allowDraining)
 	if err != nil {
 		return nil, err
 	}
@@ -590,6 +599,19 @@ func (p *hostedAgentProviderPool) acquireBackend(ctx context.Context, preferred 
 	}
 }
 
+func (p *hostedAgentProviderPool) acquireBackendForNewWork(ctx context.Context, preferred *hostedAgentPoolBackend, allowDraining bool) (*hostedAgentPoolBackend, func(), error) {
+	if preferred != nil {
+		backend, release, err := p.acquireBackend(ctx, preferred, allowDraining)
+		if err == nil {
+			return backend, release, nil
+		}
+		if ctx.Err() != nil {
+			return nil, nil, err
+		}
+	}
+	return p.acquireBackend(ctx, nil, false)
+}
+
 func (p *hostedAgentProviderPool) releaseBackend(backend *hostedAgentPoolBackend) func() {
 	return func() {
 		p.mu.Lock()
@@ -904,12 +926,129 @@ func (p *hostedAgentProviderPool) healthLoop() {
 		}
 		_ = p.ensureMinReady(p.ctx)
 		for _, backend := range p.readyBackends() {
+			session, drainAt, err := p.refreshBackendRuntimeSession(backend)
+			if err != nil {
+				slog.Warn("hosted agent runtime session refresh failed", "provider", p.name, "instance", backend.id, "error", err)
+				p.replaceBackend(backend)
+				continue
+			}
+			if reason := p.runtimeSessionRetirementReason(session, drainAt, time.Now().UTC()); reason != "" {
+				slog.Info("retiring hosted agent runtime instance", "provider", p.name, "instance", backend.id, "reason", reason)
+				p.replaceBackend(backend)
+				continue
+			}
 			if err := p.pingBackend(backend); err != nil {
 				slog.Warn("hosted agent runtime instance failed health check", "provider", p.name, "instance", backend.id, "error", err)
 				p.replaceBackend(backend)
 			}
 		}
 	}
+}
+
+func (p *hostedAgentProviderPool) refreshBackendRuntimeSession(backend *hostedAgentPoolBackend) (*pluginruntime.Session, *time.Time, error) {
+	if backend == nil {
+		return nil, nil, fmt.Errorf("runtime instance is unavailable")
+	}
+	p.mu.Lock()
+	runtimeProvider := backend.runtimeProvider
+	sessionID := strings.TrimSpace(backend.runtimeSessionID)
+	p.mu.Unlock()
+	if runtimeProvider == nil || sessionID == "" {
+		return nil, nil, nil
+	}
+	timeout := p.policy.HealthCheckInterval
+	if timeout <= 0 || timeout > 10*time.Second {
+		timeout = 10 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(p.ctx, timeout)
+	defer cancel()
+	session, err := runtimeProvider.GetSession(ctx, pluginruntime.GetSessionRequest{SessionID: sessionID})
+	if err != nil {
+		return nil, nil, fmt.Errorf("get runtime session %q: %w", sessionID, err)
+	}
+	drainAt := p.runtimeSessionDrainAt(session, time.Now().UTC())
+	p.mu.Lock()
+	if p.backendAvailableLocked(backend, true) {
+		if backend.runtimeDrainAt != nil && (drainAt == nil || backend.runtimeDrainAt.Before(*drainAt)) {
+			drainAt = cloneTime(backend.runtimeDrainAt)
+		}
+		backend.runtimeSession = session
+		backend.runtimeDrainAt = cloneTime(drainAt)
+		backend.forceCloseAt = runtimeSessionExpiresAt(session)
+	}
+	p.mu.Unlock()
+	return session, drainAt, nil
+}
+
+func (p *hostedAgentProviderPool) runtimeSessionRetirementReason(session *pluginruntime.Session, drainAt *time.Time, now time.Time) string {
+	if session == nil {
+		return ""
+	}
+	switch session.State {
+	case pluginruntime.SessionStateFailed, pluginruntime.SessionStateStopped:
+		return fmt.Sprintf("runtime session entered %q state", session.State)
+	}
+	if drainAt == nil || now.Before(*drainAt) {
+		return ""
+	}
+	if expiresAt := runtimeSessionExpiresAt(session); expiresAt != nil && !now.Before(*expiresAt) {
+		return fmt.Sprintf("runtime session expired at %s", expiresAt.Format(time.RFC3339Nano))
+	}
+	return fmt.Sprintf("runtime session reached drain deadline %s", drainAt.Format(time.RFC3339Nano))
+}
+
+func (p *hostedAgentProviderPool) runtimeSessionDrainAt(session *pluginruntime.Session, now time.Time) *time.Time {
+	if session == nil || session.Lifecycle == nil {
+		return nil
+	}
+	var drainAt *time.Time
+	if session.Lifecycle.RecommendedDrainAt != nil {
+		recommended := session.Lifecycle.RecommendedDrainAt.UTC()
+		drainAt = &recommended
+	}
+	if session.Lifecycle.ExpiresAt != nil {
+		expiryDrain := p.runtimeSessionExpiryDrainAt(session.Lifecycle, now)
+		if drainAt == nil || expiryDrain.Before(*drainAt) {
+			drainAt = &expiryDrain
+		}
+	}
+	return drainAt
+}
+
+func (p *hostedAgentProviderPool) runtimeSessionExpiryDrainAt(lifecycle *pluginruntime.SessionLifecycle, now time.Time) time.Time {
+	expiresAt := lifecycle.ExpiresAt.UTC()
+	reserve := p.policy.StartupTimeout + p.policy.DrainTimeout + p.policy.HealthCheckInterval + hostedAgentRuntimeLifecycleSafetyMargin
+	drainAt := expiresAt.Add(-reserve).UTC()
+	if lifecycle.StartedAt != nil {
+		startedAt := lifecycle.StartedAt.UTC()
+		lifetime := expiresAt.Sub(startedAt)
+		if lifetime > 0 {
+			minDrainAt := startedAt.Add(lifetime / 2).UTC()
+			if drainAt.Before(minDrainAt) {
+				return minDrainAt
+			}
+		}
+	}
+	if !now.IsZero() && expiresAt.After(now) && drainAt.Before(now) {
+		return now.Add(expiresAt.Sub(now) / 2).UTC()
+	}
+	return drainAt
+}
+
+func runtimeSessionExpiresAt(session *pluginruntime.Session) *time.Time {
+	if session == nil || session.Lifecycle == nil || session.Lifecycle.ExpiresAt == nil {
+		return nil
+	}
+	expiresAt := session.Lifecycle.ExpiresAt.UTC()
+	return &expiresAt
+}
+
+func cloneTime(src *time.Time) *time.Time {
+	if src == nil {
+		return nil
+	}
+	out := src.UTC()
+	return &out
 }
 
 func (p *hostedAgentProviderPool) maybeProbeAfterCallError(backend *hostedAgentPoolBackend, callErr error) {
@@ -1012,21 +1151,26 @@ func (p *hostedAgentProviderPool) ensureMinReady(ctx context.Context) error {
 func (p *hostedAgentProviderPool) startBackend(ctx context.Context) (*hostedAgentPoolBackend, error) {
 	startCtx, cancel := context.WithTimeout(ctx, p.policy.StartupTimeout)
 	defer cancel()
-	provider, err := startHostedAgentProviderInstance(startCtx, p.launch, p.hostServices, p.deps, false, nil)
+	instance, err := startHostedAgentProviderInstance(startCtx, p.launch, p.hostServices, p.deps, false, nil)
 	if err != nil {
 		return nil, err
 	}
 	p.mu.Lock()
 	if p.closed {
 		p.mu.Unlock()
-		_ = provider.Close()
+		_ = instance.provider.Close()
 		return nil, fmt.Errorf("hosted agent provider %q is closed", p.name)
 	}
 	p.nextID++
 	backend := &hostedAgentPoolBackend{
-		id:        p.nextID,
-		provider:  provider,
-		liveTurns: map[string]struct{}{},
+		id:               p.nextID,
+		provider:         instance.provider,
+		runtimeProvider:  instance.runtimeProvider,
+		runtimeSessionID: instance.runtimeSessionID,
+		runtimeSession:   instance.runtimeSession,
+		runtimeDrainAt:   p.runtimeSessionDrainAt(instance.runtimeSession, time.Now().UTC()),
+		forceCloseAt:     runtimeSessionExpiresAt(instance.runtimeSession),
+		liveTurns:        map[string]struct{}{},
 	}
 	p.backends = append(p.backends, backend)
 	ready, starting, draining := p.instanceCountsLocked()
@@ -1065,6 +1209,11 @@ func (p *hostedAgentProviderPool) drainAndCloseBackend(backend *hostedAgentPoolB
 	p.mu.Unlock()
 
 	deadline := time.Now().Add(p.policy.DrainTimeout)
+	p.mu.Lock()
+	if backend.forceCloseAt != nil && backend.forceCloseAt.Before(deadline) {
+		deadline = backend.forceCloseAt.UTC()
+	}
+	p.mu.Unlock()
 	for {
 		p.mu.Lock()
 		active := backend.active

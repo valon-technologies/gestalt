@@ -196,10 +196,13 @@ func (p *recordingHostedAuthorizationProvider) Calls() []authorizationSearchCall
 type capturingPluginRuntime struct {
 	provider *pluginruntime.LocalProvider
 
-	mu            sync.Mutex
-	startRequests []pluginruntime.StartSessionRequest
-	bindRequests  []pluginruntime.BindHostServiceRequest
-	stopCount     atomic.Int32
+	mu                  sync.Mutex
+	startRequests       []pluginruntime.StartSessionRequest
+	startTimes          []time.Time
+	bindRequests        []pluginruntime.BindHostServiceRequest
+	sessionLifecycles   map[string]*pluginruntime.SessionLifecycle
+	lifecycleForSession func(index int) *pluginruntime.SessionLifecycle
+	stopCount           atomic.Int32
 }
 
 func newCapturingPluginRuntime() *capturingPluginRuntime {
@@ -218,16 +221,44 @@ func (r *capturingPluginRuntime) StartSession(ctx context.Context, req pluginrun
 		Image:      req.Image,
 		Metadata:   cloneRuntimeMetadata(req.Metadata),
 	})
+	r.startTimes = append(r.startTimes, time.Now().UTC())
+	index := len(r.startRequests)
+	lifecycleForSession := r.lifecycleForSession
 	r.mu.Unlock()
-	return r.provider.StartSession(ctx, req)
+	session, err := r.provider.StartSession(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if lifecycleForSession != nil {
+		session.Lifecycle = clonePluginRuntimeSessionLifecycle(lifecycleForSession(index))
+		r.mu.Lock()
+		if r.sessionLifecycles == nil {
+			r.sessionLifecycles = map[string]*pluginruntime.SessionLifecycle{}
+		}
+		r.sessionLifecycles[session.ID] = clonePluginRuntimeSessionLifecycle(session.Lifecycle)
+		r.mu.Unlock()
+	}
+	return session, nil
 }
 
 func (r *capturingPluginRuntime) ListSessions(ctx context.Context) ([]pluginruntime.Session, error) {
-	return r.provider.ListSessions(ctx)
+	sessions, err := r.provider.ListSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range sessions {
+		r.attachSessionLifecycle(&sessions[i])
+	}
+	return sessions, nil
 }
 
 func (r *capturingPluginRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
-	return r.provider.GetSession(ctx, req)
+	session, err := r.provider.GetSession(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	r.attachSessionLifecycle(session)
+	return session, nil
 }
 
 func (r *capturingPluginRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
@@ -265,6 +296,12 @@ func (r *capturingPluginRuntime) startSessionRequests() []pluginruntime.StartSes
 	return out
 }
 
+func (r *capturingPluginRuntime) startSessionTimes() []time.Time {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]time.Time(nil), r.startTimes...)
+}
+
 func (r *capturingPluginRuntime) bindHostServiceRequests() []pluginruntime.BindHostServiceRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -273,6 +310,35 @@ func (r *capturingPluginRuntime) bindHostServiceRequests() []pluginruntime.BindH
 		out[i] = cloneBindHostServiceRequest(req)
 	}
 	return out
+}
+
+func (r *capturingPluginRuntime) attachSessionLifecycle(session *pluginruntime.Session) {
+	if session == nil || session.ID == "" {
+		return
+	}
+	r.mu.Lock()
+	lifecycle := clonePluginRuntimeSessionLifecycle(r.sessionLifecycles[session.ID])
+	r.mu.Unlock()
+	session.Lifecycle = lifecycle
+}
+
+func clonePluginRuntimeSessionLifecycle(lifecycle *pluginruntime.SessionLifecycle) *pluginruntime.SessionLifecycle {
+	if lifecycle == nil {
+		return nil
+	}
+	return &pluginruntime.SessionLifecycle{
+		StartedAt:          cloneTestTime(lifecycle.StartedAt),
+		RecommendedDrainAt: cloneTestTime(lifecycle.RecommendedDrainAt),
+		ExpiresAt:          cloneTestTime(lifecycle.ExpiresAt),
+	}
+}
+
+func cloneTestTime(src *time.Time) *time.Time {
+	if src == nil {
+		return nil
+	}
+	out := src.UTC()
+	return &out
 }
 
 type capturingBundlePluginRuntime struct {
