@@ -8,15 +8,16 @@ import (
 )
 
 type componentRuntimeConfig struct {
-	Name         string            `yaml:"name"`
-	Source       *ProviderSource   `yaml:"source,omitempty"`
-	Command      string            `yaml:"command"`
-	Args         []string          `yaml:"args,omitempty"`
-	Env          map[string]string `yaml:"env,omitempty"`
-	AllowedHosts []string          `yaml:"allowedHosts,omitempty"`
-	HostBinary   string            `yaml:"hostBinary,omitempty"`
-	ManifestPath string            `yaml:"manifestPath,omitempty"`
-	Config       yaml.Node         `yaml:"config,omitempty"`
+	Name         string                `yaml:"name"`
+	Source       *ProviderSource       `yaml:"source,omitempty"`
+	Command      string                `yaml:"command"`
+	Args         []string              `yaml:"args,omitempty"`
+	Env          map[string]string     `yaml:"env,omitempty"`
+	Egress       *ProviderEgressConfig `yaml:"egress,omitempty"`
+	AllowedHosts []string              `yaml:"allowedHosts,omitempty"`
+	HostBinary   string                `yaml:"hostBinary,omitempty"`
+	ManifestPath string                `yaml:"manifestPath,omitempty"`
+	Config       yaml.Node             `yaml:"config,omitempty"`
 }
 
 func BuildComponentRuntimeConfigNode(name, kind string, entry *ProviderEntry, providerConfig yaml.Node) (yaml.Node, error) {
@@ -33,7 +34,8 @@ func BuildComponentRuntimeConfigNode(name, kind string, entry *ProviderEntry, pr
 		Command:      entry.Command,
 		Args:         append([]string(nil), entry.Args...),
 		Env:          entry.Env,
-		AllowedHosts: entry.AllowedHosts,
+		Egress:       cloneProviderEgressConfig(entry.Egress),
+		AllowedHosts: entry.EffectiveAllowedHosts(),
 		HostBinary:   entry.HostBinary,
 		ManifestPath: entry.ResolvedManifestPath,
 		Config:       providerConfig,

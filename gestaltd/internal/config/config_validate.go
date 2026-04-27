@@ -416,6 +416,10 @@ func validateRuntimeConfig(cfg *Config) error {
 	}
 	sourceSyntax := sourceSyntaxForConfig(cfg.APIVersion)
 	cfg.Server.Runtime.Provider = strings.TrimSpace(cfg.Server.Runtime.Provider)
+	cfg.Server.Runtime.DefaultHostedProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultHostedProvider)
+	if cfg.Server.Runtime.Provider != "" && cfg.Server.Runtime.DefaultHostedProvider != "" && cfg.Server.Runtime.Provider != cfg.Server.Runtime.DefaultHostedProvider {
+		return fmt.Errorf("config validation: server.runtime.provider and server.runtime.defaultHostedProvider must match when both are set")
+	}
 	for name, entry := range cfg.Runtime.Providers {
 		if entry == nil {
 			return fmt.Errorf("config validation: runtime.providers.%s is required", name)
@@ -477,7 +481,11 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 			entry.IndexedDB.ObjectStores[i] = strings.TrimSpace(store)
 		}
 	}
-	if entry.Runtime != nil {
+	if entry.Execution != nil {
+		if err := normalizeExecutionConfig("plugins."+name, entry.Execution, false); err != nil {
+			return err
+		}
+	} else if entry.Runtime != nil {
 		if err := normalizeHostedRuntimeConfig("plugins."+name, entry.Runtime); err != nil {
 			return err
 		}
@@ -662,7 +670,11 @@ func validateAgentConfig(cfg *Config) error {
 				entry.IndexedDB.ObjectStores[i] = strings.TrimSpace(store)
 			}
 		}
-		if entry.Runtime != nil {
+		if entry.Execution != nil {
+			if err := normalizeExecutionConfig("providers.agent."+name, entry.Execution, true); err != nil {
+				return err
+			}
+		} else if entry.Runtime != nil {
 			if err := normalizeHostedRuntimeConfig("providers.agent."+name, entry.Runtime); err != nil {
 				return err
 			}
@@ -713,7 +725,7 @@ func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry)
 	if _, err := cfg.EffectiveHostedRuntime(subject, entry); err != nil {
 		return err
 	}
-	if entry.Runtime != nil {
+	if entry.UsesHostedExecution() {
 		if err := validateHostedAgentRuntimeLifecyclePolicy(subject, entry); err != nil {
 			return err
 		}
@@ -773,12 +785,15 @@ func normalizeHostedRuntimeConfig(subject string, runtimeCfg *HostedRuntimeConfi
 }
 
 func validateHostedAgentRuntimeLifecyclePolicy(subject string, entry *ProviderEntry) error {
-	if entry == nil || entry.Runtime == nil {
+	if entry == nil || !entry.UsesHostedExecution() {
 		return nil
 	}
-	runtimeCfg := entry.Runtime
+	runtimeCfg, runtimePath := hostedRuntimeConfigAndPath(subject, entry)
+	if runtimeCfg == nil {
+		return fmt.Errorf("config validation: %s is required for hosted agent providers", runtimePath)
+	}
 	lifecycle := runtimeCfg.lifecyclePolicyConfig()
-	lifecycleSubject := subject + ".runtime"
+	lifecycleSubject := runtimePath
 	if runtimeCfg.Pool != nil {
 		lifecycleSubject += ".pool"
 	}
@@ -814,6 +829,16 @@ func validateHostedAgentRuntimeLifecyclePolicy(subject string, entry *ProviderEn
 	return nil
 }
 
+func hostedRuntimeConfigAndPath(subject string, entry *ProviderEntry) (*HostedRuntimeConfig, string) {
+	if entry != nil && entry.Execution != nil {
+		return entry.Execution.Runtime, subject + ".execution.runtime"
+	}
+	if entry != nil {
+		return entry.Runtime, subject + ".runtime"
+	}
+	return nil, subject + ".runtime"
+}
+
 func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
@@ -836,6 +861,9 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	}
 	if len(entry.Invokes) > 0 {
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
+	}
+	if entry.Execution != nil {
+		return fmt.Errorf("config validation: %s.execution is only supported on plugins.* and providers.agent.*", subject)
 	}
 	if entry.Runtime != nil {
 		return fmt.Errorf("config validation: %s.runtime is only supported on plugins.*", subject)
@@ -891,6 +919,9 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	if len(entry.Invokes) > 0 {
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
 	}
+	if entry.Execution != nil {
+		return fmt.Errorf("config validation: %s.execution is only supported on plugins.* and providers.agent.*", subject)
+	}
 	if entry.Runtime != nil {
 		return fmt.Errorf("config validation: %s.runtime is only supported on plugins.*", subject)
 	}
@@ -899,6 +930,31 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	}
 	if entry.AuthorizationPolicy != "" && !strings.HasPrefix(subject, "ui.") {
 		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on plugins.* and ui.*", subject)
+	}
+	return nil
+}
+
+func normalizeExecutionConfig(subject string, execution *ExecutionConfig, allowLifecycle bool) error {
+	if execution == nil {
+		return nil
+	}
+	execution.Mode = ExecutionMode(strings.ToLower(strings.TrimSpace(string(execution.Mode))))
+	switch execution.Mode {
+	case "", ExecutionModeLocal, ExecutionModeHosted:
+	default:
+		return fmt.Errorf("config validation: %s.execution.mode must be %q or %q, got %q", subject, ExecutionModeLocal, ExecutionModeHosted, execution.Mode)
+	}
+	if execution.Mode == ExecutionModeLocal && execution.Runtime != nil {
+		return fmt.Errorf("config validation: %s.execution.runtime is only valid when execution.mode is %q", subject, ExecutionModeHosted)
+	}
+	if execution.Runtime == nil {
+		return nil
+	}
+	if err := normalizeHostedRuntimeConfig(subject+".execution", execution.Runtime); err != nil {
+		return err
+	}
+	if !allowLifecycle && execution.Runtime.LifecyclePolicyFieldsSet() {
+		return fmt.Errorf("config validation: %s.execution.runtime lifecycle fields are only supported on providers.agent.*.execution.runtime", subject)
 	}
 	return nil
 }
@@ -1225,13 +1281,15 @@ func normalizeWorkflowTargets(cfg *Config) error {
 	if cfg == nil {
 		return nil
 	}
-	for key, schedule := range cfg.Workflows.Schedules {
+	for key := range cfg.Workflows.Schedules {
+		schedule := cfg.Workflows.Schedules[key]
 		if err := normalizeWorkflowScheduleTarget(key, &schedule); err != nil {
 			return err
 		}
 		cfg.Workflows.Schedules[key] = schedule
 	}
-	for key, trigger := range cfg.Workflows.EventTriggers {
+	for key := range cfg.Workflows.EventTriggers {
+		trigger := cfg.Workflows.EventTriggers[key]
 		if err := normalizeWorkflowEventTriggerTarget(key, &trigger); err != nil {
 			return err
 		}

@@ -106,15 +106,36 @@ type HostServiceBinding struct {
 // provider listener endpoint and must return a host-reachable dial target in
 // HostedPlugin.DialTarget.
 type StartPluginRequest struct {
-	SessionID     string
-	PluginName    string
-	Command       string
-	Args          []string
-	Env           map[string]string
-	BundleDir     string
-	AllowedHosts  []string
+	SessionID  string
+	PluginName string
+	Command    string
+	Args       []string
+	Env        map[string]string
+	BundleDir  string
+	Egress     RuntimeEgressPolicy
+	// Deprecated: use Egress.AllowedHosts.
+	AllowedHosts []string
+	// Deprecated: use Egress.DefaultAction.
 	DefaultAction PolicyAction
 	HostBinary    string
+}
+
+type RuntimeEgressPolicy struct {
+	AllowedHosts  []string
+	DefaultAction PolicyAction
+}
+
+func (r StartPluginRequest) EgressPolicy() RuntimeEgressPolicy {
+	if len(r.Egress.AllowedHosts) > 0 || r.Egress.DefaultAction != "" {
+		return RuntimeEgressPolicy{
+			AllowedHosts:  append([]string(nil), r.Egress.AllowedHosts...),
+			DefaultAction: r.Egress.DefaultAction,
+		}
+	}
+	return RuntimeEgressPolicy{
+		AllowedHosts:  append([]string(nil), r.AllowedHosts...),
+		DefaultAction: r.DefaultAction,
+	}
 }
 
 type HostedPlugin struct {

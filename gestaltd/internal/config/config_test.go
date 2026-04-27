@@ -3525,6 +3525,51 @@ server:
 		}
 	})
 
+	t.Run("accepts required lifecycle fields under agent execution runtime", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      indexeddb: agent_state
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          minReadyInstances: 1
+          maxReadyInstances: 2
+          startupTimeout: 5m
+          healthCheckInterval: 30s
+          restartPolicy: always
+          drainTimeout: 2m
+  indexeddb:
+    agent_state:
+      source:
+        path: ./providers/datastore/sqlite
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		runtimeCfg := cfg.Providers.Agent["simple"].Execution.Runtime
+		if runtimeCfg.MinReadyInstances != 1 || runtimeCfg.MaxReadyInstances != 2 {
+			t.Fatalf("execution runtime ready instances = %d/%d, want 1/2", runtimeCfg.MinReadyInstances, runtimeCfg.MaxReadyInstances)
+		}
+		if runtimeCfg.RestartPolicy != HostedRuntimeRestartPolicyAlways {
+			t.Fatalf("execution restartPolicy = %q, want %q", runtimeCfg.RestartPolicy, HostedRuntimeRestartPolicyAlways)
+		}
+	})
+
 	cases := []struct {
 		name string
 		yaml string
@@ -3554,6 +3599,53 @@ server:
   encryptionKey: server-key
 `,
 			want: "providers.agent.simple.runtime.maxReadyInstances is required",
+		},
+		{
+			name: "rejects missing execution runtime on hosted agent",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      execution:
+        mode: hosted
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`,
+			want: "providers.agent.simple.execution.runtime is required",
+		},
+		{
+			name: "rejects missing lifecycle fields under execution runtime",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          minReadyInstances: 1
+          startupTimeout: 5m
+          healthCheckInterval: 30s
+          restartPolicy: always
+          drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`,
+			want: "providers.agent.simple.execution.runtime.maxReadyInstances is required",
 		},
 		{
 			name: "rejects max below min",
@@ -3672,6 +3764,53 @@ server:
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestLoadPathsPreferredProviderEntryAliasesOverrideLegacy(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	basePath := filepath.Join(dir, "base.yaml")
+	overridePath := filepath.Join(dir, "override.yaml")
+	if err := os.WriteFile(basePath, []byte(`
+server:
+  encryptionKey: server-key
+plugins:
+  service:
+    source:
+      path: ./plugins/service/manifest.yaml
+    runtime:
+      provider: missing
+    allowedHosts:
+      - api.github.com
+`), 0o644); err != nil {
+		t.Fatalf("writing base config: %v", err)
+	}
+	if err := os.WriteFile(overridePath, []byte(`
+plugins:
+  service:
+    execution:
+      mode: local
+    egress:
+      allowedHosts: []
+`), 0o644); err != nil {
+		t.Fatalf("writing override config: %v", err)
+	}
+
+	cfg, err := LoadPaths([]string{basePath, overridePath})
+	if err != nil {
+		t.Fatalf("LoadPaths: %v", err)
+	}
+	entry := cfg.Plugins["service"]
+	if entry.UsesHostedExecution() {
+		t.Fatal("UsesHostedExecution = true, want preferred execution.mode: local to override legacy runtime")
+	}
+	if entry.Runtime != nil {
+		t.Fatalf("Runtime = %#v, want nil after preferred execution override", entry.Runtime)
+	}
+	if got := entry.EffectiveAllowedHosts(); len(got) != 0 {
+		t.Fatalf("EffectiveAllowedHosts = %#v, want empty after preferred egress override", got)
 	}
 }
 

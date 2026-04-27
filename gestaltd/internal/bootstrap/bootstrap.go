@@ -1720,7 +1720,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		provider    coreagent.Provider
 		providerErr error
 	)
-	if entry.Runtime != nil {
+	if entry.UsesHostedExecution() {
 		provider, providerErr = buildHostedAgentProvider(ctx, name, entry, node, hostServices, deps)
 	} else {
 		if factories.Agent == nil {

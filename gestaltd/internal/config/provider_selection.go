@@ -109,7 +109,7 @@ func (c *Config) SelectedRuntimeProvider() (string, *RuntimeProviderEntry, error
 	if c == nil {
 		return "", nil, nil
 	}
-	return ResolveSelectedRuntimeProvider(c.Server.Runtime.Provider, c.Runtime.Providers)
+	return ResolveSelectedRuntimeProvider(c.Server.Runtime.SelectedDefaultHostedProvider(), c.Runtime.Providers)
 }
 
 type EffectiveHostIndexedDBBinding struct {
@@ -131,6 +131,11 @@ type EffectiveHostedRuntime struct {
 	Template     string
 	Image        string
 	Metadata     map[string]string
+}
+
+type EffectiveExecution struct {
+	Mode   ExecutionMode
+	Hosted EffectiveHostedRuntime
 }
 
 func (c *Config) EffectivePluginIndexedDB(pluginName string, entry *ProviderEntry) (EffectivePluginIndexedDB, error) {
@@ -180,11 +185,22 @@ func (c *Config) EffectiveAgentIndexedDB(name string, entry *ProviderEntry) (Eff
 }
 
 func (c *Config) EffectiveHostedRuntime(configPath string, entry *ProviderEntry) (EffectiveHostedRuntime, error) {
-	selectedName, _, err := c.SelectedRuntimeProvider()
+	execution, err := c.EffectiveExecution(configPath, entry)
 	if err != nil {
 		return EffectiveHostedRuntime{}, err
 	}
-	return ResolveEffectiveHostedRuntime(configPath, entry, selectedName, c.Runtime.Providers)
+	return execution.Hosted, nil
+}
+
+func (c *Config) EffectiveExecution(configPath string, entry *ProviderEntry) (EffectiveExecution, error) {
+	if c == nil {
+		return EffectiveExecution{Mode: ExecutionModeLocal}, nil
+	}
+	selectedName, _, err := c.SelectedRuntimeProvider()
+	if err != nil {
+		return EffectiveExecution{}, err
+	}
+	return ResolveEffectiveExecution(configPath, entry, selectedName, c.Runtime.Providers)
 }
 
 func ResolveEffectivePluginIndexedDB(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*ProviderEntry) (EffectivePluginIndexedDB, error) {
@@ -289,11 +305,47 @@ func ResolveEffectiveAgentIndexedDB(name string, entry *ProviderEntry, entries m
 }
 
 func ResolveEffectiveHostedRuntime(configPath string, entry *ProviderEntry, selectedName string, entries map[string]*RuntimeProviderEntry) (EffectiveHostedRuntime, error) {
-	if entry == nil || entry.Runtime == nil {
-		return EffectiveHostedRuntime{}, nil
+	execution, err := ResolveEffectiveExecution(configPath, entry, selectedName, entries)
+	if err != nil {
+		return EffectiveHostedRuntime{}, err
+	}
+	return execution.Hosted, nil
+}
+
+func ResolveEffectiveExecution(configPath string, entry *ProviderEntry, selectedName string, entries map[string]*RuntimeProviderEntry) (EffectiveExecution, error) {
+	if entry == nil {
+		return EffectiveExecution{Mode: ExecutionModeLocal}, nil
+	}
+	runtimeCfg := entry.Runtime
+	mode := ExecutionModeLocal
+	providerPath := "runtime.provider"
+	if runtimeCfg != nil {
+		mode = ExecutionModeHosted
+	}
+	if entry.Execution != nil {
+		providerPath = "execution.runtime.provider"
+		mode = entry.Execution.Mode
+		if mode == "" {
+			if entry.Execution.Runtime != nil {
+				mode = ExecutionModeHosted
+			} else {
+				mode = ExecutionModeLocal
+			}
+		}
+		runtimeCfg = entry.Execution.Runtime
+	}
+	switch mode {
+	case "", ExecutionModeLocal:
+		return EffectiveExecution{Mode: ExecutionModeLocal}, nil
+	case ExecutionModeHosted:
+	default:
+		return EffectiveExecution{}, fmt.Errorf("config validation: %s.execution.mode must be %q or %q, got %q", configPath, ExecutionModeLocal, ExecutionModeHosted, mode)
+	}
+	if runtimeCfg == nil {
+		runtimeCfg = &HostedRuntimeConfig{}
 	}
 
-	providerName := strings.TrimSpace(entry.Runtime.Provider)
+	providerName := strings.TrimSpace(runtimeCfg.Provider)
 	if providerName == "" {
 		providerName = strings.TrimSpace(selectedName)
 	}
@@ -303,7 +355,7 @@ func ResolveEffectiveHostedRuntime(configPath string, entry *ProviderEntry, sele
 		var ok bool
 		provider, ok = entries[providerName]
 		if !ok || provider == nil {
-			return EffectiveHostedRuntime{}, fmt.Errorf("config validation: %s.runtime.provider references unknown runtime %q", configPath, providerName)
+			return EffectiveExecution{}, fmt.Errorf("config validation: %s.%s references unknown runtime %q", configPath, providerPath, providerName)
 		}
 	}
 
@@ -311,11 +363,18 @@ func ResolveEffectiveHostedRuntime(configPath string, entry *ProviderEntry, sele
 		Enabled:      true,
 		ProviderName: providerName,
 		Provider:     provider,
-		Template:     strings.TrimSpace(entry.Runtime.Template),
-		Image:        strings.TrimSpace(entry.Runtime.Image),
-		Metadata:     maps.Clone(entry.Runtime.Metadata),
+		Template:     strings.TrimSpace(runtimeCfg.Template),
+		Image:        strings.TrimSpace(runtimeCfg.Image),
+		Metadata:     maps.Clone(runtimeCfg.Metadata),
 	}
-	return runtime, nil
+	return EffectiveExecution{Mode: ExecutionModeHosted, Hosted: runtime}, nil
+}
+
+func (s ServerRuntimeConfig) SelectedDefaultHostedProvider() string {
+	if provider := strings.TrimSpace(s.DefaultHostedProvider); provider != "" {
+		return provider
+	}
+	return strings.TrimSpace(s.Provider)
 }
 func ResolveSelectedHostProvider(kind HostProviderKind, explicit string, entries map[string]*ProviderEntry) (string, *ProviderEntry, error) {
 	if len(entries) == 0 {

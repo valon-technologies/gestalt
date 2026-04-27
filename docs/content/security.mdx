@@ -63,9 +63,10 @@ capabilities, not just the host-local child-process wrapper.
 
 ### Egress control
 
-Every provider entry supports `allowedHosts` to declare which upstream hosts it
-can reach. When `server.egress.defaultAction` is `deny`, providers without an
-explicit allowlist are blocked from host-mediated outbound requests.
+Every provider entry supports `egress.allowedHosts` to declare which upstream
+hosts it can reach. The legacy provider-level `allowedHosts` field remains
+accepted as an alias. When `server.egress.defaultAction` is `deny`, providers
+without an explicit allowlist are blocked from host-mediated outbound requests.
 
 ```yaml
 server:
@@ -75,9 +76,10 @@ server:
 plugins:
   my-plugin:
     source: https://artifacts.example.com/plugin/my-plugin/v1.0.0/provider-release.yaml
-    allowedHosts:
-      - "api.example.com"
-      - "*.slack.com"
+    egress:
+      allowedHosts:
+        - "api.example.com"
+        - "*.slack.com"
 ```
 
 Wildcards are supported (`*.example.com` matches `api.example.com`). The same
@@ -86,20 +88,21 @@ check applies uniformly to REST, GraphQL, and MCP providers.
 ### OS-level sandbox
 
 Executable plugin providers can run with additional OS-level isolation when
-`allowedHosts` is configured or when `server.egress.defaultAction` is `deny`.
-That isolation currently depends on host-specific runtime support, so it should
-not be treated as a portable security boundary by itself.
+`egress.allowedHosts` is configured or when `server.egress.defaultAction` is
+`deny`. That isolation currently depends on host-specific runtime support, so
+it should not be treated as a portable security boundary by itself.
 
 The built-in `local` runtime uses this same host-local sandbox path. Hosted
 runtime providers may define a stronger or different execution boundary, but
 they only count as equivalent for security policy purposes when their support
-profile preserves the same policy. In particular, Gestalt's `allowedHosts`
-model is hostname-based, so a backend that only supports CIDR or firewall rules
-is not a drop-in replacement for hostname-aware egress enforcement.
+profile preserves the same policy. In particular, Gestalt's
+`egress.allowedHosts` model is hostname-based, so a backend that only supports
+CIDR or firewall rules is not a drop-in replacement for hostname-aware egress
+enforcement.
 
 **Filesystem.** On Linux, [Landlock](https://docs.kernel.org/userspace-api/landlock.html) restricts file access to system libraries, SSL certificates, and DNS configuration. Writes are limited to the socket directory and an isolated temp directory. On macOS, equivalent restrictions are applied via `sandbox-exec`.
 
-**Network.** `gestaltd` starts a local HTTP proxy and sets `HTTP_PROXY`/`HTTPS_PROXY` in the provider's environment. The proxy checks each request's hostname against the same `allowedHosts` and `defaultAction` rules used by all other provider types.
+**Network.** `gestaltd` starts a local HTTP proxy and sets `HTTP_PROXY`/`HTTPS_PROXY` in the provider's environment. The proxy checks each request's hostname against the same `egress.allowedHosts` and `defaultAction` rules used by all other provider types.
 
 **Process group.** Sandboxed providers run in their own process group. On shutdown, `gestaltd` signals the entire group to ensure child processes are also cleaned up.
 

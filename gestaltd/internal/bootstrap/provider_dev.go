@@ -183,7 +183,7 @@ func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps D
 		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
 	}
 	if deps.Egress.DefaultAction == egress.PolicyDeny {
-		proxyEnv, err := buildHostedRuntimePublicEgressProxy(name, sessionID, entry.AllowedHosts, deps.Egress.DefaultAction, deps)
+		proxyEnv, err := buildHostedRuntimePublicEgressProxy(name, sessionID, entry.EffectiveAllowedHosts(), deps.Egress.DefaultAction, deps)
 		if err != nil {
 			return providerdev.RuntimeEnv{}, err
 		}

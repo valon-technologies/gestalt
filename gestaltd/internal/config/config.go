@@ -107,7 +107,7 @@ func (e *RuntimeProviderEntry) UnmarshalYAML(value *yaml.Node) error {
 	if err := decodeYAMLNodeKnownFields(value, &raw); err != nil {
 		return err
 	}
-	entry, err := raw.providerEntryYAML.decode()
+	entry, err := raw.decode()
 	if err != nil {
 		return err
 	}
@@ -370,10 +370,12 @@ func (g GitHubReleaseSourceDef) Location() string {
 
 // ProviderEntry is the universal configuration for any provider.
 type ProviderEntry struct {
-	Source          ProviderSource                 `yaml:"source"`
-	Config          yaml.Node                      `yaml:"config,omitempty"`
-	Default         bool                           `yaml:"default,omitempty"`
-	Env             map[string]string              `yaml:"env,omitempty"`
+	Source  ProviderSource        `yaml:"source"`
+	Config  yaml.Node             `yaml:"config,omitempty"`
+	Default bool                  `yaml:"default,omitempty"`
+	Env     map[string]string     `yaml:"env,omitempty"`
+	Egress  *ProviderEgressConfig `yaml:"egress,omitempty"`
+	// Deprecated: use egress.allowedHosts.
 	AllowedHosts    []string                       `yaml:"allowedHosts,omitempty"`
 	DisplayName     string                         `yaml:"displayName,omitempty"`
 	Description     string                         `yaml:"description,omitempty"`
@@ -393,9 +395,11 @@ type ProviderEntry struct {
 	IndexedDB         *HostIndexedDBBindingConfig   `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
 	S3                []string                      `yaml:"s3,omitempty"`
-	Runtime           *HostedRuntimeConfig          `yaml:"runtime,omitempty"`
-	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
-	MCP               bool                          `yaml:"mcp,omitempty"`
+	Execution         *ExecutionConfig              `yaml:"execution,omitempty"`
+	// Deprecated: use execution.mode=hosted and execution.runtime.
+	Runtime  *HostedRuntimeConfig      `yaml:"runtime,omitempty"`
+	Surfaces *ProviderSurfaceOverrides `yaml:"surfaces,omitempty"`
+	MCP      bool                      `yaml:"mcp,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
 	Command              string                                `yaml:"-"`
@@ -497,6 +501,22 @@ type PluginIndexedDBConfig = HostIndexedDBBindingConfig
 type pluginUIBindingConfig struct {
 	Path   string `yaml:"path,omitempty"`
 	Bundle string `yaml:"bundle,omitempty"`
+}
+
+type ProviderEgressConfig struct {
+	AllowedHosts []string `yaml:"allowedHosts,omitempty"`
+}
+
+type ExecutionMode string
+
+const (
+	ExecutionModeLocal  ExecutionMode = "local"
+	ExecutionModeHosted ExecutionMode = "hosted"
+)
+
+type ExecutionConfig struct {
+	Mode    ExecutionMode        `yaml:"mode,omitempty"`
+	Runtime *HostedRuntimeConfig `yaml:"runtime,omitempty"`
 }
 
 type HostedRuntimeConfig struct {
@@ -767,6 +787,7 @@ func (e UIEntry) MarshalYAML() (any, error) {
 func (raw providerEntryYAML) decode() (ProviderEntry, error) {
 	entry := raw.toProviderEntry()
 	entry.RouteAuth = cloneRouteAuthDef(raw.Auth)
+	normalizeProviderEntryAliases(&entry)
 	return entry, nil
 }
 
@@ -859,7 +880,136 @@ func (f providerEntryFields) toProviderEntry() ProviderEntry {
 }
 
 func providerEntryFieldsFromEntry(e ProviderEntry) providerEntryFields {
+	e.Egress = cloneProviderEgressConfig(e.Egress)
+	e.Execution = cloneExecutionConfig(e.Execution)
+	e.Runtime = cloneHostedRuntimeConfig(e.Runtime)
+	normalizeProviderEntryAliases(&e)
+	if e.Egress != nil {
+		e.AllowedHosts = nil
+	}
+	if e.Execution != nil {
+		e.Runtime = nil
+	}
 	return providerEntryFields(e)
+}
+
+func normalizeProviderEntryAliases(entry *ProviderEntry) {
+	if entry == nil {
+		return
+	}
+	entry.AllowedHosts = trimStringSlice(entry.AllowedHosts)
+	if entry.Egress != nil {
+		entry.Egress.AllowedHosts = trimStringSlice(entry.Egress.AllowedHosts)
+		entry.AllowedHosts = slices.Clone(entry.Egress.AllowedHosts)
+	} else if len(entry.AllowedHosts) > 0 {
+		entry.Egress = &ProviderEgressConfig{AllowedHosts: slices.Clone(entry.AllowedHosts)}
+	}
+	if entry.Execution != nil {
+		entry.Execution.Mode = ExecutionMode(strings.ToLower(strings.TrimSpace(string(entry.Execution.Mode))))
+		entry.Runtime = entry.Execution.Runtime
+	}
+}
+
+func trimStringSlice(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	out := values[:0]
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (e *ProviderEntry) EffectiveAllowedHosts() []string {
+	if e == nil {
+		return nil
+	}
+	if e.Egress != nil {
+		return slices.Clone(e.Egress.AllowedHosts)
+	}
+	return slices.Clone(e.AllowedHosts)
+}
+
+func (e *ProviderEntry) UsesHostedExecution() bool {
+	if e == nil {
+		return false
+	}
+	if e.Execution != nil {
+		mode := ExecutionMode(strings.ToLower(strings.TrimSpace(string(e.Execution.Mode))))
+		if mode == "" {
+			return e.Execution.Runtime != nil
+		}
+		return mode == ExecutionModeHosted
+	}
+	return e.Runtime != nil
+}
+
+func (e *ProviderEntry) HostedRuntimeConfig() *HostedRuntimeConfig {
+	if e == nil {
+		return nil
+	}
+	if e.Execution != nil {
+		return e.Execution.Runtime
+	}
+	return e.Runtime
+}
+
+func cloneProviderEgressConfig(src *ProviderEgressConfig) *ProviderEgressConfig {
+	if src == nil {
+		return nil
+	}
+	return &ProviderEgressConfig{AllowedHosts: slices.Clone(src.AllowedHosts)}
+}
+
+func cloneExecutionConfig(src *ExecutionConfig) *ExecutionConfig {
+	if src == nil {
+		return nil
+	}
+	return &ExecutionConfig{
+		Mode:    src.Mode,
+		Runtime: cloneHostedRuntimeConfig(src.Runtime),
+	}
+}
+
+func cloneHostedRuntimeConfig(src *HostedRuntimeConfig) *HostedRuntimeConfig {
+	if src == nil {
+		return nil
+	}
+	return &HostedRuntimeConfig{
+		Provider:            src.Provider,
+		Template:            src.Template,
+		Image:               src.Image,
+		Metadata:            maps.Clone(src.Metadata),
+		Pool:                cloneHostedRuntimePoolConfig(src.Pool),
+		MinReadyInstances:   src.MinReadyInstances,
+		MaxReadyInstances:   src.MaxReadyInstances,
+		StartupTimeout:      src.StartupTimeout,
+		HealthCheckInterval: src.HealthCheckInterval,
+		RestartPolicy:       src.RestartPolicy,
+		DrainTimeout:        src.DrainTimeout,
+	}
+}
+
+func cloneHostedRuntimePoolConfig(src *HostedRuntimePoolConfig) *HostedRuntimePoolConfig {
+	if src == nil {
+		return nil
+	}
+	return &HostedRuntimePoolConfig{
+		MinReadyInstances:   src.MinReadyInstances,
+		MaxReadyInstances:   src.MaxReadyInstances,
+		StartupTimeout:      src.StartupTimeout,
+		HealthCheckInterval: src.HealthCheckInterval,
+		RestartPolicy:       src.RestartPolicy,
+		DrainTimeout:        src.DrainTimeout,
+	}
 }
 
 func cloneHTTPSecuritySchemes(src map[string]*HTTPSecurityScheme) map[string]*HTTPSecurityScheme {
@@ -1323,6 +1473,8 @@ type ServerConfig struct {
 }
 
 type ServerRuntimeConfig struct {
+	DefaultHostedProvider string `yaml:"defaultHostedProvider,omitempty"`
+	// Deprecated: use defaultHostedProvider.
 	Provider string `yaml:"provider,omitempty"`
 }
 
@@ -1669,6 +1821,8 @@ func LoadAllowMissingEnvPaths(paths []string) (*Config, error) {
 
 func NormalizeCompatibility(cfg *Config) error {
 	normalizeProviderSourceShapes(cfg)
+	normalizeProviderEntryCompatibility(cfg)
+	normalizeServerRuntimeCompatibility(cfg)
 	if err := normalizeAuthorizationConfig(cfg); err != nil {
 		return err
 	}
@@ -1676,6 +1830,69 @@ func NormalizeCompatibility(cfg *Config) error {
 		return err
 	}
 	return applyPluginMountBindings(cfg)
+}
+
+func normalizeServerRuntimeCompatibility(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	cfg.Server.Runtime.Provider = strings.TrimSpace(cfg.Server.Runtime.Provider)
+	cfg.Server.Runtime.DefaultHostedProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultHostedProvider)
+	if cfg.Server.Runtime.DefaultHostedProvider == "" {
+		cfg.Server.Runtime.DefaultHostedProvider = cfg.Server.Runtime.Provider
+	}
+}
+
+func normalizeProviderEntryCompatibility(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	for _, entry := range cfg.Plugins {
+		normalizeProviderEntryAliases(entry)
+	}
+	for _, entry := range cfg.Providers.Authentication {
+		normalizeProviderEntryAliases(entry)
+	}
+	for _, entry := range cfg.Providers.Authorization {
+		normalizeProviderEntryAliases(entry)
+	}
+	for _, entry := range cfg.Providers.ExternalCredentials {
+		normalizeProviderEntryAliases(entry)
+	}
+	for _, entry := range cfg.Providers.Secrets {
+		normalizeProviderEntryAliases(entry)
+	}
+	for _, entry := range cfg.Providers.Telemetry {
+		normalizeProviderEntryAliases(entry)
+	}
+	for _, entry := range cfg.Providers.Audit {
+		normalizeProviderEntryAliases(entry)
+	}
+	for _, entry := range cfg.Providers.IndexedDB {
+		normalizeProviderEntryAliases(entry)
+	}
+	for _, entry := range cfg.Providers.Cache {
+		normalizeProviderEntryAliases(entry)
+	}
+	for _, entry := range cfg.Providers.S3 {
+		normalizeProviderEntryAliases(entry)
+	}
+	for _, entry := range cfg.Providers.Workflow {
+		normalizeProviderEntryAliases(entry)
+	}
+	for _, entry := range cfg.Providers.Agent {
+		normalizeProviderEntryAliases(entry)
+	}
+	for _, entry := range cfg.Providers.UI {
+		if entry != nil {
+			normalizeProviderEntryAliases(&entry.ProviderEntry)
+		}
+	}
+	for _, entry := range cfg.Runtime.Providers {
+		if entry != nil {
+			normalizeProviderEntryAliases(&entry.ProviderEntry)
+		}
+	}
 }
 
 func OverlayRemotePluginConfig(path string, cfg *Config) error {

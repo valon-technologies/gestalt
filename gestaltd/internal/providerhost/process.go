@@ -34,10 +34,13 @@ const (
 )
 
 type ProcessConfig struct {
-	Command       string
-	Args          []string
-	Env           map[string]string
-	AllowedHosts  []string
+	Command string
+	Args    []string
+	Env     map[string]string
+	Egress  egress.Policy
+	// Deprecated: use Egress.AllowedHosts.
+	AllowedHosts []string
+	// Deprecated: use Egress.DefaultAction.
 	DefaultAction egress.PolicyAction
 	HostBinary    string
 	Cleanup       func()
@@ -50,12 +53,15 @@ type ProcessConfig struct {
 }
 
 type ExecConfig struct {
-	Command          string
-	Args             []string
-	Env              map[string]string
-	StaticSpec       StaticProviderSpec
-	Config           map[string]any
-	AllowedHosts     []string
+	Command    string
+	Args       []string
+	Env        map[string]string
+	StaticSpec StaticProviderSpec
+	Config     map[string]any
+	Egress     egress.Policy
+	// Deprecated: use Egress.AllowedHosts.
+	AllowedHosts []string
+	// Deprecated: use Egress.DefaultAction.
 	DefaultAction    egress.PolicyAction
 	HostBinary       string
 	Cleanup          func()
@@ -124,6 +130,7 @@ func (c ExecConfig) processConfig() ProcessConfig {
 		Command:       c.Command,
 		Args:          c.Args,
 		Env:           c.Env,
+		Egress:        c.egressPolicy(),
 		AllowedHosts:  c.AllowedHosts,
 		DefaultAction: c.DefaultAction,
 		HostBinary:    c.HostBinary,
@@ -134,12 +141,33 @@ func (c ExecConfig) processConfig() ProcessConfig {
 	}
 }
 
+func (c ExecConfig) egressPolicy() egress.Policy {
+	return egressPolicyFromFields(c.Egress, c.AllowedHosts, c.DefaultAction)
+}
+
 func StartPluginProcess(ctx context.Context, cfg ProcessConfig) (*PluginProcess, error) {
 	proc, err := startProviderProcess(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 	return &PluginProcess{proc: proc}, nil
+}
+
+func (c ProcessConfig) egressPolicy() egress.Policy {
+	return egressPolicyFromFields(c.Egress, c.AllowedHosts, c.DefaultAction)
+}
+
+func egressPolicyFromFields(preferred egress.Policy, allowedHosts []string, defaultAction egress.PolicyAction) egress.Policy {
+	if len(preferred.AllowedHosts) > 0 || preferred.DefaultAction != "" {
+		return egress.Policy{
+			AllowedHosts:  append([]string(nil), preferred.AllowedHosts...),
+			DefaultAction: preferred.DefaultAction,
+		}
+	}
+	return egress.Policy{
+		AllowedHosts:  append([]string(nil), allowedHosts...),
+		DefaultAction: defaultAction,
+	}
 }
 
 func (p *PluginProcess) Lifecycle() proto.ProviderLifecycleClient {
@@ -218,7 +246,8 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 		return nil, fmt.Errorf("plugin command is required")
 	}
 
-	sandboxActive := len(cfg.AllowedHosts) > 0 || cfg.DefaultAction == egress.PolicyDeny
+	egressPolicy := cfg.egressPolicy()
+	sandboxActive := egressPolicy.RequiresHostnameEnforcement()
 
 	dir := strings.TrimSpace(cfg.SocketDir)
 	if dir == "" {
@@ -291,14 +320,11 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 		policy := &sandbox.Policy{
 			ReadOnlyPaths:  append(sandbox.DefaultReadOnlyPaths(), filepath.Dir(cfg.Command)),
 			ReadWritePaths: []string{dir, sandboxTmp},
-			AllowedHosts:   cfg.AllowedHosts,
+			AllowedHosts:   egressPolicy.AllowedHosts,
 			HostBinary:     cfg.HostBinary,
 		}
 
-		defaultAction := cfg.DefaultAction
-		checkHost := func(host string) error {
-			return egress.CheckHost(policy.AllowedHosts, host, defaultAction)
-		}
+		checkHost := egressPolicy.CheckHost
 		proxy := sandbox.NewProxyServer(checkHost)
 		port, err := proxy.Start()
 		if err != nil {

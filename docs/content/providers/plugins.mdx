@@ -12,9 +12,9 @@ fully declarative, and some are hybrid packages that combine both models.
 
 From a deployment point of view, `source` chooses the package, `config`
 passes provider-specific settings such as OAuth app credentials,
-`allowedOperations` publishes only part of a large catalog, `allowedHosts`
-declares outbound egress policy, and `runtime` opts an executable plugin into
-hosted execution.
+`allowedOperations` publishes only part of a large catalog,
+`egress.allowedHosts` declares outbound egress policy, and `execution` opts an
+executable plugin into hosted execution.
 
 If the manifest enables MCP, the same operations are also exposed through the
 server's `/mcp` endpoint.
@@ -96,7 +96,9 @@ plugins:
 ```
 
 By default, executable plugins run on the same machine as `gestaltd`. A plugin
-only uses a hosted runtime when it sets `plugins.<name>.runtime`.
+only uses a hosted runtime when it sets `execution.mode: hosted`. The legacy
+`plugins.<name>.runtime` field is still accepted as an alias for hosted
+execution.
 
 ## Choosing a runtime
 
@@ -115,21 +117,24 @@ runtime:
 
 server:
   runtime:
-    provider: modal
+    defaultHostedProvider: modal
 
 plugins:
   support:
     source: ./plugins/support/manifest.yaml
-    runtime:
-      template: python-dev
-      image: ghcr.io/example/support-plugin:2026-04-21
-      metadata:
-        environment: production
+    execution:
+      mode: hosted
+      runtime:
+        template: python-dev
+        image: ghcr.io/example/support-plugin:2026-04-21
+        metadata:
+          environment: production
 ```
 
-`plugins.<name>.runtime.provider` selects a named backend from
+`plugins.<name>.execution.runtime.provider` selects a named backend from
 `runtime.providers`. When `provider` is omitted, Gestalt uses
-`server.runtime.provider` or the one runtime entry marked `default: true`.
+`server.runtime.defaultHostedProvider` or the one runtime entry marked
+`default: true`.
 
 `template`, `image`, and `metadata` are forwarded to the runtime backend. Their
 meaning is backend-specific: one runtime may ignore them, while another may use
@@ -137,14 +142,15 @@ them to choose a sandbox template, container image, or lifecycle labels.
 
 A built-in `local` runtime is always available for same-machine execution. The
 first installable hosted runtime provider is `modal`. It requires
-`runtime.providers.<name>.config.app` and `plugins.<name>.runtime.image`.
+`runtime.providers.<name>.config.app` and
+`plugins.<name>.execution.runtime.image`.
 Gestalt only uses it for plain executable plugins today. Modal can still run
 plugins that need Gestalt-owned services or hostname-based egress when the host
 is configured for the public relay and proxy path. In practice that means
 `server.baseURL` and `server.encryptionKey` must be set, and the runtime must
 report a compatible support profile. Without those prerequisites, plugins that
 need `indexeddb`, `cache`, `s3`, workflow-manager access when workflows are
-configured, nested `invokes`, `allowedHosts`, or
+configured, nested `invokes`, `egress.allowedHosts`, or
 `server.egress.defaultAction: deny` stay on `local`.
 
 For the runtime-provider model itself, see [Providers > Runtime](/providers/runtime).
@@ -178,22 +184,24 @@ plugins:
         alias: get_ticket
 ```
 
-Use `allowedHosts` when a plugin needs explicit outbound access:
+Use `egress.allowedHosts` when a plugin needs explicit outbound access:
 
 ```yaml
 plugins:
   github:
-    allowedHosts:
-      - api.github.com
-      - "*.github.com"
+    egress:
+      allowedHosts:
+        - api.github.com
+        - "*.github.com"
 ```
 
-For executable plugins, `allowedHosts` is only a complete security boundary when
-the plugin is running inside a runtime backend that preserves Gestalt's
-hostname-based policy model. The current host-local wrappers are OS-dependent,
-so operators should treat `allowedHosts` as declarative policy plus best-effort
-enforcement unless the selected runtime explicitly supports hostname-based
-egress controls.
+For executable plugins, `egress.allowedHosts` is only a complete security
+boundary when the plugin is running inside a runtime backend that preserves
+Gestalt's hostname-based policy model. The legacy `allowedHosts` field is still
+accepted as an alias. The current host-local wrappers are OS-dependent, so
+operators should treat `egress.allowedHosts` as declarative policy plus
+best-effort enforcement unless the selected runtime explicitly supports
+hostname-based egress controls.
 
 ## Building your own plugin
 

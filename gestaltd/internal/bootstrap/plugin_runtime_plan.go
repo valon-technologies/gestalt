@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 )
 
@@ -158,7 +157,7 @@ func pluginRuntimeRequirementsForPlugin(name string, entry *config.ProviderEntry
 	if len(entry.Invokes) > 0 {
 		requiresHostServiceAccess = true
 	}
-	return requiresHostServiceAccess, len(entry.AllowedHosts) > 0 || deps.Egress.DefaultAction == egress.PolicyDeny, nil
+	return requiresHostServiceAccess, deps.Egress.ProviderPolicy(entry).RequiresHostnameEnforcement(), nil
 }
 
 func agentRuntimeRequirementsForProvider(name string, entry *config.ProviderEntry, deps Deps) (bool, bool, error) {
@@ -168,7 +167,7 @@ func agentRuntimeRequirementsForProvider(name string, entry *config.ProviderEntr
 	if _, err := config.ResolveEffectiveAgentIndexedDB(name, entry, deps.IndexedDBDefs); err != nil {
 		return false, false, err
 	}
-	return true, len(entry.AllowedHosts) > 0 || deps.Egress.DefaultAction == egress.PolicyDeny, nil
+	return true, deps.Egress.ProviderPolicy(entry).RequiresHostnameEnforcement(), nil
 }
 
 func (p HostedRuntimePlan) Validate(label string) error {
