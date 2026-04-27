@@ -76,7 +76,7 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | `GET` | `/api/v1/agent/turns/{turnID}` | Inspect one agent turn. |
 | `POST` | `/api/v1/agent/turns/{turnID}/cancel` | Cancel one agent turn. The request body may include an optional `reason`. |
 | `GET` | `/api/v1/agent/turns/{turnID}/events` | List stored events for one turn. Supports optional `after` sequence cursor and `limit`. |
-| `GET` | `/api/v1/agent/turns/{turnID}/events/stream` | Stream turn events as server-sent events. Supports optional `after` sequence cursor and `limit`. |
+| `GET` | `/api/v1/agent/turns/{turnID}/events/stream` | Stream turn events as server-sent events. Supports optional `after` sequence cursor, `limit`, and `until=terminal\|blocked_or_terminal`. |
 | `GET` | `/api/v1/agent/turns/{turnID}/interactions` | List provider-owned interactions for one turn. |
 | `POST` | `/api/v1/agent/turns/{turnID}/interactions/{interactionID}/resolve` | Resolve one pending interaction by submitting a `resolution` payload. |
 
@@ -305,9 +305,13 @@ curl -H 'Authorization: Bearer gst_api_...' \
 curl -H 'Authorization: Bearer gst_api_...' \
   'http://localhost:8080/api/v1/agent/turns/turn-123/events?after=0&limit=100'
 
-# Stream turn events
+# Stream turn events until the turn reaches a terminal state
 curl -N -H 'Authorization: Bearer gst_api_...' \
   'http://localhost:8080/api/v1/agent/turns/turn-123/events/stream?after=0'
+
+# Stream turn events until the turn is terminal or waiting on an interaction
+curl -N -H 'Authorization: Bearer gst_api_...' \
+  'http://localhost:8080/api/v1/agent/turns/turn-123/events/stream?after=0&until=blocked_or_terminal'
 
 # List pending turn interactions
 curl -H 'Authorization: Bearer gst_api_...' \

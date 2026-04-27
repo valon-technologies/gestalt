@@ -1,7 +1,12 @@
 use anyhow::{Context, Result, bail};
+use colored::Colorize;
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Map, Value, json};
-use std::io::{self, Write};
+use std::io::{self, BufRead, BufReader, IsTerminal, Write};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, AtomicU64, Ordering},
+};
 use std::thread;
 use std::time::Duration;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -11,7 +16,9 @@ use crate::cli::{
     AgentArgs, AgentSessionCreateArgs, AgentSessionUpdateArgs, AgentToolArg, AgentTurnCreateArgs,
     AgentTurnEventListArgs, AgentTurnEventStreamArgs,
 };
-use crate::interactive::{InputPrompt, prompt_confirm, prompt_input};
+use crate::interactive::{
+    InputPrompt, InteractiveLineReader, PromptLine, prompt_confirm, prompt_input,
+};
 use crate::output::{self, Format};
 use crate::params;
 
@@ -19,6 +26,8 @@ const SESSIONS_PATH: &str = "/api/v1/agent/sessions";
 const TURNS_PATH: &str = "/api/v1/agent/turns";
 const DEFAULT_EVENT_PAGE_SIZE: u32 = 100;
 const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(250);
+const EVENT_STREAM_UNTIL_BLOCKED_OR_TERMINAL: &str = "blocked_or_terminal";
+const INTERRUPT_CANCEL_REASON: &str = "operator interrupted";
 
 pub fn create_session(
     client: &ApiClient,
@@ -114,13 +123,26 @@ pub fn cancel_turn(
     Ok(())
 }
 
+fn cancel_turn_silent(client: &ApiClient, id: &str, reason: &str) -> Result<AgentTurnInfo> {
+    decode_json(
+        client
+            .post(
+                &format!("{TURNS_PATH}/{id}/cancel"),
+                &json!({ "reason": reason }),
+            )
+            .with_context(|| format!("failed to cancel agent turn {id}"))?,
+    )
+}
+
 pub fn list_turn_events(
     client: &ApiClient,
     args: &AgentTurnEventListArgs,
     format: Format,
 ) -> Result<()> {
     let resp = client
-        .get(&turn_events_path(&args.id, false, args.after, args.limit))
+        .get(&turn_events_path(
+            &args.id, false, args.after, args.limit, None,
+        ))
         .with_context(|| format!("failed to list events for agent turn {}", args.id))?;
     print_turn_events(&resp, format);
     Ok(())
@@ -128,7 +150,9 @@ pub fn list_turn_events(
 
 pub fn stream_turn_events(client: &ApiClient, args: &AgentTurnEventStreamArgs) -> Result<()> {
     let mut resp = client
-        .get_stream(&turn_events_path(&args.id, true, args.after, args.limit))
+        .get_stream(&turn_events_path(
+            &args.id, true, args.after, args.limit, None,
+        ))
         .with_context(|| format!("failed to stream events for agent turn {}", args.id))?;
     let mut stdout = io::stdout().lock();
     io::copy(&mut resp, &mut stdout).context("failed to read agent turn event stream")?;
@@ -138,13 +162,15 @@ pub fn stream_turn_events(client: &ApiClient, args: &AgentTurnEventStreamArgs) -
 pub fn run_interactive(client: &ApiClient, args: &AgentArgs) -> Result<()> {
     let mut shell = AgentShell::connect(client, args)?;
     shell.print_banner()?;
+    let interrupts = InterruptState::install();
+    let mut input = InteractiveLineReader::with_history_namespace("agent")?;
 
     if !args.messages.is_empty() {
-        shell.submit_turn(client, args.messages.clone())?;
+        shell.submit_turn(client, args.messages.clone(), &interrupts)?;
     }
 
     loop {
-        let Some(line) = prompt_agent_line()? else {
+        let Some(line) = prompt_agent_message(&mut input)? else {
             return Ok(());
         };
         let trimmed = line.trim();
@@ -163,7 +189,7 @@ pub fn run_interactive(client: &ApiClient, args: &AgentArgs) -> Result<()> {
             }
             _ => {}
         }
-        shell.submit_turn(client, vec![trimmed.to_string()])?;
+        shell.submit_turn(client, vec![line], &interrupts)?;
     }
 }
 
@@ -193,15 +219,26 @@ struct AgentTurnInfo {
     #[serde(default)]
     output_text: String,
     #[serde(default)]
+    structured_output: Option<Value>,
+    #[serde(default)]
     status_message: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AgentTurnEventInfo {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    turn_id: String,
+    #[serde(default)]
     seq: i64,
     #[serde(rename = "type")]
     event_type: String,
+    #[serde(default)]
+    source: String,
+    #[serde(default)]
+    visibility: String,
     #[serde(default)]
     data: Map<String, Value>,
 }
@@ -272,7 +309,12 @@ impl AgentShell {
         Ok(())
     }
 
-    fn submit_turn(&mut self, client: &ApiClient, messages: Vec<String>) -> Result<()> {
+    fn submit_turn(
+        &mut self,
+        client: &ApiClient,
+        messages: Vec<String>,
+        interrupts: &InterruptState,
+    ) -> Result<()> {
         let system_messages = if self.applied_system_messages {
             Vec::new()
         } else {
@@ -289,15 +331,16 @@ impl AgentShell {
         };
         let turn = create_turn_info(client, &turn_args)?;
         self.applied_system_messages = true;
-        drive_turn(client, &turn)?;
+        drive_turn(client, &turn, interrupts)?;
         Ok(())
     }
 }
 
-fn drive_turn(client: &ApiClient, turn: &AgentTurnInfo) -> Result<()> {
-    let mut renderer = AgentTurnRenderer::default();
+fn drive_turn(client: &ApiClient, turn: &AgentTurnInfo, interrupts: &InterruptState) -> Result<()> {
+    let mut renderer = AgentTurnRenderer::new();
+    let _cancel_guard = TurnCancelGuard::spawn(client, &turn.id, interrupts);
     loop {
-        drain_turn_events(client, &turn.id, &mut renderer)?;
+        stream_turn_events_until_blocked_or_terminal(client, &turn.id, &mut renderer)?;
         let latest = get_turn_info(client, &turn.id)?;
         renderer.finish_turn(&latest)?;
 
@@ -315,7 +358,19 @@ fn drive_turn(client: &ApiClient, turn: &AgentTurnInfo) -> Result<()> {
                     );
                 }
                 for interaction in pending {
-                    let resolution = prompt_interaction_resolution(&interaction)?;
+                    let prompt_interrupt_count = interrupts.count();
+                    let resolution = match prompt_interaction_resolution(&interaction) {
+                        Ok(resolution) => resolution,
+                        Err(_) if interrupts.count() > prompt_interrupt_count => {
+                            let _ = cancel_turn_silent(client, &turn.id, INTERRUPT_CANCEL_REASON);
+                            return Ok(());
+                        }
+                        Err(err) => return Err(err),
+                    };
+                    if interrupts.count() > prompt_interrupt_count {
+                        let _ = cancel_turn_silent(client, &turn.id, INTERRUPT_CANCEL_REASON);
+                        return Ok(());
+                    }
                     resolve_interaction_info(client, &turn.id, &interaction.id, resolution)?;
                 }
             }
@@ -326,15 +381,87 @@ fn drive_turn(client: &ApiClient, turn: &AgentTurnInfo) -> Result<()> {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone)]
+struct InterruptState {
+    count: Arc<AtomicU64>,
+}
+
+impl InterruptState {
+    fn install() -> Self {
+        let count = Arc::new(AtomicU64::new(0));
+        let handler_count = Arc::clone(&count);
+        if let Err(err) = ctrlc::set_handler(move || {
+            handler_count.fetch_add(1, Ordering::SeqCst);
+        }) {
+            eprintln!("warning: failed to install Ctrl-C handler: {err}");
+        }
+        Self { count }
+    }
+
+    fn count(&self) -> u64 {
+        self.count.load(Ordering::SeqCst)
+    }
+}
+
+struct TurnCancelGuard {
+    active: Arc<AtomicBool>,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+impl TurnCancelGuard {
+    fn spawn(client: &ApiClient, turn_id: &str, interrupts: &InterruptState) -> Self {
+        let active = Arc::new(AtomicBool::new(true));
+        let thread_active = Arc::clone(&active);
+        let client = client.clone();
+        let turn_id = turn_id.to_string();
+        let interrupts = interrupts.clone();
+        let baseline = interrupts.count();
+        let handle = thread::spawn(move || {
+            while thread_active.load(Ordering::SeqCst) {
+                if interrupts.count() > baseline {
+                    let _ = cancel_turn_silent(&client, &turn_id, INTERRUPT_CANCEL_REASON);
+                    return;
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+        });
+        Self {
+            active,
+            handle: Some(handle),
+        }
+    }
+}
+
+impl Drop for TurnCancelGuard {
+    fn drop(&mut self) {
+        self.active.store(false, Ordering::SeqCst);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
 struct AgentTurnRenderer {
     after_seq: u64,
     assistant_line_open: bool,
     saw_assistant_output: bool,
+    saw_structured_output: bool,
     delta_buffer: String,
+    use_color: bool,
 }
 
 impl AgentTurnRenderer {
+    fn new() -> Self {
+        Self {
+            after_seq: 0,
+            assistant_line_open: false,
+            saw_assistant_output: false,
+            saw_structured_output: false,
+            delta_buffer: String::new(),
+            use_color: io::stdout().is_terminal(),
+        }
+    }
+
     fn after_seq(&self) -> u64 {
         self.after_seq
     }
@@ -346,7 +473,8 @@ impl AgentTurnRenderer {
             }
             match event.event_type.as_str() {
                 "agent.message.delta" | "assistant.delta" => {
-                    if let Some(text) = string_field(&event.data, "text") {
+                    if let Some(text) = string_any_field(&event.data, &["text", "delta", "content"])
+                    {
                         self.start_assistant_line()?;
                         print!("{text}");
                         io::stdout().flush().context("failed to flush stdout")?;
@@ -367,51 +495,106 @@ impl AgentTurnRenderer {
                         println!();
                         self.assistant_line_open = false;
                     } else if let Some(text) = text {
-                        println!("assistant> {text}");
+                        println!("{} {text}", self.label("assistant>"));
                         self.saw_assistant_output = true;
                     }
                     self.delta_buffer.clear();
                 }
+                "turn.started" => {
+                    self.finish_assistant_line();
+                    match string_any_field(&event.data, &["status", "state"]) {
+                        Some(status) => println!("{} started ({status})", self.label("turn>")),
+                        None => println!("{} started", self.label("turn>")),
+                    }
+                }
                 "tool.started" => {
                     self.finish_assistant_line();
-                    let tool_id =
-                        string_field(&event.data, "tool_id").unwrap_or_else(|| "tool".to_string());
-                    println!("tool> {tool_id} started");
+                    let tool = string_any_field(
+                        &event.data,
+                        &[
+                            "tool_name",
+                            "toolName",
+                            "name",
+                            "operation",
+                            "tool_id",
+                            "toolId",
+                        ],
+                    )
+                    .unwrap_or_else(|| "tool".to_string());
+                    print!("{} {tool} started", self.label("tool>"));
+                    if let Some(input) =
+                        value_any_field(&event.data, &["arguments", "input", "request"])
+                    {
+                        print!(" {}", compact_json(input)?);
+                    }
+                    println!();
                 }
                 "tool.completed" => {
                     self.finish_assistant_line();
-                    let tool_id =
-                        string_field(&event.data, "tool_id").unwrap_or_else(|| "tool".to_string());
-                    match number_field(&event.data, "status") {
-                        Some(status) => println!("tool> {tool_id} completed ({status})"),
-                        None => println!("tool> {tool_id} completed"),
+                    let tool = string_any_field(
+                        &event.data,
+                        &[
+                            "tool_name",
+                            "toolName",
+                            "name",
+                            "operation",
+                            "tool_id",
+                            "toolId",
+                        ],
+                    )
+                    .unwrap_or_else(|| "tool".to_string());
+                    let status =
+                        string_any_field(&event.data, &["status", "state"]).or_else(|| {
+                            number_any_field(&event.data, &["status", "statusCode"])
+                                .map(|status| status.to_string())
+                        });
+                    match status {
+                        Some(status) => {
+                            print!("{} {tool} completed ({status})", self.label("tool>"))
+                        }
+                        None => print!("{} {tool} completed", self.label("tool>")),
                     }
+                    if let Some(error) = string_field(&event.data, "error") {
+                        print!(": {error}");
+                    } else if let Some(output) =
+                        value_any_field(&event.data, &["output", "result", "body"])
+                    {
+                        print!(" {}", compact_json(output)?);
+                    }
+                    println!();
                 }
                 "interaction.requested" => {
                     self.finish_assistant_line();
-                    let interaction_id = string_field(&event.data, "interaction_id")
-                        .unwrap_or_else(|| "interaction".to_string());
-                    println!("interaction> requested ({interaction_id})");
+                    let interaction_id =
+                        string_any_field(&event.data, &["interaction_id", "interactionId"])
+                            .unwrap_or_else(|| "interaction".to_string());
+                    println!(
+                        "{} requested ({interaction_id})",
+                        self.label("interaction>")
+                    );
                 }
                 "interaction.resolved" => {
                     self.finish_assistant_line();
-                    let interaction_id = string_field(&event.data, "interaction_id")
-                        .unwrap_or_else(|| "interaction".to_string());
-                    println!("interaction> resolved ({interaction_id})");
+                    let interaction_id =
+                        string_any_field(&event.data, &["interaction_id", "interactionId"])
+                            .unwrap_or_else(|| "interaction".to_string());
+                    println!("{} resolved ({interaction_id})", self.label("interaction>"));
                 }
                 "turn.failed" => {
                     self.finish_assistant_line();
                     if let Some(message) = string_field(&event.data, "error") {
-                        println!("turn> failed: {message}");
+                        println!("{} failed: {message}", self.label("turn>"));
                     }
                 }
                 "turn.canceled" => {
                     self.finish_assistant_line();
                     if let Some(reason) = string_field(&event.data, "reason") {
-                        println!("turn> canceled: {reason}");
+                        println!("{} canceled: {reason}", self.label("turn>"));
                     }
                 }
-                _ => {}
+                "turn.completed" => {}
+                _ if event.visibility == "private" => {}
+                _ => self.render_generic_event(event)?,
             }
         }
         Ok(())
@@ -421,16 +604,26 @@ impl AgentTurnRenderer {
         self.finish_assistant_line();
         match turn.status.as_str() {
             "succeeded" if !self.saw_assistant_output && !turn.output_text.is_empty() => {
-                println!("assistant> {}", turn.output_text);
+                println!("{} {}", self.label("assistant>"), turn.output_text);
                 self.saw_assistant_output = true;
             }
             "failed" if !turn.status_message.is_empty() => {
-                println!("turn> failed: {}", turn.status_message);
+                println!("{} failed: {}", self.label("turn>"), turn.status_message);
             }
             "canceled" if !turn.status_message.is_empty() => {
-                println!("turn> canceled: {}", turn.status_message);
+                println!("{} canceled: {}", self.label("turn>"), turn.status_message);
             }
             _ => {}
+        }
+        if !self.saw_structured_output
+            && let Some(structured_output) = turn.structured_output.as_ref()
+        {
+            println!(
+                "{} {}",
+                self.label("structured>"),
+                pretty_json(structured_output)?
+            );
+            self.saw_structured_output = true;
         }
         self.delta_buffer.clear();
         Ok(())
@@ -438,7 +631,7 @@ impl AgentTurnRenderer {
 
     fn start_assistant_line(&mut self) -> Result<()> {
         if !self.assistant_line_open {
-            print!("assistant> ");
+            print!("{} ", self.label("assistant>"));
             io::stdout().flush().context("failed to flush stdout")?;
             self.assistant_line_open = true;
         }
@@ -451,22 +644,74 @@ impl AgentTurnRenderer {
             self.assistant_line_open = false;
         }
     }
+
+    fn render_generic_event(&mut self, event: &AgentTurnEventInfo) -> Result<()> {
+        self.finish_assistant_line();
+        let mut fields = Vec::new();
+        if !event.id.is_empty() {
+            fields.push(format!("id={}", event.id));
+        }
+        if !event.source.is_empty() {
+            fields.push(format!("source={}", event.source));
+        }
+        if !event.turn_id.is_empty() {
+            fields.push(format!("turn={}", event.turn_id));
+        }
+        let suffix = if fields.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", fields.join(" "))
+        };
+        if event.data.is_empty() {
+            println!("{} {}{}", self.label("event>"), event.event_type, suffix);
+        } else {
+            println!(
+                "{} {}{} {}",
+                self.label("event>"),
+                event.event_type,
+                suffix,
+                compact_json(&Value::Object(event.data.clone()))?
+            );
+        }
+        Ok(())
+    }
+
+    fn label(&self, value: &str) -> String {
+        if self.use_color {
+            value.bold().cyan().to_string()
+        } else {
+            value.to_string()
+        }
+    }
 }
 
-fn prompt_agent_line() -> Result<Option<String>> {
-    let mut stderr = io::stderr().lock();
-    write!(stderr, "agent> ")?;
-    stderr.flush()?;
-
-    let mut line = String::new();
-    let read = io::stdin()
-        .read_line(&mut line)
-        .context("failed to read agent input")?;
-    if read == 0 {
-        writeln!(stderr)?;
-        return Ok(None);
+fn prompt_agent_message(input: &mut InteractiveLineReader) -> Result<Option<String>> {
+    let mut lines = Vec::new();
+    let mut prompt = "agent> ";
+    loop {
+        match input.read_line(prompt)? {
+            PromptLine::Line(mut line) => {
+                let continued = has_trailing_continuation(&line);
+                if continued {
+                    line.pop();
+                }
+                lines.push(line);
+                if !continued {
+                    return Ok(Some(lines.join("\n")));
+                }
+                prompt = "...> ";
+            }
+            PromptLine::Interrupted => {
+                eprintln!("^C");
+                return Ok(Some(String::new()));
+            }
+            PromptLine::Eof => return Ok(None),
+        }
     }
-    Ok(Some(line.trim().to_string()))
+}
+
+fn has_trailing_continuation(line: &str) -> bool {
+    line.chars().rev().take_while(|ch| *ch == '\\').count() % 2 == 1
 }
 
 fn prompt_interaction_resolution(interaction: &AgentInteractionInfo) -> Result<Map<String, Value>> {
@@ -543,27 +788,57 @@ fn prompt_interaction_resolution(interaction: &AgentInteractionInfo) -> Result<M
     }
 }
 
-fn drain_turn_events(
+fn stream_turn_events_until_blocked_or_terminal(
     client: &ApiClient,
     turn_id: &str,
     renderer: &mut AgentTurnRenderer,
 ) -> Result<()> {
-    loop {
-        let events = list_turn_events_info(
-            client,
+    let resp = client
+        .get_stream(&turn_events_path(
             turn_id,
-            renderer.after_seq(),
-            DEFAULT_EVENT_PAGE_SIZE,
-        )?;
-        if events.is_empty() {
+            true,
+            Some(renderer.after_seq()),
+            Some(DEFAULT_EVENT_PAGE_SIZE),
+            Some(EVENT_STREAM_UNTIL_BLOCKED_OR_TERMINAL),
+        ))
+        .with_context(|| format!("failed to stream events for agent turn {turn_id}"))?;
+    let mut reader = BufReader::new(resp);
+    let mut line = String::new();
+    let mut data = String::new();
+
+    loop {
+        line.clear();
+        let read = reader
+            .read_line(&mut line)
+            .context("failed to read agent turn event stream")?;
+        if read == 0 {
+            render_sse_event_data(&mut data, renderer)?;
             return Ok(());
         }
-        let event_count = events.len();
-        renderer.render_events(&events)?;
-        if event_count < DEFAULT_EVENT_PAGE_SIZE as usize {
-            return Ok(());
+
+        let trimmed = line.trim_end_matches(['\r', '\n']);
+        if trimmed.is_empty() {
+            render_sse_event_data(&mut data, renderer)?;
+            continue;
+        }
+
+        if let Some(value) = trimmed.strip_prefix("data:") {
+            if !data.is_empty() {
+                data.push('\n');
+            }
+            data.push_str(value.strip_prefix(' ').unwrap_or(value));
         }
     }
+}
+
+fn render_sse_event_data(data: &mut String, renderer: &mut AgentTurnRenderer) -> Result<()> {
+    if data.is_empty() {
+        return Ok(());
+    }
+    let raw = std::mem::take(data);
+    let event: AgentTurnEventInfo = serde_json::from_str(&raw)
+        .with_context(|| format!("failed to decode agent turn event stream frame: {raw}"))?;
+    renderer.render_events(&[event])
 }
 
 fn create_session_info(
@@ -648,19 +923,6 @@ fn get_turn_info(client: &ApiClient, id: &str) -> Result<AgentTurnInfo> {
     )
 }
 
-fn list_turn_events_info(
-    client: &ApiClient,
-    turn_id: &str,
-    after: u64,
-    limit: u32,
-) -> Result<Vec<AgentTurnEventInfo>> {
-    decode_json(
-        client
-            .get(&turn_events_path(turn_id, false, Some(after), Some(limit)))
-            .with_context(|| format!("failed to list events for agent turn {turn_id}"))?,
-    )
-}
-
 fn list_interactions_info(client: &ApiClient, turn_id: &str) -> Result<Vec<AgentInteractionInfo>> {
     decode_json(
         client
@@ -698,8 +960,24 @@ fn string_field(data: &Map<String, Value>, key: &str) -> Option<String> {
         .map(ToString::to_string)
 }
 
-fn number_field(data: &Map<String, Value>, key: &str) -> Option<i64> {
-    data.get(key).and_then(Value::as_i64)
+fn string_any_field(data: &Map<String, Value>, keys: &[&str]) -> Option<String> {
+    keys.iter().find_map(|key| string_field(data, key))
+}
+
+fn value_any_field<'a>(data: &'a Map<String, Value>, keys: &[&str]) -> Option<&'a Value> {
+    keys.iter().find_map(|key| data.get(*key))
+}
+
+fn number_any_field(data: &Map<String, Value>, keys: &[&str]) -> Option<i64> {
+    keys.iter().find_map(|key| data.get(*key)?.as_i64())
+}
+
+fn compact_json(value: &Value) -> Result<String> {
+    serde_json::to_string(value).context("failed to encode compact JSON")
+}
+
+fn pretty_json(value: &Value) -> Result<String> {
+    serde_json::to_string_pretty(value).context("failed to encode pretty JSON")
 }
 
 fn build_session_create_body(args: &AgentSessionCreateArgs) -> Result<Value> {
@@ -848,13 +1126,22 @@ fn session_turns_path(session_id: &str, status: Option<&str>) -> String {
     }
 }
 
-fn turn_events_path(id: &str, stream: bool, after: Option<u64>, limit: Option<u32>) -> String {
+fn turn_events_path(
+    id: &str,
+    stream: bool,
+    after: Option<u64>,
+    limit: Option<u32>,
+    until: Option<&str>,
+) -> String {
     let mut serializer = url::form_urlencoded::Serializer::new(String::new());
     if let Some(after) = after {
         serializer.append_pair("after", &after.to_string());
     }
     if let Some(limit) = limit {
         serializer.append_pair("limit", &limit.to_string());
+    }
+    if let Some(until) = until {
+        serializer.append_pair("until", until);
     }
     let suffix = if stream { "/events/stream" } else { "/events" };
     let query = serializer.finish();

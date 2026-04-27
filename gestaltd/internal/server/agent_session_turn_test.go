@@ -561,6 +561,43 @@ func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 	_ = json.NewDecoder(turnResp.Body).Decode(&turn)
 	turnID := turn["id"].(string)
 
+	blockedCtx, blockedCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer blockedCancel()
+	blockedReq, _ := http.NewRequestWithContext(blockedCtx, http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events/stream?after=0&limit=1&until=blocked_or_terminal", nil)
+	blockedReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	blockedResp, err := http.DefaultClient.Do(blockedReq)
+	if err != nil {
+		t.Fatalf("stream blocked events: %v", err)
+	}
+	defer func() { _ = blockedResp.Body.Close() }()
+	if blockedResp.StatusCode != http.StatusOK {
+		t.Fatalf("blocked stream status = %d", blockedResp.StatusCode)
+	}
+	blockedReader := bufio.NewReader(blockedResp.Body)
+	var blocked []string
+	for {
+		line, err := blockedReader.ReadString('\n')
+		if err != nil {
+			break
+		}
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "data: ") {
+			blocked = append(blocked, strings.TrimPrefix(line, "data: "))
+		}
+	}
+	if blockedCtx.Err() != nil {
+		t.Fatalf("blocked stream did not close before context deadline")
+	}
+	if len(blocked) == 0 {
+		t.Fatal("expected blocked stream events")
+	}
+	if !strings.Contains(strings.Join(blocked, "\n"), "interaction.requested") {
+		t.Fatalf("blocked stream events = %#v, want interaction.requested", blocked)
+	}
+	if strings.Contains(strings.Join(blocked, "\n"), "turn.completed") {
+		t.Fatalf("blocked stream events = %#v, did not expect turn.completed", blocked)
+	}
+
 	streamCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	streamReq, _ := http.NewRequestWithContext(streamCtx, http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events/stream?after=1&limit=10", nil)

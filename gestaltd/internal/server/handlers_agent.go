@@ -26,6 +26,8 @@ import (
 const agentIdempotencyKeyHeader = "Idempotency-Key"
 const defaultAgentTurnEventLimit = 100
 const maxAgentTurnEventLimit = 1000
+const agentTurnEventStreamUntilTerminal = "terminal"
+const agentTurnEventStreamUntilBlockedOrTerminal = "blocked_or_terminal"
 
 type agentMessageRequest struct {
 	Role     string                    `json:"role,omitempty"`
@@ -399,6 +401,10 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	until, ok := parseAgentTurnEventStreamUntil(w, r)
+	if !ok {
+		return
+	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "streaming is not supported")
@@ -417,6 +423,7 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 			s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
 			return
 		}
+		pageFull := limit > 0 && len(events) == limit
 		for _, event := range events {
 			info := agentTurnEventInfoFromCore(event)
 			payload, err := json.Marshal(info)
@@ -432,12 +439,15 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 				afterSeq = info.Seq
 			}
 		}
-		terminal, err := s.agentTurnTerminalStatus(ctx, p, turnID)
+		if pageFull {
+			continue
+		}
+		done, err := s.agentTurnStreamDone(ctx, p, turnID, until)
 		if err != nil {
 			s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
 			return
 		}
-		if terminal {
+		if done {
 			return
 		}
 		select {
@@ -540,7 +550,20 @@ func parseAgentTurnEventQuery(w http.ResponseWriter, r *http.Request) (int64, in
 	return afterSeq, limit, true
 }
 
-func (s *Server) agentTurnTerminalStatus(ctx context.Context, p *principal.Principal, turnID string) (bool, error) {
+func parseAgentTurnEventStreamUntil(w http.ResponseWriter, r *http.Request) (string, bool) {
+	value := strings.TrimSpace(r.URL.Query().Get("until"))
+	switch value {
+	case "", agentTurnEventStreamUntilTerminal:
+		return agentTurnEventStreamUntilTerminal, true
+	case agentTurnEventStreamUntilBlockedOrTerminal:
+		return agentTurnEventStreamUntilBlockedOrTerminal, true
+	default:
+		writeError(w, http.StatusBadRequest, "until must be terminal or blocked_or_terminal")
+		return "", false
+	}
+}
+
+func (s *Server) agentTurnStreamDone(ctx context.Context, p *principal.Principal, turnID string, until string) (bool, error) {
 	turn, err := s.agentRuns.GetTurn(ctx, p, turnID)
 	if err != nil {
 		return false, err
@@ -548,6 +571,8 @@ func (s *Server) agentTurnTerminalStatus(ctx context.Context, p *principal.Princ
 	switch turn.Status {
 	case coreagent.ExecutionStatusSucceeded, coreagent.ExecutionStatusFailed, coreagent.ExecutionStatusCanceled:
 		return true, nil
+	case coreagent.ExecutionStatusWaitingForInput:
+		return until == agentTurnEventStreamUntilBlockedOrTerminal, nil
 	default:
 		return false, nil
 	}
