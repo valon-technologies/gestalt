@@ -304,15 +304,7 @@ func (r *workflowRuntime) resolveWorkflowExecutionRef(ctx context.Context, req c
 }
 
 func workflowTargetHasMixedKinds(target coreworkflow.Target) bool {
-	return target.Agent != nil && workflowPluginTargetSet(target.PluginTarget())
-}
-
-func workflowPluginTargetSet(target coreworkflow.PluginTarget) bool {
-	return strings.TrimSpace(target.PluginName) != "" ||
-		strings.TrimSpace(target.Operation) != "" ||
-		strings.TrimSpace(target.Connection) != "" ||
-		strings.TrimSpace(target.Instance) != "" ||
-		len(target.Input) > 0
+	return target.Agent != nil && coreworkflow.PluginTargetSet(target.PluginTarget())
 }
 
 func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service) (*coreworkflow.InvokeOperationResponse, error) {
@@ -374,7 +366,9 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	}
 	turn, err = waitForWorkflowAgentTurn(runCtx, agentManager, principalValue, turn)
 	if err != nil {
-		_, _ = agentManager.CancelTurn(context.WithoutCancel(ctx), principalValue, turn.ID, err.Error())
+		if turn != nil && strings.TrimSpace(turn.ID) != "" {
+			_, _ = agentManager.CancelTurn(context.WithoutCancel(ctx), principalValue, turn.ID, err.Error())
+		}
 		return nil, err
 	}
 	switch turn.Status {
@@ -425,6 +419,9 @@ func waitForWorkflowAgentTurn(ctx context.Context, agentManager agentmanager.Ser
 			next, err := agentManager.GetTurn(ctx, p, current.ID)
 			if err != nil {
 				return current, err
+			}
+			if next == nil || strings.TrimSpace(next.ID) == "" {
+				return current, fmt.Errorf("workflow agent turn is missing")
 			}
 			current = next
 		}

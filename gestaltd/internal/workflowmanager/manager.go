@@ -713,7 +713,7 @@ func (m *Manager) resolveProviderByName(providerName string) (coreworkflow.Provi
 
 func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (coreworkflow.Target, error) {
 	pluginTarget := target.PluginTarget()
-	hasPlugin := workflowPluginTargetSet(pluginTarget)
+	hasPlugin := coreworkflow.PluginTargetSet(pluginTarget)
 	hasAgent := target.Agent != nil
 	if hasAgent && hasPlugin {
 		return coreworkflow.Target{}, fmt.Errorf("workflow target must set exactly one of plugin or agent")
@@ -722,14 +722,6 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 		return m.resolveAgentTarget(ctx, p, target.AgentTarget())
 	}
 	return m.resolvePluginTarget(ctx, p, pluginTarget)
-}
-
-func workflowPluginTargetSet(target coreworkflow.PluginTarget) bool {
-	return strings.TrimSpace(target.PluginName) != "" ||
-		strings.TrimSpace(target.Operation) != "" ||
-		strings.TrimSpace(target.Connection) != "" ||
-		strings.TrimSpace(target.Instance) != "" ||
-		len(target.Input) > 0
 }
 
 func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principal, target coreworkflow.PluginTarget) (coreworkflow.Target, error) {

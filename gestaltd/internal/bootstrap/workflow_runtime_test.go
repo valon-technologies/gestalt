@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -111,6 +112,44 @@ func cloneMapAny(value map[string]any) map[string]any {
 		out[key] = item
 	}
 	return out
+}
+
+type workflowRuntimeAgentManagerStub struct {
+	agentmanager.Service
+	createSessionRequests []coreagent.ManagerCreateSessionRequest
+	createTurnRequests    []coreagent.ManagerCreateTurnRequest
+	cancelTurnIDs         []string
+	returnNilTurn         bool
+}
+
+func (m *workflowRuntimeAgentManagerStub) CreateSession(_ context.Context, _ *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
+	m.createSessionRequests = append(m.createSessionRequests, req)
+	return &coreagent.Session{
+		ID:           "session-1",
+		ProviderName: req.ProviderName,
+		Model:        req.Model,
+		State:        coreagent.SessionStateActive,
+	}, nil
+}
+
+func (m *workflowRuntimeAgentManagerStub) CreateTurn(_ context.Context, _ *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+	m.createTurnRequests = append(m.createTurnRequests, req)
+	if m.returnNilTurn {
+		return nil, nil
+	}
+	return &coreagent.Turn{
+		ID:           "turn-1",
+		SessionID:    req.SessionID,
+		ProviderName: "managed",
+		Model:        req.Model,
+		Status:       coreagent.ExecutionStatusSucceeded,
+		OutputText:   "turn completed",
+	}, nil
+}
+
+func (m *workflowRuntimeAgentManagerStub) CancelTurn(_ context.Context, _ *principal.Principal, turnID, _ string) (*coreagent.Turn, error) {
+	m.cancelTurnIDs = append(m.cancelTurnIDs, turnID)
+	return &coreagent.Turn{ID: turnID, Status: coreagent.ExecutionStatusCanceled}, nil
 }
 
 type workflowRoundTripProvider struct {
@@ -420,6 +459,89 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	}
 	if len(turnReq.Tools) != 1 || turnReq.Tools[0].Target.PluginName != "roadmap" || turnReq.Tools[0].Target.Operation != "sync" {
 		t.Fatalf("turn tools = %#v", turnReq.Tools)
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefIgnoresWhitespaceLegacyPluginFields(t *testing.T) {
+	t.Parallel()
+
+	target := coreworkflow.Target{
+		PluginName: " \t",
+		Operation:  "\n",
+		Connection: " ",
+		Instance:   "\t",
+		Agent: &coreworkflow.AgentTarget{
+			ProviderName:   "managed",
+			Model:          "deep",
+			Prompt:         "Send the status summary",
+			ToolSource:     coreagent.ToolSourceModeExplicit,
+			TimeoutSeconds: 5,
+		},
+	}
+	fingerprint, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("TargetFingerprint: %v", err)
+	}
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                "agent-ref",
+		ProviderName:      "temporal",
+		Target:            target,
+		TargetFingerprint: fingerprint,
+		SubjectID:         principal.WorkloadSubjectID("scheduler"),
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+	agentManager := &workflowRuntimeAgentManagerStub{}
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+	runtime.SetAgentManager(agentManager)
+
+	resp, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		ExecutionRef: "agent-ref",
+		RunID:        "run-agent-123",
+		Target:       target,
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if len(agentManager.createTurnRequests) != 1 {
+		t.Fatalf("turn requests = %d, want 1", len(agentManager.createTurnRequests))
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetHandlesMissingTurn(t *testing.T) {
+	t.Parallel()
+
+	agentManager := &workflowRuntimeAgentManagerStub{returnNilTurn: true}
+	runtime := &workflowRuntime{}
+	runtime.SetAgentManager(agentManager)
+	p := principal.Canonicalize(&principal.Principal{
+		SubjectID:           principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+	})
+
+	_, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-agent-123",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName:   "managed",
+			Model:          "deep",
+			Prompt:         "Send the status summary",
+			ToolSource:     coreagent.ToolSourceModeExplicit,
+			TimeoutSeconds: 5,
+		}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "workflow agent turn is missing") {
+		t.Fatalf("Invoke error = %v, want missing turn error", err)
+	}
+	if len(agentManager.cancelTurnIDs) != 0 {
+		t.Fatalf("cancel turn IDs = %#v, want none for missing turn", agentManager.cancelTurnIDs)
 	}
 }
 
