@@ -83,6 +83,9 @@ func typeScriptExecutionCommand(root, target string) (string, []string, func(), 
 	if err != nil {
 		return "", nil, nil, err
 	}
+	if err := ensureTypeScriptProjectDependencies(bunPath, root); err != nil {
+		return "", nil, nil, err
+	}
 	sdkPath, err := prepareLocalTypeScriptSDK(bunPath)
 	if err != nil {
 		return "", nil, nil, err
@@ -97,8 +100,8 @@ func typeScriptExecutionCommand(root, target string) (string, []string, func(), 
 		}, nil, nil
 	}
 	return bunPath, []string{
-		"--cwd", root,
 		"run",
+		"--cwd", root,
 		typeScriptRuntimeBin,
 		"--",
 		root,
@@ -122,6 +125,9 @@ func buildTypeScriptBinary(sourceDir, binaryPath, pluginName, target, goos, goar
 	if err != nil {
 		return "", fmt.Errorf("detect Bun executable: %w", err)
 	}
+	if err := ensureTypeScriptProjectDependencies(bunPath, sourceDir); err != nil {
+		return "", fmt.Errorf("prepare TypeScript provider dependencies: %w", err)
+	}
 
 	var args []string
 	sdkPath, err := prepareLocalTypeScriptSDK(bunPath)
@@ -142,8 +148,8 @@ func buildTypeScriptBinary(sourceDir, binaryPath, pluginName, target, goos, goar
 		}
 	} else {
 		args = []string{
-			"--cwd", sourceDir,
 			"run",
+			"--cwd", sourceDir,
 			typeScriptBuildBin,
 			"--",
 			sourceDir,
@@ -227,31 +233,39 @@ func prepareLocalTypeScriptSDK(bunPath string) (string, error) {
 	return sdkPath, nil
 }
 
+func ensureTypeScriptProjectDependencies(bunPath, root string) error {
+	return ensureTypeScriptDependencies(bunPath, root, "TypeScript provider")
+}
+
 func ensureLocalTypeScriptSDKDependencies(bunPath, sdkPath string) error {
-	nodeModulesPath := filepath.Join(sdkPath, "node_modules")
+	return ensureTypeScriptDependencies(bunPath, sdkPath, "local TypeScript SDK")
+}
+
+func ensureTypeScriptDependencies(bunPath, root, label string) error {
+	nodeModulesPath := filepath.Join(root, "node_modules")
 	if info, err := os.Stat(nodeModulesPath); err == nil {
 		if info.IsDir() {
 			return nil
 		}
-		return fmt.Errorf("local TypeScript SDK node_modules path %q is not a directory", nodeModulesPath)
+		return fmt.Errorf("%s node_modules path %q is not a directory", label, nodeModulesPath)
 	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("stat local TypeScript SDK node_modules: %w", err)
+		return fmt.Errorf("stat %s node_modules: %w", label, err)
 	}
 
-	args := []string{"install", "--cwd", sdkPath}
-	lockfilePath := filepath.Join(sdkPath, "bun.lock")
+	args := []string{"install", "--cwd", root}
+	lockfilePath := filepath.Join(root, "bun.lock")
 	if _, err := os.Stat(lockfilePath); err == nil {
 		args = append(args, "--frozen-lockfile")
 	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("stat local TypeScript SDK bun.lock: %w", err)
+		return fmt.Errorf("stat %s bun.lock: %w", label, err)
 	}
 
 	cmd := exec.Command(bunPath, args...)
-	cmd.Dir = sdkPath
+	cmd.Dir = root
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("bun install for local TypeScript SDK: %w", err)
+		return fmt.Errorf("bun install for %s: %w", label, err)
 	}
 	return nil
 }

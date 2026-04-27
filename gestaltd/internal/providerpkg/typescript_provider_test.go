@@ -378,11 +378,59 @@ func TestSourceProviderExecutionCommand_TypeScriptInstallsLocalSDKDeps(t *testin
 	if command != bunPath {
 		t.Fatalf("command = %q, want %q", command, bunPath)
 	}
+	if _, err := os.Stat(filepath.Join(root, "node_modules", ".installed")); err != nil {
+		t.Fatalf("expected bun install marker in provider node_modules: %v", err)
+	}
 	if _, err := os.Stat(filepath.Join(sdkDir, "node_modules", ".installed")); err != nil {
 		t.Fatalf("expected bun install marker in fake SDK node_modules: %v", err)
 	}
 	if got := filepath.Dir(args[2]); got != filepath.Join(sdkDir, "src") {
 		t.Fatalf("runtime entry dir = %q, want %q", got, filepath.Join(sdkDir, "src"))
+	}
+}
+
+func TestSourceProviderExecutionCommand_TypeScriptPackageRuntime(t *testing.T) {
+	root := t.TempDir()
+	mustWriteTypeScriptProviderPackage(t, root, typeScriptTestPluginTarget)
+	t.Setenv(typeScriptSDKDirEnvVar, filepath.Join(t.TempDir(), "missing-sdk"))
+
+	bunPath := fakebun.NewExecutable(t, fakebun.Config{
+		Install: &fakebun.InstallConfig{
+			ExpectedCwd: root,
+		},
+		Runtime: &fakebun.RuntimeConfig{
+			Mode:           fakebun.InvocationRun,
+			ExpectedCwd:    root,
+			ExpectedEntry:  typeScriptRuntimeBin,
+			ExpectedRoot:   root,
+			ExpectedTarget: typeScriptTestPluginTarget,
+		},
+	})
+	t.Setenv(typeScriptBunEnvVar, bunPath)
+
+	command, args, cleanup, err := SourceProviderExecutionCommand(root, runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		t.Fatalf("SourceProviderExecutionCommand: %v", err)
+	}
+	if cleanup != nil {
+		t.Fatal("cleanup should be nil for TypeScript source providers")
+	}
+	if command != bunPath {
+		t.Fatalf("command = %q, want %q", command, bunPath)
+	}
+	if got := strings.Join(args, "\x00"); got != strings.Join([]string{
+		"run",
+		"--cwd",
+		root,
+		typeScriptRuntimeBin,
+		"--",
+		root,
+		typeScriptTestPluginTarget,
+	}, "\x00") {
+		t.Fatalf("args = %v", args)
+	}
+	if _, err := os.Stat(filepath.Join(root, "node_modules", ".installed")); err != nil {
+		t.Fatalf("expected bun install marker in provider node_modules: %v", err)
 	}
 }
 
@@ -567,8 +615,52 @@ func TestBuildSourceProviderReleaseBinary_TypeScriptInstallsLocalSDKDeps(t *test
 	if _, err := BuildSourceProviderReleaseBinary(root, outputPath, "ts-release", runtime.GOOS, runtime.GOARCH); err != nil {
 		t.Fatalf("BuildSourceProviderReleaseBinary: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(root, "node_modules", ".installed")); err != nil {
+		t.Fatalf("expected bun install marker in provider node_modules: %v", err)
+	}
 	if _, err := os.Stat(filepath.Join(sdkDir, "node_modules", ".installed")); err != nil {
 		t.Fatalf("expected bun install marker in fake SDK node_modules: %v", err)
+	}
+}
+
+func TestBuildSourceProviderReleaseBinary_TypeScriptPackageBuild(t *testing.T) {
+	root := t.TempDir()
+	mustWriteTypeScriptProviderPackage(t, root, typeScriptTestPluginTarget)
+	t.Setenv(typeScriptSDKDirEnvVar, filepath.Join(t.TempDir(), "missing-sdk"))
+
+	bunPath := fakebun.NewExecutable(t, fakebun.Config{
+		Install: &fakebun.InstallConfig{
+			ExpectedCwd: root,
+		},
+		Build: &fakebun.BuildConfig{
+			Mode:               fakebun.InvocationRun,
+			ExpectedCwd:        root,
+			ExpectedEntry:      typeScriptBuildBin,
+			ExpectedSourceDir:  root,
+			ExpectedTarget:     typeScriptTestPluginTarget,
+			ExpectedPluginName: "ts-release",
+			AllowedPlatforms: []fakebun.Platform{{
+				GOOS:   runtime.GOOS,
+				GOARCH: runtime.GOARCH,
+			}},
+			BinaryContent: "#!/bin/sh\n# fake package ts release binary\nexit 0\n",
+		},
+	})
+	t.Setenv(typeScriptBunEnvVar, bunPath)
+
+	outputPath := filepath.Join(t.TempDir(), "gestalt-plugin-ts-release")
+	if _, err := BuildSourceProviderReleaseBinary(root, outputPath, "ts-release", runtime.GOOS, runtime.GOARCH); err != nil {
+		t.Fatalf("BuildSourceProviderReleaseBinary: %v", err)
+	}
+	data, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", outputPath, err)
+	}
+	if !containsString(string(data), "fake package ts release binary") {
+		t.Fatalf("binary contents = %q, want fake build marker", string(data))
+	}
+	if _, err := os.Stat(filepath.Join(root, "node_modules", ".installed")); err != nil {
+		t.Fatalf("expected bun install marker in provider node_modules: %v", err)
 	}
 }
 
@@ -766,7 +858,7 @@ func writeFakeTypeScriptBun(t *testing.T, root, pluginName, expectedTarget, expe
 
 	return fakebun.NewExecutable(t, fakebun.Config{
 		Install: &fakebun.InstallConfig{
-			ExpectedCwd:           sdkPath,
+			ExpectedCwds:          []string{root, sdkPath},
 			RequireFrozenLockfile: true,
 		},
 		Runtime: &fakebun.RuntimeConfig{

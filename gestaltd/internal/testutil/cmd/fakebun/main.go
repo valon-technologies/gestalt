@@ -79,11 +79,24 @@ func runInstall(cfg *fakebun.InstallConfig, args []string) error {
 	if cwd == "" {
 		return fmt.Errorf("missing bun install --cwd")
 	}
-	if cfg.ExpectedCwd != "" && cwd != cfg.ExpectedCwd {
-		return fmt.Errorf("unexpected bun install cwd: %s != %s", cwd, cfg.ExpectedCwd)
+	if cfg.ExpectedCwd != "" || len(cfg.ExpectedCwds) > 0 {
+		allowed := cwd == cfg.ExpectedCwd
+		for _, expected := range cfg.ExpectedCwds {
+			if cwd == expected {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return fmt.Errorf("unexpected bun install cwd: %s", cwd)
+		}
 	}
 	if cfg.RequireFrozenLockfile && !frozen {
-		return fmt.Errorf("missing bun install --frozen-lockfile")
+		if _, err := os.Stat(filepath.Join(cwd, "bun.lock")); err == nil {
+			return fmt.Errorf("missing bun install --frozen-lockfile")
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("stat bun.lock: %w", err)
+		}
 	}
 
 	nodeModulesDir := filepath.Join(cwd, "node_modules")
@@ -192,13 +205,12 @@ func parseInvocation(mode fakebun.InvocationMode, args []string) (invocation, er
 	if mode == "" {
 		mode = fakebun.InvocationDirect
 	}
-	if len(args) < 3 || args[0] != "--cwd" {
-		return invocation{}, fmt.Errorf("unexpected fake bun args: %s", strings.Join(args, " "))
-	}
-
-	cwd := args[1]
 	switch mode {
 	case fakebun.InvocationDirect:
+		if len(args) < 3 || args[0] != "--cwd" {
+			return invocation{}, fmt.Errorf("unexpected fake bun args: %s", strings.Join(args, " "))
+		}
+		cwd := args[1]
 		entry := args[2]
 		tail := args[3:]
 		if len(tail) > 0 && tail[0] == "--" {
@@ -206,9 +218,22 @@ func parseInvocation(mode fakebun.InvocationMode, args []string) (invocation, er
 		}
 		return invocation{cwd: cwd, entry: entry, tail: tail}, nil
 	case fakebun.InvocationRun:
-		if len(args) < 4 || args[2] != "run" {
+		if args[0] == "run" {
+			if len(args) < 4 || args[1] != "--cwd" {
+				return invocation{}, fmt.Errorf("unexpected fake bun args: %s", strings.Join(args, " "))
+			}
+			cwd := args[2]
+			entry := args[3]
+			tail := args[4:]
+			if len(tail) > 0 && tail[0] == "--" {
+				tail = tail[1:]
+			}
+			return invocation{cwd: cwd, entry: entry, tail: tail}, nil
+		}
+		if len(args) < 4 || args[0] != "--cwd" || args[2] != "run" {
 			return invocation{}, fmt.Errorf("unexpected fake bun args: %s", strings.Join(args, " "))
 		}
+		cwd := args[1]
 		entry := args[3]
 		tail := args[4:]
 		if len(tail) > 0 && tail[0] == "--" {

@@ -26,8 +26,9 @@ type Config struct {
 }
 
 type InstallConfig struct {
-	ExpectedCwd           string `json:"expected_cwd,omitempty"`
-	RequireFrozenLockfile bool   `json:"require_frozen_lockfile,omitempty"`
+	ExpectedCwd           string   `json:"expected_cwd,omitempty"`
+	ExpectedCwds          []string `json:"expected_cwds,omitempty"`
+	RequireFrozenLockfile bool     `json:"require_frozen_lockfile,omitempty"`
 }
 
 type RuntimeConfig struct {
