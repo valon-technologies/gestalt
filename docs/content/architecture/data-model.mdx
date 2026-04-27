@@ -29,7 +29,7 @@ Owned by the configured external credentials provider, not gestaltd core. The de
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | string, PK | UUID. |
-| `subject_id` | string | Canonical credential owner such as `user:<id>` or `workload:<id>`. |
+| `subject_id` | string | Canonical credential owner such as `user:<id>`, `workload:<id>`, or `service_account:<id>`. |
 | `integration` | string | Provider name from config (e.g., `slack`). |
 | `connection` | string | Named connection within the provider (e.g., `default`, `mcp`). |
 | `instance` | string | User-chosen or discovery-assigned name for multi-account providers. |
@@ -52,8 +52,8 @@ Gestalt API tokens (`gst_api_*`). The plaintext is never stored, only a one-way 
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | string, PK | UUID. |
-| `owner_kind` | string | Token owner kind (`user`). |
-| `owner_id` | string | Owner ID within `owner_kind`. |
+| `owner_kind` | string | Token owner kind (`user` or `subject`). |
+| `owner_id` | string | Owner ID within `owner_kind`; subject-owned tokens use a canonical non-system subject ID. |
 | `credential_subject_id` | string | Subject whose upstream credentials the token may use. |
 | `name` | string | Display name (e.g., `automation`, `cli-token`). |
 | `hashed_token` | string, unique | **SHA-256 hash.** Plaintext returned once at creation. |

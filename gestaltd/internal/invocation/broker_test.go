@@ -48,7 +48,7 @@ func TestBrokerResolveToken_ConnectionModeNoneResolvesSessionUserSubject(t *test
 	}
 }
 
-func TestBrokerResolveToken_WorkloadUsesOwnExternalCredential(t *testing.T) {
+func TestBrokerResolveToken_NonUserSubjectUsesOwnExternalCredential(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
@@ -57,10 +57,11 @@ func TestBrokerResolveToken_WorkloadUsesOwnExternalCredential(t *testing.T) {
 		ConnMode: core.ConnectionModeUser,
 	})
 	broker := NewBroker(providers, svc.Users, svc.ExternalCredentials)
+	subjectID := "service_account:workflow-roadmap"
 
 	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-		ID:          "workload-workspace-team-a",
-		SubjectID:   principal.WorkloadSubjectID("workflow.roadmap"),
+		ID:          "subject-workspace-team-a",
+		SubjectID:   subjectID,
 		Integration: "slack",
 		Connection:  "workspace",
 		Instance:    "team-a",
@@ -69,8 +70,8 @@ func TestBrokerResolveToken_WorkloadUsesOwnExternalCredential(t *testing.T) {
 		t.Fatalf("PutCredential team-a: %v", err)
 	}
 	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-		ID:          "workload-workspace-team-b",
-		SubjectID:   principal.WorkloadSubjectID("workflow.roadmap"),
+		ID:          "subject-workspace-team-b",
+		SubjectID:   subjectID,
 		Integration: "slack",
 		Connection:  "workspace",
 		Instance:    "team-b",
@@ -79,16 +80,16 @@ func TestBrokerResolveToken_WorkloadUsesOwnExternalCredential(t *testing.T) {
 		t.Fatalf("PutCredential team-b: %v", err)
 	}
 
-	workload := &principal.Principal{
-		SubjectID: principal.WorkloadSubjectID("workflow.roadmap"),
-		Kind:      principal.KindWorkload,
+	subject := &principal.Principal{
+		SubjectID: subjectID,
+		Kind:      principal.Kind("service_account"),
 		Source:    principal.SourceAPIToken,
 	}
 	ctx := WithWorkflowContext(context.Background(), map[string]any{
 		"runId": "run-123",
 	})
 
-	ctx, token, err := broker.ResolveToken(ctx, workload, "slack", "workspace", "team-b")
+	ctx, token, err := broker.ResolveToken(ctx, subject, "slack", "workspace", "team-b")
 	if err != nil {
 		t.Fatalf("ResolveToken: %v", err)
 	}
@@ -96,8 +97,8 @@ func TestBrokerResolveToken_WorkloadUsesOwnExternalCredential(t *testing.T) {
 		t.Fatalf("token = %q, want team-b-token", token)
 	}
 	cred := CredentialContextFromContext(ctx)
-	if cred.SubjectID != principal.WorkloadSubjectID("workflow.roadmap") {
-		t.Fatalf("credential subject = %q, want workload subject", cred.SubjectID)
+	if cred.SubjectID != subjectID {
+		t.Fatalf("credential subject = %q, want %q", cred.SubjectID, subjectID)
 	}
 	if cred.Connection != "workspace" || cred.Instance != "team-b" {
 		t.Fatalf("credential selectors = %q/%q, want workspace/team-b", cred.Connection, cred.Instance)

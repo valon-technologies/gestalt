@@ -988,8 +988,8 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if credentialMode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
 	}
-	if m.authorizer != nil && principal.IsWorkloadPrincipal(p) && (connection != "" || instance != "") {
-		return coreagent.Tool{}, fmt.Errorf("%w: workloads may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
+	if m.authorizer != nil && principal.IsNonUserPrincipal(p) && (connection != "" || instance != "") {
+		return coreagent.Tool{}, fmt.Errorf("%w: non-user subjects may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
 	}
 
 	ctx = invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, pluginName))
@@ -1153,8 +1153,8 @@ func (m *Manager) catalogForAgentToolSearch(ctx context.Context, p *principal.Pr
 	if credentialMode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
 	}
-	if m.authorizer != nil && principal.IsWorkloadPrincipal(p) && (connection != "" || instance != "") {
-		return nil, fmt.Errorf("%w: workloads may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
+	if m.authorizer != nil && principal.IsNonUserPrincipal(p) && (connection != "" || instance != "") {
+		return nil, fmt.Errorf("%w: non-user subjects may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
 	}
 	var resolver invocation.TokenResolver
 	if tr, ok := m.invoker.(invocation.TokenResolver); ok {

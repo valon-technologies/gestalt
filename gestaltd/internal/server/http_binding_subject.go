@@ -63,11 +63,8 @@ func (s *Server) resolveHTTPBindingPrincipal(ctx context.Context, binding Mounte
 		DisplayName: strings.TrimSpace(resolved.DisplayName),
 		Source:      principal.ParseSource(strings.TrimSpace(resolved.AuthSource)),
 	})
-	switch strings.TrimSpace(resolved.Kind) {
-	case string(principal.KindUser):
-		p.Kind = principal.KindUser
-	case string(principal.KindWorkload):
-		p.Kind = principal.KindWorkload
+	if kind := strings.TrimSpace(resolved.Kind); kind != "" {
+		p.Kind = principal.Kind(kind)
 	}
 	return p, nil
 }

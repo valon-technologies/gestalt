@@ -3723,6 +3723,40 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 		t.Fatalf("plugin membership email = %q, want %q", putPluginMembershipResp.Membership.Email, dynamicEmail)
 	}
 
+	serviceAccountSubjectID := "service_account:reporting-bot"
+	body = bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, serviceAccountSubjectID))
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT service account member: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("put service account member status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+	var putServiceAccountMembershipResp struct {
+		Membership struct {
+			SelectorKind  string `json:"selectorKind"`
+			SelectorValue string `json:"selectorValue"`
+			Email         string `json:"email"`
+			Role          string `json:"role"`
+		} `json:"membership"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&putServiceAccountMembershipResp); err != nil {
+		t.Fatalf("decode service account membership response: %v", err)
+	}
+	if putServiceAccountMembershipResp.Membership.SelectorKind != "subject_id" {
+		t.Fatalf("service account membership selectorKind = %q, want subject_id", putServiceAccountMembershipResp.Membership.SelectorKind)
+	}
+	if putServiceAccountMembershipResp.Membership.SelectorValue != serviceAccountSubjectID {
+		t.Fatalf("service account membership selectorValue = %q, want %q", putServiceAccountMembershipResp.Membership.SelectorValue, serviceAccountSubjectID)
+	}
+	if putServiceAccountMembershipResp.Membership.Email != "" {
+		t.Fatalf("service account membership email = %q, want empty", putServiceAccountMembershipResp.Membership.Email)
+	}
+
 	resp, err = http.Get(ts.URL + "/admin/api/v1/authorization/plugins/sample_plugin/members")
 	if err != nil {
 		t.Fatalf("GET members: %v", err)
@@ -3736,27 +3770,39 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
 		t.Fatalf("decoding members: %v", err)
 	}
-	if len(members) != 2 {
-		t.Fatalf("expected 2 merged members, got %d (%+v)", len(members), members)
+	if len(members) != 3 {
+		t.Fatalf("expected 3 merged members, got %d (%+v)", len(members), members)
 	}
 	foundDynamicPluginMember := false
+	foundDynamicServiceAccountMember := false
 	for _, member := range members {
 		if member["source"] != "dynamic" {
 			continue
 		}
-		foundDynamicPluginMember = true
-		if got := member["selectorKind"]; got != "subject_id" {
-			t.Fatalf("dynamic plugin member selectorKind = %v, want subject_id", got)
-		}
-		if member["selectorValue"] != principal.UserSubjectID(dynamicUser.ID) {
-			t.Fatalf("dynamic plugin member selector metadata = %+v, want canonical subject_id selectorValue", member)
-		}
-		if member["email"] != dynamicEmail {
-			t.Fatalf("dynamic plugin member email = %v, want %q", member["email"], dynamicEmail)
+		switch member["selectorValue"] {
+		case principal.UserSubjectID(dynamicUser.ID):
+			foundDynamicPluginMember = true
+			if got := member["selectorKind"]; got != "subject_id" {
+				t.Fatalf("dynamic plugin member selectorKind = %v, want subject_id", got)
+			}
+			if member["email"] != dynamicEmail {
+				t.Fatalf("dynamic plugin member email = %v, want %q", member["email"], dynamicEmail)
+			}
+		case serviceAccountSubjectID:
+			foundDynamicServiceAccountMember = true
+			if got := member["selectorKind"]; got != "subject_id" {
+				t.Fatalf("dynamic service account member selectorKind = %v, want subject_id", got)
+			}
+			if member["email"] != nil {
+				t.Fatalf("dynamic service account member email = %v, want omitted", member["email"])
+			}
 		}
 	}
 	if !foundDynamicPluginMember {
 		t.Fatalf("expected one dynamic plugin member, got %+v", members)
+	}
+	if !foundDynamicServiceAccountMember {
+		t.Fatalf("expected one dynamic service account member, got %+v", members)
 	}
 
 	body = bytes.NewBufferString(`{"email":"static@example.test","role":"viewer"}`)
@@ -3781,6 +3827,17 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		t.Fatalf("delete dynamic member status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members/"+url.PathEscape(serviceAccountSubjectID), nil)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE service account member: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("delete service account member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
 	resp, err = http.Get(ts.URL + "/admin/api/v1/authorization/plugins/sample_plugin/members")

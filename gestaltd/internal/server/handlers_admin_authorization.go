@@ -565,16 +565,15 @@ func adminAuthorizationSubjectID(subjectID string) (string, error) {
 	if subjectID == "" {
 		return "", errors.New("subjectID is required")
 	}
-	if principal.IsSystemSubjectID(subjectID) {
+	kind, id, ok := core.ParseSubjectID(subjectID)
+	if !ok {
+		return "", errors.New("subjectID must be a canonical subject ID")
+	}
+	subjectID = kind + ":" + id
+	if kind == "system" {
 		return "", errors.New("subjectID must not use system:<id>")
 	}
-	if strings.TrimSpace(principal.UserIDFromSubjectID(subjectID)) != "" {
-		return subjectID, nil
-	}
-	if strings.HasPrefix(subjectID, string(principal.KindWorkload)+":") && strings.TrimPrefix(subjectID, string(principal.KindWorkload)+":") != "" {
-		return subjectID, nil
-	}
-	return "", errors.New("subjectID must use user:<id> or workload:<id>")
+	return subjectID, nil
 }
 
 func adminAuthorizationValidSubjectID(subjectID string) bool {
