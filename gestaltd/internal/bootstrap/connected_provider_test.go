@@ -8,10 +8,14 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 )
 
 type connectedCapabilityProvider struct {
 	postConnectMetadata map[string]string
+	operationConnection map[string]string
+	resolveConnection   func(operation string, params map[string]any) (string, error)
+	overrideAllowed     func(operation string, params map[string]any) bool
 }
 
 func (p *connectedCapabilityProvider) Name() string        { return "slack" }
@@ -26,7 +30,21 @@ func (p *connectedCapabilityProvider) ConnectionParamDefs() map[string]core.Conn
 }
 func (p *connectedCapabilityProvider) CredentialFields() []core.CredentialFieldDef { return nil }
 func (p *connectedCapabilityProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
-func (p *connectedCapabilityProvider) ConnectionForOperation(string) string        { return "" }
+func (p *connectedCapabilityProvider) ConnectionForOperation(operation string) string {
+	return p.operationConnection[operation]
+}
+func (p *connectedCapabilityProvider) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
+	if p.resolveConnection != nil {
+		return p.resolveConnection(operation, params)
+	}
+	return p.ConnectionForOperation(operation), nil
+}
+func (p *connectedCapabilityProvider) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
+	if p.overrideAllowed != nil {
+		return p.overrideAllowed(operation, params)
+	}
+	return false
+}
 func (p *connectedCapabilityProvider) Catalog() *catalog.Catalog {
 	return &catalog.Catalog{
 		Name: "slack",
@@ -96,6 +114,62 @@ func TestBindProviderConnectionPreservesPostConnectCapability(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("PostConnect metadata = %#v, want %#v", got, want)
+	}
+}
+
+func TestBindProviderConnectionResolvesInnerStaticOperationConnection(t *testing.T) {
+	t.Parallel()
+
+	prov := bindProviderConnection(&connectedCapabilityProvider{
+		operationConnection: map[string]string{"viewer": "bot"},
+	}, "default")
+
+	if got := prov.ConnectionForOperation("viewer"); got != "bot" {
+		t.Fatalf("ConnectionForOperation(viewer) = %q, want %q", got, "bot")
+	}
+	got, err := invocation.ResolveOperationConnection(prov, "viewer", nil)
+	if err != nil {
+		t.Fatalf("ResolveOperationConnection(viewer): %v", err)
+	}
+	if got != "bot" {
+		t.Fatalf("ResolveOperationConnection(viewer) = %q, want %q", got, "bot")
+	}
+}
+
+func TestBindProviderConnectionPreservesOperationConnectionInterfacesThroughCapabilityWrappers(t *testing.T) {
+	t.Parallel()
+
+	prov := bindProviderConnection(&connectedCapabilityProvider{
+		operationConnection: map[string]string{"viewer": "default"},
+		resolveConnection: func(operation string, params map[string]any) (string, error) {
+			if params["actor"] == "bot" {
+				return "bot", nil
+			}
+			return "default", nil
+		},
+		overrideAllowed: func(operation string, params map[string]any) bool {
+			return params["allow_override"] == true
+		},
+	}, "default")
+
+	resolver, ok := prov.(core.OperationConnectionResolver)
+	if !ok {
+		t.Fatal("expected bound provider to preserve operation connection resolver")
+	}
+	got, err := resolver.ResolveConnectionForOperation("viewer", map[string]any{"actor": "bot"})
+	if err != nil {
+		t.Fatalf("ResolveConnectionForOperation(viewer): %v", err)
+	}
+	if got != "bot" {
+		t.Fatalf("ResolveConnectionForOperation(viewer) = %q, want %q", got, "bot")
+	}
+
+	policy, ok := prov.(core.OperationConnectionOverridePolicy)
+	if !ok {
+		t.Fatal("expected bound provider to preserve operation connection override policy")
+	}
+	if !policy.OperationConnectionOverrideAllowed("viewer", map[string]any{"allow_override": true}) {
+		t.Fatal("expected operation connection override policy to be forwarded")
 	}
 }
 

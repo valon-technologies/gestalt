@@ -180,7 +180,7 @@ func newPreparedProviderStub(name string, entry *config.ProviderEntry) (core.Pro
 	if entry == nil || entry.ResolvedManifest == nil {
 		return nil, fmt.Errorf("prepared manifest is not resolved")
 	}
-	spec, operationConnections, err := buildStartupProviderSpec(name, entry)
+	spec, operationRouting, err := buildStartupProviderSpec(name, entry)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +206,7 @@ func newPreparedProviderStub(name string, entry *config.ProviderEntry) (core.Pro
 		description:    description,
 		connectionMode: spec.ConnectionMode,
 		catalog:        cat,
-		connections:    operationConnections,
+		connections:    operationRouting.connections,
 	}, nil
 }
 

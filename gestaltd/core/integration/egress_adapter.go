@@ -134,9 +134,13 @@ func partitionParams(catOp *catalog.CatalogOperation, params map[string]any, use
 
 	declared := make(map[string]struct{}, len(catOp.Parameters))
 	locations := make(map[string]string, len(catOp.Parameters))
+	internal := make(map[string]struct{})
 	var wireNames map[string]string
 	for _, p := range catOp.Parameters {
 		declared[p.Name] = struct{}{}
+		if p.Internal {
+			internal[p.Name] = struct{}{}
+		}
 		if p.Location != "" {
 			locations[p.Name] = p.Location
 		}
@@ -151,6 +155,9 @@ func partitionParams(catOp *catalog.CatalogOperation, params map[string]any, use
 	query = make(map[string]any)
 	headers = make(map[string]string)
 	for k, v := range params {
+		if _, ok := internal[k]; ok {
+			continue
+		}
 		httpKey := k
 		if wn, ok := wireNames[k]; ok {
 			httpKey = wn

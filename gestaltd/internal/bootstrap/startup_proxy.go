@@ -78,9 +78,9 @@ func (t *startupWaitTracker) beginWorkflowWait(providerName, pluginName string) 
 }
 
 type startupProviderProxy struct {
-	spec                 providerhost.StaticProviderSpec
-	operationConnections map[string]string
-	tracker              *startupWaitTracker
+	spec             providerhost.StaticProviderSpec
+	operationRouting startupOperationRouting
+	tracker          *startupWaitTracker
 
 	ready chan struct{}
 	once  sync.Once
@@ -90,12 +90,13 @@ type startupProviderProxy struct {
 	err      error
 }
 
-func newStartupProviderProxy(spec providerhost.StaticProviderSpec, operationConnections map[string]string, tracker *startupWaitTracker) *startupProviderProxy {
+func newStartupProviderProxy(spec providerhost.StaticProviderSpec, operationRouting startupOperationRouting, tracker *startupWaitTracker) *startupProviderProxy {
+	operationRouting.connections = maps.Clone(operationRouting.connections)
 	return &startupProviderProxy{
-		spec:                 spec,
-		operationConnections: maps.Clone(operationConnections),
-		tracker:              tracker,
-		ready:                make(chan struct{}),
+		spec:             spec,
+		operationRouting: operationRouting,
+		tracker:          tracker,
+		ready:            make(chan struct{}),
 	}
 }
 
@@ -247,7 +248,35 @@ func (p *startupProviderProxy) ConnectionForOperation(operation string) string {
 	if provider != nil {
 		return provider.ConnectionForOperation(operation)
 	}
-	return p.operationConnections[operation]
+	return p.operationRouting.connections[operation]
+}
+
+func (p *startupProviderProxy) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
+	provider := p.resolved()
+	if provider != nil {
+		if resolver, ok := provider.(core.OperationConnectionResolver); ok {
+			return resolver.ResolveConnectionForOperation(operation, params)
+		}
+		return provider.ConnectionForOperation(operation), nil
+	}
+	if p.operationRouting.resolver != nil {
+		return p.operationRouting.resolver.ResolveConnectionForOperation(operation, params)
+	}
+	return p.operationRouting.connections[operation], nil
+}
+
+func (p *startupProviderProxy) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
+	provider := p.resolved()
+	if provider != nil {
+		if policy, ok := provider.(core.OperationConnectionOverridePolicy); ok {
+			return policy.OperationConnectionOverrideAllowed(operation, params)
+		}
+		return false
+	}
+	if p.operationRouting.overridePolicy != nil {
+		return p.operationRouting.overridePolicy.OperationConnectionOverrideAllowed(operation, params)
+	}
+	return false
 }
 
 func (p *startupProviderProxy) ConnectionParamDefs() map[string]core.ConnectionParamDef {

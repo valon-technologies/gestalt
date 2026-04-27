@@ -15,6 +15,7 @@ type fakeProvider struct {
 	name     string
 	connMode core.ConnectionMode
 	ops      []core.Operation
+	opConn   map[string]string
 	execFn   func(ctx context.Context, op string, params map[string]any, token string) (*core.OperationResult, error)
 	closed   bool
 }
@@ -29,7 +30,12 @@ func (p *fakeProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef 
 }
 func (p *fakeProvider) CredentialFields() []core.CredentialFieldDef { return nil }
 func (p *fakeProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
-func (p *fakeProvider) ConnectionForOperation(string) string        { return "" }
+func (p *fakeProvider) ConnectionForOperation(operation string) string {
+	return p.opConn[operation]
+}
+func (p *fakeProvider) ResolveConnectionForOperation(operation string, _ map[string]any) (string, error) {
+	return p.ConnectionForOperation(operation), nil
+}
 func (p *fakeProvider) Catalog() *catalog.Catalog {
 	cat := &catalog.Catalog{
 		Name:       p.name,
@@ -174,6 +180,70 @@ func TestMergedCatalogIncludesConstructorMetadata(t *testing.T) {
 	}
 	if cat.IconSVG != "<svg/>" {
 		t.Fatalf("IconSVG = %q, want %q", cat.IconSVG, "<svg/>")
+	}
+}
+
+func TestMergedConnectionBindingPrecedence(t *testing.T) {
+	t.Parallel()
+
+	forced, err := composite.NewMergedWithConnections("test", "Test", "desc", "",
+		composite.BoundProvider{
+			Provider: &fakeProvider{
+				name:   "api",
+				ops:    []core.Operation{{Name: "list_items"}},
+				opConn: map[string]string{"list_items": "reported"},
+			},
+			Connection: "forced",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := forced.ConnectionForOperation("list_items"); got != "forced" {
+		t.Fatalf("forced ConnectionForOperation = %q, want %q", got, "forced")
+	}
+	resolved, err := forced.ResolveConnectionForOperation("list_items", nil)
+	if err != nil {
+		t.Fatalf("forced ResolveConnectionForOperation: %v", err)
+	}
+	if resolved != "forced" {
+		t.Fatalf("forced ResolveConnectionForOperation = %q, want %q", resolved, "forced")
+	}
+	if forced.OperationConnectionOverrideAllowed("list_items", nil) {
+		t.Fatal("forced binding should not allow explicit connection override")
+	}
+
+	fallback, err := composite.NewMergedWithConnections("test", "Test", "desc", "",
+		composite.BoundProvider{
+			Provider: &fakeProvider{
+				name: "api",
+				ops: []core.Operation{
+					{Name: "list_items"},
+					{Name: "get_item"},
+				},
+				opConn: map[string]string{"list_items": "reported"},
+			},
+			FallbackConnection: "fallback",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fallback.ConnectionForOperation("list_items"); got != "reported" {
+		t.Fatalf("fallback reported ConnectionForOperation = %q, want %q", got, "reported")
+	}
+	if got := fallback.ConnectionForOperation("get_item"); got != "fallback" {
+		t.Fatalf("fallback default ConnectionForOperation = %q, want %q", got, "fallback")
+	}
+	resolved, err = fallback.ResolveConnectionForOperation("get_item", nil)
+	if err != nil {
+		t.Fatalf("fallback ResolveConnectionForOperation: %v", err)
+	}
+	if resolved != "fallback" {
+		t.Fatalf("fallback ResolveConnectionForOperation = %q, want %q", resolved, "fallback")
+	}
+	if !fallback.OperationConnectionOverrideAllowed("get_item", nil) {
+		t.Fatal("fallback binding should allow explicit connection override")
 	}
 }
 

@@ -13,4 +13,5 @@ var (
 	ErrUserResolution      = errors.New("user resolution failed")
 	ErrInternal            = errors.New("internal error")
 	ErrScopeDenied         = errors.New("token scope denied")
+	ErrInvalidInvocation   = errors.New("invalid invocation")
 )

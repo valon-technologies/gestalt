@@ -287,7 +287,11 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		if transport == catalog.TransportMCPPassthrough {
 			conn = b.mcpConnection(providerName)
 		} else {
-			conn = prov.ConnectionForOperation(operation)
+			var err error
+			conn, err = ResolveOperationConnection(execProv, opMeta.ID, params)
+			if err != nil {
+				return fail(err)
+			}
 		}
 	}
 	if conn == "" && b.connMapper != nil {

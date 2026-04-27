@@ -846,6 +846,13 @@
           "type": "string",
           "minLength": 1
         },
+        "connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "connectionSelector": {
+          "$ref": "#/$defs/operationConnectionSelector"
+        },
         "allowedRoles": {
           "type": "array",
           "items": {
@@ -857,6 +864,32 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/providerParameter"
+          }
+        }
+      }
+    },
+    "operationConnectionSelector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parameter",
+        "values"
+      ],
+      "properties": {
+        "parameter": {
+          "type": "string",
+          "minLength": 1
+        },
+        "default": {
+          "type": "string",
+          "minLength": 1
+        },
+        "values": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
           }
         }
       }
@@ -916,6 +949,9 @@
           "type": "string"
         },
         "required": {
+          "type": "boolean"
+        },
+        "internal": {
           "type": "boolean"
         }
       }

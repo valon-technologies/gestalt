@@ -58,9 +58,32 @@ func (p *connectedProvider) CredentialFields() []core.CredentialFieldDef {
 func (p *connectedProvider) DiscoveryConfig() *core.DiscoveryConfig {
 	return p.inner.DiscoveryConfig()
 }
-func (p *connectedProvider) ConnectionForOperation(string) string { return p.connection }
-func (p *connectedProvider) Catalog() *catalog.Catalog            { return p.inner.Catalog() }
-func (p *connectedProvider) SupportsPostConnect() bool            { return core.SupportsPostConnect(p.inner) }
+func (p *connectedProvider) ConnectionForOperation(operation string) string {
+	if connection := p.inner.ConnectionForOperation(operation); connection != "" {
+		return connection
+	}
+	return p.connection
+}
+func (p *connectedProvider) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
+	if resolver, ok := p.inner.(core.OperationConnectionResolver); ok {
+		connection, err := resolver.ResolveConnectionForOperation(operation, params)
+		if err != nil || connection != "" {
+			return connection, err
+		}
+	}
+	if connection := p.inner.ConnectionForOperation(operation); connection != "" {
+		return connection, nil
+	}
+	return p.connection, nil
+}
+func (p *connectedProvider) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
+	if policy, ok := p.inner.(core.OperationConnectionOverridePolicy); ok {
+		return policy.OperationConnectionOverrideAllowed(operation, params)
+	}
+	return false
+}
+func (p *connectedProvider) Catalog() *catalog.Catalog { return p.inner.Catalog() }
+func (p *connectedProvider) SupportsPostConnect() bool { return core.SupportsPostConnect(p.inner) }
 func (p *connectedProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	return p.inner.Execute(ctx, operation, params, token)
 }
@@ -109,6 +132,14 @@ func (p *connectedSessionCatalogProvider) ResolveHTTPSubject(ctx context.Context
 	return subject, err
 }
 
+func (p *connectedSessionCatalogProvider) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
+	return resolveProviderConnectionForOperation(p.Provider, operation, params)
+}
+
+func (p *connectedSessionCatalogProvider) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
+	return providerOperationConnectionOverrideAllowed(p.Provider, operation, params)
+}
+
 func (p *connectedSessionCatalogProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
 	return p.session.CatalogForRequest(ctx, token)
 }
@@ -144,6 +175,14 @@ func (p *connectedGraphQLProvider) SupportsHTTPSubject() bool {
 func (p *connectedGraphQLProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
 	subject, _, err := core.ResolveHTTPSubject(ctx, p.Provider, req)
 	return subject, err
+}
+
+func (p *connectedGraphQLProvider) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
+	return resolveProviderConnectionForOperation(p.Provider, operation, params)
+}
+
+func (p *connectedGraphQLProvider) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
+	return providerOperationConnectionOverrideAllowed(p.Provider, operation, params)
 }
 
 func (p *connectedGraphQLProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
@@ -191,6 +230,14 @@ func (p *connectedOAuthProvider) ResolveHTTPSubject(ctx context.Context, req *co
 	return subject, err
 }
 
+func (p *connectedOAuthProvider) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
+	return resolveProviderConnectionForOperation(p.Provider, operation, params)
+}
+
+func (p *connectedOAuthProvider) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
+	return providerOperationConnectionOverrideAllowed(p.Provider, operation, params)
+}
+
 func (p *connectedOAuthProvider) AuthorizationURL(state string, scopes []string) string {
 	return p.auth.AuthorizationURL(state, scopes)
 }
@@ -224,4 +271,18 @@ func (p *connectedOAuthProvider) Close() error {
 		return closer.Close()
 	}
 	return nil
+}
+
+func resolveProviderConnectionForOperation(prov core.Provider, operation string, params map[string]any) (string, error) {
+	if resolver, ok := prov.(core.OperationConnectionResolver); ok {
+		return resolver.ResolveConnectionForOperation(operation, params)
+	}
+	return prov.ConnectionForOperation(operation), nil
+}
+
+func providerOperationConnectionOverrideAllowed(prov core.Provider, operation string, params map[string]any) bool {
+	if policy, ok := prov.(core.OperationConnectionOverridePolicy); ok {
+		return policy.OperationConnectionOverrideAllowed(operation, params)
+	}
+	return false
 }

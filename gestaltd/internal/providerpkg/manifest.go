@@ -591,7 +591,8 @@ func validateDeclarativeProvider(provider *providermanifestv1.Spec) error {
 	}
 	ops := provider.RESTOperations()
 	seen := make(map[string]struct{}, len(ops))
-	for i, op := range ops {
+	for i := range ops {
+		op := &ops[i]
 		if op.Name == "" {
 			return fmt.Errorf("provider.operations[%d].name is required", i)
 		}
