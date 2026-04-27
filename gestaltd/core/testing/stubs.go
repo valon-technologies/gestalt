@@ -27,9 +27,6 @@ func AttachStubExternalCredentials(svc *coredata.Services) *StubExternalCredenti
 	}
 	provider := NewStubExternalCredentialProvider()
 	svc.ExternalCredentials = provider
-	if svc.Tokens != nil {
-		svc.Tokens.SetProvider(provider)
-	}
 	return provider
 }
 

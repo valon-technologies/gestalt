@@ -80,31 +80,31 @@ type Service interface {
 }
 
 type Config struct {
-	Providers         *registry.ProviderMap[core.Provider]
-	Agent             AgentControl
-	SessionMetadata   *coredata.AgentSessionMetadataService
-	RunMetadata       *coredata.AgentRunMetadataService
-	Tokens            *coredata.TokenService
-	Invoker           invocation.Invoker
-	Authorizer        authorization.RuntimeAuthorizer
-	DefaultConnection map[string]string
-	CatalogConnection map[string]string
-	PluginInvokes     map[string][]config.PluginInvocationDependency
-	Now               func() time.Time
+	Providers           *registry.ProviderMap[core.Provider]
+	Agent               AgentControl
+	SessionMetadata     *coredata.AgentSessionMetadataService
+	RunMetadata         *coredata.AgentRunMetadataService
+	ExternalCredentials core.ExternalCredentialProvider
+	Invoker             invocation.Invoker
+	Authorizer          authorization.RuntimeAuthorizer
+	DefaultConnection   map[string]string
+	CatalogConnection   map[string]string
+	PluginInvokes       map[string][]config.PluginInvocationDependency
+	Now                 func() time.Time
 }
 
 type Manager struct {
-	providers         *registry.ProviderMap[core.Provider]
-	agent             AgentControl
-	sessionMetadata   *coredata.AgentSessionMetadataService
-	runMetadata       *coredata.AgentRunMetadataService
-	tokens            *coredata.TokenService
-	invoker           invocation.Invoker
-	authorizer        authorization.RuntimeAuthorizer
-	defaultConnection map[string]string
-	catalogConnection map[string]string
-	pluginInvokes     map[string][]config.PluginInvocationDependency
-	now               func() time.Time
+	providers           *registry.ProviderMap[core.Provider]
+	agent               AgentControl
+	sessionMetadata     *coredata.AgentSessionMetadataService
+	runMetadata         *coredata.AgentRunMetadataService
+	externalCredentials core.ExternalCredentialProvider
+	invoker             invocation.Invoker
+	authorizer          authorization.RuntimeAuthorizer
+	defaultConnection   map[string]string
+	catalogConnection   map[string]string
+	pluginInvokes       map[string][]config.PluginInvocationDependency
+	now                 func() time.Time
 }
 
 func New(cfg Config) *Manager {
@@ -117,17 +117,17 @@ func New(cfg Config) *Manager {
 		pluginInvokes[pluginName] = append([]config.PluginInvocationDependency(nil), deps...)
 	}
 	return &Manager{
-		providers:         cfg.Providers,
-		agent:             cfg.Agent,
-		sessionMetadata:   cfg.SessionMetadata,
-		runMetadata:       cfg.RunMetadata,
-		tokens:            cfg.Tokens,
-		invoker:           cfg.Invoker,
-		authorizer:        cfg.Authorizer,
-		defaultConnection: maps.Clone(cfg.DefaultConnection),
-		catalogConnection: maps.Clone(cfg.CatalogConnection),
-		pluginInvokes:     pluginInvokes,
-		now:               now,
+		providers:           cfg.Providers,
+		agent:               cfg.Agent,
+		sessionMetadata:     cfg.SessionMetadata,
+		runMetadata:         cfg.RunMetadata,
+		externalCredentials: cfg.ExternalCredentials,
+		invoker:             cfg.Invoker,
+		authorizer:          cfg.Authorizer,
+		defaultConnection:   maps.Clone(cfg.DefaultConnection),
+		catalogConnection:   maps.Clone(cfg.CatalogConnection),
+		pluginInvokes:       pluginInvokes,
+		now:                 now,
 	}
 }
 
@@ -925,8 +925,8 @@ func (m *Manager) defaultToolProviders(ctx context.Context, p *principal.Princip
 }
 
 func (m *Manager) hasDefaultToolCredential(ctx context.Context, p *principal.Principal, providerName string, credentialAvailability map[string]bool) bool {
-	if m == nil || m.tokens == nil {
-		return true
+	if m == nil || coredata.ExternalCredentialProviderMissing(m.externalCredentials) {
+		return false
 	}
 
 	bindingResolver, _ := m.invoker.(invocation.EffectiveCredentialBindingResolver)
@@ -987,7 +987,7 @@ func (m *Manager) defaultToolCredentialSubjectID(p *principal.Principal, provide
 }
 
 func (m *Manager) hasStoredDefaultToolCredential(ctx context.Context, subjectID, providerName, connection, instance string) bool {
-	if m == nil || m.tokens == nil {
+	if m == nil || coredata.ExternalCredentialProviderMissing(m.externalCredentials) {
 		return false
 	}
 	subjectID = strings.TrimSpace(subjectID)
@@ -998,11 +998,11 @@ func (m *Manager) hasStoredDefaultToolCredential(ctx context.Context, subjectID,
 		return false
 	}
 	if instance != "" {
-		_, err := m.tokens.Token(ctx, subjectID, providerName, connection, instance)
+		_, err := m.externalCredentials.GetCredential(ctx, subjectID, providerName, connection, instance)
 		return err == nil
 	}
-	tokens, err := m.tokens.ListTokensForConnection(ctx, subjectID, providerName, connection)
-	return err == nil && len(tokens) > 0
+	credentials, err := m.externalCredentials.ListCredentialsForConnection(ctx, subjectID, providerName, connection)
+	return err == nil && len(credentials) > 0
 }
 
 func (m *Manager) resolveDefaultToolsForProvider(ctx context.Context, p *principal.Principal, providerName string) ([]coreagent.Tool, error) {

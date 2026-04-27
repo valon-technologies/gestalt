@@ -1869,7 +1869,7 @@ func TestBootstrap(t *testing.T) {
 				if tc.tokenValue != "" {
 					tokenValue = tc.tokenValue
 				}
-				if err := result.Services.Tokens.StoreToken(ctx, &core.IntegrationToken{
+				if err := result.Services.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
 					SubjectID:    principal.UserSubjectID(user.ID),
 					Integration:  "slack",
 					Connection:   tc.tokenConn,
@@ -1877,7 +1877,7 @@ func TestBootstrap(t *testing.T) {
 					AccessToken:  tokenValue,
 					RefreshToken: "refresh-token",
 				}); err != nil {
-					t.Fatalf("StoreToken: %v", err)
+					t.Fatalf("PutCredential: %v", err)
 				}
 
 				principal := &principal.Principal{
@@ -4851,7 +4851,7 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
-		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
@@ -4910,7 +4910,7 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
-		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
@@ -4975,7 +4975,7 @@ func TestBootstrapStartupWorkflowCallbackRequiresExecutionRef(t *testing.T) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
-		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
@@ -5452,7 +5452,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 				if name != "temporal" {
 					return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 				}
-				if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+				if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
 					SubjectID:   "system:config",
 					Integration: "roadmap",
 					Connection:  config.PluginConnectionName,
@@ -5551,7 +5551,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 		if connection == "" {
 			connection = config.PluginConnectionName
 		}
-		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  connection,
@@ -6352,6 +6352,30 @@ func TestBootstrapClosesExternalCredentialsProviderWhenAuthorizationBuildFails(t
 	}
 	if got := closed.Load(); got != 1 {
 		t.Fatalf("external credential provider close count = %d, want 1", got)
+	}
+}
+
+func TestBootstrapRejectsNilExternalCredentialsProvider(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.ExternalCredentials = map[string]*config.ProviderEntry{
+		"remote": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Server.Providers.ExternalCredentials = "remote"
+
+	factories := validFactories()
+	factories.ExternalCredentials = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (core.ExternalCredentialProvider, error) {
+		var provider *closableExternalCredentialProvider
+		return provider, nil
+	}
+
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil {
+		t.Fatal("expected nil external credentials provider error, got nil")
+	}
+	if !strings.Contains(err.Error(), "external credentials provider") || !strings.Contains(err.Error(), "returned nil") {
+		t.Fatalf("Bootstrap error = %v, want nil external credentials provider failure", err)
 	}
 }
 

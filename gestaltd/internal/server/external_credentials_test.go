@@ -4,14 +4,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 )
 
 func TestSubjectHasOtherExternalIdentityLinkTreatsTypedNilProviderAsMissing(t *testing.T) {
 	t.Parallel()
 
-	var tokens *coredata.TokenService
-	srv := &Server{externalCredentials: tokens}
+	var provider *coretesting.StubExternalCredentialProvider
+	srv := &Server{externalCredentials: provider}
 
 	got, err := srv.subjectHasOtherExternalIdentityLink(context.Background(), "user:test", externalIdentityRef{}, "")
 	if err != nil {

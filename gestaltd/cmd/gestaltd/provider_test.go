@@ -1268,7 +1268,7 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 			Name:   "external-credentials",
 			EnvVar: providerhost.DefaultExternalCredentialSocketEnv,
 			Register: func(srv *grpc.Server) {
-				proto.RegisterExternalCredentialProviderServer(srv, providerhost.NewExternalCredentialProviderServer(services.Tokens))
+				proto.RegisterExternalCredentialProviderServer(srv, providerhost.NewExternalCredentialProviderServer(services.ExternalCredentials))
 			},
 		}},
 	})

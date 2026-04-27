@@ -703,6 +703,10 @@ func (b *Broker) resolveBoundToken(ctx context.Context, prov core.Provider, p *p
 }
 
 func (b *Broker) resolveSubjectToken(ctx context.Context, prov core.Provider, subjectID, providerName, connection, instance string, credentialMode core.ConnectionMode, credentialSubjectID string) (context.Context, string, error) {
+	if b == nil || coredata.ExternalCredentialProviderMissing(b.externalCreds) {
+		return ctx, "", fmt.Errorf("%w: external credentials provider is not configured", ErrInternal)
+	}
+
 	var storedToken *core.IntegrationToken
 	var err error
 

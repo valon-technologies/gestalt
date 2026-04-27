@@ -33,7 +33,7 @@ func TestBrokerResolveToken_ConnectionModeNoneResolvesSessionUserSubject(t *test
 			ConnMode: core.ConnectionModeNone,
 		}),
 		svc.Users,
-		svc.Tokens,
+		svc.ExternalCredentials,
 	)
 	p := &principal.Principal{
 		Identity: &core.UserIdentity{
@@ -83,9 +83,9 @@ func TestBrokerResolveToken_WorkflowContextDoesNotBypassWorkloadIdentityBinding(
 			},
 		},
 	}, providers)
-	broker := NewBroker(providers, svc.Users, svc.Tokens, WithAuthorizer(authz))
+	broker := NewBroker(providers, svc.Users, svc.ExternalCredentials, WithAuthorizer(authz))
 
-	if err := svc.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
 		ID:          "workload-workspace-team-a",
 		SubjectID:   principal.WorkloadSubjectID("workflow.roadmap"),
 		Integration: "slack",
@@ -93,9 +93,9 @@ func TestBrokerResolveToken_WorkflowContextDoesNotBypassWorkloadIdentityBinding(
 		Instance:    "team-a",
 		AccessToken: "team-a-token",
 	}); err != nil {
-		t.Fatalf("StoreToken team-a: %v", err)
+		t.Fatalf("PutCredential team-a: %v", err)
 	}
-	if err := svc.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
 		ID:          "workload-workspace-team-b",
 		SubjectID:   principal.WorkloadSubjectID("workflow.roadmap"),
 		Integration: "slack",
@@ -103,7 +103,7 @@ func TestBrokerResolveToken_WorkflowContextDoesNotBypassWorkloadIdentityBinding(
 		Instance:    "team-b",
 		AccessToken: "team-b-token",
 	}); err != nil {
-		t.Fatalf("StoreToken team-b: %v", err)
+		t.Fatalf("PutCredential team-b: %v", err)
 	}
 
 	workload := &principal.Principal{
@@ -146,7 +146,7 @@ func TestBrokerResolveToken_CredentialedWorkloadDoesNotBypassSelectorBinding(t *
 			},
 		},
 	}, providers)
-	broker := NewBroker(providers, svc.Users, svc.Tokens, WithAuthorizer(authz))
+	broker := NewBroker(providers, svc.Users, svc.ExternalCredentials, WithAuthorizer(authz))
 
 	identity := &principal.Principal{
 		Kind:                principal.KindWorkload,

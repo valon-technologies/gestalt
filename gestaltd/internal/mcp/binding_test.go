@@ -109,12 +109,12 @@ func stubServicesWithToken(t *testing.T, integrations ...string) (*coredata.Serv
 		integrations = []string{"test"}
 	}
 	for i, intg := range integrations {
-		if err := svc.Tokens.StoreToken(ctx, &core.IntegrationToken{
+		if err := svc.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
 			ID: fmt.Sprintf("tok%d", i+1), SubjectID: principal.UserSubjectID(u.ID), Integration: intg,
 			Connection: "", Instance: "default",
 			AccessToken: intg + "-token",
 		}); err != nil {
-			t.Fatalf("StoreToken: %v", err)
+			t.Fatalf("PutCredential: %v", err)
 		}
 	}
 	return svc, u.ID
@@ -312,7 +312,7 @@ func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, _ := stubServicesWithToken(t)
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -363,7 +363,7 @@ func TestNewServer_SkipsFlatOnlyProvider(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, _ := stubServicesWithToken(t)
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -387,7 +387,7 @@ func TestNewServer_ToolNameConvention(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, _ := stubServicesWithToken(t)
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:      broker,
@@ -423,7 +423,7 @@ func TestNewServer_SanitizesInvalidToolNamesAndRoutesOriginalOperation(t *testin
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "github")
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -472,7 +472,7 @@ func TestNewServer_ToolCallRoutesThrough(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t)
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -584,7 +584,7 @@ func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t)
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -621,7 +621,7 @@ func TestNewServer_BrokerErrorReturnsToolError(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t)
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -653,7 +653,7 @@ func TestNewServer_NoPrincipalReturnsToolError(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, _ := stubServicesWithToken(t)
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
@@ -687,7 +687,7 @@ func TestNewServer_AllowedProvidersFilter(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov1, prov2)
 	ds, _ := stubServicesWithToken(t)
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:          broker,
@@ -724,7 +724,7 @@ func TestNewServer_HiddenOperationsFiltered(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, _ := stubServicesWithToken(t)
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
@@ -807,7 +807,7 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "clickhouse")
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 	caps := broker.ListCapabilities()
 	if len(caps) != 1 {
 		t.Fatalf("expected 1 capability, got %d", len(caps))
@@ -881,7 +881,7 @@ func TestNewServer_DirectCallerPassthroughConnectionModeNoneSetsCredentialContex
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "clickhouse")
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
@@ -941,7 +941,7 @@ func TestNewServer_SessionCatalogConnectionModeNoneSetsCredentialContext(t *test
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "clickhouse")
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -1194,7 +1194,7 @@ func TestNewServer_HumanListToolsUsesSessionMetadataForStaticCollisions(t *testi
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	const userID = "viewer-user"
-	if err := ds.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
 		ID:          "tok-default",
 		SubjectID:   principal.UserSubjectID(userID),
 		Integration: "sampledb",
@@ -1202,7 +1202,7 @@ func TestNewServer_HumanListToolsUsesSessionMetadataForStaticCollisions(t *testi
 		Instance:    "default",
 		AccessToken: "default-token",
 	}); err != nil {
-		t.Fatalf("StoreToken: %v", err)
+		t.Fatalf("PutCredential: %v", err)
 	}
 	authz, err := authorization.New(config.AuthorizationConfig{
 		Policies: map[string]config.HumanPolicyDef{
@@ -1219,7 +1219,7 @@ func TestNewServer_HumanListToolsUsesSessionMetadataForStaticCollisions(t *testi
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -1278,7 +1278,7 @@ func TestNewServer_HumanListToolsUsesHydratedSessionCatalogSnapshot(t *testing.T
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -1365,7 +1365,7 @@ func TestNewServer_HumanListToolsIgnoresHiddenStaticCollisions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -1421,7 +1421,7 @@ func TestNewServer_SessionCatalogSuppressionHidesStaticMCPTool(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "sampledb")
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -1508,7 +1508,7 @@ func TestNewServer_HumanListToolsDoesNotLeakAcrossStatelessSessions(t *testing.T
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -1611,7 +1611,7 @@ func TestNewServer_HumanSessionCatalogReceivesAccessContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -1673,7 +1673,7 @@ func TestNewServer_HumanCallToolDeniedWhenAllowedRolesAreMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -1740,7 +1740,7 @@ func TestNewServer_WorkloadCallToolDeniedReturnsErrorResult(t *testing.T) {
 		},
 	}, providers)
 
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:    broker,
 		Providers:  providers,
@@ -1802,7 +1802,7 @@ func TestNewServer_WorkloadCallToolDeniedForUnboundSessionOnlyProvider(t *testin
 		},
 	}, providers)
 
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:    broker,
 		Providers:  providers,
@@ -1873,7 +1873,7 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	ctx := context.Background()
-	if err := ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
+	if err := ds.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
 		ID:          "tok-workload",
 		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 		Integration: "clickhouse",
@@ -1881,7 +1881,7 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 		Instance:    "team-a",
 		AccessToken: "workload-token",
 	}); err != nil {
-		t.Fatalf("StoreToken: %v", err)
+		t.Fatalf("PutCredential: %v", err)
 	}
 
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
@@ -1899,7 +1899,7 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 		},
 	}, providers)
 
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -1966,7 +1966,7 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	ctx := context.Background()
-	if err := ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
+	if err := ds.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
 		ID:          "tok-workload",
 		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 		Integration: "sampledb",
@@ -1974,7 +1974,7 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 		Instance:    "team-a",
 		AccessToken: "workload-token",
 	}); err != nil {
-		t.Fatalf("StoreToken: %v", err)
+		t.Fatalf("PutCredential: %v", err)
 	}
 
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
@@ -1992,7 +1992,7 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 		},
 	}, providers)
 
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -2067,7 +2067,7 @@ func TestNewServer_HumanCallToolUsesInstanceMetadataForStaticCollisions(t *testi
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	const userID = "viewer-user"
-	if err := ds.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
 		ID:          "tok-team-b",
 		SubjectID:   principal.UserSubjectID(userID),
 		Integration: "sampledb",
@@ -2075,7 +2075,7 @@ func TestNewServer_HumanCallToolUsesInstanceMetadataForStaticCollisions(t *testi
 		Instance:    "team-b",
 		AccessToken: "team-b-token",
 	}); err != nil {
-		t.Fatalf("StoreToken: %v", err)
+		t.Fatalf("PutCredential: %v", err)
 	}
 	authz, err := authorization.New(config.AuthorizationConfig{
 		Policies: map[string]config.HumanPolicyDef{
@@ -2092,7 +2092,7 @@ func TestNewServer_HumanCallToolUsesInstanceMetadataForStaticCollisions(t *testi
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -2374,7 +2374,7 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	const userID = "viewer-user"
-	if err := ds.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
 		ID:          "tok-catalog",
 		SubjectID:   principal.UserSubjectID(userID),
 		Integration: "sampledb",
@@ -2382,9 +2382,9 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 		Instance:    "default",
 		AccessToken: "catalog-token",
 	}); err != nil {
-		t.Fatalf("StoreToken catalog: %v", err)
+		t.Fatalf("PutCredential catalog: %v", err)
 	}
-	if err := ds.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
 		ID:          "tok-rest",
 		SubjectID:   principal.UserSubjectID(userID),
 		Integration: "sampledb",
@@ -2392,13 +2392,13 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 		Instance:    "default",
 		AccessToken: "rest-token",
 	}); err != nil {
-		t.Fatalf("StoreToken rest: %v", err)
+		t.Fatalf("PutCredential rest: %v", err)
 	}
 
 	broker := invocation.NewBroker(
 		providers,
 		ds.Users,
-		ds.Tokens,
+		ds.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sampledb": "rest-conn"})),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"sampledb": "catalog-conn"})),
 	)
@@ -2464,7 +2464,7 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 		collisionBroker := invocation.NewBroker(
 			collisionProviders,
 			ds.Users,
-			ds.Tokens,
+			ds.ExternalCredentials,
 			invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sampledb": "rest-conn"})),
 			invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"sampledb": "catalog-conn"})),
 		)
@@ -2726,17 +2726,17 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, merged)
 	ds, userID := stubServicesWithToken(t, "hybrid")
 	ctx := context.Background()
-	_ = ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
+	_ = ds.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
 		ID: "tok-plugin", SubjectID: principal.UserSubjectID(userID), Integration: "hybrid", Connection: config.PluginConnectionName, Instance: "default",
 		AccessToken: testPluginAccessToken,
 	})
-	_ = ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
+	_ = ds.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
 		ID: "tok-api", SubjectID: principal.UserSubjectID(userID), Integration: "hybrid", Connection: testAPIConnectionName, Instance: "default",
 		AccessToken: testNamedAPIAccessToken,
 	})
 	broker := invocation.NewBroker(
 		providers,
-		ds.Users, ds.Tokens,
+		ds.Users, ds.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap{"hybrid": testAPIConnectionName}),
 	)
 
@@ -3020,7 +3020,7 @@ func TestNewServer_DynamicCatalogProviderCallsSessionTool(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "clickhouse")
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -3069,7 +3069,7 @@ func TestNewServer_IncludeRESTFiltering(t *testing.T) {
 
 			providers := testutil.NewProviderRegistry(t, prov)
 			ds, _ := stubServicesWithToken(t)
-			broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+			broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 			srv := gestaltmcp.NewServer(gestaltmcp.Config{
 				Invoker:     broker,
@@ -3137,7 +3137,7 @@ func TestNewServer_MCPPassthroughContract(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	dsSvc, userID := stubServicesWithToken(t, providerName)
-	broker := invocation.NewBroker(providers, dsSvc.Users, dsSvc.Tokens)
+	broker := invocation.NewBroker(providers, dsSvc.Users, dsSvc.ExternalCredentials)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -3248,7 +3248,7 @@ func TestNewServer_PassthroughToolPreservesErrorResultStructure(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	dsSvc, userID := stubServicesWithToken(t, providerName)
-	broker := invocation.NewBroker(providers, dsSvc.Users, dsSvc.Tokens)
+	broker := invocation.NewBroker(providers, dsSvc.Users, dsSvc.ExternalCredentials)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -3317,7 +3317,7 @@ func TestNewServer_PassthroughToolTreatsNilResultAsEmptyJSON(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	dsSvc, userID := stubServicesWithToken(t, providerName)
-	broker := invocation.NewBroker(providers, dsSvc.Users, dsSvc.Tokens)
+	broker := invocation.NewBroker(providers, dsSvc.Users, dsSvc.ExternalCredentials)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,

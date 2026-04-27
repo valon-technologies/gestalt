@@ -11,7 +11,6 @@ import (
 type Services struct {
 	Users                    *UserService
 	ExternalCredentials      core.ExternalCredentialProvider
-	Tokens                   *TokenService
 	APITokens                *APITokenService
 	Identities               *IdentityService
 	IdentityAuthBindings     *IdentityAuthBindingService
@@ -100,11 +99,9 @@ func New(ds indexeddb.IndexedDB) (*Services, error) {
 	if err := apiTokens.BackfillTokenAccess(ctx); err != nil {
 		return nil, fmt.Errorf("backfill canonical api token access: %w", err)
 	}
-	tokens := NewTokenService(nil)
 	return &Services{
 		ExternalCredentials:      nil,
 		Users:                    users,
-		Tokens:                   tokens,
 		APITokens:                apiTokens,
 		Identities:               identities,
 		IdentityAuthBindings:     authBindings,
