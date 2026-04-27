@@ -1055,7 +1055,7 @@ func TestCreateWorkflowScheduleAllowsAuthorizedCatalogOperation(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"export"}}`)
+	body := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"export"}}}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -1202,7 +1202,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 	createReq, _ := http.NewRequest(
 		http.MethodPost,
 		ts.URL+"/api/v1/workflow/schedules/",
-		bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"export","instance":"tenant-a"}}`),
+		bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"export","instance":"tenant-a"}}}`),
 	)
 	createReq.Header.Set("Authorization", "Bearer "+plaintext)
 	createReq.Header.Set("Content-Type", "application/json")
@@ -1279,7 +1279,7 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 	updateReq, _ := http.NewRequest(
 		http.MethodPut,
 		ts.URL+"/api/v1/workflow/schedules/sched-ada",
-		bytes.NewBufferString(`{"cron":"*/10 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-b"}}`),
+		bytes.NewBufferString(`{"cron":"*/10 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-b"}}}`),
 	)
 	updateReq.Header.Set("Content-Type", "application/json")
 	updateReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -1356,7 +1356,7 @@ func TestWorkflowScheduleCreateFailureHidesInternalError(t *testing.T) {
 	createReq, _ := http.NewRequest(
 		http.MethodPost,
 		ts.URL+"/api/v1/workflow/schedules/",
-		bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a"}}`),
+		bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a"}}}`),
 	)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -1429,7 +1429,7 @@ func TestWorkflowScheduleCreatePinsResolvedInstance(t *testing.T) {
 	createReq, _ := http.NewRequest(
 		http.MethodPost,
 		ts.URL+"/api/v1/workflow/schedules/",
-		bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"default"}}`),
+		bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"sync","connection":"default"}}}`),
 	)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -1698,7 +1698,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	createReq, _ := http.NewRequest(
 		http.MethodPost,
 		ts.URL+"/api/v1/workflow/schedules/",
-		bytes.NewBufferString(`{"provider":"basic","cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`),
+		bytes.NewBufferString(`{"provider":"basic","cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}}`),
 	)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -1754,7 +1754,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	updateReq, _ := http.NewRequest(
 		http.MethodPut,
 		ts.URL+"/api/v1/workflow/schedules/"+created.ID,
-		bytes.NewBufferString(`{"provider":"advanced","cron":"0 * * * *","timezone":"UTC","target":{"plugin":"analytics","operation":"sync","connection":"warehouse","instance":"tenant-b","input":{"mode":"full"}},"paused":true}`),
+		bytes.NewBufferString(`{"provider":"advanced","cron":"0 * * * *","timezone":"UTC","target":{"plugin":{"name":"analytics","operation":"sync","connection":"warehouse","instance":"tenant-b","input":{"mode":"full"}}},"paused":true}`),
 	)
 	updateReq.Header.Set("Content-Type", "application/json")
 	updateReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -2216,7 +2216,7 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	}
 }
 
-func TestGlobalWorkflowEventTriggerLegacyFlatTargetStillAccepted(t *testing.T) {
+func TestGlobalWorkflowLegacyFlatTargetsAreRejected(t *testing.T) {
 	t.Parallel()
 
 	services := coretesting.NewStubServices(t)
@@ -2252,68 +2252,46 @@ func TestGlobalWorkflowEventTriggerLegacyFlatTargetStillAccepted(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	createReq, _ := http.NewRequest(
-		http.MethodPost,
-		ts.URL+"/api/v1/workflow/event-triggers/",
-		bytes.NewBufferString(`{"match":{"type":"roadmap.item.updated","source":"roadmap"},"target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`),
-	)
-	createReq.Header.Set("Content-Type", "application/json")
-	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	createResp, err := http.DefaultClient.Do(createReq)
-	if err != nil {
-		t.Fatalf("create request: %v", err)
+	cases := []struct {
+		name string
+		path string
+		body string
+		want string
+	}{
+		{
+			name: "schedule",
+			path: "/api/v1/workflow/schedules/",
+			body: `{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`,
+			want: `target.plugin.operation`,
+		},
+		{
+			name: "event trigger",
+			path: "/api/v1/workflow/event-triggers/",
+			body: `{"match":{"type":"roadmap.item.updated","source":"roadmap"},"target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`,
+			want: `target.plugin.operation`,
+		},
 	}
-	defer func() { _ = createResp.Body.Close() }()
-	if createResp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(createResp.Body)
-		t.Fatalf("expected 201, got %d: %s", createResp.StatusCode, body)
+	for _, tc := range cases {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+tc.path, bytes.NewBufferString(tc.body))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s request: %v", tc.name, err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			t.Fatalf("%s close response: %v", tc.name, closeErr)
+		}
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("%s: expected 400, got %d: %s", tc.name, resp.StatusCode, body)
+		}
+		if !strings.Contains(string(body), tc.want) {
+			t.Fatalf("%s: response body = %s, want %q", tc.name, body, tc.want)
+		}
 	}
-	createRespBody, err := io.ReadAll(createResp.Body)
-	if err != nil {
-		t.Fatalf("read create response: %v", err)
-	}
-	requireCanonicalPluginTargetJSON(t, createRespBody)
-	var created workflowEventTriggerResponse
-	if err := json.Unmarshal(createRespBody, &created); err != nil {
-		t.Fatalf("decode create response: %v", err)
-	}
-	createdPlugin := requireWorkflowPluginTarget(t, created.Target)
-	if createdPlugin.Name != "roadmap" || createdPlugin.Operation != "sync" {
-		t.Fatalf("created trigger = %#v", created)
-	}
-	if len(provider.upsertTriggerReqs) != 1 {
-		t.Fatalf("upsert trigger requests = %d, want 1", len(provider.upsertTriggerReqs))
-	}
-	createTarget := provider.upsertTriggerReqs[0].Target
-	if createTarget.PluginName != "roadmap" || createTarget.Operation != "sync" || createTarget.Connection != "analytics" || createTarget.Instance != "tenant-a" {
-		t.Fatalf("create target = %#v", createTarget)
-	}
-
-	updateReq, _ := http.NewRequest(
-		http.MethodPut,
-		ts.URL+"/api/v1/workflow/event-triggers/"+created.ID,
-		bytes.NewBufferString(`{"match":{"type":"roadmap.item.exported","source":"roadmap"},"target":{"plugin":"roadmap","operation":"export","connection":"analytics","instance":"tenant-b","input":{"mode":"full"}}}`),
-	)
-	updateReq.Header.Set("Content-Type", "application/json")
-	updateReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	updateResp, err := http.DefaultClient.Do(updateReq)
-	if err != nil {
-		t.Fatalf("update request: %v", err)
-	}
-	defer func() { _ = updateResp.Body.Close() }()
-	if updateResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(updateResp.Body)
-		t.Fatalf("expected 200, got %d: %s", updateResp.StatusCode, body)
-	}
-	if len(provider.upsertTriggerReqs) != 2 {
-		t.Fatalf("upsert trigger requests = %d, want 2", len(provider.upsertTriggerReqs))
-	}
-	updateTarget := provider.upsertTriggerReqs[1].Target
-	if updateTarget.PluginName != "roadmap" || updateTarget.Operation != "export" || updateTarget.Connection != "analytics" || updateTarget.Instance != "tenant-b" {
-		t.Fatalf("update target = %#v", updateTarget)
-	}
-	if updateTarget.Input["mode"] != "full" {
-		t.Fatalf("update target input = %#v", updateTarget.Input)
+	if len(provider.upsertReqs) != 0 || len(provider.upsertTriggerReqs) != 0 {
+		t.Fatalf("legacy target should not upsert schedules=%d triggers=%d", len(provider.upsertReqs), len(provider.upsertTriggerReqs))
 	}
 }
 
@@ -2513,7 +2491,7 @@ func TestWorkflowEventTriggerCreateRequiresMatchType(t *testing.T) {
 	req, _ := http.NewRequest(
 		http.MethodPost,
 		ts.URL+"/api/v1/workflow/event-triggers/",
-		bytes.NewBufferString(`{"match":{"source":"roadmap"},"target":{"plugin":"roadmap","operation":"sync"}}`),
+		bytes.NewBufferString(`{"match":{"source":"roadmap"},"target":{"plugin":{"name":"roadmap","operation":"sync"}}}`),
 	)
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})

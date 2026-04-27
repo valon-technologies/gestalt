@@ -2865,7 +2865,7 @@ server:
 		}
 	})
 
-	t.Run("top-level workflows config is canonicalized", func(t *testing.T) {
+	t.Run("top-level workflows config uses canonical targets", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2917,30 +2917,38 @@ server:
 			t.Fatalf("Load: %v", err)
 		}
 		wantSchedule := WorkflowScheduleConfig{
-			Provider:  "temporal",
-			Plugin:    "roadmap",
-			Cron:      "0 2 * * *",
-			Timezone:  "UTC",
-			Operation: "nightly_sync",
-			Input: map[string]any{
-				"source": "yaml",
+			Provider: "temporal",
+			Target: &WorkflowTargetConfig{
+				Plugin: &WorkflowPluginTargetConfig{
+					Name:      "roadmap",
+					Operation: "nightly_sync",
+					Input: map[string]any{
+						"source": "yaml",
+					},
+				},
 			},
+			Cron:     "0 2 * * *",
+			Timezone: "UTC",
 		}
 		if got := cfg.Workflows.Schedules["nightly"]; !reflect.DeepEqual(got, wantSchedule) {
 			t.Fatalf("Workflows.Schedules[nightly] = %#v, want %#v", got, wantSchedule)
 		}
 		wantTrigger := WorkflowEventTriggerConfig{
 			Provider: "temporal",
-			Plugin:   "roadmap",
+			Target: &WorkflowTargetConfig{
+				Plugin: &WorkflowPluginTargetConfig{
+					Name:      "roadmap",
+					Operation: "backfill_items",
+					Input: map[string]any{
+						"source": "event",
+					},
+				},
+			},
 			Match: WorkflowEventMatch{
 				Type:   "roadmap.task.updated",
 				Source: "roadmap",
 			},
-			Operation: "backfill_items",
-			Paused:    true,
-			Input: map[string]any{
-				"source": "event",
-			},
+			Paused: true,
 		}
 		if got := cfg.Workflows.EventTriggers["task_updated"]; !reflect.DeepEqual(got, wantTrigger) {
 			t.Fatalf("Workflows.EventTriggers[task_updated] = %#v, want %#v", got, wantTrigger)

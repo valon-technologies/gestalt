@@ -1622,12 +1622,12 @@ func setWorkflowFixture(cfg *config.Config, plugin string, workflow *workflowFix
 		cfg.Workflows.EventTriggers = map[string]config.WorkflowEventTriggerConfig{}
 	}
 	for key, schedule := range cfg.Workflows.Schedules {
-		if schedule.Plugin == plugin {
+		if workflowFixtureTargetPlugin(schedule.Target) == plugin {
 			delete(cfg.Workflows.Schedules, key)
 		}
 	}
 	for key, trigger := range cfg.Workflows.EventTriggers {
-		if trigger.Plugin == plugin {
+		if workflowFixtureTargetPlugin(trigger.Target) == plugin {
 			delete(cfg.Workflows.EventTriggers, key)
 		}
 	}
@@ -1636,29 +1636,42 @@ func setWorkflowFixture(cfg *config.Config, plugin string, workflow *workflowFix
 	}
 	for key, schedule := range workflow.Schedules {
 		cfg.Workflows.Schedules[key] = config.WorkflowScheduleConfig{
-			Provider:  workflow.Provider,
-			Plugin:    plugin,
-			Cron:      schedule.Cron,
-			Timezone:  schedule.Timezone,
-			Operation: schedule.Operation,
-			Input:     maps.Clone(schedule.Input),
-			Paused:    schedule.Paused,
+			Provider: workflow.Provider,
+			Target:   workflowFixtureTarget(plugin, schedule.Operation, schedule.Input),
+			Cron:     schedule.Cron,
+			Timezone: schedule.Timezone,
+			Paused:   schedule.Paused,
 		}
 	}
 	for key, trigger := range workflow.EventTriggers {
 		cfg.Workflows.EventTriggers[key] = config.WorkflowEventTriggerConfig{
 			Provider: workflow.Provider,
-			Plugin:   plugin,
+			Target:   workflowFixtureTarget(plugin, trigger.Operation, trigger.Input),
 			Match: config.WorkflowEventMatch{
 				Type:    trigger.Match.Type,
 				Source:  trigger.Match.Source,
 				Subject: trigger.Match.Subject,
 			},
-			Operation: trigger.Operation,
-			Input:     maps.Clone(trigger.Input),
-			Paused:    trigger.Paused,
+			Paused: trigger.Paused,
 		}
 	}
+}
+
+func workflowFixtureTarget(plugin, operation string, input map[string]any) *config.WorkflowTargetConfig {
+	return &config.WorkflowTargetConfig{
+		Plugin: &config.WorkflowPluginTargetConfig{
+			Name:      plugin,
+			Operation: operation,
+			Input:     maps.Clone(input),
+		},
+	}
+}
+
+func workflowFixtureTargetPlugin(target *config.WorkflowTargetConfig) string {
+	if target == nil || target.Plugin == nil {
+		return ""
+	}
+	return target.Plugin.Name
 }
 
 func transportSecretRef(name string) string {
@@ -3938,10 +3951,9 @@ func TestBootstrapClosesWorkflowProvidersWhenConfigScheduleReconcileFails(t *tes
 
 	cfg.Workflows.Schedules = map[string]config.WorkflowScheduleConfig{
 		"nightly_sync": {
-			Plugin:    "roadmap",
-			Cron:      "0 2 * * *",
-			Timezone:  "UTC",
-			Operation: "sync",
+			Target:   workflowFixtureTarget("roadmap", "sync", nil),
+			Cron:     "0 2 * * *",
+			Timezone: "UTC",
 		},
 	}
 
@@ -4792,13 +4804,11 @@ func TestBootstrapReAdoptsManagedEventTriggersWhenOwnershipStateIsMissing(t *tes
 
 	currentDB = db2
 	cfg.Workflows.EventTriggers["task_updated"] = config.WorkflowEventTriggerConfig{
-		Plugin: "roadmap",
+		Target: workflowFixtureTarget("roadmap", "sync", map[string]any{
+			"limit": 1,
+		}),
 		Match: config.WorkflowEventMatch{
 			Type: "task.updated",
-		},
-		Operation: "sync",
-		Input: map[string]any{
-			"limit": 1,
 		},
 	}
 	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
@@ -4991,8 +5001,10 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		})
 		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
-				PluginName: "roadmap",
-				Operation:  "sync",
+				Plugin: &proto.BoundWorkflowPluginTarget{
+					PluginName: "roadmap",
+					Operation:  "sync",
+				},
 			},
 			ExecutionRef: executionRef,
 		})
@@ -5050,8 +5062,10 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		})
 		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
-				PluginName: "roadmap",
-				Operation:  "sync",
+				Plugin: &proto.BoundWorkflowPluginTarget{
+					PluginName: "roadmap",
+					Operation:  "sync",
+				},
 			},
 			ExecutionRef: executionRef,
 		})
@@ -5111,8 +5125,10 @@ func TestBootstrapStartupWorkflowCallbackRequiresExecutionRef(t *testing.T) {
 		}
 		_, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
-				PluginName: "roadmap",
-				Operation:  "sync",
+				Plugin: &proto.BoundWorkflowPluginTarget{
+					PluginName: "roadmap",
+					Operation:  "sync",
+				},
 			},
 		})
 		if err == nil {
@@ -5507,8 +5523,10 @@ func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedPl
 	}
 	resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 		Target: &proto.BoundWorkflowTarget{
-			PluginName: "roadmap",
-			Operation:  "sync",
+			Plugin: &proto.BoundWorkflowPluginTarget{
+				PluginName: "roadmap",
+				Operation:  "sync",
+			},
 		},
 		ExecutionRef: executionRef,
 	})
@@ -5592,8 +5610,10 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 				})
 				resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 					Target: &proto.BoundWorkflowTarget{
-						PluginName: "roadmap",
-						Operation:  "sync",
+						Plugin: &proto.BoundWorkflowPluginTarget{
+							PluginName: "roadmap",
+							Operation:  "sync",
+						},
 					},
 					ExecutionRef: executionRef,
 				})

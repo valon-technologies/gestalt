@@ -1419,15 +1419,17 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
         authSource: "api_token",
       },
       target: {
-        pluginName: "roadmap",
-        operation: "sync",
-        input: {
-          project: "alpha",
+        plugin: {
+          pluginName: "roadmap",
+          operation: "sync",
+          input: {
+            project: "alpha",
+          },
         },
       },
     }),
   );
-  expect(run.target?.pluginName).toBe("roadmap");
+  expect(run.target?.plugin?.pluginName).toBe("roadmap");
   expect(run.status).toBe(WorkflowRunStatus.PENDING);
   expect(run.statusMessage).toBe("idempotency:req-1");
   expect(run.createdBy?.subjectId).toBe("user:user-123");
@@ -1444,13 +1446,15 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
         authSource: "api_token",
       },
       target: {
-        pluginName: "roadmap",
-        operation: "sync",
+        plugin: {
+          pluginName: "roadmap",
+          operation: "sync",
+        },
       },
     }),
   );
   expect(schedule.id).toBe("nightly");
-  expect(schedule.target?.pluginName).toBe("roadmap");
+  expect(schedule.target?.plugin?.pluginName).toBe("roadmap");
   expect(schedule.createdBy?.subjectId).toBe("service_account:planner");
 
   const updatedSchedule = await (workflow.upsertSchedule as any)(
@@ -1465,8 +1469,10 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
         authSource: "api_token",
       },
       target: {
-        pluginName: "roadmap",
-        operation: "sync",
+        plugin: {
+          pluginName: "roadmap",
+          operation: "sync",
+        },
       },
     }),
   );
@@ -1743,10 +1749,12 @@ test("integration provider request context includes workflow metadata", async ()
             authSource: "api_token",
           },
           target: {
-            pluginName: "demo",
-            operation: "sync",
-            connection: "analytics",
-            instance: "tenant-a",
+            plugin: {
+              pluginName: "demo",
+              operation: "sync",
+              connection: "analytics",
+              instance: "tenant-a",
+            },
           },
           trigger: {
             kind: "event",
@@ -1782,10 +1790,12 @@ test("integration provider request context includes workflow metadata", async ()
         authSource: "api_token",
       },
       target: {
-        pluginName: "demo",
-        operation: "sync",
-        connection: "analytics",
-        instance: "tenant-a",
+        plugin: {
+          pluginName: "demo",
+          operation: "sync",
+          connection: "analytics",
+          instance: "tenant-a",
+        },
       },
       trigger: {
         kind: "event",

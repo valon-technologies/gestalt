@@ -71,7 +71,7 @@ class Request:
     access: Access = dataclasses.field(default_factory=Access)
     invocation_token: str = ""
     # Workflow callback metadata uses a JSON-style lowerCamelCase object such
-    # as runId, target.pluginName, trigger.scheduleId, and
+    # as runId, target.plugin.pluginName, trigger.scheduleId, and
     # trigger.event.specVersion.
     workflow: dict[str, Any] = dataclasses.field(default_factory=dict)
 

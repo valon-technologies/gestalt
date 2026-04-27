@@ -572,10 +572,6 @@ workflows:
       paused: false
 ```
 
-For compatibility, schedules and triggers still accept the previous flat
-plugin fields (`plugin`, `operation`, `connection`, `instance`, `input`) and
-flat `agent`. Do not combine those fields with `target`.
-
 ### `workflows.schedules.*`
 
 | Field | Description |
@@ -609,8 +605,8 @@ flat `agent`. Do not combine those fields with `target`.
 
 Event trigger matching is exact string matching. `match.type` is required;
 `match.source` and `match.subject` are optional exact-match filters. Event
-triggers are config-managed only today; there is not yet a public HTTP or CLI
-CRUD surface for them.
+triggers can be config-managed through YAML or user-owned through the global
+workflow HTTP API and CLI.
 
 ## `providers.cache`
 

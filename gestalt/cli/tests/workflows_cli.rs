@@ -132,31 +132,6 @@ fn test_cli_list_schedules_filters_by_plugin() {
 }
 
 #[test]
-fn test_cli_list_schedules_accepts_legacy_flat_response_target() {
-    let body = r#"[
-        {"id":"sched1","provider":"p","cron":"* * * * *","target":{"plugin":"legacy","operation":"sync"},"paused":false}
-    ]"#;
-    let mut server = Server::new();
-    let _mock = authed_json_mock!(
-        server,
-        Method::GET,
-        "/api/v1/workflow/schedules",
-        StatusCode::OK
-    )
-    .with_body(body)
-    .create();
-
-    let home = tempfile::tempdir().unwrap();
-    cli_command_for_server(home.path(), &server)
-        .args(["workflow", "schedules", "list", "--plugin", "legacy"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("sched1"))
-        .stdout(predicate::str::contains("legacy"))
-        .stdout(predicate::str::contains("sync"));
-}
-
-#[test]
 fn test_cli_gets_schedule() {
     let mut server = Server::new();
     let _mock = authed_json_mock!(
@@ -270,7 +245,7 @@ fn test_cli_updates_schedule_merges_existing_fields() {
 }
 
 #[test]
-fn test_cli_updates_schedule_merges_legacy_flat_existing_target() {
+fn test_cli_updates_schedule_requires_canonical_existing_target() {
     let legacy_schedule = r#"{
         "id":"sched-legacy",
         "provider":"test-provider",
@@ -295,25 +270,6 @@ fn test_cli_updates_schedule_merges_legacy_flat_existing_target() {
     .with_body(legacy_schedule)
     .create();
 
-    let _put = authed_json_mock!(
-        server,
-        Method::PUT,
-        "/api/v1/workflow/schedules/sched-legacy",
-        StatusCode::OK
-    )
-    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-    .match_body(Matcher::JsonString(
-        r#"{
-            "cron":"15 * * * *",
-            "timezone":"UTC",
-            "target":{"plugin":{"name":"legacy","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"k":"v"}}},
-            "paused":false
-        }"#
-        .to_string(),
-    ))
-    .with_body(SCHEDULE_JSON)
-    .create();
-
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
@@ -325,7 +281,10 @@ fn test_cli_updates_schedule_merges_legacy_flat_existing_target() {
             "15 * * * *",
         ])
         .assert()
-        .success();
+        .failure()
+        .stderr(predicate::str::contains(
+            "existing schedule is missing target.plugin.name; pass --plugin",
+        ));
 }
 
 #[test]

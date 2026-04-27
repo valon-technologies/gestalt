@@ -360,14 +360,22 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 		t.Fatalf("workflow createdBy = %#v", roundTripProvider.workflowContext["createdBy"])
 	}
 	target, ok := roundTripProvider.workflowContext["target"].(map[string]any)
-	if !ok || target["pluginName"] != "roadmap" || target["operation"] != "sync" {
+	if !ok || target["kind"] != "plugin" {
 		t.Fatalf("workflow target = %#v", roundTripProvider.workflowContext["target"])
 	}
-	if got := target["connection"]; got != "analytics" {
+	plugin, ok := target["plugin"].(map[string]any)
+	if !ok || plugin["pluginName"] != "roadmap" || plugin["operation"] != "sync" {
+		t.Fatalf("workflow target plugin = %#v", target["plugin"])
+	}
+	if got := plugin["connection"]; got != "analytics" {
 		t.Fatalf("workflow target connection = %#v, want %q", got, "analytics")
 	}
-	if got := target["instance"]; got != "tenant-a" {
+	if got := plugin["instance"]; got != "tenant-a" {
 		t.Fatalf("workflow target instance = %#v, want %q", got, "tenant-a")
+	}
+	pluginInput, ok := plugin["input"].(map[string]any)
+	if !ok || pluginInput["mode"] != "full" || pluginInput["source"] != "scheduled" {
+		t.Fatalf("workflow target input = %#v", plugin["input"])
 	}
 	trigger, ok := roundTripProvider.workflowContext["trigger"].(map[string]any)
 	if !ok || trigger["kind"] != "schedule" || trigger["scheduleId"] != "sched-1" {

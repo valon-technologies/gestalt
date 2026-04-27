@@ -993,8 +993,10 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 		Cron:            "*/5 * * * *",
 		Timezone:        "UTC",
 		Target: &proto.BoundWorkflowTarget{
-			PluginName: "roadmap",
-			Operation:  "sync",
+			Plugin: &proto.BoundWorkflowPluginTarget{
+				PluginName: "roadmap",
+				Operation:  "sync",
+			},
 		},
 	})
 	if err != nil {
@@ -1016,7 +1018,7 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 		"provider_name": created.GetProviderName(),
 		"schedule_id":   scheduleID,
 		"cron":          fetched.GetSchedule().GetCron(),
-		"operation":     fetched.GetSchedule().GetTarget().GetOperation(),
+		"operation":     fetched.GetSchedule().GetTarget().GetPlugin().GetOperation(),
 	}, nil
 }
 

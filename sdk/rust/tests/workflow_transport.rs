@@ -10,9 +10,9 @@ use gestalt::proto::v1::workflow_host_server::{
 use gestalt::proto::v1::workflow_provider_client::WorkflowProviderClient;
 use gestalt::proto::v1::workflow_provider_server::WorkflowProvider as WorkflowProviderGrpc;
 use gestalt::proto::v1::{
-    self as pb, BoundWorkflowRun, BoundWorkflowTarget, ConfigureProviderRequest, ProviderKind,
-    PublishWorkflowProviderEventRequest, StartWorkflowProviderRunRequest, WorkflowEvent,
-    WorkflowRunStatus,
+    self as pb, BoundWorkflowPluginTarget, BoundWorkflowRun, BoundWorkflowTarget,
+    ConfigureProviderRequest, ProviderKind, PublishWorkflowProviderEventRequest,
+    StartWorkflowProviderRunRequest, WorkflowEvent, WorkflowRunStatus,
 };
 use gestalt::{RuntimeMetadata, WorkflowHost, WorkflowProvider};
 use hyper_util::rt::tokio::TokioIo;
@@ -245,9 +245,12 @@ impl WorkflowHostRpc for TestWorkflowHostService {
         let target = request
             .target
             .ok_or_else(|| Status::invalid_argument("missing target"))?;
+        let plugin = target
+            .plugin
+            .ok_or_else(|| Status::invalid_argument("missing target.plugin"))?;
         Ok(GrpcResponse::new(pb::InvokeWorkflowOperationResponse {
             status: 202,
-            body: format!("{}:{}", request.run_id, target.operation),
+            body: format!("{}:{}", request.run_id, plugin.operation),
         }))
     }
 }
@@ -308,14 +311,14 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
     let started = client
         .start_run(StartWorkflowProviderRunRequest {
             target: Some(BoundWorkflowTarget {
-                plugin_name: "demo".to_string(),
-                operation: "refresh".to_string(),
-                input: Some(helpers::struct_from_json(serde_json::json!({
-                    "customer_id": "cust_123"
-                }))),
-                connection: String::new(),
-                instance: String::new(),
-                plugin: None,
+                plugin: Some(BoundWorkflowPluginTarget {
+                    plugin_name: "demo".to_string(),
+                    operation: "refresh".to_string(),
+                    input: Some(helpers::struct_from_json(serde_json::json!({
+                        "customer_id": "cust_123"
+                    }))),
+                    ..Default::default()
+                }),
                 agent: None,
             }),
             idempotency_key: "run-42".to_string(),
@@ -334,14 +337,14 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
     assert_eq!(
         started.target.expect("target"),
         BoundWorkflowTarget {
-            plugin_name: "demo".to_string(),
-            operation: "refresh".to_string(),
-            input: Some(helpers::struct_from_json(serde_json::json!({
-                "customer_id": "cust_123"
-            }))),
-            connection: String::new(),
-            instance: String::new(),
-            plugin: None,
+            plugin: Some(BoundWorkflowPluginTarget {
+                plugin_name: "demo".to_string(),
+                operation: "refresh".to_string(),
+                input: Some(helpers::struct_from_json(serde_json::json!({
+                    "customer_id": "cust_123"
+                }))),
+                ..Default::default()
+            }),
             agent: None,
         }
     );
@@ -406,9 +409,12 @@ async fn workflow_host_client_round_trip_over_unix_socket() {
     let invoked = host
         .invoke_operation(pb::InvokeWorkflowOperationRequest {
             target: Some(pb::BoundWorkflowTarget {
-                plugin_name: "demo".to_string(),
-                operation: "sync".to_string(),
-                ..Default::default()
+                plugin: Some(pb::BoundWorkflowPluginTarget {
+                    plugin_name: "demo".to_string(),
+                    operation: "sync".to_string(),
+                    ..Default::default()
+                }),
+                agent: None,
             }),
             run_id: "run-42".to_string(),
             ..Default::default()

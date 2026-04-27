@@ -150,11 +150,6 @@ This creates a durable trigger that listens for published events with:
 invokes `slack.chat.postMessage` with the static input above and records a
 workflow run.
 
-For compatibility, config-managed workflows still accept the older flat
-`plugin`, `operation`, `connection`, `instance`, `input`, and `agent` fields.
-New config should use `target`, and `target` cannot be mixed with those legacy
-fields.
-
 ### Match semantics
 
 Trigger matching is exact string matching. `match.type` is required.

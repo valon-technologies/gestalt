@@ -115,7 +115,7 @@ func desiredWorkflowConfigEventTriggers(cfg *config.Config) (map[string]desiredW
 		rowID := workflowConfigEventTriggerStateID(triggerKey)
 		desired[rowID] = desiredWorkflowConfigEventTrigger{
 			ID:           rowID,
-			PluginName:   trigger.Plugin,
+			PluginName:   workflowConfigTargetLabel(workflowConfigEventTriggerTarget(trigger)),
 			TriggerKey:   triggerKey,
 			ProviderName: providerName,
 			TriggerID:    workflowConfigEventTriggerID(triggerKey),
@@ -198,24 +198,7 @@ func workflowConfigEventTriggerMatch(trigger config.WorkflowEventTriggerConfig) 
 }
 
 func workflowConfigEventTriggerTarget(trigger config.WorkflowEventTriggerConfig) coreworkflow.Target {
-	if trigger.Agent != nil {
-		return coreworkflow.Target{Agent: workflowConfigAgentTarget(trigger.Agent)}
-	}
-	pluginTarget := coreworkflow.PluginTarget{
-		PluginName: trigger.Plugin,
-		Operation:  trigger.Operation,
-		Connection: trigger.Connection,
-		Instance:   trigger.Instance,
-		Input:      maps.Clone(trigger.Input),
-	}
-	return coreworkflow.Target{
-		PluginName: pluginTarget.PluginName,
-		Operation:  pluginTarget.Operation,
-		Connection: pluginTarget.Connection,
-		Instance:   pluginTarget.Instance,
-		Input:      pluginTarget.Input,
-		Plugin:     &pluginTarget,
-	}
+	return workflowConfigTarget(trigger.Target)
 }
 
 func workflowConfigEventTriggerStateID(triggerKey string) string {

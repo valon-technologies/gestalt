@@ -128,7 +128,7 @@ func desiredWorkflowConfigSchedules(cfg *config.Config) (map[string]desiredWorkf
 		rowID := workflowConfigScheduleStateID(scheduleKey)
 		desired[rowID] = desiredWorkflowConfigSchedule{
 			ID:           rowID,
-			PluginName:   schedule.Plugin,
+			PluginName:   workflowConfigTargetLabel(workflowConfigScheduleTarget(schedule)),
 			ScheduleKey:  scheduleKey,
 			ProviderName: providerName,
 			ScheduleID:   workflowConfigScheduleID(scheduleKey),
@@ -229,15 +229,26 @@ func workflowConfigTargetLabel(target coreworkflow.Target) string {
 }
 
 func workflowConfigScheduleTarget(schedule config.WorkflowScheduleConfig) coreworkflow.Target {
-	if schedule.Agent != nil {
-		return coreworkflow.Target{Agent: workflowConfigAgentTarget(schedule.Agent)}
+	return workflowConfigTarget(schedule.Target)
+}
+
+func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Target {
+	if target == nil {
+		return coreworkflow.Target{}
+	}
+	if target.Agent != nil {
+		return coreworkflow.Target{Agent: workflowConfigAgentTarget(target.Agent)}
+	}
+	plugin := target.Plugin
+	if plugin == nil {
+		return coreworkflow.Target{}
 	}
 	pluginTarget := coreworkflow.PluginTarget{
-		PluginName: schedule.Plugin,
-		Operation:  schedule.Operation,
-		Connection: schedule.Connection,
-		Instance:   schedule.Instance,
-		Input:      maps.Clone(schedule.Input),
+		PluginName: plugin.Name,
+		Operation:  plugin.Operation,
+		Connection: plugin.Connection,
+		Instance:   plugin.Instance,
+		Input:      maps.Clone(plugin.Input),
 	}
 	return coreworkflow.Target{
 		PluginName: pluginTarget.PluginName,

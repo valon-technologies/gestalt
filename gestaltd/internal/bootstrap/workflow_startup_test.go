@@ -292,8 +292,10 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 		})
 		resp, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
-				PluginName: "roadmap",
-				Operation:  "status",
+				Plugin: &proto.BoundWorkflowPluginTarget{
+					PluginName: "roadmap",
+					Operation:  "status",
+				},
 			},
 			ExecutionRef: executionRef,
 		})
@@ -351,8 +353,10 @@ func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {
 		}
 		_, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
-				PluginName: "roadmap",
-				Operation:  "status",
+				Plugin: &proto.BoundWorkflowPluginTarget{
+					PluginName: "roadmap",
+					Operation:  "status",
+				},
 			},
 		})
 		if err == nil {

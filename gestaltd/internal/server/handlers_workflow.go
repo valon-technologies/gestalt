@@ -46,43 +46,38 @@ type workflowAgentTargetRequest struct {
 	TimeoutSeconds  int                   `json:"timeoutSeconds,omitempty"`
 }
 
-func (target *workflowScheduleTargetRequest) UnmarshalJSON(data []byte) error {
-	var raw struct {
-		Plugin     json.RawMessage             `json:"plugin"`
-		Operation  string                      `json:"operation"`
-		Connection string                      `json:"connection,omitempty"`
-		Instance   string                      `json:"instance,omitempty"`
-		Input      map[string]any              `json:"input,omitempty"`
-		Agent      *workflowAgentTargetRequest `json:"agent,omitempty"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
+type legacyWorkflowTargetFieldError struct {
+	field string
+}
 
-	target.Agent = raw.Agent
-	pluginTarget := workflowPluginTargetRequest{
-		Operation:  raw.Operation,
-		Connection: raw.Connection,
-		Instance:   raw.Instance,
-		Input:      raw.Input,
+func (e *legacyWorkflowTargetFieldError) Error() string {
+	return fmt.Sprintf("workflow target field %q is no longer supported; use target.plugin.%s", e.field, e.field)
+}
+
+func workflowJSONDecodeErrorMessage(err error) string {
+	var legacyTargetErr *legacyWorkflowTargetFieldError
+	if errors.As(err, &legacyTargetErr) {
+		return legacyTargetErr.Error()
 	}
-	if len(raw.Plugin) > 0 && string(raw.Plugin) != "null" {
-		pluginJSON := strings.TrimSpace(string(raw.Plugin))
-		if strings.HasPrefix(pluginJSON, "{") {
-			if err := json.Unmarshal(raw.Plugin, &pluginTarget); err != nil {
-				return fmt.Errorf("invalid workflow target plugin: %w", err)
-			}
-		} else {
-			if err := json.Unmarshal(raw.Plugin, &pluginTarget.Name); err != nil {
-				return fmt.Errorf("invalid workflow target plugin: %w", err)
-			}
+	return "invalid JSON body"
+}
+
+func (target *workflowScheduleTargetRequest) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return fmt.Errorf("invalid workflow target: %w", err)
+	}
+	for _, field := range []string{"operation", "connection", "instance", "input"} {
+		if _, ok := fields[field]; ok {
+			return &legacyWorkflowTargetFieldError{field: field}
 		}
 	}
-	if workflowPluginTargetRequestHasFields(pluginTarget) {
-		target.Plugin = &pluginTarget
-		return nil
+	type workflowScheduleTargetRequestAlias workflowScheduleTargetRequest
+	var decoded workflowScheduleTargetRequestAlias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return fmt.Errorf("invalid workflow target: %w", err)
 	}
-	target.Plugin = nil
+	*target = workflowScheduleTargetRequest(decoded)
 	return nil
 }
 
@@ -156,7 +151,7 @@ func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 
 	var req workflowScheduleUpsertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		writeError(w, http.StatusBadRequest, workflowJSONDecodeErrorMessage(err))
 		return
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
@@ -199,7 +194,7 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 
 	var req workflowScheduleUpsertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		writeError(w, http.StatusBadRequest, workflowJSONDecodeErrorMessage(err))
 		return
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {

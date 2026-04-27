@@ -500,21 +500,25 @@ func workflowTargetContext(target coreworkflow.Target) map[string]any {
 		return value
 	}
 	pluginTarget := target.PluginTarget()
+	plugin := map[string]any{}
 	if pluginName := strings.TrimSpace(pluginTarget.PluginName); pluginName != "" {
 		value["kind"] = "plugin"
-		value["pluginName"] = pluginName
+		plugin["pluginName"] = pluginName
 	}
 	if operation := strings.TrimSpace(pluginTarget.Operation); operation != "" {
-		value["operation"] = operation
+		plugin["operation"] = operation
 	}
 	if connection := strings.TrimSpace(pluginTarget.Connection); connection != "" {
-		value["connection"] = connection
+		plugin["connection"] = connection
 	}
 	if instance := strings.TrimSpace(pluginTarget.Instance); instance != "" {
-		value["instance"] = instance
+		plugin["instance"] = instance
 	}
 	if pluginTarget.Input != nil {
-		value["input"] = maps.Clone(pluginTarget.Input)
+		plugin["input"] = maps.Clone(pluginTarget.Input)
+	}
+	if len(plugin) > 0 {
+		value["plugin"] = plugin
 	}
 	return value
 }

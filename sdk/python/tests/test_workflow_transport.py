@@ -21,10 +21,12 @@ workflow_pb2_grpc: Any = _workflow_pb2_grpc
 _server: grpc.Server | None = None
 _socket_path: str = ""
 
+
 class _WorkflowHostServicer(workflow_pb2_grpc.WorkflowHostServicer):
     def InvokeOperation(self, request: Any, context: grpc.ServicerContext) -> Any:
         target = request.target
-        operation = target.operation if target is not None else ""
+        plugin = target.plugin if target is not None else None
+        operation = plugin.operation if plugin is not None else ""
         return workflow_pb2.InvokeWorkflowOperationResponse(
             status=202,
             body=f"{request.run_id}:{operation}",
@@ -61,8 +63,10 @@ class WorkflowTransportTests(unittest.TestCase):
                 workflow_pb2.InvokeWorkflowOperationRequest(
                     run_id="run-42",
                     target=workflow_pb2.BoundWorkflowTarget(
-                        plugin_name="demo",
-                        operation="sync",
+                        plugin=workflow_pb2.BoundWorkflowPluginTarget(
+                            plugin_name="demo",
+                            operation="sync",
+                        ),
                     ),
                 )
             )

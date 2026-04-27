@@ -615,33 +615,6 @@ type WorkflowsConfig struct {
 }
 
 type WorkflowScheduleConfig struct {
-	Provider   string                `yaml:"provider,omitempty"`
-	Target     *WorkflowTargetConfig `yaml:"target,omitempty"`
-	Plugin     string                `yaml:"-"`
-	Agent      *WorkflowAgentConfig  `yaml:"-"`
-	Cron       string                `yaml:"cron,omitempty"`
-	Timezone   string                `yaml:"timezone,omitempty"`
-	Operation  string                `yaml:"-"`
-	Connection string                `yaml:"-"`
-	Instance   string                `yaml:"-"`
-	Input      map[string]any        `yaml:"-"`
-	Paused     bool                  `yaml:"paused,omitempty"`
-}
-
-type WorkflowEventTriggerConfig struct {
-	Provider   string                `yaml:"provider,omitempty"`
-	Target     *WorkflowTargetConfig `yaml:"target,omitempty"`
-	Plugin     string                `yaml:"-"`
-	Agent      *WorkflowAgentConfig  `yaml:"-"`
-	Match      WorkflowEventMatch    `yaml:"match,omitempty"`
-	Operation  string                `yaml:"-"`
-	Connection string                `yaml:"-"`
-	Instance   string                `yaml:"-"`
-	Input      map[string]any        `yaml:"-"`
-	Paused     bool                  `yaml:"paused,omitempty"`
-}
-
-type workflowScheduleMarshalYAML struct {
 	Provider string                `yaml:"provider,omitempty"`
 	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
 	Cron     string                `yaml:"cron,omitempty"`
@@ -649,30 +622,11 @@ type workflowScheduleMarshalYAML struct {
 	Paused   bool                  `yaml:"paused,omitempty"`
 }
 
-type workflowEventTriggerMarshalYAML struct {
+type WorkflowEventTriggerConfig struct {
 	Provider string                `yaml:"provider,omitempty"`
 	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
 	Match    WorkflowEventMatch    `yaml:"match,omitempty"`
 	Paused   bool                  `yaml:"paused,omitempty"`
-}
-
-func (c WorkflowScheduleConfig) MarshalYAML() (any, error) {
-	return workflowScheduleMarshalYAML{
-		Provider: c.Provider,
-		Target:   workflowTargetConfigFromFields(c.Target, c.Plugin, c.Agent, c.Operation, c.Connection, c.Instance, c.Input),
-		Cron:     c.Cron,
-		Timezone: c.Timezone,
-		Paused:   c.Paused,
-	}, nil
-}
-
-func (c WorkflowEventTriggerConfig) MarshalYAML() (any, error) {
-	return workflowEventTriggerMarshalYAML{
-		Provider: c.Provider,
-		Target:   workflowTargetConfigFromFields(c.Target, c.Plugin, c.Agent, c.Operation, c.Connection, c.Instance, c.Input),
-		Match:    c.Match,
-		Paused:   c.Paused,
-	}, nil
 }
 
 type WorkflowTargetConfig struct {
@@ -719,31 +673,6 @@ type WorkflowEventMatch struct {
 	Type    string `yaml:"type,omitempty"`
 	Source  string `yaml:"source,omitempty"`
 	Subject string `yaml:"subject,omitempty"`
-}
-
-func workflowTargetConfigFromFields(target *WorkflowTargetConfig, plugin string, agent *WorkflowAgentConfig, operation, connection, instance string, input map[string]any) *WorkflowTargetConfig {
-	if target != nil {
-		return target
-	}
-	if agent != nil {
-		return &WorkflowTargetConfig{Agent: agent}
-	}
-	if strings.TrimSpace(plugin) == "" &&
-		strings.TrimSpace(operation) == "" &&
-		strings.TrimSpace(connection) == "" &&
-		strings.TrimSpace(instance) == "" &&
-		len(input) == 0 {
-		return nil
-	}
-	return &WorkflowTargetConfig{
-		Plugin: &WorkflowPluginTargetConfig{
-			Name:       plugin,
-			Operation:  operation,
-			Connection: connection,
-			Instance:   instance,
-			Input:      input,
-		},
-	}
 }
 
 func (c *HostIndexedDBBindingConfig) UnmarshalYAML(value *yaml.Node) error {

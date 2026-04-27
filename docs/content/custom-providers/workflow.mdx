@@ -65,11 +65,11 @@ request/response shape.
     }
 
     func (p *Provider) StartRun(_ context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
-    	return &proto.BoundWorkflowRun{
-    		Id:     req.GetTarget().GetPluginName() + ":run-1",
-    		Status: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING,
-    		Target: req.GetTarget(),
-    	}, nil
+        return &proto.BoundWorkflowRun{
+            Id:     req.GetTarget().GetPlugin().GetPluginName() + ":run-1",
+            Status: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING,
+            Target: req.GetTarget(),
+        }, nil
     }
 
     func (p *Provider) GetRun(_ context.Context, req *proto.GetWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
@@ -168,7 +168,7 @@ request/response shape.
 
         def StartRun(self, request, context):
             return gestalt.pb.BoundWorkflowRun(
-                id=f"{request.target.plugin_name}:run-1",
+                id=f"{request.target.plugin.plugin_name}:run-1",
                 status=gestalt.pb.WORKFLOW_RUN_STATUS_PENDING,
                 target=request.target,
             )
@@ -216,7 +216,8 @@ request/response shape.
             let plugin_name = req
                 .target
                 .as_ref()
-                .map(|target| target.plugin_name.clone())
+                .and_then(|target| target.plugin.as_ref())
+                .map(|plugin| plugin.plugin_name.clone())
                 .unwrap_or_else(|| "workflow".into());
             Ok(Response::new(proto::BoundWorkflowRun {
                 id: format!("{plugin_name}:run-1"),
@@ -279,7 +280,7 @@ request/response shape.
 
       async startRun(request) {
         return {
-          id: `${request.target?.pluginName ?? "workflow"}:run-1`,
+          id: `${request.target?.plugin?.pluginName ?? "workflow"}:run-1`,
           status: WorkflowRunStatus.PENDING,
           target: request.target,
         };
@@ -390,10 +391,12 @@ invoke target plugin operations.
     defer host.Close()
 
     resp, err := host.InvokeOperation(ctx, &proto.InvokeWorkflowOperationRequest{
-    	Target: &proto.BoundWorkflowTarget{
-    		PluginName: "roadmap",
-    		Operation:  "sync_items",
-    	},
+        Target: &proto.BoundWorkflowTarget{
+            Plugin: &proto.BoundWorkflowPluginTarget{
+                PluginName: "roadmap",
+                Operation:  "sync_items",
+            },
+        },
     	RunId: "run-1",
     })
     ```
@@ -404,8 +407,10 @@ invoke target plugin operations.
         resp = host.invoke_operation(
             gestalt.pb.InvokeWorkflowOperationRequest(
                 target=gestalt.pb.BoundWorkflowTarget(
-                    plugin_name="roadmap",
-                    operation="sync_items",
+                    plugin=gestalt.pb.BoundWorkflowPluginTarget(
+                        plugin_name="roadmap",
+                        operation="sync_items",
+                    ),
                 ),
                 run_id="run-1",
             )
@@ -418,9 +423,12 @@ invoke target plugin operations.
     let resp = host
         .invoke_operation(proto::InvokeWorkflowOperationRequest {
             target: Some(proto::BoundWorkflowTarget {
-                plugin_name: "roadmap".into(),
-                operation: "sync_items".into(),
-                ..Default::default()
+                plugin: Some(proto::BoundWorkflowPluginTarget {
+                    plugin_name: "roadmap".into(),
+                    operation: "sync_items".into(),
+                    ..Default::default()
+                }),
+                agent: None,
             }),
             run_id: "run-1".into(),
             ..Default::default()
@@ -435,8 +443,10 @@ invoke target plugin operations.
     const host = new WorkflowHost();
     const resp = await host.invokeOperation({
       target: {
-        pluginName: "roadmap",
-        operation: "sync_items",
+        plugin: {
+          pluginName: "roadmap",
+          operation: "sync_items",
+        },
       },
       runId: "run-1",
     });

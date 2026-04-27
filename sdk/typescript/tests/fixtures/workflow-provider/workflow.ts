@@ -38,8 +38,9 @@ export const provider = defineWorkflowProvider({
     publishCount = 0;
   },
   async startRun(request) {
+    const plugin = request.target?.plugin;
     const run = createRun(
-      `${request.target?.pluginName ?? "plugin"}:${request.target?.operation ?? "operation"}:${runs.size + 1}`,
+      `${plugin?.pluginName ?? "plugin"}:${plugin?.operation ?? "operation"}:${runs.size + 1}`,
       request,
       WorkflowRunStatus.PENDING,
       request.idempotencyKey ? `idempotency:${request.idempotencyKey}` : "",
@@ -123,8 +124,10 @@ export const provider = defineWorkflowProvider({
       id: triggerId,
       ...(existing?.match ? { match: existing.match } : {}),
       target: existing?.target ?? {
-        pluginName: request.pluginName,
-        operation: "published",
+        plugin: {
+          pluginName: request.pluginName,
+          operation: "published",
+        },
       },
       paused: false,
     });
