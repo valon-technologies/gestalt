@@ -3373,7 +3373,6 @@ func TestBootstrapClosesWorkflowIndexedDBAndAppliesScopedConfig(t *testing.T) {
 			"table_prefix": "host_",
 			"prefix":       "host_",
 			"schema":       "should_be_removed",
-			"namespace":    "should_be_removed",
 		}),
 	}
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
@@ -3428,10 +3427,6 @@ func TestBootstrapClosesWorkflowIndexedDBAndAppliesScopedConfig(t *testing.T) {
 	if _, ok := captured["schema"]; ok {
 		t.Fatalf("schema should be removed, got %#v", captured["schema"])
 	}
-	if _, ok := captured["namespace"]; ok {
-		t.Fatalf("namespace should be removed, got %#v", captured["namespace"])
-	}
-
 	if err := result.Close(context.Background()); err != nil {
 		t.Fatalf("result.Close: %v", err)
 	}

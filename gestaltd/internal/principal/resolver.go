@@ -19,15 +19,11 @@ type TokenType int
 
 const (
 	TokenTypeAPI TokenType = iota
-	TokenTypeRetiredWorkload
 )
 
 const (
-	prefixAPI            = "gst_api_"
-	prefixLegacyWorkload = "gst_wld_"
+	prefixAPI = "gst_api_"
 )
-
-const AuthSourceRetiredWorkloadToken = "retired_workload_token"
 
 func GenerateToken(typ TokenType) (plaintext, hashed string, err error) {
 	b := make([]byte, 32)
@@ -53,8 +49,6 @@ func ParseTokenType(token string) (TokenType, bool) {
 	switch {
 	case strings.HasPrefix(token, prefixAPI):
 		return TokenTypeAPI, true
-	case strings.HasPrefix(token, prefixLegacyWorkload):
-		return TokenTypeRetiredWorkload, true
 	default:
 		return 0, false
 	}

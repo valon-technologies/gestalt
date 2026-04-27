@@ -71,7 +71,7 @@ func (s *Server) createGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 
 	var req workflowEventTriggerUpsertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, workflowJSONDecodeErrorMessage(err))
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
@@ -117,7 +117,7 @@ func (s *Server) updateGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 
 	var req workflowEventTriggerUpsertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, workflowJSONDecodeErrorMessage(err))
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {

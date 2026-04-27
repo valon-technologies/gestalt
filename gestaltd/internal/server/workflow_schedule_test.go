@@ -2216,7 +2216,7 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	}
 }
 
-func TestGlobalWorkflowLegacyFlatTargetsAreRejected(t *testing.T) {
+func TestGlobalWorkflowFlatTargetsAreRejected(t *testing.T) {
 	t.Parallel()
 
 	services := coretesting.NewStubServices(t)
@@ -2262,13 +2262,13 @@ func TestGlobalWorkflowLegacyFlatTargetsAreRejected(t *testing.T) {
 			name: "schedule",
 			path: "/api/v1/workflow/schedules/",
 			body: `{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`,
-			want: `target.plugin.operation`,
+			want: `invalid JSON body`,
 		},
 		{
 			name: "event trigger",
 			path: "/api/v1/workflow/event-triggers/",
 			body: `{"match":{"type":"roadmap.item.updated","source":"roadmap"},"target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`,
-			want: `target.plugin.operation`,
+			want: `invalid JSON body`,
 		},
 	}
 	for _, tc := range cases {
@@ -2291,7 +2291,7 @@ func TestGlobalWorkflowLegacyFlatTargetsAreRejected(t *testing.T) {
 		}
 	}
 	if len(provider.upsertReqs) != 0 || len(provider.upsertTriggerReqs) != 0 {
-		t.Fatalf("legacy target should not upsert schedules=%d triggers=%d", len(provider.upsertReqs), len(provider.upsertTriggerReqs))
+		t.Fatalf("flat target should not upsert schedules=%d triggers=%d", len(provider.upsertReqs), len(provider.upsertTriggerReqs))
 	}
 }
 

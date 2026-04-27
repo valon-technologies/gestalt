@@ -137,11 +137,8 @@ func requestedAuthSource(r *http.Request) string {
 			return ""
 		}
 		if typ, ok := principal.ParseTokenType(bearer); ok {
-			switch typ {
-			case principal.TokenTypeAPI:
+			if typ == principal.TokenTypeAPI {
 				return principal.SourceAPIToken.String()
-			case principal.TokenTypeRetiredWorkload:
-				return principal.AuthSourceRetiredWorkloadToken
 			}
 		}
 		return principal.SourceSession.String()

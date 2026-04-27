@@ -230,15 +230,6 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 			wantAuthSource: "session",
 		},
 		{
-			name:           "retired_workload_bearer",
-			method:         http.MethodGet,
-			path:           "/api/v1/integrations",
-			authHeader:     "Bearer gst_wld_retired-token",
-			wantSource:     "http",
-			wantError:      "invalid token",
-			wantAuthSource: principal.AuthSourceRetiredWorkloadToken,
-		},
-		{
 			name:         "missing_plugin_route_auth_uses_named_provider_in_audit",
 			method:       http.MethodGet,
 			path:         "/api/v1/locked/ping",

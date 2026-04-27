@@ -6235,34 +6235,6 @@ func TestAuthMiddleware_PrefixedAPITokenSkipsOAuth(t *testing.T) {
 	}
 }
 
-func TestAuthMiddleware_LegacyWorkloadPrefixRejectedBeforeOAuth(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
-				t.Fatal("OAuth ValidateToken must not be called for legacy workload tokens")
-				return nil, nil
-			},
-		}
-		cfg.Services = coretesting.NewStubServices(t)
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
-	req.Header.Set("Authorization", "Bearer gst_wld_legacy-service-account-token")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("expected 401 for legacy workload token prefix, got %d", resp.StatusCode)
-	}
-}
-
 func TestMetricsEndpointsRequireAuth(t *testing.T) {
 	t.Parallel()
 
