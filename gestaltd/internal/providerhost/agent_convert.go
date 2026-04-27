@@ -112,7 +112,7 @@ func agentToolTargetToProto(target coreagent.ToolTarget) *proto.BoundAgentToolTa
 		return nil
 	}
 	return &proto.BoundAgentToolTarget{
-		PluginName: target.PluginName,
+		Plugin:     target.Plugin,
 		Operation:  target.Operation,
 		Connection: target.Connection,
 		Instance:   target.Instance,
@@ -153,7 +153,7 @@ func agentToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
 		return coreagent.ToolRef{}
 	}
 	return coreagent.ToolRef{
-		PluginName:  ref.GetPluginName(),
+		Plugin:      ref.GetPlugin(),
 		Operation:   ref.GetOperation(),
 		Connection:  ref.GetConnection(),
 		Instance:    ref.GetInstance(),
@@ -164,7 +164,7 @@ func agentToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
 
 func agentToolRefToProto(ref coreagent.ToolRef) *proto.AgentToolRef {
 	return &proto.AgentToolRef{
-		PluginName:  ref.PluginName,
+		Plugin:      ref.Plugin,
 		Operation:   ref.Operation,
 		Connection:  ref.Connection,
 		Instance:    ref.Instance,
@@ -197,10 +197,8 @@ func agentToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
 
 func agentToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {
 	switch mode {
-	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_EXPLICIT:
-		return coreagent.ToolSourceModeExplicit
-	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_INHERIT_INVOKES:
-		return coreagent.ToolSourceModeInheritInvokes
+	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH:
+		return coreagent.ToolSourceModeNativeSearch
 	default:
 		return coreagent.ToolSourceModeUnspecified
 	}
@@ -208,10 +206,8 @@ func agentToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.Tool
 
 func agentToolSourceModeToProto(mode coreagent.ToolSourceMode) proto.AgentToolSourceMode {
 	switch mode {
-	case coreagent.ToolSourceModeExplicit:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_EXPLICIT
-	case coreagent.ToolSourceModeInheritInvokes:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_INHERIT_INVOKES
+	case coreagent.ToolSourceModeNativeSearch:
+		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH
 	default:
 		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
 	}
@@ -580,6 +576,7 @@ func agentProviderCapabilitiesFromProto(value *proto.AgentProviderCapabilities) 
 		Interactions:       value.GetInteractions(),
 		ResumableTurns:     value.GetResumableTurns(),
 		ReasoningSummaries: value.GetReasoningSummaries(),
+		NativeToolSearch:   value.GetNativeToolSearch(),
 	}
 }
 

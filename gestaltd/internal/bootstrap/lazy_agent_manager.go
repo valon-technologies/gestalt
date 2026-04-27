@@ -41,6 +41,14 @@ func (l *lazyAgentManager) ResolveTools(ctx context.Context, p *principal.Princi
 	return target.ResolveTools(ctx, p, req)
 }
 
+func (l *lazyAgentManager) SearchTools(ctx context.Context, p *principal.Principal, req coreagent.SearchToolsRequest) (*coreagent.SearchToolsResponse, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.SearchTools(ctx, p, req)
+}
+
 func (l *lazyAgentManager) CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
 	target, err := l.current()
 	if err != nil {

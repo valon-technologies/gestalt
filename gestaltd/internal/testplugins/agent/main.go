@@ -235,6 +235,7 @@ func (p *agentProvider) GetCapabilities(context.Context, *proto.GetAgentProvider
 		StreamingText:      true,
 		ToolCalls:          true,
 		ParallelToolCalls:  true,
+		NativeToolSearch:   true,
 		StructuredOutput:   true,
 		Interactions:       true,
 		ResumableTurns:     true,

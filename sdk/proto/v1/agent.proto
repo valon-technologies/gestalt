@@ -58,7 +58,7 @@ message AgentActor {
 }
 
 message BoundAgentToolTarget {
-  string plugin_name = 1;
+  string plugin = 1;
   string operation = 2;
   string connection = 3;
   string instance = 4;
@@ -73,7 +73,7 @@ message ResolvedAgentTool {
 }
 
 message AgentToolRef {
-  string plugin_name = 1;
+  string plugin = 1;
   string operation = 2;
   string connection = 3;
   string instance = 4;
@@ -83,8 +83,7 @@ message AgentToolRef {
 
 enum AgentToolSourceMode {
   AGENT_TOOL_SOURCE_MODE_UNSPECIFIED = 0;
-  AGENT_TOOL_SOURCE_MODE_EXPLICIT = 1;
-  AGENT_TOOL_SOURCE_MODE_INHERIT_INVOKES = 2;
+  AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH = 1;
 }
 
 enum AgentExecutionStatus {
@@ -125,6 +124,7 @@ message AgentProviderCapabilities {
   bool interactions = 5;
   bool resumable_turns = 6;
   bool reasoning_summaries = 7;
+  bool native_tool_search = 8;
 }
 
 message GetAgentProviderCapabilitiesRequest {}
@@ -212,6 +212,8 @@ message CreateAgentProviderTurnRequest {
   google.protobuf.Struct provider_options = 9;
   AgentActor created_by = 10;
   string execution_ref = 11;
+  repeated AgentToolRef tool_refs = 12;
+  AgentToolSourceMode tool_source = 13;
 }
 
 message GetAgentProviderTurnRequest {
@@ -280,6 +282,17 @@ message ExecuteAgentToolRequest {
 message ExecuteAgentToolResponse {
   int32 status = 1;
   string body = 2;
+}
+
+message SearchAgentToolsRequest {
+  string session_id = 1;
+  string turn_id = 2;
+  string query = 3;
+  int32 max_results = 4;
+}
+
+message SearchAgentToolsResponse {
+  repeated ResolvedAgentTool tools = 1;
 }
 
 message AgentManagerCreateSessionRequest {
@@ -416,6 +429,7 @@ service AgentProvider {
 }
 
 service AgentHost {
+  rpc SearchTools(SearchAgentToolsRequest) returns (SearchAgentToolsResponse);
   rpc ExecuteTool(ExecuteAgentToolRequest) returns (ExecuteAgentToolResponse);
 }
 

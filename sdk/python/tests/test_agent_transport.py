@@ -230,6 +230,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
         return agent_pb2.AgentProviderCapabilities(
             streaming_text=True,
             tool_calls=True,
+            native_tool_search=True,
             parallel_tool_calls=False,
             structured_output=True,
             interactions=True,
@@ -239,6 +240,22 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
 
 
 class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
+    def SearchTools(self, request: Any, context: grpc.ServicerContext) -> Any:
+        _record_host_relay_tokens(context)
+        return agent_pb2.SearchAgentToolsResponse(
+            tools=[
+                agent_pb2.ResolvedAgentTool(
+                    id="slack.send_message",
+                    name="Send Slack message",
+                    description="Send a direct message",
+                    target=agent_pb2.BoundAgentToolTarget(
+                        plugin="slack",
+                        operation="send_message",
+                    ),
+                )
+            ]
+        )
+
     def ExecuteTool(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_host_relay_tokens(context)
         return agent_pb2.ExecuteAgentToolResponse(
@@ -730,6 +747,14 @@ class AgentTransportTests(unittest.TestCase):
         arguments.update({"query": "Ada Lovelace"})
 
         with AgentHost() as host:
+            search_response = host.search_tools(
+                agent_pb2.SearchAgentToolsRequest(
+                    session_id="session-1",
+                    turn_id="turn-1",
+                    query="send slack dm",
+                    max_results=3,
+                )
+            )
             response = host.execute_tool(
                 agent_pb2.ExecuteAgentToolRequest(
                     session_id="session-1",
@@ -740,9 +765,12 @@ class AgentTransportTests(unittest.TestCase):
                 )
             )
 
+        self.assertEqual(len(search_response.tools), 1)
+        self.assertEqual(search_response.tools[0].target.plugin, "slack")
+        self.assertEqual(search_response.tools[0].target.operation, "send_message")
         self.assertEqual(response.status, 207)
         self.assertEqual(response.body, "session-1:turn-1:call-7:lookup")
-        self.assertEqual(_host_relay_tokens, ["relay-token-py"])
+        self.assertEqual(_host_relay_tokens, ["relay-token-py", "relay-token-py"])
 
     def test_agent_manager_roundtrip(self) -> None:
         with AgentManager("token-123") as manager:
@@ -782,7 +810,7 @@ class AgentTransportTests(unittest.TestCase):
                             ],
                         )
                     ],
-                    tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_EXPLICIT,
+                    tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH,
                 )
             )
             fetched_turn = manager.get_turn(

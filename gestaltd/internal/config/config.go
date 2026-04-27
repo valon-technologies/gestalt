@@ -567,7 +567,6 @@ type WorkflowAgentMessage struct {
 
 type WorkflowAgentToolRef struct {
 	Plugin      string `yaml:"plugin,omitempty"`
-	PluginName  string `yaml:"pluginName,omitempty"`
 	Operation   string `yaml:"operation,omitempty"`
 	Connection  string `yaml:"connection,omitempty"`
 	Instance    string `yaml:"instance,omitempty"`

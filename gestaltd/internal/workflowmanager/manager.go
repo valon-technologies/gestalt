@@ -828,10 +828,10 @@ func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal
 	target.Model = strings.TrimSpace(target.Model)
 	target.Prompt = strings.TrimSpace(target.Prompt)
 	if target.ToolSource == coreagent.ToolSourceModeUnspecified {
-		target.ToolSource = coreagent.ToolSourceModeExplicit
+		target.ToolSource = coreagent.ToolSourceModeNativeSearch
 	}
-	if target.ToolSource == coreagent.ToolSourceModeInheritInvokes {
-		return coreworkflow.Target{}, fmt.Errorf("%w: workflow agent targets may not inherit caller plugin invokes", agentmanager.ErrAgentCallerPluginRequired)
+	if target.ToolSource != coreagent.ToolSourceModeNativeSearch {
+		return coreworkflow.Target{}, fmt.Errorf("unsupported workflow agent tool source %q", target.ToolSource)
 	}
 	if strings.TrimSpace(target.Prompt) == "" && len(target.Messages) == 0 {
 		return coreworkflow.Target{}, fmt.Errorf("workflow agent target prompt or messages is required")
@@ -839,37 +839,12 @@ func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal
 	if target.TimeoutSeconds < 0 {
 		return coreworkflow.Target{}, fmt.Errorf("workflow agent target timeout_seconds must not be negative")
 	}
-	resolvedTools, err := m.agentManager.ResolveTools(ctx, p, coreagent.ResolveToolsRequest{
-		ToolRefs:   append([]coreagent.ToolRef(nil), target.ToolRefs...),
-		ToolSource: target.ToolSource,
-	})
-	if err != nil {
-		return coreworkflow.Target{}, err
-	}
 	target.ResponseSchema = maps.Clone(target.ResponseSchema)
 	target.ProviderOptions = maps.Clone(target.ProviderOptions)
 	target.Metadata = maps.Clone(target.Metadata)
 	target.Messages = append([]coreagent.Message(nil), target.Messages...)
-	target.ToolRefs = agentToolRefsFromResolvedTools(resolvedTools)
+	target.ToolRefs = append([]coreagent.ToolRef(nil), target.ToolRefs...)
 	return coreworkflow.Target{Agent: &target}, nil
-}
-
-func agentToolRefsFromResolvedTools(tools []coreagent.Tool) []coreagent.ToolRef {
-	if len(tools) == 0 {
-		return nil
-	}
-	refs := make([]coreagent.ToolRef, 0, len(tools))
-	for _, tool := range tools {
-		refs = append(refs, coreagent.ToolRef{
-			PluginName:  strings.TrimSpace(tool.Target.PluginName),
-			Operation:   strings.TrimSpace(tool.Target.Operation),
-			Connection:  strings.TrimSpace(tool.Target.Connection),
-			Instance:    strings.TrimSpace(tool.Target.Instance),
-			Title:       strings.TrimSpace(tool.Name),
-			Description: strings.TrimSpace(tool.Description),
-		})
-	}
-	return refs
 }
 
 func (m *Manager) requireOwnedSchedule(ctx context.Context, scheduleID string, p *principal.Principal) (*ManagedSchedule, error) {
@@ -1112,10 +1087,16 @@ func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Princi
 func (m *Manager) allowTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) bool {
 	if target.Agent != nil {
 		for _, tool := range target.Agent.ToolRefs {
-			pluginName := strings.TrimSpace(tool.PluginName)
+			pluginName := strings.TrimSpace(tool.Plugin)
 			operation := strings.TrimSpace(tool.Operation)
-			if pluginName == "" || operation == "" {
+			if pluginName == "" {
 				return false
+			}
+			if operation == "" {
+				if !m.allowProvider(ctx, p, pluginName) || !principal.AllowsProviderPermission(p, pluginName) {
+					return false
+				}
+				continue
 			}
 			if !m.allowProvider(ctx, p, pluginName) || !m.allowOperation(ctx, p, pluginName, operation) {
 				return false

@@ -222,6 +222,8 @@ var AgentRunMetadataSchema = indexeddb.ObjectStoreSchema{
 		{Name: "credential_subject_id", Type: indexeddb.TypeString},
 		{Name: "permissions_json", Type: indexeddb.TypeString},
 		{Name: "idempotency_key", Type: indexeddb.TypeString},
+		{Name: "tool_refs_json", Type: indexeddb.TypeString},
+		{Name: "tool_source", Type: indexeddb.TypeString},
 		{Name: "tools_json", Type: indexeddb.TypeString},
 		{Name: "created_at", Type: indexeddb.TypeTime},
 		{Name: "revoked_at", Type: indexeddb.TypeTime},

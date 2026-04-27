@@ -66,7 +66,7 @@ pub struct AgentActor {
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BoundAgentToolTarget {
     #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
+    pub plugin: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub operation: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
@@ -90,7 +90,7 @@ pub struct ResolvedAgentTool {
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentToolRef {
     #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
+    pub plugin: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub operation: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
@@ -118,6 +118,8 @@ pub struct AgentProviderCapabilities {
     pub resumable_turns: bool,
     #[prost(bool, tag = "7")]
     pub reasoning_summaries: bool,
+    #[prost(bool, tag = "8")]
+    pub native_tool_search: bool,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderCapabilitiesRequest {}
@@ -264,6 +266,10 @@ pub struct CreateAgentProviderTurnRequest {
     pub created_by: ::core::option::Option<AgentActor>,
     #[prost(string, tag = "11")]
     pub execution_ref: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "12")]
+    pub tool_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
+    #[prost(enumeration = "AgentToolSourceMode", tag = "13")]
+    pub tool_source: i32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderTurnRequest {
@@ -361,6 +367,22 @@ pub struct ExecuteAgentToolResponse {
     pub status: i32,
     #[prost(string, tag = "2")]
     pub body: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SearchAgentToolsRequest {
+    #[prost(string, tag = "1")]
+    pub session_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub turn_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub query: ::prost::alloc::string::String,
+    #[prost(int32, tag = "4")]
+    pub max_results: i32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SearchAgentToolsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub tools: ::prost::alloc::vec::Vec<ResolvedAgentTool>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentManagerCreateSessionRequest {
@@ -543,8 +565,7 @@ impl AgentMessagePartType {
 #[repr(i32)]
 pub enum AgentToolSourceMode {
     Unspecified = 0,
-    Explicit = 1,
-    InheritInvokes = 2,
+    NativeSearch = 1,
 }
 impl AgentToolSourceMode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -554,16 +575,14 @@ impl AgentToolSourceMode {
     pub fn as_str_name(&self) -> &'static str {
         match self {
             Self::Unspecified => "AGENT_TOOL_SOURCE_MODE_UNSPECIFIED",
-            Self::Explicit => "AGENT_TOOL_SOURCE_MODE_EXPLICIT",
-            Self::InheritInvokes => "AGENT_TOOL_SOURCE_MODE_INHERIT_INVOKES",
+            Self::NativeSearch => "AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "AGENT_TOOL_SOURCE_MODE_UNSPECIFIED" => Some(Self::Unspecified),
-            "AGENT_TOOL_SOURCE_MODE_EXPLICIT" => Some(Self::Explicit),
-            "AGENT_TOOL_SOURCE_MODE_INHERIT_INVOKES" => Some(Self::InheritInvokes),
+            "AGENT_TOOL_SOURCE_MODE_NATIVE_SEARCH" => Some(Self::NativeSearch),
             _ => None,
         }
     }
@@ -1861,6 +1880,24 @@ pub mod agent_host_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        pub async fn search_tools(
+            &mut self,
+            request: impl tonic::IntoRequest<super::SearchAgentToolsRequest>,
+        ) -> std::result::Result<tonic::Response<super::SearchAgentToolsResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AgentHost/SearchTools");
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentHost",
+                "SearchTools",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
         pub async fn execute_tool(
             &mut self,
             request: impl tonic::IntoRequest<super::ExecuteAgentToolRequest>,
@@ -1894,6 +1931,10 @@ pub mod agent_host_server {
     /// Generated trait containing gRPC methods that should be implemented for use with AgentHostServer.
     #[async_trait]
     pub trait AgentHost: std::marker::Send + std::marker::Sync + 'static {
+        async fn search_tools(
+            &self,
+            request: tonic::Request<super::SearchAgentToolsRequest>,
+        ) -> std::result::Result<tonic::Response<super::SearchAgentToolsResponse>, tonic::Status>;
         async fn execute_tool(
             &self,
             request: tonic::Request<super::ExecuteAgentToolRequest>,
@@ -1972,6 +2013,47 @@ pub mod agent_host_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
+                "/gestalt.provider.v1.AgentHost/SearchTools" => {
+                    #[allow(non_camel_case_types)]
+                    struct SearchToolsSvc<T: AgentHost>(pub Arc<T>);
+                    impl<T: AgentHost> tonic::server::UnaryService<super::SearchAgentToolsRequest>
+                        for SearchToolsSvc<T>
+                    {
+                        type Response = super::SearchAgentToolsResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::SearchAgentToolsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AgentHost>::search_tools(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = SearchToolsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 "/gestalt.provider.v1.AgentHost/ExecuteTool" => {
                     #[allow(non_camel_case_types)]
                     struct ExecuteToolSvc<T: AgentHost>(pub Arc<T>);

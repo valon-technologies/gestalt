@@ -45,6 +45,10 @@ func (s *AgentRunMetadataService) Put(ctx context.Context, ref *coreagent.Execut
 	if err != nil {
 		return nil, fmt.Errorf("put agent run metadata: marshal tools: %w", err)
 	}
+	toolRefsJSON, err := marshalJSON(ref.ToolRefs)
+	if err != nil {
+		return nil, fmt.Errorf("put agent run metadata: marshal tool refs: %w", err)
+	}
 
 	now := time.Now().UTC().Truncate(time.Second)
 	createdAt := ref.CreatedAt
@@ -67,6 +71,8 @@ func (s *AgentRunMetadataService) Put(ctx context.Context, ref *coreagent.Execut
 		"credential_subject_id": strings.TrimSpace(ref.CredentialSubjectID),
 		"permissions_json":      permissionsJSON,
 		"idempotency_key":       strings.TrimSpace(ref.IdempotencyKey),
+		"tool_refs_json":        toolRefsJSON,
+		"tool_source":           strings.TrimSpace(string(ref.ToolSource)),
 		"tools_json":            toolsJSON,
 		"created_at":            *createdAt,
 		"revoked_at":            timeOrNil(ref.RevokedAt),
@@ -247,6 +253,8 @@ func recordToAgentRunMetadata(rec indexeddb.Record) *coreagent.ExecutionReferenc
 		CredentialSubjectID: recString(rec, "credential_subject_id"),
 		IdempotencyKey:      recString(rec, "idempotency_key"),
 		Permissions:         recAgentRunMetadataPermissions(rec),
+		ToolRefs:            recAgentRunMetadataToolRefs(rec),
+		ToolSource:          coreagent.ToolSourceMode(recString(rec, "tool_source")),
 		Tools:               recAgentRunMetadataTools(rec),
 		CreatedAt:           recTimePtr(rec, "created_at"),
 		RevokedAt:           recTimePtr(rec, "revoked_at"),
@@ -275,6 +283,18 @@ func recAgentRunMetadataTools(rec indexeddb.Record) []coreagent.Tool {
 		return nil
 	}
 	return tools
+}
+
+func recAgentRunMetadataToolRefs(rec indexeddb.Record) []coreagent.ToolRef {
+	raw := recString(rec, "tool_refs_json")
+	if raw == "" {
+		return nil
+	}
+	var refs []coreagent.ToolRef
+	if err := json.Unmarshal([]byte(raw), &refs); err != nil {
+		return nil
+	}
+	return refs
 }
 
 func marshalJSON(value any) (string, error) {

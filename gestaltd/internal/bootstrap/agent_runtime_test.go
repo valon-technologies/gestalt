@@ -774,8 +774,8 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 			ID:   "lookup",
 			Name: "Lookup roadmap task",
 			Target: coreagent.ToolTarget{
-				PluginName: "roadmap",
-				Operation:  "sync",
+				Plugin:    "roadmap",
+				Operation: "sync",
 			},
 		}},
 	})

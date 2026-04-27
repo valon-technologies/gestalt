@@ -192,6 +192,8 @@ func (r *remoteAgent) CreateTurn(ctx context.Context, req coreagent.CreateTurnRe
 		ProviderOptions: providerOptions,
 		CreatedBy:       agentActorToProto(req.CreatedBy),
 		ExecutionRef:    req.ExecutionRef,
+		ToolRefs:        agentToolRefsToProto(req.ToolRefs),
+		ToolSource:      agentToolSourceModeToProto(req.ToolSource),
 	})
 	if err != nil {
 		return nil, err
