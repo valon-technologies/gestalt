@@ -63,7 +63,7 @@ func workflowTargetFromProto(target *proto.BoundWorkflowTarget) coreworkflow.Tar
 		return coreworkflow.Target{}
 	}
 	plugin := workflowPluginTargetFromProto(target.GetPlugin())
-	if workflowPluginTargetEmpty(plugin) {
+	if coreworkflow.PluginTargetEmpty(plugin) {
 		plugin = coreworkflow.PluginTarget{
 			PluginName: strings.TrimSpace(target.GetPluginName()),
 			Operation:  strings.TrimSpace(target.GetOperation()),
@@ -80,7 +80,7 @@ func workflowTargetFromProto(target *proto.BoundWorkflowTarget) coreworkflow.Tar
 		Input:      plugin.Input,
 		Agent:      workflowAgentTargetFromProto(target.GetAgent()),
 	}
-	if !workflowPluginTargetEmpty(plugin) {
+	if coreworkflow.PluginTargetSet(plugin) {
 		out.Plugin = &plugin
 	}
 	return out
@@ -112,16 +112,8 @@ func workflowTargetProtoHasPluginFields(target *proto.BoundWorkflowTarget) bool 
 		target.GetInput() != nil
 }
 
-func workflowPluginTargetEmpty(target coreworkflow.PluginTarget) bool {
-	return strings.TrimSpace(target.PluginName) == "" &&
-		strings.TrimSpace(target.Operation) == "" &&
-		strings.TrimSpace(target.Connection) == "" &&
-		strings.TrimSpace(target.Instance) == "" &&
-		len(target.Input) == 0
-}
-
 func workflowPluginTargetToProto(target coreworkflow.PluginTarget) (*proto.BoundWorkflowPluginTarget, error) {
-	if workflowPluginTargetEmpty(target) {
+	if coreworkflow.PluginTargetEmpty(target) {
 		return nil, nil
 	}
 	input, err := structFromMap(target.Input)

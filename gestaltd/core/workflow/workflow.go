@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -293,7 +294,7 @@ func (t Target) AgentTarget() AgentTarget {
 }
 
 func TargetFingerprint(target Target) (string, error) {
-	if target.Agent != nil && !emptyPluginTarget(target.PluginTarget()) {
+	if target.Agent != nil && PluginTargetSet(target.PluginTarget()) {
 		return "", fmt.Errorf("target cannot include both agent and plugin fields")
 	}
 	payload, err := json.Marshal(normalizedTargetFingerprintPayload(target))
@@ -327,7 +328,7 @@ func normalizedTargetFingerprintPayload(target Target) Target {
 		return out
 	}
 	pluginTarget := target.PluginTarget()
-	if !emptyPluginTarget(pluginTarget) {
+	if PluginTargetSet(pluginTarget) {
 		if len(pluginTarget.Input) == 0 {
 			pluginTarget.Input = nil
 		}
@@ -336,10 +337,16 @@ func normalizedTargetFingerprintPayload(target Target) Target {
 	return out
 }
 
-func emptyPluginTarget(target PluginTarget) bool {
-	return target.PluginName == "" &&
-		target.Operation == "" &&
-		target.Connection == "" &&
-		target.Instance == "" &&
+// PluginTargetSet reports whether a workflow target contains any plugin target field.
+func PluginTargetSet(target PluginTarget) bool {
+	return !PluginTargetEmpty(target)
+}
+
+// PluginTargetEmpty reports whether a workflow target has no plugin target fields.
+func PluginTargetEmpty(target PluginTarget) bool {
+	return strings.TrimSpace(target.PluginName) == "" &&
+		strings.TrimSpace(target.Operation) == "" &&
+		strings.TrimSpace(target.Connection) == "" &&
+		strings.TrimSpace(target.Instance) == "" &&
 		len(target.Input) == 0
 }
