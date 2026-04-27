@@ -26,7 +26,13 @@ type Services struct {
 }
 
 func New(ds indexeddb.IndexedDB) (*Services, error) {
-	ctx := context.Background()
+	return NewWithContext(context.Background(), ds)
+}
+
+func NewWithContext(ctx context.Context, ds indexeddb.IndexedDB) (*Services, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if err := ds.CreateObjectStore(ctx, StoreUsers, UsersSchema); err != nil {
 		return nil, fmt.Errorf("create users store: %w", err)
 	}
