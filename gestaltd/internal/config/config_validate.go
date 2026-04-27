@@ -475,19 +475,11 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry, sourceSyntax
 		}
 	}
 	if entry.Runtime != nil {
-		entry.Runtime.Provider = strings.TrimSpace(entry.Runtime.Provider)
-		entry.Runtime.Template = strings.TrimSpace(entry.Runtime.Template)
-		entry.Runtime.Image = strings.TrimSpace(entry.Runtime.Image)
-		trimmed := make(map[string]string, len(entry.Runtime.Metadata))
-		for key, value := range entry.Runtime.Metadata {
-			trimmedKey := strings.TrimSpace(key)
-			if trimmedKey == "" {
-				return fmt.Errorf("config validation: plugins.%s.runtime.metadata keys must be non-empty", name)
-			}
-			trimmed[trimmedKey] = strings.TrimSpace(value)
+		if err := normalizeHostedRuntimeConfig("plugins."+name, entry.Runtime); err != nil {
+			return err
 		}
-		if entry.Runtime.Metadata != nil {
-			entry.Runtime.Metadata = trimmed
+		if entry.Runtime.LifecyclePolicyFieldsSet() {
+			return fmt.Errorf("config validation: plugins.%s.runtime lifecycle fields are only supported on providers.agent.*.runtime", name)
 		}
 	}
 	seenInvokes := make(map[string]int, len(entry.Invokes))
@@ -664,6 +656,11 @@ func validateAgentConfig(cfg *Config) error {
 				entry.IndexedDB.ObjectStores[i] = strings.TrimSpace(store)
 			}
 		}
+		if entry.Runtime != nil {
+			if err := normalizeHostedRuntimeConfig("providers.agent."+name, entry.Runtime); err != nil {
+				return err
+			}
+		}
 		if err := validateAgentProviderFields(cfg, name, entry); err != nil {
 			return err
 		}
@@ -710,6 +707,11 @@ func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry)
 	if _, err := cfg.EffectiveHostedRuntime(subject, entry); err != nil {
 		return err
 	}
+	if entry.Runtime != nil {
+		if err := validateHostedAgentRuntimeLifecyclePolicy(subject, entry); err != nil {
+			return err
+		}
+	}
 	if entry.IndexedDB == nil {
 		return nil
 	}
@@ -726,6 +728,68 @@ func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry)
 	}
 	if _, err := cfg.EffectiveAgentIndexedDB(name, entry); err != nil {
 		return err
+	}
+	return nil
+}
+
+func normalizeHostedRuntimeConfig(subject string, runtimeCfg *HostedRuntimeConfig) error {
+	if runtimeCfg == nil {
+		return nil
+	}
+	runtimeCfg.Provider = strings.TrimSpace(runtimeCfg.Provider)
+	runtimeCfg.Template = strings.TrimSpace(runtimeCfg.Template)
+	runtimeCfg.Image = strings.TrimSpace(runtimeCfg.Image)
+	runtimeCfg.StartupTimeout = strings.TrimSpace(runtimeCfg.StartupTimeout)
+	runtimeCfg.HealthCheckInterval = strings.TrimSpace(runtimeCfg.HealthCheckInterval)
+	runtimeCfg.RestartPolicy = HostedRuntimeRestartPolicy(strings.TrimSpace(string(runtimeCfg.RestartPolicy)))
+	runtimeCfg.DrainTimeout = strings.TrimSpace(runtimeCfg.DrainTimeout)
+	trimmed := make(map[string]string, len(runtimeCfg.Metadata))
+	for key, value := range runtimeCfg.Metadata {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" {
+			return fmt.Errorf("config validation: %s.runtime.metadata keys must be non-empty", subject)
+		}
+		trimmed[trimmedKey] = strings.TrimSpace(value)
+	}
+	if runtimeCfg.Metadata != nil {
+		runtimeCfg.Metadata = trimmed
+	}
+	return nil
+}
+
+func validateHostedAgentRuntimeLifecyclePolicy(subject string, entry *ProviderEntry) error {
+	if entry == nil || entry.Runtime == nil {
+		return nil
+	}
+	runtimeCfg := entry.Runtime
+	if runtimeCfg.MinReadyInstances <= 0 {
+		return fmt.Errorf("config validation: %s.runtime.minReadyInstances is required and must be greater than 0", subject)
+	}
+	if runtimeCfg.MaxReadyInstances <= 0 {
+		return fmt.Errorf("config validation: %s.runtime.maxReadyInstances is required and must be greater than 0", subject)
+	}
+	if runtimeCfg.MaxReadyInstances < runtimeCfg.MinReadyInstances {
+		return fmt.Errorf("config validation: %s.runtime.maxReadyInstances must be greater than or equal to minReadyInstances", subject)
+	}
+	if strings.TrimSpace(runtimeCfg.StartupTimeout) == "" {
+		return fmt.Errorf("config validation: %s.runtime.startupTimeout is required", subject)
+	}
+	if strings.TrimSpace(runtimeCfg.HealthCheckInterval) == "" {
+		return fmt.Errorf("config validation: %s.runtime.healthCheckInterval is required", subject)
+	}
+	if strings.TrimSpace(runtimeCfg.DrainTimeout) == "" {
+		return fmt.Errorf("config validation: %s.runtime.drainTimeout is required", subject)
+	}
+	switch runtimeCfg.RestartPolicy {
+	case HostedRuntimeRestartPolicyAlways, HostedRuntimeRestartPolicyNever:
+	default:
+		return fmt.Errorf("config validation: %s.runtime.restartPolicy must be one of %q or %q", subject, HostedRuntimeRestartPolicyAlways, HostedRuntimeRestartPolicyNever)
+	}
+	if runtimeCfg.RestartPolicy == HostedRuntimeRestartPolicyAlways && entry.IndexedDB == nil {
+		return fmt.Errorf("config validation: %s.runtime.restartPolicy %q requires %s.indexeddb as the provider persistence hook; runtime replacement does not make backend-local state durable", subject, HostedRuntimeRestartPolicyAlways, subject)
+	}
+	if _, err := runtimeCfg.LifecyclePolicy(); err != nil {
+		return fmt.Errorf("config validation: %s.runtime.%w", subject, err)
 	}
 	return nil
 }

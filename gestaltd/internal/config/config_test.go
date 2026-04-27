@@ -3478,6 +3478,203 @@ server:
 	})
 }
 
+func TestLoadConfigAgentRuntimeLifecycleFields(t *testing.T) {
+	t.Parallel()
+
+	base := `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      indexeddb: agent_state
+      runtime:
+        provider: hosted
+        minReadyInstances: 1
+        maxReadyInstances: 2
+        startupTimeout: 5m
+        healthCheckInterval: 30s
+        restartPolicy: always
+        drainTimeout: 2m
+  indexeddb:
+    agent_state:
+      source:
+        path: ./providers/datastore/sqlite
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`
+	t.Run("accepts required lifecycle fields directly under agent runtime", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, base)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		runtimeCfg := cfg.Providers.Agent["simple"].Runtime
+		if runtimeCfg.MinReadyInstances != 1 || runtimeCfg.MaxReadyInstances != 2 {
+			t.Fatalf("runtime ready instances = %d/%d, want 1/2", runtimeCfg.MinReadyInstances, runtimeCfg.MaxReadyInstances)
+		}
+		if runtimeCfg.RestartPolicy != HostedRuntimeRestartPolicyAlways {
+			t.Fatalf("restartPolicy = %q, want %q", runtimeCfg.RestartPolicy, HostedRuntimeRestartPolicyAlways)
+		}
+	})
+
+	cases := []struct {
+		name string
+		yaml string
+		want string
+	}{
+		{
+			name: "rejects missing lifecycle fields",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      runtime:
+        provider: hosted
+        minReadyInstances: 1
+        startupTimeout: 5m
+        healthCheckInterval: 30s
+        restartPolicy: always
+        drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`,
+			want: "providers.agent.simple.runtime.maxReadyInstances is required",
+		},
+		{
+			name: "rejects max below min",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      runtime:
+        provider: hosted
+        minReadyInstances: 2
+        maxReadyInstances: 1
+        startupTimeout: 5m
+        healthCheckInterval: 30s
+        restartPolicy: always
+        drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`,
+			want: "providers.agent.simple.runtime.maxReadyInstances must be greater than or equal to minReadyInstances",
+		},
+		{
+			name: "rejects unknown restart policy",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      runtime:
+        provider: hosted
+        minReadyInstances: 1
+        maxReadyInstances: 2
+        startupTimeout: 5m
+        healthCheckInterval: 30s
+        restartPolicy: sometimes
+        drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`,
+			want: "providers.agent.simple.runtime.restartPolicy must be one of",
+		},
+		{
+			name: "rejects restart without agent indexeddb",
+			yaml: `
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+      runtime:
+        provider: hosted
+        minReadyInstances: 1
+        maxReadyInstances: 2
+        startupTimeout: 5m
+        healthCheckInterval: 30s
+        restartPolicy: always
+        drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`,
+			want: `providers.agent.simple.runtime.restartPolicy "always" requires providers.agent.simple.indexeddb as the provider persistence hook`,
+		},
+		{
+			name: "rejects lifecycle fields on plugin runtime",
+			yaml: `
+plugins:
+  service:
+    source:
+      path: ./plugins/service/manifest.yaml
+    runtime:
+      provider: hosted
+      minReadyInstances: 1
+      maxReadyInstances: 2
+      startupTimeout: 5m
+      healthCheckInterval: 30s
+      restartPolicy: always
+      drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`,
+			want: "plugins.service.runtime lifecycle fields are only supported on providers.agent.*.runtime",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			path := mustWriteConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if err == nil {
+				t.Fatal("Load: expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestLoadRejectsUnknownProviderFields(t *testing.T) {
 	t.Parallel()
 

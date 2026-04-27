@@ -9,9 +9,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -19,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"gopkg.in/yaml.v3"
 )
 
 func buildAgentProviderBinary(t *testing.T) string {
@@ -30,6 +33,17 @@ func buildAgentProviderBinary(t *testing.T) string {
 }
 
 type agentRuntimeFactoryContextKey struct{}
+
+func testHostedAgentRuntimeConfig() *config.HostedRuntimeConfig {
+	return &config.HostedRuntimeConfig{
+		MinReadyInstances:   1,
+		MaxReadyInstances:   1,
+		StartupTimeout:      "5s",
+		HealthCheckInterval: "1s",
+		RestartPolicy:       config.HostedRuntimeRestartPolicyNever,
+		DrainTimeout:        "1s",
+	}
+}
 
 type agentRuntimeInvokerCall struct {
 	providerName string
@@ -83,22 +97,34 @@ type pingAgentProvider struct {
 	coreagent.UnimplementedProvider
 	calls *int
 	err   error
+	delay time.Duration
 }
 
-func (p *pingAgentProvider) Ping(context.Context) error {
+func (p *pingAgentProvider) Ping(ctx context.Context) error {
 	if p.calls != nil {
 		(*p.calls)++
+	}
+	if p.delay > 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(p.delay):
+		}
 	}
 	return p.err
 }
 
-func TestAgentRuntimePingChecksSelectedProviderOnly(t *testing.T) {
+func TestAgentRuntimePingChecksConfiguredProviders(t *testing.T) {
 	t.Parallel()
 
 	defaultCalls := 0
 	canaryCalls := 0
 	runtime := &agentRuntime{
 		defaultProviderName: "simple",
+		configuredProviders: map[string]struct{}{
+			"canary": {},
+			"simple": {},
+		},
 		providers: map[string]coreagent.Provider{
 			"canary": &pingAgentProvider{
 				calls: &canaryCalls,
@@ -108,14 +134,48 @@ func TestAgentRuntimePingChecksSelectedProviderOnly(t *testing.T) {
 		},
 	}
 
-	if err := runtime.Ping(context.Background()); err != nil {
-		t.Fatalf("Ping: %v", err)
+	if err := runtime.Ping(context.Background()); err == nil || !strings.Contains(err.Error(), `agent provider "canary" unavailable`) {
+		t.Fatalf("Ping error = %v, want canary unavailable", err)
 	}
 	if defaultCalls != 1 {
 		t.Fatalf("default provider Ping calls = %d, want 1", defaultCalls)
 	}
+	if canaryCalls != 1 {
+		t.Fatalf("canary provider Ping calls = %d, want 1", canaryCalls)
+	}
+
+	defaultCalls = 0
+	canaryCalls = 0
+	runtime.FailProvider("canary")
+	if err := runtime.Ping(context.Background()); err == nil || !strings.Contains(err.Error(), `agent provider "canary" unavailable`) {
+		t.Fatalf("Ping after failed provider error = %v, want canary unavailable", err)
+	}
+	if defaultCalls != 1 {
+		t.Fatalf("default provider Ping calls after failed provider = %d, want 1", defaultCalls)
+	}
 	if canaryCalls != 0 {
-		t.Fatalf("canary provider Ping calls = %d, want 0", canaryCalls)
+		t.Fatalf("canary provider Ping calls after failed provider = %d, want 0", canaryCalls)
+	}
+}
+
+func TestAgentRuntimePingChecksConfiguredProvidersInParallel(t *testing.T) {
+	t.Parallel()
+
+	runtime := &agentRuntime{
+		defaultProviderName: "simple",
+		configuredProviders: map[string]struct{}{
+			"canary": {},
+			"simple": {},
+		},
+		providers: map[string]coreagent.Provider{
+			"canary": &pingAgentProvider{delay: 100 * time.Millisecond},
+			"simple": &pingAgentProvider{delay: 100 * time.Millisecond},
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	if err := runtime.Ping(ctx); err != nil {
+		t.Fatalf("Ping: %v", err)
 	}
 }
 
@@ -132,6 +192,10 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 		factoryContextValue = ctx.Value(agentRuntimeFactoryContextKey{})
 		return runtimeProvider, nil
 	}
+	runtimeConfig := testHostedAgentRuntimeConfig()
+	runtimeConfig.Template = "python-dev"
+	runtimeConfig.Image = "ghcr.io/valon/gestalt-python-runtime:latest"
+	runtimeConfig.Metadata = map[string]string{"tenant": "eng"}
 
 	cfg := &config.Config{
 		Server: config.ServerConfig{
@@ -146,11 +210,7 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
 					Command: bin,
-					Runtime: &config.HostedRuntimeConfig{
-						Template: "python-dev",
-						Image:    "ghcr.io/valon/gestalt-python-runtime:latest",
-						Metadata: map[string]string{"tenant": "eng"},
-					},
+					Runtime: runtimeConfig,
 				},
 			},
 		},
@@ -199,6 +259,346 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 	}
 }
 
+func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
+	t.Parallel()
+
+	bin := buildAgentProviderBinary(t)
+	runtimeProvider := newCapturingPluginRuntime()
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	runtimeConfig := testHostedAgentRuntimeConfig()
+	runtimeConfig.MinReadyInstances = 2
+	runtimeConfig.MaxReadyInstances = 2
+	runtimeConfig.DrainTimeout = "2s"
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {Driver: config.RuntimeProviderDriver("capture")},
+			},
+		},
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				"simple": {
+					Command: bin,
+					Runtime: runtimeConfig,
+				},
+			},
+		},
+	}
+	services := coretesting.NewStubServices(t)
+	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
+	agentRuntime.SetRunMetadata(services.AgentRunMetadata)
+	deps := Deps{
+		Services:              services,
+		AgentRuntime:          agentRuntime,
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+	}
+	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildAgents: %v", err)
+	}
+	defer func() {
+		if err := closeAgents(agents...); err != nil {
+			t.Fatalf("closeAgents: %v", err)
+		}
+	}()
+
+	requests := runtimeProvider.startSessionRequests()
+	if len(requests) != 2 {
+		t.Fatalf("start session requests = %d, want 2", len(requests))
+	}
+	for i, sessionID := range []string{"session-1", "session-2"} {
+		session, err := agents[0].CreateSession(context.Background(), coreagent.CreateSessionRequest{
+			SessionID: sessionID,
+			Model:     "gpt-test",
+		})
+		if err != nil {
+			t.Fatalf("CreateSession(%d): %v", i, err)
+		}
+		if session == nil || session.ID != sessionID {
+			t.Fatalf("CreateSession(%d) = %#v, want %q", i, session, sessionID)
+		}
+	}
+	pool := hostedAgentProviderPoolForTest(t, agents[0])
+	sessionBackend := pool.sessionBackend("session-1")
+	if sessionBackend == nil {
+		t.Fatal("session-1 backend was not recorded")
+	}
+	turn, err := agents[0].CreateTurn(context.Background(), coreagent.CreateTurnRequest{
+		TurnID:    "turn-1",
+		SessionID: "session-1",
+		Model:     "gpt-test",
+		Metadata: map[string]any{
+			"requireInteraction": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if turn == nil || turn.ID != "turn-1" || turn.SessionID != "session-1" {
+		t.Fatalf("CreateTurn = %#v, want turn-1 on session-1", turn)
+	}
+	if turn.Status != coreagent.ExecutionStatusWaitingForInput {
+		t.Fatalf("turn status = %q, want %q", turn.Status, coreagent.ExecutionStatusWaitingForInput)
+	}
+	drainDone := make(chan error, 1)
+	go func() {
+		drainDone <- pool.drainAndCloseBackend(sessionBackend)
+	}()
+	waitForAgentRuntimeCondition(t, 2*time.Second, func() bool {
+		pool.mu.Lock()
+		defer pool.mu.Unlock()
+		return sessionBackend.closing
+	})
+	sessions, err := agents[0].ListSessions(context.Background(), coreagent.ListSessionsRequest{})
+	if err != nil {
+		t.Fatalf("ListSessions(during drain): %v", err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("ListSessions(during drain) = %d sessions, want 2", len(sessions))
+	}
+	fetched, err := agents[0].GetTurn(context.Background(), coreagent.GetTurnRequest{TurnID: "turn-1"})
+	if err != nil {
+		t.Fatalf("GetTurn(during drain): %v", err)
+	}
+	if fetched == nil || fetched.ID != "turn-1" || fetched.Status != coreagent.ExecutionStatusWaitingForInput {
+		t.Fatalf("GetTurn(during drain) = %#v, want waiting turn-1", fetched)
+	}
+	interactions, err := agents[0].ListInteractions(context.Background(), coreagent.ListInteractionsRequest{TurnID: "turn-1"})
+	if err != nil {
+		t.Fatalf("ListInteractions(during drain): %v", err)
+	}
+	if len(interactions) != 1 {
+		t.Fatalf("ListInteractions(during drain) = %d interactions, want 1", len(interactions))
+	}
+	if _, err := agents[0].ResolveInteraction(context.Background(), coreagent.ResolveInteractionRequest{
+		InteractionID: interactions[0].ID,
+		Resolution:    map[string]any{"approved": true},
+	}); err != nil {
+		t.Fatalf("ResolveInteraction(during drain): %v", err)
+	}
+	resolved, err := agents[0].GetTurn(context.Background(), coreagent.GetTurnRequest{TurnID: "turn-1"})
+	if err != nil {
+		t.Fatalf("GetTurn(after ResolveInteraction): %v", err)
+	}
+	if resolved == nil || resolved.Status != coreagent.ExecutionStatusSucceeded {
+		t.Fatalf("GetTurn(after ResolveInteraction) = %#v, want succeeded turn", resolved)
+	}
+	select {
+	case err := <-drainDone:
+		if err != nil {
+			t.Fatalf("drainAndCloseBackend: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("drainAndCloseBackend did not finish after live turn completed")
+	}
+}
+
+func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
+	t.Parallel()
+
+	bin := buildAgentProviderBinary(t)
+	runtimeProvider := newCapturingPluginRuntime()
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	runtimeConfig := testHostedAgentRuntimeConfig()
+	runtimeConfig.MaxReadyInstances = 2
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {Driver: config.RuntimeProviderDriver("capture")},
+			},
+		},
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				"simple": {
+					Command: bin,
+					Runtime: runtimeConfig,
+				},
+			},
+		},
+	}
+	services := coretesting.NewStubServices(t)
+	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
+	agentRuntime.SetRunMetadata(services.AgentRunMetadata)
+	deps := Deps{
+		Services:              services,
+		AgentRuntime:          agentRuntime,
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+	}
+	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildAgents: %v", err)
+	}
+	defer func() {
+		if err := closeAgents(agents...); err != nil {
+			t.Fatalf("closeAgents: %v", err)
+		}
+	}()
+
+	if got := len(runtimeProvider.startSessionRequests()); got != 1 {
+		t.Fatalf("initial start session requests = %d, want 1", got)
+	}
+	pool := hostedAgentProviderPoolForTest(t, agents[0])
+	initial := pool.readyBackends()
+	if len(initial) != 1 {
+		t.Fatalf("initial ready backends = %d, want 1", len(initial))
+	}
+	first, releaseFirst, err := pool.acquireBackend(context.Background(), initial[0], false)
+	if err != nil {
+		t.Fatalf("acquire first backend: %v", err)
+	}
+	defer releaseFirst()
+
+	session, err := agents[0].CreateSession(context.Background(), coreagent.CreateSessionRequest{
+		SessionID: "scale-out-session",
+		Model:     "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession(scale out): %v", err)
+	}
+	if session == nil || session.ID != "scale-out-session" {
+		t.Fatalf("CreateSession(scale out) = %#v, want scale-out-session", session)
+	}
+	sessionBackend := pool.sessionBackend("scale-out-session")
+	if sessionBackend != first {
+		t.Fatalf("scale-out triggering request backend = %#v, want existing ready backend", sessionBackend)
+	}
+	waitForAgentRuntimeCondition(t, 2*time.Second, func() bool {
+		return len(runtimeProvider.startSessionRequests()) == 2 && len(pool.readyBackends()) == 2
+	})
+
+	var scaledBackend *hostedAgentPoolBackend
+	for _, backend := range pool.readyBackends() {
+		if backend != first {
+			scaledBackend = backend
+			break
+		}
+	}
+	if scaledBackend == nil {
+		t.Fatal("scaled backend was not started")
+	}
+	_, releaseSecond, err := pool.acquireBackend(context.Background(), scaledBackend, false)
+	if err != nil {
+		t.Fatalf("acquire scaled backend: %v", err)
+	}
+	defer releaseSecond()
+	if _, err := agents[0].CreateSession(context.Background(), coreagent.CreateSessionRequest{
+		SessionID: "max-capped-session",
+		Model:     "gpt-test",
+	}); err != nil {
+		t.Fatalf("CreateSession(max capped): %v", err)
+	}
+	if got := len(runtimeProvider.startSessionRequests()); got != 2 {
+		t.Fatalf("start session requests after max cap = %d, want 2", got)
+	}
+}
+
+func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
+	t.Parallel()
+
+	bin := buildAgentProviderBinary(t)
+	runtimeProvider := newCapturingPluginRuntime()
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	runtimeConfig := testHostedAgentRuntimeConfig()
+	runtimeConfig.HealthCheckInterval = "50ms"
+	runtimeConfig.RestartPolicy = config.HostedRuntimeRestartPolicyAlways
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {Driver: config.RuntimeProviderDriver("capture")},
+			},
+		},
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				"simple": {
+					Command:   bin,
+					IndexedDB: &config.PluginIndexedDBConfig{Provider: "agent_state"},
+					Runtime:   runtimeConfig,
+				},
+			},
+		},
+	}
+	deps := Deps{
+		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:         map[string]*config.ProviderEntry{"agent_state": {}},
+		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+	}
+	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildAgents: %v", err)
+	}
+	defer func() {
+		if err := closeAgents(agents...); err != nil {
+			t.Fatalf("closeAgents: %v", err)
+		}
+	}()
+
+	pool := hostedAgentProviderPoolForTest(t, agents[0])
+	backends := pool.readyBackends()
+	if len(backends) != 1 {
+		t.Fatalf("ready backends = %d, want 1", len(backends))
+	}
+	if err := backends[0].provider.Close(); err != nil {
+		t.Fatalf("Close backend provider: %v", err)
+	}
+	waitForAgentRuntimeCondition(t, 2*time.Second, func() bool {
+		return len(runtimeProvider.startSessionRequests()) >= 2 && len(pool.readyBackends()) == 1
+	})
+	session, err := agents[0].CreateSession(context.Background(), coreagent.CreateSessionRequest{
+		SessionID: "session-after-restart",
+		Model:     "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession(after restart): %v", err)
+	}
+	if session == nil || session.ID != "session-after-restart" {
+		t.Fatalf("CreateSession(after restart) = %#v, want session-after-restart", session)
+	}
+}
+
+func TestHostedAgentProviderPoolPingChecksReadyBackendsInParallel(t *testing.T) {
+	t.Parallel()
+
+	pool := &hostedAgentProviderPool{
+		name: "simple",
+		backends: []*hostedAgentPoolBackend{
+			{
+				id:        1,
+				provider:  &pingAgentProvider{delay: 100 * time.Millisecond},
+				liveTurns: map[string]struct{}{},
+			},
+			{
+				id:        2,
+				provider:  &pingAgentProvider{delay: 100 * time.Millisecond},
+				liveTurns: map[string]struct{}{},
+			},
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+}
+
 func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	t.Parallel()
 
@@ -233,7 +633,7 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
 					Command: bin,
-					Runtime: &config.HostedRuntimeConfig{},
+					Runtime: testHostedAgentRuntimeConfig(),
 				},
 			},
 		},
@@ -524,6 +924,36 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	}
 }
 
+func waitForAgentRuntimeCondition(t *testing.T, timeout time.Duration, fn func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		if fn() {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("condition was not satisfied before timeout")
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+func hostedAgentProviderPoolForTest(t *testing.T, provider coreagent.Provider) *hostedAgentProviderPool {
+	t.Helper()
+	if withCleanup, ok := provider.(*agentProviderWithCleanup); ok {
+		provider = withCleanup.Provider
+	}
+	tracked, ok := provider.(*agentProviderWithTracking)
+	if !ok {
+		t.Fatalf("agent provider type = %T, want *agentProviderWithTracking", provider)
+	}
+	pool, ok := tracked.delegate.(*hostedAgentProviderPool)
+	if !ok {
+		t.Fatalf("tracked delegate type = %T, want *hostedAgentProviderPool", tracked.delegate)
+	}
+	return pool
+}
+
 //nolint:paralleltest // Hosted public-relay startup is serialized to avoid Linux CI contention.
 func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	// This exercises the hosted agent startup path over the public relay and is
@@ -559,7 +989,7 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
 					Command: bin,
-					Runtime: &config.HostedRuntimeConfig{},
+					Runtime: testHostedAgentRuntimeConfig(),
 				},
 			},
 		},
@@ -654,7 +1084,7 @@ func TestAgentRuntimeConfigRejectsMissingHostServiceAccess(t *testing.T) {
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
 					Command: bin,
-					Runtime: &config.HostedRuntimeConfig{},
+					Runtime: testHostedAgentRuntimeConfig(),
 				},
 			},
 		},

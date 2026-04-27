@@ -451,10 +451,70 @@ type PluginIndexedDBConfig struct {
 }
 
 type HostedRuntimeConfig struct {
-	Provider string            `yaml:"provider,omitempty"`
-	Template string            `yaml:"template,omitempty"`
-	Image    string            `yaml:"image,omitempty"`
-	Metadata map[string]string `yaml:"metadata,omitempty"`
+	Provider            string                     `yaml:"provider,omitempty"`
+	Template            string                     `yaml:"template,omitempty"`
+	Image               string                     `yaml:"image,omitempty"`
+	Metadata            map[string]string          `yaml:"metadata,omitempty"`
+	MinReadyInstances   int                        `yaml:"minReadyInstances,omitempty"`
+	MaxReadyInstances   int                        `yaml:"maxReadyInstances,omitempty"`
+	StartupTimeout      string                     `yaml:"startupTimeout,omitempty"`
+	HealthCheckInterval string                     `yaml:"healthCheckInterval,omitempty"`
+	RestartPolicy       HostedRuntimeRestartPolicy `yaml:"restartPolicy,omitempty"`
+	DrainTimeout        string                     `yaml:"drainTimeout,omitempty"`
+}
+
+type HostedRuntimeRestartPolicy string
+
+const (
+	HostedRuntimeRestartPolicyAlways HostedRuntimeRestartPolicy = "always"
+	HostedRuntimeRestartPolicyNever  HostedRuntimeRestartPolicy = "never"
+)
+
+type HostedRuntimeLifecyclePolicy struct {
+	MinReadyInstances   int
+	MaxReadyInstances   int
+	StartupTimeout      time.Duration
+	HealthCheckInterval time.Duration
+	RestartPolicy       HostedRuntimeRestartPolicy
+	DrainTimeout        time.Duration
+}
+
+func (c *HostedRuntimeConfig) LifecyclePolicyFieldsSet() bool {
+	if c == nil {
+		return false
+	}
+	return c.MinReadyInstances != 0 ||
+		c.MaxReadyInstances != 0 ||
+		strings.TrimSpace(c.StartupTimeout) != "" ||
+		strings.TrimSpace(c.HealthCheckInterval) != "" ||
+		strings.TrimSpace(string(c.RestartPolicy)) != "" ||
+		strings.TrimSpace(c.DrainTimeout) != ""
+}
+
+func (c *HostedRuntimeConfig) LifecyclePolicy() (HostedRuntimeLifecyclePolicy, error) {
+	if c == nil {
+		return HostedRuntimeLifecyclePolicy{}, fmt.Errorf("runtime config is required")
+	}
+	startupTimeout, err := ParseDuration(strings.TrimSpace(c.StartupTimeout))
+	if err != nil {
+		return HostedRuntimeLifecyclePolicy{}, fmt.Errorf("startupTimeout: %w", err)
+	}
+	healthCheckInterval, err := ParseDuration(strings.TrimSpace(c.HealthCheckInterval))
+	if err != nil {
+		return HostedRuntimeLifecyclePolicy{}, fmt.Errorf("healthCheckInterval: %w", err)
+	}
+	drainTimeout, err := ParseDuration(strings.TrimSpace(c.DrainTimeout))
+	if err != nil {
+		return HostedRuntimeLifecyclePolicy{}, fmt.Errorf("drainTimeout: %w", err)
+	}
+	return HostedRuntimeLifecyclePolicy{
+		MinReadyInstances:   c.MinReadyInstances,
+		MaxReadyInstances:   c.MaxReadyInstances,
+		StartupTimeout:      startupTimeout,
+		HealthCheckInterval: healthCheckInterval,
+		RestartPolicy:       HostedRuntimeRestartPolicy(strings.TrimSpace(string(c.RestartPolicy))),
+		DrainTimeout:        drainTimeout,
+	}, nil
 }
 
 type WorkflowsConfig struct {
