@@ -2,6 +2,7 @@ package pluginruntime
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -94,5 +95,13 @@ func TestLocalProviderCapturesRuntimeSessionLogsOnPluginStartupFailure(t *testin
 	}
 	if tail[0].Seq >= tail[1].Seq {
 		t.Fatalf("TailSessionLogs seqs = [%d %d], want ascending order", tail[0].Seq, tail[1].Seq)
+	}
+
+	if err := runtime.StopSession(ctx, StopSessionRequest{SessionID: session.ID}); err != nil {
+		t.Fatalf("StopSession: %v", err)
+	}
+	_, err = services.RuntimeSessionLogs.ListSessionLogs(ctx, "local", session.ID, 0, 100)
+	if !errors.Is(err, runtimelogs.ErrSessionNotFound) {
+		t.Fatalf("ListSessionLogs after stop error = %v, want ErrSessionNotFound", err)
 	}
 }
