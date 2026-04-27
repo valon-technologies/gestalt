@@ -423,6 +423,22 @@ func (p *startupWorkflowProviderProxy) CancelRun(ctx context.Context, req corewo
 	return provider.CancelRun(ctx, req)
 }
 
+func (p *startupWorkflowProviderProxy) SignalRun(ctx context.Context, req coreworkflow.SignalRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	provider, err := p.awaitForContextPlugin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.SignalRun(ctx, req)
+}
+
+func (p *startupWorkflowProviderProxy) SignalOrStartRun(ctx context.Context, req coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetPluginName(req.Target))
+	if err != nil {
+		return nil, err
+	}
+	return provider.SignalOrStartRun(ctx, req)
+}
+
 func (p *startupWorkflowProviderProxy) UpsertSchedule(ctx context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
 	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetPluginName(req.Target))
 	if err != nil {

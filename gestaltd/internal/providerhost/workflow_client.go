@@ -68,6 +68,7 @@ func (r *remoteWorkflow) StartRun(ctx context.Context, req coreworkflow.StartRun
 		IdempotencyKey: req.IdempotencyKey,
 		CreatedBy:      workflowActorToProto(req.CreatedBy),
 		ExecutionRef:   req.ExecutionRef,
+		WorkflowKey:    req.WorkflowKey,
 	})
 	if err != nil {
 		return nil, err
@@ -116,6 +117,48 @@ func (r *remoteWorkflow) CancelRun(ctx context.Context, req coreworkflow.CancelR
 		return nil, err
 	}
 	return workflowRunFromProto(resp)
+}
+
+func (r *remoteWorkflow) SignalRun(ctx context.Context, req coreworkflow.SignalRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	signal, err := workflowSignalToProto(req.Signal)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.client.SignalRun(ctx, &proto.SignalWorkflowProviderRunRequest{
+		RunId:  req.RunID,
+		Signal: signal,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return workflowSignalRunResponseFromProto(resp)
+}
+
+func (r *remoteWorkflow) SignalOrStartRun(ctx context.Context, req coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	ctx, cancel := providerCallContext(ctx)
+	defer cancel()
+	target, err := workflowTargetToProto(req.Target)
+	if err != nil {
+		return nil, err
+	}
+	signal, err := workflowSignalToProto(req.Signal)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.client.SignalOrStartRun(ctx, &proto.SignalOrStartWorkflowProviderRunRequest{
+		WorkflowKey:    req.WorkflowKey,
+		Target:         target,
+		IdempotencyKey: req.IdempotencyKey,
+		CreatedBy:      workflowActorToProto(req.CreatedBy),
+		ExecutionRef:   req.ExecutionRef,
+		Signal:         signal,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return workflowSignalRunResponseFromProto(resp)
 }
 
 func (r *remoteWorkflow) UpsertSchedule(ctx context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {

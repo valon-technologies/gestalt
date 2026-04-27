@@ -55,6 +55,16 @@ class WorkflowProviderStub(object):
                 request_serializer=v1_dot_workflow__pb2.CancelWorkflowProviderRunRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.BoundWorkflowRun.FromString,
                 _registered_method=True)
+        self.SignalRun = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowProvider/SignalRun',
+                request_serializer=v1_dot_workflow__pb2.SignalWorkflowProviderRunRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.SignalWorkflowRunResponse.FromString,
+                _registered_method=True)
+        self.SignalOrStartRun = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowProvider/SignalOrStartRun',
+                request_serializer=v1_dot_workflow__pb2.SignalOrStartWorkflowProviderRunRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.SignalWorkflowRunResponse.FromString,
+                _registered_method=True)
         self.UpsertSchedule = channel.unary_unary(
                 '/gestalt.provider.v1.WorkflowProvider/UpsertSchedule',
                 request_serializer=v1_dot_workflow__pb2.UpsertWorkflowProviderScheduleRequest.SerializeToString,
@@ -159,6 +169,18 @@ class WorkflowProviderServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def CancelRun(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SignalRun(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SignalOrStartRun(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -282,6 +304,16 @@ def add_WorkflowProviderServicer_to_server(servicer, server):
                     servicer.CancelRun,
                     request_deserializer=v1_dot_workflow__pb2.CancelWorkflowProviderRunRequest.FromString,
                     response_serializer=v1_dot_workflow__pb2.BoundWorkflowRun.SerializeToString,
+            ),
+            'SignalRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.SignalRun,
+                    request_deserializer=v1_dot_workflow__pb2.SignalWorkflowProviderRunRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.SignalWorkflowRunResponse.SerializeToString,
+            ),
+            'SignalOrStartRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.SignalOrStartRun,
+                    request_deserializer=v1_dot_workflow__pb2.SignalOrStartWorkflowProviderRunRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.SignalWorkflowRunResponse.SerializeToString,
             ),
             'UpsertSchedule': grpc.unary_unary_rpc_method_handler(
                     servicer.UpsertSchedule,
@@ -472,6 +504,60 @@ class WorkflowProvider(object):
             '/gestalt.provider.v1.WorkflowProvider/CancelRun',
             v1_dot_workflow__pb2.CancelWorkflowProviderRunRequest.SerializeToString,
             v1_dot_workflow__pb2.BoundWorkflowRun.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SignalRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.WorkflowProvider/SignalRun',
+            v1_dot_workflow__pb2.SignalWorkflowProviderRunRequest.SerializeToString,
+            v1_dot_workflow__pb2.SignalWorkflowRunResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SignalOrStartRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.WorkflowProvider/SignalOrStartRun',
+            v1_dot_workflow__pb2.SignalOrStartWorkflowProviderRunRequest.SerializeToString,
+            v1_dot_workflow__pb2.SignalWorkflowRunResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -996,6 +1082,21 @@ class WorkflowManagerHostStub(object):
         Args:
             channel: A grpc.Channel.
         """
+        self.StartRun = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowManagerHost/StartRun',
+                request_serializer=v1_dot_workflow__pb2.WorkflowManagerStartRunRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowRun.FromString,
+                _registered_method=True)
+        self.SignalRun = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowManagerHost/SignalRun',
+                request_serializer=v1_dot_workflow__pb2.WorkflowManagerSignalRunRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowRunSignal.FromString,
+                _registered_method=True)
+        self.SignalOrStartRun = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowManagerHost/SignalOrStartRun',
+                request_serializer=v1_dot_workflow__pb2.WorkflowManagerSignalOrStartRunRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowRunSignal.FromString,
+                _registered_method=True)
         self.CreateSchedule = channel.unary_unary(
                 '/gestalt.provider.v1.WorkflowManagerHost/CreateSchedule',
                 request_serializer=v1_dot_workflow__pb2.WorkflowManagerCreateScheduleRequest.SerializeToString,
@@ -1065,6 +1166,24 @@ class WorkflowManagerHostStub(object):
 
 class WorkflowManagerHostServicer(object):
     """Missing associated documentation comment in .proto file."""
+
+    def StartRun(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SignalRun(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SignalOrStartRun(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
 
     def CreateSchedule(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -1147,6 +1266,21 @@ class WorkflowManagerHostServicer(object):
 
 def add_WorkflowManagerHostServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'StartRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.StartRun,
+                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerStartRunRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowRun.SerializeToString,
+            ),
+            'SignalRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.SignalRun,
+                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerSignalRunRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowRunSignal.SerializeToString,
+            ),
+            'SignalOrStartRun': grpc.unary_unary_rpc_method_handler(
+                    servicer.SignalOrStartRun,
+                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerSignalOrStartRunRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowRunSignal.SerializeToString,
+            ),
             'CreateSchedule': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateSchedule,
                     request_deserializer=v1_dot_workflow__pb2.WorkflowManagerCreateScheduleRequest.FromString,
@@ -1222,6 +1356,87 @@ def add_WorkflowManagerHostServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class WorkflowManagerHost(object):
     """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def StartRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.WorkflowManagerHost/StartRun',
+            v1_dot_workflow__pb2.WorkflowManagerStartRunRequest.SerializeToString,
+            v1_dot_workflow__pb2.ManagedWorkflowRun.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SignalRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.WorkflowManagerHost/SignalRun',
+            v1_dot_workflow__pb2.WorkflowManagerSignalRunRequest.SerializeToString,
+            v1_dot_workflow__pb2.ManagedWorkflowRunSignal.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def SignalOrStartRun(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.WorkflowManagerHost/SignalOrStartRun',
+            v1_dot_workflow__pb2.WorkflowManagerSignalOrStartRunRequest.SerializeToString,
+            v1_dot_workflow__pb2.ManagedWorkflowRunSignal.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def CreateSchedule(request,

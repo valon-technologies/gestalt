@@ -86,6 +86,30 @@ impl WorkflowManager {
         Ok(self.client.create_schedule(request).await?.into_inner())
     }
 
+    pub async fn start_run(
+        &mut self,
+        mut request: pb::WorkflowManagerStartRunRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowRun, WorkflowManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.start_run(request).await?.into_inner())
+    }
+
+    pub async fn signal_run(
+        &mut self,
+        mut request: pb::WorkflowManagerSignalRunRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowRunSignal, WorkflowManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.signal_run(request).await?.into_inner())
+    }
+
+    pub async fn signal_or_start_run(
+        &mut self,
+        mut request: pb::WorkflowManagerSignalOrStartRunRequest,
+    ) -> std::result::Result<pb::ManagedWorkflowRunSignal, WorkflowManagerError> {
+        request.invocation_token = self.invocation_token.clone();
+        Ok(self.client.signal_or_start_run(request).await?.into_inner())
+    }
+
     pub async fn get_schedule(
         &mut self,
         mut request: pb::WorkflowManagerGetScheduleRequest,

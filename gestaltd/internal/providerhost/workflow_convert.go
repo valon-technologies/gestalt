@@ -200,6 +200,7 @@ func workflowExecutionReferenceToProto(ref *coreworkflow.ExecutionReference) (*p
 		ProviderName:        ref.ProviderName,
 		Target:              target,
 		TargetFingerprint:   ref.TargetFingerprint,
+		CallerPluginName:    ref.CallerPluginName,
 		SubjectId:           ref.SubjectID,
 		SubjectKind:         ref.SubjectKind,
 		DisplayName:         ref.DisplayName,
@@ -224,6 +225,7 @@ func workflowExecutionReferenceFromProto(ref *proto.WorkflowExecutionReference) 
 		ProviderName:        strings.TrimSpace(ref.GetProviderName()),
 		Target:              target,
 		TargetFingerprint:   strings.TrimSpace(ref.GetTargetFingerprint()),
+		CallerPluginName:    strings.TrimSpace(ref.GetCallerPluginName()),
 		SubjectID:           strings.TrimSpace(ref.GetSubjectId()),
 		SubjectKind:         strings.TrimSpace(ref.GetSubjectKind()),
 		DisplayName:         strings.TrimSpace(ref.GetDisplayName()),
@@ -422,6 +424,7 @@ func workflowRunFromProto(run *proto.BoundWorkflowRun) (*coreworkflow.Run, error
 	return &coreworkflow.Run{
 		ID:            run.GetId(),
 		Status:        status,
+		WorkflowKey:   run.GetWorkflowKey(),
 		Target:        workflowTargetFromProto(run.GetTarget()),
 		Trigger:       trigger,
 		ExecutionRef:  run.GetExecutionRef(),
@@ -432,6 +435,51 @@ func workflowRunFromProto(run *proto.BoundWorkflowRun) (*coreworkflow.Run, error
 		StatusMessage: run.GetStatusMessage(),
 		ResultBody:    run.GetResultBody(),
 	}, nil
+}
+
+func workflowRunToProto(run *coreworkflow.Run) (*proto.BoundWorkflowRun, error) {
+	if run == nil {
+		return nil, nil
+	}
+	target, err := workflowTargetToProto(run.Target)
+	if err != nil {
+		return nil, err
+	}
+	trigger, err := workflowRunTriggerToProto(run.Trigger)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.BoundWorkflowRun{
+		Id:            run.ID,
+		Status:        workflowRunStatusToProto(run.Status),
+		Target:        target,
+		Trigger:       trigger,
+		CreatedAt:     timeToProto(run.CreatedAt),
+		StartedAt:     timeToProto(run.StartedAt),
+		CompletedAt:   timeToProto(run.CompletedAt),
+		StatusMessage: run.StatusMessage,
+		ResultBody:    run.ResultBody,
+		CreatedBy:     workflowActorToProto(run.CreatedBy),
+		ExecutionRef:  run.ExecutionRef,
+		WorkflowKey:   run.WorkflowKey,
+	}, nil
+}
+
+func workflowRunStatusToProto(status coreworkflow.RunStatus) proto.WorkflowRunStatus {
+	switch status {
+	case coreworkflow.RunStatusPending:
+		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING
+	case coreworkflow.RunStatusRunning:
+		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_RUNNING
+	case coreworkflow.RunStatusSucceeded:
+		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_SUCCEEDED
+	case coreworkflow.RunStatusFailed:
+		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_FAILED
+	case coreworkflow.RunStatusCanceled:
+		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_CANCELED
+	default:
+		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_UNSPECIFIED
+	}
 }
 
 func workflowScheduleFromProto(schedule *proto.BoundWorkflowSchedule) (*coreworkflow.Schedule, error) {
@@ -530,6 +578,71 @@ func workflowInvokeRequestFromProto(req *proto.InvokeWorkflowOperationRequest) (
 		Metadata:     mapFromStruct(req.GetMetadata()),
 		CreatedBy:    workflowActorFromProto(req.GetCreatedBy()),
 		ExecutionRef: req.GetExecutionRef(),
+		Signals:      workflowSignalsFromProto(req.GetSignals()),
+	}, nil
+}
+
+func workflowSignalToProto(signal coreworkflow.Signal) (*proto.WorkflowSignal, error) {
+	payload, err := structFromMap(signal.Payload)
+	if err != nil {
+		return nil, fmt.Errorf("workflow signal payload: %w", err)
+	}
+	metadata, err := structFromMap(signal.Metadata)
+	if err != nil {
+		return nil, fmt.Errorf("workflow signal metadata: %w", err)
+	}
+	return &proto.WorkflowSignal{
+		Id:             signal.ID,
+		Name:           signal.Name,
+		Payload:        payload,
+		Metadata:       metadata,
+		CreatedBy:      workflowActorToProto(signal.CreatedBy),
+		CreatedAt:      timeToProto(signal.CreatedAt),
+		IdempotencyKey: signal.IdempotencyKey,
+		Sequence:       signal.Sequence,
+	}, nil
+}
+
+func workflowSignalFromProto(signal *proto.WorkflowSignal) coreworkflow.Signal {
+	if signal == nil {
+		return coreworkflow.Signal{}
+	}
+	return coreworkflow.Signal{
+		ID:             strings.TrimSpace(signal.GetId()),
+		Name:           strings.TrimSpace(signal.GetName()),
+		Payload:        mapFromStruct(signal.GetPayload()),
+		Metadata:       mapFromStruct(signal.GetMetadata()),
+		CreatedBy:      workflowActorFromProto(signal.GetCreatedBy()),
+		CreatedAt:      timeFromProto(signal.GetCreatedAt()),
+		IdempotencyKey: strings.TrimSpace(signal.GetIdempotencyKey()),
+		Sequence:       signal.GetSequence(),
+	}
+}
+
+func workflowSignalsFromProto(signals []*proto.WorkflowSignal) []coreworkflow.Signal {
+	if len(signals) == 0 {
+		return nil
+	}
+	out := make([]coreworkflow.Signal, 0, len(signals))
+	for _, signal := range signals {
+		out = append(out, workflowSignalFromProto(signal))
+	}
+	return out
+}
+
+func workflowSignalRunResponseFromProto(resp *proto.SignalWorkflowRunResponse) (*coreworkflow.SignalRunResponse, error) {
+	if resp == nil {
+		return nil, nil
+	}
+	run, err := workflowRunFromProto(resp.GetRun())
+	if err != nil {
+		return nil, err
+	}
+	return &coreworkflow.SignalRunResponse{
+		Run:         run,
+		Signal:      workflowSignalFromProto(resp.GetSignal()),
+		StartedRun:  resp.GetStartedRun(),
+		WorkflowKey: resp.GetWorkflowKey(),
 	}, nil
 }
 
@@ -568,6 +681,41 @@ func managedWorkflowEventTriggerToProto(managed *workflowmanager.ManagedEventTri
 	return &proto.ManagedWorkflowEventTrigger{
 		ProviderName: managed.ProviderName,
 		Trigger:      trigger,
+	}, nil
+}
+
+func managedWorkflowRunToProto(managed *workflowmanager.ManagedRun) (*proto.ManagedWorkflowRun, error) {
+	if managed == nil {
+		return nil, nil
+	}
+	run, err := workflowRunToProto(managed.Run)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.ManagedWorkflowRun{
+		ProviderName: managed.ProviderName,
+		Run:          run,
+	}, nil
+}
+
+func managedWorkflowRunSignalToProto(managed *workflowmanager.ManagedRunSignal) (*proto.ManagedWorkflowRunSignal, error) {
+	if managed == nil {
+		return nil, nil
+	}
+	run, err := workflowRunToProto(managed.Run)
+	if err != nil {
+		return nil, err
+	}
+	signal, err := workflowSignalToProto(managed.Signal)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.ManagedWorkflowRunSignal{
+		ProviderName: managed.ProviderName,
+		Run:          run,
+		Signal:       signal,
+		StartedRun:   managed.StartedRun,
+		WorkflowKey:  managed.WorkflowKey,
 	}, nil
 }
 

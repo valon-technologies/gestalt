@@ -535,6 +535,7 @@ func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsStoredLegacyFing
 		ProviderName:      "temporal",
 		Target:            target,
 		TargetFingerprint: legacyAgentWorkflowTargetFingerprint,
+		CallerPluginName:  "slack",
 		SubjectID:         "service_account:scheduler",
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
@@ -550,6 +551,13 @@ func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsStoredLegacyFing
 		ExecutionRef: "agent-ref",
 		RunID:        "run-agent-123",
 		Target:       target,
+		Signals: []coreworkflow.Signal{{
+			ID:             "sig-1",
+			Name:           "slack.message",
+			Payload:        map[string]any{"text": "new message"},
+			IdempotencyKey: "evt-1",
+			Sequence:       42,
+		}},
 	})
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
@@ -559,6 +567,16 @@ func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsStoredLegacyFing
 	}
 	if len(agentManager.createTurnRequests) != 1 {
 		t.Fatalf("turn requests = %d, want 1", len(agentManager.createTurnRequests))
+	}
+	turnReq := agentManager.createTurnRequests[0]
+	if turnReq.CallerPluginName != "slack" {
+		t.Fatalf("caller plugin = %q, want slack", turnReq.CallerPluginName)
+	}
+	if !strings.HasPrefix(turnReq.IdempotencyKey, "workflow:temporal:run-agent-123:turn:signal-batch-") {
+		t.Fatalf("turn idempotency key = %q", turnReq.IdempotencyKey)
+	}
+	if len(turnReq.Messages) != 2 || turnReq.Messages[0].Text != "Send the status summary" || !strings.Contains(turnReq.Messages[1].Text, `"name": "slack.message"`) {
+		t.Fatalf("turn messages = %#v", turnReq.Messages)
 	}
 }
 

@@ -31,10 +31,13 @@ var (
 	ErrDuplicateExecutionRefs     = errors.New("workflow object matched multiple execution references")
 	ErrWorkflowEventMatchRequired = errors.New("workflow trigger match.type is required")
 	ErrWorkflowEventTypeRequired  = errors.New("workflow event type is required")
+	ErrWorkflowKeyRequired        = errors.New("workflow key is required")
+	ErrWorkflowSignalNameRequired = errors.New("workflow signal name is required")
 )
 
 const workflowScheduleExecutionRefBasePrefix = "workflow_schedule:"
 const workflowEventTriggerExecutionRefBasePrefix = "workflow_event_trigger:"
+const workflowRunExecutionRefBasePrefix = "workflow_run:"
 const defaultWorkflowEventSpecVersion = "1.0"
 
 type WorkflowControl interface {
@@ -63,8 +66,11 @@ type Service interface {
 	PauseEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error)
 	ResumeEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error)
 	ListRuns(ctx context.Context, p *principal.Principal) ([]*ManagedRun, error)
+	StartRun(ctx context.Context, p *principal.Principal, req RunStart) (*ManagedRun, error)
 	GetRun(ctx context.Context, p *principal.Principal, runID string) (*ManagedRun, error)
 	CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*ManagedRun, error)
+	SignalRun(ctx context.Context, p *principal.Principal, req RunSignal) (*ManagedRunSignal, error)
+	SignalOrStartRun(ctx context.Context, p *principal.Principal, req RunSignalOrStart) (*ManagedRunSignal, error)
 	PublishEvent(ctx context.Context, p *principal.Principal, event coreworkflow.Event) (coreworkflow.Event, error)
 }
 
@@ -93,18 +99,42 @@ type Manager struct {
 }
 
 type ScheduleUpsert struct {
-	ProviderName string
-	Cron         string
-	Timezone     string
-	Target       coreworkflow.Target
-	Paused       bool
+	ProviderName     string
+	Cron             string
+	Timezone         string
+	Target           coreworkflow.Target
+	Paused           bool
+	CallerPluginName string
 }
 
 type EventTriggerUpsert struct {
-	ProviderName string
-	Match        coreworkflow.EventMatch
-	Target       coreworkflow.Target
-	Paused       bool
+	ProviderName     string
+	Match            coreworkflow.EventMatch
+	Target           coreworkflow.Target
+	Paused           bool
+	CallerPluginName string
+}
+
+type RunStart struct {
+	ProviderName     string
+	Target           coreworkflow.Target
+	IdempotencyKey   string
+	WorkflowKey      string
+	CallerPluginName string
+}
+
+type RunSignal struct {
+	RunID  string
+	Signal coreworkflow.Signal
+}
+
+type RunSignalOrStart struct {
+	ProviderName     string
+	WorkflowKey      string
+	Target           coreworkflow.Target
+	IdempotencyKey   string
+	Signal           coreworkflow.Signal
+	CallerPluginName string
 }
 
 type ManagedSchedule struct {
@@ -124,6 +154,16 @@ type ManagedEventTrigger struct {
 type ManagedRun struct {
 	ProviderName string
 	Run          *coreworkflow.Run
+	ExecutionRef *coreworkflow.ExecutionReference
+	provider     coreworkflow.Provider
+}
+
+type ManagedRunSignal struct {
+	ProviderName string
+	Run          *coreworkflow.Run
+	Signal       coreworkflow.Signal
+	StartedRun   bool
+	WorkflowKey  string
 	ExecutionRef *coreworkflow.ExecutionReference
 	provider     coreworkflow.Provider
 }
@@ -198,6 +238,48 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal) ([]*Mana
 	return out, nil
 }
 
+func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunStart) (*ManagedRun, error) {
+	p = principal.Canonicalized(p)
+	if strings.TrimSpace(principalSubjectID(p)) == "" {
+		return nil, ErrWorkflowSubjectRequired
+	}
+	providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
+	if err != nil {
+		return nil, err
+	}
+	target, err := m.resolveTarget(ctx, p, req.Target)
+	if err != nil {
+		return nil, err
+	}
+
+	executionRefID := runExecutionRefID(uuid.NewString())
+	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName)
+	if err != nil {
+		return nil, err
+	}
+	run, err := provider.StartRun(ctx, coreworkflow.StartRunRequest{
+		Target:         target,
+		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
+		WorkflowKey:    strings.TrimSpace(req.WorkflowKey),
+		CreatedBy:      workflowActorFromPrincipal(p),
+		ExecutionRef:   executionRefID,
+	})
+	if err != nil {
+		m.revokeExecutionRef(ctx, ref)
+		return nil, err
+	}
+	if !runMatchesExecutionRef(providerName, run, ref) {
+		m.revokeExecutionRef(ctx, ref)
+		return nil, core.ErrNotFound
+	}
+	return &ManagedRun{
+		ProviderName: providerName,
+		Run:          run,
+		ExecutionRef: ref,
+		provider:     provider,
+	}, nil
+}
+
 func (m *Manager) GetRun(ctx context.Context, p *principal.Principal, runID string) (*ManagedRun, error) {
 	runID = strings.TrimSpace(runID)
 	if runID == "" {
@@ -258,6 +340,74 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, 
 	}
 	value.Run = run
 	return value, nil
+}
+
+func (m *Manager) SignalRun(ctx context.Context, p *principal.Principal, req RunSignal) (*ManagedRunSignal, error) {
+	value, err := m.GetRun(ctx, p, req.RunID)
+	if err != nil {
+		return nil, err
+	}
+	signal, err := m.normalizeSignal(req.Signal, p)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := existingRunProvider(value).SignalRun(ctx, coreworkflow.SignalRunRequest{
+		RunID:  strings.TrimSpace(req.RunID),
+		Signal: signal,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return m.managedSignalResponse(ctx, p, value.ProviderName, existingRunProvider(value), resp, value.ExecutionRef)
+}
+
+func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, req RunSignalOrStart) (*ManagedRunSignal, error) {
+	p = principal.Canonicalized(p)
+	if strings.TrimSpace(principalSubjectID(p)) == "" {
+		return nil, ErrWorkflowSubjectRequired
+	}
+	workflowKey := strings.TrimSpace(req.WorkflowKey)
+	if workflowKey == "" {
+		return nil, ErrWorkflowKeyRequired
+	}
+	providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
+	if err != nil {
+		return nil, err
+	}
+	target, err := m.resolveTarget(ctx, p, req.Target)
+	if err != nil {
+		return nil, err
+	}
+	signal, err := m.normalizeSignal(req.Signal, p)
+	if err != nil {
+		return nil, err
+	}
+
+	executionRefID := runExecutionRefID(uuid.NewString())
+	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := provider.SignalOrStartRun(ctx, coreworkflow.SignalOrStartRunRequest{
+		WorkflowKey:    workflowKey,
+		Target:         target,
+		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
+		CreatedBy:      workflowActorFromPrincipal(p),
+		ExecutionRef:   executionRefID,
+		Signal:         signal,
+	})
+	if err != nil {
+		m.revokeExecutionRef(ctx, ref)
+		return nil, err
+	}
+	if resp == nil || resp.Run == nil || strings.TrimSpace(resp.Run.ExecutionRef) != executionRefID {
+		m.revokeExecutionRef(ctx, ref)
+	}
+	managed, err := m.managedSignalResponse(ctx, p, providerName, provider, resp, ref)
+	if err != nil && resp != nil && resp.Run != nil && strings.TrimSpace(resp.Run.ExecutionRef) == executionRefID {
+		m.revokeExecutionRef(ctx, ref)
+	}
+	return managed, err
 }
 
 func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, event coreworkflow.Event) (coreworkflow.Event, error) {
@@ -361,7 +511,7 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 
 	scheduleID := uuid.NewString()
 	executionRefID := scheduleExecutionRefID(scheduleID)
-	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p)
+	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +559,7 @@ func (m *Manager) UpdateSchedule(ctx context.Context, p *principal.Principal, sc
 	}
 
 	executionRefID := scheduleExecutionRefID(strings.TrimSpace(existing.Schedule.ID))
-	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, nextProvider, target, p)
+	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, nextProvider, target, p, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -566,7 +716,7 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 
 	triggerID := uuid.NewString()
 	executionRefID := eventTriggerExecutionRefID(triggerID)
-	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p)
+	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -617,7 +767,7 @@ func (m *Manager) UpdateEventTrigger(ctx context.Context, p *principal.Principal
 	}
 
 	executionRefID := eventTriggerExecutionRefID(strings.TrimSpace(existing.Trigger.ID))
-	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, nextProvider, target, p)
+	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, nextProvider, target, p, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
@@ -977,7 +1127,7 @@ func (m *Manager) findOwnedEventTriggerExecutionRef(ctx context.Context, trigger
 	return match, nil
 }
 
-func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal) (*coreworkflow.ExecutionReference, error) {
+func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName string) (*coreworkflow.ExecutionReference, error) {
 	store, err := workflowExecutionReferenceStore(providerName, provider)
 	if err != nil {
 		return nil, err
@@ -997,6 +1147,7 @@ func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerN
 		ProviderName:        strings.TrimSpace(providerName),
 		Target:              target,
 		TargetFingerprint:   targetFingerprint,
+		CallerPluginName:    strings.TrimSpace(callerPluginName),
 		SubjectID:           subjectID,
 		SubjectKind:         actor.SubjectKind,
 		DisplayName:         actor.DisplayName,
@@ -1304,6 +1455,52 @@ func eventTriggerIDFromExecutionRefID(executionRefID string) string {
 	return rest[:lastColon]
 }
 
+func runExecutionRefID(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		value = uuid.NewString()
+	}
+	return workflowRunExecutionRefBasePrefix + value
+}
+
+func (m *Manager) managedSignalResponse(ctx context.Context, p *principal.Principal, providerName string, provider coreworkflow.Provider, resp *coreworkflow.SignalRunResponse, candidateRef *coreworkflow.ExecutionReference) (*ManagedRunSignal, error) {
+	if resp == nil || resp.Run == nil {
+		return nil, core.ErrNotFound
+	}
+	providerName = strings.TrimSpace(providerName)
+	ref := candidateRef
+	if !runMatchesExecutionRef(providerName, resp.Run, ref) || strings.TrimSpace(ref.ID) != strings.TrimSpace(resp.Run.ExecutionRef) {
+		ref = nil
+	}
+	if ref == nil {
+		store, err := workflowExecutionReferenceStore(providerName, provider)
+		if err != nil {
+			return nil, err
+		}
+		ref, err = store.GetExecutionReference(ctx, strings.TrimSpace(resp.Run.ExecutionRef))
+		if err != nil {
+			return nil, err
+		}
+		ref = workflowExecutionRefForProvider(ref, providerName)
+	}
+	if !executionRefOwnedBy(ref, p) || !executionRefActive(ref) || !m.allowTarget(ctx, p, ref.Target) || !runMatchesExecutionRef(providerName, resp.Run, ref) {
+		return nil, core.ErrNotFound
+	}
+	workflowKey := strings.TrimSpace(resp.WorkflowKey)
+	if workflowKey == "" {
+		workflowKey = strings.TrimSpace(resp.Run.WorkflowKey)
+	}
+	return &ManagedRunSignal{
+		ProviderName: providerName,
+		Run:          resp.Run,
+		Signal:       resp.Signal,
+		StartedRun:   resp.StartedRun,
+		WorkflowKey:  workflowKey,
+		ExecutionRef: ref,
+		provider:     provider,
+	}, nil
+}
+
 func existingProvider(value *ManagedSchedule) coreworkflow.Provider {
 	if value == nil {
 		return nil
@@ -1323,6 +1520,28 @@ func existingEventTriggerProvider(value *ManagedEventTrigger) coreworkflow.Provi
 		return nil
 	}
 	return value.provider
+}
+
+func (m *Manager) normalizeSignal(signal coreworkflow.Signal, p *principal.Principal) (coreworkflow.Signal, error) {
+	signal.ID = strings.TrimSpace(signal.ID)
+	signal.Name = strings.TrimSpace(signal.Name)
+	signal.IdempotencyKey = strings.TrimSpace(signal.IdempotencyKey)
+	signal.Payload = maps.Clone(signal.Payload)
+	signal.Metadata = maps.Clone(signal.Metadata)
+	if signal.Name == "" {
+		return coreworkflow.Signal{}, ErrWorkflowSignalNameRequired
+	}
+	if signal.CreatedBy == (coreworkflow.Actor{}) {
+		signal.CreatedBy = workflowActorFromPrincipal(p)
+	}
+	if signal.CreatedAt == nil || signal.CreatedAt.IsZero() {
+		value := m.now().UTC()
+		signal.CreatedAt = &value
+	} else {
+		value := signal.CreatedAt.UTC()
+		signal.CreatedAt = &value
+	}
+	return signal, nil
 }
 
 func normalizePublishedEvent(event coreworkflow.Event, now time.Time) coreworkflow.Event {

@@ -57,6 +57,14 @@ func (p startupTestWorkflowProvider) CancelRun(context.Context, coreworkflow.Can
 	return &coreworkflow.Run{}, nil
 }
 
+func (p startupTestWorkflowProvider) SignalRun(context.Context, coreworkflow.SignalRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
+}
+
+func (p startupTestWorkflowProvider) SignalOrStartRun(context.Context, coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
+}
+
 func (p startupTestWorkflowProvider) UpsertSchedule(context.Context, coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
 	return &coreworkflow.Schedule{}, nil
 }

@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -322,6 +324,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	}
 	principalValue := principal.Canonicalized(principal.FromContext(ctx))
 	target := req.Target
+	callerPluginName := ""
 	if strings.TrimSpace(req.ExecutionRef) != "" {
 		resolvedRef, err := r.resolveWorkflowExecutionRef(ctx, req)
 		if err != nil {
@@ -329,6 +332,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		}
 		principalValue = workflowExecutionReferencePrincipal(resolvedRef)
 		target = resolvedRef.Target
+		callerPluginName = strings.TrimSpace(resolvedRef.CallerPluginName)
 	} else if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: workflow execution principal is required when execution_ref is omitted", invocation.ErrInternal)
 	}
@@ -359,16 +363,20 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 	if prompt := strings.TrimSpace(agentTarget.Prompt); prompt != "" {
 		messages = append(messages, coreagent.Message{Role: "user", Text: prompt})
 	}
+	if signalMessage := workflowSignalMessage(req.Signals); signalMessage != nil {
+		messages = append(messages, *signalMessage)
+	}
 	turn, err := agentManager.CreateTurn(runCtx, principalValue, coreagent.ManagerCreateTurnRequest{
-		SessionID:       session.ID,
-		Model:           agentTarget.Model,
-		Messages:        messages,
-		ToolRefs:        append([]coreagent.ToolRef(nil), agentTarget.ToolRefs...),
-		ToolSource:      agentTarget.ToolSource,
-		ResponseSchema:  maps.Clone(agentTarget.ResponseSchema),
-		Metadata:        metadata,
-		ProviderOptions: maps.Clone(agentTarget.ProviderOptions),
-		IdempotencyKey:  workflowAgentIdempotencyKey(req, "turn"),
+		CallerPluginName: callerPluginName,
+		SessionID:        session.ID,
+		Model:            agentTarget.Model,
+		Messages:         messages,
+		ToolRefs:         append([]coreagent.ToolRef(nil), agentTarget.ToolRefs...),
+		ToolSource:       agentTarget.ToolSource,
+		ResponseSchema:   maps.Clone(agentTarget.ResponseSchema),
+		Metadata:         metadata,
+		ProviderOptions:  maps.Clone(agentTarget.ProviderOptions),
+		IdempotencyKey:   workflowAgentTurnIdempotencyKey(req),
 	})
 	if err != nil {
 		return nil, err
@@ -407,6 +415,60 @@ func workflowAgentIdempotencyKey(req coreworkflow.InvokeOperationRequest, suffix
 		strings.TrimSpace(req.RunID),
 		strings.TrimSpace(suffix),
 	}, ":")
+}
+
+func workflowAgentTurnIdempotencyKey(req coreworkflow.InvokeOperationRequest) string {
+	batchID := workflowSignalBatchID(req.Signals)
+	if batchID == "" {
+		return workflowAgentIdempotencyKey(req, "turn")
+	}
+	return workflowAgentIdempotencyKey(req, "turn:"+batchID)
+}
+
+func workflowSignalBatchID(signals []coreworkflow.Signal) string {
+	if len(signals) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(signals))
+	for i := range signals {
+		signal := &signals[i]
+		key := strings.TrimSpace(signal.IdempotencyKey)
+		if key == "" {
+			key = strings.TrimSpace(signal.ID)
+		}
+		if key == "" && signal.Sequence != 0 {
+			key = fmt.Sprintf("seq-%d", signal.Sequence)
+		}
+		if key == "" {
+			key = strings.TrimSpace(signal.Name)
+		}
+		parts = append(parts, key)
+	}
+	body, err := json.Marshal(parts)
+	if err != nil {
+		return "signal-batch-" + fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%#v", parts))))
+	}
+	return "signal-batch-" + fmt.Sprintf("%x", sha256.Sum256(body))
+}
+
+func workflowSignalMessage(signals []coreworkflow.Signal) *coreagent.Message {
+	if len(signals) == 0 {
+		return nil
+	}
+	payload := map[string]any{
+		"signals": workflowSignalsContext(signals),
+	}
+	body, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		body = []byte(fmt.Sprintf("%#v", payload))
+	}
+	return &coreagent.Message{
+		Role: "user",
+		Text: "Workflow signal batch:\n" + string(body),
+		Metadata: map[string]any{
+			"gestalt.workflow.signal_batch": true,
+		},
+	}
 }
 
 func waitForWorkflowAgentTurn(ctx context.Context, agentManager agentmanager.Service, p *principal.Principal, turn *coreagent.Turn) (*coreagent.Turn, error) {
@@ -473,6 +535,9 @@ func workflowInvocationContext(req coreworkflow.InvokeOperationRequest) map[stri
 	if req.Metadata != nil {
 		ctxValue["metadata"] = maps.Clone(req.Metadata)
 	}
+	if len(req.Signals) > 0 {
+		ctxValue["signals"] = workflowSignalsContext(req.Signals)
+	}
 	if createdBy := workflowActorContext(req.CreatedBy); len(createdBy) > 0 {
 		ctxValue["createdBy"] = createdBy
 	}
@@ -480,6 +545,43 @@ func workflowInvocationContext(req coreworkflow.InvokeOperationRequest) map[stri
 		ctxValue["executionRef"] = executionRef
 	}
 	return ctxValue
+}
+
+func workflowSignalsContext(signals []coreworkflow.Signal) []map[string]any {
+	if len(signals) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(signals))
+	for i := range signals {
+		signal := &signals[i]
+		value := map[string]any{}
+		if id := strings.TrimSpace(signal.ID); id != "" {
+			value["id"] = id
+		}
+		if name := strings.TrimSpace(signal.Name); name != "" {
+			value["name"] = name
+		}
+		if signal.Payload != nil {
+			value["payload"] = maps.Clone(signal.Payload)
+		}
+		if signal.Metadata != nil {
+			value["metadata"] = maps.Clone(signal.Metadata)
+		}
+		if createdBy := workflowActorContext(signal.CreatedBy); len(createdBy) > 0 {
+			value["createdBy"] = createdBy
+		}
+		if signal.CreatedAt != nil {
+			value["createdAt"] = signal.CreatedAt.UTC().Format(time.RFC3339Nano)
+		}
+		if key := strings.TrimSpace(signal.IdempotencyKey); key != "" {
+			value["idempotencyKey"] = key
+		}
+		if signal.Sequence != 0 {
+			value["sequence"] = signal.Sequence
+		}
+		out = append(out, value)
+	}
+	return out
 }
 
 func workflowTargetContext(target coreworkflow.Target) map[string]any {

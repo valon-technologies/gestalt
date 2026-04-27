@@ -7,6 +7,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	"google.golang.org/grpc/codes"
@@ -48,6 +49,7 @@ func (s *WorkflowManagerServer) CreateSchedule(ctx context.Context, req *proto.W
 	if err != nil {
 		return nil, err
 	}
+	upsert.CallerPluginName = strings.TrimSpace(s.pluginName)
 	managed, err := s.manager.CreateSchedule(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, upsert)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -55,6 +57,91 @@ func (s *WorkflowManagerServer) CreateSchedule(ctx context.Context, req *proto.W
 	resp, err := managedWorkflowScheduleToProto(managed)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "encode workflow schedule: %v", err)
+	}
+	return resp, nil
+}
+
+func (s *WorkflowManagerServer) StartRun(ctx context.Context, req *proto.WorkflowManagerStartRunRequest) (*proto.ManagedWorkflowRun, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	if err != nil {
+		return nil, err
+	}
+	target, err := workflowManagerTarget(req.GetTarget())
+	if err != nil {
+		return nil, err
+	}
+	managed, err := s.manager.StartRun(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, workflowmanager.RunStart{
+		ProviderName:     strings.TrimSpace(req.GetProviderName()),
+		Target:           target,
+		IdempotencyKey:   strings.TrimSpace(req.GetIdempotencyKey()),
+		WorkflowKey:      strings.TrimSpace(req.GetWorkflowKey()),
+		CallerPluginName: strings.TrimSpace(s.pluginName),
+	})
+	if err != nil {
+		return nil, workflowManagerStatusError(err)
+	}
+	resp, err := managedWorkflowRunToProto(managed)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode workflow run: %v", err)
+	}
+	return resp, nil
+}
+
+func (s *WorkflowManagerServer) SignalRun(ctx context.Context, req *proto.WorkflowManagerSignalRunRequest) (*proto.ManagedWorkflowRunSignal, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	if err != nil {
+		return nil, err
+	}
+	runID := strings.TrimSpace(req.GetRunId())
+	if runID == "" {
+		return nil, status.Error(codes.InvalidArgument, "run_id is required")
+	}
+	managed, err := s.manager.SignalRun(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, workflowmanager.RunSignal{
+		RunID:  runID,
+		Signal: workflowSignalFromProto(req.GetSignal()),
+	})
+	if err != nil {
+		return nil, workflowManagerStatusError(err)
+	}
+	resp, err := managedWorkflowRunSignalToProto(managed)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode workflow run signal: %v", err)
+	}
+	return resp, nil
+}
+
+func (s *WorkflowManagerServer) SignalOrStartRun(ctx context.Context, req *proto.WorkflowManagerSignalOrStartRunRequest) (*proto.ManagedWorkflowRunSignal, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	if err != nil {
+		return nil, err
+	}
+	target, err := workflowManagerTarget(req.GetTarget())
+	if err != nil {
+		return nil, err
+	}
+	managed, err := s.manager.SignalOrStartRun(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, workflowmanager.RunSignalOrStart{
+		ProviderName:     strings.TrimSpace(req.GetProviderName()),
+		WorkflowKey:      strings.TrimSpace(req.GetWorkflowKey()),
+		Target:           target,
+		IdempotencyKey:   strings.TrimSpace(req.GetIdempotencyKey()),
+		Signal:           workflowSignalFromProto(req.GetSignal()),
+		CallerPluginName: strings.TrimSpace(s.pluginName),
+	})
+	if err != nil {
+		return nil, workflowManagerStatusError(err)
+	}
+	resp, err := managedWorkflowRunSignalToProto(managed)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode workflow run signal: %v", err)
 	}
 	return resp, nil
 }
@@ -104,6 +191,7 @@ func (s *WorkflowManagerServer) UpdateSchedule(ctx context.Context, req *proto.W
 	if err != nil {
 		return nil, err
 	}
+	upsert.CallerPluginName = strings.TrimSpace(s.pluginName)
 	managed, err := s.manager.UpdateSchedule(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, scheduleID, upsert)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -196,6 +284,7 @@ func (s *WorkflowManagerServer) CreateEventTrigger(ctx context.Context, req *pro
 	if err != nil {
 		return nil, err
 	}
+	upsert.CallerPluginName = strings.TrimSpace(s.pluginName)
 	managed, err := s.manager.CreateEventTrigger(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, upsert)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -251,6 +340,7 @@ func (s *WorkflowManagerServer) UpdateEventTrigger(ctx context.Context, req *pro
 	if err != nil {
 		return nil, err
 	}
+	upsert.CallerPluginName = strings.TrimSpace(s.pluginName)
 	managed, err := s.manager.UpdateEventTrigger(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, triggerID, upsert)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -364,23 +454,9 @@ func workflowManagerScheduleUpsert(
 	targetProto *proto.BoundWorkflowTarget,
 	paused bool,
 ) (workflowmanager.ScheduleUpsert, error) {
-	target, err := workflowTargetFromProtoStrict(targetProto)
+	target, err := workflowManagerTarget(targetProto)
 	if err != nil {
-		return workflowmanager.ScheduleUpsert{}, status.Errorf(codes.InvalidArgument, "target: %v", err)
-	}
-	if target.Agent == nil {
-		if target.Plugin == nil {
-			return workflowmanager.ScheduleUpsert{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")
-		}
-		pluginTarget := *target.Plugin
-		if strings.TrimSpace(pluginTarget.PluginName) == "" {
-			return workflowmanager.ScheduleUpsert{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")
-		}
-		if strings.TrimSpace(pluginTarget.Operation) == "" {
-			return workflowmanager.ScheduleUpsert{}, status.Error(codes.InvalidArgument, "target.plugin.operation is required")
-		}
-	} else if strings.TrimSpace(target.Agent.ProviderName) == "" {
-		return workflowmanager.ScheduleUpsert{}, status.Error(codes.InvalidArgument, "target.agent.provider_name is required")
+		return workflowmanager.ScheduleUpsert{}, err
 	}
 	return workflowmanager.ScheduleUpsert{
 		ProviderName: strings.TrimSpace(providerName),
@@ -391,29 +467,37 @@ func workflowManagerScheduleUpsert(
 	}, nil
 }
 
+func workflowManagerTarget(targetProto *proto.BoundWorkflowTarget) (coreworkflow.Target, error) {
+	target, err := workflowTargetFromProtoStrict(targetProto)
+	if err != nil {
+		return coreworkflow.Target{}, status.Errorf(codes.InvalidArgument, "target: %v", err)
+	}
+	if target.Agent == nil {
+		if target.Plugin == nil {
+			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")
+		}
+		pluginTarget := *target.Plugin
+		if strings.TrimSpace(pluginTarget.PluginName) == "" {
+			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")
+		}
+		if strings.TrimSpace(pluginTarget.Operation) == "" {
+			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.plugin.operation is required")
+		}
+	} else if strings.TrimSpace(target.Agent.ProviderName) == "" {
+		return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.agent.provider_name is required")
+	}
+	return target, nil
+}
+
 func workflowManagerEventTriggerUpsert(
 	providerName string,
 	matchProto *proto.WorkflowEventMatch,
 	targetProto *proto.BoundWorkflowTarget,
 	paused bool,
 ) (workflowmanager.EventTriggerUpsert, error) {
-	target, err := workflowTargetFromProtoStrict(targetProto)
+	target, err := workflowManagerTarget(targetProto)
 	if err != nil {
-		return workflowmanager.EventTriggerUpsert{}, status.Errorf(codes.InvalidArgument, "target: %v", err)
-	}
-	if target.Agent == nil {
-		if target.Plugin == nil {
-			return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")
-		}
-		pluginTarget := *target.Plugin
-		if strings.TrimSpace(pluginTarget.PluginName) == "" {
-			return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")
-		}
-		if strings.TrimSpace(pluginTarget.Operation) == "" {
-			return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "target.plugin.operation is required")
-		}
-	} else if strings.TrimSpace(target.Agent.ProviderName) == "" {
-		return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "target.agent.provider_name is required")
+		return workflowmanager.EventTriggerUpsert{}, err
 	}
 	match := workflowEventMatchFromProto(matchProto)
 	if strings.TrimSpace(match.Type) == "" {
@@ -437,7 +521,7 @@ func workflowManagerStatusError(err error) error {
 	switch {
 	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured), errors.Is(err, workflowmanager.ErrExecutionRefsNotConfigured), errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
 		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, workflowmanager.ErrWorkflowEventMatchRequired), errors.Is(err, workflowmanager.ErrWorkflowEventTypeRequired):
+	case errors.Is(err, workflowmanager.ErrWorkflowEventMatchRequired), errors.Is(err, workflowmanager.ErrWorkflowEventTypeRequired), errors.Is(err, workflowmanager.ErrWorkflowKeyRequired), errors.Is(err, workflowmanager.ErrWorkflowSignalNameRequired):
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, workflowmanager.ErrWorkflowScheduleSubject), errors.Is(err, invocation.ErrNotAuthenticated):
 		return status.Error(codes.Unauthenticated, err.Error())

@@ -24,6 +24,8 @@ const (
 	WorkflowProvider_GetRun_FullMethodName                  = "/gestalt.provider.v1.WorkflowProvider/GetRun"
 	WorkflowProvider_ListRuns_FullMethodName                = "/gestalt.provider.v1.WorkflowProvider/ListRuns"
 	WorkflowProvider_CancelRun_FullMethodName               = "/gestalt.provider.v1.WorkflowProvider/CancelRun"
+	WorkflowProvider_SignalRun_FullMethodName               = "/gestalt.provider.v1.WorkflowProvider/SignalRun"
+	WorkflowProvider_SignalOrStartRun_FullMethodName        = "/gestalt.provider.v1.WorkflowProvider/SignalOrStartRun"
 	WorkflowProvider_UpsertSchedule_FullMethodName          = "/gestalt.provider.v1.WorkflowProvider/UpsertSchedule"
 	WorkflowProvider_GetSchedule_FullMethodName             = "/gestalt.provider.v1.WorkflowProvider/GetSchedule"
 	WorkflowProvider_ListSchedules_FullMethodName           = "/gestalt.provider.v1.WorkflowProvider/ListSchedules"
@@ -50,6 +52,8 @@ type WorkflowProviderClient interface {
 	GetRun(ctx context.Context, in *GetWorkflowProviderRunRequest, opts ...grpc.CallOption) (*BoundWorkflowRun, error)
 	ListRuns(ctx context.Context, in *ListWorkflowProviderRunsRequest, opts ...grpc.CallOption) (*ListWorkflowProviderRunsResponse, error)
 	CancelRun(ctx context.Context, in *CancelWorkflowProviderRunRequest, opts ...grpc.CallOption) (*BoundWorkflowRun, error)
+	SignalRun(ctx context.Context, in *SignalWorkflowProviderRunRequest, opts ...grpc.CallOption) (*SignalWorkflowRunResponse, error)
+	SignalOrStartRun(ctx context.Context, in *SignalOrStartWorkflowProviderRunRequest, opts ...grpc.CallOption) (*SignalWorkflowRunResponse, error)
 	UpsertSchedule(ctx context.Context, in *UpsertWorkflowProviderScheduleRequest, opts ...grpc.CallOption) (*BoundWorkflowSchedule, error)
 	GetSchedule(ctx context.Context, in *GetWorkflowProviderScheduleRequest, opts ...grpc.CallOption) (*BoundWorkflowSchedule, error)
 	ListSchedules(ctx context.Context, in *ListWorkflowProviderSchedulesRequest, opts ...grpc.CallOption) (*ListWorkflowProviderSchedulesResponse, error)
@@ -110,6 +114,26 @@ func (c *workflowProviderClient) CancelRun(ctx context.Context, in *CancelWorkfl
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(BoundWorkflowRun)
 	err := c.cc.Invoke(ctx, WorkflowProvider_CancelRun_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowProviderClient) SignalRun(ctx context.Context, in *SignalWorkflowProviderRunRequest, opts ...grpc.CallOption) (*SignalWorkflowRunResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SignalWorkflowRunResponse)
+	err := c.cc.Invoke(ctx, WorkflowProvider_SignalRun_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowProviderClient) SignalOrStartRun(ctx context.Context, in *SignalOrStartWorkflowProviderRunRequest, opts ...grpc.CallOption) (*SignalWorkflowRunResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SignalWorkflowRunResponse)
+	err := c.cc.Invoke(ctx, WorkflowProvider_SignalOrStartRun_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -284,6 +308,8 @@ type WorkflowProviderServer interface {
 	GetRun(context.Context, *GetWorkflowProviderRunRequest) (*BoundWorkflowRun, error)
 	ListRuns(context.Context, *ListWorkflowProviderRunsRequest) (*ListWorkflowProviderRunsResponse, error)
 	CancelRun(context.Context, *CancelWorkflowProviderRunRequest) (*BoundWorkflowRun, error)
+	SignalRun(context.Context, *SignalWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error)
+	SignalOrStartRun(context.Context, *SignalOrStartWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error)
 	UpsertSchedule(context.Context, *UpsertWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error)
 	GetSchedule(context.Context, *GetWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error)
 	ListSchedules(context.Context, *ListWorkflowProviderSchedulesRequest) (*ListWorkflowProviderSchedulesResponse, error)
@@ -321,6 +347,12 @@ func (UnimplementedWorkflowProviderServer) ListRuns(context.Context, *ListWorkfl
 }
 func (UnimplementedWorkflowProviderServer) CancelRun(context.Context, *CancelWorkflowProviderRunRequest) (*BoundWorkflowRun, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelRun not implemented")
+}
+func (UnimplementedWorkflowProviderServer) SignalRun(context.Context, *SignalWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SignalRun not implemented")
+}
+func (UnimplementedWorkflowProviderServer) SignalOrStartRun(context.Context, *SignalOrStartWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SignalOrStartRun not implemented")
 }
 func (UnimplementedWorkflowProviderServer) UpsertSchedule(context.Context, *UpsertWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpsertSchedule not implemented")
@@ -459,6 +491,42 @@ func _WorkflowProvider_CancelRun_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(WorkflowProviderServer).CancelRun(ctx, req.(*CancelWorkflowProviderRunRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowProvider_SignalRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SignalWorkflowProviderRunRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowProviderServer).SignalRun(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowProvider_SignalRun_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowProviderServer).SignalRun(ctx, req.(*SignalWorkflowProviderRunRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowProvider_SignalOrStartRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SignalOrStartWorkflowProviderRunRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowProviderServer).SignalOrStartRun(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowProvider_SignalOrStartRun_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowProviderServer).SignalOrStartRun(ctx, req.(*SignalOrStartWorkflowProviderRunRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -775,6 +843,14 @@ var WorkflowProvider_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _WorkflowProvider_CancelRun_Handler,
 		},
 		{
+			MethodName: "SignalRun",
+			Handler:    _WorkflowProvider_SignalRun_Handler,
+		},
+		{
+			MethodName: "SignalOrStartRun",
+			Handler:    _WorkflowProvider_SignalOrStartRun_Handler,
+		},
+		{
 			MethodName: "UpsertSchedule",
 			Handler:    _WorkflowProvider_UpsertSchedule_Handler,
 		},
@@ -946,6 +1022,9 @@ var WorkflowHost_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
+	WorkflowManagerHost_StartRun_FullMethodName           = "/gestalt.provider.v1.WorkflowManagerHost/StartRun"
+	WorkflowManagerHost_SignalRun_FullMethodName          = "/gestalt.provider.v1.WorkflowManagerHost/SignalRun"
+	WorkflowManagerHost_SignalOrStartRun_FullMethodName   = "/gestalt.provider.v1.WorkflowManagerHost/SignalOrStartRun"
 	WorkflowManagerHost_CreateSchedule_FullMethodName     = "/gestalt.provider.v1.WorkflowManagerHost/CreateSchedule"
 	WorkflowManagerHost_GetSchedule_FullMethodName        = "/gestalt.provider.v1.WorkflowManagerHost/GetSchedule"
 	WorkflowManagerHost_UpdateSchedule_FullMethodName     = "/gestalt.provider.v1.WorkflowManagerHost/UpdateSchedule"
@@ -965,6 +1044,9 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WorkflowManagerHostClient interface {
+	StartRun(ctx context.Context, in *WorkflowManagerStartRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRun, error)
+	SignalRun(ctx context.Context, in *WorkflowManagerSignalRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRunSignal, error)
+	SignalOrStartRun(ctx context.Context, in *WorkflowManagerSignalOrStartRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRunSignal, error)
 	CreateSchedule(ctx context.Context, in *WorkflowManagerCreateScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
 	GetSchedule(ctx context.Context, in *WorkflowManagerGetScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
 	UpdateSchedule(ctx context.Context, in *WorkflowManagerUpdateScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
@@ -986,6 +1068,36 @@ type workflowManagerHostClient struct {
 
 func NewWorkflowManagerHostClient(cc grpc.ClientConnInterface) WorkflowManagerHostClient {
 	return &workflowManagerHostClient{cc}
+}
+
+func (c *workflowManagerHostClient) StartRun(ctx context.Context, in *WorkflowManagerStartRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRun, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ManagedWorkflowRun)
+	err := c.cc.Invoke(ctx, WorkflowManagerHost_StartRun_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowManagerHostClient) SignalRun(ctx context.Context, in *WorkflowManagerSignalRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRunSignal, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ManagedWorkflowRunSignal)
+	err := c.cc.Invoke(ctx, WorkflowManagerHost_SignalRun_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowManagerHostClient) SignalOrStartRun(ctx context.Context, in *WorkflowManagerSignalOrStartRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRunSignal, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ManagedWorkflowRunSignal)
+	err := c.cc.Invoke(ctx, WorkflowManagerHost_SignalOrStartRun_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *workflowManagerHostClient) CreateSchedule(ctx context.Context, in *WorkflowManagerCreateScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error) {
@@ -1122,6 +1234,9 @@ func (c *workflowManagerHostClient) PublishEvent(ctx context.Context, in *Workfl
 // All implementations must embed UnimplementedWorkflowManagerHostServer
 // for forward compatibility.
 type WorkflowManagerHostServer interface {
+	StartRun(context.Context, *WorkflowManagerStartRunRequest) (*ManagedWorkflowRun, error)
+	SignalRun(context.Context, *WorkflowManagerSignalRunRequest) (*ManagedWorkflowRunSignal, error)
+	SignalOrStartRun(context.Context, *WorkflowManagerSignalOrStartRunRequest) (*ManagedWorkflowRunSignal, error)
 	CreateSchedule(context.Context, *WorkflowManagerCreateScheduleRequest) (*ManagedWorkflowSchedule, error)
 	GetSchedule(context.Context, *WorkflowManagerGetScheduleRequest) (*ManagedWorkflowSchedule, error)
 	UpdateSchedule(context.Context, *WorkflowManagerUpdateScheduleRequest) (*ManagedWorkflowSchedule, error)
@@ -1145,6 +1260,15 @@ type WorkflowManagerHostServer interface {
 // pointer dereference when methods are called.
 type UnimplementedWorkflowManagerHostServer struct{}
 
+func (UnimplementedWorkflowManagerHostServer) StartRun(context.Context, *WorkflowManagerStartRunRequest) (*ManagedWorkflowRun, error) {
+	return nil, status.Error(codes.Unimplemented, "method StartRun not implemented")
+}
+func (UnimplementedWorkflowManagerHostServer) SignalRun(context.Context, *WorkflowManagerSignalRunRequest) (*ManagedWorkflowRunSignal, error) {
+	return nil, status.Error(codes.Unimplemented, "method SignalRun not implemented")
+}
+func (UnimplementedWorkflowManagerHostServer) SignalOrStartRun(context.Context, *WorkflowManagerSignalOrStartRunRequest) (*ManagedWorkflowRunSignal, error) {
+	return nil, status.Error(codes.Unimplemented, "method SignalOrStartRun not implemented")
+}
 func (UnimplementedWorkflowManagerHostServer) CreateSchedule(context.Context, *WorkflowManagerCreateScheduleRequest) (*ManagedWorkflowSchedule, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateSchedule not implemented")
 }
@@ -1203,6 +1327,60 @@ func RegisterWorkflowManagerHostServer(s grpc.ServiceRegistrar, srv WorkflowMana
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&WorkflowManagerHost_ServiceDesc, srv)
+}
+
+func _WorkflowManagerHost_StartRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowManagerStartRunRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowManagerHostServer).StartRun(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowManagerHost_StartRun_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowManagerHostServer).StartRun(ctx, req.(*WorkflowManagerStartRunRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowManagerHost_SignalRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowManagerSignalRunRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowManagerHostServer).SignalRun(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowManagerHost_SignalRun_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowManagerHostServer).SignalRun(ctx, req.(*WorkflowManagerSignalRunRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowManagerHost_SignalOrStartRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WorkflowManagerSignalOrStartRunRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowManagerHostServer).SignalOrStartRun(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowManagerHost_SignalOrStartRun_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowManagerHostServer).SignalOrStartRun(ctx, req.(*WorkflowManagerSignalOrStartRunRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _WorkflowManagerHost_CreateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -1446,6 +1624,18 @@ var WorkflowManagerHost_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "gestalt.provider.v1.WorkflowManagerHost",
 	HandlerType: (*WorkflowManagerHostServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "StartRun",
+			Handler:    _WorkflowManagerHost_StartRun_Handler,
+		},
+		{
+			MethodName: "SignalRun",
+			Handler:    _WorkflowManagerHost_SignalRun_Handler,
+		},
+		{
+			MethodName: "SignalOrStartRun",
+			Handler:    _WorkflowManagerHost_SignalOrStartRun_Handler,
+		},
 		{
 			MethodName: "CreateSchedule",
 			Handler:    _WorkflowManagerHost_CreateSchedule_Handler,
