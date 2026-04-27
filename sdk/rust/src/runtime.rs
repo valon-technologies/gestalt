@@ -117,17 +117,13 @@ pub fn maybe_write_catalog<P>(router: &Router<P>) -> Result<bool> {
     Ok(true)
 }
 
-fn maybe_write_static_catalog<P>(router: &Router<P>) -> Result<bool> {
-    maybe_write_catalog(router)
-}
-
 #[cfg(unix)]
 /// Serves an integration provider over the configured Unix socket.
 pub async fn serve_provider<P>(provider: Arc<P>, router: Router<P>) -> Result<()>
 where
     P: Provider,
 {
-    if maybe_write_static_catalog(&router)? {
+    if maybe_write_catalog(&router)? {
         return Ok(());
     }
     let server = ProviderServer::new(Arc::clone(&provider), router);
@@ -290,7 +286,7 @@ pub async fn serve_provider<P>(_provider: Arc<P>, router: Router<P>) -> Result<(
 where
     P: Provider,
 {
-    if maybe_write_static_catalog(&router)? {
+    if maybe_write_catalog(&router)? {
         return Ok(());
     }
     Err(Error::internal(
