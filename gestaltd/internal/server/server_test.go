@@ -14424,6 +14424,103 @@ func TestHostedHTTPBinding_CredentialModeNoneBypassesProviderTokenLookup(t *test
 	}
 }
 
+func TestHostedHTTPBinding_MergedStaticOperationSkipsSessionCatalogResolution(t *testing.T) {
+	t.Parallel()
+
+	hidden := false
+	invocations := make(chan string, 1)
+	sourceProvider := &stubIntegrationWithCatalog{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
+				if token != "" {
+					t.Fatalf("token = %q, want empty", token)
+				}
+				invocations <- op
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true,"ignored":"ping"}`}, nil
+			},
+		},
+		catalog: serverTestCatalog("github", []catalog.CatalogOperation{{
+			ID:        "events.handle",
+			Method:    http.MethodPost,
+			Transport: catalog.TransportPlugin,
+			Visible:   &hidden,
+		}}),
+	}
+
+	var sessionCatalogCalls atomic.Int64
+	sessionProvider := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "github",
+				ConnMode: core.ConnectionModeUser,
+			},
+		},
+		catalogForRequestFn: func(context.Context, string) (*catalog.Catalog, error) {
+			sessionCatalogCalls.Add(1)
+			return nil, fmt.Errorf("session catalog should not be resolved for static http binding operation")
+		},
+	}
+	merged, err := composite.NewMergedWithConnections("github", "GitHub", "", "",
+		composite.BoundProvider{Provider: sourceProvider},
+		composite.BoundProvider{Provider: sessionProvider},
+	)
+	if err != nil {
+		t.Fatalf("NewMergedWithConnections: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, merged)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"github": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"github_app": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:           "/event",
+						Method:         http.MethodPost,
+						CredentialMode: providermanifestv1.ConnectionModeNone,
+						Security:       "github_app",
+						Target:         "events.handle",
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/github/event", strings.NewReader(`{"zen":"Keep it logically awesome.","hook":{}}`))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http binding request: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, http.StatusOK, body)
+	}
+
+	select {
+	case op := <-invocations:
+		if op != "events.handle" {
+			t.Fatalf("operation = %q, want events.handle", op)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for http binding invocation")
+	}
+	if got := sessionCatalogCalls.Load(); got != 0 {
+		t.Fatalf("session catalog calls = %d, want 0", got)
+	}
+}
+
 func TestHostedHTTPBinding_RejectsGenericOperationRouteConflicts(t *testing.T) {
 	t.Parallel()
 
