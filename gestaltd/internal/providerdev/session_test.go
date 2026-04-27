@@ -289,6 +289,7 @@ func TestCreateSessionMatchesProviderBySource(t *testing.T) {
 	manager, err := NewManager([]Target{{
 		Name:   "workplaceHub",
 		Source: "github.com/valon-technologies/valon-tools/plugins/workplace-hub",
+		UIPath: "/workplace",
 		Spec: providerhost.StaticProviderSpec{
 			Name: "workplaceHub",
 		},
@@ -323,6 +324,21 @@ func TestCreateSessionMatchesProviderBySource(t *testing.T) {
 	}
 	if len(names) != 1 || names[0] != "workplaceHub" {
 		t.Fatalf("ResolveAttachProviderNames = %#v, want [workplaceHub]", names)
+	}
+
+	resolved, err := manager.ResolveAttachProviders(ResolveAttachRequest{Providers: []AttachProvider{{
+		Source: "github.com/valon-technologies/valon-tools/plugins/workplace-hub",
+		UI:     &AttachUI{},
+	}}})
+	if err != nil {
+		t.Fatalf("ResolveAttachProviders: %v", err)
+	}
+	if len(resolved.Providers) != 1 {
+		t.Fatalf("ResolveAttachProviders = %#v, want one provider", resolved.Providers)
+	}
+	got := resolved.Providers[0]
+	if got.Name != "workplaceHub" || got.Source != "github.com/valon-technologies/valon-tools/plugins/workplace-hub" || got.UIPath != "/workplace" || !got.UI {
+		t.Fatalf("resolved provider = %+v, want workplaceHub with source and ui path", got)
 	}
 }
 
@@ -366,6 +382,61 @@ func TestHTTPTransportCreateSessionExplicitConfigOverridesRemoteConfig(t *testin
 	}
 	if got := target.target.Config["local"]; got != true {
 		t.Fatalf("attached config local = %#v, want true", got)
+	}
+}
+
+func TestHTTPTransportResolveAttachProviders(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager([]Target{{
+		Name:   "roadmap",
+		Source: "github.com/acme/plugins/roadmap",
+		UIPath: "/roadmap",
+	}})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	ts := httptest.NewServer(providerDevTestHandler(t, manager, p))
+	t.Cleanup(ts.Close)
+
+	client := Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
+	resp, err := client.ResolveAttachProviders(context.Background(), ResolveAttachRequest{Providers: []AttachProvider{{
+		Source: "github.com/acme/plugins/roadmap",
+		UI:     &AttachUI{},
+	}}})
+	if err != nil {
+		t.Fatalf("ResolveAttachProviders: %v", err)
+	}
+	if len(resp.Providers) != 1 {
+		t.Fatalf("resolved providers = %#v, want one", resp.Providers)
+	}
+	if got := resp.Providers[0]; got.Name != "roadmap" || got.Source != "github.com/acme/plugins/roadmap" || got.UIPath != "/roadmap" || !got.UI {
+		t.Fatalf("resolved provider = %+v, want roadmap source/ui metadata", got)
+	}
+}
+
+func TestHTTPTransportResolveAttachProvidersReportsMissingPreflightEndpoint(t *testing.T) {
+	t.Parallel()
+
+	ts := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(ts.Close)
+
+	client := Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
+	_, err := client.ResolveAttachProviders(context.Background(), ResolveAttachRequest{Providers: []AttachProvider{{Name: "roadmap"}}})
+	if err == nil {
+		t.Fatal("expected missing preflight endpoint error")
+	}
+	errText := err.Error()
+	for _, want := range []string{
+		"provider dev preflight endpoint was not found",
+		PathResolve,
+		"remote gestaltd may be too old",
+	} {
+		if !strings.Contains(errText, want) {
+			t.Fatalf("error missing %q:\n%s", want, errText)
+		}
 	}
 }
 
@@ -499,6 +570,23 @@ func TestSessionCloseReturnsSameErrorToConcurrentCallers(t *testing.T) {
 func providerDevTestHandler(t *testing.T, manager *Manager, p *principal.Principal) http.Handler {
 	t.Helper()
 	mux := http.NewServeMux()
+	mux.HandleFunc(PathResolve, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		var req ResolveAttachRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		resp, err := manager.ResolveAttachProviders(req)
+		if err != nil {
+			writeProviderDevTestError(w, err)
+			return
+		}
+		writeProviderDevTestJSON(w, http.StatusOK, resp)
+	})
 	mux.HandleFunc(PathSessions, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.NotFound(w, r)

@@ -82,6 +82,12 @@ matches `--remote`. Stored CLI tokens are not sent to a different remote URL,
 including a different path prefix on the same host; if the stored credential
 points elsewhere, the command fails with a remediation message instead of
 prompting.
+Before creating the dev session, the command runs a remote preflight check. The
+preflight verifies that the remote `gestaltd` exposes provider-dev endpoints,
+resolves each requested local source to the configured remote plugin name, and
+reports whether locally bundled UI will serve through a mounted remote UI path.
+If the preflight endpoint is missing, the remote server is either too old for
+remote provider dev or provider-dev attach targets are not enabled.
 With `--remote URL --path PATH` and no `--config`, the local command sends the
 manifest `source` and the local implementation only; the remote server chooses
 the configured plugin with the same manifest `source` and preserves that

@@ -172,6 +172,13 @@ type storedGestaltCLICredential struct {
 	APIToken string `json:"api_token"`
 }
 
+type providerRemoteAuth struct {
+	Token          string
+	Source         string
+	Server         string
+	CredentialPath string
+}
+
 func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	configPaths, cleanup, err := prepareProviderRemoteConfigPaths(opts)
 	if err != nil {
@@ -192,7 +199,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		return errors.New("provider dev --remote requires at least one source-backed plugin in --config or --path")
 	}
 
-	token, err := resolveProviderRemoteToken(opts)
+	auth, err := resolveProviderRemoteAuth(opts)
 	if err != nil {
 		return err
 	}
@@ -202,7 +209,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 
 	client := providerdev.Client{
 		BaseURL: opts.Remote,
-		Token:   token,
+		Token:   auth.Token,
 	}
 	requestedProviders := make([]providerdev.AttachProvider, 0, len(targets))
 	localUIHandlersByTarget := map[int]http.Handler{}
@@ -240,6 +247,20 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		}
 		requestedProviders = append(requestedProviders, requested)
 	}
+	preflight, err := client.ResolveAttachProviders(ctx, providerdev.ResolveAttachRequest{Providers: requestedProviders})
+	if err != nil {
+		return fmt.Errorf("provider dev remote preflight failed: %w", err)
+	}
+	if err := applyProviderRemotePreflight(targets, preflight, opts); err != nil {
+		return err
+	}
+	slog.Info("provider dev remote preflight ok",
+		append(providerRemoteAuthLogAttrs(auth),
+			"remote", strings.TrimRight(opts.Remote, "/"),
+			"providers", providerRemoteResolvedProviderSummaries(preflight.Providers),
+			"local_ui_providers", providerRemotePreflightUIProviderNames(preflight.Providers),
+		)...,
+	)
 	session, err := client.CreateSession(ctx, providerdev.CreateSessionRequest{Providers: requestedProviders})
 	if err != nil {
 		return err
@@ -297,39 +318,52 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	return client.RunDispatcher(ctx, session.ID, providerClients, providerdev.WithUIHandlers(localUIHandlers))
 }
 
-func resolveProviderRemoteToken(opts providerLocalCommandOptions) (string, error) {
+func resolveProviderRemoteAuth(opts providerLocalCommandOptions) (*providerRemoteAuth, error) {
 	remoteBaseURL, err := providerRemoteBaseURL(opts.Remote)
 	if err != nil {
-		return "", fmt.Errorf("invalid --remote %q: %w", opts.Remote, err)
+		return nil, fmt.Errorf("invalid --remote %q: %w", opts.Remote, err)
 	}
 	if token := strings.TrimSpace(opts.RemoteToken); token != "" {
-		return token, nil
+		return &providerRemoteAuth{
+			Token:  token,
+			Source: "remote-token",
+			Server: remoteBaseURL,
+		}, nil
 	}
 	if token := strings.TrimSpace(os.Getenv(gestaltAPIKeyEnv)); token != "" {
-		return token, nil
+		return &providerRemoteAuth{
+			Token:  token,
+			Source: "env",
+			Server: remoteBaseURL,
+		}, nil
 	}
 
 	credential, credentialPath, ok, err := loadStoredGestaltCLICredential()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if !ok {
-		return "", providerRemoteAuthMissingError(remoteBaseURL)
+		return nil, providerRemoteAuthMissingError(remoteBaseURL)
 	}
 	if strings.TrimSpace(credential.APIURL) == "" {
-		return "", providerRemoteStoredCredentialUnscopedError(remoteBaseURL, credentialPath)
+		return nil, providerRemoteStoredCredentialUnscopedError(remoteBaseURL, credentialPath)
 	}
 	storedBaseURL, err := providerRemoteBaseURL(credential.APIURL)
 	if err != nil {
-		return "", fmt.Errorf("stored Gestalt CLI credential has invalid api_url in %s: %w", credentialPath, err)
+		return nil, fmt.Errorf("stored Gestalt CLI credential has invalid api_url in %s: %w", credentialPath, err)
 	}
 	if storedBaseURL != remoteBaseURL {
-		return "", providerRemoteStoredCredentialMismatchError(remoteBaseURL, storedBaseURL, credentialPath)
+		return nil, providerRemoteStoredCredentialMismatchError(remoteBaseURL, storedBaseURL, credentialPath)
 	}
 	if token := strings.TrimSpace(credential.APIToken); token != "" {
-		return token, nil
+		return &providerRemoteAuth{
+			Token:          token,
+			Source:         "stored-cli",
+			Server:         storedBaseURL,
+			CredentialPath: credentialPath,
+		}, nil
 	}
-	return "", fmt.Errorf("stored Gestalt CLI credential in %s is missing api_token; run 'gestalt auth login --url %s' or pass --remote-token", credentialPath, remoteBaseURL)
+	return nil, fmt.Errorf("stored Gestalt CLI credential in %s is missing api_token; run 'gestalt auth login --url %s' or pass --remote-token", credentialPath, remoteBaseURL)
 }
 
 func loadStoredGestaltCLICredential() (storedGestaltCLICredential, string, bool, error) {
@@ -454,6 +488,69 @@ or pass an explicit token:
   gestaltd provider dev --remote %s --remote-token <token> --path ./plugin
 
 You can also set %s for this command`, remoteOrigin, storedOrigin, credentialPath, remoteOrigin, remoteOrigin, gestaltAPIKeyEnv)
+}
+
+func providerRemoteAuthLogAttrs(auth *providerRemoteAuth) []any {
+	if auth == nil {
+		return nil
+	}
+	attrs := []any{
+		"auth_source", auth.Source,
+		"auth_server", auth.Server,
+	}
+	if auth.CredentialPath != "" {
+		attrs = append(attrs, "credential_file", auth.CredentialPath)
+	}
+	return attrs
+}
+
+func applyProviderRemotePreflight(targets []providerRemoteTarget, preflight *providerdev.ResolveAttachResponse, opts providerLocalCommandOptions) error {
+	if preflight == nil {
+		return errors.New("provider dev remote preflight returned empty response")
+	}
+	if len(preflight.Providers) != len(targets) {
+		return fmt.Errorf("provider dev remote preflight resolved %d providers for %d local targets", len(preflight.Providers), len(targets))
+	}
+	if opts.Path != "" && len(opts.ConfigPaths) == 0 && opts.Name == "" && len(targets) == 1 {
+		targets[0].Name = preflight.Providers[0].Name
+	}
+	return nil
+}
+
+func providerRemoteResolvedProviderSummaries(providers []providerdev.ResolvedAttachProvider) []string {
+	if len(providers) == 0 {
+		return nil
+	}
+	summaries := make([]string, 0, len(providers))
+	for _, provider := range providers {
+		parts := []string{provider.Name}
+		if source := strings.TrimSpace(provider.Source); source != "" {
+			parts = append(parts, "source="+source)
+		}
+		if provider.UI {
+			if uiPath := strings.TrimSpace(provider.UIPath); uiPath != "" {
+				parts = append(parts, "ui="+uiPath)
+			} else {
+				parts = append(parts, "ui=<not-mounted>")
+			}
+		}
+		summaries = append(summaries, strings.Join(parts, " "))
+	}
+	return summaries
+}
+
+func providerRemotePreflightUIProviderNames(providers []providerdev.ResolvedAttachProvider) []string {
+	names := make([]string, 0, len(providers))
+	for _, provider := range providers {
+		if provider.UI {
+			names = append(names, provider.Name)
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	slices.Sort(names)
+	return names
 }
 
 func providerRemoteTargetNames(targets []providerRemoteTarget) []string {
@@ -1608,6 +1705,7 @@ func printProviderDevUsage(w io.Writer) {
 	writeUsageLine(w, "With --remote, source-backed local plugins attach to an authenticated remote gestaltd session")
 	writeUsageLine(w, "while the remote config keeps its normal auth, authorization, connections, host services,")
 	writeUsageLine(w, "and mounted plugin UI routes.")
+	writeUsageLine(w, "Remote mode preflights provider matches and mounted UI paths before creating a session.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --path     Provider manifest path or directory (default: current working directory)")

@@ -102,48 +102,48 @@ func TestProviderRemoteConfigPathSynthesizesSourcePlugin(t *testing.T) {
 	}
 }
 
-func TestResolveProviderRemoteTokenPrecedence(t *testing.T) {
+func TestResolveProviderRemoteAuthPrecedence(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	writeStoredGestaltCLICredentialForTest(t, configHome, "https://stored.example.com", "stored-token")
 
 	t.Setenv(gestaltAPIKeyEnv, "env-token")
-	token, err := resolveProviderRemoteToken(providerLocalCommandOptions{
+	auth, err := resolveProviderRemoteAuth(providerLocalCommandOptions{
 		Remote:      "https://remote.example.com",
 		RemoteToken: "flag-token",
 	})
 	if err != nil {
-		t.Fatalf("resolveProviderRemoteToken with explicit token: %v", err)
+		t.Fatalf("resolveProviderRemoteAuth with explicit token: %v", err)
 	}
-	if token != "flag-token" {
-		t.Fatalf("token = %q, want explicit flag token", token)
+	if auth.Token != "flag-token" || auth.Source != "remote-token" || auth.Server != "https://remote.example.com" {
+		t.Fatalf("auth = %+v, want explicit flag token auth", auth)
 	}
 
-	token, err = resolveProviderRemoteToken(providerLocalCommandOptions{
+	auth, err = resolveProviderRemoteAuth(providerLocalCommandOptions{
 		Remote: "https://remote.example.com",
 	})
 	if err != nil {
-		t.Fatalf("resolveProviderRemoteToken with env token: %v", err)
+		t.Fatalf("resolveProviderRemoteAuth with env token: %v", err)
 	}
-	if token != "env-token" {
-		t.Fatalf("token = %q, want env token", token)
+	if auth.Token != "env-token" || auth.Source != "env" || auth.Server != "https://remote.example.com" {
+		t.Fatalf("auth = %+v, want env token auth", auth)
 	}
 }
 
-func TestResolveProviderRemoteTokenUsesMatchingStoredCLICredential(t *testing.T) {
+func TestResolveProviderRemoteAuthUsesMatchingStoredCLICredential(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv(gestaltAPIKeyEnv, "")
 	writeStoredGestaltCLICredentialForTest(t, configHome, "https://Valon.Tools:443/team-a/", "stored-token")
 
-	token, err := resolveProviderRemoteToken(providerLocalCommandOptions{
+	auth, err := resolveProviderRemoteAuth(providerLocalCommandOptions{
 		Remote: "https://valon.tools/team-a",
 	})
 	if err != nil {
-		t.Fatalf("resolveProviderRemoteToken: %v", err)
+		t.Fatalf("resolveProviderRemoteAuth: %v", err)
 	}
-	if token != "stored-token" {
-		t.Fatalf("token = %q, want stored token", token)
+	if auth.Token != "stored-token" || auth.Source != "stored-cli" || auth.Server != "https://valon.tools/team-a" || auth.CredentialPath == "" {
+		t.Fatalf("auth = %+v, want stored token auth", auth)
 	}
 }
 
@@ -153,7 +153,7 @@ func TestResolveProviderRemoteTokenRejectsDifferentBasePaths(t *testing.T) {
 	t.Setenv(gestaltAPIKeyEnv, "")
 	writeStoredGestaltCLICredentialForTest(t, configHome, "https://valon.tools/team-a", "stored-token")
 
-	_, err := resolveProviderRemoteToken(providerLocalCommandOptions{
+	_, err := resolveProviderRemoteAuth(providerLocalCommandOptions{
 		Remote: "https://valon.tools/team-b",
 	})
 	if err == nil {
@@ -177,7 +177,7 @@ func TestResolveProviderRemoteTokenRejectsMismatchedStoredCLICredential(t *testi
 	t.Setenv(gestaltAPIKeyEnv, "")
 	writeStoredGestaltCLICredentialForTest(t, configHome, "https://valon.tools", "stored-token")
 
-	_, err := resolveProviderRemoteToken(providerLocalCommandOptions{
+	_, err := resolveProviderRemoteAuth(providerLocalCommandOptions{
 		Remote: "https://staging.valon.tools",
 	})
 	if err == nil {
@@ -206,7 +206,7 @@ func TestResolveProviderRemoteTokenRejectsUnscopedStoredCLICredential(t *testing
 	t.Setenv(gestaltAPIKeyEnv, "")
 	writeStoredGestaltCLICredentialForTest(t, configHome, "", "legacy-token")
 
-	_, err := resolveProviderRemoteToken(providerLocalCommandOptions{
+	_, err := resolveProviderRemoteAuth(providerLocalCommandOptions{
 		Remote: "https://valon.tools",
 	})
 	if err == nil {
@@ -229,7 +229,7 @@ func TestResolveProviderRemoteTokenRequiresAuthWhenNoCredentialExists(t *testing
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	t.Setenv(gestaltAPIKeyEnv, "")
 
-	_, err := resolveProviderRemoteToken(providerLocalCommandOptions{
+	_, err := resolveProviderRemoteAuth(providerLocalCommandOptions{
 		Remote: "https://valon.tools",
 	})
 	if err == nil {

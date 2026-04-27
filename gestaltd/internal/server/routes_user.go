@@ -60,6 +60,7 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 		r.Post("/auth/start-oauth", s.startIntegrationOAuth)
 		r.Post("/auth/connect-manual", s.connectManual)
 
+		r.Post("/provider-dev/resolve", s.resolveProviderDevSession)
 		r.Post("/provider-dev/sessions", s.createProviderDevSession)
 		r.Get("/provider-dev/sessions/{sessionID}/poll", s.pollProviderDevSession)
 		r.Post("/provider-dev/sessions/{sessionID}/calls/{callID}", s.completeProviderDevCall)

@@ -23,7 +23,7 @@ func buildProviderDevManager(cfg *config.Config, providers *registry.ProviderMap
 
 	targets := make([]providerdev.Target, 0, len(cfg.Plugins))
 	for name, entry := range cfg.Plugins {
-		result := deriveProviderDevTarget(name, entry, providers, deps)
+		result := deriveProviderDevTarget(cfg, name, entry, providers, deps)
 		switch result.state {
 		case providerDevTargetAttachable:
 			targets = append(targets, result.target)
@@ -58,7 +58,7 @@ type providerDevTargetResult struct {
 	err    error
 }
 
-func deriveProviderDevTarget(name string, entry *config.ProviderEntry, providers *registry.ProviderMap[core.Provider], deps Deps) providerDevTargetResult {
+func deriveProviderDevTarget(cfg *config.Config, name string, entry *config.ProviderEntry, providers *registry.ProviderMap[core.Provider], deps Deps) providerDevTargetResult {
 	if entry == nil {
 		return providerDevTargetResult{state: providerDevTargetUnsupported, reason: "missing config entry"}
 	}
@@ -99,6 +99,7 @@ func deriveProviderDevTarget(name string, entry *config.ProviderEntry, providers
 		target: providerdev.Target{
 			Name:   targetName,
 			Source: strings.TrimSpace(entry.ResolvedManifest.Source),
+			UIPath: providerDevTargetUIPath(name, entry, cfg),
 			Spec:   providerDevStaticSpecFromProvider(targetName, entry, provider),
 			Config: pluginConfig,
 			RuntimeEnv: func(sessionID string) (providerdev.RuntimeEnv, error) {
@@ -106,6 +107,24 @@ func deriveProviderDevTarget(name string, entry *config.ProviderEntry, providers
 			},
 		},
 	}
+}
+
+func providerDevTargetUIPath(name string, entry *config.ProviderEntry, cfg *config.Config) string {
+	if entry == nil {
+		return ""
+	}
+	uiName := strings.TrimSpace(entry.UI)
+	if uiName == "" {
+		uiName = name
+	}
+	if cfg == nil || cfg.Providers.UI == nil || cfg.Providers.UI[uiName] == nil {
+		return ""
+	}
+	uiEntry := cfg.Providers.UI[uiName]
+	if strings.TrimSpace(uiEntry.OwnerPlugin) != name {
+		return ""
+	}
+	return strings.TrimSpace(uiEntry.Path)
 }
 
 func providerDevStaticSpecFromProvider(name string, entry *config.ProviderEntry, provider core.Provider) providerhost.StaticProviderSpec {

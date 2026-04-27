@@ -36,6 +36,28 @@ func (s *Server) createProviderDevSession(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusCreated, resp)
 }
 
+func (s *Server) resolveProviderDevSession(w http.ResponseWriter, r *http.Request) {
+	if s.providerDevSessions == nil {
+		writeError(w, http.StatusNotFound, "provider dev is not configured")
+		return
+	}
+	var req providerdev.ResolveAttachRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid provider dev resolve request")
+		return
+	}
+	p := PrincipalFromContext(r.Context())
+	if err := s.authorizeProviderDevSessionRequest(w, r, p, req); err != nil {
+		return
+	}
+	resp, err := s.providerDevSessions.ResolveAttachProviders(req)
+	if err != nil {
+		writeProviderDevError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (s *Server) authorizeProviderDevSessionRequest(w http.ResponseWriter, r *http.Request, p *principal.Principal, req providerdev.CreateSessionRequest) error {
 	if err := requireUserCaller(w, p); err != nil {
 		return err
