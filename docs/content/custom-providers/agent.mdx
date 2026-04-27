@@ -56,6 +56,20 @@ Providers can call back into Gestalt through the host service:
 These callbacks work the same way when the provider runs directly on the
 `gestaltd` host or inside a hosted runtime.
 
+## Observability
+
+Provider authors do not need to emit the baseline `gestaltd` agent metrics.
+`gestaltd` wraps the configured provider interface and records
+`gestaltd.agent.provider.operation.*` for every provider method. The public
+agent facade records `gestaltd.agent.operation.*`, tool resolution records
+`gestaltd.agent.tool.resolve.*`, and turn authorization metadata writes record
+`gestaltd.agent.run_metadata.write.*`.
+
+When OTLP tracing is enabled, the `context.Context` passed into provider
+methods carries the active trace. Preserve that context when calling back into
+`AgentHost.ExecuteTool` or starting provider-owned work that should remain part
+of the same trace tree.
+
 ## Canonical objects
 
 Provider methods exchange canonical objects rather than vendor-native payloads:

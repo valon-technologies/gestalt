@@ -10,11 +10,14 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 )
 
 type stubProvider struct {
@@ -111,7 +114,7 @@ func (s *stubBoundTokenResolver) ResolveToken(ctx context.Context, _ *principal.
 	return ctx, s.token, nil
 }
 
-func (s *stubBoundTokenResolver) ResolveEffectiveCredentialBinding(_ *principal.Principal, _ string, _ string, _ string) (invocation.CredentialBindingResolution, error) {
+func (s *stubBoundTokenResolver) ResolveEffectiveCredentialBinding(_ context.Context, _ *principal.Principal, _ string, _ string, _ string) (invocation.CredentialBindingResolution, error) {
 	return s.boundCredential, nil
 }
 
@@ -308,6 +311,85 @@ func TestResolveCatalog_ModeNoneBoundPrincipalUsesEffectiveBindingSelectors(t *t
 	if len(cat.Operations) != 1 || cat.Operations[0].ID != "session_only" {
 		t.Fatalf("catalog operations = %+v, want session_only", cat.Operations)
 	}
+}
+
+func TestResolveCatalogAndOperationMetrics(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
+	prov := &stubDynamicSessionProvider{
+		stubCatalogProvider: stubCatalogProvider{
+			stubProvider: stubProvider{
+				name:     "metric-api",
+				connMode: core.ConnectionModeUser,
+			},
+			cat: &catalog.Catalog{
+				Name: "metric-api",
+				Operations: []catalog.CatalogOperation{
+					{ID: "static_op", Method: http.MethodGet},
+				},
+			},
+		},
+		sessionCatFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != "bound-token" {
+				t.Fatalf("token = %q, want %q", token, "bound-token")
+			}
+			return &catalog.Catalog{
+				Name: "metric-api",
+				Operations: []catalog.CatalogOperation{
+					{ID: "session_op", Method: http.MethodPost},
+				},
+			}, nil
+		},
+	}
+	services := coretesting.NewStubServices(t)
+	if err := services.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
+		SubjectID:   principal.UserSubjectID("metrics-user"),
+		Integration: "metric-api",
+		Connection:  "default",
+		Instance:    "default",
+		AccessToken: "bound-token",
+	}); err != nil {
+		t.Fatalf("PutCredential: %v", err)
+	}
+	resolver := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), services.Users, services.ExternalCredentials)
+	p := &principal.Principal{
+		Kind:      principal.KindUser,
+		UserID:    "metrics-user",
+		SubjectID: principal.UserSubjectID("metrics-user"),
+	}
+
+	if _, err := invocation.ResolveCatalog(ctx, prov, "metric-api", resolver, p, "default", "default"); err != nil {
+		t.Fatalf("ResolveCatalog: %v", err)
+	}
+	if _, _, _, err := invocation.ResolveOperation(ctx, prov, "metric-api", resolver, p, "static_op", nil, ""); err != nil {
+		t.Fatalf("ResolveOperation: %v", err)
+	}
+	if _, _, _, err := invocation.ResolveOperation(ctx, prov, "metric-api", resolver, p, "raw-user-op", nil, ""); !errors.Is(err, invocation.ErrOperationNotFound) {
+		t.Fatalf("ResolveOperation(raw-user-op) error = %v, want ErrOperationNotFound", err)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.credential.binding.resolve.duration", map[string]string{
+		"gestalt.provider":                "metric-api",
+		"gestalt.credential.binding_mode": "effective",
+	})
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.credential.token.resolve.duration", map[string]string{
+		"gestalt.provider": "metric-api",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.catalog.operation.resolve.count", 1, map[string]string{
+		"gestalt.provider":  "metric-api",
+		"gestalt.operation": "static_op",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.catalog.operation.resolve.count", 1, map[string]string{
+		"gestalt.provider":  "metric-api",
+		"gestalt.operation": "unknown",
+	})
+	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.catalog.operation.resolve.count", map[string]string{
+		"gestalt.provider":  "metric-api",
+		"gestalt.operation": "raw-user-op",
+	})
 }
 
 func TestResolveCatalog_SameIDCollision_SessionWins(t *testing.T) {

@@ -241,7 +241,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
 	conn := ConnectionFromContext(ctx)
-	boundCredential, err := b.ResolveEffectiveCredentialBinding(p, providerName, conn, instance)
+	boundCredential, err := b.ResolveEffectiveCredentialBinding(ctx, p, providerName, conn, instance)
 	if err != nil {
 		return fail(err)
 	}
@@ -427,7 +427,7 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	setSubjectAttribute(p)
 
 	conn := ConnectionFromContext(ctx)
-	boundCredential, err := b.ResolveEffectiveCredentialBinding(p, providerName, conn, instance)
+	boundCredential, err := b.ResolveEffectiveCredentialBinding(ctx, p, providerName, conn, instance)
 	if err != nil {
 		return fail(err)
 	}
@@ -500,12 +500,12 @@ func (b *Broker) MCPConnection(providerName string) string {
 	return b.mcpConnection(providerName)
 }
 
-func (b *Broker) ResolveEffectiveCredentialBinding(p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error) {
-	return ResolveEffectiveCredentialBinding(b.authorizer, p, providerName, connection, instance)
+func (b *Broker) ResolveEffectiveCredentialBinding(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error) {
+	return ResolveEffectiveCredentialBinding(ctx, b.authorizer, p, providerName, connection, instance)
 }
 
-func (b *Broker) ResolveRequestedCredentialBinding(p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error) {
-	return ResolveRequestedCredentialBinding(b.authorizer, p, providerName, connection, instance)
+func (b *Broker) ResolveRequestedCredentialBinding(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error) {
+	return ResolveRequestedCredentialBinding(ctx, b.authorizer, p, providerName, connection, instance)
 }
 
 func toolResultToOperationResult(result *mcpgo.CallToolResult) (*core.OperationResult, error) {
@@ -572,7 +572,7 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 		}
 		return ctx, "", fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
 	}
-	boundCredential, err := b.ResolveRequestedCredentialBinding(p, providerName, connection, instance)
+	boundCredential, err := b.ResolveRequestedCredentialBinding(ctx, p, providerName, connection, instance)
 	if err != nil {
 		return ctx, "", err
 	}
@@ -607,7 +607,7 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	}
 	if !boundCredential.HasBinding {
 		var err error
-		boundCredential, err = b.ResolveEffectiveCredentialBinding(p, providerName, connection, instance)
+		boundCredential, err = b.ResolveEffectiveCredentialBinding(ctx, p, providerName, connection, instance)
 		if err != nil {
 			return ctx, "", err
 		}

@@ -114,7 +114,7 @@ func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov 
 		if cfg.TokenResolver != nil {
 			p := principal.FromContext(ctx)
 			if p != nil {
-				connection, instance, boundCredential, err := sessionTokenSelectors(cfg, p, provName, instanceOverride)
+				connection, instance, boundCredential, err := sessionTokenSelectors(ctx, cfg, p, provName, instanceOverride)
 				if err != nil {
 					return ctx, "", connection, err
 				}
@@ -134,7 +134,7 @@ func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov 
 	if p == nil {
 		return ctx, "", "", fmt.Errorf("not authenticated")
 	}
-	connection, instance, boundCredential, err := sessionTokenSelectors(cfg, p, provName, instanceOverride)
+	connection, instance, boundCredential, err := sessionTokenSelectors(ctx, cfg, p, provName, instanceOverride)
 	if err != nil {
 		return ctx, "", connection, err
 	}
@@ -392,10 +392,10 @@ func internalSessionToolHandler(context.Context, mcpgo.CallToolRequest) (*mcpgo.
 	return mcpgo.NewToolResultError("tool not found"), nil
 }
 
-func sessionTokenSelectors(cfg Config, p *principal.Principal, provName, instanceOverride string) (string, string, invocation.CredentialBindingResolution, error) {
+func sessionTokenSelectors(ctx context.Context, cfg Config, p *principal.Principal, provName, instanceOverride string) (string, string, invocation.CredentialBindingResolution, error) {
 	connection := cfg.MCPConnection[provName]
 	instance := normalizedSessionCatalogInstance(instanceOverride)
-	boundCredential, err := invocation.ResolveEffectiveCredentialBinding(cfg.Authorizer, p, provName, connection, instance)
+	boundCredential, err := invocation.ResolveEffectiveCredentialBinding(ctx, cfg.Authorizer, p, provName, connection, instance)
 	if err != nil {
 		return connection, instance, invocation.CredentialBindingResolution{}, err
 	}
@@ -443,10 +443,10 @@ func normalizedSessionCatalogInstance(value any) string {
 	return strings.TrimSpace(instance)
 }
 
-func workloadInstanceOverrideRequested(authz authorization.RuntimeAuthorizer, p *principal.Principal, provider, instance string) bool {
+func workloadInstanceOverrideRequested(ctx context.Context, authz authorization.RuntimeAuthorizer, p *principal.Principal, provider, instance string) bool {
 	if authz == nil || p == nil || strings.TrimSpace(instance) == "" {
 		return false
 	}
-	_, err := invocation.ResolveRequestedCredentialBinding(authz, p, provider, "", instance)
+	_, err := invocation.ResolveRequestedCredentialBinding(ctx, authz, p, provider, "", instance)
 	return err != nil
 }

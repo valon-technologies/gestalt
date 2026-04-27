@@ -5,12 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
+	"github.com/valon-technologies/gestalt/server/internal/observability"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type TokenResolver interface {
@@ -82,8 +86,28 @@ func ResolveCatalogForTargetsWithMetadata(ctx context.Context, prov core.Provide
 	}, firstErr
 }
 
-func ResolveOperation(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, operation string, sessionConnections []string, instance string) (catalog.CatalogOperation, string, string, error) {
+func ResolveOperation(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, operation string, sessionConnections []string, instance string) (op catalog.CatalogOperation, transport string, resolvedConnection string, err error) {
+	startedAt := time.Now()
+	baseAttrs := []attribute.KeyValue{
+		attribute.String("gestalt.provider", provName),
+	}
+	ctx, span := observability.StartSpan(ctx, "catalog.operation.resolve", baseAttrs...)
+	catalogSource := ""
+	defer func() {
+		metricOperation := catalogOperationMetricValue(op.ID)
+		metricAttrs := append([]attribute.KeyValue{}, baseAttrs...)
+		metricAttrs = append(metricAttrs, attribute.String("gestalt.operation", metricOperation))
+		spanAttrs := append([]attribute.KeyValue{}, metricAttrs...)
+		if catalogSource != "" {
+			spanAttrs = append(spanAttrs, observability.AttrCatalogSource.String(catalogSource))
+		}
+		observability.SetSpanAttributes(ctx, spanAttrs...)
+		observability.EndSpan(span, err)
+		observability.RecordCatalogOperationResolve(ctx, startedAt, err != nil, metricAttrs...)
+	}()
+
 	if op, ok := CatalogOperationFromContext(ctx, provName, operation); ok {
+		catalogSource = "context"
 		return op, OperationTransport(op), "", nil
 	}
 
@@ -91,12 +115,14 @@ func ResolveOperation(ctx context.Context, prov core.Provider, provName string, 
 	if staticOK {
 		if resolver, ok := prov.(requestStaticOperationResolver); ok {
 			if op, ok := resolver.ResolveStaticOperationForRequest(ctx, operation); ok {
+				catalogSource = "static"
 				return op, OperationTransport(op), "", nil
 			}
 		}
 	}
 	if !core.SupportsSessionCatalog(prov) {
 		if staticOK {
+			catalogSource = "static"
 			return staticOp, OperationTransport(staticOp), "", nil
 		}
 		return catalog.CatalogOperation{}, "", "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, provName)
@@ -105,17 +131,27 @@ func ResolveOperation(ctx context.Context, prov core.Provider, provName string, 
 	sessionOp, sessionConnection, sessionFound, err := resolveSessionOperation(ctx, prov, provName, resolver, p, operation, sessionConnections, instance)
 	if err != nil {
 		if staticOK && sessionCatalogUnsupported(err) {
+			catalogSource = "static"
 			return staticOp, OperationTransport(staticOp), "", nil
 		}
 		return catalog.CatalogOperation{}, "", "", err
 	}
 	if sessionFound {
+		catalogSource = "session"
 		return sessionOp, OperationTransport(sessionOp), sessionConnection, nil
 	}
 	if instance == "" && staticOK {
+		catalogSource = "static"
 		return staticOp, OperationTransport(staticOp), "", nil
 	}
 	return catalog.CatalogOperation{}, "", "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, provName)
+}
+
+func catalogOperationMetricValue(operation string) string {
+	if operation = strings.TrimSpace(operation); operation != "" {
+		return operation
+	}
+	return "unknown"
 }
 
 func sessionCatalogUnsupported(err error) bool {
@@ -146,7 +182,7 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 	}
 	boundCredential := CredentialBindingResolution{}
 	if bindingResolver, ok := resolver.(EffectiveCredentialBindingResolver); ok && p != nil {
-		resolvedBinding, err := bindingResolver.ResolveEffectiveCredentialBinding(p, provName, connection, instance)
+		resolvedBinding, err := bindingResolver.ResolveEffectiveCredentialBinding(ctx, p, provName, connection, instance)
 		if err != nil {
 			return nil, true, err
 		}

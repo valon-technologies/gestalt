@@ -27,6 +27,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
+	"github.com/valon-technologies/gestalt/server/internal/observability"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
@@ -1367,7 +1368,7 @@ func buildNamedExternalCredentialsProvider(ctx context.Context, name string, ent
 	if coredata.ExternalCredentialProviderMissing(provider) {
 		return nil, fmt.Errorf("bootstrap: external credentials provider %q returned nil", logicalName)
 	}
-	return provider, nil
+	return observability.InstrumentExternalCredentialProvider(logicalName, provider), nil
 }
 
 func defaultExternalCredentialsProviderEntry() *config.ProviderEntry {
@@ -1536,7 +1537,7 @@ func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factor
 }
 
 func buildAuthorization(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.AuthorizationProvider, error) {
-	_, authzEntry, err := cfg.SelectedAuthorizationProvider()
+	authzName, authzEntry, err := cfg.SelectedAuthorizationProvider()
 	if err != nil {
 		return nil, err
 	}
@@ -1559,7 +1560,7 @@ func buildAuthorization(cfg *config.Config, factories *FactoryRegistry, deps Dep
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
 	}
-	return provider, nil
+	return observability.InstrumentAuthorizationProvider(authzName, provider), nil
 }
 
 func buildIndexedDB(entry *config.ProviderEntry, factories *FactoryRegistry) (indexeddb.IndexedDB, error) {
@@ -1772,6 +1773,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 	if providerErr != nil {
 		return nil, fmt.Errorf("agent provider: %w", providerErr)
 	}
+	provider = observability.InstrumentAgentProvider(name, provider)
 	tracked := &agentProviderWithTracking{
 		delegate:     provider,
 		providerName: name,

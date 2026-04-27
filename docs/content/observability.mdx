@@ -101,8 +101,9 @@ collectors can still split the stream by filtering on `log.type=audit`.
 
 The built-in metric surface covers Prometheus exporter metadata, inbound HTTP
 requests handled by `gestaltd`, broker operation execution, connection authentication
-flows, platform authentication actions, credentialed HTTP catalog discovery, IndexedDB operations, and outbound gRPC calls
-from `gestaltd` to provider processes.
+flows, platform authentication actions, agent lifecycle operations, authorization
+provider calls, credential resolution, catalog resolution, IndexedDB operations,
+and outbound gRPC calls from `gestaltd` to provider processes.
 
 Gestalt documents metric names using their OpenTelemetry instrument names. The
 Prometheus scrape endpoint translates those names to Prometheus-style metric
@@ -250,6 +251,78 @@ key), `gestalt.action` (currently `list_operations`), and
 credentialed session-catalog path fails, even if `gestaltd` falls back to a
 static catalog and still serves a successful HTTP response.
 
+### Agent Metrics
+
+Agent metrics are recorded at the `gestaltd` agent facade and at the configured
+agent provider boundary. They use the same triplet shape as other custom
+Gestalt metrics: `<family>.count`, `<family>.error_count`, and
+`<family>.duration`.
+
+| OpenTelemetry family | Prometheus families | Meaning |
+| --- | --- | --- |
+| `gestaltd.agent.operation.*` | `gestaltd_agent_operation_count_total`, `gestaltd_agent_operation_error_count_total`, `gestaltd_agent_operation_duration_seconds` | Public agent manager operations such as `create_session`, `create_turn`, `list_turn_events`, and `resolve_interaction` |
+| `gestaltd.agent.provider.operation.*` | `gestaltd_agent_provider_operation_count_total`, `gestaltd_agent_provider_operation_error_count_total`, `gestaltd_agent_provider_operation_duration_seconds` | Calls into the selected provider-owned agent system of record |
+| `gestaltd.agent.tool.resolve.*` | `gestaltd_agent_tool_resolve_count_total`, `gestaltd_agent_tool_resolve_error_count_total`, `gestaltd_agent_tool_resolve_duration_seconds` | Tool reference resolution before a turn is sent to a provider |
+| `gestaltd.agent.run_metadata.write.*` | `gestaltd_agent_run_metadata_write_count_total`, `gestaltd_agent_run_metadata_write_error_count_total`, `gestaltd_agent_run_metadata_write_duration_seconds` | Platform writes that map provider-owned turns back to caller authorization metadata |
+
+These metric families use low-cardinality attributes:
+
+- `gestalt.agent.operation` identifies the agent operation or provider method.
+- `gestalt.agent.provider` identifies the configured agent provider on
+  provider-bound and run-metadata metric families.
+- `gestalt.agent.tool.source` identifies tool binding mode for tool resolution:
+  `explicit` or `inherit_invokes`.
+
+Agent HTTP requests also form trace trees when OTLP tracing is enabled. A
+typical `POST /api/v1/agent/sessions/{id}/turns` trace contains
+`agent.operation`, `agent.tool.resolve`, `catalog.operation.resolve`,
+`agent.run_metadata.write`, and `agent.provider.operation` spans under the
+inbound HTTP server span.
+
+### Authorization Provider Metrics
+
+Authorization provider metrics cover both direct provider interface calls and
+provider-backed human-access evaluation performed by `gestaltd`.
+
+| OpenTelemetry family | Prometheus families | Meaning |
+| --- | --- | --- |
+| `gestaltd.authorization.provider.operation.*` | `gestaltd_authorization_provider_operation_count_total`, `gestaltd_authorization_provider_operation_error_count_total`, `gestaltd_authorization_provider_operation_duration_seconds` | Calls to the configured authorization provider interface |
+| `gestaltd.authorization.provider.evaluate.*` | `gestaltd_authorization_provider_evaluate_count_total`, `gestaltd_authorization_provider_evaluate_error_count_total`, `gestaltd_authorization_provider_evaluate_duration_seconds` | Batched authorization evaluations used by provider-backed human-access checks |
+
+These metrics carry low-cardinality attributes:
+
+- `gestalt.authorization.provider` identifies the configured authorization
+  provider.
+- `gestalt.authorization.operation` identifies the provider method for
+  `gestaltd.authorization.provider.operation.*`.
+- `gestalt.authorization.scope` identifies the resource type for
+  provider-backed evaluation, such as `integration` or `operation`.
+
+### Credential And Catalog Resolution Metrics
+
+Credential and catalog resolution metrics make the pre-invocation and agent
+tool paths visible before work reaches a plugin provider.
+
+| OpenTelemetry family | Prometheus families | Meaning |
+| --- | --- | --- |
+| `gestaltd.credential.provider.operation.*` | `gestaltd_credential_provider_operation_count_total`, `gestaltd_credential_provider_operation_error_count_total`, `gestaltd_credential_provider_operation_duration_seconds` | Calls to the configured external credential provider |
+| `gestaltd.credential.binding.resolve.*` | `gestaltd_credential_binding_resolve_count_total`, `gestaltd_credential_binding_resolve_error_count_total`, `gestaltd_credential_binding_resolve_duration_seconds` | Runtime credential binding selection |
+| `gestaltd.credential.token.resolve.*` | `gestaltd_credential_token_resolve_count_total`, `gestaltd_credential_token_resolve_error_count_total`, `gestaltd_credential_token_resolve_duration_seconds` | Token lookup for a resolved binding |
+| `gestaltd.catalog.operation.resolve.*` | `gestaltd_catalog_operation_resolve_count_total`, `gestaltd_catalog_operation_resolve_error_count_total`, `gestaltd_catalog_operation_resolve_duration_seconds` | Static or session-catalog operation resolution |
+
+These metrics carry low-cardinality attributes:
+
+- `gestalt.credential.provider` identifies the configured credential provider.
+- `gestalt.credential.operation` identifies the credential provider method.
+- `gestalt.credential.binding_mode` is `effective` or `requested`.
+- `gestalt.provider` identifies the plugin provider when the path has resolved
+  one.
+- `gestalt.operation` identifies the plugin operation for catalog operation
+  resolution.
+- `gestalt.catalog.source` is attached to catalog resolution spans and records
+  whether the resolved operation came from `static`, `session`, or a
+  pre-resolved `context` operation.
+
 ### IndexedDB Metrics
 
 These metrics are recorded around every ObjectStore and Index operation on the
@@ -309,6 +382,9 @@ need actor, target, and outcome details.
 | Connection auth start and completion | Yes: `gestaltd.connection.auth.*` | Yes | Covers OAuth start and completion plus manual connect completion. |
 | Connection credential refresh | Yes: `gestaltd.connection.auth.*` with `action=refresh` | No | Refresh is system maintenance behavior, not a user-facing audit event. |
 | Credentialed HTTP catalog discovery | Yes: `gestaltd.discovery.*` with `action=list_operations` | No | Operation listing stays metrics-only even when it resolves session catalogs. |
+| Agent lifecycle and provider calls | Yes: `gestaltd.agent.*` | No | Audit the user-facing invocation or workflow that created the agent work, not every provider poll or state read. |
+| Authorization provider calls | Yes: `gestaltd.authorization.*` | No | Provider interface calls are platform internals; explicit authorization-denied decisions are audited at the guarded action boundary. |
+| Credential and catalog resolution | Yes: `gestaltd.credential.*` and `gestaltd.catalog.*` | No | These are pre-invocation plumbing paths; audit the higher-level action instead. |
 | IndexedDB operations | Yes: `gestaltd.indexeddb.*` | No | Audit the higher-level user action instead of low-level storage calls. |
 | API token inventory read | No dedicated semantic metric family | Yes | `api_token.list` is audited because it exposes stored API-token inventory. |
 | API token lifecycle | No dedicated semantic metric family | Yes | `api_token.create`, `api_token.revoke`, and `api_token.revoke_all` are audited. |

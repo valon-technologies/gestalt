@@ -37,6 +37,19 @@ The contract has three parts:
 The example below shows the shape of a minimal in-memory provider. The
 remaining methods follow the same request/response pattern.
 
+## Observability
+
+Provider authors do not need to emit the baseline `gestaltd` authorization
+metrics. `gestaltd` wraps the configured provider interface and records
+`gestaltd.authorization.provider.operation.*` for every provider method. When
+the provider is used for provider-backed human access, `gestaltd` also records
+`gestaltd.authorization.provider.evaluate.*` around the batched authorization
+checks it performs.
+
+When OTLP tracing is enabled, preserve the `context.Context` passed into
+provider methods for downstream calls so provider work remains attached to the
+same trace tree.
+
 ```go
 package exampleauthz
 

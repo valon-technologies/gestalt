@@ -236,9 +236,9 @@ func (g *GuardedInvoker) ResolveSubjectToken(ctx context.Context, prov core.Prov
 	return ctx, "", fmt.Errorf("subject token resolution not supported")
 }
 
-func (g *GuardedInvoker) ResolveEffectiveCredentialBinding(p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error) {
+func (g *GuardedInvoker) ResolveEffectiveCredentialBinding(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error) {
 	if r, ok := g.inner.(EffectiveCredentialBindingResolver); ok {
-		return r.ResolveEffectiveCredentialBinding(p, providerName, connection, instance)
+		return r.ResolveEffectiveCredentialBinding(ctx, p, providerName, connection, instance)
 	}
 	return CredentialBindingResolution{}, nil
 }
