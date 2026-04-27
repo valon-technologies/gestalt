@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strings"
@@ -48,6 +50,7 @@ type Target struct {
 	Name       string
 	Spec       providerhost.StaticProviderSpec
 	Config     map[string]any
+	UI         *AttachUI
 	RuntimeEnv RuntimeEnvBuilder
 }
 
@@ -66,6 +69,7 @@ type AttachProvider struct {
 	Name   string                          `json:"name"`
 	Spec   providerhost.StaticProviderSpec `json:"spec"`
 	Config map[string]any                  `json:"config,omitempty"`
+	UI     *AttachUI                       `json:"ui,omitempty"`
 }
 
 type CreateSessionResponse struct {
@@ -79,6 +83,21 @@ type CreateSessionProvider struct {
 	AllowedHosts []string          `json:"allowedHosts,omitempty"`
 }
 
+type AttachUI struct{}
+
+type UIAssetRequest struct {
+	Method   string      `json:"method,omitempty"`
+	Path     string      `json:"path"`
+	RawQuery string      `json:"rawQuery,omitempty"`
+	Header   http.Header `json:"header,omitempty"`
+}
+
+type UIAssetResponse struct {
+	Status int         `json:"status"`
+	Header http.Header `json:"header,omitempty"`
+	Body   string      `json:"body,omitempty"`
+}
+
 type PollResponse struct {
 	CallID   string `json:"callId"`
 	Provider string `json:"provider"`
@@ -87,8 +106,9 @@ type PollResponse struct {
 }
 
 type CompleteCallRequest struct {
-	Response string    `json:"response,omitempty"`
-	Error    *RPCError `json:"error,omitempty"`
+	Response       string    `json:"response,omitempty"`
+	ResponseBase64 string    `json:"responseBase64,omitempty"`
+	Error          *RPCError `json:"error,omitempty"`
 }
 
 type RPCError struct {
@@ -191,6 +211,7 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		target := remoteTarget
 		target.Spec = buildAttachSpec(remoteTarget.Spec, requested.Spec)
 		target.Config = requested.Config
+		target.UI = cloneAttachUI(requested.UI)
 		targets = append(targets, target)
 	}
 	m.mu.RUnlock()
@@ -311,12 +332,20 @@ func (m *Manager) CompleteCall(p *principal.Principal, sessionID, callID string,
 	}
 
 	resp := rpcResponse{}
-	if req.Error != nil {
+	switch {
+	case req.Error != nil:
 		resp.err = status.Error(codes.Code(req.Error.Code), req.Error.Message)
 		if resp.err == nil {
 			resp.err = status.Error(codes.InvalidArgument, "provider dev error code must be non-OK")
 		}
-	} else if req.Response != "" {
+	case req.ResponseBase64 != "":
+		payload, err := base64.StdEncoding.DecodeString(req.ResponseBase64)
+		if err != nil {
+			resp.err = status.Errorf(codes.InvalidArgument, "decode provider dev response: %v", err)
+		} else {
+			resp.payload = payload
+		}
+	case req.Response != "":
 		payload, err := hex.DecodeString(req.Response)
 		if err != nil {
 			resp.err = status.Errorf(codes.InvalidArgument, "decode provider dev response: %v", err)
@@ -384,6 +413,46 @@ func (m *Manager) ResolveProviderOverride(ctx context.Context, p *principal.Prin
 			return nil, false, err
 		}
 		return prov, true, nil
+	}
+	return nil, false, nil
+}
+
+func (m *Manager) ServeUIAsset(ctx context.Context, p *principal.Principal, providerName string, req UIAssetRequest) (*UIAssetResponse, bool, error) {
+	if m == nil {
+		return nil, false, nil
+	}
+	m.closeIdleSessions(time.Now())
+	owner := principalSubjectID(p)
+	if owner == "" {
+		return nil, false, nil
+	}
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return nil, false, nil
+	}
+
+	m.mu.RLock()
+	sessionIDs := append([]string(nil), m.ownerIndex[owner]...)
+	sessions := make(map[string]*Session, len(sessionIDs))
+	for _, id := range sessionIDs {
+		sessions[id] = m.sessions[id]
+	}
+	m.mu.RUnlock()
+
+	for i := len(sessionIDs) - 1; i >= 0; i-- {
+		session := sessions[sessionIDs[i]]
+		if session == nil || session.isClosed() {
+			continue
+		}
+		target := session.targets[providerName]
+		if target == nil || target.target.UI == nil {
+			continue
+		}
+		resp, err := session.serveUIAsset(ctx, providerName, req)
+		if err != nil {
+			return nil, true, err
+		}
+		return resp, true, nil
 	}
 	return nil, false, nil
 }
@@ -571,9 +640,42 @@ func (s *Session) invoke(ctx context.Context, providerName, method string, req g
 	if err != nil {
 		return status.Errorf(codes.Internal, "marshal provider dev request: %v", err)
 	}
+	result, err := s.invokeRaw(ctx, providerName, method, payload)
+	if err != nil {
+		return err
+	}
+	if resp == nil {
+		return nil
+	}
+	if err := gproto.Unmarshal(result, resp); err != nil {
+		return status.Errorf(codes.Internal, "unmarshal provider dev response: %v", err)
+	}
+	return nil
+}
+
+func (s *Session) serveUIAsset(ctx context.Context, providerName string, req UIAssetRequest) (*UIAssetResponse, error) {
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "marshal provider dev ui request: %v", err)
+	}
+	result, err := s.invokeRaw(ctx, providerName, "ServeUIAsset", payload)
+	if err != nil {
+		return nil, err
+	}
+	var resp UIAssetResponse
+	if err := json.Unmarshal(result, &resp); err != nil {
+		return nil, status.Errorf(codes.Internal, "unmarshal provider dev ui response: %v", err)
+	}
+	return &resp, nil
+}
+
+func (s *Session) invokeRaw(ctx context.Context, providerName, method string, payload []byte) ([]byte, error) {
+	if s == nil {
+		return nil, status.Error(codes.Unavailable, "provider dev session is unavailable")
+	}
 	callID, err := randomID()
 	if err != nil {
-		return status.Errorf(codes.Internal, "create provider dev call: %v", err)
+		return nil, status.Errorf(codes.Internal, "create provider dev call: %v", err)
 	}
 	call := &rpcCall{
 		id:       callID,
@@ -588,26 +690,20 @@ func (s *Session) invoke(ctx context.Context, providerName, method string, req g
 	case s.calls <- call:
 		s.touch()
 	case <-s.done:
-		return status.Error(codes.Unavailable, "provider dev session is closed")
+		return nil, status.Error(codes.Unavailable, "provider dev session is closed")
 	case <-ctx.Done():
-		return ctx.Err()
+		return nil, ctx.Err()
 	}
 
 	select {
 	case result := <-call.response:
 		s.touch()
 		if result.err != nil {
-			return result.err
+			return nil, result.err
 		}
-		if resp == nil {
-			return nil
-		}
-		if err := gproto.Unmarshal(result.payload, resp); err != nil {
-			return status.Errorf(codes.Internal, "unmarshal provider dev response: %v", err)
-		}
-		return nil
+		return result.payload, nil
 	case <-s.done:
-		return status.Error(codes.Unavailable, "provider dev session is closed")
+		return nil, status.Error(codes.Unavailable, "provider dev session is closed")
 	case <-ctx.Done():
 		s.mu.Lock()
 		call.canceled = true
@@ -616,7 +712,7 @@ func (s *Session) invoke(ctx context.Context, providerName, method string, req g
 			s.lastSeen = time.Now()
 		}
 		s.mu.Unlock()
-		return ctx.Err()
+		return nil, ctx.Err()
 	}
 }
 
@@ -777,6 +873,18 @@ type Client struct {
 	HTTPClient *http.Client
 }
 
+type DispatcherOption func(*dispatcherConfig)
+
+type dispatcherConfig struct {
+	UIHandlers map[string]http.Handler
+}
+
+func WithUIHandlers(handlers map[string]http.Handler) DispatcherOption {
+	return func(cfg *dispatcherConfig) {
+		cfg.UIHandlers = handlers
+	}
+}
+
 func (c Client) CreateSession(ctx context.Context, req CreateSessionRequest) (*CreateSessionResponse, error) {
 	var out CreateSessionResponse
 	if err := c.doJSON(ctx, http.MethodPost, PathSessions, req, &out); err != nil {
@@ -808,7 +916,13 @@ func (c Client) CloseSession(ctx context.Context, sessionID string) error {
 	return c.doJSON(ctx, http.MethodDelete, path, nil, nil)
 }
 
-func (c Client) RunDispatcher(ctx context.Context, sessionID string, providers map[string]proto.IntegrationProviderClient) error {
+func (c Client) RunDispatcher(ctx context.Context, sessionID string, providers map[string]proto.IntegrationProviderClient, options ...DispatcherOption) error {
+	cfg := dispatcherConfig{}
+	for _, option := range options {
+		if option != nil {
+			option(&cfg)
+		}
+	}
 	for {
 		call, ok, err := c.Poll(ctx, sessionID)
 		if err != nil {
@@ -820,7 +934,7 @@ func (c Client) RunDispatcher(ctx context.Context, sessionID string, providers m
 		if !ok {
 			continue
 		}
-		req := c.dispatchCall(ctx, call, providers)
+		req := c.dispatchCall(ctx, call, providers, cfg)
 		if err := c.Complete(ctx, sessionID, call.CallID, req); err != nil {
 			if dispatcherContextDone(ctx) {
 				return nil
@@ -834,7 +948,10 @@ func dispatcherContextDone(ctx context.Context) bool {
 	return ctx.Err() != nil
 }
 
-func (c Client) dispatchCall(ctx context.Context, call *PollResponse, providers map[string]proto.IntegrationProviderClient) CompleteCallRequest {
+func (c Client) dispatchCall(ctx context.Context, call *PollResponse, providers map[string]proto.IntegrationProviderClient, cfg dispatcherConfig) CompleteCallRequest {
+	if call.Method == "ServeUIAsset" {
+		return dispatchProviderDevUI(ctx, call, cfg.UIHandlers)
+	}
 	client := providers[strings.TrimSpace(call.Provider)]
 	if client == nil {
 		return CompleteCallRequest{Error: encodeRPCError(status.Errorf(codes.NotFound, "local provider %q is not running", call.Provider))}
@@ -847,7 +964,72 @@ func (c Client) dispatchCall(ctx context.Context, call *PollResponse, providers 
 	if err != nil {
 		return CompleteCallRequest{Error: encodeRPCError(err)}
 	}
-	return CompleteCallRequest{Response: hex.EncodeToString(resp)}
+	return CompleteCallRequest{ResponseBase64: base64.StdEncoding.EncodeToString(resp)}
+}
+
+func dispatchProviderDevUI(ctx context.Context, call *PollResponse, handlers map[string]http.Handler) CompleteCallRequest {
+	handler := handlers[strings.TrimSpace(call.Provider)]
+	if handler == nil {
+		return CompleteCallRequest{Error: encodeRPCError(status.Errorf(codes.NotFound, "local ui for provider %q is not running", call.Provider))}
+	}
+	payload, err := hex.DecodeString(call.Request)
+	if err != nil {
+		return CompleteCallRequest{Error: encodeRPCError(status.Errorf(codes.InvalidArgument, "decode ui request: %v", err))}
+	}
+	resp, err := dispatchProviderDevUIRequest(ctx, handler, payload)
+	if err != nil {
+		return CompleteCallRequest{Error: encodeRPCError(err)}
+	}
+	return CompleteCallRequest{ResponseBase64: base64.StdEncoding.EncodeToString(resp)}
+}
+
+func dispatchProviderDevUIRequest(ctx context.Context, handler http.Handler, payload []byte) ([]byte, error) {
+	var req UIAssetRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "decode ui request: %v", err)
+	}
+	method := strings.TrimSpace(req.Method)
+	if method == "" {
+		method = http.MethodGet
+	}
+	if method != http.MethodGet && method != http.MethodHead {
+		return nil, status.Errorf(codes.InvalidArgument, "provider dev ui only supports GET and HEAD requests")
+	}
+	path := normalizeUIAssetRequestPath(req.Path)
+	target := (&url.URL{
+		Scheme:   "http",
+		Host:     "provider-dev.local",
+		Path:     path,
+		RawQuery: req.RawQuery,
+	}).String()
+	httpReq, err := http.NewRequestWithContext(ctx, method, target, nil)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "build ui request: %v", err)
+	}
+	if header := cloneHTTPHeader(req.Header); header != nil {
+		httpReq.Header = header
+	}
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httpReq)
+	httpResp := recorder.Result()
+	defer func() { _ = httpResp.Body.Close() }()
+	body, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "read ui response: %v", err)
+	}
+	if method == http.MethodHead {
+		body = nil
+	}
+	resp := UIAssetResponse{
+		Status: httpResp.StatusCode,
+		Header: cloneHTTPHeader(httpResp.Header),
+		Body:   base64.StdEncoding.EncodeToString(body),
+	}
+	out, err := json.Marshal(resp)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode ui response: %v", err)
+	}
+	return out, nil
 }
 
 func dispatchProviderRPC(ctx context.Context, client proto.IntegrationProviderClient, method string, payload []byte) ([]byte, error) {
@@ -1099,6 +1281,36 @@ func cloneStaticProviderSpec(spec providerhost.StaticProviderSpec) providerhost.
 		out.DiscoveryConfig = &discovery
 	}
 	return out
+}
+
+func cloneAttachUI(ui *AttachUI) *AttachUI {
+	if ui == nil {
+		return nil
+	}
+	out := *ui
+	return &out
+}
+
+func cloneHTTPHeader(header http.Header) http.Header {
+	if len(header) == 0 {
+		return nil
+	}
+	out := make(http.Header, len(header))
+	for key, values := range header {
+		out[key] = slices.Clone(values)
+	}
+	return out
+}
+
+func normalizeUIAssetRequestPath(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(value, "/") {
+		value = "/" + value
+	}
+	return value
 }
 
 func principalSubjectID(p *principal.Principal) string {

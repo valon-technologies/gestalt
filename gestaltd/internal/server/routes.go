@@ -16,7 +16,7 @@ func (s *Server) routes() {
 	r.Use(s.securityHeadersMiddleware)
 	r.Use(s.hostServiceRelayMiddleware)
 	r.Use(s.egressProxyMiddleware)
-	r.Use(maxBodyMiddleware(1 << 20)) // 1 MB
+	r.Use(maxBodyMiddleware(defaultMaxBodyBytes))
 
 	switch s.routeProfile {
 	case RouteProfilePublic:

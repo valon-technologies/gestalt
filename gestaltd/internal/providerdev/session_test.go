@@ -2,6 +2,7 @@ package providerdev
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -86,10 +87,16 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	client := Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
+	localUI := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Set("X-Local-Handler", "observed")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = fmt.Fprintf(w, "local ui %s?%s range=%s", r.URL.Path, r.URL.RawQuery, r.Header.Get("Range"))
+	})
 	session, err := client.CreateSession(context.Background(), CreateSessionRequest{Providers: []AttachProvider{{
 		Name:   "roadmap",
 		Spec:   spec,
 		Config: map[string]any{"remote": true},
+		UI:     &AttachUI{},
 	}}})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -107,7 +114,7 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	go func() {
 		dispatchDone <- client.RunDispatcher(dispatchCtx, session.ID, map[string]proto.IntegrationProviderClient{
 			"roadmap": local,
-		})
+		}, WithUIHandlers(map[string]http.Handler{"roadmap": localUI}))
 	}()
 
 	resolveCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -152,6 +159,67 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	}
 	if result.Body != `{"message":"hello","operation":"echo","token":"remote-token"}` {
 		t.Fatalf("Execute body = %s", result.Body)
+	}
+
+	uiResp, ok, err := manager.ServeUIAsset(resolveCtx, p, "roadmap", UIAssetRequest{
+		Method:   http.MethodGet,
+		Path:     "/sync",
+		RawQuery: "tab=preview",
+		Header: http.Header{
+			"Range": []string{"bytes=0-3"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ServeUIAsset: %v", err)
+	}
+	if !ok {
+		t.Fatal("ServeUIAsset ok = false, want true")
+	}
+	if got := uiResp.Header.Get("Content-Type"); got != "text/html; charset=utf-8" {
+		t.Fatalf("ui content-type = %q, want text/html", got)
+	}
+	uiBody, err := base64.StdEncoding.DecodeString(uiResp.Body)
+	if err != nil {
+		t.Fatalf("decode ui body: %v", err)
+	}
+	if string(uiBody) != "local ui /sync?tab=preview range=bytes=0-3" {
+		t.Fatalf("ui body = %q", uiBody)
+	}
+
+	uiResp, ok, err = manager.ServeUIAsset(resolveCtx, p, "roadmap", UIAssetRequest{
+		Method: http.MethodGet,
+		Path:   "/empty-header",
+	})
+	if err != nil {
+		t.Fatalf("ServeUIAsset without headers: %v", err)
+	}
+	if !ok {
+		t.Fatal("ServeUIAsset without headers ok = false, want true")
+	}
+	uiBody, err = base64.StdEncoding.DecodeString(uiResp.Body)
+	if err != nil {
+		t.Fatalf("decode ui body without headers: %v", err)
+	}
+	if string(uiBody) != "local ui /empty-header? range=" {
+		t.Fatalf("ui body without headers = %q", uiBody)
+	}
+
+	uiResp, ok, err = manager.ServeUIAsset(resolveCtx, p, "roadmap", UIAssetRequest{
+		Method: http.MethodHead,
+		Path:   "/head",
+	})
+	if err != nil {
+		t.Fatalf("ServeUIAsset HEAD: %v", err)
+	}
+	if !ok {
+		t.Fatal("ServeUIAsset HEAD ok = false, want true")
+	}
+	uiBody, err = base64.StdEncoding.DecodeString(uiResp.Body)
+	if err != nil {
+		t.Fatalf("decode ui HEAD body: %v", err)
+	}
+	if len(uiBody) != 0 {
+		t.Fatalf("ui HEAD body = %q, want empty", uiBody)
 	}
 
 	local.mu.Lock()
