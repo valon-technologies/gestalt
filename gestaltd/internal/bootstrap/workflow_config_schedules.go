@@ -225,7 +225,10 @@ func workflowConfigTargetLabel(target coreworkflow.Target) string {
 		}
 		return "agent:" + providerName
 	}
-	return strings.TrimSpace(target.PluginTarget().PluginName)
+	if target.Plugin == nil {
+		return ""
+	}
+	return strings.TrimSpace(target.Plugin.PluginName)
 }
 
 func workflowConfigScheduleTarget(schedule config.WorkflowScheduleConfig) coreworkflow.Target {
@@ -251,12 +254,7 @@ func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Targ
 		Input:      maps.Clone(plugin.Input),
 	}
 	return coreworkflow.Target{
-		PluginName: pluginTarget.PluginName,
-		Operation:  pluginTarget.Operation,
-		Connection: pluginTarget.Connection,
-		Instance:   pluginTarget.Instance,
-		Input:      pluginTarget.Input,
-		Plugin:     &pluginTarget,
+		Plugin: &pluginTarget,
 	}
 }
 
@@ -387,7 +385,10 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target) []core
 		}
 		return out
 	}
-	pluginTarget := target.PluginTarget()
+	if target.Plugin == nil {
+		return nil
+	}
+	pluginTarget := *target.Plugin
 	pluginName := pluginTarget.PluginName
 	operation := strings.TrimSpace(pluginTarget.Operation)
 	if pluginName == "" || operation == "" {
@@ -420,7 +421,10 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 		}
 		return ref, nil
 	}
-	if err := workflowConfigValidateNoUserCredentialTarget(cfg, target.PluginTarget().PluginName); err != nil {
+	if target.Plugin == nil {
+		return nil, fmt.Errorf("workflow target plugin is required")
+	}
+	if err := workflowConfigValidateNoUserCredentialTarget(cfg, target.Plugin.PluginName); err != nil {
 		return nil, err
 	}
 	return ref, nil

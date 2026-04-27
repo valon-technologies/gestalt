@@ -283,12 +283,7 @@ func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) cor
 		Input:      maps.Clone(plugin.Input),
 	}
 	return coreworkflow.Target{
-		PluginName: pluginTarget.PluginName,
-		Operation:  pluginTarget.Operation,
-		Connection: pluginTarget.Connection,
-		Instance:   pluginTarget.Instance,
-		Input:      pluginTarget.Input,
-		Plugin:     &pluginTarget,
+		Plugin: &pluginTarget,
 	}
 }
 
@@ -380,7 +375,7 @@ func workflowScheduleInfoFromCore(schedule *coreworkflow.Schedule, providerName 
 
 func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowScheduleTargetInfo {
 	if target.Agent != nil {
-		agentTarget := target.AgentTarget()
+		agentTarget := *target.Agent
 		return workflowScheduleTargetInfo{
 			Agent: &workflowAgentTargetInfo{
 				ProviderName:    agentTarget.ProviderName,
@@ -395,7 +390,10 @@ func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowSche
 			},
 		}
 	}
-	pluginTarget := target.PluginTarget()
+	if target.Plugin == nil {
+		return workflowScheduleTargetInfo{}
+	}
+	pluginTarget := *target.Plugin
 	return workflowScheduleTargetInfo{
 		Plugin: &workflowPluginTargetInfo{
 			Name:       pluginTarget.PluginName,

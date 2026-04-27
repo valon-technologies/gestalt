@@ -72,16 +72,16 @@ func TestWorkflowTargetFromProtoAcceptsFlatPluginFieldsForProviderCompatibility(
 	if got := target.Plugin.PluginName; got != "demo" {
 		t.Fatalf("plugin name = %q, want %q", got, "demo")
 	}
-	if got := target.Operation; got != "refresh" {
+	if got := target.Plugin.Operation; got != "refresh" {
 		t.Fatalf("operation = %q, want %q", got, "refresh")
 	}
-	if got := target.Connection; got != "workspace" {
+	if got := target.Plugin.Connection; got != "workspace" {
 		t.Fatalf("connection = %q, want %q", got, "workspace")
 	}
-	if got := target.Instance; got != "primary" {
+	if got := target.Plugin.Instance; got != "primary" {
 		t.Fatalf("instance = %q, want %q", got, "primary")
 	}
-	if got := target.Input["customer_id"]; got != "cust_123" {
+	if got := target.Plugin.Input["customer_id"]; got != "cust_123" {
 		t.Fatalf("input customer_id = %#v, want %q", got, "cust_123")
 	}
 }

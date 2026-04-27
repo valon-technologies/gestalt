@@ -226,6 +226,10 @@ func invokeWorkflowHostDuringStartup(t *testing.T, hostServices []providerhost.H
 
 func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, target coreworkflow.Target) string {
 	t.Helper()
+	pluginTarget := target.Plugin
+	if pluginTarget == nil {
+		t.Fatalf("workflow target plugin is nil: %#v", target)
+	}
 	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
 	if err != nil {
 		t.Fatalf("resolve workflow provider %q: %v", providerName, err)
@@ -235,7 +239,7 @@ func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, targ
 		t.Fatalf("workflow provider %q does not support execution refs", providerName)
 	}
 	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, target.Operation),
+		ID:           fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
 		ProviderName: providerName,
 		Target:       target,
 		SubjectID:    "system:config",
@@ -286,10 +290,7 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
-		executionRef := storeStartupExecutionRef(t, deps, name, coreworkflow.Target{
-			PluginName: "roadmap",
-			Operation:  "status",
-		})
+		executionRef := storeStartupExecutionRef(t, deps, name, testWorkflowPluginTarget("roadmap", "status"))
 		resp, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
 				Plugin: &proto.BoundWorkflowPluginTarget{

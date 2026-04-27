@@ -33,13 +33,8 @@ type Actor struct {
 }
 
 type Target struct {
-	PluginName string
-	Operation  string
-	Connection string
-	Instance   string
-	Input      map[string]any
-	Plugin     *PluginTarget
-	Agent      *AgentTarget
+	Plugin *PluginTarget
+	Agent  *AgentTarget
 }
 
 type PluginTarget struct {
@@ -273,28 +268,8 @@ type Host interface {
 	InvokeOperation(ctx context.Context, req InvokeOperationRequest) (*InvokeOperationResponse, error)
 }
 
-func (t Target) PluginTarget() PluginTarget {
-	if t.Plugin != nil {
-		return *t.Plugin
-	}
-	return PluginTarget{
-		PluginName: t.PluginName,
-		Operation:  t.Operation,
-		Connection: t.Connection,
-		Instance:   t.Instance,
-		Input:      t.Input,
-	}
-}
-
-func (t Target) AgentTarget() AgentTarget {
-	if t.Agent != nil {
-		return *t.Agent
-	}
-	return AgentTarget{}
-}
-
 func TargetFingerprint(target Target) (string, error) {
-	if target.Agent != nil && PluginTargetSet(target.PluginTarget()) {
+	if target.Agent != nil && target.Plugin != nil && PluginTargetSet(*target.Plugin) {
 		return "", fmt.Errorf("target cannot include both agent and plugin fields")
 	}
 	payload, err := json.Marshal(normalizedTargetFingerprintPayload(target))
@@ -305,10 +280,20 @@ func TargetFingerprint(target Target) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func normalizedTargetFingerprintPayload(target Target) Target {
-	out := Target{}
+type targetFingerprintPayload struct {
+	PluginName string
+	Operation  string
+	Connection string
+	Instance   string
+	Input      map[string]any
+	Plugin     *PluginTarget
+	Agent      *AgentTarget
+}
+
+func normalizedTargetFingerprintPayload(target Target) targetFingerprintPayload {
+	out := targetFingerprintPayload{}
 	if target.Agent != nil {
-		agentTarget := target.AgentTarget()
+		agentTarget := *target.Agent
 		if len(agentTarget.Messages) == 0 {
 			agentTarget.Messages = nil
 		}
@@ -327,8 +312,8 @@ func normalizedTargetFingerprintPayload(target Target) Target {
 		out.Agent = &agentTarget
 		return out
 	}
-	pluginTarget := target.PluginTarget()
-	if PluginTargetSet(pluginTarget) {
+	if target.Plugin != nil && PluginTargetSet(*target.Plugin) {
+		pluginTarget := *target.Plugin
 		if len(pluginTarget.Input) == 0 {
 			pluginTarget.Input = nil
 		}

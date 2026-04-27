@@ -712,14 +712,17 @@ func (m *Manager) resolveProviderByName(providerName string) (coreworkflow.Provi
 }
 
 func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (coreworkflow.Target, error) {
-	pluginTarget := target.PluginTarget()
-	hasPlugin := coreworkflow.PluginTargetSet(pluginTarget)
+	hasPlugin := target.Plugin != nil && coreworkflow.PluginTargetSet(*target.Plugin)
 	hasAgent := target.Agent != nil
 	if hasAgent && hasPlugin {
 		return coreworkflow.Target{}, fmt.Errorf("workflow target must set exactly one of plugin or agent")
 	}
 	if hasAgent {
-		return m.resolveAgentTarget(ctx, p, target.AgentTarget())
+		return m.resolveAgentTarget(ctx, p, *target.Agent)
+	}
+	pluginTarget := coreworkflow.PluginTarget{}
+	if target.Plugin != nil {
+		pluginTarget = *target.Plugin
 	}
 	return m.resolvePluginTarget(ctx, p, pluginTarget)
 }
@@ -798,12 +801,7 @@ func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principa
 		Input:      maps.Clone(target.Input),
 	}
 	return coreworkflow.Target{
-		PluginName: pluginTarget.PluginName,
-		Operation:  pluginTarget.Operation,
-		Connection: pluginTarget.Connection,
-		Instance:   pluginTarget.Instance,
-		Input:      pluginTarget.Input,
-		Plugin:     &pluginTarget,
+		Plugin: &pluginTarget,
 	}, nil
 }
 
@@ -1098,7 +1096,10 @@ func (m *Manager) allowTarget(ctx context.Context, p *principal.Principal, targe
 		}
 		return true
 	}
-	pluginTarget := target.PluginTarget()
+	if target.Plugin == nil {
+		return false
+	}
+	pluginTarget := *target.Plugin
 	pluginName := strings.TrimSpace(pluginTarget.PluginName)
 	operation := strings.TrimSpace(pluginTarget.Operation)
 	if pluginName == "" || operation == "" {
@@ -1203,8 +1204,11 @@ func targetMatchesExecutionRef(target coreworkflow.Target, ref *coreworkflow.Exe
 	if ref.Target.Agent != nil || target.Agent != nil {
 		return false
 	}
-	left := target.PluginTarget()
-	right := ref.Target.PluginTarget()
+	if target.Plugin == nil || ref.Target.Plugin == nil {
+		return false
+	}
+	left := *target.Plugin
+	right := *ref.Target.Plugin
 	return strings.TrimSpace(left.PluginName) == strings.TrimSpace(right.PluginName) &&
 		strings.TrimSpace(left.Operation) == strings.TrimSpace(right.Operation) &&
 		strings.TrimSpace(left.Connection) == strings.TrimSpace(right.Connection) &&
