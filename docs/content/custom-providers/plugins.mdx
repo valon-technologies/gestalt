@@ -851,6 +851,12 @@ a different server URL, including a different path prefix on the same host, is
 not sent; the command exits with the stored credential's server and file path
 plus commands to log in for the requested server or pass an explicit token. Use
 `--remote-token` or `GESTALT_API_KEY` for non-interactive automation.
+After resolving auth, the command runs a remote preflight check before creating
+the session. Preflight confirms that the remote server supports provider-dev,
+shows which remote plugin each local source matched, and includes mounted UI
+paths when the local plugin has bundled UI. If the preflight endpoint is
+missing, upgrade or redeploy the remote `gestaltd` and confirm provider-dev
+attach targets are enabled.
 
 For `--remote --path` without `--config`, Gestalt matches the local manifest
 `source` to a configured plugin on the remote server. The remote plugin's

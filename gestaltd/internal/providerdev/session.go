@@ -35,6 +35,7 @@ const (
 	DefaultSessionIdleTimeout = 2 * time.Minute
 	DefaultCallIdleTimeout    = 30 * time.Minute
 
+	PathResolve  = "/api/v1/provider-dev/resolve"
 	PathSessions = "/api/v1/provider-dev/sessions"
 )
 
@@ -49,6 +50,7 @@ type RuntimeEnvBuilder func(sessionID string) (RuntimeEnv, error)
 type Target struct {
 	Name       string
 	Source     string
+	UIPath     string
 	Spec       providerhost.StaticProviderSpec
 	Config     map[string]any
 	UI         *AttachUI
@@ -66,6 +68,8 @@ type CreateSessionRequest struct {
 	Providers []AttachProvider `json:"providers"`
 }
 
+type ResolveAttachRequest = CreateSessionRequest
+
 type AttachProvider struct {
 	Name   string                          `json:"name"`
 	Source string                          `json:"source,omitempty"`
@@ -77,6 +81,17 @@ type AttachProvider struct {
 type CreateSessionResponse struct {
 	ID        string                  `json:"id"`
 	Providers []CreateSessionProvider `json:"providers"`
+}
+
+type ResolveAttachResponse struct {
+	Providers []ResolvedAttachProvider `json:"providers"`
+}
+
+type ResolvedAttachProvider struct {
+	Name   string `json:"name"`
+	Source string `json:"source,omitempty"`
+	UIPath string `json:"uiPath,omitempty"`
+	UI     bool   `json:"ui,omitempty"`
 }
 
 type CreateSessionProvider struct {
@@ -301,6 +316,19 @@ func (m *Manager) PollSession(ctx context.Context, p *principal.Principal, sessi
 }
 
 func (m *Manager) ResolveAttachProviderNames(req CreateSessionRequest) ([]string, error) {
+	resp, err := m.ResolveAttachProviders(req)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(resp.Providers))
+	for _, provider := range resp.Providers {
+		names = append(names, provider.Name)
+	}
+	slices.Sort(names)
+	return slices.Compact(names), nil
+}
+
+func (m *Manager) ResolveAttachProviders(req ResolveAttachRequest) (*ResolveAttachResponse, error) {
 	if m == nil {
 		return nil, status.Error(codes.FailedPrecondition, "provider dev is not configured")
 	}
@@ -308,17 +336,28 @@ func (m *Manager) ResolveAttachProviderNames(req CreateSessionRequest) ([]string
 	if err != nil {
 		return nil, err
 	}
+	if len(requestedProviders) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "at least one provider is required")
+	}
 	targets, err := m.resolveAttachTargets(requestedProviders)
 	if err != nil {
 		return nil, err
 	}
-	names := make([]string, 0, len(targets))
-	for i := range targets {
-		names = append(names, targets[i].Name)
+	resp := &ResolveAttachResponse{
+		Providers: make([]ResolvedAttachProvider, 0, len(targets)),
 	}
-	slices.Sort(names)
-	names = slices.Compact(names)
-	return names, nil
+	for i := range targets {
+		resp.Providers = append(resp.Providers, ResolvedAttachProvider{
+			Name:   targets[i].Name,
+			Source: strings.TrimSpace(targets[i].Source),
+			UIPath: strings.TrimSpace(targets[i].UIPath),
+			UI:     targets[i].UI != nil,
+		})
+	}
+	slices.SortFunc(resp.Providers, func(a, b ResolvedAttachProvider) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	return resp, nil
 }
 
 func (m *Manager) resolveAttachTargets(requestedProviders []AttachProvider) ([]Target, error) {
@@ -961,6 +1000,18 @@ func (c Client) CreateSession(ctx context.Context, req CreateSessionRequest) (*C
 	return &out, nil
 }
 
+func (c Client) ResolveAttachProviders(ctx context.Context, req ResolveAttachRequest) (*ResolveAttachResponse, error) {
+	var out ResolveAttachResponse
+	statusCode, err := c.doJSONStatus(ctx, http.MethodPost, PathResolve, req, &out)
+	if err != nil {
+		if statusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("provider dev preflight endpoint was not found at %s; the remote gestaltd may be too old or provider-dev may not be enabled: %w", c.endpointForLog(PathResolve), err)
+		}
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c Client) Poll(ctx context.Context, sessionID string) (*PollResponse, bool, error) {
 	path := PathSessions + "/" + url.PathEscape(sessionID) + "/poll"
 	var out PollResponse
@@ -1232,6 +1283,14 @@ func (c Client) endpoint(path string) (string, error) {
 	base.RawQuery = ""
 	base.Fragment = ""
 	return base.String(), nil
+}
+
+func (c Client) endpointForLog(path string) string {
+	endpoint, err := c.endpoint(path)
+	if err != nil {
+		return strings.TrimRight(strings.TrimSpace(c.BaseURL), "/") + path
+	}
+	return endpoint
 }
 
 func encodeRPCError(err error) *RPCError {
