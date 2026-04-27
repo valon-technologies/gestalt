@@ -370,12 +370,12 @@ func TestRequestContextProto_PreservesWorkflowContext(t *testing.T) {
 	}
 }
 
-func TestPrincipalFromProto_WorkloadDisplayNameDoesNotCreateIdentity(t *testing.T) {
+func TestPrincipalFromProto_NonUserDisplayNameDoesNotCreateIdentity(t *testing.T) {
 	t.Parallel()
 
 	p := principalFromProto(&proto.SubjectContext{
-		Id:          principal.WorkloadSubjectID("triage-bot"),
-		Kind:        string(principal.KindWorkload),
+		Id:          "service_account:triage-bot",
+		Kind:        "service_account",
 		DisplayName: "Triage Bot",
 		AuthSource:  principal.SourceAPIToken.String(),
 	})
@@ -385,8 +385,11 @@ func TestPrincipalFromProto_WorkloadDisplayNameDoesNotCreateIdentity(t *testing.
 	if p.DisplayName != "Triage Bot" {
 		t.Fatalf("display name = %q, want %q", p.DisplayName, "Triage Bot")
 	}
+	if p.Kind != principal.Kind("service_account") {
+		t.Fatalf("kind = %q, want service_account", p.Kind)
+	}
 	if p.Identity != nil {
-		t.Fatalf("expected workload identity to remain nil, got %#v", p.Identity)
+		t.Fatalf("expected non-user identity to remain nil, got %#v", p.Identity)
 	}
 }
 

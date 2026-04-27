@@ -2,6 +2,7 @@ package providerhost
 
 import (
 	"context"
+	"strings"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
@@ -120,11 +121,8 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 		DisplayName: subject.GetDisplayName(),
 		Source:      sourceFromString(subject.GetAuthSource()),
 	}
-	switch subject.GetKind() {
-	case string(principal.KindUser):
-		p.Kind = principal.KindUser
-	case string(principal.KindWorkload):
-		p.Kind = principal.KindWorkload
+	if kind := strings.TrimSpace(subject.GetKind()); kind != "" {
+		p.Kind = principal.Kind(kind)
 	}
 	p.UserID = principal.UserIDFromSubjectID(p.SubjectID)
 	p = principal.Canonicalized(p)

@@ -7038,8 +7038,9 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 	})
 
-	t.Run("workload resolve access uses subject policy membership", func(t *testing.T) {
+	t.Run("non-user resolve access uses subject policy membership", func(t *testing.T) {
 		t.Parallel()
+		subjectID := "service_account:triage-bot"
 
 		cfg := validConfig()
 		cfg.Authorization = config.AuthorizationConfig{
@@ -7047,7 +7048,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				"roadmap-policy": {
 					Default: "deny",
 					Members: []config.SubjectPolicyMemberDef{{
-						SubjectID: principal.WorkloadSubjectID("triage-bot"),
+						SubjectID: subjectID,
 						Role:      "viewer",
 					}},
 				},
@@ -7070,22 +7071,22 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		t.Cleanup(func() { _ = result.Close(context.Background()) })
 		<-result.ProvidersReady
 
-		workloadPrincipal := &principal.Principal{
-			SubjectID: principal.WorkloadSubjectID("triage-bot"),
-			Kind:      principal.KindWorkload,
+		subjectPrincipal := &principal.Principal{
+			SubjectID: subjectID,
+			Kind:      principal.Kind("service_account"),
 		}
-		access, allowed := result.Authorizer.ResolveAccess(ctx, workloadPrincipal, "roadmap")
+		access, allowed := result.Authorizer.ResolveAccess(ctx, subjectPrincipal, "roadmap")
 		if !allowed {
-			t.Fatal("expected workload ResolveAccess to use subject policy membership")
+			t.Fatal("expected non-user ResolveAccess to use subject policy membership")
 		}
 		if access.Policy != "roadmap-policy" {
-			t.Fatalf("workload access policy = %q, want %q", access.Policy, "roadmap-policy")
+			t.Fatalf("subject access policy = %q, want %q", access.Policy, "roadmap-policy")
 		}
 		if access.Role != "viewer" {
-			t.Fatalf("workload access role = %q, want viewer", access.Role)
+			t.Fatalf("subject access role = %q, want viewer", access.Role)
 		}
-		if !result.Authorizer.AllowProvider(ctx, workloadPrincipal, "roadmap") {
-			t.Fatal("expected workload subject to be allowed for roadmap provider")
+		if !result.Authorizer.AllowProvider(ctx, subjectPrincipal, "roadmap") {
+			t.Fatal("expected non-user subject to be allowed for roadmap provider")
 		}
 	})
 

@@ -111,11 +111,6 @@ func IsSystemPrincipal(p *Principal) bool {
 	return p != nil && IsSystemSubjectID(p.SubjectID)
 }
 
-func IsWorkloadPrincipal(p *Principal) bool {
-	p = Canonicalized(p)
-	return p != nil && p.Kind == KindWorkload
-}
-
 func IsNonUserPrincipal(p *Principal) bool {
 	p = Canonicalized(p)
 	return p != nil && p.Kind != "" && p.Kind != KindUser
