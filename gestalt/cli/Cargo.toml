@@ -26,9 +26,13 @@ rpassword = "7"
 time = { version = "0.3", features = ["parsing"] }
 rustyline = "18"
 ctrlc = "3"
+crossterm = "0.29"
+ratatui = { version = "0.30", features = ["crossterm_0_29"] }
+ratatui-textarea = "0.9"
 
 [dev-dependencies]
 tempfile = "3"
 mockito = "1"
 assert_cmd = "2"
 predicates = "3"
+portable-pty = "0.9"

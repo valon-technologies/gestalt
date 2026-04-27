@@ -250,8 +250,13 @@ CLI session can include repeated `--system` messages, repeated `--message`
 prompts, and repeated `--tool plugin:operation` additions. During execution,
 the CLI parses the event stream, renders assistant/tool/interaction events,
 cancels the active turn on Ctrl-C, and resolves pending interactions inline.
-TTY sessions use line editing and per-directory history. End an input line with
-`\` to continue the same user message on the next prompt.
+TTY sessions use a full-screen terminal UI with a persistent transcript,
+streaming assistant output, a multiline composer, queued prompts while a turn
+is running, Ctrl-C cancellation, and inline interaction panels. Press Enter to
+send, Alt-Enter to insert a newline, PageUp/PageDown to scroll, `/session` to
+show the active session, and `/quit` to exit. Non-TTY sessions keep the
+prompt-and-print fallback used by scripts and tests; there, end an input line
+with `\` to continue the same user message on the next prompt.
 
 `gestalt agent turns create` is the non-interactive equivalent. It supports
 repeated `--system`, repeated `--message`, repeated `--tool plugin:operation`,
