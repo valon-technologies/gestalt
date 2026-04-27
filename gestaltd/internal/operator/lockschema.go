@@ -61,7 +61,7 @@ type portableLockEntry struct {
 func newLockfile() *Lockfile {
 	return &Lockfile{
 		Version:             LockVersion,
-		Providers:           make(map[string]LockProviderEntry),
+		Providers:           make(map[string]LockEntry),
 		Authentication:      make(map[string]LockEntry),
 		Authorization:       make(map[string]LockEntry),
 		ExternalCredentials: make(map[string]LockEntry),
@@ -74,7 +74,7 @@ func newLockfile() *Lockfile {
 		Secrets:             make(map[string]LockEntry),
 		Telemetry:           make(map[string]LockEntry),
 		Audit:               make(map[string]LockEntry),
-		UIs:                 make(map[string]LockUIEntry),
+		UIs:                 make(map[string]LockEntry),
 	}
 }
 
@@ -86,7 +86,7 @@ func normalizeLockfile(lock *Lockfile) *Lockfile {
 		lock.Version = LockVersion
 	}
 	if lock.Providers == nil {
-		lock.Providers = make(map[string]LockProviderEntry)
+		lock.Providers = make(map[string]LockEntry)
 	}
 	if lock.Authentication == nil {
 		lock.Authentication = make(map[string]LockEntry)
@@ -125,7 +125,7 @@ func normalizeLockfile(lock *Lockfile) *Lockfile {
 		lock.IndexedDBs = make(map[string]LockEntry)
 	}
 	if lock.UIs == nil {
-		lock.UIs = make(map[string]LockUIEntry)
+		lock.UIs = make(map[string]LockEntry)
 	}
 	return lock
 }

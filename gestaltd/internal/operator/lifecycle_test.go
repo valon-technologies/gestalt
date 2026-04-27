@@ -1779,7 +1779,7 @@ server:
 	paths := initPathsForConfig(cfgPath)
 	staleLock := &Lockfile{
 		Version: LockVersion,
-		Providers: map[string]LockProviderEntry{
+		Providers: map[string]LockEntry{
 			"roadmap": {
 				Fingerprint: mustFingerprint(t, "roadmap", loadedCfg.Plugins["roadmap"], paths.configDir),
 				Source:      srv.URL + "/providers/roadmap-plugin/v" + version + "/provider-release.yaml",
@@ -1923,7 +1923,7 @@ server:
 	}
 	paths := initPathsForConfig(cfgPath)
 	lock := normalizeLockfile(initialLock)
-	lock.Providers = map[string]LockProviderEntry{
+	lock.Providers = map[string]LockEntry{
 		"roadmap": {
 			Fingerprint: mustFingerprint(t, "roadmap", loadedCfg.Plugins["roadmap"], paths.configDir),
 			Source:      srv.URL + "/providers/roadmap-plugin/v" + newVersion + "/provider-release.yaml",
@@ -2003,7 +2003,7 @@ server:
 		t.Fatalf("InitAtPath: %v", err)
 	}
 
-	lock.Providers["example"] = LockProviderEntry{
+	lock.Providers["example"] = LockEntry{
 		Fingerprint: lock.Providers["example"].Fingerprint,
 		Source:      lock.Providers["example"].Source,
 		Version:     lock.Providers["example"].Version,
@@ -2463,7 +2463,7 @@ authorization:
 	}
 }
 
-func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testing.T) {
+func TestLockEntryForSource_RejectsManifestWithoutProviderKind(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -2532,7 +2532,7 @@ func TestHashPlatformInEntries_HashesMountedUIAndProviderArchives(t *testing.T) 
 				},
 			},
 		},
-		UIs: map[string]LockUIEntry{
+		UIs: map[string]LockEntry{
 			"roadmap": {
 				Source: "github.com/testowner/web/roadmap",
 				Archives: map[string]LockArchive{
@@ -3814,7 +3814,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	lockPath := filepath.Join(dir, InitLockfileName)
 	want := &Lockfile{
 		Version: LockVersion,
-		Providers: map[string]LockProviderEntry{
+		Providers: map[string]LockEntry{
 			"example": {
 				Fingerprint: "provider-fp",
 				Source:      "github.com/test-org/test-repo/test-plugin",
@@ -3896,7 +3896,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 				},
 			},
 		},
-		UIs: map[string]LockUIEntry{
+		UIs: map[string]LockEntry{
 			"roadmap": {
 				Fingerprint: "ui-fp",
 				Source:      "github.com/test-org/test-repo/test-ui",
