@@ -386,9 +386,9 @@ type ProviderEntry struct {
 	// AuthorizationPolicy binds this provider to a shared subject access policy.
 	AuthorizationPolicy string `yaml:"authorizationPolicy,omitempty"`
 
-	// Plugin-specific config fields (parsed from YAML, only valid on plugin entries)
-	MountPath         string                        `yaml:"mountPath,omitempty"`
-	UI                string                        `yaml:"ui,omitempty"`
+	// Plugin-specific runtime fields populated from the canonical ui object.
+	MountPath         string                        `yaml:"-"`
+	UI                string                        `yaml:"-"`
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
 	Invokes           []PluginInvocationDependency  `yaml:"invokes,omitempty"`
@@ -426,7 +426,8 @@ type providerEntryYAML struct {
 
 type providerEntryMarshalYAML struct {
 	providerEntryFields `yaml:",inline"`
-	Auth                *RouteAuthDef `yaml:"auth,omitempty"`
+	Auth                *RouteAuthDef          `yaml:"auth,omitempty"`
+	UI                  *pluginUIBindingConfig `yaml:"ui,omitempty"`
 }
 
 type uiEntryYAML struct {
@@ -460,9 +461,6 @@ func (e *ProviderEntry) UnmarshalYAML(value *yaml.Node) error {
 			decoded.UI = uiBinding.Bundle
 		}
 		if uiBinding.Path != "" {
-			if strings.TrimSpace(decoded.MountPath) != "" && !providerEntryUIPathsEqual(decoded.MountPath, uiBinding.Path) {
-				return fmt.Errorf("ui.path conflicts with mountPath")
-			}
 			decoded.MountPath = uiBinding.Path
 		}
 	}
@@ -471,10 +469,17 @@ func (e *ProviderEntry) UnmarshalYAML(value *yaml.Node) error {
 }
 
 func (e ProviderEntry) MarshalYAML() (any, error) {
-	return providerEntryMarshalYAML{
+	raw := providerEntryMarshalYAML{
 		providerEntryFields: providerEntryFieldsFromEntry(e),
 		Auth:                cloneRouteAuthDef(e.RouteAuth),
-	}, nil
+	}
+	if strings.TrimSpace(e.MountPath) != "" {
+		raw.UI = &pluginUIBindingConfig{
+			Bundle: strings.TrimSpace(e.UI),
+			Path:   strings.TrimSpace(e.MountPath),
+		}
+	}
+	return raw, nil
 }
 
 type ProviderSurfaceOverrides struct {
@@ -525,12 +530,12 @@ type HostedRuntimeConfig struct {
 	Image               string                     `yaml:"image,omitempty"`
 	Metadata            map[string]string          `yaml:"metadata,omitempty"`
 	Pool                *HostedRuntimePoolConfig   `yaml:"pool,omitempty"`
-	MinReadyInstances   int                        `yaml:"minReadyInstances,omitempty"`
-	MaxReadyInstances   int                        `yaml:"maxReadyInstances,omitempty"`
-	StartupTimeout      string                     `yaml:"startupTimeout,omitempty"`
-	HealthCheckInterval string                     `yaml:"healthCheckInterval,omitempty"`
-	RestartPolicy       HostedRuntimeRestartPolicy `yaml:"restartPolicy,omitempty"`
-	DrainTimeout        string                     `yaml:"drainTimeout,omitempty"`
+	MinReadyInstances   int                        `yaml:"-"`
+	MaxReadyInstances   int                        `yaml:"-"`
+	StartupTimeout      string                     `yaml:"-"`
+	HealthCheckInterval string                     `yaml:"-"`
+	RestartPolicy       HostedRuntimeRestartPolicy `yaml:"-"`
+	DrainTimeout        string                     `yaml:"-"`
 }
 
 type HostedRuntimePoolConfig struct {
@@ -642,28 +647,62 @@ type WorkflowsConfig struct {
 type WorkflowScheduleConfig struct {
 	Provider   string                `yaml:"provider,omitempty"`
 	Target     *WorkflowTargetConfig `yaml:"target,omitempty"`
-	Plugin     string                `yaml:"plugin,omitempty"`
-	Agent      *WorkflowAgentConfig  `yaml:"agent,omitempty"`
+	Plugin     string                `yaml:"-"`
+	Agent      *WorkflowAgentConfig  `yaml:"-"`
 	Cron       string                `yaml:"cron,omitempty"`
 	Timezone   string                `yaml:"timezone,omitempty"`
-	Operation  string                `yaml:"operation,omitempty"`
-	Connection string                `yaml:"connection,omitempty"`
-	Instance   string                `yaml:"instance,omitempty"`
-	Input      map[string]any        `yaml:"input,omitempty"`
+	Operation  string                `yaml:"-"`
+	Connection string                `yaml:"-"`
+	Instance   string                `yaml:"-"`
+	Input      map[string]any        `yaml:"-"`
 	Paused     bool                  `yaml:"paused,omitempty"`
 }
 
 type WorkflowEventTriggerConfig struct {
 	Provider   string                `yaml:"provider,omitempty"`
 	Target     *WorkflowTargetConfig `yaml:"target,omitempty"`
-	Plugin     string                `yaml:"plugin,omitempty"`
-	Agent      *WorkflowAgentConfig  `yaml:"agent,omitempty"`
+	Plugin     string                `yaml:"-"`
+	Agent      *WorkflowAgentConfig  `yaml:"-"`
 	Match      WorkflowEventMatch    `yaml:"match,omitempty"`
-	Operation  string                `yaml:"operation,omitempty"`
-	Connection string                `yaml:"connection,omitempty"`
-	Instance   string                `yaml:"instance,omitempty"`
-	Input      map[string]any        `yaml:"input,omitempty"`
+	Operation  string                `yaml:"-"`
+	Connection string                `yaml:"-"`
+	Instance   string                `yaml:"-"`
+	Input      map[string]any        `yaml:"-"`
 	Paused     bool                  `yaml:"paused,omitempty"`
+}
+
+type workflowScheduleMarshalYAML struct {
+	Provider string                `yaml:"provider,omitempty"`
+	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
+	Cron     string                `yaml:"cron,omitempty"`
+	Timezone string                `yaml:"timezone,omitempty"`
+	Paused   bool                  `yaml:"paused,omitempty"`
+}
+
+type workflowEventTriggerMarshalYAML struct {
+	Provider string                `yaml:"provider,omitempty"`
+	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
+	Match    WorkflowEventMatch    `yaml:"match,omitempty"`
+	Paused   bool                  `yaml:"paused,omitempty"`
+}
+
+func (c WorkflowScheduleConfig) MarshalYAML() (any, error) {
+	return workflowScheduleMarshalYAML{
+		Provider: c.Provider,
+		Target:   workflowTargetConfigFromFields(c.Target, c.Plugin, c.Agent, c.Operation, c.Connection, c.Instance, c.Input),
+		Cron:     c.Cron,
+		Timezone: c.Timezone,
+		Paused:   c.Paused,
+	}, nil
+}
+
+func (c WorkflowEventTriggerConfig) MarshalYAML() (any, error) {
+	return workflowEventTriggerMarshalYAML{
+		Provider: c.Provider,
+		Target:   workflowTargetConfigFromFields(c.Target, c.Plugin, c.Agent, c.Operation, c.Connection, c.Instance, c.Input),
+		Match:    c.Match,
+		Paused:   c.Paused,
+	}, nil
 }
 
 type WorkflowTargetConfig struct {
@@ -710,6 +749,31 @@ type WorkflowEventMatch struct {
 	Type    string `yaml:"type,omitempty"`
 	Source  string `yaml:"source,omitempty"`
 	Subject string `yaml:"subject,omitempty"`
+}
+
+func workflowTargetConfigFromFields(target *WorkflowTargetConfig, plugin string, agent *WorkflowAgentConfig, operation, connection, instance string, input map[string]any) *WorkflowTargetConfig {
+	if target != nil {
+		return target
+	}
+	if agent != nil {
+		return &WorkflowTargetConfig{Agent: agent}
+	}
+	if strings.TrimSpace(plugin) == "" &&
+		strings.TrimSpace(operation) == "" &&
+		strings.TrimSpace(connection) == "" &&
+		strings.TrimSpace(instance) == "" &&
+		len(input) == 0 {
+		return nil
+	}
+	return &WorkflowTargetConfig{
+		Plugin: &WorkflowPluginTargetConfig{
+			Name:       plugin,
+			Operation:  operation,
+			Connection: connection,
+			Instance:   instance,
+			Input:      input,
+		},
+	}
 }
 
 func (c *HostIndexedDBBindingConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -826,8 +890,11 @@ func normalizeProviderEntryUINode(node *yaml.Node) (*pluginUIBindingConfig, erro
 	for i := 0; i+1 < len(raw.Content); i += 2 {
 		key := raw.Content[i]
 		value := raw.Content[i+1]
-		if key == nil || strings.TrimSpace(key.Value) != "ui" || value == nil || value.Kind != yaml.MappingNode {
+		if key == nil || strings.TrimSpace(key.Value) != "ui" {
 			continue
+		}
+		if value == nil || value.Kind != yaml.MappingNode {
+			return nil, fmt.Errorf("ui must be an object with path")
 		}
 		var binding pluginUIBindingConfig
 		if err := decodeYAMLNodeKnownFields(value, &binding); err != nil {
@@ -839,31 +906,15 @@ func normalizeProviderEntryUINode(node *yaml.Node) (*pluginUIBindingConfig, erro
 			return nil, fmt.Errorf("ui.path is required when ui is an object")
 		}
 		if mappingValueNode(raw, "mountPath") != nil {
-			return nil, fmt.Errorf("ui object cannot be combined with mountPath")
+			return nil, fmt.Errorf("mountPath is no longer supported; use ui.path")
 		}
-		if binding.Bundle == "" {
-			raw.Content = append(raw.Content[:i], raw.Content[i+2:]...)
-		} else {
-			raw.Content[i+1] = &yaml.Node{
-				Kind:  yaml.ScalarNode,
-				Tag:   "!!str",
-				Value: binding.Bundle,
-			}
-		}
+		raw.Content = append(raw.Content[:i], raw.Content[i+2:]...)
 		return &binding, nil
 	}
-	return nil, nil
-}
-
-func providerEntryUIPathsEqual(left, right string) bool {
-	left = strings.TrimSpace(left)
-	right = strings.TrimSpace(right)
-	if left == right {
-		return true
+	if mappingValueNode(raw, "mountPath") != nil {
+		return nil, fmt.Errorf("mountPath is no longer supported; use ui.path")
 	}
-	normalizedLeft, leftErr := normalizeMountedUIPath(left)
-	normalizedRight, rightErr := normalizeMountedUIPath(right)
-	return leftErr == nil && rightErr == nil && normalizedLeft == normalizedRight
+	return nil, nil
 }
 
 func cloneRouteAuthDef(src *RouteAuthDef) *RouteAuthDef {
@@ -2935,13 +2986,13 @@ func applyPluginMountBindings(cfg *Config) error {
 
 		if plugin.MountPath == "" {
 			if plugin.UI != "" {
-				return fmt.Errorf("config validation: plugins.%s.ui requires plugins.%s.mountPath", pluginName, pluginName)
+				return fmt.Errorf("config validation: plugins.%s.ui.bundle requires plugins.%s.ui.path", pluginName, pluginName)
 			}
 			continue
 		}
 		normalizedPath, err := normalizeMountedUIPath(plugin.MountPath)
 		if err != nil {
-			return fmt.Errorf("config validation: plugins.%s.mountPath: %w", pluginName, err)
+			return fmt.Errorf("config validation: plugins.%s.ui.path: %w", pluginName, err)
 		}
 		plugin.MountPath = normalizedPath
 		if err := validateAuthorizationPolicyReference(cfg, "plugin", pluginName, plugin.AuthorizationPolicy); err != nil {

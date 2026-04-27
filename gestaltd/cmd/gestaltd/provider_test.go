@@ -2959,7 +2959,8 @@ providers:
 plugins:
   %s:
     source: %q
-    mountPath: %q
+    ui:
+      path: %q
 server:
   providers:
     externalCredentials: default

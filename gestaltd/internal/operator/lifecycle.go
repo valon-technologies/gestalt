@@ -2116,7 +2116,7 @@ func synthesizePluginOwnedUIEntries(cfg *config.Config) error {
 		}
 		manifestSpec := plugin.ManifestSpec()
 		if manifestSpec == nil || manifestSpec.UI == nil {
-			return fmt.Errorf("plugin %q mountPath requires spec.ui or plugins.%s.ui", pluginName, pluginName)
+			return fmt.Errorf("plugin %q ui.path requires spec.ui or plugins.%s.ui.bundle", pluginName, pluginName)
 		}
 		ownedUI := manifestSpec.UI
 		entry, err := ownedUIEntryForPlugin(plugin, ownedUI)
@@ -2238,7 +2238,7 @@ func validateSynthesizedPluginUIEntry(pluginName string, existing, expected *con
 		return fmt.Errorf("config validation: plugins.%s owned ui conflicts with providers.ui.%s.source.path", pluginName, pluginName)
 	}
 	if current := strings.TrimSpace(existing.Path); current != "" && current != expected.Path {
-		return fmt.Errorf("config validation: plugins.%s.mountPath %q conflicts with providers.ui.%s.path", pluginName, expected.Path, pluginName)
+		return fmt.Errorf("config validation: plugins.%s.ui.path %q conflicts with providers.ui.%s.path", pluginName, expected.Path, pluginName)
 	}
 	if current := strings.TrimSpace(existing.AuthorizationPolicy); current != "" && current != expected.AuthorizationPolicy {
 		return fmt.Errorf("config validation: plugins.%s.authorizationPolicy conflicts with providers.ui.%s.authorizationPolicy", pluginName, pluginName)
