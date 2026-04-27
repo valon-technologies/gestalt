@@ -376,7 +376,7 @@ plugins:
 	if authorizationName != "indexeddb" || authorizationEntry == nil {
 		t.Fatalf("SelectedAuthorizationProvider = (%q, %#v), want indexeddb", authorizationName, authorizationEntry)
 	}
-	wantIndexedDB := &PluginIndexedDBConfig{Provider: "archive"}
+	wantIndexedDB := &HostIndexedDBBindingConfig{Provider: "archive"}
 	if got := cfg.Plugins["service-a"].IndexedDB; !reflect.DeepEqual(got, wantIndexedDB) {
 		t.Fatalf("Plugins[service-a].IndexedDB = %#v, want %#v", got, wantIndexedDB)
 	}
@@ -2268,7 +2268,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		want := &PluginIndexedDBConfig{
+		want := &HostIndexedDBBindingConfig{
 			Provider:     "archive",
 			DB:           "roadmap_review",
 			ObjectStores: []string{"tasks", "snapshots"},
@@ -2304,7 +2304,7 @@ server:
 			t.Fatalf("Load: %v", err)
 		}
 		got := cfg.Plugins["roadmap"].IndexedDB
-		want := &PluginIndexedDBConfig{
+		want := &HostIndexedDBBindingConfig{
 			Provider: "sqlite",
 		}
 		if !reflect.DeepEqual(got, want) {
@@ -2432,7 +2432,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		want := &PluginIndexedDBConfig{DB: "plugin_data"}
+		want := &HostIndexedDBBindingConfig{DB: "plugin_data"}
 		if got := cfg.Plugins["datadog"].IndexedDB; !reflect.DeepEqual(got, want) {
 			t.Fatalf("Plugins[datadog].IndexedDB = %#v, want %#v", got, want)
 		}
@@ -3498,7 +3498,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		want := &PluginIndexedDBConfig{
+		want := &HostIndexedDBBindingConfig{
 			Provider:     "workflow_state",
 			DB:           "workflow",
 			ObjectStores: []string{"workflow_schedules", "workflow_runs"},
@@ -3544,7 +3544,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		want := &PluginIndexedDBConfig{
+		want := &HostIndexedDBBindingConfig{
 			Provider:     "agent_state",
 			DB:           "agent_simple",
 			ObjectStores: []string{"runs", "run_idempotency"},

@@ -2217,7 +2217,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		"managed": {
 			Source:  config.ProviderSource{Path: "stub"},
 			Default: true,
-			IndexedDB: &config.PluginIndexedDBConfig{
+			IndexedDB: &config.HostIndexedDBBindingConfig{
 				Provider:     "test",
 				DB:           "agent_resume",
 				ObjectStores: []string{"provider_state"},
@@ -3174,7 +3174,7 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"basic": {
 			Source: config.ProviderSource{Path: "stub"},
-			IndexedDB: &config.PluginIndexedDBConfig{
+			IndexedDB: &config.HostIndexedDBBindingConfig{
 				Provider:     "workflow_state",
 				DB:           "workflow",
 				ObjectStores: []string{"workflow_schedules", "workflow_runs"},
@@ -3229,7 +3229,7 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 	cfg.Providers.Agent = map[string]*config.ProviderEntry{
 		"simple": {
 			Source: config.ProviderSource{Path: "stub"},
-			IndexedDB: &config.PluginIndexedDBConfig{
+			IndexedDB: &config.HostIndexedDBBindingConfig{
 				Provider:     "agent_state",
 				DB:           "agent_simple",
 				ObjectStores: []string{"runs"},
@@ -3379,7 +3379,7 @@ func TestBootstrapClosesWorkflowIndexedDBAndAppliesScopedConfig(t *testing.T) {
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"basic": {
 			Source: config.ProviderSource{Path: "stub"},
-			IndexedDB: &config.PluginIndexedDBConfig{
+			IndexedDB: &config.HostIndexedDBBindingConfig{
 				Provider:     "workflow_state",
 				DB:           "workflow",
 				ObjectStores: []string{"workflow_runs"},
@@ -3503,7 +3503,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"basic": {
 			Source: config.ProviderSource{Path: "stub"},
-			IndexedDB: &config.PluginIndexedDBConfig{
+			IndexedDB: &config.HostIndexedDBBindingConfig{
 				Provider:     "workflow_state",
 				DB:           "workflow",
 				ObjectStores: []string{"workflow_runs"},

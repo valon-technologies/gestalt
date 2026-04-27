@@ -2189,7 +2189,7 @@ func TestPythonSourcePluginFallsBackWithoutGoOnPath(t *testing.T) {
 		t.Fatalf("WriteFile(manifest.yaml): %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
-plugin = "provider"
+provider = "provider"
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile(pyproject.toml): %v", err)
 	}
@@ -3422,7 +3422,7 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 
-	makeConfig := func(indexedDB *config.PluginIndexedDBConfig) *config.Config {
+	makeConfig := func(indexedDB *config.HostIndexedDBBindingConfig) *config.Config {
 		return &config.Config{
 			Plugins: map[string]*config.ProviderEntry{
 				"echoext": {
@@ -3445,7 +3445,7 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 		},
 	}
 
-	checkEnv := func(t *testing.T, indexedDB *config.PluginIndexedDBConfig, envName string) bool {
+	checkEnv := func(t *testing.T, indexedDB *config.HostIndexedDBBindingConfig, envName string) bool {
 		t.Helper()
 		providers, _, err := buildProvidersStrict(context.Background(), makeConfig(indexedDB), NewFactoryRegistry(), Deps{
 			SelectedIndexedDBName: "main",
@@ -3480,16 +3480,16 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 	if got := checkEnv(t, nil, providerhost.DefaultIndexedDBSocketEnv); !got {
 		t.Fatal("default IndexedDB env should be set when plugin omits indexeddb and inherits the host selection")
 	}
-	if got := checkEnv(t, &config.PluginIndexedDBConfig{}, providerhost.DefaultIndexedDBSocketEnv); !got {
+	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{}, providerhost.DefaultIndexedDBSocketEnv); !got {
 		t.Fatal("default IndexedDB env should be set when plugin indexeddb is explicitly empty")
 	}
-	if got := checkEnv(t, &config.PluginIndexedDBConfig{Provider: "archive"}, providerhost.DefaultIndexedDBSocketEnv); !got {
+	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{Provider: "archive"}, providerhost.DefaultIndexedDBSocketEnv); !got {
 		t.Fatal("default IndexedDB env should be set when plugin explicitly selects one indexeddb provider")
 	}
 	if got := checkEnv(t, nil, providerhost.IndexedDBSocketEnv("main")); got {
 		t.Fatal("named IndexedDB env should not be set for inherited plugin indexeddb access")
 	}
-	if got := checkEnv(t, &config.PluginIndexedDBConfig{Provider: "archive"}, providerhost.IndexedDBSocketEnv("archive")); got {
+	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{Provider: "archive"}, providerhost.IndexedDBSocketEnv("archive")); got {
 		t.Fatal("named IndexedDB env should not be set when plugins expose a single indexeddb socket")
 	}
 }
@@ -6072,7 +6072,7 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
-				IndexedDB:            &config.PluginIndexedDBConfig{ObjectStores: []string{"tasks"}},
+				IndexedDB:            &config.HostIndexedDBBindingConfig{ObjectStores: []string{"tasks"}},
 			},
 		},
 	}
@@ -6200,7 +6200,7 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				Execution:            hostedExecutionConfig(&config.HostedRuntimeConfig{}),
-				IndexedDB:            &config.PluginIndexedDBConfig{ObjectStores: []string{"tasks"}},
+				IndexedDB:            &config.HostIndexedDBBindingConfig{ObjectStores: []string{"tasks"}},
 			},
 		},
 	}
@@ -8036,11 +8036,11 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 
 	cases := []struct {
 		name      string
-		indexedDB *config.PluginIndexedDBConfig
+		indexedDB *config.HostIndexedDBBindingConfig
 	}{
 		{name: "omitted indexeddb inherits host selection"},
-		{name: "empty indexeddb inherits host selection", indexedDB: &config.PluginIndexedDBConfig{}},
-		{name: "objectStores-only indexeddb inherits host selection", indexedDB: &config.PluginIndexedDBConfig{ObjectStores: []string{"tasks"}}},
+		{name: "empty indexeddb inherits host selection", indexedDB: &config.HostIndexedDBBindingConfig{}},
+		{name: "objectStores-only indexeddb inherits host selection", indexedDB: &config.HostIndexedDBBindingConfig{ObjectStores: []string{"tasks"}}},
 	}
 	runtimeModes := []struct {
 		name   string
@@ -8139,7 +8139,7 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 		Config map[string]any `yaml:"config"`
 	}
 
-	makeConfig := func(indexedDB *config.PluginIndexedDBConfig) *config.Config {
+	makeConfig := func(indexedDB *config.HostIndexedDBBindingConfig) *config.Config {
 		return &config.Config{
 			Plugins: map[string]*config.ProviderEntry{
 				"echoext": {
@@ -8190,26 +8190,26 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 
 	cases := []struct {
 		name       string
-		indexedDB  *config.PluginIndexedDBConfig
+		indexedDB  *config.HostIndexedDBBindingConfig
 		wantDSN    string
 		wantDB     string
 		wantSQLite bool
 	}{
 		{
 			name:      "defaults db to plugin name for postgres",
-			indexedDB: &config.PluginIndexedDBConfig{Provider: "postgres"},
+			indexedDB: &config.HostIndexedDBBindingConfig{Provider: "postgres"},
 			wantDSN:   "postgres://db.example.test/gestalt",
 			wantDB:    "echoext",
 		},
 		{
 			name:      "uses db override for postgres",
-			indexedDB: &config.PluginIndexedDBConfig{Provider: "postgres", DB: "roadmap_state"},
+			indexedDB: &config.HostIndexedDBBindingConfig{Provider: "postgres", DB: "roadmap_state"},
 			wantDSN:   "postgres://db.example.test/gestalt",
 			wantDB:    "roadmap_state",
 		},
 		{
 			name:       "uses db override for sqlite table prefixes",
-			indexedDB:  &config.PluginIndexedDBConfig{Provider: "sqlite", DB: "roadmap_state"},
+			indexedDB:  &config.HostIndexedDBBindingConfig{Provider: "sqlite", DB: "roadmap_state"},
 			wantDSN:    "sqlite://plugin-state.db",
 			wantDB:     "roadmap_state",
 			wantSQLite: true,
@@ -8360,7 +8360,7 @@ func TestPluginIndexedDBRouteObjectStoresAndTransportPrefix(t *testing.T) {
 						Args:                 []string{"provider"},
 						ResolvedManifest:     manifest,
 						ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-						IndexedDB: &config.PluginIndexedDBConfig{
+						IndexedDB: &config.HostIndexedDBBindingConfig{
 							Provider:     "memory",
 							DB:           "roadmap",
 							ObjectStores: []string{"tasks"},
@@ -8451,7 +8451,7 @@ func TestPluginIndexedDBRouteObjectStoresWithoutTransportPrefix(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				IndexedDB: &config.PluginIndexedDBConfig{
+				IndexedDB: &config.HostIndexedDBBindingConfig{
 					Provider:     "postgres",
 					DB:           "roadmap",
 					ObjectStores: []string{"tasks"},
@@ -8556,7 +8556,7 @@ func TestPluginIndexedDBPreserveLegacyTransportPrefixedData(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				IndexedDB: &config.PluginIndexedDBConfig{
+				IndexedDB: &config.HostIndexedDBBindingConfig{
 					Provider:     "memory",
 					DB:           "roadmap",
 					ObjectStores: []string{"tasks"},
@@ -8642,7 +8642,7 @@ func TestPluginIndexedDBProviderOverrideUsesExplicitHostIndexedDB(t *testing.T) 
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				IndexedDB: &config.PluginIndexedDBConfig{
+				IndexedDB: &config.HostIndexedDBBindingConfig{
 					Provider: "archive",
 					DB:       "roadmap",
 				},
@@ -8729,7 +8729,7 @@ func TestPluginIndexedDBBindingsCleanupOnS3BindingFailure(t *testing.T) {
 				Args:                 []string{"provider"},
 				ResolvedManifest:     manifest,
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				IndexedDB:            &config.PluginIndexedDBConfig{Provider: "main"},
+				IndexedDB:            &config.HostIndexedDBBindingConfig{Provider: "main"},
 				S3:                   []string{"missing"},
 			},
 		},

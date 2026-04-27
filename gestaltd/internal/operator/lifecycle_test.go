@@ -2828,7 +2828,7 @@ build-backend = "setuptools.build_meta"
 name = "local-python-provider"
 
 [tool.gestalt]
-plugin = "provider"
+provider = "provider"
 	`, "\n")), 0o644)
 	writeTestFile("provider.py", []byte(`from typing import Optional
 

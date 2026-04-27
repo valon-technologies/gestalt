@@ -24,9 +24,9 @@ def parse_plugin_target(target: str) -> PluginTarget:
     module_name = module_name.strip()
     attribute_name = attribute_name.strip() or None
     if not module_name:
-        raise RuntimeError("tool.gestalt.provider or tool.gestalt.plugin must be in module or module:attribute form")
+        raise RuntimeError("tool.gestalt.provider must be in module or module:attribute form")
     if sep and attribute_name is None:
-        raise RuntimeError("tool.gestalt.provider or tool.gestalt.plugin attribute is required when ':' is present")
+        raise RuntimeError("tool.gestalt.provider attribute is required when ':' is present")
 
     return PluginTarget(
         module_name=module_name,
@@ -76,5 +76,4 @@ def write_bundled_plugin_config(
         ),
         encoding="utf-8",
     )
-
 

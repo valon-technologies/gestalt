@@ -494,11 +494,6 @@ type HostIndexedDBBindingConfig struct {
 	ObjectStores []string `yaml:"objectStores,omitempty"`
 }
 
-// PluginIndexedDBConfig is kept as a source-compatible alias for older code and
-// tests. The binding is no longer plugin-specific: plugins, workflow providers,
-// and agent providers all use the same host IndexedDB service shape.
-type PluginIndexedDBConfig = HostIndexedDBBindingConfig
-
 type pluginUIBindingConfig struct {
 	Path   string `yaml:"path,omitempty"`
 	Bundle string `yaml:"bundle,omitempty"`

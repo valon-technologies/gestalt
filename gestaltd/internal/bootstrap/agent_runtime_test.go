@@ -567,7 +567,7 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
 					Command:   bin,
-					IndexedDB: &config.PluginIndexedDBConfig{Provider: "agent_state"},
+					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
 					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
 				},
 			},
@@ -650,7 +650,7 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
 					Command:   bin,
-					IndexedDB: &config.PluginIndexedDBConfig{Provider: "agent_state"},
+					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
 					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
 				},
 			},
@@ -732,7 +732,7 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
 					Command:   bin,
-					IndexedDB: &config.PluginIndexedDBConfig{Provider: "agent_state"},
+					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
 					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
 				},
 			},
@@ -801,7 +801,7 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 			Agent: map[string]*config.ProviderEntry{
 				"simple": {
 					Command:   bin,
-					IndexedDB: &config.PluginIndexedDBConfig{Provider: "agent_state"},
+					IndexedDB: &config.HostIndexedDBBindingConfig{Provider: "agent_state"},
 					Execution: &config.ExecutionConfig{Mode: config.ExecutionModeHosted, Runtime: runtimeConfig},
 				},
 			},

@@ -1,6 +1,7 @@
 package providerpkg
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -62,7 +63,7 @@ func TestDetectPythonComponentTarget(t *testing.T) {
 
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
-plugin = "provider"
+provider = "provider"
 authentication = "provider:auth_provider"
 cache = "provider:cache_provider"
 indexeddb = "provider:indexeddb_provider"
@@ -114,23 +115,19 @@ provider = "provider"
 	}
 }
 
-func TestDetectPythonProviderTarget_PrefersProviderKeyOverLegacyPluginKey(t *testing.T) {
+func TestDetectPythonProviderTarget_IgnoresLegacyPluginKey(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
-provider = "provider"
 plugin = "legacy_provider"
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile(pyproject.toml): %v", err)
 	}
 
-	target, err := DetectPythonProviderTarget(root)
-	if err != nil {
-		t.Fatalf("DetectPythonProviderTarget: %v", err)
-	}
-	if target != "provider" {
-		t.Fatalf("target = %q, want %q", target, "provider")
+	_, err := DetectPythonProviderTarget(root)
+	if !errors.Is(err, ErrNoPythonProviderPackage) {
+		t.Fatalf("error = %v, want %v", err, ErrNoPythonProviderPackage)
 	}
 }
 
@@ -139,7 +136,7 @@ func TestDetectPythonComponentTarget_MissingKindReturnsNoSourceComponentPackage(
 
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
-plugin = "provider"
+provider = "provider"
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile(pyproject.toml): %v", err)
 	}
