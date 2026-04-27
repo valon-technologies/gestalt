@@ -2,7 +2,6 @@
 mod helpers;
 
 use std::collections::BTreeMap;
-use std::fs;
 use std::sync::{Arc, Mutex};
 
 use gestalt::proto::v1::integration_provider_server::IntegrationProvider;
@@ -34,44 +33,18 @@ struct EchoOutput {
     message: String,
 }
 
-fn http_manifest_router() -> gestalt::Result<gestalt::Router<TestProvider>> {
-    gestalt::Router::new()
-        .security_scheme(
-            "signed",
-            gestalt::HTTPSecurityScheme::hmac()
-                .secret_env("REQUEST_SIGNING_SECRET")
-                .signature_header("X-Request-Signature")
-                .signature_prefix("v0=")
-                .payload_template("v0:{header:X-Request-Timestamp}:{raw_body}")
-                .timestamp_header("X-Request-Timestamp")
-                .max_age_seconds(300),
-        )
-        .http_binding(
-            "command",
-            gestalt::HTTPBinding::new("/command", "post", "signed", "echo")
-                .request_body(
-                    gestalt::HTTPRequestBody::new()
-                        .required(true)
-                        .content_type("application/x-www-form-urlencoded"),
-                )
-                .ack(gestalt::HTTPAck::new().status(200).body(json!({
-                    "status": "accepted",
-                }))),
-        )
-        .register(
-            Operation::<EchoInput, EchoOutput>::new("echo"),
-            |_: Arc<TestProvider>, input: EchoInput, _request: Request| async move {
-                Ok::<Response<EchoOutput>, std::convert::Infallible>(ok(EchoOutput {
-                    message: input.message,
-                }))
-            },
-        )
+fn test_router() -> gestalt::Result<gestalt::Router<TestProvider>> {
+    gestalt::Router::new().register(
+        Operation::<EchoInput, EchoOutput>::new("echo"),
+        |_: Arc<TestProvider>, input: EchoInput, _request: Request| async move {
+            Ok::<Response<EchoOutput>, std::convert::Infallible>(ok(EchoOutput {
+                message: input.message,
+            }))
+        },
+    )
 }
 
-gestalt::export_provider!(
-    constructor = TestProvider::default,
-    router = http_manifest_router
-);
+gestalt::export_provider!(constructor = TestProvider::default, router = test_router);
 
 #[tokio::test]
 async fn executes_registered_operation() {
@@ -124,92 +97,6 @@ fn catalog_includes_parameters() {
     assert_eq!(catalog.operations[0].parameters[0].name, "message");
     assert!(catalog.operations[0].read_only);
     assert_eq!(catalog.operations[0].allowed_roles, vec!["viewer", "admin"]);
-}
-
-#[test]
-fn router_includes_manifest_metadata() {
-    let router = http_manifest_router().expect("router");
-    let metadata = router.manifest_metadata();
-
-    assert_eq!(
-        metadata.security_schemes["signed"].kind,
-        Some(gestalt::HTTPSecuritySchemeType::Hmac)
-    );
-    assert_eq!(metadata.http["command"].path, "/command");
-    assert_eq!(metadata.http["command"].method, "POST");
-    assert_eq!(metadata.http["command"].security, "signed");
-    assert_eq!(metadata.http["command"].target, "echo");
-    assert_eq!(
-        metadata.http["command"]
-            .request_body
-            .as_ref()
-            .expect("request body")
-            .content
-            .len(),
-        1
-    );
-}
-
-#[tokio::test]
-async fn serve_provider_writes_catalog_and_manifest_metadata_when_requested() {
-    let _env_lock = helpers::env_lock().lock().await;
-    let catalog_path = helpers::temp_socket("router-catalog.json");
-    let metadata_path = helpers::temp_socket("router-manifest-metadata.yaml");
-    let _catalog_guard = helpers::EnvGuard::set("GESTALT_PLUGIN_WRITE_CATALOG", &catalog_path);
-    let _metadata_guard =
-        helpers::EnvGuard::set(gestalt::ENV_WRITE_MANIFEST_METADATA, &metadata_path);
-    let _name_guard = helpers::EnvGuard::set("GESTALT_PLUGIN_NAME", "manifest-provider");
-
-    gestalt::runtime::serve_provider(
-        Arc::new(TestProvider),
-        http_manifest_router().expect("router"),
-    )
-    .await
-    .expect("serve provider");
-
-    let catalog = fs::read_to_string(&catalog_path).expect("read catalog");
-    assert!(catalog.contains("\"name\": \"manifest-provider\""));
-    assert!(catalog.contains("\"id\": \"echo\""));
-
-    let metadata = fs::read_to_string(&metadata_path).expect("read manifest metadata");
-    assert!(metadata.contains("securitySchemes:"));
-    assert!(metadata.contains("type: hmac"));
-    assert!(metadata.contains("env: REQUEST_SIGNING_SECRET"));
-    assert!(metadata.contains("signatureHeader: X-Request-Signature"));
-    assert!(metadata.contains("http:"));
-    assert!(metadata.contains("path: /command"));
-    assert!(metadata.contains("target: echo"));
-}
-
-#[tokio::test]
-async fn export_provider_writes_manifest_metadata_with_catalog_exports() {
-    let _env_lock = helpers::env_lock().lock().await;
-    let catalog_path = helpers::temp_socket("macro-catalog.json");
-    let metadata_path = helpers::temp_socket("macro-manifest-metadata.yaml");
-    let direct_metadata_path = helpers::temp_socket("direct-manifest-metadata.yaml");
-    let _metadata_guard =
-        helpers::EnvGuard::set(gestalt::ENV_WRITE_MANIFEST_METADATA, &metadata_path);
-
-    __gestalt_write_catalog("macro-provider", catalog_path.to_str().expect("utf8 path"))
-        .expect("write catalog");
-
-    let catalog = fs::read_to_string(&catalog_path).expect("read macro catalog");
-    assert!(catalog.contains("\"name\": \"macro-provider\""));
-
-    let metadata = fs::read_to_string(&metadata_path).expect("read macro metadata");
-    assert!(metadata.contains("securitySchemes:"));
-    assert!(metadata.contains("target: echo"));
-
-    __gestalt_write_manifest_metadata(
-        "macro-provider",
-        direct_metadata_path.to_str().expect("utf8 path"),
-    )
-    .expect("write direct manifest metadata");
-
-    let direct_metadata =
-        fs::read_to_string(&direct_metadata_path).expect("read direct manifest metadata");
-    assert!(direct_metadata.contains("securitySchemes:"));
-    assert!(direct_metadata.contains("application/x-www-form-urlencoded"));
 }
 
 #[derive(Default)]

@@ -129,9 +129,8 @@ func Register[P any, In any, Out any](
 // Router dispatches provider Execute calls against typed handlers and derives
 // the corresponding static executable catalog.
 type Router[P any] struct {
-	catalog          *proto.Catalog
-	manifestMetadata *ManifestMetadata
-	handlers         map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error)
+	catalog  *proto.Catalog
+	handlers map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error)
 }
 
 // NewRouter constructs a typed router from registrations. Source-provider flows
@@ -180,19 +179,6 @@ func (r *Router[P]) Catalog() *proto.Catalog {
 	return cloneCatalog(r.catalog)
 }
 
-// ManifestMetadata returns a defensive copy of the router's generated manifest
-// metadata.
-func (r *Router[P]) ManifestMetadata() ManifestMetadata {
-	if r == nil || r.manifestMetadata == nil {
-		return ManifestMetadata{}
-	}
-	cloned := cloneManifestMetadata(r.manifestMetadata)
-	if cloned == nil {
-		return ManifestMetadata{}
-	}
-	return *cloned
-}
-
 // WithName returns a copy of r with the catalog name overridden.
 func (r *Router[P]) WithName(name string) *Router[P] {
 	if r == nil {
@@ -207,27 +193,8 @@ func (r *Router[P]) WithName(name string) *Router[P] {
 		handlers[opID] = handler
 	}
 	return &Router[P]{
-		catalog:          cat,
-		manifestMetadata: cloneManifestMetadata(r.manifestMetadata),
-		handlers:         handlers,
-	}
-}
-
-// WithManifestMetadata returns a copy of r with hosted HTTP/security metadata
-// attached for manifest export.
-func (r *Router[P]) WithManifestMetadata(metadata ManifestMetadata) *Router[P] {
-	if r == nil {
-		return nil
-	}
-	cat := cloneCatalog(r.catalog)
-	handlers := make(map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error), len(r.handlers))
-	for opID, handler := range r.handlers {
-		handlers[opID] = handler
-	}
-	return &Router[P]{
-		catalog:          cat,
-		manifestMetadata: cloneManifestMetadataValue(metadata),
-		handlers:         handlers,
+		catalog:  cat,
+		handlers: handlers,
 	}
 }
 

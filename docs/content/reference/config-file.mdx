@@ -959,6 +959,8 @@ plugins:
 | `source.auth` | Optional metadata-fetch auth for release sources. Use this for `source.url`, `source.githubRelease`, or local `provider-release.yaml` metadata. |
 | `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on plugin HTTP operation routes (`/api/v1/integrations/{name}/operations` and `/api/v1/{integration}/{operation}`) and on plugin-backed mounted UIs, including browser-login flows whose `next` path resolves into that plugin's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
 | `config` | Provider-specific configuration passed into the provider package. |
+| `securitySchemes` | Optional hosted HTTP security scheme overrides merged over the plugin manifest's `spec.securitySchemes`. Use this for deployment-specific secrets or for deployment-local hosted HTTP bindings. |
+| `http` | Optional hosted HTTP binding overrides merged over the plugin manifest's `spec.http`. Use this only when a deployment intentionally changes the route path, request body, security scheme, target operation, or acknowledgment response. |
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |

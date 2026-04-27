@@ -91,50 +91,12 @@ func TestServeAuthenticationProviderClosesProviderOnShutdown(t *testing.T) {
 }
 
 func TestServeProviderWritesStaticArtifacts(t *testing.T) {
-	t.Run("catalog and manifest metadata", func(t *testing.T) {
+	t.Run("catalog", func(t *testing.T) {
 		outputDir := filepath.Join(t.TempDir(), "generated")
 		catalogPath := filepath.Join(outputDir, "catalog.yaml")
-		metadataPath := filepath.Join(outputDir, "manifest-metadata.yaml")
 		t.Setenv("GESTALT_PLUGIN_WRITE_CATALOG", catalogPath)
-		t.Setenv("GESTALT_PLUGIN_WRITE_MANIFEST_METADATA", metadataPath)
 
-		router := stubRouter.WithManifestMetadata(gestalt.ManifestMetadata{
-			SecuritySchemes: map[string]gestalt.HTTPSecurityScheme{
-				"signed": {
-					Type: gestalt.HTTPSecuritySchemeTypeHMAC,
-					Secret: &gestalt.HTTPSecretRef{
-						Env: "REQUEST_SIGNING_SECRET",
-					},
-					SignatureHeader: "X-Request-Signature",
-					SignaturePrefix: "v0=",
-					PayloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}",
-					TimestampHeader: "X-Request-Timestamp",
-					MaxAgeSeconds:   300,
-				},
-			},
-			HTTP: map[string]gestalt.HTTPBinding{
-				"command": {
-					Path:     "/command",
-					Method:   "POST",
-					Security: "signed",
-					Target:   "test_op",
-					RequestBody: &gestalt.HTTPRequestBody{
-						Required: true,
-						Content: map[string]gestalt.HTTPMediaType{
-							"application/x-www-form-urlencoded": {},
-						},
-					},
-					Ack: &gestalt.HTTPAck{
-						Status: 200,
-						Body: map[string]any{
-							"status": "accepted",
-						},
-					},
-				},
-			},
-		})
-
-		if err := gestalt.ServeProvider(context.Background(), &stubProvider{}, router); err != nil {
+		if err := gestalt.ServeProvider(context.Background(), &stubProvider{}, stubRouter); err != nil {
 			t.Fatalf("ServeProvider: %v", err)
 		}
 
@@ -151,40 +113,6 @@ func TestServeProviderWritesStaticArtifacts(t *testing.T) {
 			if !strings.Contains(catalogYAML, want) {
 				t.Fatalf("catalog YAML missing %q:\n%s", want, catalogYAML)
 			}
-		}
-
-		metadataData, err := os.ReadFile(metadataPath)
-		if err != nil {
-			t.Fatalf("ReadFile(manifest metadata): %v", err)
-		}
-		metadataYAML := string(metadataData)
-		for _, want := range []string{
-			"securitySchemes:",
-			"type: hmac",
-			"env: REQUEST_SIGNING_SECRET",
-			"signatureHeader: X-Request-Signature",
-			"http:",
-			"path: /command",
-			"target: test_op",
-			"application/x-www-form-urlencoded",
-			"status: accepted",
-		} {
-			if !strings.Contains(metadataYAML, want) {
-				t.Fatalf("manifest metadata YAML missing %q:\n%s", want, metadataYAML)
-			}
-		}
-	})
-
-	t.Run("manifest metadata omitted when unset on router", func(t *testing.T) {
-		metadataPath := filepath.Join(t.TempDir(), "manifest-metadata.yaml")
-		t.Setenv("GESTALT_PLUGIN_WRITE_MANIFEST_METADATA", metadataPath)
-
-		if err := gestalt.ServeProvider(context.Background(), &stubProvider{}, stubRouter); err != nil {
-			t.Fatalf("ServeProvider: %v", err)
-		}
-
-		if _, err := os.Stat(metadataPath); !os.IsNotExist(err) {
-			t.Fatalf("manifest metadata file exists, err = %v, want not exists", err)
 		}
 	})
 }

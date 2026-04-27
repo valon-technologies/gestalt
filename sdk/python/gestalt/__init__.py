@@ -34,15 +34,6 @@ from ._api import (
     Subject,
     field,
 )
-from ._manifest_metadata import (
-    HTTPAck,
-    HTTPBinding,
-    HTTPMediaType,
-    HTTPRequestBody,
-    HTTPSecretRef,
-    HTTPSecurityScheme,
-    PluginManifestMetadata,
-)
 
 _LAZY_EXPORTS = {
     "AgentHost": ("._agent", "AgentHost"),
@@ -195,12 +186,6 @@ __all__ = [
     "ENV_WORKFLOW_HOST_SOCKET",
     "ExternalTokenValidator",
     "HealthChecker",
-    "HTTPAck",
-    "HTTPBinding",
-    "HTTPMediaType",
-    "HTTPRequestBody",
-    "HTTPSecretRef",
-    "HTTPSecurityScheme",
     "HTTPSubjectRequest",
     "HTTPSubjectResolutionError",
     "Index",
@@ -226,7 +211,6 @@ __all__ = [
     "PresignOptions",
     "PresignResult",
     "ProviderKind",
-    "PluginManifestMetadata",
     "ProviderMetadata",
     "Request",
     "Response",

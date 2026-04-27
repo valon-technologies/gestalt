@@ -78,21 +78,6 @@ export {
   type CatalogSchema,
 } from "./catalog.ts";
 export {
-  hasPluginManifestMetadata,
-  manifestMetadataToYaml,
-  writeManifestMetadataYaml,
-  type HTTPAck,
-  type HTTPAuthScheme,
-  type HTTPBinding,
-  type HTTPIn,
-  type HTTPMediaType,
-  type HTTPRequestBody,
-  type HTTPSecretRef,
-  type HTTPSecurityScheme,
-  type HTTPSecuritySchemeType,
-  type PluginManifestMetadata,
-} from "./manifest-metadata.ts";
-export {
   buildProviderBinary,
   bunBuildCommand,
   bunTarget,
@@ -219,7 +204,6 @@ export {
   ENV_PROVIDER_PARENT_PID,
   ENV_PROVIDER_SOCKET,
   ENV_WRITE_CATALOG,
-  ENV_WRITE_MANIFEST_METADATA,
   createAuthenticationService,
   createCacheService,
   createSecretsService,

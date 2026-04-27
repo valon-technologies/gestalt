@@ -202,18 +202,10 @@ source packages use the same release flow without catalog generation. Pass
 `--platform linux/amd64,darwin/arm64` to build explicit targets. Pass `--platform all` in CI release jobs to build the
 full supported platform matrix for source builds.
 
-Executable source plugins can also define hosted HTTP metadata in code. During
-local source execution and `provider release`, Gestalt merges generated
-`spec.securitySchemes` and `spec.http` blocks into the effective manifest. The
-language-specific authoring APIs are:
-
-- Go: `Router.WithManifestMetadata(...)`
-- Python: `Plugin(..., securitySchemes=..., http=...)`
-- Rust: `Router::security_scheme(...).http_binding(...)`
-- TypeScript: `definePlugin({ securitySchemes, http, ... })`
-
-That generated metadata shows up in the released manifest exactly as if it had
-been authored declaratively:
+Executable source plugins declare hosted HTTP routes in the manifest with
+`spec.securitySchemes` and `spec.http`. During local source execution and
+`provider release`, Gestalt preserves those manifest blocks in the effective
+manifest and released archive:
 
 ```yaml
 spec:

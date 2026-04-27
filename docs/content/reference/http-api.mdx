@@ -21,6 +21,7 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | `POST` | `/api/v1/auth/logout` | Clears the current platform session. |
 | `GET` | `/api/v1/auth/callback` | Completes plugin OAuth. |
 | `POST` | `/api/v1/auth/pending-connection` | Render or finalize a multi-candidate connection choice using a pending connection token. |
+| `GET`, `POST`, `PUT`, `PATCH`, or `DELETE` | `/api/v1/{plugin}/{hostedPath}` | Invoke a plugin-hosted HTTP binding declared by `spec.http` or `plugins.<name>.http`. The route is verified by the binding's `security` scheme, not by Gestalt session authentication. |
 
 ## Authenticated User Routes
 

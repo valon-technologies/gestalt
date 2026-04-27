@@ -750,42 +750,7 @@ func setupPluginDirWithHostedHTTPBinding(t *testing.T, baseDir string) string {
 	t.Helper()
 
 	pluginDir := setupPluginDir(t, baseDir)
-	providerPath := filepath.Join(pluginDir, "provider.go")
-	source, err := os.ReadFile(providerPath)
-	if err != nil {
-		t.Fatalf("read %s: %v", providerPath, err)
-	}
-
-	const replacement = `	).WithManifestMetadata(gestalt.ManifestMetadata{
-		SecuritySchemes: map[string]gestalt.HTTPSecurityScheme{
-			"public": {
-				Type: gestalt.HTTPSecuritySchemeTypeNone,
-			},
-		},
-		HTTP: map[string]gestalt.HTTPBinding{
-			"echo_form": {
-				Path:     "/echo-form",
-				Method:   http.MethodPost,
-				Security: "public",
-				Target:   "echo",
-				RequestBody: &gestalt.HTTPRequestBody{
-					Required: true,
-					Content: map[string]gestalt.HTTPMediaType{
-						"application/x-www-form-urlencoded": {},
-					},
-				},
-			},
-		},
-	})
-)`
-	updated := strings.Replace(string(source), "\t)\n)", replacement, 1)
-	if updated == string(source) {
-		t.Fatalf("failed to inject hosted HTTP metadata into %s", providerPath)
-	}
-	if err := os.WriteFile(providerPath, []byte(updated), 0o644); err != nil {
-		t.Fatalf("write %s: %v", providerPath, err)
-	}
-
+	addHostedHTTPBindingToPluginManifest(t, pluginDir, "echo_form", "/echo-form", "echo")
 	return pluginDir
 }
 
@@ -793,37 +758,11 @@ func setupPluginDirWithHTTPSubjectResolution(t *testing.T, baseDir string) strin
 	t.Helper()
 
 	pluginDir := setupPluginDir(t, baseDir)
+	addHostedHTTPBindingToPluginManifest(t, pluginDir, "resolve_subject", "/resolve-subject", "invoke_request_context")
 	providerPath := filepath.Join(pluginDir, "provider.go")
 	source, err := os.ReadFile(providerPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", providerPath, err)
-	}
-
-	const routerReplacement = `	).WithManifestMetadata(gestalt.ManifestMetadata{
-		SecuritySchemes: map[string]gestalt.HTTPSecurityScheme{
-			"public": {
-				Type: gestalt.HTTPSecuritySchemeTypeNone,
-			},
-		},
-		HTTP: map[string]gestalt.HTTPBinding{
-			"resolve_subject": {
-				Path:     "/resolve-subject",
-				Method:   http.MethodPost,
-				Security: "public",
-				Target:   "invoke_request_context",
-				RequestBody: &gestalt.HTTPRequestBody{
-					Required: true,
-					Content: map[string]gestalt.HTTPMediaType{
-						"application/x-www-form-urlencoded": {},
-					},
-				},
-			},
-		},
-	})
-)`
-	updated := strings.Replace(string(source), "\t)\n)", routerReplacement, 1)
-	if updated == string(source) {
-		t.Fatalf("failed to inject hosted HTTP subject metadata into %s", providerPath)
 	}
 
 	const resolverMethod = `
@@ -866,17 +805,57 @@ func (p *Provider) ResolveHTTPSubject(ctx context.Context, req gestalt.HTTPSubje
 }
 
 `
-	withResolver := strings.Replace(updated, "func (p *Provider) greet(", resolverMethod+"func (p *Provider) greet(", 1)
-	if withResolver == updated {
+	updated := strings.Replace(string(source), "func (p *Provider) greet(", resolverMethod+"func (p *Provider) greet(", 1)
+	if updated == string(source) {
 		t.Fatalf("failed to inject ResolveHTTPSubject into %s", providerPath)
 	}
-	updated = withResolver
 
 	if err := os.WriteFile(providerPath, []byte(updated), 0o644); err != nil {
 		t.Fatalf("write %s: %v", providerPath, err)
 	}
 
 	return pluginDir
+}
+
+func addHostedHTTPBindingToPluginManifest(t *testing.T, pluginDir, name, path, target string) {
+	t.Helper()
+
+	manifestPath := filepath.Join(pluginDir, "manifest.yaml")
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read source manifest %s: %v", manifestPath, err)
+	}
+	if manifest.Spec == nil {
+		manifest.Spec = &providermanifestv1.Spec{}
+	}
+	if manifest.Spec.SecuritySchemes == nil {
+		manifest.Spec.SecuritySchemes = map[string]*providermanifestv1.HTTPSecurityScheme{}
+	}
+	manifest.Spec.SecuritySchemes["public"] = &providermanifestv1.HTTPSecurityScheme{
+		Type: providermanifestv1.HTTPSecuritySchemeTypeNone,
+	}
+	if manifest.Spec.HTTP == nil {
+		manifest.Spec.HTTP = map[string]*providermanifestv1.HTTPBinding{}
+	}
+	manifest.Spec.HTTP[name] = &providermanifestv1.HTTPBinding{
+		Path:     path,
+		Method:   http.MethodPost,
+		Security: "public",
+		Target:   target,
+		RequestBody: &providermanifestv1.HTTPRequestBody{
+			Required: true,
+			Content: map[string]*providermanifestv1.HTTPMediaType{
+				"application/x-www-form-urlencoded": {},
+			},
+		},
+	}
+	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatFromPath(manifestPath))
+	if err != nil {
+		t.Fatalf("encode source manifest %s: %v", manifestPath, err)
+	}
+	if err := os.WriteFile(manifestPath, data, 0o644); err != nil {
+		t.Fatalf("write %s: %v", manifestPath, err)
+	}
 }
 
 func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
@@ -2178,7 +2157,7 @@ plugins:
 	}
 }
 
-func TestE2EServeMountsGeneratedHostedHTTPBindingsForLocalSourcePlugin(t *testing.T) {
+func TestE2EServeMountsManifestHostedHTTPBindingsForLocalSourcePlugin(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
