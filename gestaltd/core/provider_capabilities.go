@@ -105,3 +105,23 @@ func PostConnect(ctx context.Context, prov Provider, token *IntegrationToken) (m
 	}
 	return metadata, true, nil
 }
+
+func SupportsHTTPSubject(prov Provider) bool {
+	if aware, ok := prov.(interface{ SupportsHTTPSubject() bool }); ok {
+		return aware.SupportsHTTPSubject()
+	}
+	_, ok := prov.(HTTPSubjectResolver)
+	return ok
+}
+
+func ResolveHTTPSubject(ctx context.Context, prov Provider, req *HTTPSubjectResolveRequest) (*HTTPResolvedSubject, bool, error) {
+	if !SupportsHTTPSubject(prov) {
+		return nil, false, nil
+	}
+	resolver, ok := prov.(HTTPSubjectResolver)
+	if !ok {
+		return nil, false, nil
+	}
+	subject, err := resolver.ResolveHTTPSubject(ctx, req)
+	return subject, true, err
+}

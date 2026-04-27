@@ -71,6 +71,11 @@ func (p *connectedProvider) PostConnect(ctx context.Context, token *core.Integra
 	}
 	return metadata, err
 }
+func (p *connectedProvider) SupportsHTTPSubject() bool { return core.SupportsHTTPSubject(p.inner) }
+func (p *connectedProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+	subject, _, err := core.ResolveHTTPSubject(ctx, p.inner, req)
+	return subject, err
+}
 func (p *connectedProvider) Close() error {
 	if closer, ok := p.inner.(io.Closer); ok {
 		return closer.Close()
@@ -93,6 +98,15 @@ func (p *connectedSessionCatalogProvider) PostConnect(ctx context.Context, token
 		return nil, core.ErrPostConnectUnsupported
 	}
 	return metadata, err
+}
+
+func (p *connectedSessionCatalogProvider) SupportsHTTPSubject() bool {
+	return core.SupportsHTTPSubject(p.Provider)
+}
+
+func (p *connectedSessionCatalogProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+	subject, _, err := core.ResolveHTTPSubject(ctx, p.Provider, req)
+	return subject, err
 }
 
 func (p *connectedSessionCatalogProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
@@ -121,6 +135,15 @@ func (p *connectedGraphQLProvider) PostConnect(ctx context.Context, token *core.
 		return nil, core.ErrPostConnectUnsupported
 	}
 	return metadata, err
+}
+
+func (p *connectedGraphQLProvider) SupportsHTTPSubject() bool {
+	return core.SupportsHTTPSubject(p.Provider)
+}
+
+func (p *connectedGraphQLProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+	subject, _, err := core.ResolveHTTPSubject(ctx, p.Provider, req)
+	return subject, err
 }
 
 func (p *connectedGraphQLProvider) InvokeGraphQL(ctx context.Context, request core.GraphQLRequest, token string) (*core.OperationResult, error) {
@@ -157,6 +180,15 @@ func (p *connectedOAuthProvider) PostConnect(ctx context.Context, token *core.In
 		return nil, core.ErrPostConnectUnsupported
 	}
 	return metadata, err
+}
+
+func (p *connectedOAuthProvider) SupportsHTTPSubject() bool {
+	return core.SupportsHTTPSubject(p.Provider)
+}
+
+func (p *connectedOAuthProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+	subject, _, err := core.ResolveHTTPSubject(ctx, p.Provider, req)
+	return subject, err
 }
 
 func (p *connectedOAuthProvider) AuthorizationURL(state string, scopes []string) string {

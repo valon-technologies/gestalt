@@ -19,17 +19,12 @@ func (s *Server) resolveHTTPBindingPrincipal(ctx context.Context, binding Mounte
 	if err != nil {
 		return nil, err
 	}
-	resolver, ok := prov.(core.HTTPSubjectResolver)
-	if !ok {
-		return bindingPrincipal, nil
-	}
-
 	resolveCtx := principal.WithPrincipal(ctx, bindingPrincipal)
 	resolveCtx = invocation.WithAccessContext(resolveCtx, s.providerAccessContextWithContext(resolveCtx, bindingPrincipal, binding.PluginName))
 	resolveCtx = invocation.WithWorkflowContext(resolveCtx, httpBindingContextValue(binding, verified, parsed))
 	resolveCtx = invocation.WithInvocationSurface(resolveCtx, invocation.InvocationSurfaceHTTP)
 
-	resolved, err := resolver.ResolveHTTPSubject(resolveCtx, &core.HTTPSubjectResolveRequest{
+	resolved, supported, err := core.ResolveHTTPSubject(resolveCtx, prov, &core.HTTPSubjectResolveRequest{
 		Binding:         binding.Name,
 		Method:          requestMethod(r, binding),
 		Path:            requestPath(r, binding),
@@ -42,6 +37,9 @@ func (s *Server) resolveHTTPBindingPrincipal(ctx context.Context, binding Mounte
 		VerifiedSubject: verifiedSubject(verified),
 		VerifiedClaims:  verifiedClaims(verified),
 	})
+	if !supported {
+		return bindingPrincipal, nil
+	}
 	if err != nil {
 		var resolveErr *core.HTTPSubjectResolveError
 		if errors.As(err, &resolveErr) {

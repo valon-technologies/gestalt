@@ -139,6 +139,15 @@ func (p *Provider) PostConnect(ctx context.Context, token *core.IntegrationToken
 	return nil, core.ErrPostConnectUnsupported
 }
 
+func (p *Provider) SupportsHTTPSubject() bool {
+	return core.SupportsHTTPSubject(p.api)
+}
+
+func (p *Provider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+	subject, _, err := core.ResolveHTTPSubject(ctx, p.api, req)
+	return subject, err
+}
+
 func (p *Provider) Close() error {
 	var firstErr error
 	if err := p.mcp.Close(); err != nil {

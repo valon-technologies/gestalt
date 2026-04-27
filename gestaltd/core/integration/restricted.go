@@ -233,6 +233,15 @@ func (r *Restricted) PostConnect(ctx context.Context, token *core.IntegrationTok
 	return nil, core.ErrPostConnectUnsupported
 }
 
+func (r *Restricted) SupportsHTTPSubject() bool {
+	return core.SupportsHTTPSubject(r.inner)
+}
+
+func (r *Restricted) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+	subject, _, err := core.ResolveHTTPSubject(ctx, r.inner, req)
+	return subject, err
+}
+
 func (r *Restricted) ConnectionForOperation(operation string) string {
 	if _, ok := r.allowed[operation]; !ok {
 		return ""

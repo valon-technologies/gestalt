@@ -666,6 +666,18 @@ func (p *attachProvider) PostConnect(ctx context.Context, token *core.Integratio
 	return pcp.PostConnect(ctx, token)
 }
 
+func (p *attachProvider) SupportsHTTPSubject() bool {
+	return p != nil && p.Provider != nil && core.SupportsHTTPSubject(p.Provider)
+}
+
+func (p *attachProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+	if p == nil || p.Provider == nil {
+		return nil, nil
+	}
+	subject, _, err := core.ResolveHTTPSubject(ctx, p.Provider, req)
+	return subject, err
+}
+
 func (p *attachProvider) Close() error {
 	if p == nil || p.Provider == nil {
 		return nil
