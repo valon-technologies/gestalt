@@ -199,6 +199,7 @@ pub fn env_api_key_is_set() -> bool {
         .unwrap_or(false)
 }
 
+#[derive(Clone)]
 pub struct ApiClient {
     client: Client,
     stream_client: Client,

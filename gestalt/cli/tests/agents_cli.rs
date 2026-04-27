@@ -335,23 +335,25 @@ fn test_cli_runs_interactive_agent_session() {
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"hello there"}]}"#.to_string(),
+        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"hello\nthere"}]}"#.to_string(),
     ))
     .with_body(TURN_JSON)
     .create();
-    let _events = authed_json_mock!(
-        server,
-        Method::GET,
-        "/api/v1/agent/turns/turn-1/events?after=0&limit=100",
-        StatusCode::OK
-    )
-    .with_body(
-        r#"[
-            {"seq":1,"type":"assistant.completed","data":{"text":"hello back"}},
-            {"seq":2,"type":"turn.completed","data":{"status":"succeeded"}}
-        ]"#,
-    )
-    .create();
+    let _events = server
+        .mock(
+            Method::GET.as_str(),
+            "/api/v1/agent/turns/turn-1/events/stream?after=0&limit=100&until=blocked_or_terminal",
+        )
+        .match_header(header::AUTHORIZATION.as_str(), Matcher::Exact(test_bearer()))
+        .with_status(usize::from(StatusCode::OK.as_u16()))
+        .with_header(header::CONTENT_TYPE.as_str(), "text/event-stream")
+        .with_body(
+            "data: {\"seq\":1,\"type\":\"tool.started\",\"data\":{\"toolName\":\"lookup\",\"arguments\":{\"ticket\":\"INC-42\"}}}\n\n\
+             data: {\"seq\":2,\"type\":\"tool.completed\",\"data\":{\"toolName\":\"lookup\",\"status\":200,\"output\":{\"ok\":true}}}\n\n\
+             data: {\"seq\":3,\"type\":\"assistant.completed\",\"data\":{\"text\":\"hello back\"}}\n\n\
+             data: {\"seq\":4,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        )
+        .create();
     let _get_turn = authed_json_mock!(
         server,
         Method::GET,
@@ -365,7 +367,8 @@ fn test_cli_runs_interactive_agent_session() {
             "provider":"managed",
             "model":"gpt-5.4",
             "status":"succeeded",
-            "outputText":"hello back"
+            "outputText":"hello back",
+            "structuredOutput":{"summary":"ok"}
         }"#,
     )
     .create();
@@ -373,10 +376,14 @@ fn test_cli_runs_interactive_agent_session() {
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args(["agent", "--provider", "managed", "--model", "gpt-5.4"])
-        .write_stdin("hello there\n/quit\n")
+        .write_stdin("hello\\\nthere\n/quit\n")
         .assert()
         .success()
+        .stdout(predicate::str::contains("tool> lookup started"))
+        .stdout(predicate::str::contains("tool> lookup completed (200)"))
         .stdout(predicate::str::contains("assistant> hello back"))
+        .stdout(predicate::str::contains("structured>"))
+        .stdout(predicate::str::contains(r#""summary": "ok""#))
         .stderr(predicate::str::contains(
             "Session session-1 [managed / gpt-5.4]",
         ))
@@ -428,13 +435,11 @@ fn test_cli_resumes_latest_active_agent_session() {
         ),
         ExpectedRequest::text(
             Method::GET,
-            "/api/v1/agent/turns/turn-resumed/events?after=0&limit=100",
+            "/api/v1/agent/turns/turn-resumed/events/stream?after=0&limit=100&until=blocked_or_terminal",
             StatusCode::OK,
-            http::APPLICATION_JSON,
-            r#"[
-                {"seq":1,"type":"assistant.completed","data":{"text":"continued"}},
-                {"seq":2,"type":"turn.completed","data":{"status":"succeeded"}}
-            ]"#,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"continued\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
         ),
         ExpectedRequest::text(
             Method::GET,
@@ -556,13 +561,11 @@ fn test_cli_resumes_existing_agent_session_and_resolves_input_interaction() {
         ),
         ExpectedRequest::text(
             Method::GET,
-            "/api/v1/agent/turns/turn-input/events?after=0&limit=100",
+            "/api/v1/agent/turns/turn-input/events/stream?after=0&limit=100&until=blocked_or_terminal",
             StatusCode::OK,
-            http::APPLICATION_JSON,
-            r#"[
-                {"seq":1,"type":"turn.started","data":{"status":"running"}},
-                {"seq":2,"type":"interaction.requested","data":{"interaction_id":"interaction-2"}}
-            ]"#,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"turn.started\",\"data\":{\"status\":\"running\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"interaction.requested\",\"data\":{\"interaction_id\":\"interaction-2\"}}\n\n",
         ),
         ExpectedRequest::text(
             Method::GET,
@@ -611,14 +614,12 @@ fn test_cli_resumes_existing_agent_session_and_resolves_input_interaction() {
         ),
         ExpectedRequest::text(
             Method::GET,
-            "/api/v1/agent/turns/turn-input/events?after=2&limit=100",
+            "/api/v1/agent/turns/turn-input/events/stream?after=2&limit=100&until=blocked_or_terminal",
             StatusCode::OK,
-            http::APPLICATION_JSON,
-            r#"[
-                {"seq":3,"type":"interaction.resolved","data":{"interaction_id":"interaction-2"}},
-                {"seq":4,"type":"assistant.completed","data":{"text":"incident INC-42 summarized"}},
-                {"seq":5,"type":"turn.completed","data":{"status":"succeeded"}}
-            ]"#,
+            "text/event-stream",
+            "data: {\"seq\":3,\"type\":\"interaction.resolved\",\"data\":{\"interaction_id\":\"interaction-2\"}}\n\n\
+             data: {\"seq\":4,\"type\":\"assistant.completed\",\"data\":{\"text\":\"incident INC-42 summarized\"}}\n\n\
+             data: {\"seq\":5,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
         ),
         ExpectedRequest::text(
             Method::GET,
@@ -693,13 +694,11 @@ fn test_cli_resolves_agent_interaction_in_interactive_mode() {
         ),
         ExpectedRequest::text(
             Method::GET,
-            "/api/v1/agent/turns/turn-approval/events?after=0&limit=100",
+            "/api/v1/agent/turns/turn-approval/events/stream?after=0&limit=100&until=blocked_or_terminal",
             StatusCode::OK,
-            http::APPLICATION_JSON,
-            r#"[
-                {"seq":1,"type":"turn.started","data":{"status":"running"}},
-                {"seq":2,"type":"interaction.requested","data":{"interaction_id":"interaction-1"}}
-            ]"#,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"turn.started\",\"data\":{\"status\":\"running\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"interaction.requested\",\"data\":{\"interaction_id\":\"interaction-1\"}}\n\n",
         ),
         ExpectedRequest::text(
             Method::GET,
@@ -748,14 +747,12 @@ fn test_cli_resolves_agent_interaction_in_interactive_mode() {
         ),
         ExpectedRequest::text(
             Method::GET,
-            "/api/v1/agent/turns/turn-approval/events?after=2&limit=100",
+            "/api/v1/agent/turns/turn-approval/events/stream?after=2&limit=100&until=blocked_or_terminal",
             StatusCode::OK,
-            http::APPLICATION_JSON,
-            r#"[
-                {"seq":3,"type":"interaction.resolved","data":{"interaction_id":"interaction-1"}},
-                {"seq":4,"type":"assistant.completed","data":{"text":"deployment approved"}},
-                {"seq":5,"type":"turn.completed","data":{"status":"succeeded"}}
-            ]"#,
+            "text/event-stream",
+            "data: {\"seq\":3,\"type\":\"interaction.resolved\",\"data\":{\"interaction_id\":\"interaction-1\"}}\n\n\
+             data: {\"seq\":4,\"type\":\"assistant.completed\",\"data\":{\"text\":\"deployment approved\"}}\n\n\
+             data: {\"seq\":5,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
         ),
         ExpectedRequest::text(
             Method::GET,

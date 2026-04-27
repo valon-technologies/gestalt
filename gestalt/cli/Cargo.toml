@@ -24,6 +24,8 @@ getrandom = "0.4"
 comfy-table = { version = "7.2.1", default-features = false }
 rpassword = "7"
 time = { version = "0.3", features = ["parsing"] }
+rustyline = "18"
+ctrlc = "3"
 
 [dev-dependencies]
 tempfile = "3"
