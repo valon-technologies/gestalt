@@ -2521,7 +2521,7 @@ func writeFakeTypeScriptComponentReleaseBunForPlatforms(t *testing.T, expectedTa
 	sourceDir := "."
 	return fakebun.NewExecutable(t, fakebun.Config{
 		Install: &fakebun.InstallConfig{
-			ExpectedCwd:           sdkPath,
+			ExpectedCwds:          []string{sourceDir, sdkPath},
 			RequireFrozenLockfile: true,
 		},
 		Build: &fakebun.BuildConfig{
@@ -2560,7 +2560,7 @@ func writeFakeTypeScriptProviderReleaseBun(t *testing.T, expectedPluginName, exp
 	sourceDir := "."
 	return fakebun.NewExecutable(t, fakebun.Config{
 		Install: &fakebun.InstallConfig{
-			ExpectedCwd:           sdkPath,
+			ExpectedCwds:          []string{sourceDir, sdkPath},
 			RequireFrozenLockfile: true,
 		},
 		Runtime: &fakebun.RuntimeConfig{
