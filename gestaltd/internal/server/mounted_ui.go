@@ -465,7 +465,7 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 		}
 		return nil, false
 	}
-	if err := rejectWorkloadCaller(w, p); err != nil {
+	if err := requireUserCaller(w, p); err != nil {
 		return nil, false
 	}
 

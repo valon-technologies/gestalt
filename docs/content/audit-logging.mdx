@@ -91,7 +91,7 @@ rejects the request before invocation.
 | Provider operation invocation | Yes: `gestaltd.operation.*` | Yes | Guarded invocations are both metered and audited. |
 | Platform login start and completion | Yes: `gestaltd.auth.*` | Yes | Login is both operational telemetry and a security event. |
 | Platform token validation | Yes: `gestaltd.auth.*` with `action=validate_token` | Partially | Successful per-request validation is metrics-only; denied auth in shared middleware emits `auth.authenticate`. |
-| HTTP pre-invoker authorization denials | No dedicated semantic metric family | Yes | Denied workload access before invocation dispatch is audited with the attempted operation or `operations.list`. |
+| HTTP pre-invoker authorization denials | No dedicated semantic metric family | Yes | Denied subject access before invocation dispatch is audited with the attempted operation or `operations.list`. |
 | Connection auth start and completion | Yes: `gestaltd.connection.auth.*` | Yes | Covers OAuth start and completion plus manual connect completion. |
 | Connection credential refresh | Yes: `gestaltd.connection.auth.*` with `action=refresh` | No | Refresh remains metrics-only to avoid audit noise. |
 | Credentialed HTTP catalog discovery | Yes: `gestaltd.discovery.*` with `action=list_operations` | No | Operation listing that resolves a session catalog stays metrics-only to avoid audit spam. |

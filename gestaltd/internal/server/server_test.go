@@ -10824,15 +10824,15 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingSubjectCredentialReturns4
 	}
 }
 
-func TestWorkloadAuthorization_HumanRoutesReturn403(t *testing.T) {
+func TestSubjectAuthorization_UserOnlyRoutesReturn403ForNonUserSubjects(t *testing.T) {
 	t.Parallel()
 
-	workloadToken, workloadTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
+	subjectToken, subjectTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 	svc := coretesting.NewStubServices(t)
-	seedSubjectAPIToken(t, svc, workloadTokenHash, principal.WorkloadSubjectID("triage-bot"), "triage-bot")
+	seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{N: "weather", ConnMode: core.ConnectionModeNone},
@@ -10858,7 +10858,7 @@ func TestWorkloadAuthorization_HumanRoutesReturn403(t *testing.T) {
 		{method: http.MethodPost, path: "/api/v1/auth/logout"},
 	} {
 		req, _ := http.NewRequest(request.method, ts.URL+request.path, bytes.NewBufferString(request.body))
-		req.Header.Set("Authorization", "Bearer "+workloadToken)
+		req.Header.Set("Authorization", "Bearer "+subjectToken)
 		if request.body != "" {
 			req.Header.Set("Content-Type", "application/json")
 		}
