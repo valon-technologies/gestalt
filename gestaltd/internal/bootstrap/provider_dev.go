@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 
@@ -28,10 +29,18 @@ func buildProviderDevManager(cfg *config.Config, providers *registry.ProviderMap
 		}
 		spec, _, err := buildStartupProviderSpec(name, entry)
 		if err != nil {
+			if !providerDevEntryIsLocal(entry) {
+				slog.Warn("skipping provider dev target", "provider", name, "error", err)
+				continue
+			}
 			return nil, fmt.Errorf("provider dev target %q: %w", name, err)
 		}
 		pluginConfig, err := config.NodeToMap(entry.Config)
 		if err != nil {
+			if !providerDevEntryIsLocal(entry) {
+				slog.Warn("skipping provider dev target config", "provider", name, "error", err)
+				continue
+			}
 			return nil, fmt.Errorf("provider dev target %q config: %w", name, err)
 		}
 		targetName := name
@@ -49,6 +58,10 @@ func buildProviderDevManager(cfg *config.Config, providers *registry.ProviderMap
 		return nil, nil
 	}
 	return providerdev.NewManager(targets)
+}
+
+func providerDevEntryIsLocal(entry *config.ProviderEntry) bool {
+	return entry != nil && (entry.HasLocalSource() || entry.HasLocalReleaseSource())
 }
 
 func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps Deps, sessionID string) (providerdev.RuntimeEnv, error) {
