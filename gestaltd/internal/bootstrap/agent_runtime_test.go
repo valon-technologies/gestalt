@@ -1027,6 +1027,58 @@ func TestHostedAgentProviderPoolGetTurnRetriesAfterPreferredTimeout(t *testing.T
 	}
 }
 
+func TestHostedAgentProviderPoolGetTurnRetriesAfterStalePreferredMiss(t *testing.T) {
+	t.Parallel()
+
+	firstCalls := 0
+	secondCalls := 0
+	first := &hostedAgentPoolBackend{
+		id: 1,
+		provider: &routingAgentProvider{
+			getTurn: func(context.Context, coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+				firstCalls++
+				return nil, core.ErrNotFound
+			},
+		},
+		liveTurns: map[string]struct{}{"turn-1": {}},
+	}
+	second := &hostedAgentPoolBackend{
+		id: 2,
+		provider: &routingAgentProvider{
+			getTurn: func(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+				secondCalls++
+				return &coreagent.Turn{
+					ID:        req.TurnID,
+					SessionID: "session-1",
+					Status:    coreagent.ExecutionStatusSucceeded,
+				}, nil
+			},
+		},
+		liveTurns: map[string]struct{}{},
+	}
+	pool := &hostedAgentProviderPool{
+		name:            "simple",
+		ctx:             context.Background(),
+		sessionBackends: map[string]*hostedAgentPoolBackend{},
+		turnBackends:    map[string]*hostedAgentPoolBackend{"turn-1": first},
+		backends:        []*hostedAgentPoolBackend{first, second},
+	}
+
+	turn, err := pool.GetTurn(context.Background(), coreagent.GetTurnRequest{TurnID: "turn-1"})
+	if err != nil {
+		t.Fatalf("GetTurn: %v", err)
+	}
+	if turn == nil || turn.ID != "turn-1" || turn.Status != coreagent.ExecutionStatusSucceeded {
+		t.Fatalf("GetTurn = %#v, want succeeded turn-1", turn)
+	}
+	if firstCalls != 1 || secondCalls != 1 {
+		t.Fatalf("GetTurn calls: first=%d second=%d, want first=1 second=1", firstCalls, secondCalls)
+	}
+	if backend := pool.turnBackend("turn-1"); backend != nil {
+		t.Fatalf("terminal turn backend = %#v, want no sticky backend after success", backend)
+	}
+}
+
 func TestHostedAgentProviderPoolListSessionsContinuesAfterTransientBackendFailure(t *testing.T) {
 	t.Parallel()
 
