@@ -113,6 +113,15 @@ func (s *stubBoundTokenResolver) ResolveToken(ctx context.Context, _ *principal.
 	return ctx, s.token, nil
 }
 
+type recordingBindingTokenResolver struct {
+	tokenCalls int
+}
+
+func (s *recordingBindingTokenResolver) ResolveToken(ctx context.Context, _ *principal.Principal, _ string, _ string, _ string) (context.Context, string, error) {
+	s.tokenCalls++
+	return ctx, "user-token", nil
+}
+
 func TestResolveCatalog_StaticCatalog(t *testing.T) {
 	t.Parallel()
 
@@ -296,6 +305,46 @@ func TestResolveCatalog_ModeNonePrincipalUsesRequestedSelectors(t *testing.T) {
 	}
 	if resolver.lastInstance != "team-a" {
 		t.Fatalf("resolver instance = %q, want team-a", resolver.lastInstance)
+	}
+	if len(cat.Operations) != 1 || cat.Operations[0].ID != "session_only" {
+		t.Fatalf("catalog operations = %+v, want session_only", cat.Operations)
+	}
+}
+
+func TestResolveCatalog_CredentialModeNoneOverrideSkipsSessionTokenResolution(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubDynamicSessionProvider{
+		stubCatalogProvider: stubCatalogProvider{
+			stubProvider: stubProvider{
+				name:     "override-none-api",
+				connMode: core.ConnectionModeUser,
+			},
+		},
+		sessionCatFn: func(ctx context.Context, token string) (*catalog.Catalog, error) {
+			if token != "" {
+				t.Fatalf("token = %q, want empty token for credentialMode none override", token)
+			}
+			if got := invocation.CredentialContextFromContext(ctx).Mode; got != core.ConnectionModeNone {
+				t.Fatalf("credential mode = %q, want %q", got, core.ConnectionModeNone)
+			}
+			return &catalog.Catalog{
+				Name: "override-none-api",
+				Operations: []catalog.CatalogOperation{
+					{ID: "session_only", Method: http.MethodGet},
+				},
+			}, nil
+		},
+	}
+	resolver := &recordingBindingTokenResolver{}
+
+	ctx := invocation.WithCredentialModeOverride(context.Background(), core.ConnectionModeNone)
+	cat, err := invocation.ResolveCatalog(ctx, prov, "override-none-api", resolver, &principal.Principal{UserID: "u1"}, "default", "workspace-a")
+	if err != nil {
+		t.Fatalf("ResolveCatalog: %v", err)
+	}
+	if resolver.tokenCalls != 0 {
+		t.Fatalf("token resolver calls = %d, want 0", resolver.tokenCalls)
 	}
 	if len(cat.Operations) != 1 || cat.Operations[0].ID != "session_only" {
 		t.Fatalf("catalog operations = %+v, want session_only", cat.Operations)

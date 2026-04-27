@@ -640,10 +640,18 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
+	if visible, ok := staticCatalogOperationVisibleByDefault(surfaceProv, operationName); ok && !visible {
+		s.writeInvocationError(w, r, providerName, operationName, invocation.ErrOperationNotFound)
+		return
+	}
 	sessionConnections := s.catalogSelectorConfig().SessionCatalogConnections(providerName, connection)
 	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, surfaceProv, providerName, resolver, p, operationName, sessionConnections, instance)
 	if err != nil {
 		s.writeInvocationError(w, r, providerName, operationName, err)
+		return
+	}
+	if !catalog.OperationVisibleByDefault(opMeta) {
+		s.writeInvocationError(w, r, providerName, operationName, invocation.ErrOperationNotFound)
 		return
 	}
 	metricutil.AddHTTPAttributes(r.Context(),
@@ -774,12 +782,26 @@ func httpVisibleCatalogOperations(ops []catalog.CatalogOperation) []catalog.Cata
 	filtered := make([]catalog.CatalogOperation, 0, len(ops))
 	for i := range ops {
 		op := ops[i]
+		if !catalog.OperationVisibleByDefault(op) {
+			continue
+		}
 		if invocation.OperationTransport(op) == catalog.TransportMCPPassthrough {
 			continue
 		}
 		filtered = append(filtered, op)
 	}
 	return filtered
+}
+
+func staticCatalogOperationVisibleByDefault(prov core.Provider, operation string) (bool, bool) {
+	if prov == nil {
+		return true, false
+	}
+	op, ok := invocation.CatalogOperation(prov.Catalog(), operation)
+	if !ok {
+		return true, false
+	}
+	return catalog.OperationVisibleByDefault(op), true
 }
 
 func safeOperationErrorMessage(err error) (string, bool) {

@@ -51,6 +51,10 @@ type CatalogOperation struct {
 	Query          string               `yaml:"query,omitempty"          json:"query,omitempty"`
 }
 
+func OperationVisibleByDefault(op CatalogOperation) bool {
+	return op.Visible == nil || *op.Visible
+}
+
 func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 	type catalogOperationYAML struct {
 		ID             string               `yaml:"id"`

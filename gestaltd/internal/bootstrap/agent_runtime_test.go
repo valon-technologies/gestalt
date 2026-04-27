@@ -17,6 +17,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
@@ -46,10 +47,11 @@ func testHostedAgentRuntimeConfig() *config.HostedRuntimeConfig {
 }
 
 type agentRuntimeInvokerCall struct {
-	providerName string
-	operation    string
-	params       map[string]any
-	subjectID    string
+	providerName           string
+	operation              string
+	params                 map[string]any
+	subjectID              string
+	credentialModeOverride core.ConnectionMode
 }
 
 type recordingAgentRuntimeInvoker struct {
@@ -60,10 +62,11 @@ type recordingAgentRuntimeInvoker struct {
 func (i *recordingAgentRuntimeInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
 	i.mu.Lock()
 	i.calls = append(i.calls, agentRuntimeInvokerCall{
-		providerName: providerName,
-		operation:    operation,
-		params:       cloneAnyMap(params),
-		subjectID:    p.SubjectID,
+		providerName:           providerName,
+		operation:              operation,
+		params:                 cloneAnyMap(params),
+		subjectID:              p.SubjectID,
+		credentialModeOverride: invocation.CredentialModeOverrideFromContext(ctx),
 	})
 	i.mu.Unlock()
 
@@ -774,8 +777,9 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 			ID:   "lookup",
 			Name: "Lookup roadmap task",
 			Target: coreagent.ToolTarget{
-				Plugin:    "roadmap",
-				Operation: "sync",
+				Plugin:         "roadmap",
+				Operation:      "sync",
+				CredentialMode: core.ConnectionModeNone,
 			},
 		}},
 	})
@@ -826,6 +830,9 @@ func TestAgentRuntimeConfigUsesDirectAgentHostBinding(t *testing.T) {
 	}
 	if calls[0].subjectID != "user:user-123" {
 		t.Fatalf("invoker subject_id = %q, want user:user-123", calls[0].subjectID)
+	}
+	if calls[0].credentialModeOverride != core.ConnectionModeNone {
+		t.Fatalf("invoker credential mode override = %q, want %q", calls[0].credentialModeOverride, core.ConnectionModeNone)
 	}
 
 	events, err := agents[0].ListTurnEvents(context.Background(), coreagent.ListTurnEventsRequest{

@@ -138,8 +138,8 @@ func agentToolsToProto(tools []coreagent.Tool) ([]*proto.ResolvedAgentTool, erro
 		return nil, nil
 	}
 	out := make([]*proto.ResolvedAgentTool, 0, len(tools))
-	for _, tool := range tools {
-		value, err := agentToolToProto(tool)
+	for i := range tools {
+		value, err := agentToolToProto(tools[i])
 		if err != nil {
 			return nil, err
 		}

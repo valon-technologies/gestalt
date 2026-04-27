@@ -1463,9 +1463,10 @@ func EffectiveNamedConnectionDef(plugin *ProviderEntry, manifestPlugin *provider
 type OperationOverride = providermanifestv1.ManifestOperationOverride
 
 type PluginInvocationDependency struct {
-	Plugin    string `yaml:"plugin,omitempty"`
-	Operation string `yaml:"operation,omitempty"`
-	Surface   string `yaml:"surface,omitempty"`
+	Plugin         string                            `yaml:"plugin,omitempty"`
+	Operation      string                            `yaml:"operation,omitempty"`
+	Surface        string                            `yaml:"surface,omitempty"`
+	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
 }
 
 func Load(path string) (*Config, error) {

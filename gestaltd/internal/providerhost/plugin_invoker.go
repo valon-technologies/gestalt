@@ -174,6 +174,10 @@ func (s *PluginInvokerServer) tokenContextForInvoke(req *proto.PluginInvokeReque
 	if !allowsOperation(tokenCtx.grants, targetPlugin, targetOperation) || !s.allows(targetPlugin, targetOperation) {
 		return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s", s.pluginName, targetPlugin, targetOperation)
 	}
+	tokenCtx.credentialModeOverride = operationCredentialMode(tokenCtx.grants, targetPlugin, targetOperation)
+	if tokenCtx.credentialModeOverride == "" {
+		tokenCtx.credentialModeOverride = operationCredentialMode(s.allowed, targetPlugin, targetOperation)
+	}
 	return tokenCtx, nil
 }
 

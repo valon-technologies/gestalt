@@ -78,10 +78,11 @@ type MessagePart struct {
 }
 
 type ToolTarget struct {
-	Plugin     string
-	Operation  string
-	Connection string
-	Instance   string
+	Plugin         string
+	Operation      string
+	Connection     string
+	Instance       string
+	CredentialMode core.ConnectionMode
 }
 
 type Tool struct {
@@ -93,12 +94,13 @@ type Tool struct {
 }
 
 type ToolRef struct {
-	Plugin      string
-	Operation   string
-	Connection  string
-	Instance    string
-	Title       string
-	Description string
+	Plugin         string
+	Operation      string
+	Connection     string
+	Instance       string
+	CredentialMode core.ConnectionMode
+	Title          string
+	Description    string
 }
 
 type ResolveToolsRequest struct {

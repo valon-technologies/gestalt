@@ -180,6 +180,15 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 	if !core.SupportsSessionCatalog(prov) {
 		return nil, false, nil
 	}
+	if CredentialModeOverrideFromContext(ctx) == core.ConnectionModeNone {
+		ctx = WithCredentialContext(ctx, CredentialContext{
+			Mode:       core.ConnectionModeNone,
+			Connection: strings.TrimSpace(connection),
+			Instance:   strings.TrimSpace(instance),
+		})
+		cat, _, err := core.CatalogForRequest(ctx, prov, "")
+		return cat, true, err
+	}
 	if effectiveConnectionMode(ctx, prov) == core.ConnectionModeNone {
 		if resolver != nil && p != nil {
 			enrichedCtx, token, err := resolver.ResolveToken(ctx, p, provName, connection, instance)
