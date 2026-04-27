@@ -1069,7 +1069,8 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 
 type agentToolSearchCandidate struct {
 	ref             coreagent.ToolRef
-	score           int
+	catalog         *catalog.Catalog
+	operation       catalog.CatalogOperation
 	skipUnavailable bool
 }
 
@@ -1083,6 +1084,11 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 		providerNames = m.providers.List()
 	}
 	query = strings.TrimSpace(query)
+	if scope.all {
+		if mentioned := mentionedAgentToolSearchProviders(query, providerNames); len(mentioned) > 0 {
+			providerNames = mentioned
+		}
+	}
 	candidates := make([]agentToolSearchCandidate, 0)
 	var firstUnavailableErr error
 	for _, pluginName := range providerNames {
@@ -1130,10 +1136,6 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 				if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, pluginName, op) {
 					continue
 				}
-				score := scoreAgentToolSearch(query, pluginName, cat, op)
-				if query != "" && score <= 0 {
-					continue
-				}
 				ref := searchRef
 				if strings.TrimSpace(ref.Operation) == "" {
 					ref.Title = ""
@@ -1141,23 +1143,19 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 				}
 				ref.Plugin = pluginName
 				ref.Operation = operation
-				candidates = append(candidates, agentToolSearchCandidate{ref: ref, score: score, skipUnavailable: skipUnavailable && agentToolSearchRefSkipsUnavailable(searchRef)})
+				candidates = append(candidates, agentToolSearchCandidate{
+					ref:             ref,
+					catalog:         cat,
+					operation:       op,
+					skipUnavailable: skipUnavailable && agentToolSearchRefSkipsUnavailable(searchRef),
+				})
 			}
 		}
 	}
 	if len(candidates) == 0 && !scope.all && firstUnavailableErr != nil {
 		return nil, firstUnavailableErr
 	}
-	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].score != candidates[j].score {
-			return candidates[i].score > candidates[j].score
-		}
-		if candidates[i].ref.Plugin != candidates[j].ref.Plugin {
-			return candidates[i].ref.Plugin < candidates[j].ref.Plugin
-		}
-		return candidates[i].ref.Operation < candidates[j].ref.Operation
-	})
-	return candidates, nil
+	return rankAgentToolSearchCandidates(query, candidates)
 }
 
 func agentToolSearchUnavailable(err error) bool {
@@ -1284,36 +1282,6 @@ func (s agentToolSearchScope) refsForProvider(pluginName string) []coreagent.Too
 func agentToolSearchRefAllows(ref coreagent.ToolRef, operation string) bool {
 	refOperation := strings.TrimSpace(ref.Operation)
 	return refOperation == "" || refOperation == strings.TrimSpace(operation)
-}
-
-func scoreAgentToolSearch(query, pluginName string, cat *catalog.Catalog, op catalog.CatalogOperation) int {
-	query = strings.ToLower(strings.TrimSpace(query))
-	if query == "" {
-		return 1
-	}
-	haystacks := []struct {
-		value  string
-		weight int
-	}{
-		{pluginName, 8},
-		{op.ID, 8},
-		{op.Title, 6},
-		{cat.DisplayName, 4},
-		{cat.Description, 2},
-		{op.Description, 2},
-	}
-	score := 0
-	for _, term := range strings.Fields(query) {
-		for _, haystack := range haystacks {
-			if strings.Contains(strings.ToLower(haystack.value), term) {
-				score += haystack.weight
-			}
-		}
-	}
-	if strings.Contains(strings.ToLower(pluginName+" "+op.ID+" "+op.Title), query) {
-		score += 12
-	}
-	return score
 }
 
 func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) error {
