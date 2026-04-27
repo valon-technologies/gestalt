@@ -1,11 +1,16 @@
+use std::time::{Duration, Instant};
+
 use serde_json::Value;
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 use super::super::{
     AgentInteractionInfo, AgentSessionInfo, AgentTurnEventInfo, AgentTurnInfo, compact_json,
-    pretty_json, string_any_field, string_field, value_any_field,
+    number_any_field, pretty_json, string_any_field, string_field, value_any_field,
 };
 
 const MAX_TRANSCRIPT_ITEMS: usize = 500;
+const TOOL_PREVIEW_MAX_WIDTH: usize = 120;
 
 pub(super) struct AgentUiState {
     pub(super) session_id: String,
@@ -47,6 +52,7 @@ impl AgentUiState {
 
     pub(super) fn start_turn(&mut self) {
         self.finish_assistant_stream();
+        self.finish_running_tool_activities("turn replaced");
         self.busy = true;
         self.current_turn_id = None;
         self.pending_interaction = None;
@@ -56,6 +62,7 @@ impl AgentUiState {
     }
 
     pub(super) fn finish_worker(&mut self) {
+        self.finish_running_tool_activities("turn ended");
         self.busy = false;
         self.current_turn_id = None;
         self.pending_interaction = None;
@@ -84,38 +91,18 @@ impl AgentUiState {
                     .unwrap_or_else(|| "turn started".to_string());
             }
             "tool.started" => {
-                let tool = event_tool_name(&event);
-                let suffix = value_any_field(&event.data, &["arguments", "input", "request"])
-                    .and_then(|value| compact_json(value).ok())
-                    .map(|value| format!(" {value}"))
-                    .unwrap_or_default();
-                self.push_tool(format!("{tool} started{suffix}"));
+                let activity = ToolActivity::started(&event);
+                let tool = activity.name.clone();
+                self.push_tool_activity(activity);
                 self.status = format!("{tool} running");
             }
             "tool.completed" => {
-                let tool = event_tool_name(&event);
-                let status = string_any_field(&event.data, &["status", "state"]).or_else(|| {
-                    event
-                        .data
-                        .get("statusCode")
-                        .and_then(Value::as_i64)
-                        .map(|v| v.to_string())
-                });
-                let mut text = match status {
-                    Some(status) => format!("{tool} completed ({status})"),
-                    None => format!("{tool} completed"),
-                };
-                if let Some(error) = string_field(&event.data, "error") {
-                    text.push_str(&format!(": {error}"));
-                } else if let Some(output) =
-                    value_any_field(&event.data, &["output", "result", "body"])
-                    && let Ok(encoded) = compact_json(output)
-                {
-                    text.push(' ');
-                    text.push_str(&encoded);
-                }
-                self.push_tool(text);
-                self.status = "tool completed".to_string();
+                let info = ToolTerminalEvent::from_completed(&event);
+                self.finish_tool_activity(info);
+            }
+            "tool.failed" => {
+                let info = ToolTerminalEvent::from_failed(&event);
+                self.finish_tool_activity(info);
             }
             "interaction.requested" => {
                 let id = string_any_field(&event.data, &["interaction_id", "interactionId"])
@@ -168,6 +155,7 @@ impl AgentUiState {
         }
         if terminal {
             self.finish_assistant_stream();
+            self.finish_running_tool_activities(&format!("turn {}", turn.status));
         }
         if !self.saw_structured_output
             && let Some(structured_output) = turn.structured_output.as_ref()
@@ -235,8 +223,71 @@ impl AgentUiState {
         self.assistant_buffer.clear();
     }
 
-    fn push_tool(&mut self, text: String) {
-        self.push(TranscriptKind::Tool, text);
+    fn push_tool_activity(&mut self, activity: ToolActivity) {
+        self.transcript
+            .push(TranscriptItem::tool_activity(activity));
+        self.trim_transcript();
+    }
+
+    fn finish_tool_activity(&mut self, terminal: ToolTerminalEvent) {
+        let tool = terminal.name.clone();
+        let terminal_status = terminal.status_label();
+        if let Some(item) = self.find_running_tool_activity_mut(&terminal) {
+            if let Some(activity) = item.tool_activity.as_mut() {
+                activity.finish(terminal);
+                item.text = activity.render_text();
+            }
+        } else {
+            self.push_tool_activity(ToolActivity::terminal(terminal));
+        }
+        self.status = terminal_status.unwrap_or_else(|| format!("{tool} completed"));
+    }
+
+    fn find_running_tool_activity_mut(
+        &mut self,
+        terminal: &ToolTerminalEvent,
+    ) -> Option<&mut TranscriptItem> {
+        let index = self.find_running_tool_activity_index(terminal)?;
+        self.transcript.get_mut(index)
+    }
+
+    fn find_running_tool_activity_index(&self, terminal: &ToolTerminalEvent) -> Option<usize> {
+        if let Some(key) = terminal.key.as_deref()
+            && let Some(index) = self.transcript.iter().position(|item| {
+                item.tool_activity
+                    .as_ref()
+                    .is_some_and(|activity| activity.is_running_key_match(key))
+            })
+        {
+            return Some(index);
+        }
+
+        let mut candidates = self
+            .transcript
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| {
+                item.tool_activity
+                    .as_ref()
+                    .is_some_and(|activity| activity.is_running_name_match(&terminal.name))
+            })
+            .map(|(index, _)| index);
+        let candidate = candidates.next()?;
+        if candidates.next().is_some() {
+            return None;
+        }
+        Some(candidate)
+    }
+
+    fn finish_running_tool_activities(&mut self, reason: &str) {
+        for item in &mut self.transcript {
+            if let Some(activity) = item.tool_activity.as_mut()
+                && matches!(activity.status, ToolActivityStatus::Running)
+            {
+                activity.end(reason);
+                item.text = activity.render_text();
+            }
+        }
     }
 
     pub(super) fn push_interaction(&mut self, text: String) {
@@ -256,6 +307,7 @@ impl AgentUiState {
             kind,
             text,
             streaming: false,
+            tool_activity: None,
         });
         self.trim_transcript();
     }
@@ -265,14 +317,28 @@ impl AgentUiState {
             kind,
             text,
             streaming: true,
+            tool_activity: None,
         });
         self.trim_transcript();
     }
 
     fn trim_transcript(&mut self) {
-        if self.transcript.len() > MAX_TRANSCRIPT_ITEMS {
-            let remove = self.transcript.len() - MAX_TRANSCRIPT_ITEMS;
-            self.transcript.drain(0..remove);
+        while self.transcript.len() > MAX_TRANSCRIPT_ITEMS {
+            if let Some(remove) = self
+                .transcript
+                .iter()
+                .position(|item| !item.has_running_tool_activity())
+            {
+                self.transcript.remove(remove);
+                continue;
+            }
+
+            if let Some(item) = self.transcript.first_mut()
+                && let Some(activity) = item.tool_activity.as_mut()
+            {
+                activity.end("trimmed");
+                item.text = activity.render_text();
+            }
         }
     }
 
@@ -341,6 +407,188 @@ pub(super) struct TranscriptItem {
     pub(super) kind: TranscriptKind,
     pub(super) text: String,
     streaming: bool,
+    tool_activity: Option<ToolActivity>,
+}
+
+impl TranscriptItem {
+    fn tool_activity(activity: ToolActivity) -> Self {
+        let text = activity.render_text();
+        Self {
+            kind: TranscriptKind::Tool,
+            text,
+            streaming: false,
+            tool_activity: Some(activity),
+        }
+    }
+
+    fn has_running_tool_activity(&self) -> bool {
+        self.tool_activity
+            .as_ref()
+            .is_some_and(|activity| matches!(activity.status, ToolActivityStatus::Running))
+    }
+}
+
+struct ToolActivity {
+    key: Option<String>,
+    name: String,
+    status: ToolActivityStatus,
+    started_at: Option<Instant>,
+    elapsed: Option<Duration>,
+    args: Option<String>,
+    output: Option<String>,
+    error: Option<String>,
+}
+
+impl ToolActivity {
+    fn started(event: &AgentTurnEventInfo) -> Self {
+        Self {
+            key: event_tool_key(event),
+            name: event_tool_name(event),
+            status: ToolActivityStatus::Running,
+            started_at: Some(Instant::now()),
+            elapsed: None,
+            args: preview_value(&event.data, &["arguments", "input", "request"]),
+            output: None,
+            error: None,
+        }
+    }
+
+    fn terminal(terminal: ToolTerminalEvent) -> Self {
+        let mut activity = Self {
+            key: terminal.key.clone(),
+            name: terminal.name.clone(),
+            status: ToolActivityStatus::Running,
+            started_at: None,
+            elapsed: None,
+            args: terminal.args.clone(),
+            output: None,
+            error: None,
+        };
+        activity.finish(terminal);
+        activity
+    }
+
+    fn finish(&mut self, terminal: ToolTerminalEvent) {
+        self.status = terminal.status;
+        if self.args.is_none() {
+            self.args = terminal.args;
+        }
+        self.output = terminal.output;
+        self.error = terminal.error;
+        self.elapsed = self.started_at.map(|started_at| started_at.elapsed());
+    }
+
+    fn end(&mut self, reason: &str) {
+        self.status = ToolActivityStatus::Ended(reason.to_string());
+        self.elapsed = self.started_at.map(|started_at| started_at.elapsed());
+    }
+
+    fn is_running_key_match(&self, key: &str) -> bool {
+        matches!(self.status, ToolActivityStatus::Running) && self.key.as_deref() == Some(key)
+    }
+
+    fn is_running_name_match(&self, name: &str) -> bool {
+        matches!(self.status, ToolActivityStatus::Running) && self.name == name
+    }
+
+    fn render_text(&self) -> String {
+        let mut text = format!("{} {}", self.name, self.status.summary());
+        let mut meta = Vec::new();
+        if let Some(status) = self.status.detail() {
+            meta.push(status);
+        }
+        if let Some(elapsed) = self.elapsed {
+            meta.push(format_duration(elapsed));
+        }
+        if !meta.is_empty() {
+            text.push_str(&format!(" ({})", meta.join(", ")));
+        }
+        if let Some(args) = self.args.as_deref() {
+            text.push_str(&format!("\n  args {args}"));
+        }
+        if let Some(output) = self.output.as_deref() {
+            text.push_str(&format!("\n  output {output}"));
+        }
+        if let Some(error) = self.error.as_deref() {
+            text.push_str(&format!("\n  error {error}"));
+        }
+        text
+    }
+}
+
+struct ToolTerminalEvent {
+    key: Option<String>,
+    name: String,
+    status: ToolActivityStatus,
+    args: Option<String>,
+    output: Option<String>,
+    error: Option<String>,
+}
+
+impl ToolTerminalEvent {
+    fn from_completed(event: &AgentTurnEventInfo) -> Self {
+        let error = string_field(&event.data, "error").map(|value| truncate_preview(&value));
+        let status = if error.is_some() {
+            ToolActivityStatus::Failed(tool_status(&event.data))
+        } else {
+            ToolActivityStatus::Completed(tool_status(&event.data))
+        };
+        Self {
+            key: event_tool_key(event),
+            name: event_tool_name(event),
+            status,
+            args: preview_value(&event.data, &["arguments", "input", "request"]),
+            output: preview_value(&event.data, &["output", "result", "body"]),
+            error,
+        }
+    }
+
+    fn from_failed(event: &AgentTurnEventInfo) -> Self {
+        Self {
+            key: event_tool_key(event),
+            name: event_tool_name(event),
+            status: ToolActivityStatus::Failed(tool_status(&event.data)),
+            args: preview_value(&event.data, &["arguments", "input", "request"]),
+            output: preview_value(&event.data, &["output", "result", "body"]),
+            error: string_any_field(&event.data, &["error", "message"])
+                .map(|value| truncate_preview(&value)),
+        }
+    }
+
+    fn status_label(&self) -> Option<String> {
+        match self.status {
+            ToolActivityStatus::Running => None,
+            ToolActivityStatus::Completed(_) => Some(format!("{} completed", self.name)),
+            ToolActivityStatus::Failed(_) => Some(format!("{} failed", self.name)),
+            ToolActivityStatus::Ended(_) => Some(format!("{} ended", self.name)),
+        }
+    }
+}
+
+enum ToolActivityStatus {
+    Running,
+    Completed(Option<String>),
+    Failed(Option<String>),
+    Ended(String),
+}
+
+impl ToolActivityStatus {
+    fn summary(&self) -> &'static str {
+        match self {
+            Self::Running => "running",
+            Self::Completed(_) => "completed",
+            Self::Failed(_) => "failed",
+            Self::Ended(_) => "ended",
+        }
+    }
+
+    fn detail(&self) -> Option<String> {
+        match self {
+            Self::Running => None,
+            Self::Completed(status) | Self::Failed(status) => status.clone(),
+            Self::Ended(reason) => Some(reason.clone()),
+        }
+    }
 }
 
 fn event_tool_name(event: &AgentTurnEventInfo) -> String {
@@ -356,6 +604,58 @@ fn event_tool_name(event: &AgentTurnEventInfo) -> String {
         ],
     )
     .unwrap_or_else(|| "tool".to_string())
+}
+
+fn event_tool_key(event: &AgentTurnEventInfo) -> Option<String> {
+    string_any_field(
+        &event.data,
+        &[
+            "tool_call_id",
+            "toolCallId",
+            "call_id",
+            "callId",
+            "invocation_id",
+            "invocationId",
+            "tool_use_id",
+            "toolUseId",
+            "id",
+        ],
+    )
+}
+
+fn tool_status(data: &serde_json::Map<String, Value>) -> Option<String> {
+    string_any_field(data, &["status", "state"]).or_else(|| {
+        number_any_field(data, &["status", "statusCode"]).map(|status| status.to_string())
+    })
+}
+
+fn preview_value(data: &serde_json::Map<String, Value>, keys: &[&str]) -> Option<String> {
+    value_any_field(data, keys)
+        .and_then(|value| compact_json(value).ok())
+        .map(|value| truncate_preview(&value))
+}
+
+fn truncate_preview(value: &str) -> String {
+    let mut preview = String::new();
+    let mut width = 0usize;
+    for grapheme in UnicodeSegmentation::graphemes(value, true) {
+        let grapheme_width = UnicodeWidthStr::width(grapheme);
+        if width > 0 && width.saturating_add(grapheme_width) > TOOL_PREVIEW_MAX_WIDTH {
+            preview.push_str("...");
+            return preview;
+        }
+        preview.push_str(grapheme);
+        width += grapheme_width;
+    }
+    preview
+}
+
+fn format_duration(duration: Duration) -> String {
+    if duration.as_secs() > 0 {
+        format!("{:.1}s", duration.as_secs_f64())
+    } else {
+        format!("{}ms", duration.as_millis())
+    }
 }
 
 fn generic_event_text(event: &AgentTurnEventInfo) -> String {

@@ -461,6 +461,169 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
 
 #[cfg(unix)]
 #[test]
+fn test_cli_tty_groups_tool_activity_rows() {
+    let long_output = format!("visible-prefix-{}-hidden-tail", "x".repeat(180));
+    let stream = format!(
+        "data: {{\"seq\":1,\"type\":\"tool.started\",\"data\":{{\"toolCallId\":\"call-lookup\",\"toolName\":\"lookup\",\"arguments\":{{\"ticket\":\"INC-42\"}}}}}}\n\n\
+         data: {{\"seq\":2,\"type\":\"tool.completed\",\"data\":{{\"toolCallId\":\"call-lookup\",\"toolName\":\"lookup\",\"statusCode\":200,\"output\":{{\"summary\":\"{long_output}\"}}}}}}\n\n\
+         data: {{\"seq\":3,\"type\":\"tool.started\",\"data\":{{\"toolCallId\":\"call-deploy\",\"toolName\":\"deploy\",\"input\":{{\"environment\":\"prod\"}}}}}}\n\n\
+         data: {{\"seq\":4,\"type\":\"tool.failed\",\"data\":{{\"toolCallId\":\"call-deploy\",\"toolName\":\"deploy\",\"error\":\"denied by policy\"}}}}\n\n\
+         data: {{\"seq\":5,\"type\":\"assistant.completed\",\"data\":{{\"text\":\"tools done\"}}}}\n\n\
+         data: {{\"seq\":6,\"type\":\"turn.completed\",\"data\":{{\"status\":\"succeeded\"}}}}\n\n"
+    );
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions",
+            r#"{"provider":"managed","model":"gpt-5.4"}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"use tools"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-tools",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-tools/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            &stream,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-tools",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-tools",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"tools done"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.write("use tools\r");
+    session.wait_for(&mut output, "lookup");
+    session.wait_for(&mut output, "completed");
+    session.wait_for(&mut output, "200");
+    session.wait_for(&mut output, "visible-prefix");
+    session.wait_for(&mut output, "deploy");
+    session.wait_for(&mut output, "failed");
+    session.wait_for(&mut output, "denied");
+    session.wait_for(&mut output, "done");
+    session.write("/quit\r");
+    session.wait_for_exit();
+
+    assert!(
+        !output.contains("hidden-tail"),
+        "tool output preview was not truncated:\n{output}"
+    );
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_tty_reconciles_unmatched_tool_activity_rows() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions",
+            r#"{"provider":"managed","model":"gpt-5.4"}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"ambiguous tools"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-ambiguous-tools",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-ambiguous-tools/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"tool.started\",\"data\":{\"toolName\":\"search\",\"arguments\":{\"query\":\"single\"}}}\n\n\
+             data: {\"seq\":2,\"type\":\"tool.completed\",\"data\":{\"toolName\":\"search\",\"statusCode\":200,\"output\":{\"matches\":1}}}\n\n\
+             data: {\"seq\":3,\"type\":\"tool.started\",\"data\":{\"toolName\":\"lookup\",\"arguments\":{\"ticket\":\"INC-1\"}}}\n\n\
+             data: {\"seq\":4,\"type\":\"tool.started\",\"data\":{\"toolName\":\"lookup\",\"arguments\":{\"ticket\":\"INC-2\"}}}\n\n\
+             data: {\"seq\":5,\"type\":\"tool.completed\",\"data\":{\"toolName\":\"lookup\",\"statusCode\":200,\"output\":{\"ticket\":\"INC-2\"}}}\n\n\
+             data: {\"seq\":6,\"type\":\"tool.completed\",\"data\":{\"toolName\":\"audit\",\"statusCode\":204,\"output\":{\"ok\":true}}}\n\n\
+             data: {\"seq\":7,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-ambiguous-tools",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-ambiguous-tools",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.write("ambiguous tools\r");
+    session.wait_for(&mut output, "search");
+    session.wait_for(&mut output, "completed");
+    session.wait_for(&mut output, "lookup");
+    session.wait_for(&mut output, "ended");
+    session.wait_for(&mut output, "audit");
+    session.write("/quit\r");
+    session.wait_for_exit();
+
+    assert!(
+        !output.contains("audit completed (204, 0ms)"),
+        "terminal-only tool row rendered a synthetic elapsed time:\n{output}"
+    );
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
 fn test_cli_tty_help_and_prompt_history() {
     let server = ScriptedServer::spawn(vec![
         ExpectedRequest::json(
