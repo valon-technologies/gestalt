@@ -251,7 +251,7 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("external credentials provider is required")
 	}
 	apiTokens := cfg.Services.APITokens
-	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, cfg.Authorizer)
+	resolver := principal.NewResolver(cfg.Auth, users, apiTokens)
 	authProviders := make(map[string]core.AuthenticationProvider, len(cfg.AuthProviders)+1)
 	for name, provider := range cfg.AuthProviders {
 		if provider == nil {
@@ -266,7 +266,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	authResolvers := make(map[string]*principal.Resolver, len(authProviders))
 	for name, provider := range authProviders {
-		authResolvers[name] = principal.NewResolver(provider, users, apiTokens, cfg.Authorizer)
+		authResolvers[name] = principal.NewResolver(provider, users, apiTokens)
 	}
 
 	router := chi.NewRouter()

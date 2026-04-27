@@ -29,11 +29,29 @@ func (s *APITokenService) StoreAPIToken(ctx context.Context, token *core.APIToke
 	if ownerKind == "" || ownerID == "" {
 		return fmt.Errorf("store api token: owner_kind and owner_id are required")
 	}
-	if ownerKind != core.APITokenOwnerKindUser {
+	switch ownerKind {
+	case core.APITokenOwnerKindUser:
+		if token.CredentialSubjectID == "" {
+			token.CredentialSubjectID = apiTokenUserSubjectID(ownerID)
+		}
+	case core.APITokenOwnerKindSubject:
+		subjectKind, _, ok := core.ParseSubjectID(ownerID)
+		if !ok {
+			return fmt.Errorf("store api token: subject owner_id must be a canonical subject id")
+		}
+		if subjectKind == core.APITokenOwnerKindUser || subjectKind == "system" {
+			return fmt.Errorf("store api token: subject owner_id must be a non-user, non-system subject id")
+		}
+		credentialSubjectID := strings.TrimSpace(token.CredentialSubjectID)
+		if credentialSubjectID == "" {
+			credentialSubjectID = ownerID
+		}
+		if credentialSubjectID != ownerID {
+			return fmt.Errorf("store api token: subject-owned token credential_subject_id must match owner_id")
+		}
+		token.CredentialSubjectID = credentialSubjectID
+	default:
 		return fmt.Errorf("store api token: unsupported owner_kind %q", ownerKind)
-	}
-	if token.CredentialSubjectID == "" && ownerKind == core.APITokenOwnerKindUser {
-		token.CredentialSubjectID = apiTokenUserSubjectID(ownerID)
 	}
 	token.OwnerKind = ownerKind
 	token.OwnerID = ownerID
@@ -134,6 +152,9 @@ func recordToAPIToken(rec indexeddb.Record) *core.APIToken {
 	}
 	if token.CredentialSubjectID == "" && token.OwnerKind == core.APITokenOwnerKindUser && token.OwnerID != "" {
 		token.CredentialSubjectID = apiTokenUserSubjectID(token.OwnerID)
+	}
+	if token.CredentialSubjectID == "" && token.OwnerKind == core.APITokenOwnerKindSubject && token.OwnerID != "" {
+		token.CredentialSubjectID = token.OwnerID
 	}
 	if raw := recString(rec, "permissions_json"); raw != "" {
 		var permissions []core.AccessPermission

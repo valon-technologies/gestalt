@@ -16,7 +16,6 @@ server:
   # listener, encryption, egress, host-provider selectors
 authorization:
   policies: {}
-  workloads: {}
 providers:
   audit: {}
   authentication: {}
@@ -129,13 +128,6 @@ authorization:
           role: admin
         - subjectID: workload:triage-bot
           role: viewer
-  workloads:
-    triage-bot:
-      displayName: Triage Bot
-      token:
-        secret:
-          provider: default
-          name: triage-bot-token
 ```
 
 `public.host` and `public.port` control the public listener address. Both default to all-interfaces on port `8080`.
@@ -158,9 +150,9 @@ authorization:
 
 Dynamic grants are plugin-scoped, not policy-scoped. When a plugin sets `authorizationPolicy`, operators can manage additional dynamic members for that plugin from the built-in admin UI at `/admin/?tab=members` or through `/admin/api/v1/authorization/...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for subjects that already have static authorization on that plugin. The `email` write field is a user-only convenience alias; `subjectId` accepts both `user:<id>` and `workload:<id>`.
 
-`authorization.workloads` configures non-human workload callers. Each workload uses a dedicated bearer token with the `gst_wld_` prefix. Workloads do not carry plugin-specific access lists or fixed credential selectors; grant plugin access with `authorization.policies` or provider-backed dynamic memberships using the workload subject ID, and store third-party credentials through the configured external credentials provider under `workload:<id>`.
+Non-human callers are modeled as canonical subjects, typically `workload:<id>`, and authenticate with Gestalt API tokens whose stored owner is that subject. Grant plugin access with `authorization.policies` or provider-backed dynamic memberships using the workload subject ID, and store third-party credentials through the configured external credentials provider under the same subject ID.
 
-Plugins without `authorizationPolicy` are open to any authenticated subject, including configured workloads. Bind a plugin to a policy when workload access should be explicit.
+Plugins without `authorizationPolicy` are open to any authenticated subject. Bind a plugin to a policy when non-human access should be explicit.
 
 | Field | Default | Description |
 | --- | --- | --- |
@@ -179,7 +171,6 @@ Plugins without `authorizationPolicy` are open to any authenticated subject, inc
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
 | `admin.ui` | | Optional named `providers.ui` bundle whose `admin/` assets should back `/admin`. When omitted, Gestalt auto-discovers `admin/` assets from the root UI bundle before using the built-in fallback. |
 | `authorization.policies` | | Shared subject access policies resolved by canonical `subjectID`. |
-| `authorization.workloads` | | Workload bearer tokens for non-human subjects. |
 
 When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener. When `server.admin.authorizationPolicy` is set, Gestalt does apply browser session auth plus role-based policy checks to `/admin` and `/admin/api/v1/*`.
 

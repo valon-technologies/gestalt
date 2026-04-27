@@ -8,11 +8,9 @@ import (
 )
 
 // RuntimeAuthorizer is the internal authorization interface used by gestaltd
-// request paths. Workload tokens authenticate non-human subjects; authorization
-// decisions are evaluated against the subject ID just like user subjects.
+// request paths. Authorization decisions are evaluated against canonical subject
+// IDs, regardless of how the caller authenticated.
 type RuntimeAuthorizer interface {
-	principal.WorkloadTokenResolver
-
 	Start(ctx context.Context) error
 	Close() error
 

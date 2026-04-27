@@ -140,8 +140,8 @@ func requestedAuthSource(r *http.Request) string {
 			switch typ {
 			case principal.TokenTypeAPI:
 				return principal.SourceAPIToken.String()
-			case principal.TokenTypeWorkload:
-				return principal.SourceWorkloadToken.String()
+			case principal.TokenTypeRetiredWorkload:
+				return principal.AuthSourceRetiredWorkloadToken
 			}
 		}
 		return principal.SourceSession.String()

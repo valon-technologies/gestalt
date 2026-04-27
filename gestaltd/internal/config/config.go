@@ -1475,8 +1475,7 @@ type EgressConfig struct {
 }
 
 type AuthorizationConfig struct {
-	Workloads map[string]WorkloadDef      `yaml:"workloads,omitempty"`
-	Policies  map[string]SubjectPolicyDef `yaml:"policies,omitempty"`
+	Policies map[string]SubjectPolicyDef `yaml:"policies,omitempty"`
 }
 
 type SubjectPolicyDef struct {
@@ -1487,11 +1486,6 @@ type SubjectPolicyDef struct {
 type SubjectPolicyMemberDef struct {
 	SubjectID string `yaml:"subjectID,omitempty"`
 	Role      string `yaml:"role"`
-}
-
-type WorkloadDef struct {
-	DisplayName string `yaml:"displayName,omitempty"`
-	Token       string `yaml:"token"`
 }
 
 type ListenerConfig struct {
@@ -2940,9 +2934,6 @@ func normalizedAuthorizationConfig(cfg AuthorizationConfig) AuthorizationConfig 
 			policies[name] = normalizedSubjectPolicyDef(policy)
 		}
 		cfg.Policies = policies
-	}
-	if len(cfg.Workloads) == 0 {
-		cfg.Workloads = nil
 	}
 	return cfg
 }

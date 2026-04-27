@@ -1441,7 +1441,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
         subjectId: "workload:planner",
         subjectKind: "workload",
         displayName: "Planner",
-        authSource: "workload_token",
+        authSource: "api_token",
       },
       target: {
         pluginName: "roadmap",

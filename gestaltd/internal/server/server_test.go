@@ -1215,6 +1215,22 @@ func seedAPIToken(t *testing.T, svc *coredata.Services, plaintext, hashed, userI
 	}
 }
 
+func seedSubjectAPIToken(t *testing.T, svc *coredata.Services, hashed, subjectID, name string) {
+	t.Helper()
+	exp := time.Now().Add(24 * time.Hour)
+	if err := svc.APITokens.StoreAPIToken(context.Background(), &core.APIToken{
+		ID:                  "api-tok-" + strings.ReplaceAll(subjectID, ":", "-"),
+		OwnerKind:           core.APITokenOwnerKindSubject,
+		OwnerID:             subjectID,
+		CredentialSubjectID: subjectID,
+		Name:                name,
+		HashedToken:         hashed,
+		ExpiresAt:           &exp,
+	}); err != nil {
+		t.Fatalf("seedSubjectAPIToken: StoreAPIToken: %v", err)
+	}
+}
+
 func seedUser(t *testing.T, svc *coredata.Services, email string) *core.User {
 	t.Helper()
 	ctx := context.Background()
@@ -5825,26 +5841,22 @@ func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 	}
 }
 
-func TestAuthMiddleware_ValidWorkloadToken(t *testing.T) {
+func TestAuthMiddleware_ValidSubjectOwnedAPIToken(t *testing.T) {
 	t.Parallel()
 
-	plaintext, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
+	svc := coretesting.NewStubServices(t)
+	seedSubjectAPIToken(t, svc, hashed, principal.WorkloadSubjectID("weather-bot"), "weather-bot")
 
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{N: "weather", ConnMode: core.ConnectionModeNone},
 		ops:             []core.Operation{{Name: "forecast", Method: http.MethodGet}},
 	}
 	providers := testutil.NewProviderRegistry(t, stub)
-	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"weather-bot": {
-				Token: plaintext,
-			},
-		},
-	}, nil)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{}, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -5854,7 +5866,7 @@ func TestAuthMiddleware_ValidWorkloadToken(t *testing.T) {
 			},
 		}
 		cfg.Providers = providers
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = svc
 		cfg.Authorizer = authz
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -5870,6 +5882,54 @@ func TestAuthMiddleware_ValidWorkloadToken(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestAuthMiddleware_SubjectOwnedAPITokenRejectsBorrowedCredentialSubject(t *testing.T) {
+	t.Parallel()
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	svc := coretesting.NewStubServices(t)
+	now := time.Now()
+	if err := svc.DB.ObjectStore(coredata.StoreAPITokens).Add(context.Background(), indexeddb.Record{
+		"id":                    "api-tok-borrowed-credential",
+		"owner_kind":            core.APITokenOwnerKindSubject,
+		"owner_id":              principal.WorkloadSubjectID("triage-bot"),
+		"credential_subject_id": principal.UserSubjectID("other-user"),
+		"name":                  "triage-bot",
+		"hashed_token":          hashed,
+		"created_at":            now,
+		"updated_at":            now,
+	}); err != nil {
+		t.Fatalf("seed malformed api token: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
+				t.Fatal("OAuth ValidateToken must not be called for prefixed API tokens")
+				return nil, nil
+			},
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 401 for borrowed credential subject, got %d: %s", resp.StatusCode, body)
 	}
 }
 
@@ -6115,6 +6175,34 @@ func TestAuthMiddleware_PrefixedAPITokenSkipsOAuth(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestAuthMiddleware_LegacyWorkloadPrefixRejectedBeforeOAuth(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
+				t.Fatal("OAuth ValidateToken must not be called for legacy workload tokens")
+				return nil, nil
+			},
+		}
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("Authorization", "Bearer gst_wld_legacy-workload-token")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for legacy workload token prefix, got %d", resp.StatusCode)
 	}
 }
 
@@ -6470,12 +6558,13 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 func TestWorkloadAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t *testing.T) {
 	t.Parallel()
 
-	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	workloadToken, workloadTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
+	seedSubjectAPIToken(t, svc, workloadTokenHash, principal.WorkloadSubjectID("triage-bot"), "triage-bot")
 	seedSubjectToken(t, svc, principal.WorkloadSubjectID("triage-bot"), "svc", "workspace", "default", "identity-svc-token")
 
 	svcProvider := &stubIntegrationWithOps{
@@ -6500,11 +6589,6 @@ func TestWorkloadAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t
 	}
 	providers := testutil.NewProviderRegistry(t, svcProvider, weatherProvider, mcpOnlyProvider, secretProvider)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: workloadToken,
-			},
-		},
 		Policies: map[string]config.SubjectPolicyDef{
 			"workload_policy": {
 				Default: "allow",
@@ -6626,10 +6710,12 @@ func TestWorkloadAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t
 func TestWorkloadAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelectors(t *testing.T) {
 	t.Parallel()
 
-	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	workloadToken, workloadTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
+	authSvc := coretesting.NewStubServices(t)
+	seedSubjectAPIToken(t, authSvc, workloadTokenHash, principal.WorkloadSubjectID("triage-bot"), "triage-bot")
 
 	provider := &stubIntegrationWithCatalog{
 		StubIntegration: coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionModeUser},
@@ -6640,11 +6726,6 @@ func TestWorkloadAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelector
 	}
 	providers := testutil.NewProviderRegistry(t, provider)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: workloadToken,
-			},
-		},
 		Policies: map[string]config.SubjectPolicyDef{
 			"svc_policy": {
 				Default: "allow",
@@ -6660,7 +6741,7 @@ func TestWorkloadAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelector
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
 		cfg.Providers = providers
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = authSvc
 		cfg.Authorizer = authz
 		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 	})
@@ -6690,6 +6771,7 @@ func TestWorkloadAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelector
 	}
 
 	svc := coretesting.NewStubServices(t)
+	seedSubjectAPIToken(t, svc, workloadTokenHash, principal.WorkloadSubjectID("triage-bot"), "triage-bot")
 	seedSubjectToken(t, svc, principal.WorkloadSubjectID("triage-bot"), "svc-session", testDefaultConnection, "team-a", "session-bound-token")
 
 	var sessionCatalogToken string
@@ -6709,11 +6791,6 @@ func TestWorkloadAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelector
 	}
 	sessionProviders := testutil.NewProviderRegistry(t, sessionProvider)
 	sessionAuthz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: workloadToken,
-			},
-		},
 		Policies: map[string]config.SubjectPolicyDef{
 			"svc_session_policy": {
 				Members: []config.SubjectPolicyMemberDef{{
@@ -10142,12 +10219,13 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 func TestWorkloadAuthorization_ExecuteOperation_UsesSubjectCredentialAndSessionSelectors(t *testing.T) {
 	t.Parallel()
 
-	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	workloadToken, workloadTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
+	seedSubjectAPIToken(t, svc, workloadTokenHash, principal.WorkloadSubjectID("triage-bot"), "triage-bot")
 	seedSubjectToken(t, svc, principal.WorkloadSubjectID("triage-bot"), "svc", "workspace", "team-a", "identity-bound-token")
 
 	stub := &stubIntegrationWithCatalog{
@@ -10165,11 +10243,6 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesSubjectCredentialAndSessionS
 	}
 	providers := testutil.NewProviderRegistry(t, stub)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: workloadToken,
-			},
-		},
 		Policies: map[string]config.SubjectPolicyDef{
 			"svc_policy": {
 				Default: "allow",
@@ -10240,10 +10313,12 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesSubjectCredentialAndSessionS
 func TestWorkloadAuthorization_ExecuteOperation_AllowsPolicylessPlugin(t *testing.T) {
 	t.Parallel()
 
-	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	workloadToken, workloadTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
+	svc := coretesting.NewStubServices(t)
+	seedSubjectAPIToken(t, svc, workloadTokenHash, principal.WorkloadSubjectID("triage-bot"), "triage-bot")
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "svc",
@@ -10254,17 +10329,11 @@ func TestWorkloadAuthorization_ExecuteOperation_AllowsPolicylessPlugin(t *testin
 		},
 		ops: []core.Operation{{Name: "run", Method: http.MethodGet}},
 	}
-	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: workloadToken,
-			},
-		},
-	}, nil)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{}, nil)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = svc
 		cfg.Authorizer = authz
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -10690,7 +10759,7 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 func TestWorkloadAuthorization_ExecuteOperation_MissingSubjectCredentialReturns412(t *testing.T) {
 	t.Parallel()
 
-	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	workloadToken, workloadTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
@@ -10707,11 +10776,6 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingSubjectCredentialReturns4
 	}
 	providers := testutil.NewProviderRegistry(t, stub)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: workloadToken,
-			},
-		},
 		Policies: map[string]config.SubjectPolicyDef{
 			"svc_policy": {
 				Default: "allow",
@@ -10724,6 +10788,7 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingSubjectCredentialReturns4
 	}, map[string]*config.ProviderEntry{"svc": {AuthorizationPolicy: "svc_policy"}})
 
 	svc := coretesting.NewStubServices(t)
+	seedSubjectAPIToken(t, svc, workloadTokenHash, principal.WorkloadSubjectID("triage-bot"), "triage-bot")
 	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials, invocation.WithAuthorizer(authz))
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
 
@@ -10762,28 +10827,24 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingSubjectCredentialReturns4
 func TestWorkloadAuthorization_HumanRoutesReturn403(t *testing.T) {
 	t.Parallel()
 
-	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	workloadToken, workloadTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
+	svc := coretesting.NewStubServices(t)
+	seedSubjectAPIToken(t, svc, workloadTokenHash, principal.WorkloadSubjectID("triage-bot"), "triage-bot")
 
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{N: "weather", ConnMode: core.ConnectionModeNone},
 		ops:             []core.Operation{{Name: "forecast", Method: http.MethodGet}},
 	}
 	providers := testutil.NewProviderRegistry(t, stub)
-	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: workloadToken,
-			},
-		},
-	}, nil)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{}, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
 		cfg.Providers = providers
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = svc
 		cfg.Authorizer = authz
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -12184,10 +12245,12 @@ func TestStartIntegrationOAuth(t *testing.T) {
 func TestStartIntegrationOAuth_WorkloadDeniedByPolicy(t *testing.T) {
 	t.Parallel()
 
-	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	workloadToken, workloadTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
+	svc := coretesting.NewStubServices(t)
+	seedSubjectAPIToken(t, svc, workloadTokenHash, principal.WorkloadSubjectID("triage-bot"), "triage-bot")
 	stub := &stubIntegrationWithAuthURL{
 		StubIntegration: coretesting.StubIntegration{N: "slack"},
 		authURL:         "https://slack.com/oauth/v2/authorize",
@@ -12196,11 +12259,6 @@ func TestStartIntegrationOAuth_WorkloadDeniedByPolicy(t *testing.T) {
 		authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
 	}
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: workloadToken,
-			},
-		},
 		Policies: map[string]config.SubjectPolicyDef{
 			"slack_policy": {
 				Default: "deny",
@@ -12213,7 +12271,7 @@ func TestStartIntegrationOAuth_WorkloadDeniedByPolicy(t *testing.T) {
 		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
 		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
 		cfg.Authorizer = authz
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -15936,17 +15994,13 @@ func TestConnectManual(t *testing.T) {
 	t.Run("workload denied by policy cannot connect", func(t *testing.T) {
 		t.Parallel()
 
-		workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+		workloadToken, workloadTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 		if err != nil {
 			t.Fatalf("GenerateToken: %v", err)
 		}
 		svc := coretesting.NewStubServices(t)
+		seedSubjectAPIToken(t, svc, workloadTokenHash, principal.WorkloadSubjectID("triage-bot"), "triage-bot")
 		authz := mustAuthorizer(t, config.AuthorizationConfig{
-			Workloads: map[string]config.WorkloadDef{
-				"triage-bot": {
-					Token: workloadToken,
-				},
-			},
 			Policies: map[string]config.SubjectPolicyDef{
 				"manual_policy": {
 					Default: "deny",
@@ -15989,18 +16043,14 @@ func TestConnectManual(t *testing.T) {
 	t.Run("workload external identity writes subject relationship", func(t *testing.T) {
 		t.Parallel()
 
-		workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+		workloadToken, workloadTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 		if err != nil {
 			t.Fatalf("GenerateToken: %v", err)
 		}
 		svc := coretesting.NewStubServices(t)
+		seedSubjectAPIToken(t, svc, workloadTokenHash, principal.WorkloadSubjectID("triage-bot"), "triage-bot")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
 		base, err := authorization.New(config.AuthorizationConfig{
-			Workloads: map[string]config.WorkloadDef{
-				"triage-bot": {
-					Token: workloadToken,
-				},
-			},
 			Policies: map[string]config.SubjectPolicyDef{
 				"manual_policy": {
 					Members: []config.SubjectPolicyMemberDef{{
@@ -18067,15 +18117,15 @@ func TestMCPEndpoint_WorkloadAuthorizationAndAudit(t *testing.T) {
 	}
 
 	svc := coretesting.NewStubServices(t)
+	workloadToken, workloadTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	seedSubjectAPIToken(t, svc, workloadTokenHash, principal.WorkloadSubjectID("triage-bot"), "triage-bot")
 	seedSubjectToken(t, svc, principal.WorkloadSubjectID("triage-bot"), "clickhouse", "default", "default", "identity-token")
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: "gst_wld_triage-bot-token",
-			},
-		},
 		Policies: map[string]config.SubjectPolicyDef{
 			"clickhouse_policy": {
 				Members: []config.SubjectPolicyMemberDef{{
@@ -18098,7 +18148,7 @@ func TestMCPEndpoint_WorkloadAuthorizationAndAudit(t *testing.T) {
 	defer ts.Close()
 
 	headers := map[string]string{
-		"Authorization": "Bearer gst_wld_triage-bot-token",
+		"Authorization": "Bearer " + workloadToken,
 	}
 
 	_, _, initHeaders := mcpJSONRPCWithHeaders(t, ts, headers, map[string]any{
@@ -18190,8 +18240,8 @@ func TestMCPEndpoint_WorkloadAuthorizationAndAudit(t *testing.T) {
 	if auditRecord["allowed"] != false {
 		t.Fatalf("expected audit allowed=false, got %v", auditRecord["allowed"])
 	}
-	if auditRecord["auth_source"] != "workload_token" {
-		t.Fatalf("expected audit auth_source workload_token, got %v", auditRecord["auth_source"])
+	if auditRecord["auth_source"] != "api_token" {
+		t.Fatalf("expected audit auth_source api_token, got %v", auditRecord["auth_source"])
 	}
 	if auditRecord["subject_id"] != "workload:triage-bot" {
 		t.Fatalf("expected subject_id workload:triage-bot, got %v", auditRecord["subject_id"])

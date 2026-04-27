@@ -3064,7 +3064,7 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 	coretesting.AttachStubExternalCredentials(services)
 	t.Cleanup(func() { _ = services.Close() })
 
-	if len(authCfg.Workloads) > 0 || len(authCfg.Policies) > 0 {
+	if len(authCfg.Policies) > 0 {
 		authz, err := authorization.New(authCfg, cfg.Plugins)
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)

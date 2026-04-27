@@ -82,7 +82,7 @@ func TestBrokerResolveToken_WorkloadUsesOwnExternalCredential(t *testing.T) {
 	workload := &principal.Principal{
 		SubjectID: principal.WorkloadSubjectID("workflow.roadmap"),
 		Kind:      principal.KindWorkload,
-		Source:    principal.SourceWorkloadToken,
+		Source:    principal.SourceAPIToken,
 	}
 	ctx := WithWorkflowContext(context.Background(), map[string]any{
 		"runId": "run-123",

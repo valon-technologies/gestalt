@@ -141,13 +141,12 @@ func TestProviderDevMountedUIHandlerUsesMountedAuthRuntime(t *testing.T) {
 			serverAuth,
 			services.Users,
 			services.APITokens,
-			nil,
 		),
 		authProviders: map[string]core.AuthenticationProvider{
 			"alt": altAuth,
 		},
 		authResolvers: map[string]*principal.Resolver{
-			"alt": principal.NewResolver(altAuth, services.Users, services.APITokens, nil),
+			"alt": principal.NewResolver(altAuth, services.Users, services.APITokens),
 		},
 		pluginDefs: map[string]*config.ProviderEntry{
 			"roadmap": {RouteAuth: &config.RouteAuthDef{Provider: "alt"}},
@@ -230,7 +229,7 @@ func TestProviderDevMountedUIHandlerUsesAnonymousForNoAuthMountedUI(t *testing.T
 		t.Fatalf("coredata.New: %v", err)
 	}
 	noneAuth := &coretesting.StubAuthProvider{N: "none"}
-	resolver := principal.NewResolver(noneAuth, services.Users, services.APITokens, nil)
+	resolver := principal.NewResolver(noneAuth, services.Users, services.APITokens)
 	s := &Server{
 		users:              services.Users,
 		auth:               noneAuth,
