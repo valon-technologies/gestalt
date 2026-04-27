@@ -33,8 +33,8 @@ import { Callout } from 'nextra/components'
 | --- | --- |
 | `gestaltd provider dev --path PATH` | Run a local source plugin or UI bundle inside a synthesized Gestalt config. Serves `/admin` and any configured or inferred public UIs. |
 | `gestaltd provider dev --config PATH` | Layer supporting providers, plugins, and UI mounts on top of the synthesized local baseline. Repeat `--config` to merge left-to-right. |
-| `gestaltd provider dev --remote URL --path PATH` | Attach one local source plugin to an authenticated remote `gestaltd` session while the remote config keeps auth, authorization, connections, and host services. |
-| `gestaltd provider dev --remote URL --config PATH` | Attach every source-backed plugin in the layered config. Use repeated `--config` files the same way as local dev to choose which plugins are local and which remain remote. |
+| `gestaltd provider dev --remote URL --path PATH` | Attach one local source plugin to an authenticated remote `gestaltd` session. The remote server matches by manifest `source` and keeps its configured auth, authorization, connections, plugin config, and host services. |
+| `gestaltd provider dev --remote URL --config PATH` | Attach every source-backed plugin in the layered config. Use repeated `--config` files when you need explicit local config overrides or multiple local plugins. |
 | `gestaltd provider validate --path PATH` | Validate a local source plugin or UI bundle inside the same synthesized Gestalt config used by `provider dev`. |
 | `gestaltd provider validate --config PATH` | Validate the target provider together with selected supporting providers and `null` deletions from layered config overlays. |
 | `gestaltd provider release --version VERSION` | Build and package a provider release. Go, Python, Rust, and TypeScript source plugins default to the host platform. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
@@ -58,7 +58,8 @@ gestaltd provider validate --path ./plugins/support --config ./dev/support.yaml 
 gestaltd provider dev --path ./plugins/support
 gestaltd provider dev --path ./ui/dashboard
 gestaltd provider dev --path ./plugins/support --config ./dev/support.yaml --port 8080
-GESTALT_API_KEY=vat_... gestaltd provider dev --remote https://gestalt.example.com --config ./base.yaml --config ./prod.yaml --path ./plugins/support --name support
+GESTALT_API_KEY=vat_... gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support
+GESTALT_API_KEY=vat_... gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support --name support
 GESTALT_API_KEY=vat_... gestaltd provider dev --remote https://gestalt.example.com --config ./remote.yaml --config ./local-overrides.yaml
 gestaltd provider release --version 0.0.1-alpha.1
 gestaltd provider release --version 0.0.1-alpha.1 --platform all
@@ -74,21 +75,26 @@ keeps its existing config-relative behavior for backward compatibility.
 `provider dev --remote` is environment-agnostic: the URL is just the remote
 `gestaltd` instance to attach to. The local command only replaces source-backed
 plugin implementations for the authenticated principal that created the session.
-The attached plugin's config is sent by the local command, so use `--config`
-layers when the plugin needs config values, invokes, mounted UI settings, or
-secret references. All non-local plugins and remote host services continue to
-resolve through the remote instance. Remote servers expose attach targets for
-configured plugins that are registered on the remote server, and existing plugin
-authorization decides whether the authenticated caller may attach.
-Remote mode allows missing local environment substitutions while loading config
-so unrelated deploy-only env vars do not block attach.
+With `--remote URL --path PATH` and no `--config`, the local command sends the
+manifest `source` and the local implementation only; the remote server chooses
+the configured plugin with the same manifest `source` and preserves that
+remote plugin's config. If multiple remote plugins share the same source, or the
+manifest has no source, pass `--name` to choose the configured remote plugin.
+All non-local plugins and remote host services continue to resolve through the
+remote instance.
+
+When `--config` is present, source-backed plugin entries in the layered local
+config are treated as explicit local overrides. Their plugin config is sent to
+the remote session instead of inheriting the remote server's config. Remote mode
+allows missing local environment substitutions while loading config so unrelated
+deploy-only env vars do not block attach.
 Remote mode tunnels plugin RPC, catalog, post-connect, host-service calls, and
 plugin-owned UI assets for mounted UIs that already exist on the remote server.
 Raw GraphQL surfaces are not tunneled in v1.
 
 For TypeScript source plugins, `provider dev` installs dependencies with
 `bun install` when a `package.json` is present and `node_modules` is missing.
-Source UI release builds use the same bootstrap before `release.build.command`
-when that build workdir has a `package.json`.
+Source UI release builds use the same bootstrap for Bun-managed build workdirs
+before `release.build.command` when dependencies are missing.
 
 See [Configuration](/configuration) for the relationship between `init`, `serve --locked`, and `validate`.

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -97,6 +98,7 @@ func deriveProviderDevTarget(name string, entry *config.ProviderEntry, providers
 		state: providerDevTargetAttachable,
 		target: providerdev.Target{
 			Name:   targetName,
+			Source: strings.TrimSpace(entry.ResolvedManifest.Source),
 			Spec:   providerDevStaticSpecFromProvider(targetName, entry, provider),
 			Config: pluginConfig,
 			RuntimeEnv: func(sessionID string) (providerdev.RuntimeEnv, error) {

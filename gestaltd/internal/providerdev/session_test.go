@@ -71,6 +71,9 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	manager, err := NewManager([]Target{{
 		Name: "roadmap",
 		Spec: remoteSpec,
+		Config: map[string]any{
+			"remote": true,
+		},
 		RuntimeEnv: func(string) (RuntimeEnv, error) {
 			return RuntimeEnv{
 				Env:          map[string]string{"GESTALT_PLUGIN_INVOKER_SOCKET": "tls://gestalt.example.test:443"},
@@ -93,10 +96,9 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 		_, _ = fmt.Fprintf(w, "local ui %s?%s range=%s", r.URL.Path, r.URL.RawQuery, r.Header.Get("Range"))
 	})
 	session, err := client.CreateSession(context.Background(), CreateSessionRequest{Providers: []AttachProvider{{
-		Name:   "roadmap",
-		Spec:   spec,
-		Config: map[string]any{"remote": true},
-		UI:     &AttachUI{},
+		Name: "roadmap",
+		Spec: spec,
+		UI:   &AttachUI{},
 	}}})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -278,6 +280,119 @@ func TestCompleteCallTreatsOKErrorCodeAsProtocolError(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("call response was not delivered")
+	}
+}
+
+func TestCreateSessionMatchesProviderBySource(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager([]Target{{
+		Name:   "workplaceHub",
+		Source: "github.com/valon-technologies/valon-tools/plugins/workplace-hub",
+		Spec: providerhost.StaticProviderSpec{
+			Name: "workplaceHub",
+		},
+		Config: map[string]any{"remote": true},
+	}})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	resp, err := manager.CreateSession(context.Background(), p, CreateSessionRequest{Providers: []AttachProvider{{
+		Source: "github.com/valon-technologies/valon-tools/plugins/workplace-hub",
+		Spec: providerhost.StaticProviderSpec{
+			Name: "local-workplace-hub",
+		},
+	}}})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if len(resp.Providers) != 1 {
+		t.Fatalf("session providers = %#v, want one", resp.Providers)
+	}
+	if got := resp.Providers[0].Name; got != "workplaceHub" {
+		t.Fatalf("resolved provider name = %q, want workplaceHub", got)
+	}
+
+	names, err := manager.ResolveAttachProviderNames(CreateSessionRequest{Providers: []AttachProvider{{
+		Source: "github.com/valon-technologies/valon-tools/plugins/workplace-hub",
+	}}})
+	if err != nil {
+		t.Fatalf("ResolveAttachProviderNames: %v", err)
+	}
+	if len(names) != 1 || names[0] != "workplaceHub" {
+		t.Fatalf("ResolveAttachProviderNames = %#v, want [workplaceHub]", names)
+	}
+}
+
+func TestHTTPTransportCreateSessionExplicitConfigOverridesRemoteConfig(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager([]Target{{
+		Name:   "roadmap",
+		Config: map[string]any{"remote": true},
+	}})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	ts := httptest.NewServer(providerDevTestHandler(t, manager, p))
+	t.Cleanup(ts.Close)
+
+	client := Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
+	localConfig := map[string]any{"local": true}
+	resp, err := client.CreateSession(context.Background(), CreateSessionRequest{Providers: []AttachProvider{{
+		Name:   "roadmap",
+		Config: &localConfig,
+	}}})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	manager.mu.RLock()
+	session := manager.sessions[resp.ID]
+	manager.mu.RUnlock()
+	if session == nil {
+		t.Fatalf("session %q was not recorded", resp.ID)
+	}
+	target := session.targets["roadmap"]
+	if target == nil {
+		t.Fatal("session target roadmap was not recorded")
+	}
+	if got := target.target.Config["remote"]; got != nil {
+		t.Fatalf("attached config remote = %#v, want omitted", got)
+	}
+	if got := target.target.Config["local"]; got != true {
+		t.Fatalf("attached config local = %#v, want true", got)
+	}
+}
+
+func TestCreateSessionRejectsAmbiguousProviderSource(t *testing.T) {
+	t.Parallel()
+
+	const source = "github.com/acme/plugins/shared"
+	manager, err := NewManager([]Target{{
+		Name:   "first",
+		Source: source,
+	}, {
+		Name:   "second",
+		Source: source,
+	}})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	_, err = manager.CreateSession(context.Background(), p, CreateSessionRequest{Providers: []AttachProvider{{
+		Source: source,
+	}}})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("CreateSession error = %v, want InvalidArgument", err)
+	}
+	if !strings.Contains(err.Error(), "pass --name") {
+		t.Fatalf("CreateSession error = %v, want pass --name hint", err)
 	}
 }
 
