@@ -140,6 +140,7 @@ func (p *hostedAgentProviderPool) GetSession(ctx context.Context, req coreagent.
 
 func (p *hostedAgentProviderPool) ListSessions(ctx context.Context, req coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
 	var out []*coreagent.Session
+	seenSessionIDs := map[string]struct{}{}
 	for _, backend := range p.availableBackends(true) {
 		acquired, release, err := p.acquireBackend(ctx, backend, true)
 		if err != nil {
@@ -152,9 +153,16 @@ func (p *hostedAgentProviderPool) ListSessions(ctx context.Context, req coreagen
 			return nil, err
 		}
 		for _, session := range sessions {
+			sessionID := strings.TrimSpace(sessionIDForSession(session))
+			if sessionID != "" {
+				if _, ok := seenSessionIDs[sessionID]; ok {
+					continue
+				}
+				seenSessionIDs[sessionID] = struct{}{}
+			}
 			p.recordSession(session, acquired)
+			out = append(out, session)
 		}
-		out = append(out, sessions...)
 	}
 	return out, nil
 }

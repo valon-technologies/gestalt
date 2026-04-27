@@ -117,6 +117,15 @@ func (p *pingAgentProvider) Ping(ctx context.Context) error {
 	return p.err
 }
 
+type listSessionsAgentProvider struct {
+	coreagent.UnimplementedProvider
+	sessions []*coreagent.Session
+}
+
+func (p *listSessionsAgentProvider) ListSessions(context.Context, coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
+	return append([]*coreagent.Session(nil), p.sessions...), nil
+}
+
 func TestAgentRuntimePingChecksConfiguredProviders(t *testing.T) {
 	t.Parallel()
 
@@ -829,6 +838,57 @@ func TestHostedAgentProviderPoolPingChecksReadyBackendsInParallel(t *testing.T) 
 	defer cancel()
 	if err := pool.Ping(ctx); err != nil {
 		t.Fatalf("Ping: %v", err)
+	}
+}
+
+func TestHostedAgentProviderPoolListSessionsDeduplicatesSharedStoreSessions(t *testing.T) {
+	t.Parallel()
+
+	firstProvider := &listSessionsAgentProvider{
+		sessions: []*coreagent.Session{{ID: "session-1", State: coreagent.SessionStateActive}},
+	}
+	secondProvider := &listSessionsAgentProvider{
+		sessions: []*coreagent.Session{
+			{ID: "session-1", State: coreagent.SessionStateActive},
+			{ID: "session-2", State: coreagent.SessionStateActive},
+		},
+	}
+	pool := &hostedAgentProviderPool{
+		name:            "simple",
+		sessionBackends: map[string]*hostedAgentPoolBackend{},
+		backends: []*hostedAgentPoolBackend{
+			{
+				id:        1,
+				provider:  firstProvider,
+				liveTurns: map[string]struct{}{},
+			},
+			{
+				id:        2,
+				provider:  secondProvider,
+				liveTurns: map[string]struct{}{},
+			},
+		},
+	}
+
+	sessions, err := pool.ListSessions(context.Background(), coreagent.ListSessionsRequest{})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("ListSessions returned %d sessions, want 2: %#v", len(sessions), sessions)
+	}
+	ids := map[string]int{}
+	for _, session := range sessions {
+		ids[session.ID]++
+	}
+	if ids["session-1"] != 1 || ids["session-2"] != 1 {
+		t.Fatalf("ListSessions IDs = %#v, want session-1 and session-2 once", ids)
+	}
+	if backend := pool.sessionBackend("session-1"); backend != pool.backends[0] {
+		t.Fatalf("session-1 backend = %#v, want first backend", backend)
+	}
+	if backend := pool.sessionBackend("session-2"); backend != pool.backends[1] {
+		t.Fatalf("session-2 backend = %#v, want second backend", backend)
 	}
 }
 
