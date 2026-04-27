@@ -1345,7 +1345,7 @@ func seedProviderPluginAuthorization(t *testing.T, svc *coredata.Services, authz
 func seedToken(t *testing.T, svc *coredata.Services, tok *core.IntegrationToken) {
 	t.Helper()
 	ctx := context.Background()
-	if err := svc.Tokens.StoreToken(ctx, tok); err != nil {
+	if err := svc.ExternalCredentials.PutCredential(ctx, tok); err != nil {
 		t.Fatalf("seedToken: %v", err)
 	}
 }
@@ -1361,12 +1361,39 @@ func TestNewServerRequiresStateSecretWithAuth(t *testing.T) {
 		Auth:      &coretesting.StubAuthProvider{N: "google"},
 		Services:  svc,
 		Providers: providers,
-		Invoker:   invocation.NewBroker(providers, svc.Users, svc.Tokens),
+		Invoker:   invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials),
 	})
 	if err == nil {
 		t.Fatal("expected error when auth is enabled without state secret")
 	}
 	if !strings.Contains(err.Error(), "state secret is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNewServerRequiresExternalCredentialsProvider(t *testing.T) {
+	t.Parallel()
+
+	svc, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	providers := func() *registry.ProviderMap[core.Provider] {
+		reg := registry.New()
+		return &reg.Providers
+	}()
+
+	_, err = server.New(server.Config{
+		Auth:        &coretesting.StubAuthProvider{N: "none"},
+		Services:    svc,
+		Providers:   providers,
+		Invoker:     invocation.NewBroker(providers, svc.Users, nil),
+		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+	})
+	if err == nil {
+		t.Fatal("expected error when external credentials provider is missing")
+	}
+	if !strings.Contains(err.Error(), "external credentials provider is required") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -1381,7 +1408,7 @@ func TestNewServerAdminAuthorizationRequiresValidSplitBaseURLs(t *testing.T) {
 			Auth:      &coretesting.StubAuthProvider{N: "google"},
 			Services:  svc,
 			Providers: &reg.Providers,
-			Invoker:   invocation.NewBroker(&reg.Providers, svc.Users, svc.Tokens),
+			Invoker:   invocation.NewBroker(&reg.Providers, svc.Users, svc.ExternalCredentials),
 			StateSecret: []byte(
 				"0123456789abcdef0123456789abcdef",
 			),
@@ -8200,7 +8227,7 @@ func TestListIntegrations_FindOrCreateUserError(t *testing.T) {
 	}
 }
 
-func TestListIntegrations_ListTokensError(t *testing.T) {
+func TestListIntegrations_ListCredentialsError(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
@@ -8236,7 +8263,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		t.Parallel()
 
 		svc := coretesting.NewStubServices(t)
-		recordingCreds := newRecordingExternalCredentialProvider(svc.Tokens)
+		recordingCreds := newRecordingExternalCredentialProvider(svc.ExternalCredentials)
 		svc.ExternalCredentials = recordingCreds
 		u := seedUser(t, svc, "anonymous@gestalt")
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
@@ -8289,9 +8316,9 @@ func TestDisconnectIntegration(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 		}
-		tokens, err := svc.Tokens.ListTokensForIntegration(context.Background(), principal.UserSubjectID(u.ID), "slack")
+		tokens, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), principal.UserSubjectID(u.ID), "slack")
 		if err != nil {
-			t.Fatalf("ListTokensForIntegration: %v", err)
+			t.Fatalf("ListCredentialsForProvider: %v", err)
 		}
 		if len(tokens) != 0 {
 			t.Fatalf("expected 0 tokens after disconnect, got %d", len(tokens))
@@ -8377,9 +8404,9 @@ func TestDisconnectIntegration(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 		}
-		tokens, err := svc.Tokens.ListTokensForIntegration(context.Background(), principal.UserSubjectID(u.ID), "slack")
+		tokens, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), principal.UserSubjectID(u.ID), "slack")
 		if err != nil {
-			t.Fatalf("ListTokensForIntegration: %v", err)
+			t.Fatalf("ListCredentialsForProvider: %v", err)
 		}
 		if len(tokens) != 1 {
 			t.Fatalf("expected 1 token after disconnect, got %d", len(tokens))
@@ -8436,9 +8463,9 @@ func TestDisconnectIntegration(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("WriteRelationships seed slack identity: %v", err)
 		}
-		originalTokens, err := svc.Tokens.ListTokensForIntegration(context.Background(), principal.UserSubjectID(u.ID), "slack")
+		originalTokens, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), principal.UserSubjectID(u.ID), "slack")
 		if err != nil {
-			t.Fatalf("ListTokensForIntegration before disconnect: %v", err)
+			t.Fatalf("ListCredentialsForProvider before disconnect: %v", err)
 		}
 		if len(originalTokens) != 1 {
 			t.Fatalf("expected 1 token before disconnect, got %d", len(originalTokens))
@@ -8467,9 +8494,9 @@ func TestDisconnectIntegration(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 500, got %d: %s", resp.StatusCode, body)
 		}
-		tokens, err := svc.Tokens.ListTokensForIntegration(context.Background(), principal.UserSubjectID(u.ID), "slack")
+		tokens, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), principal.UserSubjectID(u.ID), "slack")
 		if err != nil {
-			t.Fatalf("ListTokensForIntegration: %v", err)
+			t.Fatalf("ListCredentialsForProvider: %v", err)
 		}
 		if len(tokens) != 1 || tokens[0].ID != "tok-1" {
 			t.Fatalf("expected token rollback after unlink failure, got %+v", tokens)
@@ -8590,9 +8617,9 @@ func TestDisconnectIntegration(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 		}
-		tokens, err := svc.Tokens.ListTokensForIntegration(context.Background(), principal.UserSubjectID(u.ID), "notion")
+		tokens, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), principal.UserSubjectID(u.ID), "notion")
 		if err != nil {
-			t.Fatalf("ListTokensForIntegration: %v", err)
+			t.Fatalf("ListCredentialsForProvider: %v", err)
 		}
 		if len(tokens) != 1 {
 			t.Fatalf("expected 1 token after targeted disconnect, got %d", len(tokens))
@@ -9044,7 +9071,7 @@ func TestListOperations_UsesBrokerCatalogConnectionFallback(t *testing.T) {
 	broker := invocation.NewBroker(
 		providers,
 		svc.Users,
-		svc.Tokens,
+		svc.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "rest-conn"})),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "catalog-conn"})),
 	)
@@ -9111,7 +9138,7 @@ func TestListOperations_RetriesDefaultConnectionAfterBrokerCatalogError(t *testi
 	broker := invocation.NewBroker(
 		providers,
 		svc.Users,
-		svc.Tokens,
+		svc.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "rest-conn"})),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "mcp-conn"})),
 	)
@@ -10744,7 +10771,7 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns
 	}, providers, nil, nil)
 
 	svc := coretesting.NewStubServices(t)
-	broker := invocation.NewBroker(providers, svc.Users, svc.Tokens, invocation.WithAuthorizer(authz))
+	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials, invocation.WithAuthorizer(authz))
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -10968,7 +10995,7 @@ func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 		broker := invocation.NewBroker(
 			providers,
 			svc.Users,
-			svc.Tokens,
+			svc.ExternalCredentials,
 			invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"test-int": "mcp-conn"})),
 		)
 
@@ -11041,7 +11068,7 @@ func TestExecuteOperation_UsesFallbackSessionCatalogConnectionAfterEarlierError(
 	broker := invocation.NewBroker(
 		providers,
 		svc.Users,
-		svc.Tokens,
+		svc.ExternalCredentials,
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "mcp-conn"})),
 	)
 
@@ -11134,7 +11161,7 @@ func TestExecuteOperation_PinsSessionCatalogConnectionIntoExecution(t *testing.T
 	broker := invocation.NewBroker(
 		providers,
 		svc.Users,
-		svc.Tokens,
+		svc.ExternalCredentials,
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "mcp-conn"})),
 	)
 
@@ -11209,7 +11236,7 @@ func TestExecuteOperation_UsesConfiguredCatalogConnectionWhenInvokerIsWrapped(t 
 	broker := invocation.NewBroker(
 		providers,
 		svc.Users,
-		svc.Tokens,
+		svc.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "rest-conn"})),
 	)
 	wrappedInvoker := struct {
@@ -11292,7 +11319,7 @@ func TestExecuteOperation_UsesServerCatalogConnectionBeforeBrokerFallback(t *tes
 	broker := invocation.NewBroker(
 		providers,
 		svc.Users,
-		svc.Tokens,
+		svc.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "rest-conn"})),
 	)
 
@@ -11368,7 +11395,7 @@ func TestExecuteOperation_DoesNotFallbackPastConfiguredCatalogConnection(t *test
 	broker := invocation.NewBroker(
 		providers,
 		svc.Users,
-		svc.Tokens,
+		svc.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "rest-conn"})),
 	)
 
@@ -12224,7 +12251,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 
 		var auditBuf bytes.Buffer
 		svc := coretesting.NewStubServices(t)
-		recordingCreds := newRecordingExternalCredentialProvider(svc.Tokens)
+		recordingCreds := newRecordingExternalCredentialProvider(svc.ExternalCredentials)
 		svc.ExternalCredentials = recordingCreds
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
@@ -12327,7 +12354,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("expected redirect to /integrations?connected=slack, got %q", loc)
 		}
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "user@example.com")
-		tokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
+		tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
 		if len(tokens) == 0 {
 			t.Fatal("expected token to be stored")
 		}
@@ -12582,7 +12609,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("expected 200, got %d", selectResp.StatusCode)
 		}
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "cli@test.local")
-		tokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
+		tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
 		if len(tokens) == 0 {
 			t.Fatal("expected token to be stored after selection")
 		}
@@ -12751,11 +12778,11 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 
 		admin, _ := svc.Users.FindOrCreateUser(context.Background(), "admin@example.test")
 		viewer, _ := svc.Users.FindOrCreateUser(context.Background(), "viewer@example.test")
-		adminTokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(admin.ID))
+		adminTokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(admin.ID))
 		if len(adminTokens) != 1 {
 			t.Fatalf("expected one admin token, got %d", len(adminTokens))
 		}
-		viewerTokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(viewer.ID))
+		viewerTokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(viewer.ID))
 		if len(viewerTokens) != 0 {
 			t.Fatalf("expected viewer token rollback, got %d", len(viewerTokens))
 		}
@@ -14041,7 +14068,7 @@ func TestHostedHTTPBinding_RejectsGenericOperationRouteConflicts(t *testing.T) {
 		Auth:        &coretesting.StubAuthProvider{N: "none"},
 		Services:    svc,
 		Providers:   providers,
-		Invoker:     invocation.NewBroker(providers, svc.Users, svc.Tokens),
+		Invoker:     invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials),
 		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
 		PluginDefs: map[string]*config.ProviderEntry{
 			"reports": {
@@ -14085,7 +14112,7 @@ func TestHostedHTTPBinding_RejectsInvalidConfigBindings(t *testing.T) {
 			Auth:        &coretesting.StubAuthProvider{N: "none"},
 			Services:    svc,
 			Providers:   providers,
-			Invoker:     invocation.NewBroker(providers, svc.Users, svc.Tokens),
+			Invoker:     invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials),
 			StateSecret: []byte("0123456789abcdef0123456789abcdef"),
 		}
 	}
@@ -14772,7 +14799,7 @@ func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
-	recordingCreds := newRecordingExternalCredentialProvider(svc.Tokens)
+	recordingCreds := newRecordingExternalCredentialProvider(svc.ExternalCredentials)
 	svc.ExternalCredentials = recordingCreds
 	u := seedUser(t, svc, "anonymous@gestalt")
 	expired := time.Now().Add(-1 * time.Hour)
@@ -15074,7 +15101,7 @@ func TestExecuteOperation_RefreshPersistsReturnedTokenFields(t *testing.T) {
 				t.Fatalf("expected 200, got %d", resp.StatusCode)
 			}
 
-			stored, err := svc.Tokens.Token(context.Background(), principal.UserSubjectID(u.ID), "fake", "default", "default")
+			stored, err := svc.ExternalCredentials.GetCredential(context.Background(), principal.UserSubjectID(u.ID), "fake", "default", "default")
 			if err != nil {
 				t.Fatalf("Token: %v", err)
 			}
@@ -15111,7 +15138,7 @@ func TestExecuteOperation_RefreshFailureEdgeCases(t *testing.T) {
 			name:      "deleted token falls back to in-memory token when still valid",
 			expiresAt: time.Now().Add(2 * time.Minute),
 			beforeRefresh: func(svc *coredata.Services) {
-				_ = svc.Tokens.DeleteToken(context.Background(), "tok1")
+				_ = svc.ExternalCredentials.DeleteCredential(context.Background(), "tok1")
 			},
 			wantStatus:    http.StatusOK,
 			wantUsedToken: "still-valid-token",
@@ -15202,7 +15229,7 @@ func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T
 		},
 		refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
 			ctx := context.Background()
-			_ = svc.Tokens.StoreToken(ctx, &core.IntegrationToken{
+			_ = svc.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
 				ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "fake",
 				Connection: "default", Instance: "default",
 				AccessToken: "concurrently-refreshed-token", RefreshToken: "new-refresh",
@@ -15234,7 +15261,7 @@ func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T
 	}
 }
 
-func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
+func TestExecuteOperation_PutCredentialFailureReturnsError(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
@@ -15279,7 +15306,7 @@ func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
 	provider.PutErr = nil
 
 	if resp.StatusCode != http.StatusBadGateway {
-		t.Fatalf("expected 502 when StoreToken fails after refresh, got %d", resp.StatusCode)
+		t.Fatalf("expected 502 when PutCredential fails after refresh, got %d", resp.StatusCode)
 	}
 }
 
@@ -15424,7 +15451,7 @@ func TestExecuteOperation_HTTPAndMCPEquivalent(t *testing.T) {
 		t.Fatalf("decode HTTP body: %v", err)
 	}
 
-	invoker := invocation.NewBroker(providers, svc.Users, svc.Tokens)
+	invoker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials)
 	mcpSrv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   invoker,
 		Providers: providers,
@@ -15580,7 +15607,7 @@ func TestConnectManual(t *testing.T) {
 
 		var auditBuf bytes.Buffer
 		svc := coretesting.NewStubServices(t)
-		recordingCreds := newRecordingExternalCredentialProvider(svc.Tokens)
+		recordingCreds := newRecordingExternalCredentialProvider(svc.ExternalCredentials)
 		svc.ExternalCredentials = recordingCreds
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
@@ -15614,9 +15641,9 @@ func TestConnectManual(t *testing.T) {
 		}
 
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
-		tokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
+		tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
 		if len(tokens) == 0 {
-			t.Fatal("expected StoreToken to be called")
+			t.Fatal("expected PutCredential to be called")
 		}
 		stored := tokens[0]
 		if stored.Integration != "manual-svc" {
@@ -15702,9 +15729,9 @@ func TestConnectManual(t *testing.T) {
 		}
 
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
-		tokens, err := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
+		tokens, err := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
 		if err != nil {
-			t.Fatalf("ListTokens: %v", err)
+			t.Fatalf("ListCredentials: %v", err)
 		}
 		if len(tokens) != 1 {
 			t.Fatalf("expected exactly one stored token after reconnect, got %d", len(tokens))
@@ -15798,9 +15825,9 @@ func TestConnectManual(t *testing.T) {
 		}
 
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
-		tokens, err := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
+		tokens, err := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
 		if err != nil {
-			t.Fatalf("ListTokens: %v", err)
+			t.Fatalf("ListCredentials: %v", err)
 		}
 		if len(tokens) != 1 {
 			t.Fatalf("expected original token to be restored, got %d tokens", len(tokens))
@@ -16057,7 +16084,7 @@ func TestConnectManual(t *testing.T) {
 			t.Fatalf("expected redirect to /integrations?connected=manual-svc, got %q", loc)
 		}
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "same@test.local")
-		tokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
+		tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
 		if len(tokens) == 0 {
 			t.Fatal("expected token to be stored")
 		}
@@ -16227,7 +16254,7 @@ func TestConnectManual(t *testing.T) {
 		}
 
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
-		tokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
+		tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
 		if len(tokens) != 1 {
 			t.Fatalf("expected 1 stored token, got %d", len(tokens))
 		}
@@ -16304,7 +16331,7 @@ func TestConnectManual(t *testing.T) {
 		}
 
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
-		tokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
+		tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
 		if len(tokens) != 1 {
 			t.Fatalf("expected 1 stored token, got %d", len(tokens))
 		}
@@ -16814,7 +16841,7 @@ func newMCPHandler(t *testing.T, providers *registry.ProviderMap[core.Provider],
 	if authorizer != nil {
 		brokerOpts = append(brokerOpts, invocation.WithAuthorizer(authorizer))
 	}
-	broker := invocation.NewBroker(providers, svc.Users, svc.Tokens, brokerOpts...)
+	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials, brokerOpts...)
 	mcpInvoker := invocation.NewGuarded(broker, broker, "mcp", auditSink)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       mcpInvoker,
@@ -18831,9 +18858,9 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 			}
 
 			u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
-			tokens, _ := svc.Tokens.ListTokens(context.Background(), principal.UserSubjectID(u.ID))
+			tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
 			if len(tokens) == 0 {
-				t.Fatal("expected StoreToken to be called")
+				t.Fatal("expected PutCredential to be called")
 			}
 			stored := tokens[0]
 

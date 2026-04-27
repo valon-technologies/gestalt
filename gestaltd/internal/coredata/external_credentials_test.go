@@ -1,29 +1,62 @@
 package coredata
 
-import "testing"
+import (
+	"context"
+	"testing"
 
-func TestEffectiveExternalCredentialProviderHandlesTypedNilFallbacks(t *testing.T) {
+	"github.com/valon-technologies/gestalt/server/core"
+)
+
+type testExternalCredentialProvider struct{}
+
+func (*testExternalCredentialProvider) PutCredential(context.Context, *core.ExternalCredential) error {
+	return nil
+}
+
+func (*testExternalCredentialProvider) RestoreCredential(context.Context, *core.ExternalCredential) error {
+	return nil
+}
+
+func (*testExternalCredentialProvider) GetCredential(context.Context, string, string, string, string) (*core.ExternalCredential, error) {
+	return nil, core.ErrNotFound
+}
+
+func (*testExternalCredentialProvider) ListCredentials(context.Context, string) ([]*core.ExternalCredential, error) {
+	return nil, nil
+}
+
+func (*testExternalCredentialProvider) ListCredentialsForProvider(context.Context, string, string) ([]*core.ExternalCredential, error) {
+	return nil, nil
+}
+
+func (*testExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string, string) ([]*core.ExternalCredential, error) {
+	return nil, nil
+}
+
+func (*testExternalCredentialProvider) DeleteCredential(context.Context, string) error {
+	return nil
+}
+
+func TestEffectiveExternalCredentialProviderHandlesTypedNil(t *testing.T) {
 	t.Parallel()
 
-	t.Run("falls back from typed nil external credentials to tokens", func(t *testing.T) {
+	t.Run("returns configured external credentials", func(t *testing.T) {
 		t.Parallel()
 
-		var missing *TokenService
-		tokens := &TokenService{}
+		provider := &testExternalCredentialProvider{}
 		got := EffectiveExternalCredentialProvider(&Services{
-			ExternalCredentials: missing,
-			Tokens:              tokens,
+			ExternalCredentials: provider,
 		})
-		if got != tokens {
-			t.Fatalf("EffectiveExternalCredentialProvider returned %#v, want %#v", got, tokens)
+		if got != provider {
+			t.Fatalf("EffectiveExternalCredentialProvider returned %#v, want %#v", got, provider)
 		}
 	})
 
-	t.Run("does not wrap typed nil tokens", func(t *testing.T) {
+	t.Run("does not wrap typed nil external credentials", func(t *testing.T) {
 		t.Parallel()
 
-		var tokens *TokenService
-		got := EffectiveExternalCredentialProvider(&Services{Tokens: tokens})
+		var provider *testExternalCredentialProvider
+		got := EffectiveExternalCredentialProvider(&Services{ExternalCredentials: provider})
 		if got != nil {
 			t.Fatalf("EffectiveExternalCredentialProvider returned %#v, want nil", got)
 		}

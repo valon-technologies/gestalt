@@ -496,14 +496,14 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
-	if err := services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+	if err := services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
 		SubjectID:   principal.UserSubjectID(user.ID),
 		Integration: "roadmap",
 		Connection:  "analytics",
 		Instance:    "tenant-a",
 		AccessToken: "user-token",
 	}); err != nil {
-		t.Fatalf("StoreToken: %v", err)
+		t.Fatalf("PutCredential: %v", err)
 	}
 
 	providers := registry.New()
@@ -544,7 +544,7 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 	runtime := &workflowRuntime{
 		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
 	}
-	runtime.SetInvoker(invocation.NewBroker(&providers.Providers, services.Users, services.Tokens, invocation.WithAuthorizer(authz)))
+	runtime.SetInvoker(invocation.NewBroker(&providers.Providers, services.Users, services.ExternalCredentials, invocation.WithAuthorizer(authz)))
 
 	_, err = runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
@@ -610,7 +610,7 @@ func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *tes
 		t.Fatalf("Register provider: %v", err)
 	}
 
-	broker := invocation.NewBroker(&providers.Providers, services.Users, services.Tokens)
+	broker := invocation.NewBroker(&providers.Providers, services.Users, services.ExternalCredentials)
 	runtime := &workflowRuntime{
 		invoker:   broker,
 		providers: map[string]coreworkflow.Provider{"basic": refProvider},

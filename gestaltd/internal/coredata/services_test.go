@@ -490,7 +490,7 @@ func TestUserService(t *testing.T) {
 	})
 }
 
-func TestTokenService(t *testing.T) {
+func TestExternalCredentialProvider(t *testing.T) {
 	t.Parallel()
 
 	t.Run("StoreAndRetrieve_round_trip", func(t *testing.T) {
@@ -512,11 +512,11 @@ func TestTokenService(t *testing.T) {
 			ExpiresAt:    &expires,
 			MetadataJSON: `{"key":"val"}`,
 		}
-		if err := svc.Tokens.StoreToken(ctx, token); err != nil {
-			t.Fatalf("StoreToken: %v", err)
+		if err := svc.ExternalCredentials.PutCredential(ctx, token); err != nil {
+			t.Fatalf("PutCredential: %v", err)
 		}
 
-		got, err := svc.Tokens.Token(ctx, principal.UserSubjectID(user.ID), "test-svc", "default", "inst-1")
+		got, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "test-svc", "default", "inst-1")
 		if err != nil {
 			t.Fatalf("Token: %v", err)
 		}
@@ -537,17 +537,17 @@ func TestTokenService(t *testing.T) {
 		}
 	})
 
-	t.Run("Token_not_found", func(t *testing.T) {
+	t.Run("GetCredential_not_found", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 
-		_, err := svc.Tokens.Token(context.Background(), "no-user", "no-svc", "no-conn", "no-inst")
+		_, err := svc.ExternalCredentials.GetCredential(context.Background(), "no-user", "no-svc", "no-conn", "no-inst")
 		if err != core.ErrNotFound {
 			t.Fatalf("Token = %v, want ErrNotFound", err)
 		}
 	})
 
-	t.Run("ListTokens_by_user", func(t *testing.T) {
+	t.Run("ListCredentials_by_user", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 		ctx := context.Background()
@@ -560,21 +560,21 @@ func TestTokenService(t *testing.T) {
 			{ID: "tok-a2", SubjectID: principal.UserSubjectID(userA.ID), Integration: "svc-b", Connection: "default", Instance: "i2", AccessToken: "a2", RefreshToken: "r2"},
 			{ID: "tok-b1", SubjectID: principal.UserSubjectID(userB.ID), Integration: "svc-a", Connection: "default", Instance: "i1", AccessToken: "a3", RefreshToken: "r3"},
 		} {
-			if err := svc.Tokens.StoreToken(ctx, tok); err != nil {
-				t.Fatalf("StoreToken(%s): %v", tok.ID, err)
+			if err := svc.ExternalCredentials.PutCredential(ctx, tok); err != nil {
+				t.Fatalf("PutCredential(%s): %v", tok.ID, err)
 			}
 		}
 
-		tokens, err := svc.Tokens.ListTokens(ctx, principal.UserSubjectID(userA.ID))
+		tokens, err := svc.ExternalCredentials.ListCredentials(ctx, principal.UserSubjectID(userA.ID))
 		if err != nil {
-			t.Fatalf("ListTokens: %v", err)
+			t.Fatalf("ListCredentials: %v", err)
 		}
 		if len(tokens) != 2 {
-			t.Fatalf("ListTokens: got %d, want 2", len(tokens))
+			t.Fatalf("ListCredentials: got %d, want 2", len(tokens))
 		}
 	})
 
-	t.Run("ListTokensForIntegration", func(t *testing.T) {
+	t.Run("ListCredentialsForProvider", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 		ctx := context.Background()
@@ -585,21 +585,21 @@ func TestTokenService(t *testing.T) {
 			{ID: "tok-2", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc-a", Connection: "default", Instance: "i2", AccessToken: "b", RefreshToken: "s"},
 			{ID: "tok-3", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc-b", Connection: "default", Instance: "i1", AccessToken: "c", RefreshToken: "u"},
 		} {
-			if err := svc.Tokens.StoreToken(ctx, tok); err != nil {
-				t.Fatalf("StoreToken(%s): %v", tok.ID, err)
+			if err := svc.ExternalCredentials.PutCredential(ctx, tok); err != nil {
+				t.Fatalf("PutCredential(%s): %v", tok.ID, err)
 			}
 		}
 
-		tokens, err := svc.Tokens.ListTokensForIntegration(ctx, principal.UserSubjectID(user.ID), "svc-a")
+		tokens, err := svc.ExternalCredentials.ListCredentialsForProvider(ctx, principal.UserSubjectID(user.ID), "svc-a")
 		if err != nil {
-			t.Fatalf("ListTokensForIntegration: %v", err)
+			t.Fatalf("ListCredentialsForProvider: %v", err)
 		}
 		if len(tokens) != 2 {
 			t.Fatalf("got %d tokens, want 2", len(tokens))
 		}
 	})
 
-	t.Run("ListTokensForConnection", func(t *testing.T) {
+	t.Run("ListCredentialsForConnection", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 		ctx := context.Background()
@@ -610,21 +610,21 @@ func TestTokenService(t *testing.T) {
 			{ID: "tok-2", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc", Connection: "conn-a", Instance: "i2", AccessToken: "b", RefreshToken: "s"},
 			{ID: "tok-3", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc", Connection: "conn-b", Instance: "i1", AccessToken: "c", RefreshToken: "u"},
 		} {
-			if err := svc.Tokens.StoreToken(ctx, tok); err != nil {
-				t.Fatalf("StoreToken(%s): %v", tok.ID, err)
+			if err := svc.ExternalCredentials.PutCredential(ctx, tok); err != nil {
+				t.Fatalf("PutCredential(%s): %v", tok.ID, err)
 			}
 		}
 
-		tokens, err := svc.Tokens.ListTokensForConnection(ctx, principal.UserSubjectID(user.ID), "svc", "conn-a")
+		tokens, err := svc.ExternalCredentials.ListCredentialsForConnection(ctx, principal.UserSubjectID(user.ID), "svc", "conn-a")
 		if err != nil {
-			t.Fatalf("ListTokensForConnection: %v", err)
+			t.Fatalf("ListCredentialsForConnection: %v", err)
 		}
 		if len(tokens) != 2 {
 			t.Fatalf("got %d tokens, want 2", len(tokens))
 		}
 	})
 
-	t.Run("DeleteToken", func(t *testing.T) {
+	t.Run("DeleteCredential", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 		ctx := context.Background()
@@ -635,30 +635,30 @@ func TestTokenService(t *testing.T) {
 			Connection: "default", Instance: "i1",
 			AccessToken: "a", RefreshToken: "r",
 		}
-		if err := svc.Tokens.StoreToken(ctx, tok); err != nil {
-			t.Fatalf("StoreToken: %v", err)
+		if err := svc.ExternalCredentials.PutCredential(ctx, tok); err != nil {
+			t.Fatalf("PutCredential: %v", err)
 		}
 
-		if err := svc.Tokens.DeleteToken(ctx, "tok-del"); err != nil {
-			t.Fatalf("DeleteToken: %v", err)
+		if err := svc.ExternalCredentials.DeleteCredential(ctx, "tok-del"); err != nil {
+			t.Fatalf("DeleteCredential: %v", err)
 		}
 
-		_, err := svc.Tokens.Token(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
+		_, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
 		if err != core.ErrNotFound {
 			t.Fatalf("Token after delete = %v, want ErrNotFound", err)
 		}
 	})
 
-	t.Run("DeleteToken_nonexistent_no_error", func(t *testing.T) {
+	t.Run("DeleteCredential_nonexistent_no_error", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 
-		if err := svc.Tokens.DeleteToken(context.Background(), "does-not-exist"); err != nil {
-			t.Fatalf("DeleteToken nonexistent: %v", err)
+		if err := svc.ExternalCredentials.DeleteCredential(context.Background(), "does-not-exist"); err != nil {
+			t.Fatalf("DeleteCredential nonexistent: %v", err)
 		}
 	})
 
-	t.Run("StoreToken_upsert", func(t *testing.T) {
+	t.Run("PutCredential_upsert", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 		ctx := context.Background()
@@ -669,17 +669,17 @@ func TestTokenService(t *testing.T) {
 			Connection: "default", Instance: "i1",
 			AccessToken: "original", RefreshToken: "r",
 		}
-		if err := svc.Tokens.StoreToken(ctx, tok); err != nil {
-			t.Fatalf("first StoreToken: %v", err)
+		if err := svc.ExternalCredentials.PutCredential(ctx, tok); err != nil {
+			t.Fatalf("first PutCredential: %v", err)
 		}
 
 		tok.ID = "tok-upsert-replacement"
 		tok.AccessToken = "updated"
-		if err := svc.Tokens.StoreToken(ctx, tok); err != nil {
-			t.Fatalf("second StoreToken: %v", err)
+		if err := svc.ExternalCredentials.PutCredential(ctx, tok); err != nil {
+			t.Fatalf("second PutCredential: %v", err)
 		}
 
-		got, err := svc.Tokens.Token(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
+		got, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc", "default", "i1")
 		if err != nil {
 			t.Fatalf("Token: %v", err)
 		}
@@ -690,16 +690,16 @@ func TestTokenService(t *testing.T) {
 			t.Errorf("AccessToken = %q, want %q", got.AccessToken, "updated")
 		}
 
-		tokens, err := svc.Tokens.ListTokensForConnection(ctx, principal.UserSubjectID(user.ID), "svc", "default")
+		tokens, err := svc.ExternalCredentials.ListCredentialsForConnection(ctx, principal.UserSubjectID(user.ID), "svc", "default")
 		if err != nil {
-			t.Fatalf("ListTokensForConnection: %v", err)
+			t.Fatalf("ListCredentialsForConnection: %v", err)
 		}
 		if len(tokens) != 1 {
 			t.Fatalf("got %d tokens, want 1", len(tokens))
 		}
 	})
 
-	t.Run("ConcurrentTokenWrites", func(t *testing.T) {
+	t.Run("ConcurrentCredentialWrites", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 		ctx := context.Background()
@@ -713,7 +713,7 @@ func TestTokenService(t *testing.T) {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				errs[idx] = svc.Tokens.StoreToken(ctx, &core.IntegrationToken{
+				errs[idx] = svc.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
 					ID:           fmt.Sprintf("tok-%d", idx),
 					SubjectID:    principal.UserSubjectID(user.ID),
 					Integration:  "svc",
@@ -732,9 +732,9 @@ func TestTokenService(t *testing.T) {
 			}
 		}
 
-		tokens, err := svc.Tokens.ListTokens(ctx, principal.UserSubjectID(user.ID))
+		tokens, err := svc.ExternalCredentials.ListCredentials(ctx, principal.UserSubjectID(user.ID))
 		if err != nil {
-			t.Fatalf("ListTokens: %v", err)
+			t.Fatalf("ListCredentials: %v", err)
 		}
 		if len(tokens) != count {
 			t.Fatalf("got %d tokens, want %d", len(tokens), count)

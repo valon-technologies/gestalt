@@ -13,9 +13,6 @@ func EffectiveExternalCredentialProvider(services *Services) core.ExternalCreden
 	if !ExternalCredentialProviderMissing(services.ExternalCredentials) {
 		return services.ExternalCredentials
 	}
-	if services.Tokens != nil {
-		return services.Tokens
-	}
 	return nil
 }
 

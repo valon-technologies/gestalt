@@ -2491,17 +2491,17 @@ func TestHybridDeclarativeExecutableProviderUsesNamedDefaultConnectionForPluginO
 
 	services := coretesting.NewStubServices(t)
 	subjectID := principal.UserSubjectID("u-hybrid")
-	if err := services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+	if err := services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
 		SubjectID:   subjectID,
 		Integration: "hybrid",
 		Connection:  "default",
 		Instance:    "default",
 		AccessToken: "tok-default",
 	}); err != nil {
-		t.Fatalf("StoreToken(default): %v", err)
+		t.Fatalf("PutCredential(default): %v", err)
 	}
 
-	result, err := invocation.NewBroker(providers, services.Users, services.Tokens).Invoke(
+	result, err := invocation.NewBroker(providers, services.Users, services.ExternalCredentials).Invoke(
 		context.Background(),
 		&principal.Principal{
 			UserID: "u-hybrid",
@@ -2831,7 +2831,7 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 	coretesting.AttachStubExternalCredentials(services)
 	t.Cleanup(func() { _ = services.Close() })
 
-	broker := invocation.NewBroker(providers, services.Users, services.Tokens, brokerOpts...)
+	broker := invocation.NewBroker(providers, services.Users, services.ExternalCredentials, brokerOpts...)
 	bridge.SetTarget(invocation.NewGuarded(broker, nil, "plugin", nil, invocation.WithoutRateLimit()))
 
 	return &nestedInvokeHarness{
@@ -2967,7 +2967,7 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 		}
 		brokerOpts = append(brokerOpts, invocation.WithAuthorizer(authz))
 	}
-	broker := invocation.NewBroker(providers, services.Users, services.Tokens, brokerOpts...)
+	broker := invocation.NewBroker(providers, services.Users, services.ExternalCredentials, brokerOpts...)
 	bridge.SetTarget(invocation.NewGuarded(broker, nil, "plugin", nil, invocation.WithoutRateLimit()))
 
 	return &nestedInvokeHarness{
@@ -2995,7 +2995,7 @@ func storeNestedInvokeToken(t *testing.T, harness *nestedInvokeHarness, ctx cont
 func storeNestedInvokeTokenForSubject(t *testing.T, harness *nestedInvokeHarness, ctx context.Context, subjectID, plugin, connection, instance string) {
 	t.Helper()
 
-	if err := harness.services.Tokens.StoreToken(ctx, &core.IntegrationToken{
+	if err := harness.services.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
 		SubjectID:    subjectID,
 		Integration:  plugin,
 		Connection:   connection,
@@ -3003,7 +3003,7 @@ func storeNestedInvokeTokenForSubject(t *testing.T, harness *nestedInvokeHarness
 		AccessToken:  plugin + "-" + connection + "-token",
 		RefreshToken: "refresh-token",
 	}); err != nil {
-		t.Fatalf("StoreToken(%s,%s,%s): %v", plugin, connection, instance, err)
+		t.Fatalf("PutCredential(%s,%s,%s): %v", plugin, connection, instance, err)
 	}
 }
 
@@ -3609,7 +3609,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 
 	agentProvider := newStubAgentTurnManagerProvider()
 	agentRuntime := &agentRuntime{defaultProviderName: "managed", providers: map[string]coreagent.Provider{"managed": agentProvider}}
-	broker := invocation.NewBroker(&pluginProviders.Providers, services.Users, services.Tokens)
+	broker := invocation.NewBroker(&pluginProviders.Providers, services.Users, services.ExternalCredentials)
 	agentRuntime.SetRunMetadata(services.AgentRunMetadata)
 	agentRuntime.SetInvoker(broker)
 	manager := agentmanager.New(agentmanager.Config{
@@ -6717,7 +6717,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	coretesting.AttachStubExternalCredentials(services)
 	t.Cleanup(func() { _ = services.Close() })
 
-	broker := invocation.NewBroker(providers, services.Users, services.Tokens)
+	broker := invocation.NewBroker(providers, services.Users, services.ExternalCredentials)
 	guarded := invocation.NewGuarded(broker, nil, "plugin", nil, invocation.WithoutRateLimit())
 	bridge.SetTarget(guarded)
 	harness := &nestedInvokeHarness{

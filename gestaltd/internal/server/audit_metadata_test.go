@@ -39,7 +39,7 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, stub)
 	svc := coretesting.NewStubServices(t)
-	broker := invocation.NewBroker(providers, svc.Users, svc.Tokens)
+	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials)
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
 
 	srv, err := server.New(server.Config{
@@ -134,7 +134,7 @@ func TestAuditMetadata_FallbackToRemoteAddr(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, stub)
 	svc := coretesting.NewStubServices(t)
-	broker := invocation.NewBroker(providers, svc.Users, svc.Tokens)
+	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials)
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
 
 	srv, err := server.New(server.Config{
@@ -385,7 +385,7 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	}
 
 	svc := coretesting.NewStubServices(t)
-	if err := svc.Tokens.StoreToken(t.Context(), &core.IntegrationToken{
+	if err := svc.ExternalCredentials.PutCredential(t.Context(), &core.IntegrationToken{
 		ID:          "identity-audit-token",
 		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 		Integration: "audit-workload-prov",
@@ -393,10 +393,10 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 		Instance:    "team-a",
 		AccessToken: "identity-token",
 	}); err != nil {
-		t.Fatalf("StoreToken: %v", err)
+		t.Fatalf("PutCredential: %v", err)
 	}
 
-	broker := invocation.NewBroker(providers, svc.Users, svc.Tokens, invocation.WithAuthorizer(authz))
+	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials, invocation.WithAuthorizer(authz))
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
 
 	srv, err := server.New(server.Config{

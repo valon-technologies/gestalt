@@ -162,7 +162,7 @@ func TestComposite_MCPFromAPIExposesBothToolSets(t *testing.T) {
 	comp := composite.New("notion", apiProv, mcpUp)
 	providers := testutil.NewProviderRegistry(t, comp)
 	ds, userID := stubServicesWithToken(t, "notion")
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: &stubTokenResolver{token: "t"},

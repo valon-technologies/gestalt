@@ -82,7 +82,7 @@ func TestNewHTTPServerSupportsH2CHostServiceRelay(t *testing.T) {
 		Providers:    &reg.Providers,
 		StateSecret:  secret,
 		RouteProfile: RouteProfilePublic,
-		Invoker:      invocation.NewBroker(&reg.Providers, services.Users, services.Tokens),
+		Invoker:      invocation.NewBroker(&reg.Providers, services.Users, services.ExternalCredentials),
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)

@@ -43,7 +43,7 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) { //nolint:paralleltest // mut
 
 	providers := testutil.NewProviderRegistry(t, stub)
 	ds := coretesting.NewStubServices(t)
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv, err := server.New(server.Config{
 		Auth: &coretesting.StubAuthProvider{
@@ -136,7 +136,7 @@ func TestTracing_BrokerSpanRecordsErrors(t *testing.T) { //nolint:paralleltest /
 
 	providers := testutil.NewProviderRegistry(t, stub)
 	ds := coretesting.NewStubServices(t)
-	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials)
 
 	srv, err := server.New(server.Config{
 		Auth:        &coretesting.StubAuthProvider{N: "none"},

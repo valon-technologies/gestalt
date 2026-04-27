@@ -243,8 +243,14 @@ func New(cfg Config) (*Server, error) {
 		}
 	}
 
+	if cfg.Services == nil {
+		return nil, fmt.Errorf("services are required")
+	}
 	users := cfg.Services.Users
 	externalCredentials := coredata.EffectiveExternalCredentialProvider(cfg.Services)
+	if coredata.ExternalCredentialProviderMissing(externalCredentials) {
+		return nil, fmt.Errorf("external credentials provider is required")
+	}
 	apiTokens := cfg.Services.APITokens
 	identities := cfg.Services.Identities
 	identityGrants := cfg.Services.IdentityManagementGrants

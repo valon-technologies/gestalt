@@ -63,7 +63,7 @@ func TestExecuteOperation_CompositeStaticRESTBypassesMCPSessionResolution(t *tes
 	broker := invocation.NewBroker(
 		providers,
 		svc.Users,
-		svc.Tokens,
+		svc.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"notion": "OAuth"})),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"notion": "MCP"})),
 	)
