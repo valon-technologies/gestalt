@@ -101,13 +101,14 @@ type Session struct {
 	owner   string
 	targets map[string]*attachedTarget
 
-	mu       sync.Mutex
-	calls    chan *rpcCall
-	pending  map[string]*rpcCall
-	done     chan struct{}
-	lastSeen time.Time
-	closeErr error
-	closed   bool
+	mu        sync.Mutex
+	calls     chan *rpcCall
+	pending   map[string]*rpcCall
+	done      chan struct{}
+	closeDone chan struct{}
+	lastSeen  time.Time
+	closeErr  error
+	closed    bool
 }
 
 type attachedTarget struct {
@@ -124,6 +125,7 @@ type rpcCall struct {
 	method      string
 	request     []byte
 	deliveredAt time.Time
+	canceled    bool
 	response    chan rpcResponse
 }
 
@@ -198,13 +200,14 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		return nil, status.Errorf(codes.Internal, "create provider dev session: %v", err)
 	}
 	session := &Session{
-		id:       sessionID,
-		owner:    owner,
-		targets:  make(map[string]*attachedTarget, len(targets)),
-		calls:    make(chan *rpcCall, 128),
-		pending:  map[string]*rpcCall{},
-		done:     make(chan struct{}),
-		lastSeen: time.Now(),
+		id:        sessionID,
+		owner:     owner,
+		targets:   make(map[string]*attachedTarget, len(targets)),
+		calls:     make(chan *rpcCall, 128),
+		pending:   map[string]*rpcCall{},
+		done:      make(chan struct{}),
+		closeDone: make(chan struct{}),
+		lastSeen:  time.Now(),
 	}
 	resp := &CreateSessionResponse{
 		ID:        sessionID,
@@ -253,30 +256,36 @@ func (m *Manager) PollSession(ctx context.Context, p *principal.Principal, sessi
 	}
 	session.touch()
 
-	select {
-	case call := <-session.calls:
-		session.mu.Lock()
-		if session.closed {
+	for {
+		select {
+		case call := <-session.calls:
+			session.mu.Lock()
+			if session.closed {
+				session.mu.Unlock()
+				return nil, false, status.Error(codes.NotFound, "provider dev session is closed")
+			}
+			if call.canceled {
+				session.mu.Unlock()
+				continue
+			}
+			call.deliveredAt = time.Now()
+			session.pending[call.id] = call
+			session.lastSeen = call.deliveredAt
 			session.mu.Unlock()
+			return &PollResponse{
+				CallID:   call.id,
+				Provider: call.provider,
+				Method:   call.method,
+				Request:  hex.EncodeToString(call.request),
+			}, true, nil
+		case <-session.done:
 			return nil, false, status.Error(codes.NotFound, "provider dev session is closed")
+		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(ctx.Err(), context.Canceled) {
+				return nil, false, nil
+			}
+			return nil, false, ctx.Err()
 		}
-		call.deliveredAt = time.Now()
-		session.pending[call.id] = call
-		session.lastSeen = call.deliveredAt
-		session.mu.Unlock()
-		return &PollResponse{
-			CallID:   call.id,
-			Provider: call.provider,
-			Method:   call.method,
-			Request:  hex.EncodeToString(call.request),
-		}, true, nil
-	case <-session.done:
-		return nil, false, status.Error(codes.NotFound, "provider dev session is closed")
-	case <-ctx.Done():
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(ctx.Err(), context.Canceled) {
-			return nil, false, nil
-		}
-		return nil, false, ctx.Err()
 	}
 }
 
@@ -304,6 +313,9 @@ func (m *Manager) CompleteCall(p *principal.Principal, sessionID, callID string,
 	resp := rpcResponse{}
 	if req.Error != nil {
 		resp.err = status.Error(codes.Code(req.Error.Code), req.Error.Message)
+		if resp.err == nil {
+			resp.err = status.Error(codes.InvalidArgument, "provider dev error code must be non-OK")
+		}
 	} else if req.Response != "" {
 		payload, err := hex.DecodeString(req.Response)
 		if err != nil {
@@ -466,13 +478,21 @@ func (s *Session) Close() error {
 		return nil
 	}
 	s.mu.Lock()
+	if s.closeDone == nil {
+		s.closeDone = make(chan struct{})
+	}
 	if s.closed {
+		closeDone := s.closeDone
+		s.mu.Unlock()
+		<-closeDone
+		s.mu.Lock()
 		err := s.closeErr
 		s.mu.Unlock()
 		return err
 	}
 	s.closed = true
 	close(s.done)
+	closeDone := s.closeDone
 	pending := make([]*rpcCall, 0, len(s.pending))
 	for id, call := range s.pending {
 		delete(s.pending, id)
@@ -498,6 +518,7 @@ func (s *Session) Close() error {
 	s.mu.Lock()
 	s.closeErr = errors.Join(errs...)
 	err := s.closeErr
+	close(closeDone)
 	s.mu.Unlock()
 	return err
 }
@@ -589,6 +610,7 @@ func (s *Session) invoke(ctx context.Context, providerName, method string, req g
 		return status.Error(codes.Unavailable, "provider dev session is closed")
 	case <-ctx.Done():
 		s.mu.Lock()
+		call.canceled = true
 		delete(s.pending, callID)
 		if !s.closed {
 			s.lastSeen = time.Now()
