@@ -24,7 +24,6 @@ import (
 const (
 	runtimeShutdownTimeout        = 15 * time.Second
 	readinessDatastorePingTimeout = 2 * time.Second
-	readinessAgentPingTimeout     = 5 * time.Second
 )
 
 func httpCatalogConnectionMap(connMaps bootstrap.ConnectionMaps) map[string]string {
@@ -103,14 +102,6 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 			defer cancel()
 			if err := result.Services.Ping(pingCtx); err != nil {
 				return "datastore unavailable"
-			}
-			if result.AgentControl != nil {
-				agentPingCtx, agentPingCancel := context.WithTimeout(context.Background(), readinessAgentPingTimeout)
-				defer agentPingCancel()
-				if err := result.AgentControl.Ping(agentPingCtx); err != nil {
-					slog.Warn("agent provider readiness check failed", "error", err)
-					return "agent providers unavailable"
-				}
 			}
 			return ""
 		},

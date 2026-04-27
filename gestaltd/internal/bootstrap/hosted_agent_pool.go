@@ -11,6 +11,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 )
@@ -372,7 +373,7 @@ func (p *hostedAgentProviderPool) GetCapabilities(ctx context.Context, req corea
 func (p *hostedAgentProviderPool) Ping(ctx context.Context) error {
 	backends := p.readyBackends()
 	if len(backends) == 0 {
-		return fmt.Errorf("hosted agent provider %q has no ready runtime instances", p.name)
+		return p.unavailableError(fmt.Errorf("hosted agent provider %q has no ready runtime instances", p.name))
 	}
 	errs := make(chan error, len(backends))
 	var wg sync.WaitGroup
@@ -417,7 +418,9 @@ func (p *hostedAgentProviderPool) Close() error {
 			backend.draining = true
 		}
 	}
+	ready, starting, draining := p.instanceCountsLocked()
 	p.mu.Unlock()
+	p.recordInstanceCounts(context.Background(), ready, starting, draining)
 	p.cancel()
 
 	errs := make(chan error, len(backends))
@@ -540,30 +543,40 @@ func (p *hostedAgentProviderPool) acquireBackend(ctx context.Context, preferred 
 				return preferred, p.releaseBackend(preferred), nil
 			}
 			p.mu.Unlock()
-			return nil, nil, fmt.Errorf("hosted agent provider %q runtime instance is not ready", p.name)
+			return nil, nil, p.unavailableError(fmt.Errorf("hosted agent provider %q runtime instance is not ready", p.name))
 		}
 		if backend := p.pickReadyBackendLocked(); backend != nil {
+			var ready, starting, draining int
+			var scaled bool
 			if backend.active > 0 && p.canScaleOutLocked() {
-				p.startScaleOutLocked()
+				ready, starting, draining, scaled = p.startScaleOutLocked()
 			}
 			backend.active++
 			p.mu.Unlock()
+			if scaled {
+				p.recordInstanceCounts(ctx, ready, starting, draining)
+			}
 			return backend, p.releaseBackend(backend), nil
 		}
 		if p.canScaleOutLocked() {
 			p.starting++
+			ready, starting, draining := p.instanceCountsLocked()
 			p.mu.Unlock()
+			p.recordInstanceCounts(ctx, ready, starting, draining)
 			started, startErr := p.startBackend(ctx)
 			p.mu.Lock()
 			p.starting--
+			ready, starting, draining = p.instanceCountsLocked()
 			if startErr == nil && p.backendAvailableLocked(started, false) {
 				started.active++
 				p.mu.Unlock()
+				p.recordInstanceCounts(ctx, ready, starting, draining)
 				return started, p.releaseBackend(started), nil
 			}
 			p.mu.Unlock()
+			p.recordInstanceCounts(ctx, ready, starting, draining)
 			if startErr != nil {
-				return nil, nil, startErr
+				return nil, nil, p.unavailableError(startErr)
 			}
 			continue
 		}
@@ -624,22 +637,26 @@ func (p *hostedAgentProviderPool) canScaleOutLocked() bool {
 	return ready+p.starting < p.policy.MaxReadyInstances
 }
 
-func (p *hostedAgentProviderPool) startScaleOutLocked() {
+func (p *hostedAgentProviderPool) startScaleOutLocked() (ready, starting, draining int, scaled bool) {
 	if p.closed || !p.canScaleOutLocked() {
-		return
+		return 0, 0, 0, false
 	}
 	p.starting++
+	ready, starting, draining = p.instanceCountsLocked()
 	p.lifecycleWG.Add(1)
 	go func() {
 		defer p.lifecycleWG.Done()
 		_, err := p.startBackend(p.ctx)
 		p.mu.Lock()
 		p.starting--
+		ready, starting, draining := p.instanceCountsLocked()
 		p.mu.Unlock()
+		p.recordInstanceCounts(p.ctx, ready, starting, draining)
 		if err != nil && !errors.Is(err, context.Canceled) {
 			slog.Warn("failed to scale out hosted agent runtime instance", "provider", p.name, "error", err)
 		}
 	}()
+	return ready, starting, draining, true
 }
 
 func (p *hostedAgentProviderPool) backendAvailableLocked(backend *hostedAgentPoolBackend, allowDraining bool) bool {
@@ -671,6 +688,47 @@ func (p *hostedAgentProviderPool) availableBackends(allowDraining bool) []*hoste
 		}
 	}
 	return out
+}
+
+func (p *hostedAgentProviderPool) unavailableError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return hostedAgentProviderUnavailableError{providerName: p.name, cause: err}
+}
+
+type hostedAgentProviderUnavailableError struct {
+	providerName string
+	cause        error
+}
+
+func (e hostedAgentProviderUnavailableError) Error() string {
+	return fmt.Sprintf("%s: %v", agentmanager.NewAgentProviderNotAvailableError(e.providerName), e.cause)
+}
+
+func (e hostedAgentProviderUnavailableError) Unwrap() []error {
+	return []error{agentmanager.NewAgentProviderNotAvailableError(e.providerName), e.cause}
+}
+
+func (p *hostedAgentProviderPool) instanceCountsLocked() (ready, starting, draining int) {
+	starting = p.starting
+	for _, backend := range p.backends {
+		if backend == nil || backend.closed {
+			continue
+		}
+		if backend.draining || backend.closing {
+			draining++
+			continue
+		}
+		if backend.provider != nil {
+			ready++
+		}
+	}
+	return ready, starting, draining
+}
+
+func (p *hostedAgentProviderPool) recordInstanceCounts(ctx context.Context, ready, starting, draining int) {
+	recordHostedAgentRuntimeInstances(ctx, p.name, ready, starting, draining)
 }
 
 func (p *hostedAgentProviderPool) sessionBackend(sessionID string) *hostedAgentPoolBackend {
@@ -844,7 +902,7 @@ func (p *hostedAgentProviderPool) healthLoop() {
 			return
 		case <-ticker.C:
 		}
-		p.ensureMinReady(p.ctx)
+		_ = p.ensureMinReady(p.ctx)
 		for _, backend := range p.readyBackends() {
 			if err := p.pingBackend(backend); err != nil {
 				slog.Warn("hosted agent runtime instance failed health check", "provider", p.name, "instance", backend.id, "error", err)
@@ -867,8 +925,11 @@ func (p *hostedAgentProviderPool) maybeProbeAfterCallError(backend *hostedAgentP
 }
 
 func (p *hostedAgentProviderPool) pingBackend(backend *hostedAgentPoolBackend) error {
+	startedAt := time.Now()
 	if backend == nil || backend.provider == nil {
-		return fmt.Errorf("runtime instance is unavailable")
+		err := fmt.Errorf("runtime instance is unavailable")
+		recordHostedAgentRuntimeHealthCheck(p.ctx, p.name, startedAt, err)
+		return err
 	}
 	timeout := p.policy.HealthCheckInterval
 	if timeout > 10*time.Second {
@@ -876,7 +937,9 @@ func (p *hostedAgentProviderPool) pingBackend(backend *hostedAgentPoolBackend) e
 	}
 	ctx, cancel := context.WithTimeout(p.ctx, timeout)
 	defer cancel()
-	return backend.provider.Ping(ctx)
+	err := backend.provider.Ping(ctx)
+	recordHostedAgentRuntimeHealthCheck(p.ctx, p.name, startedAt, err)
+	return err
 }
 
 func (p *hostedAgentProviderPool) replaceBackend(backend *hostedAgentPoolBackend) {
@@ -890,7 +953,11 @@ func (p *hostedAgentProviderPool) replaceBackend(backend *hostedAgentPoolBackend
 		defer p.lifecycleWG.Done()
 		// Replacement restores ready capacity. Session/turn recovery after the
 		// drained backend closes depends on the agent provider's durable store.
-		p.ensureMinReady(p.ctx)
+		startErr := p.ensureMinReady(p.ctx)
+		recordHostedAgentRuntimeReplacement(p.ctx, p.name, startErr)
+		if startErr != nil && !errors.Is(startErr, context.Canceled) {
+			slog.Warn("failed to replace hosted agent runtime instance", "provider", p.name, "instance", backend.id, "error", startErr)
+		}
 		if err := p.drainAndCloseBackend(backend); err != nil {
 			slog.Warn("failed to close unhealthy hosted agent runtime instance", "provider", p.name, "instance", backend.id, "error", err)
 		}
@@ -907,12 +974,12 @@ func (p *hostedAgentProviderPool) addLifecycleWork() bool {
 	return true
 }
 
-func (p *hostedAgentProviderPool) ensureMinReady(ctx context.Context) {
+func (p *hostedAgentProviderPool) ensureMinReady(ctx context.Context) error {
 	for {
 		p.mu.Lock()
 		if p.closed {
 			p.mu.Unlock()
-			return
+			return nil
 		}
 		ready := 0
 		for _, backend := range p.backends {
@@ -922,18 +989,22 @@ func (p *hostedAgentProviderPool) ensureMinReady(ctx context.Context) {
 		}
 		if ready+p.starting >= p.policy.MinReadyInstances {
 			p.mu.Unlock()
-			return
+			return nil
 		}
 		p.starting++
+		ready, starting, draining := p.instanceCountsLocked()
 		p.mu.Unlock()
+		p.recordInstanceCounts(ctx, ready, starting, draining)
 
 		_, err := p.startBackend(ctx)
 		p.mu.Lock()
 		p.starting--
+		ready, starting, draining = p.instanceCountsLocked()
 		p.mu.Unlock()
+		p.recordInstanceCounts(ctx, ready, starting, draining)
 		if err != nil {
 			slog.Warn("failed to start hosted agent runtime instance", "provider", p.name, "error", err)
-			return
+			return err
 		}
 	}
 }
@@ -958,7 +1029,9 @@ func (p *hostedAgentProviderPool) startBackend(ctx context.Context) (*hostedAgen
 		liveTurns: map[string]struct{}{},
 	}
 	p.backends = append(p.backends, backend)
+	ready, starting, draining := p.instanceCountsLocked()
 	p.mu.Unlock()
+	p.recordInstanceCounts(ctx, ready, starting, draining)
 	return backend, nil
 }
 
@@ -967,11 +1040,14 @@ func (p *hostedAgentProviderPool) markBackendDraining(backend *hostedAgentPoolBa
 		return false
 	}
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	if backend.draining || backend.closed {
+		p.mu.Unlock()
 		return false
 	}
 	backend.draining = true
+	ready, starting, draining := p.instanceCountsLocked()
+	p.mu.Unlock()
+	p.recordInstanceCounts(p.ctx, ready, starting, draining)
 	return true
 }
 
@@ -996,7 +1072,9 @@ func (p *hostedAgentProviderPool) drainAndCloseBackend(backend *hostedAgentPoolB
 		if (active == 0 && liveTurns == 0) || time.Now().After(deadline) {
 			backend.closed = true
 			p.removeBackendLocked(backend)
+			ready, starting, draining := p.instanceCountsLocked()
 			p.mu.Unlock()
+			p.recordInstanceCounts(p.ctx, ready, starting, draining)
 			break
 		}
 		p.mu.Unlock()

@@ -3,6 +3,7 @@ package pluginruntime
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -104,7 +105,7 @@ func (p *executableProvider) StartSession(ctx context.Context, req StartSessionR
 			SessionID:           session.ID,
 			Metadata:            metadata,
 		}); err != nil {
-			return nil, fmt.Errorf("register runtime session logs: %w", err)
+			slog.WarnContext(ctx, "failed to register runtime session logs", "runtime_provider", p.name, "session", session.ID, "error", err)
 		}
 	}
 	return session, nil
