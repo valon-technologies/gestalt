@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -98,6 +99,180 @@ func TestProviderRemoteConfigPathSynthesizesSourcePlugin(t *testing.T) {
 	}
 	if !targets[0].InheritRemoteConfig {
 		t.Fatal("target InheritRemoteConfig = false, want true")
+	}
+}
+
+func TestResolveProviderRemoteTokenPrecedence(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	writeStoredGestaltCLICredentialForTest(t, configHome, "https://stored.example.com", "stored-token")
+
+	t.Setenv(gestaltAPIKeyEnv, "env-token")
+	token, err := resolveProviderRemoteToken(providerLocalCommandOptions{
+		Remote:      "https://remote.example.com",
+		RemoteToken: "flag-token",
+	})
+	if err != nil {
+		t.Fatalf("resolveProviderRemoteToken with explicit token: %v", err)
+	}
+	if token != "flag-token" {
+		t.Fatalf("token = %q, want explicit flag token", token)
+	}
+
+	token, err = resolveProviderRemoteToken(providerLocalCommandOptions{
+		Remote: "https://remote.example.com",
+	})
+	if err != nil {
+		t.Fatalf("resolveProviderRemoteToken with env token: %v", err)
+	}
+	if token != "env-token" {
+		t.Fatalf("token = %q, want env token", token)
+	}
+}
+
+func TestResolveProviderRemoteTokenUsesMatchingStoredCLICredential(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv(gestaltAPIKeyEnv, "")
+	writeStoredGestaltCLICredentialForTest(t, configHome, "https://Valon.Tools:443/team-a/", "stored-token")
+
+	token, err := resolveProviderRemoteToken(providerLocalCommandOptions{
+		Remote: "https://valon.tools/team-a",
+	})
+	if err != nil {
+		t.Fatalf("resolveProviderRemoteToken: %v", err)
+	}
+	if token != "stored-token" {
+		t.Fatalf("token = %q, want stored token", token)
+	}
+}
+
+func TestResolveProviderRemoteTokenRejectsDifferentBasePaths(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv(gestaltAPIKeyEnv, "")
+	writeStoredGestaltCLICredentialForTest(t, configHome, "https://valon.tools/team-a", "stored-token")
+
+	_, err := resolveProviderRemoteToken(providerLocalCommandOptions{
+		Remote: "https://valon.tools/team-b",
+	})
+	if err == nil {
+		t.Fatal("expected path-scoped stored credential mismatch error")
+	}
+	errText := err.Error()
+	for _, want := range []string{
+		"Remote server:\n  https://valon.tools/team-b",
+		"Stored credential:\n  server: https://valon.tools/team-a",
+		"The stored credential is scoped to a different Gestalt server, so it was not sent.",
+	} {
+		if !strings.Contains(errText, want) {
+			t.Fatalf("error missing %q:\n%s", want, errText)
+		}
+	}
+}
+
+func TestResolveProviderRemoteTokenRejectsMismatchedStoredCLICredential(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv(gestaltAPIKeyEnv, "")
+	writeStoredGestaltCLICredentialForTest(t, configHome, "https://valon.tools", "stored-token")
+
+	_, err := resolveProviderRemoteToken(providerLocalCommandOptions{
+		Remote: "https://staging.valon.tools",
+	})
+	if err == nil {
+		t.Fatal("expected stored credential mismatch error")
+	}
+	errText := err.Error()
+	for _, want := range []string{
+		"provider dev --remote could not use the stored Gestalt CLI credential.",
+		"Remote server:\n  https://staging.valon.tools",
+		"Stored credential:\n  server: https://valon.tools",
+		filepath.Join(configHome, "gestalt", "credentials.json"),
+		"The stored credential is scoped to a different Gestalt server, so it was not sent.",
+		"gestalt auth login --url https://staging.valon.tools",
+		"gestaltd provider dev --remote https://staging.valon.tools --remote-token <token> --path ./plugin",
+		"You can also set GESTALT_API_KEY for this command",
+	} {
+		if !strings.Contains(errText, want) {
+			t.Fatalf("error missing %q:\n%s", want, errText)
+		}
+	}
+}
+
+func TestResolveProviderRemoteTokenRejectsUnscopedStoredCLICredential(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv(gestaltAPIKeyEnv, "")
+	writeStoredGestaltCLICredentialForTest(t, configHome, "", "legacy-token")
+
+	_, err := resolveProviderRemoteToken(providerLocalCommandOptions{
+		Remote: "https://valon.tools",
+	})
+	if err == nil {
+		t.Fatal("expected unscoped stored credential error")
+	}
+	errText := err.Error()
+	for _, want := range []string{
+		"Stored credential:\n  server: <missing>",
+		"The stored credential does not record which Gestalt server it belongs to, so it was not sent.",
+		"gestalt auth login --url https://valon.tools",
+	} {
+		if !strings.Contains(errText, want) {
+			t.Fatalf("error missing %q:\n%s", want, errText)
+		}
+	}
+}
+
+func TestResolveProviderRemoteTokenRequiresAuthWhenNoCredentialExists(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv(gestaltAPIKeyEnv, "")
+
+	_, err := resolveProviderRemoteToken(providerLocalCommandOptions{
+		Remote: "https://valon.tools",
+	})
+	if err == nil {
+		t.Fatal("expected missing auth error")
+	}
+	errText := err.Error()
+	for _, want := range []string{
+		"provider dev --remote requires authentication.",
+		"Remote server:\n  https://valon.tools",
+		"No --remote-token or GESTALT_API_KEY was provided, and no stored Gestalt CLI credential for this server was found.",
+		"gestalt auth login --url https://valon.tools",
+		"gestaltd provider dev --remote https://valon.tools --remote-token <token> --path ./plugin",
+	} {
+		if !strings.Contains(errText, want) {
+			t.Fatalf("error missing %q:\n%s", want, errText)
+		}
+	}
+}
+
+func TestProviderRemoteBaseURLNormalizesDefaultPortsAndTrailingSlashes(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"https://Valon.Tools":       "https://valon.tools",
+		"https://valon.tools:443/x": "https://valon.tools/x",
+		"http://valon.tools:80":     "http://valon.tools",
+		"http://127.0.0.1:8080/a":   "http://127.0.0.1:8080/a",
+		"https://valon.tools/a///":  "https://valon.tools/a",
+	}
+	for input, want := range cases {
+		input := input
+		want := want
+		t.Run(input, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := providerRemoteBaseURL(input)
+			if err != nil {
+				t.Fatalf("providerRemoteBaseURL(%q): %v", input, err)
+			}
+			if got != want {
+				t.Fatalf("providerRemoteBaseURL(%q) = %q, want %q", input, got, want)
+			}
+		})
 	}
 }
 
@@ -3814,6 +3989,20 @@ func writeTestFile(t *testing.T, dir, rel string, data []byte, mode os.FileMode)
 	if err := os.WriteFile(path, data, mode); err != nil {
 		t.Fatalf("WriteFile(%s): %v", rel, err)
 	}
+}
+
+func writeStoredGestaltCLICredentialForTest(t *testing.T, configHome, apiURL, apiToken string) {
+	t.Helper()
+
+	data, err := json.Marshal(map[string]string{
+		"api_url":      apiURL,
+		"api_token":    apiToken,
+		"api_token_id": "tok-123",
+	})
+	if err != nil {
+		t.Fatalf("Marshal stored CLI credential: %v", err)
+	}
+	writeTestFile(t, configHome, "gestalt/credentials.json", data, 0o600)
 }
 
 func sha256HexForTest(value string) string {

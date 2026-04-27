@@ -834,7 +834,7 @@ a path-only attach is enough:
 
 ```sh
 export GESTALT_URL=https://gestalt.example.com
-export GESTALT_API_KEY=vat_...
+gestalt auth login --url "$GESTALT_URL"
 
 gestaltd provider dev --remote "$GESTALT_URL" --path ./slack
 ```
@@ -844,6 +844,13 @@ that exposes provider-dev attach targets. The local command replaces only the
 source plugin attached by your authenticated session. Providers that are not
 attached locally continue to run through the remote server and its existing
 configuration.
+Remote provider dev authenticates with `--remote-token` first, then
+`GESTALT_API_KEY`, then the stored CLI token from `gestalt auth login` when the
+stored credential's server base URL matches `--remote`. A stored credential for
+a different server URL, including a different path prefix on the same host, is
+not sent; the command exits with the stored credential's server and file path
+plus commands to log in for the requested server or pass an explicit token. Use
+`--remote-token` or `GESTALT_API_KEY` for non-interactive automation.
 
 For `--remote --path` without `--config`, Gestalt matches the local manifest
 `source` to a configured plugin on the remote server. The remote plugin's

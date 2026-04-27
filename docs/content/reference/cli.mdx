@@ -58,9 +58,10 @@ gestaltd provider validate --path ./plugins/support --config ./dev/support.yaml 
 gestaltd provider dev --path ./plugins/support
 gestaltd provider dev --path ./ui/dashboard
 gestaltd provider dev --path ./plugins/support --config ./dev/support.yaml --port 8080
-GESTALT_API_KEY=vat_... gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support
-GESTALT_API_KEY=vat_... gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support --name support
-GESTALT_API_KEY=vat_... gestaltd provider dev --remote https://gestalt.example.com --config ./remote.yaml --config ./local-overrides.yaml
+gestalt auth login --url https://gestalt.example.com
+gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support
+gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support --name support
+gestaltd provider dev --remote https://gestalt.example.com --config ./remote.yaml --config ./local-overrides.yaml
 gestaltd provider release --version 0.0.1-alpha.1
 gestaltd provider release --version 0.0.1-alpha.1 --platform all
 gestaltd provider release --version 0.0.1-alpha.1 --platform linux/amd64,linux/arm64
@@ -75,6 +76,12 @@ keeps its existing config-relative behavior for backward compatibility.
 `provider dev --remote` is environment-agnostic: the URL is just the remote
 `gestaltd` instance to attach to. The local command only replaces source-backed
 plugin implementations for the authenticated principal that created the session.
+Authentication resolves in this order: `--remote-token`, `GESTALT_API_KEY`, then
+the stored CLI token from `gestalt auth login` when its recorded server base URL
+matches `--remote`. Stored CLI tokens are not sent to a different remote URL,
+including a different path prefix on the same host; if the stored credential
+points elsewhere, the command fails with a remediation message instead of
+prompting.
 With `--remote URL --path PATH` and no `--config`, the local command sends the
 manifest `source` and the local implementation only; the remote server chooses
 the configured plugin with the same manifest `source` and preserves that
