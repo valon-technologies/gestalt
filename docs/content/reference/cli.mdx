@@ -76,10 +76,10 @@ keeps its existing config-relative behavior for backward compatibility.
 plugin implementations for the authenticated principal that created the session;
 all non-local plugins, credentials, policies, and host services continue to
 resolve through the remote instance. Remote servers expose attach targets for
-configured plugins, and existing plugin authorization decides whether the
-authenticated caller may attach. Remote mode tunnels plugin RPC, catalog,
-post-connect, host-service calls, and plugin-owned UI assets for mounted UIs
-that already exist on the remote server. Raw GraphQL surfaces are not tunneled
-in v1.
+configured plugins whose static provider metadata can be derived, and existing
+plugin authorization decides whether the authenticated caller may attach.
+Remote mode tunnels plugin RPC, catalog, post-connect, host-service calls, and
+plugin-owned UI assets for mounted UIs that already exist on the remote server.
+Raw GraphQL surfaces are not tunneled in v1.
 
 See [Configuration](/configuration) for the relationship between `init`, `serve --locked`, and `validate`.

@@ -1024,8 +1024,9 @@ source: ./manifest.yaml
 ```
 
 When a remote `gestaltd` instance is running the provider-dev endpoints,
-authenticated developers can attach a local implementation for any configured
-plugin they are authorized to access with `gestaltd provider dev --remote`.
+authenticated developers can attach a local implementation for configured
+plugins whose static provider metadata can be derived and that they are
+authorized to access with `gestaltd provider dev --remote`.
 
 Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source providers from the module declared in `[tool.gestalt].provider` or the legacy `[tool.gestalt].plugin`.
 
