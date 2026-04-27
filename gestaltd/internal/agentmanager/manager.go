@@ -81,31 +81,29 @@ type Service interface {
 }
 
 type Config struct {
-	Providers           *registry.ProviderMap[core.Provider]
-	Agent               AgentControl
-	SessionMetadata     *coredata.AgentSessionMetadataService
-	RunMetadata         *coredata.AgentRunMetadataService
-	ExternalCredentials core.ExternalCredentialProvider
-	Invoker             invocation.Invoker
-	Authorizer          authorization.RuntimeAuthorizer
-	DefaultConnection   map[string]string
-	CatalogConnection   map[string]string
-	PluginInvokes       map[string][]config.PluginInvocationDependency
-	Now                 func() time.Time
+	Providers         *registry.ProviderMap[core.Provider]
+	Agent             AgentControl
+	SessionMetadata   *coredata.AgentSessionMetadataService
+	RunMetadata       *coredata.AgentRunMetadataService
+	Invoker           invocation.Invoker
+	Authorizer        authorization.RuntimeAuthorizer
+	DefaultConnection map[string]string
+	CatalogConnection map[string]string
+	PluginInvokes     map[string][]config.PluginInvocationDependency
+	Now               func() time.Time
 }
 
 type Manager struct {
-	providers           *registry.ProviderMap[core.Provider]
-	agent               AgentControl
-	sessionMetadata     *coredata.AgentSessionMetadataService
-	runMetadata         *coredata.AgentRunMetadataService
-	externalCredentials core.ExternalCredentialProvider
-	invoker             invocation.Invoker
-	authorizer          authorization.RuntimeAuthorizer
-	defaultConnection   map[string]string
-	catalogConnection   map[string]string
-	pluginInvokes       map[string][]config.PluginInvocationDependency
-	now                 func() time.Time
+	providers         *registry.ProviderMap[core.Provider]
+	agent             AgentControl
+	sessionMetadata   *coredata.AgentSessionMetadataService
+	runMetadata       *coredata.AgentRunMetadataService
+	invoker           invocation.Invoker
+	authorizer        authorization.RuntimeAuthorizer
+	defaultConnection map[string]string
+	catalogConnection map[string]string
+	pluginInvokes     map[string][]config.PluginInvocationDependency
+	now               func() time.Time
 }
 
 func New(cfg Config) *Manager {
@@ -118,17 +116,16 @@ func New(cfg Config) *Manager {
 		pluginInvokes[pluginName] = append([]config.PluginInvocationDependency(nil), deps...)
 	}
 	return &Manager{
-		providers:           cfg.Providers,
-		agent:               cfg.Agent,
-		sessionMetadata:     cfg.SessionMetadata,
-		runMetadata:         cfg.RunMetadata,
-		externalCredentials: cfg.ExternalCredentials,
-		invoker:             cfg.Invoker,
-		authorizer:          cfg.Authorizer,
-		defaultConnection:   maps.Clone(cfg.DefaultConnection),
-		catalogConnection:   maps.Clone(cfg.CatalogConnection),
-		pluginInvokes:       pluginInvokes,
-		now:                 now,
+		providers:         cfg.Providers,
+		agent:             cfg.Agent,
+		sessionMetadata:   cfg.SessionMetadata,
+		runMetadata:       cfg.RunMetadata,
+		invoker:           cfg.Invoker,
+		authorizer:        cfg.Authorizer,
+		defaultConnection: maps.Clone(cfg.DefaultConnection),
+		catalogConnection: maps.Clone(cfg.CatalogConnection),
+		pluginInvokes:     pluginInvokes,
+		now:               now,
 	}
 }
 
@@ -752,14 +749,7 @@ func (m *Manager) resolveTools(ctx context.Context, p *principal.Principal, call
 	if err != nil {
 		return nil, err
 	}
-	if source != coreagent.ToolSourceModeUnspecified || strings.TrimSpace(callerPluginName) != "" {
-		return explicitTools, nil
-	}
-	defaultTools := m.resolveDefaultTools(ctx, p)
-	if len(defaultTools) == 0 {
-		return explicitTools, nil
-	}
-	return mergeTools(explicitTools, defaultTools), nil
+	return explicitTools, nil
 }
 
 func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error) {
@@ -885,263 +875,6 @@ func (m *Manager) resolveExplicitTools(ctx context.Context, p *principal.Princip
 		out = append(out, tool)
 	}
 	return out, nil
-}
-
-func (m *Manager) resolveDefaultTools(ctx context.Context, p *principal.Principal) []coreagent.Tool {
-	if m == nil || m.providers == nil {
-		return nil
-	}
-	out := make([]coreagent.Tool, 0, 8)
-	for _, providerName := range m.defaultToolProviders(ctx, p) {
-		providerTools, err := m.resolveDefaultToolsForProvider(ctx, p, providerName)
-		if err != nil {
-			continue
-		}
-		out = append(out, providerTools...)
-	}
-	return out
-}
-
-func (m *Manager) defaultToolProviders(ctx context.Context, p *principal.Principal) []string {
-	if m == nil || m.providers == nil {
-		return nil
-	}
-	providerNames := m.providers.List()
-	if len(providerNames) == 0 {
-		return nil
-	}
-
-	out := make([]string, 0, len(providerNames))
-	credentialAvailability := make(map[string]bool, len(providerNames))
-	for _, providerName := range providerNames {
-		if !m.allowProvider(ctx, p, providerName) {
-			continue
-		}
-		prov, err := m.providers.Get(providerName)
-		if err != nil {
-			continue
-		}
-		if core.NormalizeConnectionMode(prov.ConnectionMode()) == core.ConnectionModeNone {
-			out = append(out, providerName)
-			continue
-		}
-		if !m.hasDefaultToolCredential(ctx, p, providerName, credentialAvailability) {
-			continue
-		}
-		out = append(out, providerName)
-	}
-	return out
-}
-
-func (m *Manager) hasDefaultToolCredential(ctx context.Context, p *principal.Principal, providerName string, credentialAvailability map[string]bool) bool {
-	if m == nil || coredata.ExternalCredentialProviderMissing(m.externalCredentials) {
-		return false
-	}
-
-	bindingResolver, _ := m.invoker.(invocation.EffectiveCredentialBindingResolver)
-	targets := m.catalogSelectorConfig().BoundSessionCatalogTargets(providerName, p, "", "")
-	if len(targets) == 0 {
-		targets = []invocation.CatalogResolutionTarget{{}}
-	}
-	for _, target := range targets {
-		subjectID := m.defaultToolCredentialSubjectID(p, providerName)
-		connection := strings.TrimSpace(target.Connection)
-		instance := strings.TrimSpace(target.Instance)
-		if bindingResolver != nil {
-			boundCredential, err := bindingResolver.ResolveEffectiveCredentialBinding(p, providerName, connection, instance)
-			if err != nil {
-				continue
-			}
-			if subject := strings.TrimSpace(boundCredential.CredentialSubjectID); subject != "" {
-				subjectID = subject
-			}
-			if conn := strings.TrimSpace(boundCredential.Connection); conn != "" {
-				connection = conn
-			}
-			if inst := strings.TrimSpace(boundCredential.Instance); inst != "" {
-				instance = inst
-			}
-		}
-		if subjectID == "" {
-			continue
-		}
-
-		cacheKey := subjectID + "\x00" + providerName + "\x00" + connection + "\x00" + instance
-		if ok, found := credentialAvailability[cacheKey]; found {
-			if ok {
-				return true
-			}
-			continue
-		}
-
-		ok := m.hasStoredDefaultToolCredential(ctx, subjectID, providerName, connection, instance)
-		credentialAvailability[cacheKey] = ok
-		if ok {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *Manager) defaultToolCredentialSubjectID(p *principal.Principal, providerName string) string {
-	if m != nil && m.authorizer != nil {
-		boundCredential, err := invocation.ResolveEffectiveCredentialBinding(m.authorizer, p, providerName, "", "")
-		if err == nil && boundCredential.HasBinding {
-			if subjectID := strings.TrimSpace(boundCredential.CredentialSubjectID); subjectID != "" {
-				return subjectID
-			}
-		}
-	}
-	return principal.EffectiveCredentialSubjectID(p)
-}
-
-func (m *Manager) hasStoredDefaultToolCredential(ctx context.Context, subjectID, providerName, connection, instance string) bool {
-	if m == nil || coredata.ExternalCredentialProviderMissing(m.externalCredentials) {
-		return false
-	}
-	subjectID = strings.TrimSpace(subjectID)
-	providerName = strings.TrimSpace(providerName)
-	connection = strings.TrimSpace(connection)
-	instance = strings.TrimSpace(instance)
-	if subjectID == "" || providerName == "" {
-		return false
-	}
-	if instance != "" {
-		_, err := m.externalCredentials.GetCredential(ctx, subjectID, providerName, connection, instance)
-		return err == nil
-	}
-	credentials, err := m.externalCredentials.ListCredentialsForConnection(ctx, subjectID, providerName, connection)
-	return err == nil && len(credentials) > 0
-}
-
-func (m *Manager) resolveDefaultToolsForProvider(ctx context.Context, p *principal.Principal, providerName string) ([]coreagent.Tool, error) {
-	prov, err := m.providers.Get(providerName)
-	if err != nil {
-		return nil, err
-	}
-	connection, instance, cat, ok := m.resolveDefaultToolCatalog(ctx, p, providerName, prov)
-	if !ok || cat == nil {
-		return nil, nil
-	}
-
-	out := make([]coreagent.Tool, 0, len(cat.Operations))
-	for i := range cat.Operations {
-		op := &cat.Operations[i]
-		if !defaultToolAllowed(*op) {
-			continue
-		}
-		if !m.allowOperation(ctx, p, providerName, op.ID) {
-			continue
-		}
-		if !principal.AllowsOperationPermission(p, providerName, op.ID) {
-			continue
-		}
-		if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, providerName, *op) {
-			continue
-		}
-
-		tool, err := m.resolveTool(ctx, p, coreagent.ToolRef{
-			PluginName: providerName,
-			Operation:  op.ID,
-			Connection: connection,
-			Instance:   instance,
-		})
-		if err != nil {
-			continue
-		}
-		out = append(out, tool)
-	}
-	return out, nil
-}
-
-func (m *Manager) resolveDefaultToolCatalog(ctx context.Context, p *principal.Principal, providerName string, prov core.Provider) (string, string, *catalog.Catalog, bool) {
-	ctx = invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, providerName))
-	resolver, _ := m.invoker.(invocation.TokenResolver)
-	bindingResolver, _ := m.invoker.(invocation.EffectiveCredentialBindingResolver)
-	requiresCredential := core.NormalizeConnectionMode(prov.ConnectionMode()) != core.ConnectionModeNone
-	targets := m.catalogSelectorConfig().BoundSessionCatalogTargets(providerName, p, "", "")
-	if len(targets) == 0 {
-		targets = []invocation.CatalogResolutionTarget{{}}
-	}
-	for _, target := range targets {
-		connection := strings.TrimSpace(target.Connection)
-		instance := strings.TrimSpace(target.Instance)
-		boundCredential := invocation.CredentialBindingResolution{}
-		if bindingResolver != nil {
-			resolvedBinding, err := bindingResolver.ResolveEffectiveCredentialBinding(p, providerName, connection, instance)
-			if err != nil {
-				continue
-			}
-			boundCredential = resolvedBinding
-		}
-
-		catalogCtx := ctx
-		if requiresCredential {
-			if resolver == nil {
-				continue
-			}
-			resolvedCtx, _, err := invocation.ResolveTokenForBinding(ctx, resolver, p, providerName, connection, instance, boundCredential)
-			if err != nil {
-				continue
-			}
-			cred := invocation.CredentialContextFromContext(resolvedCtx)
-			if cred.Connection != "" {
-				connection = cred.Connection
-			}
-			if cred.Instance != "" {
-				instance = cred.Instance
-			}
-			catalogCtx = resolvedCtx
-		}
-
-		var cat *catalog.Catalog
-		var err error
-		if requiresCredential {
-			cat, _, err = invocation.ResolveCatalogStrictWithMetadata(catalogCtx, prov, providerName, resolver, p, connection, instance)
-		} else {
-			cat, _, err = invocation.ResolveCatalogWithMetadata(catalogCtx, prov, providerName, resolver, p, connection, instance)
-		}
-		if err != nil || cat == nil {
-			continue
-		}
-		return connection, instance, cat, true
-	}
-	return "", "", nil, false
-}
-
-func defaultToolAllowed(op catalog.CatalogOperation) bool {
-	if op.Visible != nil && !*op.Visible {
-		return false
-	}
-	if op.Annotations.DestructiveHint != nil && *op.Annotations.DestructiveHint {
-		return false
-	}
-	if op.ReadOnly {
-		return true
-	}
-	return op.Annotations.ReadOnlyHint != nil && *op.Annotations.ReadOnlyHint
-}
-
-func mergeTools(groups ...[]coreagent.Tool) []coreagent.Tool {
-	total := 0
-	for _, group := range groups {
-		total += len(group)
-	}
-	if total == 0 {
-		return nil
-	}
-	out := make([]coreagent.Tool, 0, total)
-	seen := make(map[string]struct{}, total)
-	for _, group := range groups {
-		for _, tool := range group {
-			if _, ok := seen[tool.ID]; ok {
-				continue
-			}
-			seen[tool.ID] = struct{}{}
-			out = append(out, tool)
-		}
-	}
-	return out
 }
 
 func (m *Manager) allowProvider(ctx context.Context, p *principal.Principal, provider string) bool {

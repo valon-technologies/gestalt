@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/server"
@@ -60,6 +61,7 @@ type memoryAgentProvider struct {
 	turns        map[string]*coreagent.Turn
 	turnEvents   map[string][]*coreagent.TurnEvent
 	interactions map[string]*coreagent.Interaction
+	turnRequests []coreagent.CreateTurnRequest
 }
 
 func newMemoryAgentProvider() *memoryAgentProvider {
@@ -139,6 +141,7 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req coreagent.Create
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	p.turnRequests = append(p.turnRequests, cloneCreateTurnRequest(req))
 	now := time.Now().UTC().Truncate(time.Second)
 	turn := &coreagent.Turn{
 		ID:           req.TurnID,
@@ -182,6 +185,17 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req coreagent.Create
 		session.UpdatedAt = &now
 	}
 	return cloneTurn(turn), nil
+}
+
+func (p *memoryAgentProvider) capturedTurnRequests() []coreagent.CreateTurnRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	out := make([]coreagent.CreateTurnRequest, 0, len(p.turnRequests))
+	for _, req := range p.turnRequests {
+		out = append(out, cloneCreateTurnRequest(req))
+	}
+	return out
 }
 
 func (p *memoryAgentProvider) GetTurn(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
@@ -335,6 +349,16 @@ func cloneTurn(src *coreagent.Turn) *coreagent.Turn {
 	return &dst
 }
 
+func cloneCreateTurnRequest(src coreagent.CreateTurnRequest) coreagent.CreateTurnRequest {
+	dst := src
+	dst.Messages = append([]coreagent.Message(nil), src.Messages...)
+	dst.Tools = append([]coreagent.Tool(nil), src.Tools...)
+	dst.ResponseSchema = cloneMap(src.ResponseSchema)
+	dst.Metadata = cloneMap(src.Metadata)
+	dst.ProviderOptions = cloneMap(src.ProviderOptions)
+	return dst
+}
+
 func cloneTurnEvent(src *coreagent.TurnEvent) *coreagent.TurnEvent {
 	if src == nil {
 		return nil
@@ -371,7 +395,16 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		}
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:           &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			Agent: &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+				N:        "docs",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+					ID:       "search",
+					Title:    "Search",
+					ReadOnly: true,
+				}}},
+			}),
 			SessionMetadata: services.AgentSessions,
 			RunMetadata:     services.AgentRunMetadata,
 		})
@@ -428,6 +461,13 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("decode turn: %v", err)
 	}
 	turnID := turn["id"].(string)
+	turnRequests := provider.capturedTurnRequests()
+	if len(turnRequests) != 1 {
+		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
+	}
+	if len(turnRequests[0].Tools) != 0 {
+		t.Fatalf("provider turn tools len = %d, want 0", len(turnRequests[0].Tools))
+	}
 
 	eventsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events?after=0&limit=10", nil)
 	eventsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})

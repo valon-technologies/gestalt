@@ -1035,16 +1035,15 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		CatalogConnection: connMaps.APIConnection,
 	}))
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
-		Providers:           providers,
-		Agent:               prepared.Deps.AgentRuntime,
-		SessionMetadata:     prepared.Services.AgentSessions,
-		RunMetadata:         prepared.Services.AgentRunMetadata,
-		ExternalCredentials: coredata.EffectiveExternalCredentialProvider(prepared.Services),
-		Invoker:             sharedInvoker,
-		Authorizer:          authz,
-		DefaultConnection:   connMaps.DefaultConnection,
-		CatalogConnection:   connMaps.APIConnection,
-		PluginInvokes:       agentPluginInvokes(cfg),
+		Providers:         providers,
+		Agent:             prepared.Deps.AgentRuntime,
+		SessionMetadata:   prepared.Services.AgentSessions,
+		RunMetadata:       prepared.Services.AgentRunMetadata,
+		Invoker:           sharedInvoker,
+		Authorizer:        authz,
+		DefaultConnection: connMaps.DefaultConnection,
+		CatalogConnection: connMaps.APIConnection,
+		PluginInvokes:     agentPluginInvokes(cfg),
 	}))
 	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
