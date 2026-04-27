@@ -2,7 +2,7 @@
 
 UI providers are static asset bundles. Gestalt serves each configured
 bundle either directly from `providers.ui.<name>.path` or via
-`plugins.<name>.mountPath`. The built-in admin UI at `/admin` remains available
+`plugins.<name>.ui.path`. The built-in admin UI at `/admin` remains available
 regardless of whether public UI bundles are configured.
 
 ## How UI providers work
@@ -63,8 +63,9 @@ providers:
 plugins:
   roadmap_review:
     source: ./customer-roadmap-review/plugin/manifest.yaml
-    ui: roadmap
-    mountPath: /create-customer-roadmap-review
+    ui:
+      bundle: roadmap
+      path: /create-customer-roadmap-review
     authorizationPolicy: roadmap_review
 ```
 
@@ -74,7 +75,8 @@ Or let the plugin manifest own the UI bundle and keep only the deployment bindin
 plugins:
   roadmap_review:
     source: ./customer-roadmap-review/plugin/manifest.yaml
-    mountPath: /create-customer-roadmap-review
+    ui:
+      path: /create-customer-roadmap-review
     authorizationPolicy: roadmap_review
 ```
 
@@ -142,7 +144,7 @@ Asset-root layout, build hooks, and release packaging now live under
 
 ## What to read next
 
-- [Configuration](/configuration): `providers.ui`, `plugins.<name>.mountPath`, and headless deployments
+- [Configuration](/configuration): `providers.ui`, `plugins.<name>.ui.path`, and headless deployments
 - [Client UI](/client/web): what the default client exposes
 - [Authorization](/providers/authorization): route and role semantics
 - [Custom UI](/custom-providers/ui): advanced authoring docs

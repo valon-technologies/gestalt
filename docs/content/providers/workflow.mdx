@@ -2,11 +2,11 @@ import { Callout, Tabs } from 'nextra/components'
 
 # Workflow
 
-Gestalt workflows let you invoke a plugin operation later instead of right now.
+Gestalt workflows let you invoke a plugin operation or agent target later
+instead of right now.
 Today that primarily means cron-based schedules, triggers, workflow run
 history, event publishing, and run cancelation. The workflow model is global.
-A workflow target is always explicit: `plugin`, `operation`, and optional
-`connection`, `instance`, and `input`.
+A workflow target is always explicit: `target.plugin` or `target.agent`.
 
 <Callout type="info">
   The public workflow surface now covers schedules, triggers, event publishing,
@@ -106,15 +106,17 @@ workflows:
   schedules:
     nightly_sync:
       provider: local
-      plugin: roadmap
       cron: "0 3 * * *"
       timezone: America/New_York
-      operation: sync
-      connection: default
-      instance: tenant-a
-      input:
-        mode: incremental
-        includeArchived: false
+      target:
+        plugin:
+          name: roadmap
+          operation: sync
+          connection: default
+          instance: tenant-a
+          input:
+            mode: incremental
+            includeArchived: false
 ```
 
 This creates a durable schedule named `nightly_sync` that invokes
@@ -127,17 +129,19 @@ workflows:
   eventTriggers:
     roadmap_item_updated:
       provider: local
-      plugin: slack
       match:
         type: roadmap.item.updated
         source: roadmap
         subject: item
-      operation: chat.postMessage
-      connection: alerts
-      instance: engineering
-      input:
-        channel: C123456
-        text: "A roadmap item changed."
+      target:
+        plugin:
+          name: slack
+          operation: chat.postMessage
+          connection: alerts
+          instance: engineering
+          input:
+            channel: C123456
+            text: "A roadmap item changed."
 ```
 
 This creates a durable trigger that listens for published events with:
@@ -145,6 +149,11 @@ This creates a durable trigger that listens for published events with:
 `source = "roadmap"` and `subject = "item"`. When an event matches, Gestalt
 invokes `slack.chat.postMessage` with the static input above and records a
 workflow run.
+
+For compatibility, config-managed workflows still accept the older flat
+`plugin`, `operation`, `connection`, `instance`, `input`, and `agent` fields.
+New config should use `target`, and `target` cannot be mixed with those legacy
+fields.
 
 ### Match semantics
 
@@ -395,12 +404,14 @@ workflows:
   schedules:
     nightly_sync:
       provider: local
-      plugin: roadmap
-      operation: sync
       cron: "0 3 * * *"
       timezone: UTC
-      input:
-        mode: incremental
+      target:
+        plugin:
+          name: roadmap
+          operation: sync
+          input:
+            mode: incremental
 
   eventTriggers:
     notify_sync_completed:
@@ -408,23 +419,27 @@ workflows:
       match:
         type: roadmap.sync.completed
         source: roadmap
-      plugin: slack
-      operation: chat.postMessage
-      connection: alerts
-      input:
-        channel: C123456
-        text: "Nightly roadmap sync completed."
+      target:
+        plugin:
+          name: slack
+          operation: chat.postMessage
+          connection: alerts
+          input:
+            channel: C123456
+            text: "Nightly roadmap sync completed."
 
     refresh_search_index:
       provider: local
       match:
         type: roadmap.sync.completed
         source: roadmap
-      plugin: search
-      operation: reindex
-      connection: default
-      input:
-        scope: roadmap
+      target:
+        plugin:
+          name: search
+          operation: reindex
+          connection: default
+          input:
+            scope: roadmap
 ```
 
 In that example, `nightly_sync` only starts the first step. The

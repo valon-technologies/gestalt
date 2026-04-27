@@ -112,7 +112,7 @@ func (c *Config) SelectedRuntimeProvider() (string, *RuntimeProviderEntry, error
 	return ResolveSelectedRuntimeProvider(c.Server.Runtime.Provider, c.Runtime.Providers)
 }
 
-type EffectivePluginIndexedDB struct {
+type EffectiveHostIndexedDBBinding struct {
 	Enabled      bool
 	ProviderName string
 	Provider     *ProviderEntry
@@ -120,21 +120,9 @@ type EffectivePluginIndexedDB struct {
 	ObjectStores []string
 }
 
-type EffectiveWorkflowIndexedDB struct {
-	Enabled      bool
-	ProviderName string
-	Provider     *ProviderEntry
-	DB           string
-	ObjectStores []string
-}
-
-type EffectiveAgentIndexedDB struct {
-	Enabled      bool
-	ProviderName string
-	Provider     *ProviderEntry
-	DB           string
-	ObjectStores []string
-}
+type EffectivePluginIndexedDB = EffectiveHostIndexedDBBinding
+type EffectiveWorkflowIndexedDB = EffectiveHostIndexedDBBinding
+type EffectiveAgentIndexedDB = EffectiveHostIndexedDBBinding
 
 type EffectiveHostedRuntime struct {
 	Enabled      bool

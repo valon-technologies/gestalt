@@ -74,6 +74,13 @@ providers:
       runtime:
         provider: modal
         image: ghcr.io/valon/gestalt-python-runtime:latest
+        pool:
+          minReadyInstances: 1
+          maxReadyInstances: 4
+          startupTimeout: 2m
+          healthCheckInterval: 30s
+          restartPolicy: always
+          drainTimeout: 1m
       allowedHosts:
         - api.openai.com
         - api.anthropic.com
@@ -84,6 +91,10 @@ providers:
 This keeps the caller interface the same. The request still targets
 `provider: simple`. The only difference is where the provider executes and how
 `gestaltd` enforces host-service access and egress.
+
+`runtime.pool` is the canonical hosted agent lifecycle block. The older flat
+runtime lifecycle fields are still accepted for compatibility, but cannot be
+mixed with `pool`.
 
 ## Session and turn shape
 
