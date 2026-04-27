@@ -349,20 +349,20 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 	}
 }
 
-func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
+func TestAuditMetadata_ServiceAccountSubjectAndCredentialPath(t *testing.T) {
 	t.Parallel()
 
 	var auditBuf bytes.Buffer
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 
-	workloadToken, workloadTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
+	subjectToken, subjectTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
-			N:        "audit-workload-prov",
+			N:        "audit-subject-prov",
 			ConnMode: core.ConnectionModeUser,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				if token != "identity-token" {
@@ -382,11 +382,11 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	}
 
 	svc := coretesting.NewStubServices(t)
-	seedSubjectAPIToken(t, svc, workloadTokenHash, principal.WorkloadSubjectID("triage-bot"), "triage-bot")
+	seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
 	if err := svc.ExternalCredentials.PutCredential(t.Context(), &core.ExternalCredential{
 		ID:          "identity-audit-token",
-		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
-		Integration: "audit-workload-prov",
+		SubjectID:   "service_account:triage-bot",
+		Integration: "audit-subject-prov",
 		Connection:  "workspace",
 		Instance:    "team-a",
 		AccessToken: "identity-token",
@@ -412,8 +412,8 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	ts := httptest.NewServer(srv)
 	t.Cleanup(ts.Close)
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/audit-workload-prov/ping?_connection=workspace&_instance=team-a", bytes.NewBufferString(`{}`))
-	req.Header.Set("Authorization", "Bearer "+workloadToken)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/audit-subject-prov/ping?_connection=workspace&_instance=team-a", bytes.NewBufferString(`{}`))
+	req.Header.Set("Authorization", "Bearer "+subjectToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -431,17 +431,17 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 		t.Fatalf("failed to parse audit JSON: %v\nraw: %s", err, auditBuf.String())
 	}
 
-	if record["subject_id"] != "workload:triage-bot" {
-		t.Fatalf("expected workload subject_id, got %v", record["subject_id"])
+	if record["subject_id"] != "service_account:triage-bot" {
+		t.Fatalf("expected service account subject_id, got %v", record["subject_id"])
 	}
-	if record["subject_kind"] != "workload" {
-		t.Fatalf("expected subject_kind=workload, got %v", record["subject_kind"])
+	if record["subject_kind"] != "service_account" {
+		t.Fatalf("expected subject_kind=service_account, got %v", record["subject_kind"])
 	}
 	if record["credential_mode"] != "user" {
 		t.Fatalf("expected credential_mode=user, got %v", record["credential_mode"])
 	}
-	if record["credential_subject_id"] != "workload:triage-bot" {
-		t.Fatalf("expected credential_subject_id workload principal, got %v", record["credential_subject_id"])
+	if record["credential_subject_id"] != "service_account:triage-bot" {
+		t.Fatalf("expected credential_subject_id service account principal, got %v", record["credential_subject_id"])
 	}
 	if record["credential_connection"] != "workspace" {
 		t.Fatalf("expected credential_connection=workspace, got %v", record["credential_connection"])

@@ -166,7 +166,7 @@ omitted, that field is ignored during matching.
 User-owned schedules are global resources exposed through
 `POST /api/v1/workflow/schedules` and `gestalt workflow schedules ...`.
 These schedules execute as the creating subject, not as a plugin-local or
-synthetic workflow workload.
+synthetic workflow subject.
 
 <Tabs items={['CLI', 'HTTP']}>
   <Tabs.Tab>
@@ -258,7 +258,7 @@ workflow backend.
 User-owned triggers are global resources exposed through
 `POST /api/v1/workflow/event-triggers` and
 `gestalt workflow triggers ...`. These triggers execute as the creating
-subject, not as a plugin-local or synthetic workflow workload.
+subject, not as a plugin-local or synthetic workflow subject.
 
 <Tabs items={['CLI', 'HTTP']}>
   <Tabs.Tab>

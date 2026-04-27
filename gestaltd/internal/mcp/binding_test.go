@@ -137,10 +137,10 @@ func ctxWithIdentityPrincipal(email, userID string) context.Context {
 	return principal.WithPrincipal(context.Background(), p)
 }
 
-func ctxWithWorkloadPrincipal(workloadID string) context.Context {
+func ctxWithServiceAccountPrincipal(accountID string) context.Context {
 	p := &principal.Principal{
-		Kind:      principal.KindWorkload,
-		SubjectID: principal.WorkloadSubjectID(workloadID),
+		Kind:      principal.Kind("service_account"),
+		SubjectID: "service_account:" + accountID,
 		Source:    principal.SourceAPIToken,
 	}
 	return principal.WithPrincipal(context.Background(), p)
@@ -971,7 +971,7 @@ func TestNewServer_SessionCatalogConnectionModeNoneSetsCredentialContext(t *test
 	}
 }
 
-func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
+func TestNewServer_ServiceAccountListToolsFiltersStaticAndSessionTools(t *testing.T) {
 	t.Parallel()
 
 	staticCat := &catalog.Catalog{
@@ -1032,7 +1032,7 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 		Policies: map[string]config.SubjectPolicyDef{
 			"clickhouse_policy": {
 				Members: []config.SubjectPolicyMemberDef{{
-					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					SubjectID: "service_account:triage-bot",
 					Role:      "viewer",
 				}},
 			},
@@ -1047,8 +1047,8 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 		},
 		TokenResolver: &stubTokenResolver{
 			resolveFn: func(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
-				if p == nil || p.Kind != principal.KindWorkload {
-					t.Fatalf("expected workload principal, got %+v", p)
+				if p == nil || p.Kind != principal.Kind("service_account") {
+					t.Fatalf("expected service account principal, got %+v", p)
 				}
 				if providerName != "clickhouse" {
 					t.Fatalf("providerName = %q, want %q", providerName, "clickhouse")
@@ -1065,7 +1065,7 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 	})
 
 	session := newTestSessionWithTools()
-	result := listToolsForSession(t, srv, ctxWithWorkloadPrincipal("triage-bot"), session)
+	result := listToolsForSession(t, srv, ctxWithServiceAccountPrincipal("triage-bot"), session)
 
 	names := make([]string, 0, len(result.Tools))
 	descriptions := map[string]string{}
@@ -1702,7 +1702,7 @@ func TestNewServer_HumanCallToolDeniedWhenAllowedRolesAreMissing(t *testing.T) {
 	}
 }
 
-func TestNewServer_WorkloadCallToolDeniedReturnsErrorResult(t *testing.T) {
+func TestNewServer_ServiceAccountCallToolDeniedReturnsErrorResult(t *testing.T) {
 	t.Parallel()
 
 	var sessionCatalogCalls int
@@ -1744,7 +1744,7 @@ func TestNewServer_WorkloadCallToolDeniedReturnsErrorResult(t *testing.T) {
 		Policies: map[string]config.SubjectPolicyDef{
 			"clickhouse_policy": {
 				Members: []config.SubjectPolicyMemberDef{{
-					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					SubjectID: "service_account:triage-bot",
 					Role:      "viewer",
 				}},
 			},
@@ -1758,7 +1758,7 @@ func TestNewServer_WorkloadCallToolDeniedReturnsErrorResult(t *testing.T) {
 		Authorizer: authz,
 	})
 
-	result := callToolForSession(t, srv, ctxWithWorkloadPrincipal("triage-bot"), newTestSessionWithTools(), "clickhouse_delete_table", map[string]any{"table": "users"})
+	result := callToolForSession(t, srv, ctxWithServiceAccountPrincipal("triage-bot"), newTestSessionWithTools(), "clickhouse_delete_table", map[string]any{"table": "users"})
 	if !result.IsError {
 		t.Fatalf("expected MCP error result, got %+v", result)
 	}
@@ -1774,7 +1774,7 @@ func TestNewServer_WorkloadCallToolDeniedReturnsErrorResult(t *testing.T) {
 	}
 }
 
-func TestNewServer_WorkloadCallToolDeniedForUnboundSessionOnlyProvider(t *testing.T) {
+func TestNewServer_ServiceAccountCallToolDeniedForUnboundSessionOnlyProvider(t *testing.T) {
 	t.Parallel()
 
 	var sessionCatalogCalls int
@@ -1820,7 +1820,7 @@ func TestNewServer_WorkloadCallToolDeniedForUnboundSessionOnlyProvider(t *testin
 	})
 
 	session := newTestSessionWithTools()
-	result := callToolForSession(t, srv, ctxWithWorkloadPrincipal("triage-bot"), session, "clickhouse_run_query", map[string]any{"sql": "select 1"})
+	result := callToolForSession(t, srv, ctxWithServiceAccountPrincipal("triage-bot"), session, "clickhouse_run_query", map[string]any{"sql": "select 1"})
 	if !result.IsError {
 		t.Fatalf("expected MCP error result, got %+v", result)
 	}
@@ -1839,7 +1839,7 @@ func TestNewServer_WorkloadCallToolDeniedForUnboundSessionOnlyProvider(t *testin
 	}
 }
 
-func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *testing.T) {
+func TestNewServer_ServiceAccountCallToolUsesBoundConnectionForSessionOnlyProvider(t *testing.T) {
 	t.Parallel()
 
 	var sessionCatalogCalls int
@@ -1851,8 +1851,8 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 		},
 		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			sessionCatalogCalls++
-			if token != "workload-token" {
-				t.Fatalf("session catalog token = %q, want %q", token, "workload-token")
+			if token != "service-account-token" {
+				t.Fatalf("session catalog token = %q, want %q", token, "service-account-token")
 			}
 			return &catalog.Catalog{
 				Name: "clickhouse",
@@ -1871,8 +1871,8 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 			if name != "run_query" {
 				t.Fatalf("name = %q, want %q", name, "run_query")
 			}
-			if token := mcpupstream.UpstreamTokenFromContext(ctx); token != "workload-token" {
-				t.Fatalf("upstream token = %q, want %q", token, "workload-token")
+			if token := mcpupstream.UpstreamTokenFromContext(ctx); token != "service-account-token" {
+				t.Fatalf("upstream token = %q, want %q", token, "service-account-token")
 			}
 			if sql, _ := args["sql"].(string); sql != "select 1" {
 				t.Fatalf("sql = %q, want %q", sql, "select 1")
@@ -1885,12 +1885,12 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 	ds := coretesting.NewStubServices(t)
 	ctx := context.Background()
 	if err := ds.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
-		ID:          "tok-workload",
-		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
+		ID:          "tok-service-account",
+		SubjectID:   "service_account:triage-bot",
 		Integration: "clickhouse",
 		Connection:  "workspace",
 		Instance:    "team-a",
-		AccessToken: "workload-token",
+		AccessToken: "service-account-token",
 	}); err != nil {
 		t.Fatalf("PutCredential: %v", err)
 	}
@@ -1899,7 +1899,7 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 		Policies: map[string]config.SubjectPolicyDef{
 			"clickhouse_policy": {
 				Members: []config.SubjectPolicyMemberDef{{
-					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					SubjectID: "service_account:triage-bot",
 					Role:      "viewer",
 				}},
 			},
@@ -1915,7 +1915,7 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 		MCPConnection: map[string]string{"clickhouse": "workspace"},
 	})
 
-	result := callToolForSession(t, srv, ctxWithWorkloadPrincipal("triage-bot"), newTestSessionWithTools(), "clickhouse_run_query", map[string]any{"sql": "select 1"})
+	result := callToolForSession(t, srv, ctxWithServiceAccountPrincipal("triage-bot"), newTestSessionWithTools(), "clickhouse_run_query", map[string]any{"sql": "select 1"})
 	if result.IsError {
 		t.Fatalf("expected success result, got %+v", result)
 	}
@@ -1924,14 +1924,14 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 		t.Fatalf("unexpected MCP success content: %+v", result.Content)
 	}
 	if !called {
-		t.Fatal("expected workload tool call to reach provider")
+		t.Fatal("expected service account tool call to reach provider")
 	}
 	if sessionCatalogCalls != 1 {
 		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 1)
 	}
 }
 
-func TestNewServer_WorkloadCallToolUsesRequestedInstance(t *testing.T) {
+func TestNewServer_ServiceAccountCallToolUsesRequestedInstance(t *testing.T) {
 	t.Parallel()
 
 	var sessionCatalogCalls int
@@ -1988,8 +1988,8 @@ func TestNewServer_WorkloadCallToolUsesRequestedInstance(t *testing.T) {
 	ds := coretesting.NewStubServices(t)
 	ctx := context.Background()
 	if err := ds.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
-		ID:          "tok-workload",
-		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
+		ID:          "tok-service-account",
+		SubjectID:   "service_account:triage-bot",
 		Integration: "sampledb",
 		Connection:  "workspace",
 		Instance:    "team-b",
@@ -1998,12 +1998,12 @@ func TestNewServer_WorkloadCallToolUsesRequestedInstance(t *testing.T) {
 		t.Fatalf("PutCredential: %v", err)
 	}
 	if err := ds.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
-		ID:          "tok-workload-default",
-		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
+		ID:          "tok-service-account-default",
+		SubjectID:   "service_account:triage-bot",
 		Integration: "sampledb",
 		Connection:  "workspace",
 		Instance:    "team-a",
-		AccessToken: "workload-token",
+		AccessToken: "service-account-token",
 	}); err != nil {
 		t.Fatalf("PutCredential: %v", err)
 	}
@@ -2012,7 +2012,7 @@ func TestNewServer_WorkloadCallToolUsesRequestedInstance(t *testing.T) {
 		Policies: map[string]config.SubjectPolicyDef{
 			"sampledb_policy": {
 				Members: []config.SubjectPolicyMemberDef{{
-					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					SubjectID: "service_account:triage-bot",
 					Role:      "viewer",
 				}},
 			},
@@ -2028,7 +2028,7 @@ func TestNewServer_WorkloadCallToolUsesRequestedInstance(t *testing.T) {
 		MCPConnection: map[string]string{"sampledb": "workspace"},
 	})
 
-	result := callToolForSession(t, srv, ctxWithWorkloadPrincipal("triage-bot"), newTestSessionWithTools(), "sampledb_run_query", map[string]any{
+	result := callToolForSession(t, srv, ctxWithServiceAccountPrincipal("triage-bot"), newTestSessionWithTools(), "sampledb_run_query", map[string]any{
 		"sql":       "select 1",
 		"_instance": "team-b",
 	})
@@ -2037,7 +2037,7 @@ func TestNewServer_WorkloadCallToolUsesRequestedInstance(t *testing.T) {
 		t.Fatalf("unexpected MCP success content: %+v", result.Content)
 	}
 	if !called {
-		t.Fatal("expected workload tool call to reach provider")
+		t.Fatal("expected service account tool call to reach provider")
 	}
 	if sessionCatalogCalls != 1 {
 		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 1)

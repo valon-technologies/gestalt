@@ -128,7 +128,7 @@ tool_result | image_ref` plus the corresponding `text`, `json`, `toolCall`,
 
 `/admin/api/v1/...` mirrors the built-in `/admin` protection model: when `server.admin.authorizationPolicy` is unset, the routes are open wherever `/admin` is open; when it is set, they require the same browser session and role checks as `/admin`, but return JSON `401`/`403` instead of browser redirects.
 
-Mutable membership APIs still list and delete by canonical `subjectId`. User-backed rows use `user:<user_id>` and non-human rows can use `workload:<workload_id>`, `service_account:<id>`, or another canonical non-system subject ID. Dynamic membership writes accept either a canonical `subjectId` or an `email` alias. When `email` is used, Gestalt resolves it to the canonical user subject and creates the user record if needed before persisting the provider-backed grant.
+Mutable membership APIs still list and delete by canonical `subjectId`. User-backed rows use `user:<user_id>` and non-human rows can use `service_account:<id>` or another canonical non-system subject ID. Dynamic membership writes accept either a canonical `subjectId` or an `email` alias. When `email` is used, Gestalt resolves it to the canonical user subject and creates the user record if needed before persisting the provider-backed grant.
 
 `PUT` and `DELETE` may return `202 Accepted` with `status: "persisted_pending_reload"` when the dynamic grant was written successfully but the local in-memory authorization snapshot has not reloaded yet. In that case, retry access checks only after the local snapshot converges.
 

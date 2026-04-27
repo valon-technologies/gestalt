@@ -220,15 +220,15 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			wantSessionCatalog: "token-123|user:user-123|user|Ada|true|api_token|user|roadmap|admin",
 		},
 		{
-			name: "workload subject",
+			name: "service account subject",
 			principal: &principal.Principal{
-				SubjectID:   principal.WorkloadSubjectID("triage-bot"),
+				SubjectID:   "service_account:triage-bot",
 				DisplayName: "Triage Bot",
-				Kind:        principal.KindWorkload,
+				Kind:        principal.Kind("service_account"),
 				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|workload:triage-bot|workload|Triage Bot|false|api_token|user|workload:triage-bot|roadmap|admin",
-			wantSessionCatalog: "token-123|workload:triage-bot|workload|Triage Bot|false|api_token|user|roadmap|admin",
+			wantExecuteBody:    "echo|secret-token|hi|acme|service_account:triage-bot|service_account|Triage Bot|false|api_token|user|service_account:triage-bot|roadmap|admin",
+			wantSessionCatalog: "token-123|service_account:triage-bot|service_account|Triage Bot|false|api_token|user|roadmap|admin",
 		},
 	}
 
@@ -314,13 +314,13 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	}
 }
 
-func TestRequestContextProto_PreservesWorkloadDisplayName(t *testing.T) {
+func TestRequestContextProto_PreservesServiceAccountDisplayName(t *testing.T) {
 	t.Parallel()
 
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
+		SubjectID:   "service_account:triage-bot",
 		DisplayName: "Triage Bot",
-		Kind:        principal.KindWorkload,
+		Kind:        principal.Kind("service_account"),
 		Source:      principal.SourceAPIToken,
 	})
 	ctx = invocation.WithAccessContext(ctx, invocation.AccessContext{

@@ -768,7 +768,7 @@ test("integration provider service resolves hosted HTTP subjects through the plu
       context: create(RequestContextSchema, {
         subject: create(SubjectContextSchema, {
           id: "system:http_binding:agent:command",
-          kind: "workload",
+          kind: "system",
           authSource: "http_binding",
         }),
         credential: create(CredentialContextSchema, {
@@ -817,7 +817,7 @@ test("integration provider service resolves hosted HTTP subjects through the plu
   expect(seenContext).toEqual({
     subject: {
       id: "system:http_binding:agent:command",
-      kind: "workload",
+      kind: "system",
       displayName: "",
       authSource: "http_binding",
     },
@@ -1438,8 +1438,8 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
       cron: "*/5 * * * *",
       timezone: "UTC",
       requestedBy: {
-        subjectId: "workload:planner",
-        subjectKind: "workload",
+        subjectId: "service_account:planner",
+        subjectKind: "service_account",
         displayName: "Planner",
         authSource: "api_token",
       },
@@ -1451,7 +1451,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
   );
   expect(schedule.id).toBe("nightly");
   expect(schedule.target?.pluginName).toBe("roadmap");
-  expect(schedule.createdBy?.subjectId).toBe("workload:planner");
+  expect(schedule.createdBy?.subjectId).toBe("service_account:planner");
 
   const updatedSchedule = await (workflow.upsertSchedule as any)(
     create(UpsertWorkflowProviderScheduleRequestSchema, {
@@ -1470,7 +1470,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
       },
     }),
   );
-  expect(updatedSchedule.createdBy?.subjectId).toBe("workload:planner");
+  expect(updatedSchedule.createdBy?.subjectId).toBe("service_account:planner");
 
   await (workflow.publishEvent as any)(
     create(PublishWorkflowProviderEventRequestSchema, {

@@ -2259,7 +2259,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	p := &principal.Principal{
 		SubjectID:           "user:user-123",
 		UserID:              "user-123",
-		CredentialSubjectID: principal.WorkloadSubjectID("agent-credential"),
+		CredentialSubjectID: "service_account:agent-credential",
 		Kind:                principal.KindUser,
 		Source:              principal.SourceSession,
 		TokenPermissions:    perms,
@@ -2352,8 +2352,8 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if len(ref.Tools) != 1 || ref.Tools[0].Target.Plugin != "roadmap" || ref.Tools[0].Target.Operation != "sync" {
 		t.Fatalf("stored searched tools = %#v", ref.Tools)
 	}
-	if ref.CredentialSubjectID != principal.WorkloadSubjectID("agent-credential") {
-		t.Fatalf("stored credential subject = %q, want %q", ref.CredentialSubjectID, principal.WorkloadSubjectID("agent-credential"))
+	if ref.CredentialSubjectID != "service_account:agent-credential" {
+		t.Fatalf("stored credential subject = %q, want %q", ref.CredentialSubjectID, "service_account:agent-credential")
 	}
 }
 
@@ -6094,7 +6094,7 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("workflow managed workloads allow normalized credentialed providers", func(t *testing.T) {
+	t.Run("workflow managed subjects allow normalized credentialed providers", func(t *testing.T) {
 		t.Parallel()
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -6135,7 +6135,7 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("workflow managed workload subjects stay unique across similar plugin names", func(t *testing.T) {
+	t.Run("workflow managed service account subjects stay unique across similar plugin names", func(t *testing.T) {
 		t.Parallel()
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

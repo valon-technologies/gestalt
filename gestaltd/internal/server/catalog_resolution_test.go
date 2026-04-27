@@ -293,7 +293,7 @@ func TestResolveCatalog_ModeNonePrincipalUsesRequestedSelectors(t *testing.T) {
 		prov,
 		"bound-none-api",
 		resolver,
-		&principal.Principal{Kind: principal.KindWorkload, SubjectID: principal.WorkloadSubjectID("triage-bot")},
+		&principal.Principal{Kind: principal.Kind("service_account"), SubjectID: "service_account:triage-bot"},
 		"workspace",
 		"team-a",
 	)
@@ -684,7 +684,7 @@ func TestFilterCatalogForPrincipal_HumanUnboundProviderKeepsRoleAnnotatedOperati
 	}
 }
 
-func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing.T) {
+func TestFilterCatalogForPrincipal_SubjectFilteringUsesMergedCatalog(t *testing.T) {
 	t.Parallel()
 
 	prov := &stubSessionProvider{
@@ -714,7 +714,7 @@ func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing
 		Policies: map[string]config.SubjectPolicyDef{
 			"clash_policy": {
 				Members: []config.SubjectPolicyMemberDef{{
-					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					SubjectID: "service_account:triage-bot",
 					Role:      "viewer",
 				}},
 			},
@@ -728,8 +728,8 @@ func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing
 	}
 
 	p := &principal.Principal{
-		Kind:      principal.KindWorkload,
-		SubjectID: principal.WorkloadSubjectID("triage-bot"),
+		Kind:      principal.Kind("service_account"),
+		SubjectID: "service_account:triage-bot",
 	}
 	cat, err := invocation.ResolveCatalog(context.Background(), prov, "clash-api", &stubTokenResolver{token: "tok_456"}, p, "default", "")
 	if err != nil {
@@ -738,7 +738,7 @@ func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing
 
 	filtered := invocation.FilterCatalogForPrincipal(context.Background(), cat, "clash-api", p, authz)
 	if len(filtered.Operations) != 2 {
-		t.Fatalf("expected 2 operations after workload filtering, got %d", len(filtered.Operations))
+		t.Fatalf("expected 2 operations after subject filtering, got %d", len(filtered.Operations))
 	}
 	if filtered.Operations[0].ID != "shared_op" {
 		t.Fatalf("expected first filtered op shared_op, got %q", filtered.Operations[0].ID)

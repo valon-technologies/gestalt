@@ -25,7 +25,7 @@ provider-backed relationship storage or dynamic subject-grant control plane.
 
 At the product level, authorization is about subjects and runtime surfaces.
 Gestalt resolves each request to a canonical subject such as `user:<id>`,
-`workload:<id>`, or a system subject, then asks whether that subject may access
+`service_account:<id>`, or a system subject, then asks whether that subject may access
 the thing they are trying to use. Static memberships under
 `authorization.policies` are always available. When you configure an
 authorization provider, Gestalt adds dynamic relationship storage on top so

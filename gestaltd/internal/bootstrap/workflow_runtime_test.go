@@ -325,10 +325,10 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 		t.Fatalf("provider = %q, want %q", gotProvider, "roadmap")
 	}
 	if gotInstance != "" {
-		t.Fatalf("instance = %q, want empty instance for workload invocations", gotInstance)
+		t.Fatalf("instance = %q, want empty instance for non-user invocations", gotInstance)
 	}
 	if gotConnection != "" {
-		t.Fatalf("connection = %q, want empty connection for workload invocations", gotConnection)
+		t.Fatalf("connection = %q, want empty connection for non-user invocations", gotConnection)
 	}
 	if gotOperation != "sync" {
 		t.Fatalf("operation = %q, want %q", gotOperation, "sync")
@@ -494,7 +494,7 @@ func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefIgnoresWhitespaceLegacy
 		ProviderName:      "temporal",
 		Target:            target,
 		TargetFingerprint: fingerprint,
-		SubjectID:         principal.WorkloadSubjectID("scheduler"),
+		SubjectID:         "service_account:scheduler",
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
@@ -562,7 +562,7 @@ func TestWorkflowRuntimeRejectsMixedAgentPluginTargetWithLegacyExecutionRef(t *t
 			PluginName: "roadmap",
 			Operation:  "sync",
 		},
-		SubjectID: principal.WorkloadSubjectID("scheduler"),
+		SubjectID: "service_account:scheduler",
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
@@ -603,7 +603,7 @@ func TestWorkflowRuntimeRejectsAgentExecutionRefWithoutFingerprint(t *testing.T)
 		ID:           "agent-ref-without-fingerprint",
 		ProviderName: "temporal",
 		Target:       target,
-		SubjectID:    principal.WorkloadSubjectID("scheduler"),
+		SubjectID:    "service_account:scheduler",
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
@@ -641,7 +641,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 			Instance:   "tenant-a",
 		},
 		SubjectID:           principal.UserSubjectID(user.ID),
-		CredentialSubjectID: principal.WorkloadSubjectID("workflow-credential"),
+		CredentialSubjectID: "service_account:workflow-credential",
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
@@ -695,8 +695,8 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	if gotPrincipal == nil || gotPrincipal.Kind != principal.KindUser || gotPrincipal.UserID != user.ID || gotPrincipal.SubjectID != principal.UserSubjectID(user.ID) {
 		t.Fatalf("principal = %#v", gotPrincipal)
 	}
-	if gotPrincipal.CredentialSubjectID != principal.WorkloadSubjectID("workflow-credential") {
-		t.Fatalf("credential subject = %q, want %q", gotPrincipal.CredentialSubjectID, principal.WorkloadSubjectID("workflow-credential"))
+	if gotPrincipal.CredentialSubjectID != "service_account:workflow-credential" {
+		t.Fatalf("credential subject = %q, want %q", gotPrincipal.CredentialSubjectID, "service_account:workflow-credential")
 	}
 	if gotProvider != "roadmap" {
 		t.Fatalf("provider = %q, want %q", gotProvider, "roadmap")
@@ -709,18 +709,18 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	}
 }
 
-func TestWorkflowRuntimeInvokeExecutionRefUsesStoredWorkloadPrincipal(t *testing.T) {
+func TestWorkflowRuntimeInvokeExecutionRefUsesStoredSubjectPrincipal(t *testing.T) {
 	t.Parallel()
 
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "exec-ref-workload",
+		ID:           "exec-ref-service-account",
 		ProviderName: "temporal",
 		Target: coreworkflow.Target{
 			PluginName: "roadmap",
 			Operation:  "sync",
 		},
-		SubjectID: principal.WorkloadSubjectID("scheduler"),
+		SubjectID: "service_account:scheduler",
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
@@ -739,7 +739,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredWorkloadPrincipal(t *testing
 
 	if _, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
-		ExecutionRef: "exec-ref-workload",
+		ExecutionRef: "exec-ref-service-account",
 		Target: coreworkflow.Target{
 			PluginName: "roadmap",
 			Operation:  "sync",
@@ -751,11 +751,11 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredWorkloadPrincipal(t *testing
 	if gotPrincipal == nil {
 		t.Fatal("principal = nil")
 	}
-	if gotPrincipal.Kind != principal.KindWorkload {
-		t.Fatalf("principal kind = %q, want %q", gotPrincipal.Kind, principal.KindWorkload)
+	if gotPrincipal.Kind != principal.Kind("service_account") {
+		t.Fatalf("principal kind = %q, want %q", gotPrincipal.Kind, principal.Kind("service_account"))
 	}
-	if gotPrincipal.SubjectID != principal.WorkloadSubjectID("scheduler") {
-		t.Fatalf("subjectID = %q, want %q", gotPrincipal.SubjectID, principal.WorkloadSubjectID("scheduler"))
+	if gotPrincipal.SubjectID != "service_account:scheduler" {
+		t.Fatalf("subjectID = %q, want %q", gotPrincipal.SubjectID, "service_account:scheduler")
 	}
 }
 

@@ -126,7 +126,7 @@ authorization:
           role: viewer
         - subjectID: user:admin-user
           role: admin
-        - subjectID: workload:triage-bot
+        - subjectID: service_account:triage-bot
           role: viewer
 ```
 
@@ -146,11 +146,11 @@ authorization:
 
 `admin.ui` optionally pins `/admin` to one named `providers.ui.<name>` bundle. The selected bundle must ship `admin/index.html` inside its prepared asset root. When `admin.ui` is omitted, Gestalt first auto-discovers admin assets from the root-mounted UI bundle (`path: /`) when that bundle contains `admin/index.html`, then falls back to the built-in admin shell.
 
-`authorization.policies` configures shared subject access policies. Each policy resolves a caller to exactly one role by matching canonical `subjectID` values such as `user:<id>` or `workload:<id>`, then applies a `default` fallback (`allow` or `deny`) when no member matches. Plugins opt into a policy explicitly through `authorizationPolicy`.
+`authorization.policies` configures shared subject access policies. Each policy resolves a caller to exactly one role by matching canonical `subjectID` values such as `user:<id>` or `service_account:<id>`, then applies a `default` fallback (`allow` or `deny`) when no member matches. Plugins opt into a policy explicitly through `authorizationPolicy`.
 
-Dynamic grants are plugin-scoped, not policy-scoped. When a plugin sets `authorizationPolicy`, operators can manage additional dynamic members for that plugin from the built-in admin UI at `/admin/?tab=members` or through `/admin/api/v1/authorization/...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for subjects that already have static authorization on that plugin. The `email` write field is a user-only convenience alias; `subjectId` accepts any canonical non-system subject ID, such as `user:<id>`, `workload:<id>`, or `service_account:<id>`.
+Dynamic grants are plugin-scoped, not policy-scoped. When a plugin sets `authorizationPolicy`, operators can manage additional dynamic members for that plugin from the built-in admin UI at `/admin/?tab=members` or through `/admin/api/v1/authorization/...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for subjects that already have static authorization on that plugin. The `email` write field is a user-only convenience alias; `subjectId` accepts any canonical non-system subject ID, such as `user:<id>`, `service_account:<id>`, or another deployment-defined subject kind.
 
-Non-human callers are modeled as canonical subjects, typically `workload:<id>` or `service_account:<id>`, and authenticate with Gestalt API tokens whose stored owner is that subject. Grant plugin access with `authorization.policies` or provider-backed dynamic memberships using the canonical subject ID, and store third-party credentials through the configured external credentials provider under the same subject ID.
+Non-human callers are modeled as canonical subjects, typically `service_account:<id>`, and authenticate with Gestalt API tokens whose stored owner is that subject. Grant plugin access with `authorization.policies` or provider-backed dynamic memberships using the canonical subject ID, and store third-party credentials through the configured external credentials provider under the same subject ID.
 
 Plugins without `authorizationPolicy` are open to any authenticated subject. Bind a plugin to a policy when non-human access should be explicit.
 
@@ -1126,7 +1126,7 @@ connections:
       type: mcp_oauth
 ```
 
-Connection `mode` determines how credentials are managed: `none` requires no credentials, and `user` stores credentials for the caller's effective subject. For humans that is typically `user:<id>`; for non-human subjects it can be `workload:<id>`, `service_account:<id>`, or another canonical non-system subject ID. All connections in a single plugin must share the same mode.
+Connection `mode` determines how credentials are managed: `none` requires no credentials, and `user` stores credentials for the caller's effective subject. For humans that is typically `user:<id>`; for non-human API token callers it can be `service_account:<id>` or another canonical non-system subject ID. Runtime surfaces can also supply system subjects such as `system:http_binding:<plugin>:<binding>` as the effective credential owner. All connections in a single plugin must share the same mode.
 
 #### Authentication Shapes
 

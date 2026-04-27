@@ -29,7 +29,7 @@ Owned by the configured external credentials provider, not gestaltd core. The de
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | string, PK | UUID. |
-| `subject_id` | string | Canonical credential owner such as `user:<id>`, `workload:<id>`, or `service_account:<id>`. |
+| `subject_id` | string | Canonical credential owner such as `user:<id>`, `service_account:<id>`, or a runtime-supplied `system:<id>` subject. |
 | `integration` | string | Provider name from config (e.g., `slack`). |
 | `connection` | string | Named connection within the provider (e.g., `default`, `mcp`). |
 | `instance` | string | User-chosen or discovery-assigned name for multi-account providers. |
