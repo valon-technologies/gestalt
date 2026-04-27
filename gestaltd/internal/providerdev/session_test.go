@@ -3,6 +3,7 @@ package providerdev
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"google.golang.org/grpc"
@@ -174,6 +176,143 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	}
 }
 
+func TestCompleteCallTreatsOKErrorCodeAsProtocolError(t *testing.T) {
+	t.Parallel()
+
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	call := &rpcCall{id: "call-1", response: make(chan rpcResponse, 1)}
+	session := &Session{
+		id:        "session-1",
+		owner:     p.SubjectID,
+		pending:   map[string]*rpcCall{"call-1": call},
+		done:      make(chan struct{}),
+		closeDone: make(chan struct{}),
+		lastSeen:  time.Now(),
+	}
+	manager := &Manager{
+		sessions:   map[string]*Session{"session-1": session},
+		ownerIndex: map[string][]string{p.SubjectID: {"session-1"}},
+	}
+
+	if err := manager.CompleteCall(p, "session-1", "call-1", CompleteCallRequest{
+		Error: &RPCError{Code: int32(codes.OK), Message: "unexpected ok"},
+	}); err != nil {
+		t.Fatalf("CompleteCall: %v", err)
+	}
+
+	select {
+	case resp := <-call.response:
+		if got := status.Code(resp.err); got != codes.InvalidArgument {
+			t.Fatalf("response error code = %s, want %s", got, codes.InvalidArgument)
+		}
+		if got := resp.payload; got != nil {
+			t.Fatalf("response payload = %x, want nil", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("call response was not delivered")
+	}
+}
+
+func TestPollSessionDropsCanceledQueuedCall(t *testing.T) {
+	t.Parallel()
+
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	session := &Session{
+		id:        "session-1",
+		owner:     p.SubjectID,
+		calls:     make(chan *rpcCall, 1),
+		pending:   map[string]*rpcCall{},
+		done:      make(chan struct{}),
+		closeDone: make(chan struct{}),
+		lastSeen:  time.Now(),
+	}
+	manager := &Manager{
+		sessions:   map[string]*Session{"session-1": session},
+		ownerIndex: map[string][]string{p.SubjectID: {"session-1"}},
+	}
+
+	invokeCtx, cancel := context.WithCancel(context.Background())
+	invokeDone := make(chan error, 1)
+	go func() {
+		invokeDone <- session.invoke(invokeCtx, "roadmap", "Execute", &emptypb.Empty{}, &emptypb.Empty{})
+	}()
+
+	deadline := time.Now().Add(time.Second)
+	for len(session.calls) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(session.calls) == 0 {
+		t.Fatal("invoke did not enqueue a call")
+	}
+
+	cancel()
+	if err := <-invokeDone; !errors.Is(err, context.Canceled) {
+		t.Fatalf("invoke error = %v, want %v", err, context.Canceled)
+	}
+
+	pollCtx, pollCancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer pollCancel()
+	resp, ok, err := manager.PollSession(pollCtx, p, "session-1")
+	if err != nil {
+		t.Fatalf("PollSession: %v", err)
+	}
+	if ok || resp != nil {
+		t.Fatalf("PollSession = (%#v, %t), want no call", resp, ok)
+	}
+	if got := len(session.pending); got != 0 {
+		t.Fatalf("pending calls = %d, want 0", got)
+	}
+	if got := len(session.calls); got != 0 {
+		t.Fatalf("queued calls = %d, want 0", got)
+	}
+}
+
+func TestSessionCloseReturnsSameErrorToConcurrentCallers(t *testing.T) {
+	t.Parallel()
+
+	expected := errors.New("close failed")
+	prov := &blockingCloseProvider{
+		StubIntegration: coretesting.StubIntegration{N: "roadmap"},
+		started:         make(chan struct{}),
+		release:         make(chan struct{}),
+		err:             expected,
+	}
+	session := &Session{
+		targets: map[string]*attachedTarget{
+			"roadmap": {provider: prov},
+		},
+		pending:   map[string]*rpcCall{},
+		done:      make(chan struct{}),
+		closeDone: make(chan struct{}),
+	}
+
+	firstDone := make(chan error, 1)
+	go func() {
+		firstDone <- session.Close()
+	}()
+	<-prov.started
+
+	secondDone := make(chan error, 1)
+	go func() {
+		secondDone <- session.Close()
+	}()
+
+	select {
+	case err := <-secondDone:
+		t.Fatalf("second Close returned before cleanup finished: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(prov.release)
+
+	if err := <-firstDone; !errors.Is(err, expected) {
+		t.Fatalf("first Close error = %v, want %v", err, expected)
+	}
+	if err := <-secondDone; !errors.Is(err, expected) {
+		t.Fatalf("second Close error = %v, want %v", err, expected)
+	}
+}
+
 func providerDevTestHandler(t *testing.T, manager *Manager, p *principal.Principal) http.Handler {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -305,4 +444,17 @@ func (c *recordingIntegrationClient) GetSessionCatalog(context.Context, *proto.G
 
 func (c *recordingIntegrationClient) PostConnect(context.Context, *proto.PostConnectRequest, ...grpc.CallOption) (*proto.PostConnectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "post connect is not implemented")
+}
+
+type blockingCloseProvider struct {
+	coretesting.StubIntegration
+	started chan struct{}
+	release chan struct{}
+	err     error
+}
+
+func (p *blockingCloseProvider) Close() error {
+	close(p.started)
+	<-p.release
+	return p.err
 }
