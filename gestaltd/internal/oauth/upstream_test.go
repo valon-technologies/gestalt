@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
@@ -284,177 +285,160 @@ func TestPKCEExchangeCode(t *testing.T) {
 func TestClientAuthHeader(t *testing.T) {
 	t.Parallel()
 
-	var gotAuth string
-	var formHasClientID bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "bad form", http.StatusBadRequest)
-			return
-		}
-		formHasClientID = r.FormValue("client_id") != ""
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"access_token": "header-token",
-			"token_type":   "Bearer",
+	tests := []struct {
+		name      string
+		call      func(*UpstreamHandler) (*core.TokenResponse, error)
+		wantToken string
+	}{
+		{
+			name: "authorization code",
+			call: func(h *UpstreamHandler) (*core.TokenResponse, error) {
+				return h.ExchangeCode(context.Background(), "code")
+			},
+			wantToken: "header-token",
+		},
+		{
+			name: "refresh token",
+			call: func(h *UpstreamHandler) (*core.TokenResponse, error) {
+				return h.RefreshToken(context.Background(), "rt")
+			},
+			wantToken: "refreshed",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var gotAuth string
+			var formHasClientID bool
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotAuth = r.Header.Get("Authorization")
+				if err := r.ParseForm(); err != nil {
+					http.Error(w, "bad form", http.StatusBadRequest)
+					return
+				}
+				formHasClientID = r.FormValue("client_id") != ""
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"access_token": tc.wantToken,
+					"token_type":   "Bearer",
+				})
+			}))
+			testutil.CloseOnCleanup(t, srv)
+
+			h := NewUpstream(UpstreamConfig{
+				ClientID:         "my-id",
+				ClientSecret:     "my-secret",
+				TokenURL:         srv.URL + "/token",
+				RedirectURL:      srv.URL + "/callback",
+				ClientAuthMethod: ClientAuthHeader,
+			})
+
+			tok, err := tc.call(h)
+			if err != nil {
+				t.Fatalf("%s: %v", tc.name, err)
+			}
+			if tok.AccessToken != tc.wantToken {
+				t.Errorf("AccessToken = %q, want %q", tok.AccessToken, tc.wantToken)
+			}
+			if !strings.HasPrefix(gotAuth, "Basic ") {
+				t.Errorf("expected Basic auth header, got %q", gotAuth)
+			}
+			if formHasClientID {
+				t.Error("client_id should not appear in form body with ClientAuthHeader")
+			}
 		})
-	}))
-	testutil.CloseOnCleanup(t, srv)
-
-	h := NewUpstream(UpstreamConfig{
-		ClientID:         "my-id",
-		ClientSecret:     "my-secret",
-		TokenURL:         srv.URL + "/token",
-		RedirectURL:      srv.URL + "/callback",
-		ClientAuthMethod: ClientAuthHeader,
-	})
-
-	tok, err := h.ExchangeCode(context.Background(), "code")
-	if err != nil {
-		t.Fatalf("ExchangeCode: %v", err)
-	}
-	if tok.AccessToken != "header-token" {
-		t.Errorf("AccessToken = %q, want %q", tok.AccessToken, "header-token")
-	}
-	if !strings.HasPrefix(gotAuth, "Basic ") {
-		t.Errorf("expected Basic auth header, got %q", gotAuth)
-	}
-	if formHasClientID {
-		t.Error("client_id should not appear in form body with ClientAuthHeader")
-	}
-}
-
-func TestClientAuthHeaderRefresh(t *testing.T) {
-	t.Parallel()
-
-	var gotAuth string
-	var formHasClientID bool
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "bad form", http.StatusBadRequest)
-			return
-		}
-		formHasClientID = r.FormValue("client_id") != ""
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"access_token": "refreshed",
-			"token_type":   "Bearer",
-		})
-	}))
-	testutil.CloseOnCleanup(t, srv)
-
-	h := NewUpstream(UpstreamConfig{
-		ClientID:         "my-id",
-		ClientSecret:     "my-secret",
-		TokenURL:         srv.URL + "/token",
-		ClientAuthMethod: ClientAuthHeader,
-	})
-
-	tok, err := h.RefreshToken(context.Background(), "rt")
-	if err != nil {
-		t.Fatalf("RefreshToken: %v", err)
-	}
-	if tok.AccessToken != "refreshed" {
-		t.Errorf("AccessToken = %q, want %q", tok.AccessToken, "refreshed")
-	}
-	if !strings.HasPrefix(gotAuth, "Basic ") {
-		t.Errorf("expected Basic auth header, got %q", gotAuth)
-	}
-	if formHasClientID {
-		t.Error("client_id should not appear in form body with ClientAuthHeader")
 	}
 }
 
 func TestTokenExchangeJSON(t *testing.T) {
 	t.Parallel()
 
-	var gotContentType string
-	var gotBody map[string]string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotContentType = r.Header.Get("Content-Type")
-		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
-			http.Error(w, "bad json", http.StatusBadRequest)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"access_token": "json-token",
-			"token_type":   "Bearer",
+	tests := []struct {
+		name       string
+		call       func(*UpstreamHandler) (*core.TokenResponse, error)
+		wantToken  string
+		wantGrant  string
+		wantField  string
+		wantValue  string
+		redirect   string
+		wantClient bool
+	}{
+		{
+			name: "authorization code",
+			call: func(h *UpstreamHandler) (*core.TokenResponse, error) {
+				return h.ExchangeCode(context.Background(), "code-123")
+			},
+			wantToken:  "json-token",
+			wantGrant:  "authorization_code",
+			wantField:  "code",
+			wantValue:  "code-123",
+			redirect:   "http://localhost/callback",
+			wantClient: true,
+		},
+		{
+			name: "refresh token",
+			call: func(h *UpstreamHandler) (*core.TokenResponse, error) {
+				return h.RefreshToken(context.Background(), "rt-123")
+			},
+			wantToken: "json-refreshed",
+			wantGrant: "refresh_token",
+			wantField: "refresh_token",
+			wantValue: "rt-123",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var gotContentType string
+			var gotBody map[string]string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotContentType = r.Header.Get("Content-Type")
+				if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+					http.Error(w, "bad json", http.StatusBadRequest)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"access_token": tc.wantToken,
+					"token_type":   "Bearer",
+				})
+			}))
+			testutil.CloseOnCleanup(t, srv)
+
+			h := NewUpstream(UpstreamConfig{
+				ClientID:      "cid",
+				ClientSecret:  "csecret",
+				TokenURL:      srv.URL + "/token",
+				RedirectURL:   tc.redirect,
+				TokenExchange: TokenExchangeJSON,
+			})
+
+			tok, err := tc.call(h)
+			if err != nil {
+				t.Fatalf("%s: %v", tc.name, err)
+			}
+			if tok.AccessToken != tc.wantToken {
+				t.Errorf("AccessToken = %q, want %q", tok.AccessToken, tc.wantToken)
+			}
+			if gotContentType != "application/json" {
+				t.Errorf("Content-Type = %q, want %q", gotContentType, "application/json")
+			}
+			if gotBody["grant_type"] != tc.wantGrant {
+				t.Errorf("grant_type = %q, want %q", gotBody["grant_type"], tc.wantGrant)
+			}
+			if gotBody[tc.wantField] != tc.wantValue {
+				t.Errorf("%s = %q, want %q", tc.wantField, gotBody[tc.wantField], tc.wantValue)
+			}
+			if tc.wantClient && gotBody["client_id"] != "cid" {
+				t.Errorf("client_id = %q, want %q", gotBody["client_id"], "cid")
+			}
 		})
-	}))
-	testutil.CloseOnCleanup(t, srv)
-
-	h := NewUpstream(UpstreamConfig{
-		ClientID:      "cid",
-		ClientSecret:  "csecret",
-		TokenURL:      srv.URL + "/token",
-		RedirectURL:   srv.URL + "/callback",
-		TokenExchange: TokenExchangeJSON,
-	})
-
-	tok, err := h.ExchangeCode(context.Background(), "code-123")
-	if err != nil {
-		t.Fatalf("ExchangeCode: %v", err)
-	}
-	if tok.AccessToken != "json-token" {
-		t.Errorf("AccessToken = %q, want %q", tok.AccessToken, "json-token")
-	}
-	if gotContentType != "application/json" {
-		t.Errorf("Content-Type = %q, want %q", gotContentType, "application/json")
-	}
-	if gotBody["grant_type"] != "authorization_code" {
-		t.Errorf("grant_type = %q, want %q", gotBody["grant_type"], "authorization_code")
-	}
-	if gotBody["code"] != "code-123" {
-		t.Errorf("code = %q, want %q", gotBody["code"], "code-123")
-	}
-	if gotBody["client_id"] != "cid" {
-		t.Errorf("client_id = %q, want %q", gotBody["client_id"], "cid")
-	}
-}
-
-func TestTokenExchangeJSONRefresh(t *testing.T) {
-	t.Parallel()
-
-	var gotContentType string
-	var gotBody map[string]string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotContentType = r.Header.Get("Content-Type")
-		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
-			http.Error(w, "bad json", http.StatusBadRequest)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"access_token": "json-refreshed",
-			"token_type":   "Bearer",
-		})
-	}))
-	testutil.CloseOnCleanup(t, srv)
-
-	h := NewUpstream(UpstreamConfig{
-		ClientID:      "cid",
-		ClientSecret:  "csecret",
-		TokenURL:      srv.URL + "/token",
-		TokenExchange: TokenExchangeJSON,
-	})
-
-	tok, err := h.RefreshToken(context.Background(), "rt-123")
-	if err != nil {
-		t.Fatalf("RefreshToken: %v", err)
-	}
-	if tok.AccessToken != "json-refreshed" {
-		t.Errorf("AccessToken = %q, want %q", tok.AccessToken, "json-refreshed")
-	}
-	if gotContentType != "application/json" {
-		t.Errorf("Content-Type = %q, want %q", gotContentType, "application/json")
-	}
-	if gotBody["grant_type"] != "refresh_token" {
-		t.Errorf("grant_type = %q, want %q", gotBody["grant_type"], "refresh_token")
-	}
-	if gotBody["refresh_token"] != "rt-123" {
-		t.Errorf("refresh_token = %q, want %q", gotBody["refresh_token"], "rt-123")
 	}
 }
 
@@ -593,88 +577,64 @@ func TestGenerateVerifier(t *testing.T) {
 	}
 }
 
-func TestDefaultScopesUsedWhenCallerProvidesNone(t *testing.T) {
+func TestAuthorizationURLScopes(t *testing.T) {
 	t.Parallel()
 
-	h := NewUpstream(UpstreamConfig{
-		ClientID:         "client-id",
-		AuthorizationURL: "https://example.com/authorize",
-		RedirectURL:      "https://app.com/callback",
-		DefaultScopes:    []string{"read:data"},
-	})
-
-	authURL := h.AuthorizationURL("state-1", nil)
-	parsed, err := url.Parse(authURL)
-	if err != nil {
-		t.Fatalf("parsing URL: %v", err)
+	tests := []struct {
+		name                string
+		defaultScopes       []string
+		requestScopes       []string
+		authorizationParams map[string]string
+		wantScope           string
+	}{
+		{
+			name:          "default scopes when caller provides none",
+			defaultScopes: []string{"read:data"},
+			wantScope:     "read:data",
+		},
+		{
+			name:          "default scopes when caller provides empty",
+			defaultScopes: []string{"read", "write"},
+			requestScopes: []string{},
+			wantScope:     "read write",
+		},
+		{
+			name:          "explicit scopes override defaults",
+			defaultScopes: []string{"default-scope"},
+			requestScopes: []string{"explicit-scope"},
+			wantScope:     "explicit-scope",
+		},
+		{
+			name:                "authorization params override defaults",
+			defaultScopes:       []string{"from-spec"},
+			authorizationParams: map[string]string{"scope": "from-config"},
+			wantScope:           "from-config",
+		},
 	}
-	scope := parsed.Query().Get("scope")
-	if scope != "read:data" {
-		t.Errorf("scope = %q, want %q", scope, "read:data")
-	}
-}
 
-func TestDefaultScopesUsedWhenCallerProvidesEmpty(t *testing.T) {
-	t.Parallel()
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	h := NewUpstream(UpstreamConfig{
-		ClientID:         "client-id",
-		AuthorizationURL: "https://example.com/authorize",
-		RedirectURL:      "https://app.com/callback",
-		DefaultScopes:    []string{"read", "write"},
-	})
+			h := NewUpstream(UpstreamConfig{
+				ClientID:            "client-id",
+				AuthorizationURL:    "https://example.com/authorize",
+				RedirectURL:         "https://app.com/callback",
+				DefaultScopes:       tc.defaultScopes,
+				AuthorizationParams: tc.authorizationParams,
+			})
 
-	authURL := h.AuthorizationURL("state-1", []string{})
-	parsed, err := url.Parse(authURL)
-	if err != nil {
-		t.Fatalf("parsing URL: %v", err)
-	}
-	scope := parsed.Query().Get("scope")
-	if scope != "read write" {
-		t.Errorf("scope = %q, want %q", scope, "read write")
-	}
-}
-
-func TestExplicitScopesOverrideDefaults(t *testing.T) {
-	t.Parallel()
-
-	h := NewUpstream(UpstreamConfig{
-		ClientID:         "client-id",
-		AuthorizationURL: "https://example.com/authorize",
-		RedirectURL:      "https://app.com/callback",
-		DefaultScopes:    []string{"default-scope"},
-	})
-
-	authURL := h.AuthorizationURL("state-1", []string{"explicit-scope"})
-	parsed, err := url.Parse(authURL)
-	if err != nil {
-		t.Fatalf("parsing URL: %v", err)
-	}
-	scope := parsed.Query().Get("scope")
-	if scope != "explicit-scope" {
-		t.Errorf("scope = %q, want %q", scope, "explicit-scope")
-	}
-}
-
-func TestAuthorizationParamsOverrideDefaultScopes(t *testing.T) {
-	t.Parallel()
-
-	h := NewUpstream(UpstreamConfig{
-		ClientID:            "client-id",
-		AuthorizationURL:    "https://example.com/authorize",
-		RedirectURL:         "https://app.com/callback",
-		DefaultScopes:       []string{"from-spec"},
-		AuthorizationParams: map[string]string{"scope": "from-config"},
-	})
-
-	authURL := h.AuthorizationURL("state-1", nil)
-	parsed, err := url.Parse(authURL)
-	if err != nil {
-		t.Fatalf("parsing URL: %v", err)
-	}
-	scope := parsed.Query().Get("scope")
-	if scope != "from-config" {
-		t.Errorf("scope = %q, want %q (authorization_params should override default scopes)", scope, "from-config")
+			authURL := h.AuthorizationURL("state-1", tc.requestScopes)
+			parsed, err := url.Parse(authURL)
+			if err != nil {
+				t.Fatalf("parsing URL: %v", err)
+			}
+			scope := parsed.Query().Get("scope")
+			if scope != tc.wantScope {
+				t.Errorf("scope = %q, want %q", scope, tc.wantScope)
+			}
+		})
 	}
 }
 
@@ -764,63 +724,64 @@ func TestTokenResponseExtra(t *testing.T) {
 	}
 }
 
-func TestAccessTokenPathExtractsNestedToken(t *testing.T) {
+func TestAccessTokenPath(t *testing.T) {
 	t.Parallel()
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-			"ok": true,
-			"access_token": "xoxb-bot-token",
-			"token_type": "bot",
-			"authed_user": {
-				"id": "U12345",
-				"access_token": "xoxp-user-token",
-				"token_type": "user",
-				"scope": "chat:write"
+	tests := []struct {
+		name            string
+		responseBody    string
+		accessTokenPath string
+		wantToken       string
+	}{
+		{
+			name: "extracts nested token",
+			responseBody: `{
+				"ok": true,
+				"access_token": "xoxb-bot-token",
+				"token_type": "bot",
+				"authed_user": {
+					"id": "U12345",
+					"access_token": "xoxp-user-token",
+					"token_type": "user",
+					"scope": "chat:write"
+				}
+			}`,
+			accessTokenPath: "authed_user.access_token",
+			wantToken:       "xoxp-user-token",
+		},
+		{
+			name:         "falls back to top level",
+			responseBody: `{"access_token": "standard-token", "token_type": "Bearer"}`,
+			wantToken:    "standard-token",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.responseBody))
+			}))
+			t.Cleanup(srv.Close)
+
+			h := NewUpstream(UpstreamConfig{
+				ClientID:        "cid",
+				ClientSecret:    "csec",
+				TokenURL:        srv.URL + "/token",
+				RedirectURL:     "http://localhost/cb",
+				AccessTokenPath: tc.accessTokenPath,
+			})
+
+			resp, err := h.ExchangeCode(context.Background(), "code")
+			if err != nil {
+				t.Fatalf("ExchangeCode: %v", err)
 			}
-		}`))
-	}))
-	t.Cleanup(srv.Close)
-
-	h := NewUpstream(UpstreamConfig{
-		ClientID:        "cid",
-		ClientSecret:    "csec",
-		TokenURL:        srv.URL + "/token",
-		RedirectURL:     "http://localhost/cb",
-		AccessTokenPath: "authed_user.access_token",
-	})
-
-	resp, err := h.ExchangeCode(context.Background(), "code")
-	if err != nil {
-		t.Fatalf("ExchangeCode: %v", err)
-	}
-	if resp.AccessToken != "xoxp-user-token" {
-		t.Errorf("AccessToken = %q, want xoxp-user-token", resp.AccessToken)
-	}
-}
-
-func TestAccessTokenPathFallsBackToTopLevel(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token": "standard-token", "token_type": "Bearer"}`))
-	}))
-	t.Cleanup(srv.Close)
-
-	h := NewUpstream(UpstreamConfig{
-		ClientID:     "cid",
-		ClientSecret: "csec",
-		TokenURL:     srv.URL + "/token",
-		RedirectURL:  "http://localhost/cb",
-	})
-
-	resp, err := h.ExchangeCode(context.Background(), "code")
-	if err != nil {
-		t.Fatalf("ExchangeCode: %v", err)
-	}
-	if resp.AccessToken != "standard-token" {
-		t.Errorf("AccessToken = %q, want standard-token", resp.AccessToken)
+			if resp.AccessToken != tc.wantToken {
+				t.Errorf("AccessToken = %q, want %q", resp.AccessToken, tc.wantToken)
+			}
+		})
 	}
 }

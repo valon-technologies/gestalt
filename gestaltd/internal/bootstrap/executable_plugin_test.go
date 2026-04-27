@@ -5013,169 +5013,117 @@ func TestPluginInvokesDoNotLeakCallerAccessToPolicylessTargets(t *testing.T) {
 	}
 }
 
-func TestPluginInvokesRejectUndeclaredTargets(t *testing.T) {
+func TestPluginInvokesRejectInvalidTargetRequests(t *testing.T) {
 	t.Parallel()
 
-	harness := newNestedInvokeHarness(t)
-	ctx := context.Background()
-	user := newNestedInvokeUser(t, harness, ctx, "nested-declared@test.com")
-	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
-	storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "default")
-
-	result, err := harness.invoker.Invoke(
-		invocation.WithConnection(context.Background(), "work"),
-		&principal.Principal{
-			UserID: user.ID,
-			Kind:   principal.KindUser,
-			Source: principal.SourceSession,
-			Scopes: []string{"caller", "example"},
+	type tokenSpec struct {
+		plugin     string
+		connection string
+		instance   string
+	}
+	tests := []struct {
+		name      string
+		email     string
+		tokens    []tokenSpec
+		params    map[string]any
+		wantError string
+	}{
+		{
+			name:  "undeclared target",
+			email: "nested-declared@test.com",
+			tokens: []tokenSpec{
+				{plugin: "caller", connection: "work", instance: "default"},
+				{plugin: "example", connection: "work", instance: "default"},
+			},
+			params: map[string]any{
+				"plugin":    "example",
+				"operation": "status",
+			},
+			wantError: `may not invoke example.status`,
 		},
-		"caller",
-		"",
-		"invoke_plugin",
-		map[string]any{
-			"plugin":    "example",
-			"operation": "status",
+		{
+			name:  "invalid invocation token",
+			email: "nested-invalid-handle@test.com",
+			tokens: []tokenSpec{
+				{plugin: "caller", connection: "work", instance: "default"},
+				{plugin: "example", connection: "work", instance: "default"},
+			},
+			params: map[string]any{
+				"plugin":           "example",
+				"operation":        "request_context",
+				"invocation_token": "forged-token",
+			},
+			wantError: "invalid or expired",
 		},
-	)
-	if err != nil {
-		t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
-	}
-
-	var got invokePluginEnvelope
-	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
-		t.Fatalf("json.Unmarshal: %v", err)
-	}
-	if got.OK {
-		t.Fatalf("expected undeclared target rejection, got success: %+v", got)
-	}
-	if !strings.Contains(got.Error, `may not invoke example.status`) {
-		t.Fatalf("undeclared target error = %q, want target rejection", got.Error)
-	}
-}
-
-func TestPluginInvokesRejectInvalidInvocationToken(t *testing.T) {
-	t.Parallel()
-
-	harness := newNestedInvokeHarness(t)
-	ctx := context.Background()
-	user := newNestedInvokeUser(t, harness, ctx, "nested-invalid-handle@test.com")
-	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
-	storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "default")
-
-	result, err := harness.invoker.Invoke(
-		invocation.WithConnection(context.Background(), "work"),
-		&principal.Principal{
-			UserID: user.ID,
-			Kind:   principal.KindUser,
-			Source: principal.SourceSession,
-			Scopes: []string{"caller", "example"},
+		{
+			name:  "missing target token",
+			email: "nested-no-target-token@test.com",
+			tokens: []tokenSpec{
+				{plugin: "caller", connection: "work", instance: "default"},
+			},
+			params: map[string]any{
+				"plugin":    "example",
+				"operation": "request_context",
+			},
+			wantError: "code = FailedPrecondition",
 		},
-		"caller",
-		"",
-		"invoke_plugin",
-		map[string]any{
-			"plugin":           "example",
-			"operation":        "request_context",
-			"invocation_token": "forged-token",
+		{
+			name:  "ambiguous target instance",
+			email: "nested-ambiguous-target@test.com",
+			tokens: []tokenSpec{
+				{plugin: "caller", connection: "work", instance: "default"},
+				{plugin: "example", connection: "work", instance: "primary"},
+				{plugin: "example", connection: "work", instance: "secondary"},
+			},
+			params: map[string]any{
+				"plugin":     "example",
+				"operation":  "request_context",
+				"connection": "work",
+			},
+			wantError: "code = Aborted",
 		},
-	)
-	if err != nil {
-		t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
 	}
 
-	var got invokePluginEnvelope
-	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
-		t.Fatalf("json.Unmarshal: %v", err)
-	}
-	if got.OK {
-		t.Fatalf("expected invalid invocation token rejection, got success: %+v", got)
-	}
-	if !strings.Contains(got.Error, "invalid or expired") {
-		t.Fatalf("invalid invocation token error = %q, want invalid or expired", got.Error)
-	}
-}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-func TestPluginInvokesMissingTargetTokenReturnsFailedPrecondition(t *testing.T) {
-	t.Parallel()
+			harness := newNestedInvokeHarness(t)
+			ctx := context.Background()
+			user := newNestedInvokeUser(t, harness, ctx, tc.email)
+			for _, token := range tc.tokens {
+				storeNestedInvokeToken(t, harness, ctx, user.ID, token.plugin, token.connection, token.instance)
+			}
 
-	harness := newNestedInvokeHarness(t)
-	ctx := context.Background()
-	user := newNestedInvokeUser(t, harness, ctx, "nested-no-target-token@test.com")
-	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
+			result, err := harness.invoker.Invoke(
+				invocation.WithConnection(context.Background(), "work"),
+				&principal.Principal{
+					UserID: user.ID,
+					Kind:   principal.KindUser,
+					Source: principal.SourceSession,
+					Scopes: []string{"caller", "example"},
+				},
+				"caller",
+				"",
+				"invoke_plugin",
+				tc.params,
+			)
+			if err != nil {
+				t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
+			}
 
-	result, err := harness.invoker.Invoke(
-		invocation.WithConnection(context.Background(), "work"),
-		&principal.Principal{
-			UserID: user.ID,
-			Kind:   principal.KindUser,
-			Source: principal.SourceSession,
-			Scopes: []string{"caller", "example"},
-		},
-		"caller",
-		"",
-		"invoke_plugin",
-		map[string]any{
-			"plugin":    "example",
-			"operation": "request_context",
-		},
-	)
-	if err != nil {
-		t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
-	}
-
-	var got invokePluginEnvelope
-	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
-		t.Fatalf("json.Unmarshal: %v", err)
-	}
-	if got.OK {
-		t.Fatalf("expected missing target token envelope, got success: %+v", got)
-	}
-	if !strings.Contains(got.Error, "code = FailedPrecondition") {
-		t.Fatalf("missing target token error = %q, want FailedPrecondition", got.Error)
-	}
-}
-
-func TestPluginInvokesAmbiguousTargetInstanceReturnsAborted(t *testing.T) {
-	t.Parallel()
-
-	harness := newNestedInvokeHarness(t)
-	ctx := context.Background()
-	user := newNestedInvokeUser(t, harness, ctx, "nested-ambiguous-target@test.com")
-	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
-	storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "primary")
-	storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "secondary")
-
-	result, err := harness.invoker.Invoke(
-		invocation.WithConnection(context.Background(), "work"),
-		&principal.Principal{
-			UserID: user.ID,
-			Kind:   principal.KindUser,
-			Source: principal.SourceSession,
-			Scopes: []string{"caller", "example"},
-		},
-		"caller",
-		"",
-		"invoke_plugin",
-		map[string]any{
-			"plugin":     "example",
-			"operation":  "request_context",
-			"connection": "work",
-		},
-	)
-	if err != nil {
-		t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
-	}
-
-	var got invokePluginEnvelope
-	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
-		t.Fatalf("json.Unmarshal: %v", err)
-	}
-	if got.OK {
-		t.Fatalf("expected ambiguous target instance envelope, got success: %+v", got)
-	}
-	if !strings.Contains(got.Error, "code = Aborted") {
-		t.Fatalf("ambiguous target instance error = %q, want Aborted", got.Error)
+			var got invokePluginEnvelope
+			if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+				t.Fatalf("json.Unmarshal: %v", err)
+			}
+			if got.OK {
+				t.Fatalf("expected error envelope, got success: %+v", got)
+			}
+			if !strings.Contains(got.Error, tc.wantError) {
+				t.Fatalf("error = %q, want substring %q", got.Error, tc.wantError)
+			}
+		})
 	}
 }
 

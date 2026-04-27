@@ -38,142 +38,98 @@ func mustServe(t *testing.T, handler http.Handler, path string) (int, string) {
 	return resp.StatusCode, string(body)
 }
 
-func TestDirHandler_ServesIndexHTML(t *testing.T) {
+func TestDirHandler_ServesFilesAndFallbacks(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	mustWriteFile(t, dir, "index.html", "<html>home</html>")
 
-	handler, err := DirHandler(dir)
-	if err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name  string
+		files map[string]string
+		path  string
+		want  string
+	}{
+		{
+			name:  "serves index html",
+			files: map[string]string{"index.html": "<html>home</html>"},
+			path:  "/",
+			want:  "home",
+		},
+		{
+			name: "serves exact file",
+			files: map[string]string{
+				"index.html": "<html>home</html>",
+				"style.css":  "body { color: red; }",
+			},
+			path: "/style.css",
+			want: "color: red",
+		},
+		{
+			name: "html suffix fallback",
+			files: map[string]string{
+				"index.html": "<html>home</html>",
+				"about.html": "<html>about page</html>",
+			},
+			path: "/about",
+			want: "about page",
+		},
+		{
+			name:  "spa fallback for unknown path",
+			files: map[string]string{"index.html": "<html>spa-root</html>"},
+			path:  "/nonexistent",
+			want:  "spa-root",
+		},
+		{
+			name: "static asset in subdirectory",
+			files: map[string]string{
+				"index.html":    "<html>home</html>",
+				"assets/app.js": "console.log('app');",
+			},
+			path: "/assets/app.js",
+			want: "console.log",
+		},
+		{
+			name: "html fallback preferred over spa",
+			files: map[string]string{
+				"index.html":    "<html>home</html>",
+				"settings.html": "<html>settings</html>",
+			},
+			path: "/settings",
+			want: "settings",
+		},
+		{
+			name: "html fallback preferred over directory",
+			files: map[string]string{
+				"index.html":                    "<html>home</html>",
+				"integrations.html":             "<html>integrations</html>",
+				"integrations/__next._full.txt": "metadata",
+			},
+			path: "/integrations",
+			want: "integrations",
+		},
 	}
 
-	code, body := mustServe(t, handler, "/")
-	if code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", code, http.StatusOK)
-	}
-	if !strings.Contains(body, "home") {
-		t.Fatalf("body = %q, want home content", body)
-	}
-}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-func TestDirHandler_ServesExactFile(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	mustWriteFile(t, dir, "index.html", "<html>home</html>")
-	mustWriteFile(t, dir, "style.css", "body { color: red; }")
+			dir := t.TempDir()
+			for rel, content := range tc.files {
+				mustWriteFile(t, dir, rel, content)
+			}
 
-	handler, err := DirHandler(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
+			handler, err := DirHandler(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
 
-	code, body := mustServe(t, handler, "/style.css")
-	if code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", code, http.StatusOK)
-	}
-	if !strings.Contains(body, "color: red") {
-		t.Fatalf("body = %q, want CSS content", body)
-	}
-}
-
-func TestDirHandler_HTMLSuffixFallback(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	mustWriteFile(t, dir, "index.html", "<html>home</html>")
-	mustWriteFile(t, dir, "about.html", "<html>about page</html>")
-
-	handler, err := DirHandler(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	code, body := mustServe(t, handler, "/about")
-	if code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", code, http.StatusOK)
-	}
-	if !strings.Contains(body, "about page") {
-		t.Fatalf("body = %q, want about page content", body)
-	}
-}
-
-func TestDirHandler_SPAFallbackForUnknownPath(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	mustWriteFile(t, dir, "index.html", "<html>spa-root</html>")
-
-	handler, err := DirHandler(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	code, body := mustServe(t, handler, "/nonexistent")
-	if code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", code, http.StatusOK)
-	}
-	if !strings.Contains(body, "spa-root") {
-		t.Fatalf("body = %q, want SPA fallback", body)
-	}
-}
-
-func TestDirHandler_StaticAssetInSubdirectory(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	mustWriteFile(t, dir, "index.html", "<html>home</html>")
-	mustWriteFile(t, dir, "assets/app.js", "console.log('app');")
-
-	handler, err := DirHandler(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	code, body := mustServe(t, handler, "/assets/app.js")
-	if code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", code, http.StatusOK)
-	}
-	if !strings.Contains(body, "console.log") {
-		t.Fatalf("body = %q, want JS content", body)
-	}
-}
-
-func TestDirHandler_HTMLFallbackPreferredOverSPA(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	mustWriteFile(t, dir, "index.html", "<html>home</html>")
-	mustWriteFile(t, dir, "settings.html", "<html>settings</html>")
-
-	handler, err := DirHandler(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	code, body := mustServe(t, handler, "/settings")
-	if code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", code, http.StatusOK)
-	}
-	if !strings.Contains(body, "settings") {
-		t.Fatalf("body = %q, want settings content", body)
-	}
-}
-
-func TestDirHandler_HTMLFallbackPreferredOverDirectory(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	mustWriteFile(t, dir, "index.html", "<html>home</html>")
-	mustWriteFile(t, dir, "integrations.html", "<html>integrations</html>")
-	mustWriteFile(t, dir, "integrations/__next._full.txt", "metadata")
-
-	handler, err := DirHandler(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	code, body := mustServe(t, handler, "/integrations")
-	if code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", code, http.StatusOK)
-	}
-	if !strings.Contains(body, "integrations") {
-		t.Fatalf("body = %q, want integrations content", body)
+			code, body := mustServe(t, handler, tc.path)
+			if code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", code, http.StatusOK)
+			}
+			if !strings.Contains(body, tc.want) {
+				t.Fatalf("body = %q, want content containing %q", body, tc.want)
+			}
+		})
 	}
 }
 

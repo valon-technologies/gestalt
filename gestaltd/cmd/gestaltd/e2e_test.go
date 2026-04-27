@@ -2580,85 +2580,79 @@ func TestE2EInitAndServeLayeredConfigs(t *testing.T) {
 	}
 }
 
-func TestE2EServeAutoInitUsesOverrideLockfile(t *testing.T) {
+func TestE2EServeUsesOverrideLockfile(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
-		t.Skip("skipping E2E serve lockfile override test in short mode")
+		t.Skip("skipping E2E serve lockfile override tests in short mode")
 	}
 
-	dir := t.TempDir()
-	cfgPath := writeServeConfig(t, dir, 0, nil)
-	lockPath := filepath.Join(dir, "state", "serve", "gestalt.lock.json")
-
-	baseURL := startGestaltdWithConfigsAndArgs(t, []string{cfgPath}, []string{"serve", "--lockfile", lockPath}, lockPath)
-	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/integrations")
-	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); !os.IsNotExist(err) {
-		t.Fatalf("default lockfile should not be written, got err=%v", err)
-	}
-}
-
-func TestE2EDefaultServeAutoInitUsesOverrideLockfile(t *testing.T) {
-	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping default serve lockfile override test in short mode")
-	}
-
-	dir := t.TempDir()
-	cfgPath := writeServeConfig(t, dir, 0, nil)
-	lockPath := filepath.Join(dir, "state", "default-serve", "gestalt.lock.json")
-
-	baseURL := startGestaltdWithConfigsAndArgs(t, []string{cfgPath}, []string{"--lockfile", lockPath}, lockPath)
-	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/integrations")
-	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); !os.IsNotExist(err) {
-		t.Fatalf("default lockfile should not be written, got err=%v", err)
-	}
-}
-
-func TestE2EServeLockedUsesOverrideLockfile(t *testing.T) {
-	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping locked serve lockfile override test in short mode")
+	tests := []struct {
+		name       string
+		lockDir    string
+		args       func(lockPath string) []string
+		preInit    bool
+		waitForNew bool
+	}{
+		{
+			name:    "serve auto init",
+			lockDir: "serve",
+			args: func(lockPath string) []string {
+				return []string{"serve", "--lockfile", lockPath}
+			},
+			waitForNew: true,
+		},
+		{
+			name:    "default serve auto init",
+			lockDir: "default-serve",
+			args: func(lockPath string) []string {
+				return []string{"--lockfile", lockPath}
+			},
+			waitForNew: true,
+		},
+		{
+			name:    "locked serve",
+			lockDir: "locked-serve",
+			args: func(lockPath string) []string {
+				return []string{"serve", "--locked", "--lockfile", lockPath}
+			},
+			preInit: true,
+		},
 	}
 
-	dir := t.TempDir()
-	cfgPath := writeServeConfig(t, dir, 0, nil)
-	lockPath := filepath.Join(dir, "state", "locked-serve", "gestalt.lock.json")
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd init with --lockfile failed: %v\noutput: %s", err, out)
-	}
-	baseURL := startGestaltdWithConfigsAndArgs(t, []string{cfgPath}, []string{"serve", "--locked", "--lockfile", lockPath}, "")
-	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/integrations")
-	if err != nil {
-		t.Fatalf("GET /api/v1/integrations: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); !os.IsNotExist(err) {
-		t.Fatalf("default lockfile should not be written, got err=%v", err)
+			dir := t.TempDir()
+			cfgPath := writeServeConfig(t, dir, 0, nil)
+			lockPath := filepath.Join(dir, "state", tc.lockDir, "gestalt.lock.json")
+			if tc.preInit {
+				out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+				if err != nil {
+					t.Fatalf("gestaltd init with --lockfile failed: %v\noutput: %s", err, out)
+				}
+			}
+
+			requiredPath := ""
+			if tc.waitForNew {
+				requiredPath = lockPath
+			}
+			baseURL := startGestaltdWithConfigsAndArgs(t, []string{cfgPath}, tc.args(lockPath), requiredPath)
+			resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/integrations")
+			if err != nil {
+				t.Fatalf("GET /api/v1/integrations: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); !os.IsNotExist(err) {
+				t.Fatalf("default lockfile should not be written, got err=%v", err)
+			}
+		})
 	}
 }
 
