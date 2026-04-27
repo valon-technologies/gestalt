@@ -815,6 +815,7 @@ type callbackAgentProvider struct {
 	*recordingAgentProvider
 	started                *providerhost.StartedHostServices
 	socketPath             string
+	searchQuery            string
 	toolBodies             []string
 	resolveInteractionHook func(context.Context, coreagent.ResolveInteractionRequest) error
 }
@@ -884,10 +885,14 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req coreagent.Cr
 		client := proto.NewAgentHostClient(conn)
 		tools := append([]coreagent.Tool(nil), req.Tools...)
 		if len(tools) == 0 {
+			searchQuery := strings.TrimSpace(p.searchQuery)
+			if searchQuery == "" {
+				searchQuery = "roadmap sync"
+			}
 			resp, err := client.SearchTools(ctx, &proto.SearchAgentToolsRequest{
 				SessionId:  req.SessionID,
 				TurnId:     turnID,
-				Query:      "roadmap sync",
+				Query:      searchQuery,
 				MaxResults: 5,
 			})
 			if err != nil {
@@ -2493,6 +2498,263 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	})
 	if err == nil || !strings.Contains(err.Error(), `no external credential stored for integration "ashby"`) {
 		t.Fatalf("AgentManager.CreateTurn(scoped unavailable) error = %v, want ashby credential error", err)
+	}
+}
+
+func TestBootstrapAgentHostToolSearchPrioritizesNamedPluginIssueTools(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {
+			Source:  config.ProviderSource{Path: "stub"},
+			Default: true,
+		},
+	}
+
+	factories := validFactories()
+	const unavailableIssueProviderCount = 120
+	unavailableIssueProviders := make([]core.Provider, 0, unavailableIssueProviderCount)
+	unavailableIssuePermissions := make([]core.AccessPermission, 0, unavailableIssueProviderCount)
+	for i := range unavailableIssueProviderCount {
+		name := fmt.Sprintf("aaa_ticket_issue_source_%03d", i)
+		unavailableIssueProviders = append(unavailableIssueProviders, &coretesting.StubIntegration{
+			N:        name,
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{
+				Name:        name,
+				DisplayName: "Assigned ticket issue source",
+				Description: "Unavailable issue tracking integration.",
+				Operations: []catalog.CatalogOperation{{
+					ID:          "list_issues",
+					Method:      http.MethodGet,
+					Title:       "List assigned ticket issues",
+					Description: "List tickets and issues assigned to the current user.",
+					Parameters: []catalog.CatalogParameter{{
+						Name:        "assignee",
+						Type:        "string",
+						Description: "Issue assignee filter.",
+					}},
+					ReadOnly: true,
+				}},
+			},
+		})
+		unavailableIssuePermissions = append(unavailableIssuePermissions, core.AccessPermission{
+			Plugin:     name,
+			Operations: []string{"list_issues"},
+		})
+	}
+	factories.Builtins = append(factories.Builtins, unavailableIssueProviders...)
+	factories.Builtins = append(
+		factories.Builtins,
+		&coretesting.StubIntegration{
+			N:        "linear",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name:        "linear",
+				DisplayName: "Linear",
+				Description: "Manage issues, projects, and teams.",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "list_issues",
+						Method:      http.MethodGet,
+						Title:       "All issues",
+						Description: "All issues visible to the authenticated user. Can be filtered by assignee, team, state, labels, project, and cycle.",
+						Parameters: []catalog.CatalogParameter{{
+							Name:        "assignee",
+							Type:        "string",
+							Description: "Issue assignee filter.",
+						}},
+						ReadOnly: true,
+					},
+					{
+						ID:          "list_comments",
+						Method:      http.MethodGet,
+						Title:       "All comments",
+						Description: "All comments the user has access to in the workspace.",
+						ReadOnly:    true,
+					},
+					{
+						ID:          "list_customers",
+						Method:      http.MethodGet,
+						Title:       "All customers",
+						Description: "All customers in the workspace, with optional filtering and sorting.",
+						ReadOnly:    true,
+					},
+					{
+						ID:          "list_documents",
+						Method:      http.MethodGet,
+						Title:       "All documents",
+						Description: "All documents the user has access to in the workspace.",
+						ReadOnly:    true,
+					},
+				},
+			},
+			ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				body, err := json.Marshal(map[string]any{
+					"provider":  "linear",
+					"operation": operation,
+				})
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			},
+		},
+		&coretesting.StubIntegration{
+			N:        "customerRoadmapReview",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name:        "customerRoadmapReview",
+				DisplayName: "Customer Roadmap Review",
+				Description: "Review customer roadmap views, customer needs, endpoints, and current user metadata.",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "publish_customer_view",
+						Method:      http.MethodPost,
+						Title:       "Publish customer view",
+						Description: "Publish a customer-facing view.",
+						ReadOnly:    true,
+					},
+					{
+						ID:          "get_me",
+						Method:      http.MethodGet,
+						Title:       "Get me",
+						Description: "Get current user metadata.",
+						ReadOnly:    true,
+					},
+					{
+						ID:          "get_endpoints",
+						Method:      http.MethodGet,
+						Title:       "Get endpoints",
+						Description: "List available customer roadmap endpoints.",
+						ReadOnly:    true,
+					},
+				},
+			},
+			ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				body, err := json.Marshal(map[string]any{
+					"provider":  "customerRoadmapReview",
+					"operation": operation,
+				})
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+			},
+		},
+	)
+
+	var provider *callbackAgentProvider
+	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
+		started, err := providerhost.StartHostServices(hostServices)
+		if err != nil {
+			return nil, err
+		}
+		value, err := newCallbackAgentProvider(started)
+		if err != nil {
+			_ = started.Close()
+			return nil, err
+		}
+		value.searchQuery = "list my Linear tickets/issues assigned to me"
+		provider = value
+		return value, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	permissions := []core.AccessPermission{
+		{
+			Plugin:     "linear",
+			Operations: []string{"list_issues", "list_comments", "list_customers", "list_documents"},
+		},
+		{
+			Plugin:     "customerRoadmapReview",
+			Operations: []string{"publish_customer_view", "get_me", "get_endpoints"},
+		},
+	}
+	permissions = append(permissions, unavailableIssuePermissions...)
+	perms := principal.CompilePermissions(permissions)
+	p := &principal.Principal{
+		SubjectID:        "user:user-123",
+		UserID:           "user-123",
+		Kind:             principal.KindUser,
+		Source:           principal.SourceSession,
+		TokenPermissions: perms,
+		Scopes:           principal.PermissionPlugins(perms),
+	}
+	ctx := principal.WithPrincipal(context.Background(), p)
+
+	session, err := result.AgentManager.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+		ClientRef:    "cli-session-linear-search",
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession: %v", err)
+	}
+	turn, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
+		IdempotencyKey: "linear-search-idempotency-key",
+		Model:          "gpt-test",
+		Messages:       []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn: %v", err)
+	}
+	if turn == nil {
+		t.Fatal("AgentManager.CreateTurn returned nil turn")
+	}
+
+	provider.mu.Lock()
+	toolBodies := append([]string(nil), provider.toolBodies...)
+	provider.mu.Unlock()
+	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"provider":"linear"`) || !strings.Contains(toolBodies[0], `"operation":"list_issues"`) {
+		t.Fatalf("tool callback bodies = %#v, want first searched tool to be linear.list_issues", toolBodies)
+	}
+
+	ref, err := result.Services.AgentRunMetadata.Get(context.Background(), turn.ID)
+	if err != nil {
+		t.Fatalf("AgentRunMetadata.Get: %v", err)
+	}
+	if len(ref.Tools) == 0 || ref.Tools[0].Target.Plugin != "linear" || ref.Tools[0].Target.Operation != "list_issues" {
+		t.Fatalf("stored searched tools = %#v, want linear.list_issues first", ref.Tools)
+	}
+
+	provider.mu.Lock()
+	provider.searchQuery = "assigned ticket issues"
+	provider.mu.Unlock()
+	second, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
+		IdempotencyKey: "linear-search-after-unavailable-idempotency-key",
+		Model:          "gpt-test",
+		Messages:       []coreagent.Message{{Role: "user", Text: "get my assigned tickets"}},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn(after unavailable hits): %v", err)
+	}
+	if second == nil {
+		t.Fatal("AgentManager.CreateTurn(after unavailable hits) returned nil turn")
+	}
+
+	provider.mu.Lock()
+	toolBodies = append([]string(nil), provider.toolBodies...)
+	provider.mu.Unlock()
+	if len(toolBodies) != 2 || !strings.Contains(toolBodies[1], `"provider":"linear"`) || !strings.Contains(toolBodies[1], `"operation":"list_issues"`) {
+		t.Fatalf("tool callback bodies after unavailable hits = %#v, want second searched tool to be linear.list_issues", toolBodies)
+	}
+
+	secondRef, err := result.Services.AgentRunMetadata.Get(context.Background(), second.ID)
+	if err != nil {
+		t.Fatalf("AgentRunMetadata.Get(after unavailable hits): %v", err)
+	}
+	if len(secondRef.Tools) == 0 || secondRef.Tools[0].Target.Plugin != "linear" || secondRef.Tools[0].Target.Operation != "list_issues" {
+		t.Fatalf("stored searched tools after unavailable hits = %#v, want linear.list_issues first", secondRef.Tools)
 	}
 }
 
