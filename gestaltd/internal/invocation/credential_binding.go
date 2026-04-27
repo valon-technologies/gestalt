@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
+	"github.com/valon-technologies/gestalt/server/internal/observability"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type CredentialBindingResolution struct {
@@ -19,22 +22,37 @@ type CredentialBindingResolution struct {
 }
 
 type EffectiveCredentialBindingResolver interface {
-	ResolveEffectiveCredentialBinding(p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error)
+	ResolveEffectiveCredentialBinding(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error)
 }
 
 type BindingTokenResolver interface {
 	ResolveTokenWithBinding(ctx context.Context, p *principal.Principal, providerName, connection, instance string, boundCredential CredentialBindingResolution) (context.Context, string, error)
 }
 
-func ResolveEffectiveCredentialBinding(authz authorization.RuntimeAuthorizer, p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error) {
-	return resolveCredentialBinding(authz, p, providerName, connection, instance, false)
+func ResolveEffectiveCredentialBinding(ctx context.Context, authz authorization.RuntimeAuthorizer, p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error) {
+	return resolveCredentialBinding(ctx, authz, p, providerName, connection, instance, false)
 }
 
-func ResolveRequestedCredentialBinding(authz authorization.RuntimeAuthorizer, p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error) {
-	return resolveCredentialBinding(authz, p, providerName, connection, instance, true)
+func ResolveRequestedCredentialBinding(ctx context.Context, authz authorization.RuntimeAuthorizer, p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error) {
+	return resolveCredentialBinding(ctx, authz, p, providerName, connection, instance, true)
 }
 
-func resolveCredentialBinding(authz authorization.RuntimeAuthorizer, p *principal.Principal, providerName, connection, instance string, enforceRequested bool) (CredentialBindingResolution, error) {
+func resolveCredentialBinding(ctx context.Context, authz authorization.RuntimeAuthorizer, p *principal.Principal, providerName, connection, instance string, enforceRequested bool) (result CredentialBindingResolution, err error) {
+	startedAt := time.Now()
+	mode := "effective"
+	if enforceRequested {
+		mode = "requested"
+	}
+	attrs := []attribute.KeyValue{
+		attribute.String("gestalt.provider", strings.TrimSpace(providerName)),
+		attribute.String("gestalt.credential.binding_mode", mode),
+	}
+	ctx, span := observability.StartSpan(ctx, "credential.binding.resolve", attrs...)
+	defer func() {
+		observability.EndSpan(span, err)
+		observability.RecordCredentialBindingResolve(ctx, startedAt, err != nil, attrs...)
+	}()
+
 	if authz == nil || p == nil {
 		return CredentialBindingResolution{}, nil
 	}
@@ -93,13 +111,29 @@ func bindingSelectorOverrideError() error {
 }
 
 func ResolveTokenForBinding(ctx context.Context, resolver TokenResolver, p *principal.Principal, providerName, connection, instance string, boundCredential CredentialBindingResolution) (context.Context, string, error) {
+	startedAt := time.Now()
+	attrs := []attribute.KeyValue{
+		attribute.String("gestalt.provider", strings.TrimSpace(providerName)),
+	}
+	ctx, span := observability.StartSpan(ctx, "credential.token.resolve", attrs...)
+	var err error
+	defer func() {
+		observability.EndSpan(span, err)
+		observability.RecordCredentialTokenResolve(ctx, startedAt, err != nil, attrs...)
+	}()
+
 	if resolver == nil {
-		return ctx, "", fmt.Errorf("token resolution not supported")
+		err = fmt.Errorf("token resolution not supported")
+		return ctx, "", err
 	}
 	if boundCredential.HasBinding {
 		if bindingResolver, ok := resolver.(BindingTokenResolver); ok {
-			return bindingResolver.ResolveTokenWithBinding(ctx, p, providerName, connection, instance, boundCredential)
+			var token string
+			ctx, token, err = bindingResolver.ResolveTokenWithBinding(ctx, p, providerName, connection, instance, boundCredential)
+			return ctx, token, err
 		}
 	}
-	return resolver.ResolveToken(ctx, p, providerName, connection, instance)
+	var token string
+	ctx, token, err = resolver.ResolveToken(ctx, p, providerName, connection, instance)
+	return ctx, token, err
 }

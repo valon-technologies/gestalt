@@ -12,7 +12,9 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/observability"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type providerBackedRoleState struct {
@@ -495,7 +497,15 @@ func (a *ProviderBackedAuthorizer) resolveRoleVariants(ctx context.Context, subj
 				Resource: resource,
 			})
 		}
-		resp, err := a.provider.EvaluateMany(ctx, &core.AccessEvaluationsRequest{Requests: reqs})
+		startedAt := time.Now()
+		attrs := []attribute.KeyValue{
+			observability.AttrAuthorizationProvider.String(observability.AuthorizationProviderMetricName(a.provider)),
+			observability.AttrAuthorizationScope.String(resourceType),
+		}
+		evalCtx, span := observability.StartSpan(ctx, "authorization.provider.evaluate", attrs...)
+		resp, err := a.provider.EvaluateMany(evalCtx, &core.AccessEvaluationsRequest{Requests: reqs})
+		observability.EndSpan(span, err)
+		observability.RecordAuthorizationProviderEvaluate(evalCtx, startedAt, err != nil, attrs...)
 		if err != nil {
 			return "", false, err
 		}

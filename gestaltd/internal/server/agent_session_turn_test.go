@@ -18,8 +18,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
+	"github.com/valon-technologies/gestalt/server/internal/observability"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 )
 
 type stubAgentControl struct {
@@ -510,6 +512,86 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		body, _ := io.ReadAll(cancelResp.Body)
 		t.Fatalf("cancel turn status = %d body=%s", cancelResp.StatusCode, body)
 	}
+}
+
+func TestAgentSessionAndTurnMetrics(t *testing.T) {
+	t.Parallel()
+
+	provider := observability.InstrumentAgentProvider("managed", newMemoryAgentProvider())
+	metrics := metrictest.NewManualMeterProvider(t)
+	services := coretesting.NewStubServices(t)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.MeterProvider = metrics.Provider
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "metric-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "metrics@example.com", DisplayName: "Metrics"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent:           &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			Providers:       testutil.NewProviderRegistry(t),
+			SessionMetadata: services.AgentSessions,
+			RunMetadata:     services.AgentRunMetadata,
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"claude-sonnet"}`))
+	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "metric-session"})
+	sessionResp, err := http.DefaultClient.Do(sessionReq)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+	if sessionResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(sessionResp.Body)
+		t.Fatalf("create session status = %d body=%s", sessionResp.StatusCode, string(body))
+	}
+	var session map[string]any
+	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	sessionID, _ := session["id"].(string)
+	if sessionID == "" {
+		t.Fatalf("session response missing id: %#v", session)
+	}
+
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "metric-session"})
+	turnResp, err := http.DefaultClient.Do(turnReq)
+	if err != nil {
+		t.Fatalf("create turn: %v", err)
+	}
+	defer func() { _ = turnResp.Body.Close() }()
+	if turnResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(turnResp.Body)
+		t.Fatalf("create turn status = %d body=%s", turnResp.StatusCode, string(body))
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.agent.operation.count", 1, map[string]string{
+		"gestalt.agent.operation": "create_session",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.agent.operation.count", 1, map[string]string{
+		"gestalt.agent.operation": "create_turn",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.agent.provider.operation.count", 1, map[string]string{
+		"gestalt.agent.provider":  "managed",
+		"gestalt.agent.operation": "create_turn",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.agent.tool.resolve.count", 1, map[string]string{
+		"gestalt.agent.tool.source": "explicit",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.agent.run_metadata.write.count", 1, map[string]string{
+		"gestalt.agent.provider":  "managed",
+		"gestalt.agent.operation": "create_turn",
+	})
 }
 
 func TestAgentSessionsAndTurnsRoundTripWithoutAuth(t *testing.T) {

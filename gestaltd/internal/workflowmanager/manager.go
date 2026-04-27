@@ -767,7 +767,7 @@ func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principa
 	}
 	boundCredential := invocation.CredentialBindingResolution{}
 	if bindingResolver, ok := m.invoker.(invocation.EffectiveCredentialBindingResolver); ok {
-		boundCredential, err = bindingResolver.ResolveEffectiveCredentialBinding(p, pluginName, connection, instance)
+		boundCredential, err = bindingResolver.ResolveEffectiveCredentialBinding(ctx, p, pluginName, connection, instance)
 		if err != nil {
 			return coreworkflow.Target{}, err
 		}

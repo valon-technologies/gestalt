@@ -38,8 +38,10 @@ import (
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	graphqlschema "github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -1628,6 +1630,64 @@ func transportSecretRef(name string) string {
 	return config.EncodeSecretRefTransport(config.SecretRef{
 		Provider: "default",
 		Name:     name,
+	})
+}
+
+func TestBootstrapProviderBoundaryMetrics(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.ExternalCredentials = map[string]*config.ProviderEntry{
+		"remote-creds": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Server.Providers.ExternalCredentials = "remote-creds"
+	cfg.Providers.Authorization = map[string]*config.ProviderEntry{
+		"remote-authz": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Server.Providers.Authorization = "remote-authz"
+
+	factories := validFactories()
+	factories.Authorization = stubAuthorizationFactory("authorization-provider")
+	metrics := metrictest.NewManualMeterProvider(t)
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := result.Close(context.Background()); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	})
+	<-result.ProvidersReady
+
+	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
+	if err := result.Services.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
+		SubjectID:   principal.UserSubjectID("metrics-user"),
+		Integration: "slack",
+		Connection:  "default",
+		Instance:    "default",
+		AccessToken: "tok_metrics",
+	}); err != nil {
+		t.Fatalf("PutCredential: %v", err)
+	}
+	if _, err := result.AuthorizationProvider.Evaluate(ctx, &core.AccessEvaluationRequest{
+		Subject:  &core.SubjectRef{Type: "user", Id: "metrics-user"},
+		Action:   &core.ActionRef{Name: "read"},
+		Resource: &core.ResourceRef{Type: "integration", Id: "slack"},
+	}); err != nil {
+		t.Fatalf("Evaluate: %v", err)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.credential.provider.operation.count", 1, map[string]string{
+		"gestalt.credential.provider":  "remote-creds",
+		"gestalt.credential.operation": "put_credential",
+		"gestalt.provider":             "slack",
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.authorization.provider.operation.count", 1, map[string]string{
+		"gestalt.authorization.provider":  "remote-authz",
+		"gestalt.authorization.operation": "evaluate",
 	})
 }
 

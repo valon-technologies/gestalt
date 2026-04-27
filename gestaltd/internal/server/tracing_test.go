@@ -3,6 +3,7 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,8 +12,11 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/observability"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -182,6 +186,117 @@ func TestTracing_BrokerSpanRecordsErrors(t *testing.T) { //nolint:paralleltest /
 	}
 }
 
+func TestTracing_AgentTurnTraceTree(t *testing.T) { //nolint:paralleltest // mutates global otel.TracerProvider
+	exporter := tracetest.NewInMemoryExporter()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+
+	prev := otel.GetTracerProvider()
+	otel.SetTracerProvider(tp)
+	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+
+	agentProvider := observability.InstrumentAgentProvider("managed", newMemoryAgentProvider())
+	services := coretesting.NewStubServices(t)
+	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+		N:        "docs",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+			ID:       "search",
+			Title:    "Search",
+			ReadOnly: true,
+		}}},
+	})
+	broker := invocation.NewBroker(providers, services.Users, services.ExternalCredentials)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "agent-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "agent-trace@example.com", DisplayName: "Trace"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = providers
+		cfg.Invoker = broker
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent:           &stubAgentControl{defaultProviderName: "managed", provider: agentProvider},
+			Providers:       providers,
+			SessionMetadata: services.AgentSessions,
+			RunMetadata:     services.AgentRunMetadata,
+			Invoker:         broker,
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"claude-sonnet"}`))
+	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "agent-session"})
+	sessionResp, err := http.DefaultClient.Do(sessionReq)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+	if sessionResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(sessionResp.Body)
+		t.Fatalf("create session status = %d body=%s", sessionResp.StatusCode, string(body))
+	}
+	var session map[string]any
+	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	sessionID, _ := session["id"].(string)
+	if sessionID == "" {
+		t.Fatalf("session response missing id: %#v", session)
+	}
+
+	turnBody := `{"messages":[{"role":"user","text":"search docs"}],"toolRefs":[{"pluginName":"docs","operation":"search"}]}`
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(turnBody))
+	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "agent-session"})
+	turnResp, err := http.DefaultClient.Do(turnReq)
+	if err != nil {
+		t.Fatalf("create turn: %v", err)
+	}
+	defer func() { _ = turnResp.Body.Close() }()
+	if turnResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(turnResp.Body)
+		t.Fatalf("create turn status = %d body=%s", turnResp.StatusCode, string(body))
+	}
+
+	_ = tp.ForceFlush(context.Background())
+	spans := exporter.GetSpans()
+	agentSpan := findSpanWithAttr(spans, "agent.operation", "gestalt.agent.operation", "create_turn")
+	if agentSpan == nil {
+		t.Fatalf("expected create_turn agent.operation span, got spans: %v", spanNames(spans))
+	}
+	providerSpan := findSpanWithAttr(spans, "agent.provider.operation", "gestalt.agent.operation", "create_turn")
+	if providerSpan == nil {
+		t.Fatal("expected create_turn agent.provider.operation span")
+	}
+	toolSpan := findSpan(spans, "agent.tool.resolve")
+	if toolSpan == nil {
+		t.Fatal("expected agent.tool.resolve span")
+	}
+	catalogSpan := findSpan(spans, "catalog.operation.resolve")
+	if catalogSpan == nil {
+		t.Fatal("expected catalog.operation.resolve span")
+	}
+	metadataSpan := findSpan(spans, "agent.run_metadata.write")
+	if metadataSpan == nil {
+		t.Fatal("expected agent.run_metadata.write span")
+	}
+	for _, child := range []*tracetest.SpanStub{providerSpan, toolSpan, catalogSpan, metadataSpan} {
+		if child.SpanContext.TraceID() != agentSpan.SpanContext.TraceID() {
+			t.Fatalf("span %q trace id = %s, want agent trace id %s", child.Name, child.SpanContext.TraceID(), agentSpan.SpanContext.TraceID())
+		}
+	}
+	assertSpanHasAttr(t, agentSpan, "gestalt.agent.provider", "managed")
+	assertSpanHasAttr(t, providerSpan, "gestalt.agent.provider", "managed")
+	assertSpanHasAttr(t, catalogSpan, "gestalt.provider", "docs")
+	assertSpanHasAttr(t, catalogSpan, "gestalt.operation", "search")
+	assertSpanHasAttr(t, catalogSpan, "gestalt.catalog.source", "static")
+}
+
 func findSpan(spans tracetest.SpanStubs, name string) *tracetest.SpanStub {
 	for i := range spans {
 		if spans[i].Name == name {
@@ -189,6 +304,28 @@ func findSpan(spans tracetest.SpanStubs, name string) *tracetest.SpanStub {
 		}
 	}
 	return nil
+}
+
+func findSpanWithAttr(spans tracetest.SpanStubs, name string, key string, value string) *tracetest.SpanStub {
+	for i := range spans {
+		if spans[i].Name != name {
+			continue
+		}
+		for _, attr := range spans[i].Attributes {
+			if string(attr.Key) == key && attr.Value.AsString() == value {
+				return &spans[i]
+			}
+		}
+	}
+	return nil
+}
+
+func spanNames(spans tracetest.SpanStubs) []string {
+	names := make([]string, 0, len(spans))
+	for _, span := range spans {
+		names = append(names, span.Name)
+	}
+	return names
 }
 
 func findSpanPrefix(spans tracetest.SpanStubs, prefix string) *tracetest.SpanStub {

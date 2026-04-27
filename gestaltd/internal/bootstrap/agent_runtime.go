@@ -18,7 +18,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/observability"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type agentRuntime struct {
@@ -131,7 +133,13 @@ func (r *agentRuntime) TrackTurn(ctx context.Context, providerName string, req c
 		}
 		return fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
-	_, err := runMetadata.Put(ctx, &coreagent.ExecutionReference{
+	startedAt := time.Now()
+	attrs := []attribute.KeyValue{
+		observability.AttrAgentProvider.String(strings.TrimSpace(providerName)),
+		observability.AttrAgentOperation.String("track_turn"),
+	}
+	metadataCtx, span := observability.StartSpan(ctx, "agent.run_metadata.write", attrs...)
+	_, err := runMetadata.Put(metadataCtx, &coreagent.ExecutionReference{
 		ID:                  turnID,
 		SessionID:           strings.TrimSpace(req.SessionID),
 		ProviderName:        strings.TrimSpace(providerName),
@@ -141,6 +149,8 @@ func (r *agentRuntime) TrackTurn(ctx context.Context, providerName string, req c
 		Permissions:         permissionsForAgentTools(req.Tools),
 		Tools:               append([]coreagent.Tool(nil), req.Tools...),
 	})
+	observability.EndSpan(span, err)
+	observability.RecordAgentRunMetadataWrite(metadataCtx, startedAt, err != nil, attrs...)
 	return err
 }
 

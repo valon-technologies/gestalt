@@ -19,8 +19,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/observability"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 var (
@@ -136,7 +138,22 @@ func (m *Manager) Available() bool {
 	return len(m.agent.ProviderNames()) > 0
 }
 
-func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req coreagent.ResolveToolsRequest) ([]coreagent.Tool, error) {
+func startAgentOperation(ctx context.Context, operation string) (context.Context, func(error)) {
+	startedAt := time.Now()
+	attrs := []attribute.KeyValue{
+		observability.AttrAgentOperation.String(operation),
+	}
+	ctx, span := observability.StartSpan(ctx, "agent.operation", attrs...)
+	return ctx, func(err error) {
+		observability.EndSpan(span, err)
+		observability.RecordAgentOperation(ctx, startedAt, err != nil, attrs...)
+	}
+}
+
+func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req coreagent.ResolveToolsRequest) (tools []coreagent.Tool, err error) {
+	ctx, finish := startAgentOperation(ctx, "resolve_tools")
+	defer func() { finish(err) }()
+
 	p = principal.Canonicalized(p)
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrAgentSubjectRequired
@@ -144,7 +161,10 @@ func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req 
 	return m.resolveTools(ctx, p, strings.TrimSpace(req.CallerPluginName), req.ToolRefs, req.ToolSource)
 }
 
-func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
+func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (session *coreagent.Session, err error) {
+	ctx, finish := startAgentOperation(ctx, "create_session")
+	defer func() { finish(err) }()
+
 	p = principal.Canonicalized(p)
 	if m == nil || m.sessionMetadata == nil {
 		return nil, ErrAgentSessionMetadataNotConfigured
@@ -157,6 +177,7 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	if err != nil {
 		return nil, err
 	}
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(providerName))
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	sessionID := uuid.NewString()
 	if idempotencyKey != "" {
@@ -191,7 +212,7 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 			sessionID = uuid.NewString()
 		}
 	}
-	session, err := provider.CreateSession(ctx, coreagent.CreateSessionRequest{
+	session, err = provider.CreateSession(ctx, coreagent.CreateSessionRequest{
 		SessionID:       sessionID,
 		IdempotencyKey:  idempotencyKey,
 		Model:           strings.TrimSpace(req.Model),
@@ -232,21 +253,31 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	return normalized, nil
 }
 
-func (m *Manager) GetSession(ctx context.Context, p *principal.Principal, sessionID string) (*coreagent.Session, error) {
+func (m *Manager) GetSession(ctx context.Context, p *principal.Principal, sessionID string) (session *coreagent.Session, err error) {
+	ctx, finish := startAgentOperation(ctx, "get_session")
+	defer func() { finish(err) }()
+
 	ref, err := m.requireOwnedSessionMetadata(ctx, sessionID, p)
 	if err != nil {
 		return nil, err
 	}
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ref.ProviderName))
 	return m.getSessionByMetadata(ctx, p, ref)
 }
 
-func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.Session, error) {
+func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, providerName string) (sessions []*coreagent.Session, err error) {
+	ctx, finish := startAgentOperation(ctx, "list_sessions")
+	defer func() { finish(err) }()
+
 	refs, err := m.listOwnedSessionMetadata(ctx, p)
 	if err != nil {
 		return nil, err
 	}
 	refsByProvider := sessionRefsByProvider(refs)
 	providerName = strings.TrimSpace(providerName)
+	if providerName != "" {
+		observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(providerName))
+	}
 	if providerName != "" {
 		if providerRefs, ok := refsByProvider[providerName]; ok {
 			refsByProvider = map[string][]*coreagent.SessionReference{providerName: providerRefs}
@@ -293,16 +324,20 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, prov
 	return out, nil
 }
 
-func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerUpdateSessionRequest) (*coreagent.Session, error) {
+func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerUpdateSessionRequest) (session *coreagent.Session, err error) {
+	ctx, finish := startAgentOperation(ctx, "update_session")
+	defer func() { finish(err) }()
+
 	ref, err := m.requireOwnedSessionMetadata(ctx, req.SessionID, p)
 	if err != nil {
 		return nil, err
 	}
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ref.ProviderName))
 	provider, err := m.resolveProviderByName(ref.ProviderName)
 	if err != nil {
 		return nil, err
 	}
-	session, err := provider.UpdateSession(ctx, coreagent.UpdateSessionRequest{
+	session, err = provider.UpdateSession(ctx, coreagent.UpdateSessionRequest{
 		SessionID: strings.TrimSpace(req.SessionID),
 		ClientRef: strings.TrimSpace(req.ClientRef),
 		State:     req.State,
@@ -326,7 +361,10 @@ func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req
 	return normalized, nil
 }
 
-func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateTurnRequest) (turn *coreagent.Turn, err error) {
+	ctx, finish := startAgentOperation(ctx, "create_turn")
+	defer func() { finish(err) }()
+
 	p = principal.Canonicalized(p)
 	if m == nil || m.runMetadata == nil {
 		return nil, ErrAgentTurnMetadataNotConfigured
@@ -339,6 +377,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	if err != nil {
 		return nil, err
 	}
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(sessionRef.ProviderName))
 	provider, err := m.resolveProviderByName(sessionRef.ProviderName)
 	if err != nil {
 		return nil, err
@@ -384,7 +423,13 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 			turnID = uuid.NewString()
 		}
 	}
-	ref, err := m.runMetadata.Put(ctx, &coreagent.ExecutionReference{
+	metadataStartedAt := time.Now()
+	metadataAttrs := []attribute.KeyValue{
+		observability.AttrAgentProvider.String(sessionRef.ProviderName),
+		observability.AttrAgentOperation.String("create_turn"),
+	}
+	metadataCtx, metadataSpan := observability.StartSpan(ctx, "agent.run_metadata.write", metadataAttrs...)
+	ref, err := m.runMetadata.Put(metadataCtx, &coreagent.ExecutionReference{
 		ID:                  turnID,
 		SessionID:           sessionRef.ID,
 		ProviderName:        sessionRef.ProviderName,
@@ -394,13 +439,15 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		Permissions:         principal.PermissionsToAccessPermissions(p.TokenPermissions),
 		Tools:               tools,
 	})
+	observability.EndSpan(metadataSpan, err)
+	observability.RecordAgentRunMetadataWrite(metadataCtx, metadataStartedAt, err != nil, metadataAttrs...)
 	if err != nil {
 		if idempotencyKey != "" {
 			_ = m.runMetadata.ReleaseIdempotency(ctx, subjectID, sessionRef.ProviderName, idempotencyKey)
 		}
 		return nil, err
 	}
-	turn, err := provider.CreateTurn(ctx, coreagent.CreateTurnRequest{
+	turn, err = provider.CreateTurn(ctx, coreagent.CreateTurnRequest{
 		TurnID:          turnID,
 		SessionID:       sessionRef.ID,
 		IdempotencyKey:  idempotencyKey,
@@ -430,24 +477,32 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	return normalized, nil
 }
 
-func (m *Manager) GetTurn(ctx context.Context, p *principal.Principal, turnID string) (*coreagent.Turn, error) {
+func (m *Manager) GetTurn(ctx context.Context, p *principal.Principal, turnID string) (turn *coreagent.Turn, err error) {
+	ctx, finish := startAgentOperation(ctx, "get_turn")
+	defer func() { finish(err) }()
+
 	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
 	if err != nil {
 		return nil, err
 	}
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ref.ProviderName))
 	return m.getTurnByMetadata(ctx, p, ref)
 }
 
-func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, sessionID string) ([]*coreagent.Turn, error) {
+func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, sessionID string) (turns []*coreagent.Turn, err error) {
+	ctx, finish := startAgentOperation(ctx, "list_turns")
+	defer func() { finish(err) }()
+
 	sessionRef, err := m.requireOwnedSessionMetadata(ctx, sessionID, p)
 	if err != nil {
 		return nil, err
 	}
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(sessionRef.ProviderName))
 	provider, err := m.resolveProviderByName(sessionRef.ProviderName)
 	if err != nil {
 		return nil, err
 	}
-	turns, err := provider.ListTurns(ctx, coreagent.ListTurnsRequest{SessionID: sessionRef.ID})
+	turns, err = provider.ListTurns(ctx, coreagent.ListTurnsRequest{SessionID: sessionRef.ID})
 	if err != nil {
 		return nil, err
 	}
@@ -482,16 +537,20 @@ func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, session
 	return out, nil
 }
 
-func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, turnID, reason string) (*coreagent.Turn, error) {
+func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, turnID, reason string) (turn *coreagent.Turn, err error) {
+	ctx, finish := startAgentOperation(ctx, "cancel_turn")
+	defer func() { finish(err) }()
+
 	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
 	if err != nil {
 		return nil, err
 	}
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ref.ProviderName))
 	provider, err := m.resolveProviderByName(ref.ProviderName)
 	if err != nil {
 		return nil, err
 	}
-	turn, err := provider.CancelTurn(ctx, coreagent.CancelTurnRequest{
+	turn, err = provider.CancelTurn(ctx, coreagent.CancelTurnRequest{
 		TurnID: strings.TrimSpace(turnID),
 		Reason: strings.TrimSpace(reason),
 	})
@@ -504,11 +563,15 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, turnID
 	return normalizeProviderTurn(ref.ProviderName, ref.SessionID, ref.ID, turn)
 }
 
-func (m *Manager) ListTurnEvents(ctx context.Context, p *principal.Principal, turnID string, afterSeq int64, limit int) ([]*coreagent.TurnEvent, error) {
+func (m *Manager) ListTurnEvents(ctx context.Context, p *principal.Principal, turnID string, afterSeq int64, limit int) (events []*coreagent.TurnEvent, err error) {
+	ctx, finish := startAgentOperation(ctx, "list_turn_events")
+	defer func() { finish(err) }()
+
 	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
 	if err != nil {
 		return nil, err
 	}
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ref.ProviderName))
 	provider, err := m.resolveProviderByName(ref.ProviderName)
 	if err != nil {
 		return nil, err
@@ -520,11 +583,15 @@ func (m *Manager) ListTurnEvents(ctx context.Context, p *principal.Principal, tu
 	})
 }
 
-func (m *Manager) ListInteractions(ctx context.Context, p *principal.Principal, turnID string) ([]*coreagent.Interaction, error) {
+func (m *Manager) ListInteractions(ctx context.Context, p *principal.Principal, turnID string) (out []*coreagent.Interaction, err error) {
+	ctx, finish := startAgentOperation(ctx, "list_interactions")
+	defer func() { finish(err) }()
+
 	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
 	if err != nil {
 		return nil, err
 	}
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ref.ProviderName))
 	provider, err := m.resolveProviderByName(ref.ProviderName)
 	if err != nil {
 		return nil, err
@@ -533,7 +600,7 @@ func (m *Manager) ListInteractions(ctx context.Context, p *principal.Principal, 
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*coreagent.Interaction, 0, len(interactions))
+	out = make([]*coreagent.Interaction, 0, len(interactions))
 	for _, interaction := range interactions {
 		if interaction == nil {
 			continue
@@ -549,11 +616,15 @@ func (m *Manager) ListInteractions(ctx context.Context, p *principal.Principal, 
 	return out, nil
 }
 
-func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal, turnID, interactionID string, resolution map[string]any) (*coreagent.Interaction, error) {
+func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal, turnID, interactionID string, resolution map[string]any) (interaction *coreagent.Interaction, err error) {
+	ctx, finish := startAgentOperation(ctx, "resolve_interaction")
+	defer func() { finish(err) }()
+
 	ref, err := m.requireOwnedTurnMetadata(ctx, turnID, p)
 	if err != nil {
 		return nil, err
 	}
+	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ref.ProviderName))
 	interactionID = strings.TrimSpace(interactionID)
 	if interactionID == "" {
 		return nil, ErrAgentInteractionRequired
@@ -562,7 +633,7 @@ func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal
 	if err != nil {
 		return nil, err
 	}
-	interaction, err := provider.ResolveInteraction(ctx, coreagent.ResolveInteractionRequest{
+	interaction, err = provider.ResolveInteraction(ctx, coreagent.ResolveInteractionRequest{
 		InteractionID: interactionID,
 		Resolution:    maps.Clone(resolution),
 	})
@@ -727,7 +798,21 @@ func (m *Manager) requireOwnedTurnMetadata(ctx context.Context, turnID string, p
 	return ref, nil
 }
 
-func (m *Manager) resolveTools(ctx context.Context, p *principal.Principal, callerPluginName string, explicit []coreagent.ToolRef, source coreagent.ToolSourceMode) ([]coreagent.Tool, error) {
+func (m *Manager) resolveTools(ctx context.Context, p *principal.Principal, callerPluginName string, explicit []coreagent.ToolRef, source coreagent.ToolSourceMode) (tools []coreagent.Tool, err error) {
+	startedAt := time.Now()
+	toolSource := string(source)
+	if strings.TrimSpace(toolSource) == "" {
+		toolSource = string(coreagent.ToolSourceModeExplicit)
+	}
+	attrs := []attribute.KeyValue{
+		observability.AttrAgentToolSource.String(toolSource),
+	}
+	ctx, span := observability.StartSpan(ctx, "agent.tool.resolve", attrs...)
+	defer func() {
+		observability.EndSpan(span, err)
+		observability.RecordAgentToolResolve(ctx, startedAt, err != nil, attrs...)
+	}()
+
 	refs := make([]coreagent.ToolRef, 0, len(explicit)+4)
 	refs = append(refs, explicit...)
 	if source == coreagent.ToolSourceModeInheritInvokes {
@@ -795,7 +880,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	}
 	boundCredential := invocation.CredentialBindingResolution{}
 	if bindingResolver, ok := m.invoker.(invocation.EffectiveCredentialBindingResolver); ok {
-		boundCredential, err = bindingResolver.ResolveEffectiveCredentialBinding(p, pluginName, connection, instance)
+		boundCredential, err = bindingResolver.ResolveEffectiveCredentialBinding(ctx, p, pluginName, connection, instance)
 		if err != nil {
 			return coreagent.Tool{}, err
 		}

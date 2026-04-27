@@ -947,9 +947,13 @@ func hostedAgentProviderPoolForTest(t *testing.T, provider coreagent.Provider) *
 	if !ok {
 		t.Fatalf("agent provider type = %T, want *agentProviderWithTracking", provider)
 	}
-	pool, ok := tracked.delegate.(*hostedAgentProviderPool)
+	delegate := tracked.delegate
+	if wrapper, ok := delegate.(interface{ Unwrap() coreagent.Provider }); ok {
+		delegate = wrapper.Unwrap()
+	}
+	pool, ok := delegate.(*hostedAgentProviderPool)
 	if !ok {
-		t.Fatalf("tracked delegate type = %T, want *hostedAgentProviderPool", tracked.delegate)
+		t.Fatalf("tracked delegate type = %T, want *hostedAgentProviderPool", delegate)
 	}
 	return pool
 }
