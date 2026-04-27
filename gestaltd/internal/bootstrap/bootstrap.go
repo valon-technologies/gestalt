@@ -400,7 +400,26 @@ type workflowProviderWithCleanup struct {
 	cleanup func()
 }
 
+type workflowProviderWithExecutionReferencesAndCleanup struct {
+	coreworkflow.Provider
+	coreworkflow.ExecutionReferenceStore
+	cleanup func()
+}
+
 func (p *workflowProviderWithCleanup) Close() error {
+	var errs []error
+	if p != nil && p.Provider != nil {
+		if err := p.Provider.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if p != nil && p.cleanup != nil {
+		p.cleanup()
+	}
+	return errors.Join(errs...)
+}
+
+func (p *workflowProviderWithExecutionReferencesAndCleanup) Close() error {
 	var errs []error
 	if p != nil && p.Provider != nil {
 		if err := p.Provider.Close(); err != nil {
@@ -1684,9 +1703,17 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 		return nil, fmt.Errorf("workflow provider: %w", err)
 	}
 	if cleanup != nil {
-		provider = &workflowProviderWithCleanup{
-			Provider: provider,
-			cleanup:  cleanup,
+		if executionRefs, ok := provider.(coreworkflow.ExecutionReferenceStore); ok {
+			provider = &workflowProviderWithExecutionReferencesAndCleanup{
+				Provider:                provider,
+				ExecutionReferenceStore: executionRefs,
+				cleanup:                 cleanup,
+			}
+		} else {
+			provider = &workflowProviderWithCleanup{
+				Provider: provider,
+				cleanup:  cleanup,
+			}
 		}
 		cleanup = nil
 	}
