@@ -125,6 +125,13 @@ func providerCallContext(parent context.Context) (context.Context, context.Cance
 	return context.WithTimeout(parent, providerRPCTimeout)
 }
 
+func providerMigrationContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	return context.WithTimeout(parent, providerMigrateTimeout)
+}
+
 func providerStreamContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()
