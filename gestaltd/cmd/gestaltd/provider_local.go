@@ -23,7 +23,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
@@ -249,7 +248,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		if !ok {
 			return fmt.Errorf("remote provider dev did not return runtime env for provider %q", target.Name)
 		}
-		process, err := startProviderRemoteProcess(ctx, target, cfg, sessionProvider)
+		process, err := startProviderRemoteProcess(ctx, target, sessionProvider)
 		if err != nil {
 			return err
 		}
@@ -614,7 +613,7 @@ func ensureProviderRemoteManifestResolved(name string, entry *config.ProviderEnt
 	return manifestPath, manifest, nil
 }
 
-func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget, cfg *config.Config, remote providerdev.CreateSessionProvider) (*providerhost.PluginProcess, error) {
+func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget, remote providerdev.CreateSessionProvider) (*providerhost.PluginProcess, error) {
 	entry := target.Entry
 	command := entry.Command
 	args := slices.Clone(entry.Args)
@@ -644,25 +643,18 @@ func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget
 	}
 	env = mergeStringMaps(env, remote.Env)
 
-	allowedHosts := append([]string(nil), entry.AllowedHosts...)
-	for _, host := range remote.AllowedHosts {
-		allowedHosts = appendUniqueString(allowedHosts, host)
-	}
-	defaultAction := egress.PolicyAction("")
-	if cfg != nil {
-		defaultAction = egress.PolicyAction(cfg.Server.Egress.DefaultAction)
-	}
+	// Remote dev runs arbitrary local source trees. The plugin sandbox is tuned
+	// for staged executables and can hide source files from TypeScript/Python
+	// runtimes, so v1 leaves local source execution unsandboxed.
 	process, err := providerhost.StartPluginProcess(ctx, providerhost.ProcessConfig{
-		Command:       command,
-		Args:          args,
-		Env:           env,
-		AllowedHosts:  allowedHosts,
-		DefaultAction: defaultAction,
-		HostBinary:    entry.HostBinary,
-		Cleanup:       cleanup,
-		ProviderName:  target.Name,
-		Stdout:        os.Stdout,
-		Stderr:        os.Stderr,
+		Command:      command,
+		Args:         args,
+		Env:          env,
+		HostBinary:   entry.HostBinary,
+		Cleanup:      cleanup,
+		ProviderName: target.Name,
+		Stdout:       os.Stdout,
+		Stderr:       os.Stderr,
 	})
 	if err != nil {
 		if cleanup != nil {
@@ -1162,14 +1154,6 @@ func mergeStringMaps(base map[string]string, overlay map[string]string) map[stri
 		base[key] = value
 	}
 	return base
-}
-
-func appendUniqueString(values []string, value string) []string {
-	value = strings.TrimSpace(value)
-	if value == "" || slices.Contains(values, value) {
-		return values
-	}
-	return append(values, value)
 }
 
 func canonicalPath(path string) (string, error) {
