@@ -22,6 +22,8 @@ use crate::interactive::{
 use crate::output::{self, Format};
 use crate::params;
 
+mod tui;
+
 const SESSIONS_PATH: &str = "/api/v1/agent/sessions";
 const TURNS_PATH: &str = "/api/v1/agent/turns";
 const DEFAULT_EVENT_PAGE_SIZE: u32 = 100;
@@ -160,6 +162,10 @@ pub fn stream_turn_events(client: &ApiClient, args: &AgentTurnEventStreamArgs) -
 }
 
 pub fn run_interactive(client: &ApiClient, args: &AgentArgs) -> Result<()> {
+    if tui::can_run() {
+        return tui::run(client, args);
+    }
+
     let mut shell = AgentShell::connect(client, args)?;
     shell.print_banner()?;
     let interrupts = InterruptState::install();
@@ -793,18 +799,33 @@ fn stream_turn_events_until_blocked_or_terminal(
     turn_id: &str,
     renderer: &mut AgentTurnRenderer,
 ) -> Result<()> {
+    let after_seq = renderer.after_seq();
+    stream_turn_event_frames(client, turn_id, after_seq, |event| {
+        renderer.render_events(&[event])
+    })
+}
+
+fn stream_turn_event_frames<F>(
+    client: &ApiClient,
+    turn_id: &str,
+    after_seq: u64,
+    mut handle_event: F,
+) -> Result<()>
+where
+    F: FnMut(AgentTurnEventInfo) -> Result<()>,
+{
     let resp = client
         .get_stream(&turn_events_path(
             turn_id,
             true,
-            Some(renderer.after_seq()),
+            Some(after_seq),
             Some(DEFAULT_EVENT_PAGE_SIZE),
             Some(EVENT_STREAM_UNTIL_BLOCKED_OR_TERMINAL),
         ))
         .with_context(|| format!("failed to stream events for agent turn {turn_id}"))?;
     let mut reader = BufReader::new(resp);
     let mut line = String::new();
-    let mut data = String::new();
+    let mut decoder = SseEventDecoder::default();
 
     loop {
         line.clear();
@@ -812,33 +833,49 @@ fn stream_turn_events_until_blocked_or_terminal(
             .read_line(&mut line)
             .context("failed to read agent turn event stream")?;
         if read == 0 {
-            render_sse_event_data(&mut data, renderer)?;
+            if let Some(event) = decoder.finish()? {
+                handle_event(event)?;
+            }
             return Ok(());
         }
 
-        let trimmed = line.trim_end_matches(['\r', '\n']);
-        if trimmed.is_empty() {
-            render_sse_event_data(&mut data, renderer)?;
-            continue;
-        }
-
-        if let Some(value) = trimmed.strip_prefix("data:") {
-            if !data.is_empty() {
-                data.push('\n');
-            }
-            data.push_str(value.strip_prefix(' ').unwrap_or(value));
+        if let Some(event) = decoder.push_line(&line)? {
+            handle_event(event)?;
         }
     }
 }
 
-fn render_sse_event_data(data: &mut String, renderer: &mut AgentTurnRenderer) -> Result<()> {
-    if data.is_empty() {
-        return Ok(());
+#[derive(Default)]
+struct SseEventDecoder {
+    data: String,
+}
+
+impl SseEventDecoder {
+    fn push_line(&mut self, line: &str) -> Result<Option<AgentTurnEventInfo>> {
+        let trimmed = line.trim_end_matches(['\r', '\n']);
+        if trimmed.is_empty() {
+            return self.finish();
+        }
+
+        if let Some(value) = trimmed.strip_prefix("data:") {
+            if !self.data.is_empty() {
+                self.data.push('\n');
+            }
+            self.data.push_str(value.strip_prefix(' ').unwrap_or(value));
+        }
+
+        Ok(None)
     }
-    let raw = std::mem::take(data);
-    let event: AgentTurnEventInfo = serde_json::from_str(&raw)
-        .with_context(|| format!("failed to decode agent turn event stream frame: {raw}"))?;
-    renderer.render_events(&[event])
+
+    fn finish(&mut self) -> Result<Option<AgentTurnEventInfo>> {
+        if self.data.is_empty() {
+            return Ok(None);
+        }
+        let raw = std::mem::take(&mut self.data);
+        serde_json::from_str(&raw)
+            .with_context(|| format!("failed to decode agent turn event stream frame: {raw}"))
+            .map(Some)
+    }
 }
 
 fn create_session_info(

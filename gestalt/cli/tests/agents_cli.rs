@@ -2,9 +2,10 @@ mod support;
 
 use serde_json::Value;
 use std::collections::VecDeque;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
+use std::time::{Duration, Instant};
 use support::*;
 
 const SESSION_JSON: &str = r#"{
@@ -390,6 +391,310 @@ fn test_cli_runs_interactive_agent_session() {
         .stderr(predicate::str::contains("Type /quit to exit."));
 }
 
+#[cfg(unix)]
+#[test]
+fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions",
+            r#"{"provider":"managed","model":"gpt-5.4"}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"hello tui"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-tty",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-tty/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"agent.message.delta\",\"data\":{\"text\":\"hello\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-tty",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-tty",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"hello from tui"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "\x1b[?1049h");
+    session.wait_for(&mut output, "Session");
+    session.write("hello tui\r");
+    session.wait_for(&mut output, "assistant>");
+    session.wait_for(&mut output, "hello");
+    session.write("/quit\r");
+    session.wait_for_exit();
+
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_tty_turn_boundary_stops_stale_streaming_transcript_item() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions",
+            r#"{"provider":"managed","model":"gpt-5.4"}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"first turn"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-first",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-first/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"assistant.delta\",\"data\":{\"text\":\"alpha\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.failed\",\"data\":{}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-first",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-first",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"failed"
+            }"#,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"second turn"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-second",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-second/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"assistant.delta\",\"data\":{\"text\":\"beta\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-second",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-second",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"beta"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.write("first turn\r");
+    session.wait_for(&mut output, "alpha");
+    session.write("second turn\r");
+    session.wait_for(&mut output, "beta");
+    session.write("/quit\r");
+    session.wait_for_exit();
+
+    assert!(
+        !output.contains("alphabeta"),
+        "assistant output from separate turns was merged:\n{output}"
+    );
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_tty_secret_interaction_masks_and_requires_input() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions",
+            r#"{"provider":"managed","model":"gpt-5.4"}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"needs secret"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-secret",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-secret/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"turn.started\",\"data\":{\"status\":\"running\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"interaction.requested\",\"data\":{\"interaction_id\":\"interaction-secret\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-secret",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-secret",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"waiting_for_input",
+                "statusMessage":"waiting for input"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-secret/interactions",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"[
+                {
+                    "id":"interaction-secret",
+                    "turnId":"turn-secret",
+                    "type":"input",
+                    "state":"pending",
+                    "title":"API token",
+                    "prompt":"Enter the deployment token.",
+                    "request":{"required":true,"secret":true}
+                }
+            ]"#,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/turns/turn-secret/interactions/interaction-secret/resolve",
+            r#"{"resolution":{"response":"supersecret"}}"#,
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"interaction-secret",
+                "turnId":"turn-secret",
+                "type":"input",
+                "state":"resolved",
+                "resolution":{"response":"supersecret"}
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-secret/events/stream?after=2&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":3,\"type\":\"interaction.resolved\",\"data\":{\"interaction_id\":\"interaction-secret\"}}\n\n\
+             data: {\"seq\":4,\"type\":\"assistant.completed\",\"data\":{\"text\":\"token accepted\"}}\n\n\
+             data: {\"seq\":5,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-secret",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-secret",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"token accepted"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.write("needs secret\r");
+    session.wait_for(&mut output, "API token");
+    session.write("\r");
+    session.wait_for(&mut output, "A value is required.");
+    session.write("supersecret\r");
+    session.wait_for(&mut output, "assistant>");
+    session.wait_for(&mut output, "accepted");
+    session.write("/quit\r");
+    session.wait_for_exit();
+
+    assert!(
+        !output.contains("supersecret"),
+        "secret input was rendered in TTY output:\n{output}"
+    );
+    server.assert_finished();
+}
+
 #[test]
 fn test_cli_resumes_latest_active_agent_session() {
     let server = ScriptedServer::spawn(vec![
@@ -527,7 +832,8 @@ fn test_cli_agent_help_describes_resume_provider_filter() {
         .success()
         .stdout(predicate::str::contains("--resume"))
         .stdout(predicate::str::contains("--continue"))
-        .stdout(predicate::str::contains("provider filter when resuming"));
+        .stdout(predicate::str::contains("provider filter when resuming"))
+        .stdout(predicate::str::contains("--ui").not());
 }
 
 #[test]
@@ -914,6 +1220,114 @@ struct ScriptedHttpRequest {
     target: String,
     authorization: Option<String>,
     body: Vec<u8>,
+}
+
+#[cfg(unix)]
+struct TtyCliSession {
+    writer: Box<dyn Write + Send>,
+    reader: Option<std::thread::JoinHandle<()>>,
+    rx: mpsc::Receiver<String>,
+    child: Box<dyn portable_pty::Child + Send + Sync>,
+}
+
+#[cfg(unix)]
+impl TtyCliSession {
+    fn write(&mut self, input: &str) {
+        self.writer.write_all(input.as_bytes()).unwrap();
+        self.writer.flush().unwrap();
+    }
+
+    fn wait_for(&mut self, output: &mut String, needle: &str) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !output.contains(needle) {
+            let now = Instant::now();
+            assert!(
+                now < deadline,
+                "timed out waiting for {needle:?}; output was:\n{output}"
+            );
+            let timeout = deadline
+                .saturating_duration_since(now)
+                .min(Duration::from_millis(100));
+            match self.rx.recv_timeout(timeout) {
+                Ok(chunk) => output.push_str(&chunk),
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    panic!("PTY reader closed before seeing {needle:?}; output was:\n{output}")
+                }
+            }
+        }
+    }
+
+    fn wait_for_exit(&mut self) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            if let Some(status) = self.child.try_wait().unwrap() {
+                assert!(status.success(), "TTY CLI exited with {status:?}");
+                if let Some(reader) = self.reader.take() {
+                    let _ = reader.join();
+                }
+                return;
+            }
+            if Instant::now() >= deadline {
+                let _ = self.child.kill();
+                panic!("timed out waiting for TTY CLI to exit");
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+}
+
+#[cfg(unix)]
+fn spawn_tty_cli(home: &std::path::Path, url: &str, args: &[&str]) -> TtyCliSession {
+    use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+
+    std::fs::create_dir_all(home).unwrap();
+    let pty_system = native_pty_system();
+    let pair = pty_system
+        .openpty(PtySize {
+            rows: 24,
+            cols: 100,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .unwrap();
+    let mut cmd = CommandBuilder::new(env!("CARGO_BIN_EXE_gestalt"));
+    cmd.cwd(home);
+    cmd.env("HOME", home);
+    cmd.env("XDG_CONFIG_HOME", home.join("xdg-config"));
+    cmd.env("GESTALT_API_KEY", TEST_TOKEN);
+    cmd.env_remove("GESTALT_URL");
+    cmd.arg("--url");
+    cmd.arg(url);
+    cmd.args(args);
+
+    let child = pair.slave.spawn_command(cmd).unwrap();
+    drop(pair.slave);
+    let mut reader = pair.master.try_clone_reader().unwrap();
+    let writer = pair.master.take_writer().unwrap();
+    let (tx, rx) = mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        let mut buffer = [0; 4096];
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) => return,
+                Ok(read) => {
+                    let chunk = String::from_utf8_lossy(&buffer[..read]).to_string();
+                    if tx.send(chunk).is_err() {
+                        return;
+                    }
+                }
+                Err(_) => return,
+            }
+        }
+    });
+
+    TtyCliSession {
+        writer,
+        reader: Some(reader),
+        rx,
+        child,
+    }
 }
 
 fn read_scripted_http_request(stream: &mut TcpStream) -> ScriptedHttpRequest {
