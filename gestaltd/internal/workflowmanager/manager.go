@@ -11,7 +11,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -41,6 +43,10 @@ type WorkflowControl interface {
 	ProviderNames() []string
 }
 
+type AgentControl interface {
+	ResolveProviderSelection(name string) (providerName string, provider coreagent.Provider, err error)
+}
+
 type Service interface {
 	ListSchedules(ctx context.Context, p *principal.Principal) ([]*ManagedSchedule, error)
 	CreateSchedule(ctx context.Context, p *principal.Principal, req ScheduleUpsert) (*ManagedSchedule, error)
@@ -65,6 +71,8 @@ type Service interface {
 type Config struct {
 	Providers         *registry.ProviderMap[core.Provider]
 	Workflow          WorkflowControl
+	Agent             AgentControl
+	AgentManager      agentmanager.Service
 	Invoker           invocation.Invoker
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
@@ -75,6 +83,8 @@ type Config struct {
 type Manager struct {
 	providers         *registry.ProviderMap[core.Provider]
 	workflow          WorkflowControl
+	agent             AgentControl
+	agentManager      agentmanager.Service
 	invoker           invocation.Invoker
 	authorizer        authorization.RuntimeAuthorizer
 	defaultConnection map[string]string
@@ -126,6 +136,8 @@ func New(cfg Config) *Manager {
 	return &Manager{
 		providers:         cfg.Providers,
 		workflow:          cfg.Workflow,
+		agent:             cfg.Agent,
+		agentManager:      cfg.AgentManager,
 		invoker:           cfg.Invoker,
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
@@ -263,22 +275,15 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, even
 	}
 
 	providerNames := m.workflow.ProviderNames()
-	pluginNames := []string{}
-	if m.providers != nil {
-		pluginNames = m.providers.List()
-	}
 	for _, providerName := range providerNames {
 		provider, err := m.resolveProviderByName(providerName)
 		if err != nil {
 			return coreworkflow.Event{}, err
 		}
-		for _, pluginName := range pluginNames {
-			if err := provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
-				PluginName: pluginName,
-				Event:      event,
-			}); err != nil {
-				return coreworkflow.Event{}, err
-			}
+		if err := provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
+			Event: event,
+		}); err != nil {
+			return coreworkflow.Event{}, err
 		}
 	}
 	return event, nil
@@ -707,10 +712,34 @@ func (m *Manager) resolveProviderByName(providerName string) (coreworkflow.Provi
 }
 
 func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (coreworkflow.Target, error) {
+	pluginTarget := target.PluginTarget()
+	hasPlugin := workflowPluginTargetSet(pluginTarget)
+	hasAgent := target.Agent != nil
+	if hasAgent && hasPlugin {
+		return coreworkflow.Target{}, fmt.Errorf("workflow target must set exactly one of plugin or agent")
+	}
+	if hasAgent {
+		return m.resolveAgentTarget(ctx, p, target.AgentTarget())
+	}
+	return m.resolvePluginTarget(ctx, p, pluginTarget)
+}
+
+func workflowPluginTargetSet(target coreworkflow.PluginTarget) bool {
+	return strings.TrimSpace(target.PluginName) != "" ||
+		strings.TrimSpace(target.Operation) != "" ||
+		strings.TrimSpace(target.Connection) != "" ||
+		strings.TrimSpace(target.Instance) != "" ||
+		len(target.Input) > 0
+}
+
+func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principal, target coreworkflow.PluginTarget) (coreworkflow.Target, error) {
 	if m == nil || m.providers == nil {
 		return coreworkflow.Target{}, fmt.Errorf("%w: workflow providers are not configured", invocation.ErrInternal)
 	}
 	pluginName := strings.TrimSpace(target.PluginName)
+	if pluginName == "" {
+		return coreworkflow.Target{}, fmt.Errorf("%w: workflow target plugin is required", invocation.ErrProviderNotFound)
+	}
 	prov, err := m.providers.Get(pluginName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
@@ -778,13 +807,77 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 			sessionInstance = cred.Instance
 		}
 	}
-	return coreworkflow.Target{
+	pluginTarget := coreworkflow.PluginTarget{
 		PluginName: pluginName,
 		Operation:  opMeta.ID,
 		Connection: connection,
 		Instance:   sessionInstance,
 		Input:      maps.Clone(target.Input),
+	}
+	return coreworkflow.Target{
+		PluginName: pluginTarget.PluginName,
+		Operation:  pluginTarget.Operation,
+		Connection: pluginTarget.Connection,
+		Instance:   pluginTarget.Instance,
+		Input:      pluginTarget.Input,
+		Plugin:     &pluginTarget,
 	}, nil
+}
+
+func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal, target coreworkflow.AgentTarget) (coreworkflow.Target, error) {
+	if m == nil || m.agent == nil || m.agentManager == nil {
+		return coreworkflow.Target{}, fmt.Errorf("%w: agent workflows are not configured", invocation.ErrInternal)
+	}
+	providerName, _, err := m.agent.ResolveProviderSelection(target.ProviderName)
+	if err != nil {
+		return coreworkflow.Target{}, err
+	}
+	target.ProviderName = strings.TrimSpace(providerName)
+	target.Model = strings.TrimSpace(target.Model)
+	target.Prompt = strings.TrimSpace(target.Prompt)
+	if target.ToolSource == coreagent.ToolSourceModeUnspecified {
+		target.ToolSource = coreagent.ToolSourceModeExplicit
+	}
+	if target.ToolSource == coreagent.ToolSourceModeInheritInvokes {
+		return coreworkflow.Target{}, fmt.Errorf("%w: workflow agent targets may not inherit caller plugin invokes", agentmanager.ErrAgentCallerPluginRequired)
+	}
+	if strings.TrimSpace(target.Prompt) == "" && len(target.Messages) == 0 {
+		return coreworkflow.Target{}, fmt.Errorf("workflow agent target prompt or messages is required")
+	}
+	if target.TimeoutSeconds < 0 {
+		return coreworkflow.Target{}, fmt.Errorf("workflow agent target timeout_seconds must not be negative")
+	}
+	resolvedTools, err := m.agentManager.ResolveTools(ctx, p, coreagent.ResolveToolsRequest{
+		ToolRefs:   append([]coreagent.ToolRef(nil), target.ToolRefs...),
+		ToolSource: target.ToolSource,
+	})
+	if err != nil {
+		return coreworkflow.Target{}, err
+	}
+	target.ResponseSchema = maps.Clone(target.ResponseSchema)
+	target.ProviderOptions = maps.Clone(target.ProviderOptions)
+	target.Metadata = maps.Clone(target.Metadata)
+	target.Messages = append([]coreagent.Message(nil), target.Messages...)
+	target.ToolRefs = agentToolRefsFromResolvedTools(resolvedTools)
+	return coreworkflow.Target{Agent: &target}, nil
+}
+
+func agentToolRefsFromResolvedTools(tools []coreagent.Tool) []coreagent.ToolRef {
+	if len(tools) == 0 {
+		return nil
+	}
+	refs := make([]coreagent.ToolRef, 0, len(tools))
+	for _, tool := range tools {
+		refs = append(refs, coreagent.ToolRef{
+			PluginName:  strings.TrimSpace(tool.Target.PluginName),
+			Operation:   strings.TrimSpace(tool.Target.Operation),
+			Connection:  strings.TrimSpace(tool.Target.Connection),
+			Instance:    strings.TrimSpace(tool.Target.Instance),
+			Title:       strings.TrimSpace(tool.Name),
+			Description: strings.TrimSpace(tool.Description),
+		})
+	}
+	return refs
 }
 
 func (m *Manager) requireOwnedSchedule(ctx context.Context, scheduleID string, p *principal.Principal) (*ManagedSchedule, error) {
@@ -936,10 +1029,15 @@ func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerN
 	if subjectID == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
+	targetFingerprint, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		return nil, fmt.Errorf("workflow target fingerprint: %w", err)
+	}
 	return store.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{
 		ID:                  executionRefID,
 		ProviderName:        strings.TrimSpace(providerName),
 		Target:              target,
+		TargetFingerprint:   targetFingerprint,
 		SubjectID:           subjectID,
 		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
 		Permissions:         principal.PermissionsToAccessPermissions(p.TokenPermissions),
@@ -1020,8 +1118,25 @@ func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Princi
 }
 
 func (m *Manager) allowTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) bool {
-	pluginName := strings.TrimSpace(target.PluginName)
-	operation := strings.TrimSpace(target.Operation)
+	if target.Agent != nil {
+		for _, tool := range target.Agent.ToolRefs {
+			pluginName := strings.TrimSpace(tool.PluginName)
+			operation := strings.TrimSpace(tool.Operation)
+			if pluginName == "" || operation == "" {
+				return false
+			}
+			if !m.allowProvider(ctx, p, pluginName) || !m.allowOperation(ctx, p, pluginName, operation) {
+				return false
+			}
+			if !principal.AllowsOperationPermission(p, pluginName, operation) {
+				return false
+			}
+		}
+		return true
+	}
+	pluginTarget := target.PluginTarget()
+	pluginName := strings.TrimSpace(pluginTarget.PluginName)
+	operation := strings.TrimSpace(pluginTarget.Operation)
 	if pluginName == "" || operation == "" {
 		return false
 	}
@@ -1091,10 +1206,7 @@ func scheduleMatchesExecutionRef(providerName string, schedule *coreworkflow.Sch
 	if providerName = strings.TrimSpace(providerName); providerName != "" && strings.TrimSpace(ref.ProviderName) != providerName {
 		return false
 	}
-	return strings.TrimSpace(schedule.Target.PluginName) == strings.TrimSpace(ref.Target.PluginName) &&
-		strings.TrimSpace(schedule.Target.Operation) == strings.TrimSpace(ref.Target.Operation) &&
-		strings.TrimSpace(schedule.Target.Connection) == strings.TrimSpace(ref.Target.Connection) &&
-		strings.TrimSpace(schedule.Target.Instance) == strings.TrimSpace(ref.Target.Instance)
+	return targetMatchesExecutionRef(schedule.Target, ref)
 }
 
 func eventTriggerMatchesExecutionRef(providerName string, trigger *coreworkflow.EventTrigger, ref *coreworkflow.ExecutionReference) bool {
@@ -1104,10 +1216,7 @@ func eventTriggerMatchesExecutionRef(providerName string, trigger *coreworkflow.
 	if providerName = strings.TrimSpace(providerName); providerName != "" && strings.TrimSpace(ref.ProviderName) != providerName {
 		return false
 	}
-	return strings.TrimSpace(trigger.Target.PluginName) == strings.TrimSpace(ref.Target.PluginName) &&
-		strings.TrimSpace(trigger.Target.Operation) == strings.TrimSpace(ref.Target.Operation) &&
-		strings.TrimSpace(trigger.Target.Connection) == strings.TrimSpace(ref.Target.Connection) &&
-		strings.TrimSpace(trigger.Target.Instance) == strings.TrimSpace(ref.Target.Instance)
+	return targetMatchesExecutionRef(trigger.Target, ref)
 }
 
 func runMatchesExecutionRef(providerName string, run *coreworkflow.Run, ref *coreworkflow.ExecutionReference) bool {
@@ -1117,10 +1226,26 @@ func runMatchesExecutionRef(providerName string, run *coreworkflow.Run, ref *cor
 	if providerName = strings.TrimSpace(providerName); providerName != "" && strings.TrimSpace(ref.ProviderName) != providerName {
 		return false
 	}
-	return strings.TrimSpace(run.Target.PluginName) == strings.TrimSpace(ref.Target.PluginName) &&
-		strings.TrimSpace(run.Target.Operation) == strings.TrimSpace(ref.Target.Operation) &&
-		strings.TrimSpace(run.Target.Connection) == strings.TrimSpace(ref.Target.Connection) &&
-		strings.TrimSpace(run.Target.Instance) == strings.TrimSpace(ref.Target.Instance)
+	return targetMatchesExecutionRef(run.Target, ref)
+}
+
+func targetMatchesExecutionRef(target coreworkflow.Target, ref *coreworkflow.ExecutionReference) bool {
+	if ref == nil {
+		return false
+	}
+	if strings.TrimSpace(ref.TargetFingerprint) != "" {
+		fingerprint, err := coreworkflow.TargetFingerprint(target)
+		return err == nil && fingerprint == strings.TrimSpace(ref.TargetFingerprint)
+	}
+	if ref.Target.Agent != nil || target.Agent != nil {
+		return false
+	}
+	left := target.PluginTarget()
+	right := ref.Target.PluginTarget()
+	return strings.TrimSpace(left.PluginName) == strings.TrimSpace(right.PluginName) &&
+		strings.TrimSpace(left.Operation) == strings.TrimSpace(right.Operation) &&
+		strings.TrimSpace(left.Connection) == strings.TrimSpace(right.Connection) &&
+		strings.TrimSpace(left.Instance) == strings.TrimSpace(right.Instance)
 }
 
 func normalizeEventMatch(match coreworkflow.EventMatch) coreworkflow.EventMatch {

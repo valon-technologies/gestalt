@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -20,11 +21,25 @@ import (
 )
 
 type workflowScheduleTargetRequest struct {
-	Plugin     string         `json:"plugin,omitempty"`
-	Operation  string         `json:"operation"`
-	Connection string         `json:"connection,omitempty"`
-	Instance   string         `json:"instance,omitempty"`
-	Input      map[string]any `json:"input,omitempty"`
+	Plugin     string                      `json:"plugin,omitempty"`
+	Operation  string                      `json:"operation"`
+	Connection string                      `json:"connection,omitempty"`
+	Instance   string                      `json:"instance,omitempty"`
+	Input      map[string]any              `json:"input,omitempty"`
+	Agent      *workflowAgentTargetRequest `json:"agent,omitempty"`
+}
+
+type workflowAgentTargetRequest struct {
+	ProviderName    string                `json:"provider,omitempty"`
+	Model           string                `json:"model,omitempty"`
+	Prompt          string                `json:"prompt,omitempty"`
+	Messages        []agentMessageRequest `json:"messages,omitempty"`
+	ToolRefs        []agentToolRefRequest `json:"toolRefs,omitempty"`
+	Tools           []agentToolRefRequest `json:"tools,omitempty"`
+	ResponseSchema  map[string]any        `json:"responseSchema,omitempty"`
+	Metadata        map[string]any        `json:"metadata,omitempty"`
+	ProviderOptions map[string]any        `json:"providerOptions,omitempty"`
+	TimeoutSeconds  int                   `json:"timeoutSeconds,omitempty"`
 }
 
 type workflowScheduleUpsertRequest struct {
@@ -36,11 +51,24 @@ type workflowScheduleUpsertRequest struct {
 }
 
 type workflowScheduleTargetInfo struct {
-	Plugin     string         `json:"plugin,omitempty"`
-	Operation  string         `json:"operation"`
-	Connection string         `json:"connection,omitempty"`
-	Instance   string         `json:"instance,omitempty"`
-	Input      map[string]any `json:"input,omitempty"`
+	Plugin     string                   `json:"plugin,omitempty"`
+	Operation  string                   `json:"operation"`
+	Connection string                   `json:"connection,omitempty"`
+	Instance   string                   `json:"instance,omitempty"`
+	Input      map[string]any           `json:"input,omitempty"`
+	Agent      *workflowAgentTargetInfo `json:"agent,omitempty"`
+}
+
+type workflowAgentTargetInfo struct {
+	ProviderName    string                `json:"provider,omitempty"`
+	Model           string                `json:"model,omitempty"`
+	Prompt          string                `json:"prompt,omitempty"`
+	Messages        []agentMessageRequest `json:"messages,omitempty"`
+	ToolRefs        []agentToolRefRequest `json:"toolRefs,omitempty"`
+	ResponseSchema  map[string]any        `json:"responseSchema,omitempty"`
+	Metadata        map[string]any        `json:"metadata,omitempty"`
+	ProviderOptions map[string]any        `json:"providerOptions,omitempty"`
+	TimeoutSeconds  int                   `json:"timeoutSeconds,omitempty"`
 }
 
 type workflowScheduleInfo struct {
@@ -83,9 +111,8 @@ func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	pluginName := strings.TrimSpace(req.Target.Plugin)
-	if pluginName == "" {
-		writeError(w, http.StatusBadRequest, "workflow target plugin is required")
+	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
+		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of plugin or agent")
 		return
 	}
 	managed, err := s.workflowSchedules.CreateSchedule(r.Context(), p, workflowmanager.ScheduleUpsert{
@@ -96,7 +123,7 @@ func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 		Paused:       req.Paused,
 	})
 	if err != nil {
-		s.writeWorkflowScheduleManagerError(w, r, pluginName, strings.TrimSpace(req.Target.Operation), "", err)
+		s.writeWorkflowScheduleManagerError(w, r, workflowScheduleTargetErrorPlugin(req.Target), workflowScheduleTargetErrorOperation(req.Target), "", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, workflowScheduleInfoFromManaged(managed))
@@ -127,9 +154,8 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	pluginName := strings.TrimSpace(req.Target.Plugin)
-	if pluginName == "" {
-		writeError(w, http.StatusBadRequest, "workflow target plugin is required")
+	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
+		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of plugin or agent")
 		return
 	}
 	managed, err := s.workflowSchedules.UpdateSchedule(r.Context(), p, scheduleID, workflowmanager.ScheduleUpsert{
@@ -140,7 +166,7 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 		Paused:       req.Paused,
 	})
 	if err != nil {
-		s.writeWorkflowScheduleManagerError(w, r, pluginName, strings.TrimSpace(req.Target.Operation), scheduleID, err)
+		s.writeWorkflowScheduleManagerError(w, r, workflowScheduleTargetErrorPlugin(req.Target), workflowScheduleTargetErrorOperation(req.Target), scheduleID, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, workflowScheduleInfoFromManaged(managed))
@@ -201,13 +227,75 @@ func (s *Server) resolveWorkflowScheduleActor(w http.ResponseWriter, r *http.Req
 }
 
 func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) coreworkflow.Target {
-	return coreworkflow.Target{
+	if target.Agent != nil {
+		agentTarget := workflowAgentTargetFromRequest(target.Agent)
+		return coreworkflow.Target{Agent: &agentTarget}
+	}
+	pluginTarget := coreworkflow.PluginTarget{
 		PluginName: strings.TrimSpace(target.Plugin),
 		Operation:  strings.TrimSpace(target.Operation),
 		Connection: strings.TrimSpace(target.Connection),
 		Instance:   strings.TrimSpace(target.Instance),
 		Input:      maps.Clone(target.Input),
 	}
+	return coreworkflow.Target{
+		PluginName: pluginTarget.PluginName,
+		Operation:  pluginTarget.Operation,
+		Connection: pluginTarget.Connection,
+		Instance:   pluginTarget.Instance,
+		Input:      pluginTarget.Input,
+		Plugin:     &pluginTarget,
+	}
+}
+
+func workflowAgentTargetFromRequest(target *workflowAgentTargetRequest) coreworkflow.AgentTarget {
+	if target == nil {
+		return coreworkflow.AgentTarget{}
+	}
+	toolRefs := target.ToolRefs
+	if len(toolRefs) == 0 {
+		toolRefs = target.Tools
+	}
+	return coreworkflow.AgentTarget{
+		ProviderName:    strings.TrimSpace(target.ProviderName),
+		Model:           strings.TrimSpace(target.Model),
+		Prompt:          strings.TrimSpace(target.Prompt),
+		Messages:        agentMessagesFromRequest(target.Messages),
+		ToolRefs:        agentToolRefsFromRequest(toolRefs),
+		ToolSource:      coreagent.ToolSourceModeExplicit,
+		ResponseSchema:  maps.Clone(target.ResponseSchema),
+		Metadata:        maps.Clone(target.Metadata),
+		ProviderOptions: maps.Clone(target.ProviderOptions),
+		TimeoutSeconds:  target.TimeoutSeconds,
+	}
+}
+
+func workflowScheduleTargetRequestHasOneKind(target workflowScheduleTargetRequest) bool {
+	hasPlugin := workflowScheduleTargetRequestHasPluginFields(target)
+	hasAgent := target.Agent != nil
+	return hasPlugin != hasAgent
+}
+
+func workflowScheduleTargetRequestHasPluginFields(target workflowScheduleTargetRequest) bool {
+	return strings.TrimSpace(target.Plugin) != "" ||
+		strings.TrimSpace(target.Operation) != "" ||
+		strings.TrimSpace(target.Connection) != "" ||
+		strings.TrimSpace(target.Instance) != "" ||
+		len(target.Input) > 0
+}
+
+func workflowScheduleTargetErrorPlugin(target workflowScheduleTargetRequest) string {
+	if target.Agent != nil {
+		return "agent"
+	}
+	return strings.TrimSpace(target.Plugin)
+}
+
+func workflowScheduleTargetErrorOperation(target workflowScheduleTargetRequest) string {
+	if target.Agent != nil {
+		return "turn"
+	}
+	return strings.TrimSpace(target.Operation)
 }
 
 func workflowScheduleInfoFromManaged(managed *workflowmanager.ManagedSchedule) workflowScheduleInfo {
@@ -231,14 +319,35 @@ func workflowScheduleInfoFromCore(schedule *coreworkflow.Schedule, providerName 
 	info.CreatedAt = schedule.CreatedAt
 	info.UpdatedAt = schedule.UpdatedAt
 	info.NextRunAt = schedule.NextRunAt
-	info.Target = workflowScheduleTargetInfo{
-		Plugin:     schedule.Target.PluginName,
-		Operation:  schedule.Target.Operation,
-		Connection: userFacingConnectionName(schedule.Target.Connection),
-		Instance:   schedule.Target.Instance,
-		Input:      maps.Clone(schedule.Target.Input),
-	}
+	info.Target = workflowScheduleTargetInfoFromCore(schedule.Target)
 	return info
+}
+
+func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowScheduleTargetInfo {
+	if target.Agent != nil {
+		agentTarget := target.AgentTarget()
+		return workflowScheduleTargetInfo{
+			Agent: &workflowAgentTargetInfo{
+				ProviderName:    agentTarget.ProviderName,
+				Model:           agentTarget.Model,
+				Prompt:          agentTarget.Prompt,
+				Messages:        agentMessageInfoFromCore(agentTarget.Messages),
+				ToolRefs:        agentToolRefsToRequest(agentTarget.ToolRefs),
+				ResponseSchema:  maps.Clone(agentTarget.ResponseSchema),
+				Metadata:        maps.Clone(agentTarget.Metadata),
+				ProviderOptions: maps.Clone(agentTarget.ProviderOptions),
+				TimeoutSeconds:  agentTarget.TimeoutSeconds,
+			},
+		}
+	}
+	pluginTarget := target.PluginTarget()
+	return workflowScheduleTargetInfo{
+		Plugin:     pluginTarget.PluginName,
+		Operation:  pluginTarget.Operation,
+		Connection: userFacingConnectionName(pluginTarget.Connection),
+		Instance:   pluginTarget.Instance,
+		Input:      maps.Clone(pluginTarget.Input),
+	}
 }
 
 func (s *Server) writeWorkflowScheduleProviderError(ctx context.Context, w http.ResponseWriter, pluginName, scheduleID string, err error) {

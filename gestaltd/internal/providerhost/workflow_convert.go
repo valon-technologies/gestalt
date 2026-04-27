@@ -33,11 +33,102 @@ func workflowRunStatusFromProto(status proto.WorkflowRunStatus) (coreworkflow.Ru
 }
 
 func workflowTargetToProto(target coreworkflow.Target) (*proto.BoundWorkflowTarget, error) {
+	plugin, err := workflowPluginTargetToProto(target.PluginTarget())
+	if err != nil {
+		return nil, err
+	}
+	if target.Agent != nil && plugin != nil {
+		return nil, fmt.Errorf("workflow target cannot include both agent and plugin fields")
+	}
+	agent, err := workflowAgentTargetToProto(target.Agent)
+	if err != nil {
+		return nil, err
+	}
+	value := &proto.BoundWorkflowTarget{
+		Plugin: plugin,
+		Agent:  agent,
+	}
+	if plugin != nil {
+		value.PluginName = plugin.PluginName
+		value.Operation = plugin.Operation
+		value.Input = plugin.Input
+		value.Connection = plugin.Connection
+		value.Instance = plugin.Instance
+	}
+	return value, nil
+}
+
+func workflowTargetFromProto(target *proto.BoundWorkflowTarget) coreworkflow.Target {
+	if target == nil {
+		return coreworkflow.Target{}
+	}
+	plugin := workflowPluginTargetFromProto(target.GetPlugin())
+	if workflowPluginTargetEmpty(plugin) {
+		plugin = coreworkflow.PluginTarget{
+			PluginName: strings.TrimSpace(target.GetPluginName()),
+			Operation:  strings.TrimSpace(target.GetOperation()),
+			Connection: strings.TrimSpace(target.GetConnection()),
+			Instance:   strings.TrimSpace(target.GetInstance()),
+			Input:      mapFromStruct(target.GetInput()),
+		}
+	}
+	out := coreworkflow.Target{
+		PluginName: plugin.PluginName,
+		Operation:  plugin.Operation,
+		Connection: plugin.Connection,
+		Instance:   plugin.Instance,
+		Input:      plugin.Input,
+		Agent:      workflowAgentTargetFromProto(target.GetAgent()),
+	}
+	if !workflowPluginTargetEmpty(plugin) {
+		out.Plugin = &plugin
+	}
+	return out
+}
+
+func workflowTargetFromProtoStrict(target *proto.BoundWorkflowTarget) (coreworkflow.Target, error) {
+	if err := validateWorkflowTargetProtoKinds(target); err != nil {
+		return coreworkflow.Target{}, err
+	}
+	return workflowTargetFromProto(target), nil
+}
+
+func validateWorkflowTargetProtoKinds(target *proto.BoundWorkflowTarget) error {
+	if target == nil || target.GetAgent() == nil || !workflowTargetProtoHasPluginFields(target) {
+		return nil
+	}
+	return fmt.Errorf("target cannot include both agent and plugin fields")
+}
+
+func workflowTargetProtoHasPluginFields(target *proto.BoundWorkflowTarget) bool {
+	if target == nil {
+		return false
+	}
+	return target.GetPlugin() != nil ||
+		strings.TrimSpace(target.GetPluginName()) != "" ||
+		strings.TrimSpace(target.GetOperation()) != "" ||
+		strings.TrimSpace(target.GetConnection()) != "" ||
+		strings.TrimSpace(target.GetInstance()) != "" ||
+		target.GetInput() != nil
+}
+
+func workflowPluginTargetEmpty(target coreworkflow.PluginTarget) bool {
+	return strings.TrimSpace(target.PluginName) == "" &&
+		strings.TrimSpace(target.Operation) == "" &&
+		strings.TrimSpace(target.Connection) == "" &&
+		strings.TrimSpace(target.Instance) == "" &&
+		len(target.Input) == 0
+}
+
+func workflowPluginTargetToProto(target coreworkflow.PluginTarget) (*proto.BoundWorkflowPluginTarget, error) {
+	if workflowPluginTargetEmpty(target) {
+		return nil, nil
+	}
 	input, err := structFromMap(target.Input)
 	if err != nil {
 		return nil, fmt.Errorf("workflow target input: %w", err)
 	}
-	return &proto.BoundWorkflowTarget{
+	return &proto.BoundWorkflowPluginTarget{
 		PluginName: target.PluginName,
 		Operation:  target.Operation,
 		Input:      input,
@@ -46,16 +137,68 @@ func workflowTargetToProto(target coreworkflow.Target) (*proto.BoundWorkflowTarg
 	}, nil
 }
 
-func workflowTargetFromProto(target *proto.BoundWorkflowTarget) coreworkflow.Target {
+func workflowPluginTargetFromProto(target *proto.BoundWorkflowPluginTarget) coreworkflow.PluginTarget {
 	if target == nil {
-		return coreworkflow.Target{}
+		return coreworkflow.PluginTarget{}
 	}
-	return coreworkflow.Target{
+	return coreworkflow.PluginTarget{
 		PluginName: strings.TrimSpace(target.GetPluginName()),
 		Operation:  strings.TrimSpace(target.GetOperation()),
 		Connection: strings.TrimSpace(target.GetConnection()),
 		Instance:   strings.TrimSpace(target.GetInstance()),
 		Input:      mapFromStruct(target.GetInput()),
+	}
+}
+
+func workflowAgentTargetToProto(target *coreworkflow.AgentTarget) (*proto.BoundWorkflowAgentTarget, error) {
+	if target == nil {
+		return nil, nil
+	}
+	messages, err := agentMessagesToProto(target.Messages)
+	if err != nil {
+		return nil, err
+	}
+	responseSchema, err := structFromMap(target.ResponseSchema)
+	if err != nil {
+		return nil, fmt.Errorf("workflow agent response_schema: %w", err)
+	}
+	metadata, err := structFromMap(target.Metadata)
+	if err != nil {
+		return nil, fmt.Errorf("workflow agent metadata: %w", err)
+	}
+	providerOptions, err := structFromMap(target.ProviderOptions)
+	if err != nil {
+		return nil, fmt.Errorf("workflow agent provider_options: %w", err)
+	}
+	return &proto.BoundWorkflowAgentTarget{
+		ProviderName:    target.ProviderName,
+		Model:           target.Model,
+		Prompt:          target.Prompt,
+		Messages:        messages,
+		ToolRefs:        agentToolRefsToProto(target.ToolRefs),
+		ToolSource:      agentToolSourceModeToProto(target.ToolSource),
+		ResponseSchema:  responseSchema,
+		Metadata:        metadata,
+		ProviderOptions: providerOptions,
+		TimeoutSeconds:  int32(target.TimeoutSeconds),
+	}, nil
+}
+
+func workflowAgentTargetFromProto(target *proto.BoundWorkflowAgentTarget) *coreworkflow.AgentTarget {
+	if target == nil {
+		return nil
+	}
+	return &coreworkflow.AgentTarget{
+		ProviderName:    strings.TrimSpace(target.GetProviderName()),
+		Model:           strings.TrimSpace(target.GetModel()),
+		Prompt:          target.GetPrompt(),
+		Messages:        agentMessagesFromProto(target.GetMessages()),
+		ToolRefs:        agentToolRefsFromProto(target.GetToolRefs()),
+		ToolSource:      agentToolSourceModeFromProto(target.GetToolSource()),
+		ResponseSchema:  mapFromStruct(target.GetResponseSchema()),
+		Metadata:        mapFromStruct(target.GetMetadata()),
+		ProviderOptions: mapFromStruct(target.GetProviderOptions()),
+		TimeoutSeconds:  int(target.GetTimeoutSeconds()),
 	}
 }
 
@@ -95,6 +238,7 @@ func workflowExecutionReferenceToProto(ref *coreworkflow.ExecutionReference) (*p
 		Id:                  ref.ID,
 		ProviderName:        ref.ProviderName,
 		Target:              target,
+		TargetFingerprint:   ref.TargetFingerprint,
 		SubjectId:           ref.SubjectID,
 		CredentialSubjectId: ref.CredentialSubjectID,
 		Permissions:         workflowAccessPermissionsToProto(ref.Permissions),
@@ -107,10 +251,15 @@ func workflowExecutionReferenceFromProto(ref *proto.WorkflowExecutionReference) 
 	if ref == nil {
 		return nil, nil
 	}
+	target, err := workflowTargetFromProtoStrict(ref.GetTarget())
+	if err != nil {
+		return nil, err
+	}
 	return &coreworkflow.ExecutionReference{
 		ID:                  strings.TrimSpace(ref.GetId()),
 		ProviderName:        strings.TrimSpace(ref.GetProviderName()),
-		Target:              workflowTargetFromProto(ref.GetTarget()),
+		Target:              target,
+		TargetFingerprint:   strings.TrimSpace(ref.GetTargetFingerprint()),
 		SubjectID:           strings.TrimSpace(ref.GetSubjectId()),
 		CredentialSubjectID: strings.TrimSpace(ref.GetCredentialSubjectId()),
 		Permissions:         workflowAccessPermissionsFromProto(ref.GetPermissions()),
@@ -398,6 +547,10 @@ func workflowInvokeRequestFromProto(req *proto.InvokeWorkflowOperationRequest) (
 	if req == nil {
 		return coreworkflow.InvokeOperationRequest{}, nil
 	}
+	target, err := workflowTargetFromProtoStrict(req.GetTarget())
+	if err != nil {
+		return coreworkflow.InvokeOperationRequest{}, err
+	}
 	trigger, err := workflowRunTriggerFromProto(req.GetTrigger())
 	if err != nil {
 		return coreworkflow.InvokeOperationRequest{}, err
@@ -405,7 +558,7 @@ func workflowInvokeRequestFromProto(req *proto.InvokeWorkflowOperationRequest) (
 	return coreworkflow.InvokeOperationRequest{
 		RunID:        req.GetRunId(),
 		Trigger:      trigger,
-		Target:       workflowTargetFromProto(req.GetTarget()),
+		Target:       target,
 		Input:        mapFromStruct(req.GetInput()),
 		Metadata:     mapFromStruct(req.GetMetadata()),
 		CreatedBy:    workflowActorFromProto(req.GetCreatedBy()),

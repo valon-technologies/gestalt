@@ -51,6 +51,8 @@ func (s *stubAgentControl) ProviderNames() []string {
 	return []string{strings.TrimSpace(s.defaultProviderName)}
 }
 
+func (s *stubAgentControl) Ping(context.Context) error { return nil }
+
 type memoryAgentProvider struct {
 	coreagent.UnimplementedProvider
 	mu           sync.Mutex

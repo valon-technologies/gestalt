@@ -1876,6 +1876,10 @@ func (unavailableAgentManager) Available() bool {
 	return false
 }
 
+func (unavailableAgentManager) ResolveTools(context.Context, *principal.Principal, coreagent.ResolveToolsRequest) ([]coreagent.Tool, error) {
+	return nil, fmt.Errorf("agent manager is not available")
+}
+
 func (unavailableAgentManager) CreateSession(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }

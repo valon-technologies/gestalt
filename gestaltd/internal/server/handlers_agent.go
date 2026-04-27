@@ -629,6 +629,24 @@ func agentToolRefsFromRequest(refs []agentToolRefRequest) []coreagent.ToolRef {
 	return out
 }
 
+func agentToolRefsToRequest(refs []coreagent.ToolRef) []agentToolRefRequest {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]agentToolRefRequest, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, agentToolRefRequest{
+			PluginName:  strings.TrimSpace(ref.PluginName),
+			Operation:   strings.TrimSpace(ref.Operation),
+			Connection:  strings.TrimSpace(ref.Connection),
+			Instance:    strings.TrimSpace(ref.Instance),
+			Title:       strings.TrimSpace(ref.Title),
+			Description: strings.TrimSpace(ref.Description),
+		})
+	}
+	return out
+}
+
 func validateAgentToolRefs(refs []agentToolRefRequest) error {
 	for idx, ref := range refs {
 		if strings.TrimSpace(ref.PluginName) == "" {

@@ -35,13 +35,17 @@ func (s *WorkflowHostServer) InvokeOperation(ctx context.Context, req *proto.Inv
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "workflow invoke operation: %v", err)
 	}
-	value.Target.PluginName = strings.TrimSpace(value.Target.PluginName)
-	if value.Target.PluginName == "" {
-		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.plugin_name is required")
-	}
-	value.Target.Operation = strings.TrimSpace(value.Target.Operation)
-	if value.Target.Operation == "" {
-		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.operation is required")
+	if value.Target.Agent == nil {
+		value.Target.PluginName = strings.TrimSpace(value.Target.PluginTarget().PluginName)
+		if value.Target.PluginName == "" {
+			return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.plugin_name is required")
+		}
+		value.Target.Operation = strings.TrimSpace(value.Target.PluginTarget().Operation)
+		if value.Target.Operation == "" {
+			return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.operation is required")
+		}
+	} else if strings.TrimSpace(value.Target.Agent.ProviderName) == "" {
+		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.agent.provider_name is required")
 	}
 	if strings.TrimSpace(value.ExecutionRef) == "" {
 		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: execution_ref is required")

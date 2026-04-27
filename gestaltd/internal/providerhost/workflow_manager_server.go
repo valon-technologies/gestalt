@@ -364,12 +364,20 @@ func workflowManagerScheduleUpsert(
 	targetProto *proto.BoundWorkflowTarget,
 	paused bool,
 ) (workflowmanager.ScheduleUpsert, error) {
-	target := workflowTargetFromProto(targetProto)
-	if strings.TrimSpace(target.PluginName) == "" {
-		return workflowmanager.ScheduleUpsert{}, status.Error(codes.InvalidArgument, "target.plugin_name is required")
+	target, err := workflowTargetFromProtoStrict(targetProto)
+	if err != nil {
+		return workflowmanager.ScheduleUpsert{}, status.Errorf(codes.InvalidArgument, "target: %v", err)
 	}
-	if strings.TrimSpace(target.Operation) == "" {
-		return workflowmanager.ScheduleUpsert{}, status.Error(codes.InvalidArgument, "target.operation is required")
+	if target.Agent == nil {
+		pluginTarget := target.PluginTarget()
+		if strings.TrimSpace(pluginTarget.PluginName) == "" {
+			return workflowmanager.ScheduleUpsert{}, status.Error(codes.InvalidArgument, "target.plugin_name is required")
+		}
+		if strings.TrimSpace(pluginTarget.Operation) == "" {
+			return workflowmanager.ScheduleUpsert{}, status.Error(codes.InvalidArgument, "target.operation is required")
+		}
+	} else if strings.TrimSpace(target.Agent.ProviderName) == "" {
+		return workflowmanager.ScheduleUpsert{}, status.Error(codes.InvalidArgument, "target.agent.provider_name is required")
 	}
 	return workflowmanager.ScheduleUpsert{
 		ProviderName: strings.TrimSpace(providerName),
@@ -386,12 +394,20 @@ func workflowManagerEventTriggerUpsert(
 	targetProto *proto.BoundWorkflowTarget,
 	paused bool,
 ) (workflowmanager.EventTriggerUpsert, error) {
-	target := workflowTargetFromProto(targetProto)
-	if strings.TrimSpace(target.PluginName) == "" {
-		return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "target.plugin_name is required")
+	target, err := workflowTargetFromProtoStrict(targetProto)
+	if err != nil {
+		return workflowmanager.EventTriggerUpsert{}, status.Errorf(codes.InvalidArgument, "target: %v", err)
 	}
-	if strings.TrimSpace(target.Operation) == "" {
-		return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "target.operation is required")
+	if target.Agent == nil {
+		pluginTarget := target.PluginTarget()
+		if strings.TrimSpace(pluginTarget.PluginName) == "" {
+			return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "target.plugin_name is required")
+		}
+		if strings.TrimSpace(pluginTarget.Operation) == "" {
+			return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "target.operation is required")
+		}
+	} else if strings.TrimSpace(target.Agent.ProviderName) == "" {
+		return workflowmanager.EventTriggerUpsert{}, status.Error(codes.InvalidArgument, "target.agent.provider_name is required")
 	}
 	match := workflowEventMatchFromProto(matchProto)
 	if strings.TrimSpace(match.Type) == "" {

@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -507,6 +509,16 @@ type workflowScheduleResponse struct {
 		Connection string         `json:"connection"`
 		Instance   string         `json:"instance"`
 		Input      map[string]any `json:"input"`
+		Agent      *struct {
+			ProviderName   string `json:"provider"`
+			Model          string `json:"model"`
+			Prompt         string `json:"prompt"`
+			TimeoutSeconds int    `json:"timeoutSeconds"`
+			ToolRefs       []struct {
+				PluginName string `json:"pluginName"`
+				Operation  string `json:"operation"`
+			} `json:"toolRefs"`
+		} `json:"agent"`
 	} `json:"target"`
 	Paused bool `json:"paused"`
 }
@@ -525,6 +537,15 @@ type workflowEventTriggerResponse struct {
 		Connection string         `json:"connection"`
 		Instance   string         `json:"instance"`
 		Input      map[string]any `json:"input"`
+		Agent      *struct {
+			ProviderName string `json:"provider"`
+			Model        string `json:"model"`
+			Prompt       string `json:"prompt"`
+			ToolRefs     []struct {
+				PluginName string `json:"pluginName"`
+				Operation  string `json:"operation"`
+			} `json:"toolRefs"`
+		} `json:"agent"`
 	} `json:"target"`
 	Paused bool `json:"paused"`
 }
@@ -695,6 +716,107 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	}
 	if ref.RevokedAt == nil || ref.RevokedAt.IsZero() {
 		t.Fatalf("expected revoked execution ref, got %#v", ref)
+	}
+}
+
+func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	user := seedUser(t, services, "ada-agent@example.test")
+	provider := newMemoryWorkflowProvider()
+	agentProvider := newMemoryAgentProvider()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "roadmap",
+				Operations: []catalog.CatalogOperation{
+					{ID: "sync", Method: http.MethodPost},
+				},
+			},
+		})
+		cfg.Agent = &stubAgentControl{defaultProviderName: "managed", provider: agentProvider}
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Providers: cfg.Providers,
+			Agent:     cfg.Agent,
+			Invoker:   cfg.Invoker,
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			provider:            provider,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"provider":"managed","model":"deep","prompt":"Send the status summary","timeoutSeconds":90,"toolRefs":[{"pluginName":"roadmap","operation":"sync"}]}}}`)
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", createBody)
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	if createResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(createResp.Body)
+		t.Fatalf("expected 201, got %d: %s", createResp.StatusCode, body)
+	}
+	var created workflowScheduleResponse
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.Target.Agent == nil || created.Target.Agent.ProviderName != "managed" || created.Target.Agent.Model != "deep" {
+		t.Fatalf("created agent target = %#v", created.Target.Agent)
+	}
+	if len(created.Target.Agent.ToolRefs) != 1 || created.Target.Agent.ToolRefs[0].PluginName != "roadmap" || created.Target.Agent.ToolRefs[0].Operation != "sync" {
+		t.Fatalf("created agent tools = %#v", created.Target.Agent.ToolRefs)
+	}
+	if len(provider.upsertReqs) != 1 {
+		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
+	}
+	storedTarget := provider.upsertReqs[0].Target
+	if storedTarget.Agent == nil || storedTarget.Agent.ToolSource != coreagent.ToolSourceModeExplicit {
+		t.Fatalf("stored target = %#v", storedTarget)
+	}
+	if provider.upsertReqs[0].ExecutionRef == "" {
+		t.Fatal("expected execution ref")
+	}
+	ref, err := provider.GetExecutionReference(context.Background(), provider.upsertReqs[0].ExecutionRef)
+	if err != nil {
+		t.Fatalf("Get execution ref: %v", err)
+	}
+	if ref.Target.Agent == nil || ref.TargetFingerprint == "" {
+		t.Fatalf("execution ref = %#v", ref)
+	}
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
+	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", listResp.StatusCode)
+	}
+	var listed []workflowScheduleResponse
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Target.Agent == nil || listed[0].Target.Agent.Prompt != "Send the status summary" {
+		t.Fatalf("listed schedules = %#v", listed)
 	}
 }
 
@@ -2255,7 +2377,7 @@ func TestWorkflowEventTriggerCreateRequiresMatchType(t *testing.T) {
 	}
 }
 
-func TestWorkflowEventPublishFansOutAcrossProvidersAndPlugins(t *testing.T) {
+func TestWorkflowEventPublishFansOutAcrossWorkflowProviders(t *testing.T) {
 	t.Parallel()
 
 	services := coretesting.NewStubServices(t)
@@ -2351,16 +2473,11 @@ func TestWorkflowEventPublishFansOutAcrossProvidersAndPlugins(t *testing.T) {
 		"basic":    basicProvider,
 		"advanced": advancedProvider,
 	} {
-		if len(provider.publishEventReqs) != 2 {
-			t.Fatalf("%s publish requests = %d, want 2", name, len(provider.publishEventReqs))
+		if len(provider.publishEventReqs) != 1 {
+			t.Fatalf("%s publish requests = %d, want 1", name, len(provider.publishEventReqs))
 		}
-		gotPlugins := []string{
-			provider.publishEventReqs[0].PluginName,
-			provider.publishEventReqs[1].PluginName,
-		}
-		slices.Sort(gotPlugins)
-		if !slices.Equal(gotPlugins, []string{"roadmap", "slack"}) {
-			t.Fatalf("%s publish plugins = %#v", name, gotPlugins)
+		if got := provider.publishEventReqs[0].PluginName; got != "" {
+			t.Fatalf("%s publish plugin = %q, want empty global publish", name, got)
 		}
 		for _, publishReq := range provider.publishEventReqs {
 			if publishReq.Event.ID != body.Event.ID || publishReq.Event.SpecVersion != "1.0" || publishReq.Event.Time == nil || !publishReq.Event.Time.Equal(*body.Event.Time) {

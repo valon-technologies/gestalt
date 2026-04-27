@@ -162,6 +162,17 @@ func agentToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
 	}
 }
 
+func agentToolRefToProto(ref coreagent.ToolRef) *proto.AgentToolRef {
+	return &proto.AgentToolRef{
+		PluginName:  ref.PluginName,
+		Operation:   ref.Operation,
+		Connection:  ref.Connection,
+		Instance:    ref.Instance,
+		Title:       ref.Title,
+		Description: ref.Description,
+	}
+}
+
 func agentToolRefsFromProto(refs []*proto.AgentToolRef) []coreagent.ToolRef {
 	if len(refs) == 0 {
 		return nil
@@ -169,6 +180,17 @@ func agentToolRefsFromProto(refs []*proto.AgentToolRef) []coreagent.ToolRef {
 	out := make([]coreagent.ToolRef, 0, len(refs))
 	for _, ref := range refs {
 		out = append(out, agentToolRefFromProto(ref))
+	}
+	return out
+}
+
+func agentToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]*proto.AgentToolRef, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, agentToolRefToProto(ref))
 	}
 	return out
 }
@@ -181,6 +203,17 @@ func agentToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.Tool
 		return coreagent.ToolSourceModeInheritInvokes
 	default:
 		return coreagent.ToolSourceModeUnspecified
+	}
+}
+
+func agentToolSourceModeToProto(mode coreagent.ToolSourceMode) proto.AgentToolSourceMode {
+	switch mode {
+	case coreagent.ToolSourceModeExplicit:
+		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_EXPLICIT
+	case coreagent.ToolSourceModeInheritInvokes:
+		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_INHERIT_INVOKES
+	default:
+		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
 	}
 }
 

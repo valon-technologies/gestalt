@@ -1016,12 +1016,8 @@ func validateWorkflowsConfig(cfg *Config) error {
 			if _, exists := normalized[key]; exists {
 				return fmt.Errorf("config validation: workflows.schedules duplicates %q", key)
 			}
-			schedule.Plugin = strings.TrimSpace(schedule.Plugin)
-			if schedule.Plugin == "" {
-				return fmt.Errorf("config validation: workflows.schedules.%s.plugin is required", key)
-			}
-			if _, ok := cfg.Plugins[schedule.Plugin]; !ok {
-				return fmt.Errorf("config validation: workflows.schedules.%s.plugin references unknown plugin %q", key, schedule.Plugin)
+			if err := validateWorkflowScheduleTarget(cfg, key, &schedule); err != nil {
+				return err
 			}
 			schedule.Provider = strings.TrimSpace(schedule.Provider)
 			providerName, _, err := cfg.EffectiveWorkflowProvider(schedule.Provider)
@@ -1039,7 +1035,7 @@ func validateWorkflowsConfig(cfg *Config) error {
 				return err
 			}
 			schedule.Operation = strings.TrimSpace(schedule.Operation)
-			if schedule.Operation == "" {
+			if schedule.Agent == nil && schedule.Operation == "" {
 				return fmt.Errorf("config validation: workflows.schedules.%s.operation is required", key)
 			}
 			schedule.Connection = strings.TrimSpace(schedule.Connection)
@@ -1067,12 +1063,8 @@ func validateWorkflowsConfig(cfg *Config) error {
 			if _, exists := normalized[key]; exists {
 				return fmt.Errorf("config validation: workflows.eventTriggers duplicates %q", key)
 			}
-			trigger.Plugin = strings.TrimSpace(trigger.Plugin)
-			if trigger.Plugin == "" {
-				return fmt.Errorf("config validation: workflows.eventTriggers.%s.plugin is required", key)
-			}
-			if _, ok := cfg.Plugins[trigger.Plugin]; !ok {
-				return fmt.Errorf("config validation: workflows.eventTriggers.%s.plugin references unknown plugin %q", key, trigger.Plugin)
+			if err := validateWorkflowEventTriggerTarget(cfg, key, &trigger); err != nil {
+				return err
 			}
 			trigger.Provider = strings.TrimSpace(trigger.Provider)
 			providerName, _, err := cfg.EffectiveWorkflowProvider(trigger.Provider)
@@ -1089,7 +1081,7 @@ func validateWorkflowsConfig(cfg *Config) error {
 			trigger.Match.Source = strings.TrimSpace(trigger.Match.Source)
 			trigger.Match.Subject = strings.TrimSpace(trigger.Match.Subject)
 			trigger.Operation = strings.TrimSpace(trigger.Operation)
-			if trigger.Operation == "" {
+			if trigger.Agent == nil && trigger.Operation == "" {
 				return fmt.Errorf("config validation: workflows.eventTriggers.%s.operation is required", key)
 			}
 			trigger.Connection = strings.TrimSpace(trigger.Connection)
@@ -1097,6 +1089,117 @@ func validateWorkflowsConfig(cfg *Config) error {
 			normalized[key] = trigger
 		}
 		cfg.Workflows.EventTriggers = normalized
+	}
+	return nil
+}
+
+func validateWorkflowScheduleTarget(cfg *Config, key string, schedule *WorkflowScheduleConfig) error {
+	if schedule == nil {
+		return fmt.Errorf("config validation: workflows.schedules.%s is required", key)
+	}
+	hasAgent := schedule.Agent != nil
+	schedule.Plugin = strings.TrimSpace(schedule.Plugin)
+	hasPlugin := schedule.Plugin != ""
+	if hasAgent == hasPlugin {
+		return fmt.Errorf("config validation: workflows.schedules.%s must set exactly one of plugin or agent", key)
+	}
+	if hasAgent && workflowSchedulePluginFieldsSet(schedule) {
+		return fmt.Errorf("config validation: workflows.schedules.%s cannot set plugin target fields with agent", key)
+	}
+	if hasPlugin {
+		if _, ok := cfg.Plugins[schedule.Plugin]; !ok {
+			return fmt.Errorf("config validation: workflows.schedules.%s.plugin references unknown plugin %q", key, schedule.Plugin)
+		}
+		return nil
+	}
+	return validateWorkflowAgentConfig(cfg, "workflows.schedules."+key+".agent", schedule.Agent)
+}
+
+func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *WorkflowEventTriggerConfig) error {
+	if trigger == nil {
+		return fmt.Errorf("config validation: workflows.eventTriggers.%s is required", key)
+	}
+	hasAgent := trigger.Agent != nil
+	trigger.Plugin = strings.TrimSpace(trigger.Plugin)
+	hasPlugin := trigger.Plugin != ""
+	if hasAgent == hasPlugin {
+		return fmt.Errorf("config validation: workflows.eventTriggers.%s must set exactly one of plugin or agent", key)
+	}
+	if hasAgent && workflowEventTriggerPluginFieldsSet(trigger) {
+		return fmt.Errorf("config validation: workflows.eventTriggers.%s cannot set plugin target fields with agent", key)
+	}
+	if hasPlugin {
+		if _, ok := cfg.Plugins[trigger.Plugin]; !ok {
+			return fmt.Errorf("config validation: workflows.eventTriggers.%s.plugin references unknown plugin %q", key, trigger.Plugin)
+		}
+		return nil
+	}
+	return validateWorkflowAgentConfig(cfg, "workflows.eventTriggers."+key+".agent", trigger.Agent)
+}
+
+func workflowSchedulePluginFieldsSet(schedule *WorkflowScheduleConfig) bool {
+	return strings.TrimSpace(schedule.Operation) != "" ||
+		strings.TrimSpace(schedule.Connection) != "" ||
+		strings.TrimSpace(schedule.Instance) != "" ||
+		len(schedule.Input) > 0
+}
+
+func workflowEventTriggerPluginFieldsSet(trigger *WorkflowEventTriggerConfig) bool {
+	return strings.TrimSpace(trigger.Operation) != "" ||
+		strings.TrimSpace(trigger.Connection) != "" ||
+		strings.TrimSpace(trigger.Instance) != "" ||
+		len(trigger.Input) > 0
+}
+
+func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentConfig) error {
+	if agent == nil {
+		return fmt.Errorf("config validation: %s is required", path)
+	}
+	agent.Provider = strings.TrimSpace(agent.Provider)
+	providerName, _, err := cfg.EffectiveAgentProvider(agent.Provider)
+	if err != nil {
+		return fmt.Errorf("config validation: %s.provider: %w", path, err)
+	}
+	if providerName == "" {
+		return fmt.Errorf("config validation: %s.provider is required", path)
+	}
+	agent.Provider = providerName
+	agent.Model = strings.TrimSpace(agent.Model)
+	agent.Prompt = strings.TrimSpace(agent.Prompt)
+	for i := range agent.Messages {
+		agent.Messages[i].Role = strings.TrimSpace(agent.Messages[i].Role)
+		agent.Messages[i].Text = strings.TrimSpace(agent.Messages[i].Text)
+	}
+	if agent.Prompt == "" && len(agent.Messages) == 0 {
+		return fmt.Errorf("config validation: %s.prompt or messages is required", path)
+	}
+	for i := range agent.Tools {
+		tool := &agent.Tools[i]
+		tool.Plugin = strings.TrimSpace(tool.Plugin)
+		tool.PluginName = strings.TrimSpace(tool.PluginName)
+		if tool.PluginName == "" {
+			tool.PluginName = tool.Plugin
+		}
+		if tool.PluginName == "" {
+			return fmt.Errorf("config validation: %s.tools[%d].plugin is required", path, i)
+		}
+		if _, ok := cfg.Plugins[tool.PluginName]; !ok {
+			return fmt.Errorf("config validation: %s.tools[%d].plugin references unknown plugin %q", path, i, tool.PluginName)
+		}
+		tool.Operation = strings.TrimSpace(tool.Operation)
+		if tool.Operation == "" {
+			return fmt.Errorf("config validation: %s.tools[%d].operation is required", path, i)
+		}
+		tool.Connection = strings.TrimSpace(tool.Connection)
+		tool.Instance = strings.TrimSpace(tool.Instance)
+		tool.Title = strings.TrimSpace(tool.Title)
+		tool.Description = strings.TrimSpace(tool.Description)
+	}
+	agent.Timeout = strings.TrimSpace(agent.Timeout)
+	if agent.Timeout != "" {
+		if _, err := time.ParseDuration(agent.Timeout); err != nil {
+			return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", path, agent.Timeout, err)
+		}
 	}
 	return nil
 }
