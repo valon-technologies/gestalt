@@ -31,7 +31,7 @@ These fields are emitted when available:
 
 | Field | Meaning |
 | --- | --- |
-| `auth_source` | Authentication mechanism for the caller: `session`, `api_token`, or `env`. Rejected retired workload bearer tokens are audit-tagged as `retired_workload_token`. |
+| `auth_source` | Authentication mechanism for the caller: `session`, `api_token`, or `env`. |
 | `subject_id` | Canonical caller subject such as `user:<id>` or `service_account:<id>` |
 | `subject_kind` | Canonical subject type, such as `user` or `service_account` |
 | `target_kind` | Generic kind for the object the event acted on, such as `api_token` or `connection` |
