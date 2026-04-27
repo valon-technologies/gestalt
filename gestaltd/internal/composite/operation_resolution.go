@@ -13,6 +13,14 @@ func (p *Provider) ResolveStaticOperationForRequest(_ context.Context, operation
 	return taggedCatalogOperation(p.api.Catalog(), operation, "")
 }
 
+// ResolveStaticOperationForRequest marks statically merged operations as
+// authoritative for request execution. Merged providers can combine source
+// plugin operations with providers that expose session catalogs; static
+// operations should still route directly to their owning provider.
+func (m *MergedProvider) ResolveStaticOperationForRequest(_ context.Context, operation string) (catalog.CatalogOperation, bool) {
+	return taggedCatalogOperation(m.catalog, operation, "")
+}
+
 func taggedCatalogOperation(cat *catalog.Catalog, operation, transport string) (catalog.CatalogOperation, bool) {
 	if cat == nil {
 		return catalog.CatalogOperation{}, false
