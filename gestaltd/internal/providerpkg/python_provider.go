@@ -29,7 +29,7 @@ var ErrNoPythonSourceComponentPackage = errors.New("no Python source component p
 var pythonIdentifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func DetectPythonProviderTarget(root string) (string, error) {
-	target, err := detectPythonProjectTarget(root, "plugin")
+	target, err := detectPythonProjectTarget(root, "provider")
 	if err != nil {
 		if errors.Is(err, ErrNoPythonSourceComponentPackage) {
 			return "", ErrNoPythonProviderPackage
@@ -79,11 +79,7 @@ func detectPythonProjectTarget(root, key string) (string, error) {
 		return "", ErrNoPythonSourceComponentPackage
 	}
 	if _, _, err := SplitPythonProviderTarget(target); err != nil {
-		label := key
-		if key == "plugin" {
-			label = "provider/plugin"
-		}
-		return "", fmt.Errorf("%s tool.gestalt.%s: %w", pythonProjectFile, label, err)
+		return "", fmt.Errorf("%s tool.gestalt.%s: %w", pythonProjectFile, key, err)
 	}
 	return target, nil
 }
@@ -308,12 +304,6 @@ func isPythonIdentifier(value string) bool {
 }
 
 func pythonProjectTarget(data []byte, wantedKey string) (string, error) {
-	if wantedKey == "plugin" {
-		target, err := pythonProjectTargetValue(data, "provider")
-		if err != nil || target != "" {
-			return target, err
-		}
-	}
 	return pythonProjectTargetValue(data, wantedKey)
 }
 

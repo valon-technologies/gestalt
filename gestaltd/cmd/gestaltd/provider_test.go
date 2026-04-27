@@ -991,7 +991,7 @@ version = "0.0.1-alpha.1"
 dependencies = ["gestalt"]
 
 [tool.gestalt]
-plugin = "os import path\nimport os;os.system('cmd')#:attr"
+provider = "os import path\nimport os;os.system('cmd')#:attr"
 `), 0o644)
 	writeTestFile(t, pluginDir, "provider.py", []byte("plugin = None\n"), 0o644)
 	manifestData, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
@@ -2527,7 +2527,7 @@ version = "0.0.1-alpha.1"
 dependencies = ["gestalt"]
 
 [tool.gestalt]
-plugin = "provider"
+provider = "provider"
 `), 0o644)
 	writeTestFile(t, pluginDir, "provider.py", []byte(`import gestalt
 

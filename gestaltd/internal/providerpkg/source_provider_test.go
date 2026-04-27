@@ -15,7 +15,7 @@ func TestDetectSourceProvider_FallsBackToPythonWhenCargoIsWorkspaceManifest(t *t
 	root := t.TempDir()
 	writeRustWorkspaceCargoToml(t, root)
 	mustWriteFile(t, filepath.Join(root, pythonProjectFile), []byte(`[tool.gestalt]
-plugin = "provider.plugin:plugin"
+provider = "provider.plugin:plugin"
 `), 0o644)
 
 	kind, target, err := detectSourceProvider(root, runtime.GOOS, runtime.GOARCH)

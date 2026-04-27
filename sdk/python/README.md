@@ -7,9 +7,8 @@ It is published to PyPI as `gestalt-sdk` and imported in provider code as
 `gestalt`.
 
 It is intended to be used by source providers discovered through
-`[tool.gestalt].provider` in `pyproject.toml` (or the legacy
-`[tool.gestalt].plugin` key) and by packaged providers built from that
-same source tree.
+`[tool.gestalt].provider` in `pyproject.toml` and by packaged providers
+built from that same source tree.
 
 Python source providers are developed locally via `from.source.path` and
 released through `gestaltd provider release` for the host platform by default,
