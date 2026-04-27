@@ -72,6 +72,15 @@ func (p *graphQLSessionCatalogProvider) PostConnect(ctx context.Context, token *
 	return metadata, err
 }
 
+func (p *graphQLSessionCatalogProvider) SupportsHTTPSubject() bool {
+	return core.SupportsHTTPSubject(p.Provider)
+}
+
+func (p *graphQLSessionCatalogProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+	subject, _, err := core.ResolveHTTPSubject(ctx, p.Provider, req)
+	return subject, err
+}
+
 func (p *graphQLSessionCatalogProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	if _, ok := graphQLCatalogOperation(p.Catalog(), operation); ok {
 		return p.Provider.Execute(ctx, operation, params, token)

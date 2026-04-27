@@ -188,6 +188,29 @@ func (m *MergedProvider) PostConnect(ctx context.Context, token *core.Integratio
 	return nil, core.ErrPostConnectUnsupported
 }
 
+func (m *MergedProvider) SupportsHTTPSubject() bool {
+	for _, provider := range m.owned {
+		if core.SupportsHTTPSubject(provider) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *MergedProvider) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+	for _, provider := range m.owned {
+		if !core.SupportsHTTPSubject(provider) {
+			continue
+		}
+		subject, supported, err := core.ResolveHTTPSubject(ctx, provider, req)
+		if !supported {
+			continue
+		}
+		return subject, err
+	}
+	return nil, nil
+}
+
 func (m *MergedProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
 	if !m.SupportsSessionCatalog() {
 		return nil, core.WrapSessionCatalogUnsupported(fmt.Errorf("provider %q does not support session catalogs", m.Name()))

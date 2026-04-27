@@ -161,6 +161,13 @@ func (p *startupProviderProxy) SupportsSessionCatalog() bool {
 	}
 	return core.SupportsSessionCatalog(provider)
 }
+func (p *startupProviderProxy) SupportsHTTPSubject() bool {
+	provider := p.resolved()
+	if provider == nil {
+		return true
+	}
+	return core.SupportsHTTPSubject(provider)
+}
 func (p *startupProviderProxy) Catalog() *catalog.Catalog {
 	if p.spec.Catalog == nil {
 		return nil
@@ -180,6 +187,21 @@ func (p *startupProviderProxy) Execute(ctx context.Context, operation string, pa
 		return nil, err
 	}
 	return provider.Execute(ctx, operation, params, token)
+}
+
+func (p *startupProviderProxy) ResolveHTTPSubject(ctx context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+	done, err := p.beginWorkflowWait(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+
+	provider, err := p.await(ctx)
+	if err != nil {
+		return nil, err
+	}
+	subject, _, err := core.ResolveHTTPSubject(ctx, provider, req)
+	return subject, err
 }
 
 func (p *startupProviderProxy) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {

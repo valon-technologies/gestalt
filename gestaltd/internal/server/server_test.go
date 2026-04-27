@@ -13973,6 +13973,112 @@ func TestHostedHTTPBinding_RejectsReservedSystemResolvedSubject(t *testing.T) {
 	}
 }
 
+func TestHostedHTTPBinding_ComposedProviderPreservesSubjectResolver(t *testing.T) {
+	t.Parallel()
+
+	subjects := make(chan string, 1)
+	resolved := atomic.Bool{}
+	baseProvider := &stubIntegrationWithResolvedSubject{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "events",
+				ConnMode: core.ConnectionModeNone,
+				ExecuteFn: func(ctx context.Context, op string, params map[string]any, _ string) (*core.OperationResult, error) {
+					if op != "handle_event" {
+						t.Fatalf("operation = %q, want %q", op, "handle_event")
+					}
+					if got, want := params["event"], "opened"; got != want {
+						t.Fatalf("params[event] = %#v, want %q", got, want)
+					}
+					subjects <- principal.FromContext(ctx).SubjectID
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"accepted":true}`}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "handle_event", Method: http.MethodPost}},
+		},
+		resolveFn: func(_ context.Context, req *core.HTTPSubjectResolveRequest) (*core.HTTPResolvedSubject, error) {
+			resolved.Store(true)
+			if got, want := req.Params["event"], "opened"; got != want {
+				t.Fatalf("resolver params[event] = %#v, want %q", got, want)
+			}
+			return &core.HTTPResolvedSubject{
+				ID:          "user:slack-linked",
+				Kind:        string(principal.KindUser),
+				DisplayName: "Slack User",
+				AuthSource:  "authorization",
+			}, nil
+		},
+	}
+	restricted := coreintegration.NewRestricted(baseProvider, map[string]string{"handle_event": ""})
+	otherProvider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "events-mcp",
+			ConnMode: core.ConnectionModeNone,
+		},
+		ops: []core.Operation{{Name: "other_event", Method: http.MethodPost}},
+	}
+	provider, err := composite.NewMergedWithConnections(
+		"events",
+		"Events",
+		"Event receiver",
+		"",
+		composite.BoundProvider{Provider: restricted},
+		composite.BoundProvider{Provider: otherProvider},
+	)
+	if err != nil {
+		t.Fatalf("NewMergedWithConnections: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"events": {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"public": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"event": {
+						Path:     "/event",
+						Method:   http.MethodPost,
+						Security: "public",
+						Target:   "handle_event",
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/events/event", strings.NewReader(`{"event":"opened"}`))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http binding request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, http.StatusOK, strings.TrimSpace(string(body)))
+	}
+	if !resolved.Load() {
+		t.Fatal("expected composed provider to call HTTP subject resolver")
+	}
+
+	select {
+	case subjectID := <-subjects:
+		if subjectID != "user:slack-linked" {
+			t.Fatalf("operation subject = %q, want %q", subjectID, "user:slack-linked")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for http binding invocation")
+	}
+}
+
 func TestHostedHTTPBinding_CredentialModeNoneBypassesProviderTokenLookup(t *testing.T) {
 	t.Parallel()
 
