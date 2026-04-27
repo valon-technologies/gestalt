@@ -66,6 +66,7 @@ type AgentControl interface {
 
 type Service interface {
 	Available() bool
+	ResolveTools(ctx context.Context, p *principal.Principal, req coreagent.ResolveToolsRequest) ([]coreagent.Tool, error)
 	CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error)
 	GetSession(ctx context.Context, p *principal.Principal, sessionID string) (*coreagent.Session, error)
 	ListSessions(ctx context.Context, p *principal.Principal, providerName string) ([]*coreagent.Session, error)
@@ -136,6 +137,14 @@ func (m *Manager) Available() bool {
 		return false
 	}
 	return len(m.agent.ProviderNames()) > 0
+}
+
+func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req coreagent.ResolveToolsRequest) ([]coreagent.Tool, error) {
+	p = principal.Canonicalized(p)
+	if strings.TrimSpace(principalSubjectID(p)) == "" {
+		return nil, ErrAgentSubjectRequired
+	}
+	return m.resolveTools(ctx, p, strings.TrimSpace(req.CallerPluginName), req.ToolRefs, req.ToolSource)
 }
 
 func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {

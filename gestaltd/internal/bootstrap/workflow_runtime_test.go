@@ -10,9 +10,11 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/agentmanager"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -334,6 +336,161 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	}
 	if got := trigger["scheduledFor"]; got != scheduledFor.UTC().Format(time.RFC3339Nano) {
 		t.Fatalf("scheduledFor = %#v, want %q", got, scheduledFor.UTC().Format(time.RFC3339Nano))
+	}
+}
+
+func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	reg := registry.New()
+	if err := reg.Providers.Register("roadmap", &coretesting.StubIntegration{
+		N:        "roadmap",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "roadmap",
+			Operations: []catalog.CatalogOperation{
+				{ID: "sync", Method: http.MethodPost},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("Register roadmap: %v", err)
+	}
+	agentProvider := newStubAgentTurnManagerProvider()
+	agentRuntime := &agentRuntime{
+		defaultProviderName: "managed",
+		providers:           map[string]coreagent.Provider{"managed": agentProvider},
+	}
+	agentRuntime.SetRunMetadata(services.AgentRunMetadata)
+	manager := agentmanager.New(agentmanager.Config{
+		Providers:       &reg.Providers,
+		Agent:           agentRuntime,
+		SessionMetadata: services.AgentSessions,
+		RunMetadata:     services.AgentRunMetadata,
+	})
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{},
+	}
+	runtime.SetAgentManager(manager)
+
+	req := coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-agent-123",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName:   "managed",
+			Model:          "deep",
+			Prompt:         "Send the status summary",
+			ToolSource:     coreagent.ToolSourceModeExplicit,
+			ToolRefs:       []coreagent.ToolRef{{PluginName: "roadmap", Operation: "sync"}},
+			TimeoutSeconds: 5,
+		}},
+		Trigger: coreworkflow.RunTrigger{Manual: true},
+	}
+	p := principal.Canonicalize(&principal.Principal{
+		SubjectID:           principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}}),
+	})
+
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if len(agentProvider.createSessionRequests) != 1 {
+		t.Fatalf("session requests = %d, want 1", len(agentProvider.createSessionRequests))
+	}
+	if got := agentProvider.createSessionRequests[0].IdempotencyKey; got != "workflow:temporal:run-agent-123:session" {
+		t.Fatalf("session idempotency key = %q", got)
+	}
+	if len(agentProvider.createTurnRequests) != 1 {
+		t.Fatalf("turn requests = %d, want 1", len(agentProvider.createTurnRequests))
+	}
+	turnReq := agentProvider.createTurnRequests[0]
+	if got := turnReq.IdempotencyKey; got != "workflow:temporal:run-agent-123:turn" {
+		t.Fatalf("turn idempotency key = %q", got)
+	}
+	if len(turnReq.Messages) != 1 || turnReq.Messages[0].Text != "Send the status summary" {
+		t.Fatalf("turn messages = %#v", turnReq.Messages)
+	}
+	if len(turnReq.Tools) != 1 || turnReq.Tools[0].Target.PluginName != "roadmap" || turnReq.Tools[0].Target.Operation != "sync" {
+		t.Fatalf("turn tools = %#v", turnReq.Tools)
+	}
+}
+
+func TestWorkflowRuntimeRejectsMixedAgentPluginTargetWithLegacyExecutionRef(t *testing.T) {
+	t.Parallel()
+
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:           "legacy-ref",
+		ProviderName: "temporal",
+		Target: coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "sync",
+		},
+		SubjectID: principal.WorkloadSubjectID("scheduler"),
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+	_, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		ExecutionRef: "legacy-ref",
+		RunID:        "run-123",
+		Target: coreworkflow.Target{
+			PluginName: "roadmap",
+			Operation:  "sync",
+			Agent: &coreworkflow.AgentTarget{
+				ProviderName:   "managed",
+				Prompt:         "send reminder",
+				ToolSource:     coreagent.ToolSourceModeExplicit,
+				TimeoutSeconds: 5,
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("Invoke mixed agent/plugin target succeeded, want error")
+	}
+}
+
+func TestWorkflowRuntimeRejectsAgentExecutionRefWithoutFingerprint(t *testing.T) {
+	t.Parallel()
+
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	target := coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+		ProviderName: "managed",
+		Prompt:       "send reminder",
+		ToolSource:   coreagent.ToolSourceModeExplicit,
+	}}
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:           "agent-ref-without-fingerprint",
+		ProviderName: "temporal",
+		Target:       target,
+		SubjectID:    principal.WorkloadSubjectID("scheduler"),
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+	_, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		ExecutionRef: "agent-ref-without-fingerprint",
+		RunID:        "run-123",
+		Target:       target,
+	})
+	if err == nil {
+		t.Fatal("Invoke agent target without execution-ref fingerprint succeeded, want error")
 	}
 }
 

@@ -141,6 +141,7 @@ type Config struct {
 	AuditSink             core.AuditSink
 	Services              *coredata.Services
 	Providers             *registry.ProviderMap[core.Provider]
+	Agent                 bootstrap.AgentControl
 	AgentManager          agentmanager.Service
 	Workflow              bootstrap.WorkflowControl
 	PluginRuntimes        bootstrap.RuntimeInspector
@@ -342,6 +343,8 @@ func New(cfg Config) (*Server, error) {
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
 		Providers:         cfg.Providers,
 		Workflow:          cfg.Workflow,
+		Agent:             cfg.Agent,
+		AgentManager:      cfg.AgentManager,
 		Invoker:           cfg.Invoker,
 		Authorizer:        cfg.Authorizer,
 		DefaultConnection: cfg.DefaultConnection,

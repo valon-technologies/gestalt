@@ -2,9 +2,14 @@ package workflow
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 )
 
 const ConfigManagedSchedulePrefix = "cfg_"
@@ -32,12 +37,36 @@ type Target struct {
 	Connection string
 	Instance   string
 	Input      map[string]any
+	Plugin     *PluginTarget
+	Agent      *AgentTarget
+}
+
+type PluginTarget struct {
+	PluginName string
+	Operation  string
+	Connection string
+	Instance   string
+	Input      map[string]any
+}
+
+type AgentTarget struct {
+	ProviderName    string
+	Model           string
+	Prompt          string
+	Messages        []coreagent.Message
+	ToolRefs        []coreagent.ToolRef
+	ToolSource      coreagent.ToolSourceMode
+	ResponseSchema  map[string]any
+	ProviderOptions map[string]any
+	Metadata        map[string]any
+	TimeoutSeconds  int
 }
 
 type ExecutionReference struct {
 	ID                  string
 	ProviderName        string
 	Target              Target
+	TargetFingerprint   string
 	SubjectID           string
 	CredentialSubjectID string
 	Permissions         []core.AccessPermission
@@ -241,4 +270,76 @@ type Provider interface {
 
 type Host interface {
 	InvokeOperation(ctx context.Context, req InvokeOperationRequest) (*InvokeOperationResponse, error)
+}
+
+func (t Target) PluginTarget() PluginTarget {
+	if t.Plugin != nil {
+		return *t.Plugin
+	}
+	return PluginTarget{
+		PluginName: t.PluginName,
+		Operation:  t.Operation,
+		Connection: t.Connection,
+		Instance:   t.Instance,
+		Input:      t.Input,
+	}
+}
+
+func (t Target) AgentTarget() AgentTarget {
+	if t.Agent != nil {
+		return *t.Agent
+	}
+	return AgentTarget{}
+}
+
+func TargetFingerprint(target Target) (string, error) {
+	if target.Agent != nil && !emptyPluginTarget(target.PluginTarget()) {
+		return "", fmt.Errorf("target cannot include both agent and plugin fields")
+	}
+	payload, err := json.Marshal(normalizedTargetFingerprintPayload(target))
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func normalizedTargetFingerprintPayload(target Target) Target {
+	out := Target{}
+	if target.Agent != nil {
+		agentTarget := target.AgentTarget()
+		if len(agentTarget.Messages) == 0 {
+			agentTarget.Messages = nil
+		}
+		if len(agentTarget.ToolRefs) == 0 {
+			agentTarget.ToolRefs = nil
+		}
+		if len(agentTarget.ResponseSchema) == 0 {
+			agentTarget.ResponseSchema = nil
+		}
+		if len(agentTarget.ProviderOptions) == 0 {
+			agentTarget.ProviderOptions = nil
+		}
+		if len(agentTarget.Metadata) == 0 {
+			agentTarget.Metadata = nil
+		}
+		out.Agent = &agentTarget
+		return out
+	}
+	pluginTarget := target.PluginTarget()
+	if !emptyPluginTarget(pluginTarget) {
+		if len(pluginTarget.Input) == 0 {
+			pluginTarget.Input = nil
+		}
+		out.Plugin = &pluginTarget
+	}
+	return out
+}
+
+func emptyPluginTarget(target PluginTarget) bool {
+	return target.PluginName == "" &&
+		target.Operation == "" &&
+		target.Connection == "" &&
+		target.Instance == "" &&
+		len(target.Input) == 0
 }

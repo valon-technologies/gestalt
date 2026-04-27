@@ -977,6 +977,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	prepared.Deps.PluginInvoker = pluginInvoker
 	prepared.Deps.WorkflowManager = workflowManager
 	prepared.Deps.AgentManager = agentManager
+	prepared.Deps.WorkflowRuntime.SetAgentManager(agentManager)
 
 	providers, providersReady, connAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
@@ -1026,6 +1027,8 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	workflowManager.SetTarget(workflowmanager.New(workflowmanager.Config{
 		Providers:         providers,
 		Workflow:          prepared.Deps.WorkflowRuntime,
+		Agent:             prepared.Deps.AgentRuntime,
+		AgentManager:      agentManager,
 		Invoker:           sharedInvoker,
 		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,

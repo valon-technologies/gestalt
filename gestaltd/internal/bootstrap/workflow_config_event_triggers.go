@@ -36,7 +36,7 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 	for _, rowID := range slices.Sorted(maps.Keys(desired)) {
 		desiredEntry := desired[rowID]
 		trigger := desiredEntry.trigger
-		pluginName := trigger.Plugin
+		pluginName := workflowConfigTargetLabel(workflowConfigEventTriggerTarget(trigger))
 		providerName, provider, err := runtime.ResolveProviderSelection(trigger.Provider)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q: %w", desiredEntry.TriggerKey, pluginName, err)
@@ -142,13 +142,13 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 		}
 		var executionRefs coreworkflow.ExecutionReferenceStore
 		for _, trigger := range triggers {
-			if trigger == nil || !isWorkflowConfigOwnedEventTrigger(trigger, trigger.Target.PluginName, trigger.ID) {
+			if trigger == nil || !isWorkflowConfigOwnedEventTrigger(trigger, workflowConfigTargetLabel(trigger.Target), trigger.ID) {
 				continue
 			}
 			if _, ok := desiredByProviderTrigger[workflowConfigProviderObjectKey(providerName, trigger.ID)]; ok {
 				continue
 			}
-			pluginName := strings.TrimSpace(trigger.Target.PluginName)
+			pluginName := workflowConfigTargetLabel(trigger.Target)
 			providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
 			if err := provider.DeleteEventTrigger(providerCtx, coreworkflow.DeleteEventTriggerRequest{TriggerID: trigger.ID}); err != nil && !isWorkflowObjectNotFound(err) {
 				return fmt.Errorf("bootstrap: delete workflow event trigger %q for plugin %q: %w", trigger.ID, pluginName, err)
@@ -174,11 +174,7 @@ func isAdoptableWorkflowEventTrigger(existing *coreworkflow.EventTrigger, trigge
 	return existing.ID == triggerID &&
 		existing.Match == workflowConfigEventTriggerMatch(trigger) &&
 		existing.Paused == trigger.Paused &&
-		existing.Target.PluginName == trigger.Plugin &&
-		existing.Target.Operation == trigger.Operation &&
-		existing.Target.Connection == trigger.Connection &&
-		existing.Target.Instance == trigger.Instance &&
-		workflowTargetInputsEqual(existing.Target.Input, trigger.Input)
+		workflowTargetsEqual(existing.Target, workflowConfigEventTriggerTarget(trigger))
 }
 
 func isWorkflowConfigOwnedEventTrigger(existing *coreworkflow.EventTrigger, pluginName, triggerID string) bool {
@@ -187,7 +183,7 @@ func isWorkflowConfigOwnedEventTrigger(existing *coreworkflow.EventTrigger, plug
 	}
 	actor := workflowConfigActor()
 	return existing.ID == triggerID &&
-		existing.Target.PluginName == pluginName &&
+		workflowConfigTargetLabel(existing.Target) == pluginName &&
 		existing.CreatedBy.SubjectID == actor.SubjectID &&
 		existing.CreatedBy.SubjectKind == actor.SubjectKind &&
 		existing.CreatedBy.AuthSource == actor.AuthSource
@@ -202,12 +198,23 @@ func workflowConfigEventTriggerMatch(trigger config.WorkflowEventTriggerConfig) 
 }
 
 func workflowConfigEventTriggerTarget(trigger config.WorkflowEventTriggerConfig) coreworkflow.Target {
-	return coreworkflow.Target{
+	if trigger.Agent != nil {
+		return coreworkflow.Target{Agent: workflowConfigAgentTarget(trigger.Agent)}
+	}
+	pluginTarget := coreworkflow.PluginTarget{
 		PluginName: trigger.Plugin,
 		Operation:  trigger.Operation,
 		Connection: trigger.Connection,
 		Instance:   trigger.Instance,
 		Input:      maps.Clone(trigger.Input),
+	}
+	return coreworkflow.Target{
+		PluginName: pluginTarget.PluginName,
+		Operation:  pluginTarget.Operation,
+		Connection: pluginTarget.Connection,
+		Instance:   pluginTarget.Instance,
+		Input:      pluginTarget.Input,
+		Plugin:     &pluginTarget,
 	}
 }
 

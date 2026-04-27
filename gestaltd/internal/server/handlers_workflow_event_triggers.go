@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"net/http"
 	"strings"
 	"time"
@@ -75,9 +74,8 @@ func (s *Server) createGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	pluginName := strings.TrimSpace(req.Target.Plugin)
-	if pluginName == "" {
-		writeError(w, http.StatusBadRequest, "workflow target plugin is required")
+	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
+		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of plugin or agent")
 		return
 	}
 	if strings.TrimSpace(req.Match.Type) == "" {
@@ -91,7 +89,7 @@ func (s *Server) createGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		Paused:       req.Paused,
 	})
 	if err != nil {
-		s.writeWorkflowEventTriggerManagerError(w, r, pluginName, strings.TrimSpace(req.Target.Operation), "", err)
+		s.writeWorkflowEventTriggerManagerError(w, r, workflowScheduleTargetErrorPlugin(req.Target), workflowScheduleTargetErrorOperation(req.Target), "", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, workflowEventTriggerInfoFromManaged(managed))
@@ -122,9 +120,8 @@ func (s *Server) updateGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	pluginName := strings.TrimSpace(req.Target.Plugin)
-	if pluginName == "" {
-		writeError(w, http.StatusBadRequest, "workflow target plugin is required")
+	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
+		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of plugin or agent")
 		return
 	}
 	if strings.TrimSpace(req.Match.Type) == "" {
@@ -138,7 +135,7 @@ func (s *Server) updateGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		Paused:       req.Paused,
 	})
 	if err != nil {
-		s.writeWorkflowEventTriggerManagerError(w, r, pluginName, strings.TrimSpace(req.Target.Operation), triggerID, err)
+		s.writeWorkflowEventTriggerManagerError(w, r, workflowScheduleTargetErrorPlugin(req.Target), workflowScheduleTargetErrorOperation(req.Target), triggerID, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, workflowEventTriggerInfoFromManaged(managed))
@@ -211,13 +208,7 @@ func workflowEventTriggerInfoFromCore(trigger *coreworkflow.EventTrigger, provid
 		Source:  trigger.Match.Source,
 		Subject: trigger.Match.Subject,
 	}
-	info.Target = workflowScheduleTargetInfo{
-		Plugin:     trigger.Target.PluginName,
-		Operation:  trigger.Target.Operation,
-		Connection: userFacingConnectionName(trigger.Target.Connection),
-		Instance:   trigger.Target.Instance,
-		Input:      maps.Clone(trigger.Target.Input),
-	}
+	info.Target = workflowScheduleTargetInfoFromCore(trigger.Target)
 	info.Paused = trigger.Paused
 	info.CreatedAt = trigger.CreatedAt
 	info.UpdatedAt = trigger.UpdatedAt

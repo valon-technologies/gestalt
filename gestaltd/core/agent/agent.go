@@ -101,6 +101,12 @@ type ToolRef struct {
 	Description string
 }
 
+type ResolveToolsRequest struct {
+	ToolRefs         []ToolRef
+	ToolSource       ToolSourceMode
+	CallerPluginName string
+}
+
 type ToolSourceMode string
 
 const (

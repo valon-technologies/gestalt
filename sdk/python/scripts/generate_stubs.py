@@ -88,6 +88,10 @@ def main() -> int:
                 raise RuntimeError(
                     f"buf generated {module_name}_pb2.py without the expected protobuf 6.33.1 runtime floor"
                 )
+            pb2_source = pb2_source.replace(
+                GRPC_RUNTIME_IMPORT_PREFIX,
+                GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX,
+            )
 
             pb2_grpc_source = pb2_grpc_path.read_text(encoding="utf-8")
             pb2_import_module = grpc_pb2_import_module(module_name)

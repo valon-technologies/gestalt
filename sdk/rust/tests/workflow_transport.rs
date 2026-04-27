@@ -315,6 +315,8 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
                 }))),
                 connection: String::new(),
                 instance: String::new(),
+                plugin: None,
+                agent: None,
             }),
             idempotency_key: "run-42".to_string(),
             ..Default::default()
@@ -339,6 +341,8 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
             }))),
             connection: String::new(),
             instance: String::new(),
+            plugin: None,
+            agent: None,
         }
     );
 

@@ -523,26 +523,56 @@ type WorkflowsConfig struct {
 }
 
 type WorkflowScheduleConfig struct {
-	Provider   string         `yaml:"provider,omitempty"`
-	Plugin     string         `yaml:"plugin,omitempty"`
-	Cron       string         `yaml:"cron,omitempty"`
-	Timezone   string         `yaml:"timezone,omitempty"`
-	Operation  string         `yaml:"operation,omitempty"`
-	Connection string         `yaml:"connection,omitempty"`
-	Instance   string         `yaml:"instance,omitempty"`
-	Input      map[string]any `yaml:"input,omitempty"`
-	Paused     bool           `yaml:"paused,omitempty"`
+	Provider   string               `yaml:"provider,omitempty"`
+	Plugin     string               `yaml:"plugin,omitempty"`
+	Agent      *WorkflowAgentConfig `yaml:"agent,omitempty"`
+	Cron       string               `yaml:"cron,omitempty"`
+	Timezone   string               `yaml:"timezone,omitempty"`
+	Operation  string               `yaml:"operation,omitempty"`
+	Connection string               `yaml:"connection,omitempty"`
+	Instance   string               `yaml:"instance,omitempty"`
+	Input      map[string]any       `yaml:"input,omitempty"`
+	Paused     bool                 `yaml:"paused,omitempty"`
 }
 
 type WorkflowEventTriggerConfig struct {
-	Provider   string             `yaml:"provider,omitempty"`
-	Plugin     string             `yaml:"plugin,omitempty"`
-	Match      WorkflowEventMatch `yaml:"match,omitempty"`
-	Operation  string             `yaml:"operation,omitempty"`
-	Connection string             `yaml:"connection,omitempty"`
-	Instance   string             `yaml:"instance,omitempty"`
-	Input      map[string]any     `yaml:"input,omitempty"`
-	Paused     bool               `yaml:"paused,omitempty"`
+	Provider   string               `yaml:"provider,omitempty"`
+	Plugin     string               `yaml:"plugin,omitempty"`
+	Agent      *WorkflowAgentConfig `yaml:"agent,omitempty"`
+	Match      WorkflowEventMatch   `yaml:"match,omitempty"`
+	Operation  string               `yaml:"operation,omitempty"`
+	Connection string               `yaml:"connection,omitempty"`
+	Instance   string               `yaml:"instance,omitempty"`
+	Input      map[string]any       `yaml:"input,omitempty"`
+	Paused     bool                 `yaml:"paused,omitempty"`
+}
+
+type WorkflowAgentConfig struct {
+	Provider        string                 `yaml:"provider,omitempty"`
+	Model           string                 `yaml:"model,omitempty"`
+	Prompt          string                 `yaml:"prompt,omitempty"`
+	Messages        []WorkflowAgentMessage `yaml:"messages,omitempty"`
+	Tools           []WorkflowAgentToolRef `yaml:"tools,omitempty"`
+	ResponseSchema  map[string]any         `yaml:"responseSchema,omitempty"`
+	Metadata        map[string]any         `yaml:"metadata,omitempty"`
+	ProviderOptions map[string]any         `yaml:"providerOptions,omitempty"`
+	Timeout         string                 `yaml:"timeout,omitempty"`
+}
+
+type WorkflowAgentMessage struct {
+	Role     string         `yaml:"role,omitempty"`
+	Text     string         `yaml:"text,omitempty"`
+	Metadata map[string]any `yaml:"metadata,omitempty"`
+}
+
+type WorkflowAgentToolRef struct {
+	Plugin      string `yaml:"plugin,omitempty"`
+	PluginName  string `yaml:"pluginName,omitempty"`
+	Operation   string `yaml:"operation,omitempty"`
+	Connection  string `yaml:"connection,omitempty"`
+	Instance    string `yaml:"instance,omitempty"`
+	Title       string `yaml:"title,omitempty"`
+	Description string `yaml:"description,omitempty"`
 }
 
 type WorkflowEventMatch struct {

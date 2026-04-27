@@ -9033,6 +9033,46 @@ pub struct BoundWorkflowTarget {
     pub connection: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub instance: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub plugin: ::core::option::Option<BoundWorkflowPluginTarget>,
+    #[prost(message, optional, tag = "7")]
+    pub agent: ::core::option::Option<BoundWorkflowAgentTarget>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BoundWorkflowPluginTarget {
+    #[prost(string, tag = "1")]
+    pub plugin_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub operation: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub input: ::core::option::Option<::prost_types::Struct>,
+    #[prost(string, tag = "4")]
+    pub connection: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub instance: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BoundWorkflowAgentTarget {
+    #[prost(string, tag = "1")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub model: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub prompt: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "4")]
+    pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
+    #[prost(message, repeated, tag = "5")]
+    pub tool_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
+    #[prost(enumeration = "AgentToolSourceMode", tag = "6")]
+    pub tool_source: i32,
+    #[prost(message, optional, tag = "7")]
+    pub response_schema: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "8")]
+    pub metadata: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "9")]
+    pub provider_options: ::core::option::Option<::prost_types::Struct>,
+    #[prost(int32, tag = "10")]
+    pub timeout_seconds: i32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowActor {
@@ -9201,6 +9241,8 @@ pub struct WorkflowExecutionReference {
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(message, optional, tag = "8")]
     pub revoked_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(string, tag = "9")]
+    pub target_fingerprint: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StartWorkflowProviderRunRequest {

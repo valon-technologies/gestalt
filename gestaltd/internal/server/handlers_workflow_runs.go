@@ -80,7 +80,7 @@ func (s *Server) listGlobalWorkflowRuns(w http.ResponseWriter, r *http.Request) 
 		if managed == nil || managed.Run == nil {
 			continue
 		}
-		if pluginFilter != "" && strings.TrimSpace(managed.Run.Target.PluginName) != pluginFilter {
+		if pluginFilter != "" && strings.TrimSpace(managed.Run.Target.PluginTarget().PluginName) != pluginFilter {
 			continue
 		}
 		if statusFilter != "" && strings.TrimSpace(string(managed.Run.Status)) != statusFilter {
@@ -144,13 +144,7 @@ func workflowRunInfoFromCore(run *coreworkflow.Run, providerName string) workflo
 	info.CompletedAt = run.CompletedAt
 	info.StatusMessage = run.StatusMessage
 	info.ResultBody = run.ResultBody
-	info.Target = workflowScheduleTargetInfo{
-		Plugin:     run.Target.PluginName,
-		Operation:  run.Target.Operation,
-		Connection: userFacingConnectionName(run.Target.Connection),
-		Instance:   run.Target.Instance,
-		Input:      maps.Clone(run.Target.Input),
-	}
+	info.Target = workflowScheduleTargetInfoFromCore(run.Target)
 	info.Trigger = workflowRunTriggerInfoFromCore(run.Trigger)
 	info.CreatedBy = workflowActorInfoFromCore(run.CreatedBy)
 	return info
