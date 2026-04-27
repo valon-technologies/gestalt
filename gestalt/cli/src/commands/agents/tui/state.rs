@@ -276,36 +276,42 @@ impl AgentUiState {
         }
     }
 
-    pub(super) fn visible_transcript(&self, height: usize) -> &[TranscriptItem] {
-        let visible = height.max(1);
-        let offset = self.scroll_offset.min(self.max_scroll_offset(visible));
-        let end = self.transcript.len().saturating_sub(offset);
-        let start = end.saturating_sub(visible);
-        &self.transcript[start..end]
+    pub(super) fn transcript(&self) -> &[TranscriptItem] {
+        &self.transcript
     }
 
-    pub(super) fn scroll_up(&mut self, height: usize) {
+    pub(super) fn scroll_offset(&self) -> usize {
+        self.scroll_offset
+    }
+
+    pub(super) fn scroll_up(&mut self, height: usize, content_height: usize) {
         self.scroll_offset = self
             .scroll_offset
             .saturating_add(5)
-            .min(self.max_scroll_offset(height));
+            .min(max_scroll_offset(height, content_height));
     }
 
     pub(super) fn scroll_down(&mut self) {
         self.scroll_offset = self.scroll_offset.saturating_sub(5);
     }
 
-    pub(super) fn scroll_to_top(&mut self, height: usize) {
-        self.scroll_offset = self.max_scroll_offset(height);
+    pub(super) fn scroll_to_top(&mut self, height: usize, content_height: usize) {
+        self.scroll_offset = max_scroll_offset(height, content_height);
     }
 
     pub(super) fn scroll_to_bottom(&mut self) {
         self.scroll_offset = 0;
     }
 
-    fn max_scroll_offset(&self, height: usize) -> usize {
-        self.transcript.len().saturating_sub(height.max(1))
+    pub(super) fn clamp_scroll_offset(&mut self, height: usize, content_height: usize) {
+        self.scroll_offset = self
+            .scroll_offset
+            .min(max_scroll_offset(height, content_height));
     }
+}
+
+fn max_scroll_offset(height: usize, content_height: usize) -> usize {
+    content_height.saturating_sub(height.max(1))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
