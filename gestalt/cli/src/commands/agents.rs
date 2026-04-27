@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail};
 use colored::Colorize;
-use serde::{Deserialize, de::DeserializeOwned};
+use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use serde_json::{Map, Value, json};
 use std::io::{self, BufRead, BufReader, IsTerminal, Write};
 use std::sync::{
@@ -247,6 +247,51 @@ struct AgentTurnEventInfo {
     visibility: String,
     #[serde(default)]
     data: Map<String, Value>,
+    #[serde(default, deserialize_with = "deserialize_turn_display")]
+    display: Option<AgentTurnDisplayInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentTurnDisplayInfo {
+    #[serde(default)]
+    kind: String,
+    #[serde(default)]
+    phase: String,
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    label: String,
+    #[serde(default, rename = "ref")]
+    display_ref: String,
+    #[allow(dead_code)]
+    #[serde(default)]
+    parent_ref: String,
+    #[serde(default)]
+    input: Option<Value>,
+    #[serde(default)]
+    output: Option<Value>,
+    #[serde(default)]
+    error: Option<Value>,
+}
+
+impl AgentTurnDisplayInfo {
+    fn from_value(value: Value) -> Option<Self> {
+        let Value::Object(mut data) = value else {
+            return None;
+        };
+        Some(Self {
+            kind: take_string_field(&mut data, "kind"),
+            phase: take_string_field(&mut data, "phase"),
+            text: take_string_field(&mut data, "text"),
+            label: take_string_field(&mut data, "label"),
+            display_ref: take_string_field(&mut data, "ref"),
+            parent_ref: take_string_field(&mut data, "parentRef"),
+            input: data.remove("input"),
+            output: data.remove("output"),
+            error: data.remove("error"),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -477,6 +522,9 @@ impl AgentTurnRenderer {
             if event.seq > 0 {
                 self.after_seq = self.after_seq.max(event.seq as u64);
             }
+            if self.render_display_event(event)? {
+                continue;
+            }
             match event.event_type.as_str() {
                 "agent.message.delta" | "assistant.delta" => {
                     if let Some(text) = string_any_field(&event.data, &["text", "delta", "content"])
@@ -649,6 +697,198 @@ impl AgentTurnRenderer {
             println!();
             self.assistant_line_open = false;
         }
+    }
+
+    fn render_display_event(&mut self, event: &AgentTurnEventInfo) -> Result<bool> {
+        let Some(display) = turn_event_display(event) else {
+            return Ok(false);
+        };
+        match display.kind.trim() {
+            "text" => self.render_display_text(display, "assistant>"),
+            "reasoning" => self.render_display_text(display, "reasoning>"),
+            "tool" => self.render_display_tool(event, display),
+            "interaction" => Ok(self.render_display_interaction(event, display)),
+            "status" => Ok(self.render_display_status(display)),
+            "error" => Ok(self.render_display_error(display)),
+            _ => Ok(false),
+        }
+    }
+
+    fn render_display_text(&mut self, display: &AgentTurnDisplayInfo, label: &str) -> Result<bool> {
+        let text = display_text(display);
+        if label == "assistant>" {
+            match display.phase.trim() {
+                "delta" => {
+                    if let Some(text) = text {
+                        self.start_assistant_line()?;
+                        print!("{text}");
+                        io::stdout().flush().context("failed to flush stdout")?;
+                        self.saw_assistant_output = true;
+                        self.delta_buffer.push_str(text);
+                        return Ok(true);
+                    }
+                }
+                "completed" => {
+                    if self.assistant_line_open {
+                        let Some(text) = text else {
+                            return Ok(false);
+                        };
+                        if self.delta_buffer.is_empty() {
+                            print!("{text}");
+                        } else if let Some(suffix) = text.strip_prefix(&self.delta_buffer) {
+                            print!("{suffix}");
+                        }
+                        println!();
+                        self.assistant_line_open = false;
+                        self.delta_buffer.clear();
+                        return Ok(true);
+                    } else if let Some(text) = text {
+                        println!("{} {text}", self.label(label));
+                        self.saw_assistant_output = true;
+                        self.delta_buffer.clear();
+                        return Ok(true);
+                    }
+                }
+                _ if text.is_some() => {
+                    self.finish_assistant_line();
+                    let text = text.expect("checked is_some");
+                    println!("{} {text}", self.label(label));
+                    self.saw_assistant_output = true;
+                    return Ok(true);
+                }
+                _ => {}
+            }
+            return Ok(false);
+        }
+
+        self.finish_assistant_line();
+        if let Some(text) = text {
+            println!("{} {text}", self.label(label));
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    fn render_display_tool(
+        &mut self,
+        event: &AgentTurnEventInfo,
+        display: &AgentTurnDisplayInfo,
+    ) -> Result<bool> {
+        self.finish_assistant_line();
+        let tool = display_tool_label(event, display);
+        match display.phase.trim() {
+            "started" => {
+                print!("{} {tool} started", self.label("tool>"));
+                if let Some(input) = display_tool_input(event, display) {
+                    print!(" {}", compact_json(input)?);
+                }
+                println!();
+            }
+            "completed" => {
+                print!("{} {tool} completed", self.label("tool>"));
+                if let Some(status) = display_status(event, display) {
+                    print!(" ({status})");
+                }
+                if let Some(error) = display_tool_error(event, display) {
+                    print!(": {}", display_value_text(error)?);
+                } else if let Some(output) = display_tool_output(event, display) {
+                    print!(" {}", compact_json(output)?);
+                }
+                println!();
+            }
+            "failed" => {
+                print!("{} {tool} failed", self.label("tool>"));
+                if let Some(status) = display_status(event, display) {
+                    print!(" ({status})");
+                }
+                if let Some(error) = display_tool_error(event, display) {
+                    print!(": {}", display_value_text(error)?);
+                }
+                println!();
+            }
+            "progress" => {
+                if let Some(text) = display_text(display) {
+                    println!("{} {tool} {text}", self.label("tool>"));
+                } else {
+                    println!("{} {tool} progress", self.label("tool>"));
+                }
+            }
+            _ => return Ok(false),
+        }
+        Ok(true)
+    }
+
+    fn render_display_interaction(
+        &mut self,
+        _event: &AgentTurnEventInfo,
+        display: &AgentTurnDisplayInfo,
+    ) -> bool {
+        self.finish_assistant_line();
+        let interaction_ref = display_ref(display)
+            .map(ToString::to_string)
+            .unwrap_or_else(|| "interaction".to_string());
+        match display.phase.trim() {
+            "requested" => println!(
+                "{} requested ({interaction_ref})",
+                self.label("interaction>")
+            ),
+            "resolved" => println!(
+                "{} resolved ({interaction_ref})",
+                self.label("interaction>")
+            ),
+            _ => return false,
+        }
+        true
+    }
+
+    fn render_display_status(&mut self, display: &AgentTurnDisplayInfo) -> bool {
+        self.finish_assistant_line();
+        let text = display_text(display);
+        match display.phase.trim() {
+            "started" => match text {
+                Some(text) => println!("{} started ({text})", self.label("turn>")),
+                None => println!("{} started", self.label("turn>")),
+            },
+            "canceled" => match text {
+                Some(text) => println!("{} canceled: {text}", self.label("turn>")),
+                None => println!("{} canceled", self.label("turn>")),
+            },
+            "completed" => {
+                if let Some(text) = text {
+                    println!("{} completed ({text})", self.label("turn>"));
+                }
+            }
+            "progress" => {
+                if let Some(text) = text {
+                    println!("{} {text}", self.label("turn>"));
+                }
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    fn render_display_error(&mut self, display: &AgentTurnDisplayInfo) -> bool {
+        self.finish_assistant_line();
+        let label = if display_label(display) == Some("turn") {
+            "turn>"
+        } else {
+            "error>"
+        };
+        let text = display_text(display).map(ToString::to_string).or_else(|| {
+            display
+                .error
+                .as_ref()
+                .and_then(|value| display_value_text(value).ok())
+        });
+        let Some(text) = text else {
+            return false;
+        };
+        match display.phase.trim() {
+            "failed" => println!("{} failed: {text}", self.label(label)),
+            _ => println!("{} {text}", self.label(label)),
+        }
+        true
     }
 
     fn render_generic_event(&mut self, event: &AgentTurnEventInfo) -> Result<()> {
@@ -991,6 +1231,23 @@ where
     serde_json::from_value(value).context("failed to decode agent response")
 }
 
+fn deserialize_turn_display<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<AgentTurnDisplayInfo>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<Value>::deserialize(deserializer)?;
+    Ok(value.and_then(AgentTurnDisplayInfo::from_value))
+}
+
+fn take_string_field(data: &mut Map<String, Value>, key: &str) -> String {
+    match data.remove(key) {
+        Some(Value::String(value)) => value,
+        _ => String::new(),
+    }
+}
+
 fn string_field(data: &Map<String, Value>, key: &str) -> Option<String> {
     data.get(key)
         .and_then(Value::as_str)
@@ -1007,6 +1264,103 @@ fn value_any_field<'a>(data: &'a Map<String, Value>, keys: &[&str]) -> Option<&'
 
 fn number_any_field(data: &Map<String, Value>, keys: &[&str]) -> Option<i64> {
     keys.iter().find_map(|key| data.get(*key)?.as_i64())
+}
+
+fn turn_event_display(event: &AgentTurnEventInfo) -> Option<&AgentTurnDisplayInfo> {
+    let display = event.display.as_ref()?;
+    if display.kind.trim().is_empty() {
+        return None;
+    }
+    if event.visibility == "private" && !known_turn_event_type(&event.event_type) {
+        return None;
+    }
+    Some(display)
+}
+
+fn known_turn_event_type(event_type: &str) -> bool {
+    matches!(
+        event_type,
+        "agent.message.delta"
+            | "assistant.delta"
+            | "assistant.completed"
+            | "turn.started"
+            | "turn.completed"
+            | "turn.failed"
+            | "turn.canceled"
+            | "tool.started"
+            | "tool.completed"
+            | "tool.failed"
+            | "interaction.requested"
+            | "interaction.resolved"
+    )
+}
+
+fn display_text(display: &AgentTurnDisplayInfo) -> Option<&str> {
+    if display.text.is_empty() {
+        None
+    } else {
+        Some(&display.text)
+    }
+}
+
+fn display_label(display: &AgentTurnDisplayInfo) -> Option<&str> {
+    non_empty_str(&display.label)
+}
+
+fn display_ref(display: &AgentTurnDisplayInfo) -> Option<&str> {
+    non_empty_str(&display.display_ref)
+}
+
+fn display_tool_label(_event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) -> String {
+    display_label(display)
+        .or_else(|| display_ref(display))
+        .map(ToString::to_string)
+        .unwrap_or_else(|| "tool".to_string())
+}
+
+fn display_tool_ref(_event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) -> Option<String> {
+    display_ref(display).map(ToString::to_string)
+}
+
+fn display_tool_input<'a>(
+    _event: &'a AgentTurnEventInfo,
+    display: &'a AgentTurnDisplayInfo,
+) -> Option<&'a Value> {
+    display.input.as_ref()
+}
+
+fn display_tool_output<'a>(
+    _event: &'a AgentTurnEventInfo,
+    display: &'a AgentTurnDisplayInfo,
+) -> Option<&'a Value> {
+    display.output.as_ref()
+}
+
+fn display_tool_error<'a>(
+    _event: &'a AgentTurnEventInfo,
+    display: &'a AgentTurnDisplayInfo,
+) -> Option<&'a Value> {
+    display.error.as_ref()
+}
+
+fn display_status(_event: &AgentTurnEventInfo, display: &AgentTurnDisplayInfo) -> Option<String> {
+    display_text(display).map(ToString::to_string)
+}
+
+fn display_value_text(value: &Value) -> Result<String> {
+    match value {
+        Value::String(text) => Ok(text.clone()),
+        _ => compact_json(value),
+    }
+}
+
+fn non_empty_str(value: &str) -> Option<&str> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
 }
 
 fn compact_json(value: &Value) -> Result<String> {
