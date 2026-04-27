@@ -164,7 +164,7 @@ func partitionParams(catOp *catalog.CatalogOperation, params map[string]any, use
 		}
 		switch locations[k] {
 		case "body":
-			body[k] = v
+			body[httpKey] = v
 		case "query":
 			query[httpKey] = v
 		case "header":
@@ -176,14 +176,14 @@ func partitionParams(catOp *catalog.CatalogOperation, params map[string]any, use
 				if useMethodDefault {
 					continue
 				}
-				body[k] = v
+				body[httpKey] = v
 				continue
 			}
 			if defaultLocation == "query" {
 				query[httpKey] = v
 				continue
 			}
-			body[k] = v
+			body[httpKey] = v
 		}
 	}
 	return body, query, headers

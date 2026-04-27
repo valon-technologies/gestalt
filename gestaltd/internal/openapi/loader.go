@@ -14,6 +14,7 @@ import (
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
+	"github.com/valon-technologies/gestalt/server/core/toolschema"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 )
@@ -187,16 +188,18 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 				allowedRoles = override.AllowedRoles
 			}
 
-			var params []provider.ParameterDef
+			var (
+				params       []provider.ParameterDef
+				paramNames   = toolschema.NewNameAllocator()
+				seenRawNames = make(map[string]struct{})
+			)
 			for _, p := range op.Parameters {
-				params = append(params, definitionParamFromOpenAPI(p))
+				param := definitionParamFromOpenAPI(p, paramNames)
+				seenRawNames[p.Name] = struct{}{}
+				params = append(params, param)
 			}
 
 			if op.RequestBody != nil && op.RequestBody.Content != nil {
-				seen := make(map[string]struct{}, len(params))
-				for _, p := range params {
-					seen[p.Name] = struct{}{}
-				}
 				for contentPair := op.RequestBody.Content.First(); contentPair != nil; contentPair = contentPair.Next() {
 					mt := contentPair.Value()
 					if mt.Schema == nil || mt.Schema.Schema() == nil {
@@ -211,9 +214,11 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 						requiredSet[r] = true
 					}
 					for propPair := schema.Properties.First(); propPair != nil; propPair = propPair.Next() {
-						if _, exists := seen[propPair.Key()]; exists {
+						rawName := propPair.Key()
+						if _, exists := seenRawNames[rawName]; exists {
 							continue
 						}
+						seenRawNames[rawName] = struct{}{}
 						propSchema := propPair.Value().Schema()
 						if propSchema == nil {
 							continue
@@ -222,12 +227,14 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 						if len(propSchema.Type) > 0 {
 							pType = propSchema.Type[0]
 						}
+						mapping := paramNames.Allocate(rawName)
 						params = append(params, provider.ParameterDef{
-							Name:        propPair.Key(),
+							Name:        mapping.Name,
+							WireName:    mapping.WireName,
 							Type:        pType,
 							Location:    "body",
 							Description: propSchema.Description,
-							Required:    requiredSet[propPair.Key()],
+							Required:    requiredSet[rawName],
 						})
 					}
 					break
@@ -245,28 +252,20 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 	}
 }
 
-func definitionParamFromOpenAPI(p *v3high.Parameter) provider.ParameterDef {
+func definitionParamFromOpenAPI(p *v3high.Parameter, names *toolschema.NameAllocator) provider.ParameterDef {
 	paramType := "string"
 	if p.Schema != nil && p.Schema.Schema() != nil {
 		if types := p.Schema.Schema().Type; len(types) > 0 {
 			paramType = types[0]
 		}
 	}
-	name, wireName := normalizeParamName(p.Name)
+	mapping := names.Allocate(p.Name)
 	return provider.ParameterDef{
-		Name:        name,
-		WireName:    wireName,
+		Name:        mapping.Name,
+		WireName:    mapping.WireName,
 		Type:        paramType,
 		Location:    p.In,
 		Description: p.Description,
 		Required:    p.Required != nil && *p.Required,
 	}
-}
-
-func normalizeParamName(raw string) (name, wireName string) {
-	if !strings.ContainsAny(raw, "[]") {
-		return raw, ""
-	}
-	normalized := strings.ReplaceAll(strings.ReplaceAll(raw, "[", "_"), "]", "")
-	return normalized, raw
 }
