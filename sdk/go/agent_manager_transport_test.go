@@ -133,4 +133,10 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 	if harness.turnRequests[0].GetSessionId() != "session-1" || harness.turnRequests[0].GetModel() != "gpt-test" {
 		t.Fatalf("turn request = %+v, want session_id=session-1 model=gpt-test", harness.turnRequests[0])
 	}
+	if len(harness.turnRequests[0].GetToolRefs()) != 0 {
+		t.Fatalf("turn tool refs len = %d, want 0", len(harness.turnRequests[0].GetToolRefs()))
+	}
+	if harness.turnRequests[0].GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
+		t.Fatalf("turn tool source = %s, want unspecified", harness.turnRequests[0].GetToolSource())
+	}
 }

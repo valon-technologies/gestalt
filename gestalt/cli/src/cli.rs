@@ -555,7 +555,7 @@ pub struct AgentTurnCreateArgs {
     #[arg(long = "message")]
     pub messages: Vec<String>,
 
-    /// Add a tool beyond the default safe tool set in plugin:operation form
+    /// Add a tool in plugin:operation form
     #[arg(long = "tool", value_parser = AgentToolArg::parse)]
     pub tools: Vec<AgentToolArg>,
 
