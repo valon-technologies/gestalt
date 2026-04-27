@@ -46,7 +46,7 @@ pub(super) fn spawn_turn_worker(
     thread::spawn(move || {
         let result = run_turn_worker(&client, turn_args, &event_tx, &command_rx);
         if let Err(err) = result {
-            let _ = event_tx.send(WorkerEvent::Error(err.to_string()));
+            let _ = event_tx.send(WorkerEvent::Error(format!("{err:#}")));
         }
         let _ = event_tx.send(WorkerEvent::Done);
     })
