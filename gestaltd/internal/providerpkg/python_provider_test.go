@@ -1,9 +1,7 @@
 package providerpkg
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -244,62 +242,11 @@ func pythonTestOtherPlatform() (string, string) {
 	return "linux", "amd64"
 }
 
-func pythonTestRuntimePath() (string, error) {
-	if value := os.Getenv("GESTALT_PYTHON"); value != "" {
-		if resolved, err := exec.LookPath(value); err == nil {
-			return resolved, nil
-		}
-		if info, err := os.Stat(value); err == nil && !info.IsDir() {
-			return value, nil
-		}
-	}
-	for _, candidate := range []string{"python3", "python"} {
-		if resolved, err := exec.LookPath(candidate); err == nil {
-			return resolved, nil
-		}
-	}
-	return "", exec.ErrNotFound
-}
-
 func pythonTestInterpreterPath(root, goos, suffix string) string {
 	if goos == "windows" {
 		return filepath.Join(root, suffix, "Scripts", "python.exe")
 	}
 	return filepath.Join(root, suffix, "bin", "python")
-}
-
-func mustWritePythonWithoutGRPCWrapper(t *testing.T, root, pythonPath string) string {
-	t.Helper()
-
-	path := filepath.Join(root, "python-no-grpc")
-	script := fmt.Sprintf(`#!%s
-import importlib.abc
-import runpy
-import sys
-
-class _BlockRuntimeDeps(importlib.abc.MetaPathFinder):
-    def find_spec(self, fullname, path=None, target=None):
-        if fullname == "grpc" or fullname.startswith("grpc."):
-            error = ModuleNotFoundError("No module named 'grpc'")
-            error.name = "grpc"
-            raise error
-        if fullname == "google" or fullname.startswith("google."):
-            error = ModuleNotFoundError("No module named 'google'")
-            error.name = "google"
-            raise error
-        return None
-
-sys.meta_path.insert(0, _BlockRuntimeDeps())
-
-if len(sys.argv) < 3 or sys.argv[1] != "-m":
-    raise SystemExit("unsupported invocation")
-
-module_name = sys.argv[2]
-sys.argv = [sys.argv[0], *sys.argv[3:]]
-runpy.run_module(module_name, run_name="__main__")
-`, pythonPath)
-	mustWriteFile(t, path, []byte(script), 0o755)
-	return path
 }
 
 func mustWritePythonInterpreter(t *testing.T, path string) {
@@ -311,30 +258,6 @@ func mustWritePythonInterpreter(t *testing.T, path string) {
 	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatalf("WriteFile(%s): %v", path, err)
 	}
-}
-
-func mustWritePythonSourceManifest(t *testing.T, root, pluginName string) string {
-	t.Helper()
-
-	data, err := EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindPlugin,
-		Source:  "github.com/testowner/plugins/" + pluginName,
-		Version: "0.0.1",
-		Spec: &providermanifestv1.Spec{
-			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-				"default": {
-					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-				},
-			},
-		},
-	}, ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat: %v", err)
-	}
-
-	path := filepath.Join(root, "manifest.yaml")
-	mustWriteFile(t, path, data, 0o644)
-	return path
 }
 
 func containsString(haystack, needle string) bool {
