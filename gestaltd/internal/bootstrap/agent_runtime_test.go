@@ -577,6 +577,236 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 	}
 }
 
+func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *testing.T) {
+	t.Parallel()
+
+	bin := buildAgentProviderBinary(t)
+	runtimeProvider := newCapturingPluginRuntime()
+	runtimeProvider.lifecycleForSession = func(index int) *pluginruntime.SessionLifecycle {
+		startedAt := time.Now().UTC()
+		expiresAt := startedAt.Add(time.Hour)
+		lifecycle := &pluginruntime.SessionLifecycle{
+			StartedAt: &startedAt,
+			ExpiresAt: &expiresAt,
+		}
+		if index == 1 {
+			recommendedDrainAt := startedAt.Add(75 * time.Millisecond)
+			lifecycle.RecommendedDrainAt = &recommendedDrainAt
+		}
+		return lifecycle
+	}
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	runtimeConfig := testHostedAgentRuntimeConfig()
+	runtimeConfig.HealthCheckInterval = "25ms"
+	runtimeConfig.RestartPolicy = config.HostedRuntimeRestartPolicyAlways
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {Driver: config.RuntimeProviderDriver("capture")},
+			},
+		},
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				"simple": {
+					Command:   bin,
+					IndexedDB: &config.PluginIndexedDBConfig{Provider: "agent_state"},
+					Runtime:   runtimeConfig,
+				},
+			},
+		},
+	}
+	deps := Deps{
+		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:         map[string]*config.ProviderEntry{"agent_state": {}},
+		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+	}
+	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildAgents: %v", err)
+	}
+	defer func() {
+		if err := closeAgents(agents...); err != nil {
+			t.Fatalf("closeAgents: %v", err)
+		}
+	}()
+
+	pool := hostedAgentProviderPoolForTest(t, agents[0])
+	backends := pool.readyBackends()
+	if len(backends) != 1 {
+		t.Fatalf("ready backends = %d, want 1", len(backends))
+	}
+	first := backends[0]
+	waitForAgentRuntimeCondition(t, 3*time.Second, func() bool {
+		ready := pool.readyBackends()
+		return len(runtimeProvider.startSessionRequests()) >= 2 && len(ready) == 1 && ready[0] != first
+	})
+	pool.mu.Lock()
+	firstRetired := first.draining || first.closed
+	pool.mu.Unlock()
+	if !firstRetired {
+		t.Fatal("first runtime backend was not marked draining or closed")
+	}
+	session, err := agents[0].CreateSession(context.Background(), coreagent.CreateSessionRequest{
+		SessionID: "session-after-runtime-drain",
+		Model:     "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession(after runtime drain): %v", err)
+	}
+	if session == nil || session.ID != "session-after-runtime-drain" {
+		t.Fatalf("CreateSession(after runtime drain) = %#v, want session-after-runtime-drain", session)
+	}
+}
+
+func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntimeLifetime(t *testing.T) {
+	t.Parallel()
+
+	bin := buildAgentProviderBinary(t)
+	runtimeProvider := newCapturingPluginRuntime()
+	runtimeProvider.lifecycleForSession = func(index int) *pluginruntime.SessionLifecycle {
+		expiresAt := time.Now().UTC().Add(5 * time.Minute)
+		return &pluginruntime.SessionLifecycle{
+			ExpiresAt: &expiresAt,
+		}
+	}
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	runtimeConfig := testHostedAgentRuntimeConfig()
+	runtimeConfig.StartupTimeout = "5m"
+	runtimeConfig.DrainTimeout = "2m"
+	runtimeConfig.HealthCheckInterval = "25ms"
+	runtimeConfig.RestartPolicy = config.HostedRuntimeRestartPolicyAlways
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {Driver: config.RuntimeProviderDriver("capture")},
+			},
+		},
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				"simple": {
+					Command:   bin,
+					IndexedDB: &config.PluginIndexedDBConfig{Provider: "agent_state"},
+					Runtime:   runtimeConfig,
+				},
+			},
+		},
+	}
+	deps := Deps{
+		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:         map[string]*config.ProviderEntry{"agent_state": {}},
+		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+	}
+	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildAgents: %v", err)
+	}
+	defer func() {
+		if err := closeAgents(agents...); err != nil {
+			t.Fatalf("closeAgents: %v", err)
+		}
+	}()
+
+	time.Sleep(150 * time.Millisecond)
+	if got := len(runtimeProvider.startSessionRequests()); got != 1 {
+		t.Fatalf("start session requests after expiry health checks = %d, want 1", got)
+	}
+}
+
+func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) {
+	t.Parallel()
+
+	bin := buildAgentProviderBinary(t)
+	runtimeProvider := newCapturingPluginRuntime()
+	var expiryMu sync.Mutex
+	var firstExpiresAt time.Time
+	runtimeProvider.lifecycleForSession = func(index int) *pluginruntime.SessionLifecycle {
+		expiresAt := time.Now().UTC().Add(time.Hour)
+		if index == 1 {
+			expiresAt = time.Now().UTC().Add(2 * time.Second)
+			expiryMu.Lock()
+			firstExpiresAt = expiresAt
+			expiryMu.Unlock()
+		}
+		return &pluginruntime.SessionLifecycle{
+			ExpiresAt: &expiresAt,
+		}
+	}
+	factories := NewFactoryRegistry()
+	factories.Runtime = func(context.Context, string, *config.RuntimeProviderEntry, Deps) (pluginruntime.Provider, error) {
+		return runtimeProvider, nil
+	}
+	runtimeConfig := testHostedAgentRuntimeConfig()
+	runtimeConfig.StartupTimeout = "5m"
+	runtimeConfig.DrainTimeout = "2m"
+	runtimeConfig.HealthCheckInterval = "25ms"
+	runtimeConfig.RestartPolicy = config.HostedRuntimeRestartPolicyAlways
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Runtime: config.ServerRuntimeConfig{Provider: "hosted"},
+		},
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"hosted": {Driver: config.RuntimeProviderDriver("capture")},
+			},
+		},
+		Providers: config.ProvidersConfig{
+			Agent: map[string]*config.ProviderEntry{
+				"simple": {
+					Command:   bin,
+					IndexedDB: &config.PluginIndexedDBConfig{Provider: "agent_state"},
+					Runtime:   runtimeConfig,
+				},
+			},
+		},
+	}
+	deps := Deps{
+		AgentRuntime:          &agentRuntime{providers: map[string]coreagent.Provider{}},
+		IndexedDBDefs:         map[string]*config.ProviderEntry{"agent_state": {}},
+		IndexedDBFactory:      func(yaml.Node) (indexeddb.IndexedDB, error) { return &coretesting.StubIndexedDB{}, nil },
+		PluginRuntimeRegistry: newPluginRuntimeRegistry(cfg, factories.Runtime, Deps{}),
+	}
+	agents, err := buildAgents(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildAgents: %v", err)
+	}
+	defer func() {
+		if err := closeAgents(agents...); err != nil {
+			t.Fatalf("closeAgents: %v", err)
+		}
+	}()
+
+	waitForAgentRuntimeCondition(t, 3*time.Second, func() bool {
+		return len(runtimeProvider.startSessionRequests()) >= 2
+	})
+	startTimes := runtimeProvider.startSessionTimes()
+	if len(startTimes) < 2 {
+		t.Fatalf("start session times = %d, want at least 2", len(startTimes))
+	}
+	expiryMu.Lock()
+	expiresAt := firstExpiresAt
+	expiryMu.Unlock()
+	if expiresAt.IsZero() {
+		t.Fatal("first runtime expiry was not captured")
+	}
+	if !startTimes[1].Before(expiresAt) {
+		t.Fatalf("replacement started at %s, want before first runtime expiry %s", startTimes[1].Format(time.RFC3339Nano), expiresAt.Format(time.RFC3339Nano))
+	}
+}
+
 func TestHostedAgentProviderPoolPingChecksReadyBackendsInParallel(t *testing.T) {
 	t.Parallel()
 

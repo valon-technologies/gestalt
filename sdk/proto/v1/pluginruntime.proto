@@ -43,6 +43,15 @@ message PluginRuntimeSession {
   string id = 1;
   string state = 2;
   map<string, string> metadata = 3;
+  PluginRuntimeSessionLifecycle lifecycle = 4;
+  string state_reason = 5;
+  string state_message = 6;
+}
+
+message PluginRuntimeSessionLifecycle {
+  google.protobuf.Timestamp started_at = 1;
+  google.protobuf.Timestamp recommended_drain_at = 2;
+  google.protobuf.Timestamp expires_at = 3;
 }
 
 message StartPluginRuntimeSessionRequest {
@@ -54,6 +63,12 @@ message StartPluginRuntimeSessionRequest {
 
 message GetPluginRuntimeSessionRequest {
   string session_id = 1;
+}
+
+message ListPluginRuntimeSessionsRequest {}
+
+message ListPluginRuntimeSessionsResponse {
+  repeated PluginRuntimeSession sessions = 1;
 }
 
 message StopPluginRuntimeSessionRequest {
@@ -133,6 +148,7 @@ service PluginRuntimeProvider {
   rpc GetSupport(google.protobuf.Empty) returns (PluginRuntimeSupport);
   rpc StartSession(StartPluginRuntimeSessionRequest) returns (PluginRuntimeSession);
   rpc GetSession(GetPluginRuntimeSessionRequest) returns (PluginRuntimeSession);
+  rpc ListSessions(ListPluginRuntimeSessionsRequest) returns (ListPluginRuntimeSessionsResponse);
   rpc StopSession(StopPluginRuntimeSessionRequest) returns (google.protobuf.Empty);
   rpc BindHostService(BindPluginRuntimeHostServiceRequest) returns (PluginRuntimeHostServiceBinding);
   rpc StartPlugin(StartHostedPluginRequest) returns (HostedPlugin);

@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type ExecutableConfig struct {
@@ -114,6 +115,27 @@ func (p *executableProvider) StartSession(ctx context.Context, req StartSessionR
 func (p *executableProvider) ListSessions(ctx context.Context) ([]Session, error) {
 	if p == nil {
 		return nil, fmt.Errorf("plugin runtime is not configured")
+	}
+
+	resp, err := p.runtime.ListSessions(ctx, &proto.ListPluginRuntimeSessionsRequest{})
+	if err == nil {
+		out := make([]Session, 0, len(resp.GetSessions()))
+		refreshed := make(map[string]*Session, len(resp.GetSessions()))
+		for _, protoSession := range resp.GetSessions() {
+			session := sessionFromProto(protoSession)
+			if session == nil || session.ID == "" {
+				continue
+			}
+			refreshed[session.ID] = cloneHostedSession(session)
+			out = append(out, *session)
+		}
+		p.mu.Lock()
+		p.sessions = refreshed
+		p.mu.Unlock()
+		return out, nil
+	}
+	if status.Code(err) != codes.Unimplemented {
+		return nil, fmt.Errorf("list runtime sessions: %w", err)
 	}
 
 	p.mu.Lock()
@@ -328,10 +350,39 @@ func sessionFromProto(src *proto.PluginRuntimeSession) *Session {
 		return nil
 	}
 	return &Session{
-		ID:       src.GetId(),
-		State:    SessionState(src.GetState()),
-		Metadata: cloneStringMap(src.GetMetadata()),
+		ID:           src.GetId(),
+		State:        SessionState(src.GetState()),
+		Metadata:     cloneStringMap(src.GetMetadata()),
+		Lifecycle:    sessionLifecycleFromProto(src.GetLifecycle()),
+		StateReason:  strings.TrimSpace(src.GetStateReason()),
+		StateMessage: strings.TrimSpace(src.GetStateMessage()),
 	}
+}
+
+func sessionLifecycleFromProto(src *proto.PluginRuntimeSessionLifecycle) *SessionLifecycle {
+	if src == nil {
+		return nil
+	}
+	lifecycle := &SessionLifecycle{
+		StartedAt:          timeFromProto(src.GetStartedAt()),
+		RecommendedDrainAt: timeFromProto(src.GetRecommendedDrainAt()),
+		ExpiresAt:          timeFromProto(src.GetExpiresAt()),
+	}
+	if lifecycle.StartedAt == nil && lifecycle.RecommendedDrainAt == nil && lifecycle.ExpiresAt == nil {
+		return nil
+	}
+	return lifecycle
+}
+
+func timeFromProto(src *timestamppb.Timestamp) *time.Time {
+	if src == nil {
+		return nil
+	}
+	ts := src.AsTime().UTC()
+	if ts.IsZero() {
+		return nil
+	}
+	return &ts
 }
 
 func (p *executableProvider) trackSession(session *Session) {
@@ -351,10 +402,32 @@ func cloneHostedSession(session *Session) *Session {
 		return nil
 	}
 	return &Session{
-		ID:       session.ID,
-		State:    session.State,
-		Metadata: cloneStringMap(session.Metadata),
+		ID:           session.ID,
+		State:        session.State,
+		Metadata:     cloneStringMap(session.Metadata),
+		Lifecycle:    cloneSessionLifecycle(session.Lifecycle),
+		StateReason:  session.StateReason,
+		StateMessage: session.StateMessage,
 	}
+}
+
+func cloneSessionLifecycle(lifecycle *SessionLifecycle) *SessionLifecycle {
+	if lifecycle == nil {
+		return nil
+	}
+	return &SessionLifecycle{
+		StartedAt:          cloneTimePtr(lifecycle.StartedAt),
+		RecommendedDrainAt: cloneTimePtr(lifecycle.RecommendedDrainAt),
+		ExpiresAt:          cloneTimePtr(lifecycle.ExpiresAt),
+	}
+}
+
+func cloneTimePtr(src *time.Time) *time.Time {
+	if src == nil {
+		return nil
+	}
+	out := src.UTC()
+	return &out
 }
 
 func hostServiceRelayToProto(src HostServiceRelay) *proto.PluginRuntimeHostServiceRelay {

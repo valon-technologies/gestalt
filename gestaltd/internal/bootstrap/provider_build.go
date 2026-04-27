@@ -847,7 +847,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			_ = runtimeProvider.Close()
 		}
 	}()
-	if err := waitForPluginRuntimeSessionReady(ctx, runtimeProvider, sessionID); err != nil {
+	if _, err := waitForPluginRuntimeSessionReady(ctx, runtimeProvider, sessionID); err != nil {
 		return nil, fmt.Errorf("wait for plugin runtime session %q ready: %w", sessionID, err)
 	}
 
@@ -972,6 +972,13 @@ type hostedAgentProviderLaunch struct {
 	cleanup         func()
 }
 
+type hostedAgentProviderInstance struct {
+	provider         coreagent.Provider
+	runtimeProvider  pluginruntime.Provider
+	runtimeSessionID string
+	runtimeSession   *pluginruntime.Session
+}
+
 func (p *hostedAgentProviderLaunch) close() {
 	if p == nil {
 		return
@@ -1065,7 +1072,7 @@ func prepareHostedAgentProviderLaunch(ctx context.Context, name string, entry *c
 	return preparedLaunch, nil
 }
 
-func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentProviderLaunch, hostServices []providerhost.HostService, deps Deps, closeRuntime bool, cleanup func()) (coreagent.Provider, error) {
+func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentProviderLaunch, hostServices []providerhost.HostService, deps Deps, closeRuntime bool, cleanup func()) (*hostedAgentProviderInstance, error) {
 	if launch == nil {
 		return nil, fmt.Errorf("hosted agent launch is required")
 	}
@@ -1105,7 +1112,8 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		}
 	}()
 	phaseStarted = time.Now()
-	if err := waitForPluginRuntimeSessionReady(ctx, runtimeProvider, sessionID); err != nil {
+	readySession, err := waitForPluginRuntimeSessionReady(ctx, runtimeProvider, sessionID)
+	if err != nil {
 		recordHostedAgentRuntimeStartPhase(ctx, name, "runtime_session_ready", phaseStarted, err)
 		return nil, fmt.Errorf("wait for hosted agent runtime session %q ready: %w", sessionID, err)
 	}
@@ -1212,7 +1220,12 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	stopSession = false
 	closeOnFailure = false
 	cleanup = nil
-	return provider, nil
+	return &hostedAgentProviderInstance{
+		provider:         provider,
+		runtimeProvider:  runtimeProvider,
+		runtimeSessionID: sessionID,
+		runtimeSession:   readySession,
+	}, nil
 }
 
 func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, entry *config.ProviderEntry, deps Deps) (config.EffectiveHostedRuntime, pluginruntime.Provider, bool, error) {
@@ -1367,22 +1380,22 @@ func stopPluginRuntimeSession(runtimeProvider pluginruntime.Provider, sessionID 
 	}
 }
 
-func waitForPluginRuntimeSessionReady(ctx context.Context, runtimeProvider pluginruntime.Provider, sessionID string) error {
+func waitForPluginRuntimeSessionReady(ctx context.Context, runtimeProvider pluginruntime.Provider, sessionID string) (*pluginruntime.Session, error) {
 	for {
 		session, err := runtimeProvider.GetSession(ctx, pluginruntime.GetSessionRequest{SessionID: sessionID})
 		if err != nil {
-			return err
+			return nil, err
 		}
 		switch session.State {
 		case pluginruntime.SessionStateReady, pluginruntime.SessionStateRunning:
-			return nil
+			return session, nil
 		case pluginruntime.SessionStateFailed, pluginruntime.SessionStateStopped:
-			return fmt.Errorf("session entered %q state", session.State)
+			return nil, fmt.Errorf("session entered %q state", session.State)
 		}
 
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil, ctx.Err()
 		case <-time.After(25 * time.Millisecond):
 		}
 	}
