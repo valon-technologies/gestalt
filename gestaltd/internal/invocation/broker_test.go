@@ -85,7 +85,7 @@ func TestBrokerResolveToken_WorkflowContextDoesNotBypassWorkloadIdentityBinding(
 	}, providers)
 	broker := NewBroker(providers, svc.Users, svc.ExternalCredentials, WithAuthorizer(authz))
 
-	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 		ID:          "workload-workspace-team-a",
 		SubjectID:   principal.WorkloadSubjectID("workflow.roadmap"),
 		Integration: "slack",
@@ -95,7 +95,7 @@ func TestBrokerResolveToken_WorkflowContextDoesNotBypassWorkloadIdentityBinding(
 	}); err != nil {
 		t.Fatalf("PutCredential team-a: %v", err)
 	}
-	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 		ID:          "workload-workspace-team-b",
 		SubjectID:   principal.WorkloadSubjectID("workflow.roadmap"),
 		Integration: "slack",

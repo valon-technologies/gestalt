@@ -526,8 +526,8 @@ class MainEntrypointTests(unittest.TestCase):
         )
         post_connect_response = servicer.PostConnect(
             plugin_pb2.PostConnectRequest(
-                token=plugin_pb2.IntegrationToken(
-                    user_id="user:user-123",
+                token=plugin_pb2.PostConnectCredential(
+                    subject_id="user:user-123",
                     connection="workspace",
                     instance="default",
                     metadata_json='{"team_id":"T123"}',
@@ -539,8 +539,8 @@ class MainEntrypointTests(unittest.TestCase):
         )
         empty_timestamp_response = servicer.PostConnect(
             plugin_pb2.PostConnectRequest(
-                token=plugin_pb2.IntegrationToken(
-                    user_id="user:user-123",
+                token=plugin_pb2.PostConnectCredential(
+                    subject_id="user:user-123",
                     connection="workspace",
                     instance="default",
                     metadata_json='{"team_id":"T123"}',

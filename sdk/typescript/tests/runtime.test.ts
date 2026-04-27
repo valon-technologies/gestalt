@@ -658,7 +658,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
     create(PostConnectRequestSchema, {
       token: {
         id: "tok-123",
-        userId: "user:user-123",
+        subjectId: "user:user-123",
         integration: "basic-provider",
         connection: "workspace",
         instance: "__default__",

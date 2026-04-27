@@ -92,7 +92,7 @@ func operationResultStatus(result *core.OperationResult, err error) int {
 		return http.StatusUnauthorized
 	case errors.Is(err, ErrAuthorizationDenied), errors.Is(err, ErrScopeDenied):
 		return http.StatusForbidden
-	case errors.Is(err, ErrNoToken), errors.Is(err, ErrReconnectRequired):
+	case errors.Is(err, ErrNoCredential), errors.Is(err, ErrReconnectRequired):
 		return http.StatusPreconditionFailed
 	case errors.Is(err, ErrAmbiguousInstance):
 		return http.StatusConflict

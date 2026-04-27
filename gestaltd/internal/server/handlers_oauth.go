@@ -255,7 +255,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		tokenExpiresAt = &t
 	}
 
-	tm := tokenMaterial{
+	tm := credentialMaterial{
 		SubjectID:      state.SubjectID,
 		AuthSource:     state.AuthSource,
 		Integration:    providerName,

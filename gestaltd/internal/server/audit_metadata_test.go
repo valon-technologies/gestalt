@@ -385,7 +385,7 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	}
 
 	svc := coretesting.NewStubServices(t)
-	if err := svc.ExternalCredentials.PutCredential(t.Context(), &core.IntegrationToken{
+	if err := svc.ExternalCredentials.PutCredential(t.Context(), &core.ExternalCredential{
 		ID:          "identity-audit-token",
 		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 		Integration: "audit-workload-prov",

@@ -207,7 +207,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	successSvc := coretesting.NewStubServices(t)
 	u := seedUser(t, successSvc, "anonymous@gestalt")
 	expired := time.Now().Add(-1 * time.Hour)
-	seedToken(t, successSvc, &core.IntegrationToken{
+	seedToken(t, successSvc, &core.ExternalCredential{
 		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: providerName,
 		Connection: "default", Instance: "default",
 		AccessToken: "old-access-token", RefreshToken: "old-refresh-token", ExpiresAt: &expired,
@@ -247,7 +247,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 
 	errorSvc := coretesting.NewStubServices(t)
 	u2 := seedUser(t, errorSvc, "anonymous@gestalt")
-	seedToken(t, errorSvc, &core.IntegrationToken{
+	seedToken(t, errorSvc, &core.ExternalCredential{
 		ID: "tok2", SubjectID: principal.UserSubjectID(u2.ID), Integration: providerName,
 		Connection: "default", Instance: "default",
 		AccessToken: "expired-access-token", RefreshToken: "expired-refresh-token", ExpiresAt: &expired,

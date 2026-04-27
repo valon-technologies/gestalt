@@ -313,7 +313,7 @@ func (s *stubOAuth) RefreshToken(ctx context.Context, refreshToken string) (*cor
 	return nil, nil
 }
 
-func (s *stubOAuth) PostConnect(_ context.Context, _ *core.IntegrationToken) (map[string]string, error) {
+func (s *stubOAuth) PostConnect(_ context.Context, _ *core.ExternalCredential) (map[string]string, error) {
 	return map[string]string{
 		"gestalt.external_identity.type": "slack_identity",
 		"gestalt.external_identity.id":   "team:T123:user:U456",
@@ -372,7 +372,7 @@ func TestRestrictedPreservesPostConnectCapability(t *testing.T) {
 		t.Fatal("expected restricted wrapper to expose post-connect support")
 	}
 
-	got, supported, err := core.PostConnect(context.Background(), prov, &core.IntegrationToken{
+	got, supported, err := core.PostConnect(context.Background(), prov, &core.ExternalCredential{
 		Integration: "slack",
 		Connection:  "default",
 		AccessToken: "tok",

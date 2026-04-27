@@ -174,7 +174,7 @@ func (m *MergedProvider) SupportsPostConnect() bool {
 	return false
 }
 
-func (m *MergedProvider) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+func (m *MergedProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
 	for _, provider := range m.owned {
 		if !core.SupportsPostConnect(provider) {
 			continue

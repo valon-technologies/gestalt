@@ -231,7 +231,7 @@ func (s *Server) writeWorkflowEventTriggerManagerError(w http.ResponseWriter, r 
 		errors.Is(err, invocation.ErrNotAuthenticated),
 		errors.Is(err, invocation.ErrAuthorizationDenied),
 		errors.Is(err, invocation.ErrScopeDenied),
-		errors.Is(err, invocation.ErrNoToken),
+		errors.Is(err, invocation.ErrNoCredential),
 		errors.Is(err, invocation.ErrReconnectRequired),
 		errors.Is(err, invocation.ErrAmbiguousInstance),
 		errors.Is(err, invocation.ErrUserResolution),

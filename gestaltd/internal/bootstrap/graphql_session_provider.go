@@ -64,7 +64,7 @@ func (p *graphQLSessionCatalogProvider) SupportsPostConnect() bool {
 	return core.SupportsPostConnect(p.Provider)
 }
 
-func (p *graphQLSessionCatalogProvider) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+func (p *graphQLSessionCatalogProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
 	metadata, supported, err := core.PostConnect(ctx, p.Provider, token)
 	if !supported {
 		return nil, core.ErrPostConnectUnsupported

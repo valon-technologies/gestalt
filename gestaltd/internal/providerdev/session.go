@@ -773,7 +773,7 @@ func (p *attachProvider) SupportsPostConnect() bool {
 	return p != nil && p.Provider != nil && core.SupportsPostConnect(p.Provider)
 }
 
-func (p *attachProvider) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+func (p *attachProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
 	if p == nil || p.Provider == nil {
 		return nil, core.ErrPostConnectUnsupported
 	}

@@ -246,7 +246,7 @@ func TestMergedPreservesPostConnectCapability(t *testing.T) {
 		t.Fatal("expected merged provider to expose post-connect support")
 	}
 
-	got, supported, err := core.PostConnect(context.Background(), merged, &core.IntegrationToken{
+	got, supported, err := core.PostConnect(context.Background(), merged, &core.ExternalCredential{
 		Integration: "slack",
 		Connection:  "default",
 		AccessToken: "tok",
@@ -270,7 +270,7 @@ func (p *falsePositivePostConnectProvider) SupportsPostConnect() bool {
 	return false
 }
 
-func (p *falsePositivePostConnectProvider) PostConnect(_ context.Context, _ *core.IntegrationToken) (map[string]string, error) {
+func (p *falsePositivePostConnectProvider) PostConnect(_ context.Context, _ *core.ExternalCredential) (map[string]string, error) {
 	return nil, core.ErrPostConnectUnsupported
 }
 
@@ -295,7 +295,7 @@ func TestMergedPostConnectSkipsProvidersThatAdvertiseNoSupport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, supported, err := core.PostConnect(context.Background(), merged, &core.IntegrationToken{
+	got, supported, err := core.PostConnect(context.Background(), merged, &core.ExternalCredential{
 		Integration: "slack",
 		Connection:  "default",
 		AccessToken: "tok",

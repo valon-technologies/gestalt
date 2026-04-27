@@ -109,7 +109,7 @@ func stubServicesWithToken(t *testing.T, integrations ...string) (*coredata.Serv
 		integrations = []string{"test"}
 	}
 	for i, intg := range integrations {
-		if err := svc.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
+		if err := svc.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
 			ID: fmt.Sprintf("tok%d", i+1), SubjectID: principal.UserSubjectID(u.ID), Integration: intg,
 			Connection: "", Instance: "default",
 			AccessToken: intg + "-token",
@@ -1194,7 +1194,7 @@ func TestNewServer_HumanListToolsUsesSessionMetadataForStaticCollisions(t *testi
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	const userID = "viewer-user"
-	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 		ID:          "tok-default",
 		SubjectID:   principal.UserSubjectID(userID),
 		Integration: "sampledb",
@@ -1873,7 +1873,7 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	ctx := context.Background()
-	if err := ds.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
+	if err := ds.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
 		ID:          "tok-workload",
 		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 		Integration: "clickhouse",
@@ -1966,7 +1966,7 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	ctx := context.Background()
-	if err := ds.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
+	if err := ds.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
 		ID:          "tok-workload",
 		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 		Integration: "sampledb",
@@ -2067,7 +2067,7 @@ func TestNewServer_HumanCallToolUsesInstanceMetadataForStaticCollisions(t *testi
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	const userID = "viewer-user"
-	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 		ID:          "tok-team-b",
 		SubjectID:   principal.UserSubjectID(userID),
 		Integration: "sampledb",
@@ -2374,7 +2374,7 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	const userID = "viewer-user"
-	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 		ID:          "tok-catalog",
 		SubjectID:   principal.UserSubjectID(userID),
 		Integration: "sampledb",
@@ -2384,7 +2384,7 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 	}); err != nil {
 		t.Fatalf("PutCredential catalog: %v", err)
 	}
-	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+	if err := ds.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 		ID:          "tok-rest",
 		SubjectID:   principal.UserSubjectID(userID),
 		Integration: "sampledb",
@@ -2726,11 +2726,11 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, merged)
 	ds, userID := stubServicesWithToken(t, "hybrid")
 	ctx := context.Background()
-	_ = ds.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
+	_ = ds.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
 		ID: "tok-plugin", SubjectID: principal.UserSubjectID(userID), Integration: "hybrid", Connection: config.PluginConnectionName, Instance: "default",
 		AccessToken: testPluginAccessToken,
 	})
-	_ = ds.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
+	_ = ds.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
 		ID: "tok-api", SubjectID: principal.UserSubjectID(userID), Integration: "hybrid", Connection: testAPIConnectionName, Instance: "default",
 		AccessToken: testNamedAPIAccessToken,
 	})

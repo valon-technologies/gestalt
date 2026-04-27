@@ -54,7 +54,7 @@ func (p *connectedCapabilityProvider) ExchangeCode(_ context.Context, _ string) 
 func (p *connectedCapabilityProvider) RefreshToken(_ context.Context, _ string) (*core.TokenResponse, error) {
 	return &core.TokenResponse{AccessToken: "refreshed-token"}, nil
 }
-func (p *connectedCapabilityProvider) PostConnect(_ context.Context, _ *core.IntegrationToken) (map[string]string, error) {
+func (p *connectedCapabilityProvider) PostConnect(_ context.Context, _ *core.ExternalCredential) (map[string]string, error) {
 	return p.postConnectMetadata, nil
 }
 
@@ -83,7 +83,7 @@ func TestBindProviderConnectionPreservesPostConnectCapability(t *testing.T) {
 		t.Fatal("expected bound provider to preserve post-connect support")
 	}
 
-	got, supported, err := core.PostConnect(context.Background(), prov, &core.IntegrationToken{
+	got, supported, err := core.PostConnect(context.Background(), prov, &core.ExternalCredential{
 		Integration: "slack",
 		Connection:  "default",
 		AccessToken: "tok",
@@ -150,7 +150,7 @@ func TestBindProviderConnectionDoesNotFalsePositivePostConnectSupport(t *testing
 		t.Fatal("expected bound provider to report no post-connect support")
 	}
 
-	got, supported, err := core.PostConnect(context.Background(), prov, &core.IntegrationToken{
+	got, supported, err := core.PostConnect(context.Background(), prov, &core.ExternalCredential{
 		Integration: "slack",
 		Connection:  "default",
 		AccessToken: "tok",

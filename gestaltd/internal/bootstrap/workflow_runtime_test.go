@@ -775,7 +775,7 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
-	if err := services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+	if err := services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 		SubjectID:   principal.UserSubjectID(user.ID),
 		Integration: "roadmap",
 		Connection:  "analytics",

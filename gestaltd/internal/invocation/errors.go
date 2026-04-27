@@ -7,7 +7,7 @@ var (
 	ErrOperationNotFound   = errors.New("operation not found")
 	ErrNotAuthenticated    = errors.New("not authenticated")
 	ErrAuthorizationDenied = errors.New("authorization denied")
-	ErrNoToken             = errors.New("no integration token")
+	ErrNoCredential        = errors.New("no external credential")
 	ErrReconnectRequired   = errors.New("integration reconnect required")
 	ErrAmbiguousInstance   = errors.New("ambiguous instance")
 	ErrUserResolution      = errors.New("user resolution failed")

@@ -642,7 +642,7 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 		if subjectID == "" {
 			return ctx, "", fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
 		}
-		return b.resolveSubjectToken(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
+		return b.resolveSubjectCredential(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
 
 	default:
 		return ctx, "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, mode)
@@ -707,7 +707,7 @@ func (b *Broker) resolveBoundToken(ctx context.Context, prov core.Provider, p *p
 			boundCredential.Connection,
 			boundCredential.Instance,
 		)
-		return b.resolveSubjectToken(
+		return b.resolveSubjectCredential(
 			ctx,
 			prov,
 			subjectID,
@@ -722,32 +722,32 @@ func (b *Broker) resolveBoundToken(ctx context.Context, prov core.Provider, p *p
 	}
 }
 
-func (b *Broker) resolveSubjectToken(ctx context.Context, prov core.Provider, subjectID, providerName, connection, instance string, credentialMode core.ConnectionMode, credentialSubjectID string) (context.Context, string, error) {
+func (b *Broker) resolveSubjectCredential(ctx context.Context, prov core.Provider, subjectID, providerName, connection, instance string, credentialMode core.ConnectionMode, credentialSubjectID string) (context.Context, string, error) {
 	if b == nil || coredata.ExternalCredentialProviderMissing(b.externalCreds) {
 		return ctx, "", fmt.Errorf("%w: external credentials provider is not configured", ErrInternal)
 	}
 
-	var storedToken *core.IntegrationToken
+	var storedCredential *core.ExternalCredential
 	var err error
 
 	if instance != "" {
-		storedToken, err = b.externalCreds.GetCredential(ctx, subjectID, providerName, connection, instance)
+		storedCredential, err = b.externalCreds.GetCredential(ctx, subjectID, providerName, connection, instance)
 		if err != nil {
 			if errors.Is(err, core.ErrNotFound) {
-				return ctx, "", fmt.Errorf("%w: no token stored for integration %q instance %q", ErrNoToken, providerName, instance)
+				return ctx, "", fmt.Errorf("%w: no external credential stored for integration %q instance %q", ErrNoCredential, providerName, instance)
 			}
-			return ctx, "", fmt.Errorf("%w: retrieving integration token: %v", ErrInternal, err)
+			return ctx, "", fmt.Errorf("%w: retrieving external credential: %v", ErrInternal, err)
 		}
 	} else {
 		tokens, listErr := b.externalCreds.ListCredentialsForConnection(ctx, subjectID, providerName, connection)
 		if listErr != nil {
-			return ctx, "", fmt.Errorf("%w: listing tokens: %v", ErrInternal, listErr)
+			return ctx, "", fmt.Errorf("%w: listing external credentials: %v", ErrInternal, listErr)
 		}
 		switch len(tokens) {
 		case 0:
-			return ctx, "", fmt.Errorf("%w: no token stored for integration %q", ErrNoToken, providerName)
+			return ctx, "", fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
 		case 1:
-			storedToken = tokens[0]
+			storedCredential = tokens[0]
 		default:
 			instances := make([]string, len(tokens))
 			for i, t := range tokens {
@@ -758,27 +758,27 @@ func (b *Broker) resolveSubjectToken(ctx context.Context, prov core.Provider, su
 		}
 	}
 
-	if storedToken == nil {
-		return ctx, "", fmt.Errorf("%w: no token stored for integration %q", ErrNoToken, providerName)
+	if storedCredential == nil {
+		return ctx, "", fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
 	}
-	SetCredentialAudit(ctx, credentialMode, credentialSubjectID, storedToken.Connection, storedToken.Instance)
+	SetCredentialAudit(ctx, credentialMode, credentialSubjectID, storedCredential.Connection, storedCredential.Instance)
 	ctx = WithCredentialContext(ctx, CredentialContext{
 		Mode:       credentialMode,
 		SubjectID:  credentialSubjectID,
-		Connection: storedToken.Connection,
-		Instance:   storedToken.Instance,
+		Connection: storedCredential.Connection,
+		Instance:   storedCredential.Instance,
 	})
 
-	if storedToken.MetadataJSON != "" {
+	if storedCredential.MetadataJSON != "" {
 		var connParams map[string]string
-		if err := json.Unmarshal([]byte(storedToken.MetadataJSON), &connParams); err != nil {
+		if err := json.Unmarshal([]byte(storedCredential.MetadataJSON), &connParams); err != nil {
 			slog.WarnContext(ctx, "malformed metadata JSON", "provider", providerName, "error", err)
 		} else if len(connParams) > 0 {
 			ctx = core.WithConnectionParams(ctx, connParams)
 		}
 	}
 
-	accessToken, err := b.refreshTokenIfNeeded(ctx, storedToken, providerName, connection, metricutil.NormalizeConnectionMode(effectiveConnectionMode(ctx, prov)))
+	accessToken, err := b.refreshCredentialIfNeeded(ctx, storedCredential, providerName, connection, metricutil.NormalizeConnectionMode(effectiveConnectionMode(ctx, prov)))
 	return ctx, accessToken, err
 }
 
@@ -790,10 +790,10 @@ func (b *Broker) ResolveSubjectToken(ctx context.Context, prov core.Provider, su
 	if subjectID == "" {
 		return ctx, "", fmt.Errorf("%w: principal has no subject ID or email", ErrUserResolution)
 	}
-	return b.resolveSubjectToken(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
+	return b.resolveSubjectCredential(ctx, prov, subjectID, providerName, connection, instance, core.ConnectionModeUser, subjectID)
 }
 
-func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.IntegrationToken, providerName, connection, connectionMode string) (string, error) {
+func (b *Broker) refreshCredentialIfNeeded(ctx context.Context, token *core.ExternalCredential, providerName, connection, connectionMode string) (string, error) {
 	if token.RefreshToken == "" || token.ExpiresAt == nil {
 		return token.AccessToken, nil
 	}

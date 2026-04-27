@@ -30,8 +30,6 @@ type ExternalCredential struct {
 	UpdatedAt         time.Time
 }
 
-type IntegrationToken = ExternalCredential
-
 type AccessPermission struct {
 	Plugin     string   `json:"plugin"`
 	Operations []string `json:"operations,omitempty"`

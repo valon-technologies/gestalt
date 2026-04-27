@@ -1349,7 +1349,7 @@ func TestWorkflowScheduleCreatePinsResolvedInstance(t *testing.T) {
 
 	services := coretesting.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
-	seedToken(t, services, &core.IntegrationToken{
+	seedToken(t, services, &core.ExternalCredential{
 		ID:          "roadmap-default-tenant-a",
 		SubjectID:   principal.UserSubjectID(user.ID),
 		Integration: "roadmap",
@@ -1595,14 +1595,14 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 
 	services := coretesting.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
-	seedToken(t, services, &core.IntegrationToken{
+	seedToken(t, services, &core.ExternalCredential{
 		ID:          "roadmap-default-token",
 		SubjectID:   principal.UserSubjectID(user.ID),
 		Integration: "roadmap",
 		Connection:  "default",
 		AccessToken: "roadmap-token",
 	})
-	seedToken(t, services, &core.IntegrationToken{
+	seedToken(t, services, &core.ExternalCredential{
 		ID:          "analytics-default-token",
 		SubjectID:   principal.UserSubjectID(user.ID),
 		Integration: "analytics",
