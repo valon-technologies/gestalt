@@ -246,8 +246,12 @@ not replace the generic `/api/v1/{plugin}/{operation}` facade; use them when a
 plugin needs a stable custom path, form-encoded request bodies, hosted request
 verification, or an immediate host-managed acknowledgment response.
 
-`spec.http.<name>.path` is plugin-relative. For plugin `example`, `path: /command`
+`spec.http.<name>.path` is plugin-relative. The configured plugin key determines
+the public prefix: for a deployment entry named `example`, `path: /command`
 mounts at `/api/v1/example/command`.
+
+Each binding must name a security scheme. Use a `type: none` scheme only for
+routes that are intentionally unsigned.
 
 #### `spec.securitySchemes`
 
@@ -265,17 +269,22 @@ mounts at `/api/v1/example/command`.
 | `scheme` | string | `basic` or `bearer` for `type: http`. |
 | `secret` | HTTPSecretRef | Secret reference for the scheme. |
 
+Every scheme requires `type`. `hmac`, `apiKey`, and `http` schemes also require
+`secret`. HMAC schemes compare the computed digest against `signatureHeader`,
+optionally prefixed by `signaturePrefix`; `payloadTemplate` supports
+`{raw_body}` and `{header:Header-Name}` placeholders.
+
 #### `spec.http.<name>`
 
-| Field | Type | Purpose |
-| --- | --- | --- |
-| `path` | string | Plugin-relative route path. |
-| `method` | string | HTTP method for the hosted route. |
-| `credentialMode` | string | Optional credential override for the bound operation. `none` skips provider OAuth token resolution for the route; omit it to inherit the provider default. |
-| `security` | string | Name of a scheme from `spec.securitySchemes`. |
-| `target` | string | Canonical operation ID to invoke. |
-| `requestBody` | HTTPRequestBody | Allowed request content types. |
-| `ack` | HTTPAck | Immediate host-managed response. Omit it for synchronous request/response handlers. |
+| Field | Type | Required | Purpose |
+| --- | --- | --- | --- |
+| `path` | string | yes | Plugin-relative route path. |
+| `method` | string | yes | HTTP method for the hosted route. One of `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`. |
+| `credentialMode` | string | no | Optional credential override for the bound operation. `none` skips provider OAuth token resolution for the route; omit it to inherit the provider default. |
+| `security` | string | yes | Name of a scheme from `spec.securitySchemes`. |
+| `target` | string | yes | Canonical operation ID to invoke. |
+| `requestBody` | HTTPRequestBody | no | Allowed request content types. |
+| `ack` | HTTPAck | no | Immediate host-managed response. Omit it for synchronous request/response handlers. |
 
 Example:
 
@@ -312,6 +321,23 @@ Source plugins written in Go, Python, Rust, or TypeScript may generate these
 blocks from code. Gestalt merges generated `securitySchemes` / `http` metadata
 into the effective manifest during local source execution and
 `gestaltd provider release`.
+
+Gestalt parses query parameters into the operation input for every hosted HTTP
+binding. For request bodies, `application/json` object fields merge into the
+input, `application/x-www-form-urlencoded` fields become string parameters, and
+other content types are exposed as `rawBody`. If `requestBody.content` is set,
+the request `Content-Type` must match one of the declared media types or `*/*`.
+
+If `ack` is set, Gestalt returns that status, headers, and body immediately and
+dispatches the target operation asynchronously. Without `ack`, the route waits
+for the operation result and returns it to the caller.
+
+Executable providers may optionally implement hosted HTTP subject resolution
+before the target operation runs. The resolver receives the verified binding
+name, method, path, headers, query parameters, decoded params, raw body,
+security scheme, and verified claims. Returning a subject makes normal plugin
+authorization and connection lookup run as that subject; returning nothing uses
+the binding's system subject.
 
 ### Pagination
 

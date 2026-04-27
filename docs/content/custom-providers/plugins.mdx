@@ -446,6 +446,204 @@ The router derives catalog parameters from the input type. Fields are required b
   </Tabs.Tab>
 </Tabs>
 
+## Hosted HTTP endpoints
+
+Hosted HTTP endpoints let an external product call a plugin through a stable
+HTTP route, while the plugin still handles the request as a normal operation.
+They are useful for webhooks, Slack slash commands, Slack event callbacks, and
+other inbound requests whose path, signature verification, body shape, or
+acknowledgment response needs to match the calling product.
+
+The endpoint declaration usually belongs to the plugin package, either in
+`spec.http` / `spec.securitySchemes` in the manifest or as SDK-generated
+metadata. Deployment config selects the plugin and may override fields, but
+most deployments do not need a separate route declaration. If the configured
+plugin key is `slack` and the binding path is `/commands/support`, Gestalt
+mounts the route at `/api/v1/slack/commands/support` on `server.baseUrl`.
+
+Each binding names a security scheme. Use `type: none` only for routes that are
+intentionally unsigned; signed production webhooks should use `hmac`, `apiKey`,
+or `http` verification. The binding then targets an operation ID. Gestalt
+verifies the request, decodes query/body parameters, optionally resolves a more
+specific subject, and invokes the target operation.
+
+<Tabs items={['Manifest', 'Python', 'TypeScript']}>
+  <Tabs.Tab>
+    ```yaml
+    kind: plugin
+    source: github.com/your-org/plugins/slack
+    version: 0.0.1
+    spec:
+      securitySchemes:
+        slack_signed:
+          type: hmac
+          secret:
+            env: SLACK_SIGNING_SECRET
+          signatureHeader: X-Slack-Signature
+          signaturePrefix: v0=
+          payloadTemplate: "v0:{header:X-Slack-Request-Timestamp}:{raw_body}"
+          timestampHeader: X-Slack-Request-Timestamp
+          maxAgeSeconds: 300
+      http:
+        support_command:
+          path: /commands/support
+          method: POST
+          credentialMode: none
+          security: slack_signed
+          target: handle_support_command
+          requestBody:
+            required: true
+            content:
+              application/x-www-form-urlencoded: {}
+          ack:
+            status: 200
+            body:
+              status: accepted
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+
+    plugin = gestalt.Plugin(
+        "slack",
+        security_schemes={
+            "slack_signed": {
+                "type": "hmac",
+                "secret": {"env": "SLACK_SIGNING_SECRET"},
+                "signatureHeader": "X-Slack-Signature",
+                "signaturePrefix": "v0=",
+                "payloadTemplate": "v0:{header:X-Slack-Request-Timestamp}:{raw_body}",
+                "timestampHeader": "X-Slack-Request-Timestamp",
+                "maxAgeSeconds": 300,
+            },
+        },
+        http={
+            "support_command": {
+                "path": "/commands/support",
+                "method": "POST",
+                "credentialMode": "none",
+                "security": "slack_signed",
+                "target": "handle_support_command",
+                "requestBody": {
+                    "required": True,
+                    "content": {"application/x-www-form-urlencoded": {}},
+                },
+                "ack": {"status": 200, "body": {"status": "accepted"}},
+            },
+        },
+    )
+
+
+    class SlackCommandInput(gestalt.Model):
+        team_id: str
+        user_id: str
+        channel_id: str
+        text: str = gestalt.field(default="")
+
+
+    @plugin.operation(id="handle_support_command", method="POST")
+    def handle_support_command(
+        input: SlackCommandInput, req: gestalt.Request
+    ) -> dict[str, bool]:
+        # Run the Slack command workflow. The host already verified the signature.
+        return {"ok": True}
+
+
+    @plugin.http_subject
+    def resolve_http_subject(
+        request: gestalt.HTTPSubjectRequest,
+    ) -> gestalt.Subject | None:
+        team_id = str(request.params.get("team_id") or "")
+        user_id = str(request.params.get("user_id") or "")
+        if not team_id or not user_id:
+            raise gestalt.http_subject_error(400, "missing Slack subject fields")
+        return gestalt.Subject(
+            id=f"slack:{team_id}:{user_id}",
+            kind="user",
+            display_name=user_id,
+            auth_source="slack",
+        )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    import {
+      definePlugin,
+      httpSubjectError,
+      ok,
+      operation,
+      s,
+    } from "@valon-technologies/gestalt";
+
+    export const plugin = definePlugin({
+      securitySchemes: {
+        slack_signed: {
+          type: "hmac",
+          secret: { env: "SLACK_SIGNING_SECRET" },
+          signatureHeader: "X-Slack-Signature",
+          signaturePrefix: "v0=",
+          payloadTemplate: "v0:{header:X-Slack-Request-Timestamp}:{raw_body}",
+          timestampHeader: "X-Slack-Request-Timestamp",
+          maxAgeSeconds: 300,
+        },
+      },
+      http: {
+        support_command: {
+          path: "/commands/support",
+          method: "POST",
+          credentialMode: "none",
+          security: "slack_signed",
+          target: "handle_support_command",
+          requestBody: {
+            required: true,
+            content: { "application/x-www-form-urlencoded": {} },
+          },
+          ack: { status: 200, body: { status: "accepted" } },
+        },
+      },
+      resolveHTTPSubject(request) {
+        const teamID = String(request.params.team_id ?? "");
+        const userID = String(request.params.user_id ?? "");
+        if (!teamID || !userID) {
+          throw httpSubjectError(400, "missing Slack subject fields");
+        }
+        return {
+          id: `slack:${teamID}:${userID}`,
+          kind: "user",
+          displayName: userID,
+          authSource: "slack",
+        };
+      },
+      operations: [
+        operation({
+          id: "handle_support_command",
+          method: "POST",
+          input: s.object({
+            team_id: s.string(),
+            user_id: s.string(),
+            channel_id: s.string(),
+            text: s.optional(s.string()),
+          }),
+          output: s.object({ ok: s.boolean() }),
+          async handler(input, request) {
+            // Run the Slack command workflow. The host already verified the signature.
+            return ok({ ok: true });
+          },
+        }),
+      ],
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Request query parameters are included in the operation input. JSON object
+bodies merge into the input by field name, form-encoded bodies become string
+parameters, and unsupported body types are passed as `rawBody`. If `ack` is
+configured, Gestalt sends that response immediately and runs the operation
+asynchronously. Without `ack`, the caller receives the operation response.
+
 ## Declarative plugins
 
 Not every plugin needs executable code. If the upstream API is already reachable over HTTP, you can expose it as a set of REST operations declared entirely in the manifest. Gestalt forwards each invocation to the upstream, injecting the caller's credentials automatically. No provider process runs.
