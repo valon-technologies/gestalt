@@ -40,6 +40,11 @@ var (
 	ErrAgentInteractionNotFound          = errors.New("agent interaction is not found")
 )
 
+const (
+	agentSessionCreationWaitTimeout  = 5 * time.Second
+	agentSessionCreationPollInterval = 100 * time.Millisecond
+)
+
 type AgentProviderNotAvailableError struct {
 	Name string
 }
@@ -217,9 +222,13 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 			existing, err := m.sessionMetadata.Get(ctx, claimedSessionID)
 			if err != nil {
 				if errors.Is(err, indexeddb.ErrNotFound) {
-					return nil, ErrAgentSessionCreationInProgress
+					existing, err = m.waitForClaimedSessionMetadata(ctx, subjectID, providerName, idempotencyKey, claimedSessionID)
+					if err != nil {
+						return nil, err
+					}
+				} else {
+					return nil, err
 				}
-				return nil, err
 			}
 			if !sessionRefOwnedBy(existing, p) {
 				return nil, core.ErrNotFound
@@ -1394,6 +1403,37 @@ func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 		Invoker:           m.invoker,
 		CatalogConnection: m.catalogConnection,
 		DefaultConnection: m.defaultConnection,
+	}
+}
+
+func (m *Manager) waitForClaimedSessionMetadata(ctx context.Context, subjectID, providerName, idempotencyKey, sessionID string) (*coreagent.SessionReference, error) {
+	waitCtx, cancel := context.WithTimeout(ctx, agentSessionCreationWaitTimeout)
+	defer cancel()
+	ticker := time.NewTicker(agentSessionCreationPollInterval)
+	defer ticker.Stop()
+	currentSessionID := strings.TrimSpace(sessionID)
+	for {
+		select {
+		case <-waitCtx.Done():
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			return nil, ErrAgentSessionCreationInProgress
+		case <-ticker.C:
+			refreshedSessionID, err := m.sessionMetadata.SessionIDForIdempotency(ctx, subjectID, providerName, idempotencyKey)
+			if err == nil && strings.TrimSpace(refreshedSessionID) != "" {
+				currentSessionID = strings.TrimSpace(refreshedSessionID)
+			} else if err != nil && !errors.Is(err, indexeddb.ErrNotFound) {
+				return nil, err
+			}
+			existing, err := m.sessionMetadata.Get(ctx, currentSessionID)
+			if err == nil {
+				return existing, nil
+			}
+			if !errors.Is(err, indexeddb.ErrNotFound) {
+				return nil, err
+			}
+		}
 	}
 }
 

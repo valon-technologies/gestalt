@@ -165,6 +165,21 @@ func (s *AgentSessionMetadataService) ReleaseIdempotency(ctx context.Context, su
 	return nil
 }
 
+func (s *AgentSessionMetadataService) SessionIDForIdempotency(ctx context.Context, subjectID, providerName, idempotencyKey string) (string, error) {
+	recordID := agentSessionIdempotencyRecordID(subjectID, providerName, idempotencyKey)
+	if recordID == "" {
+		return "", indexeddb.ErrNotFound
+	}
+	rec, err := s.idempotencyStore.Get(ctx, recordID)
+	if err != nil {
+		if err == indexeddb.ErrNotFound {
+			return "", indexeddb.ErrNotFound
+		}
+		return "", fmt.Errorf("get agent session idempotency: %w", err)
+	}
+	return recString(rec, "session_id"), nil
+}
+
 func (s *AgentSessionMetadataService) putIdempotencyRecord(ctx context.Context, ref *coreagent.SessionReference) error {
 	if s == nil || s.idempotencyStore == nil || ref == nil {
 		return nil
