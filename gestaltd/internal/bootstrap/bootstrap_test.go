@@ -814,6 +814,15 @@ type callbackAgentProvider struct {
 	resolveInteractionHook func(context.Context, coreagent.ResolveInteractionRequest) error
 }
 
+type callbackSessionCatalogIntegration struct {
+	coretesting.StubIntegration
+	sessionCatalog *catalog.Catalog
+}
+
+func (p *callbackSessionCatalogIntegration) CatalogForRequest(context.Context, string) (*catalog.Catalog, error) {
+	return p.sessionCatalog, nil
+}
+
 func newCallbackAgentProvider(started *providerhost.StartedHostServices) (*callbackAgentProvider, error) {
 	if started == nil {
 		return nil, fmt.Errorf("started host services are required")
@@ -2204,31 +2213,62 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	}
 
 	factories := validFactories()
-	factories.Builtins = append(factories.Builtins, &coretesting.StubIntegration{
-		N:        "roadmap",
-		ConnMode: core.ConnectionModeNone,
-		CatalogVal: &catalog.Catalog{
-			Name: "roadmap",
-			Operations: []catalog.CatalogOperation{{
-				ID:          "sync",
-				Method:      http.MethodPost,
-				Title:       "Sync roadmap",
-				Description: "Sync the roadmap state",
-				InputSchema: json.RawMessage(`{"type":"object","properties":{"taskId":{"type":"string"}}}`),
-			}},
+	factories.Builtins = append(
+		factories.Builtins,
+		&coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "roadmap",
+				Operations: []catalog.CatalogOperation{{
+					ID:          "sync",
+					Method:      http.MethodPost,
+					Title:       "Sync roadmap",
+					Description: "Sync the roadmap state",
+					InputSchema: json.RawMessage(`{"type":"object","properties":{"taskId":{"type":"string"}}}`),
+				}},
+			},
+			ExecuteFn: func(ctx context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
+				body, err := json.Marshal(map[string]any{
+					"operation": operation,
+					"subject":   principal.FromContext(ctx).SubjectID,
+					"taskId":    params["taskId"],
+				})
+				if err != nil {
+					return nil, err
+				}
+				return &core.OperationResult{Status: http.StatusAccepted, Body: string(body)}, nil
+			},
 		},
-		ExecuteFn: func(ctx context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
-			body, err := json.Marshal(map[string]any{
-				"operation": operation,
-				"subject":   principal.FromContext(ctx).SubjectID,
-				"taskId":    params["taskId"],
-			})
-			if err != nil {
-				return nil, err
-			}
-			return &core.OperationResult{Status: http.StatusAccepted, Body: string(body)}, nil
+		&coretesting.StubIntegration{
+			N:        "lever",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{
+				Name: "lever",
+				Operations: []catalog.CatalogOperation{{
+					ID:          "sync",
+					Method:      http.MethodPost,
+					Title:       "Roadmap sync",
+					Description: "Unavailable static integration that should not fail global agent tool search",
+				}},
+			},
 		},
-	})
+		&callbackSessionCatalogIntegration{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "ashby",
+				ConnMode: core.ConnectionModeUser,
+			},
+			sessionCatalog: &catalog.Catalog{
+				Name: "ashby",
+				Operations: []catalog.CatalogOperation{{
+					ID:          "sync",
+					Method:      http.MethodPost,
+					Title:       "Roadmap sync",
+					Description: "Unavailable session-catalog integration that should not fail global agent tool search",
+				}},
+			},
+		},
+	)
 
 	var provider *callbackAgentProvider
 	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
@@ -2252,10 +2292,20 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	perms := principal.CompilePermissions([]core.AccessPermission{{
-		Plugin:     "roadmap",
-		Operations: []string{"sync"},
-	}})
+	perms := principal.CompilePermissions([]core.AccessPermission{
+		{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		},
+		{
+			Plugin:     "lever",
+			Operations: []string{"sync"},
+		},
+		{
+			Plugin:     "ashby",
+			Operations: []string{"sync"},
+		},
+	})
 	p := &principal.Principal{
 		SubjectID:           "user:user-123",
 		UserID:              "user-123",
@@ -2354,6 +2404,43 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	}
 	if ref.CredentialSubjectID != principal.WorkloadSubjectID("agent-credential") {
 		t.Fatalf("stored credential subject = %q, want %q", ref.CredentialSubjectID, principal.WorkloadSubjectID("agent-credential"))
+	}
+
+	global, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
+		IdempotencyKey: "global-search-idempotency-key",
+		Model:          "gpt-test",
+		Messages:       []coreagent.Message{{Role: "user", Text: "sync it without explicit tools"}},
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateTurn(global search): %v", err)
+	}
+	provider.mu.Lock()
+	globalToolBodies := append([]string(nil), provider.toolBodies...)
+	provider.mu.Unlock()
+	if len(globalToolBodies) != 2 || !strings.Contains(globalToolBodies[1], `"subject":"user:user-123"`) || !strings.Contains(globalToolBodies[1], `"taskId":"task-123"`) {
+		t.Fatalf("global tool callback bodies = %#v", globalToolBodies)
+	}
+	globalRef, err := result.Services.AgentRunMetadata.Get(context.Background(), global.ID)
+	if err != nil {
+		t.Fatalf("AgentRunMetadata.Get(global): %v", err)
+	}
+	if len(globalRef.ToolRefs) != 0 || globalRef.ToolSource != coreagent.ToolSourceModeNativeSearch {
+		t.Fatalf("global stored tool source/refs = %q %#v", globalRef.ToolSource, globalRef.ToolRefs)
+	}
+	if len(globalRef.Tools) != 1 || globalRef.Tools[0].Target.Plugin != "roadmap" || globalRef.Tools[0].Target.Operation != "sync" {
+		t.Fatalf("global stored searched tools = %#v", globalRef.Tools)
+	}
+
+	_, err = result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID:      session.ID,
+		IdempotencyKey: "scoped-unavailable-idempotency-key",
+		Model:          "gpt-test",
+		Messages:       []coreagent.Message{{Role: "user", Text: "sync ashby"}},
+		ToolRefs:       []coreagent.ToolRef{{Plugin: "ashby"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), `no external credential stored for integration "ashby"`) {
+		t.Fatalf("AgentManager.CreateTurn(scoped unavailable) error = %v, want ashby credential error", err)
 	}
 }
 
