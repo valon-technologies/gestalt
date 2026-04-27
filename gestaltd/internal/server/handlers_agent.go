@@ -417,12 +417,7 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 
-	for {
-		events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
-		if err != nil {
-			s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
-			return
-		}
+	writeEvents := func(events []*coreagent.TurnEvent) bool {
 		pageFull := limit > 0 && len(events) == limit
 		for _, event := range events {
 			info := agentTurnEventInfoFromCore(event)
@@ -439,6 +434,16 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 				afterSeq = info.Seq
 			}
 		}
+		return pageFull
+	}
+
+	for {
+		events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
+		if err != nil {
+			s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
+			return
+		}
+		pageFull := writeEvents(events)
 		if pageFull {
 			continue
 		}
@@ -448,7 +453,16 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if done {
-			return
+			events, err := s.agentRuns.ListTurnEvents(ctx, p, turnID, afterSeq, limit)
+			if err != nil {
+				s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
+				return
+			}
+			if len(events) == 0 {
+				return
+			}
+			writeEvents(events)
+			continue
 		}
 		select {
 		case <-ctx.Done():
