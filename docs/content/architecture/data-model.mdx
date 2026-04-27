@@ -1,6 +1,6 @@
 # Data Model
 
-Gestalt stores most persistent state through the configured [IndexedDB provider](/providers/indexeddb). At startup, gestaltd provisions three object stores and their indexes through the same `CreateObjectStore` interface that plugins use. Any backend that implements the IndexedDB contract can store this data. Migrations run automatically on startup.
+Gestalt stores most persistent state through configured providers. Gestaltd core provisions only the object stores it directly owns through the configured [IndexedDB provider](/providers/indexeddb): users, API tokens, agent metadata/idempotency, runtime sessions, and runtime session logs. Provider-owned state, such as upstream credentials, is provisioned by that provider instead of by gestaltd core.
 
 MCP OAuth client registrations (`oauth_registrations`) are stored separately in a raw SQL table managed outside the IndexedDB provider.
 
@@ -24,7 +24,7 @@ Emails and display names are plaintext. If you need encrypted PII at rest, handl
 
 ### `external_credentials`
 
-Stores upstream credentials (OAuth tokens, API keys, manual credentials) for each subject's connected integrations.
+Owned by the configured external credentials provider, not gestaltd core. The default provider stores upstream credentials (OAuth tokens, API keys, manual credentials) for each subject's connected integrations.
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -52,14 +52,13 @@ Gestalt API tokens (`gst_api_*`). The plaintext is never stored, only a one-way 
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | string, PK | UUID. |
-| `identity_id` | string | Canonical identity link for the token owner. |
 | `owner_kind` | string | Token owner kind (`user`). |
 | `owner_id` | string | Owner ID within `owner_kind`. |
-| `token_kind` | string | Token purpose (`api` or `workload`). |
 | `credential_subject_id` | string | Subject whose upstream credentials the token may use. |
 | `name` | string | Display name (e.g., `automation`, `cli-token`). |
 | `hashed_token` | string, unique | **SHA-256 hash.** Plaintext returned once at creation. |
 | `scopes` | string | Plaintext. Space-separated provider names. |
+| `permissions_json` | string | JSON-encoded provider access permissions. |
 | `expires_at` | time | Null for non-expiring tokens. |
 | `created_at` | time | |
 | `updated_at` | time | |

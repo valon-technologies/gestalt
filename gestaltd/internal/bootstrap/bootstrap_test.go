@@ -7251,17 +7251,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Fatalf("Start(first): %v", err)
 		}
 
-		canonicalIdentityID, err := result.Services.Users.CanonicalIdentityIDForUser(ctx, dynamicUser.ID)
-		if err != nil {
-			t.Fatalf("CanonicalIdentityIDForUser(first): %v", err)
-		}
-		waitForCanonicalAuthorizationState(t, ctx, result, canonicalIdentityID, "calendar", "admin")
-		if err := result.Services.IdentityPluginAccess.DeleteAccess(ctx, canonicalIdentityID, "calendar"); err != nil {
-			t.Fatalf("DeleteAccess(calendar): %v", err)
-		}
-		if err := result.Services.WorkspaceRoles.DeleteRole(ctx, canonicalIdentityID, "admin"); err != nil {
-			t.Fatalf("DeleteRole(admin): %v", err)
-		}
 		if err := result.Close(context.Background()); err != nil {
 			t.Fatalf("Close(first): %v", err)
 		}
@@ -7298,25 +7287,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Fatalf("provider-backed admin role after restart = %q, want %q", adminAccess.Role, "admin")
 		}
 
-		canonicalIdentityID, err = result.Services.Users.CanonicalIdentityIDForUser(ctx, dynamicUser.ID)
-		if err != nil {
-			t.Fatalf("CanonicalIdentityIDForUser: %v", err)
-		}
-		waitForCanonicalAuthorizationState(t, ctx, result, canonicalIdentityID, "calendar", "admin")
-		pluginAccess, err := result.Services.IdentityPluginAccess.GetAccess(ctx, canonicalIdentityID, "calendar")
-		if err != nil {
-			t.Fatalf("GetAccess(calendar): %v", err)
-		}
-		if !pluginAccess.InvokeAllOperations {
-			t.Fatal("expected restart rehydrate to restore invoke-all plugin access")
-		}
-		roles, err := result.Services.WorkspaceRoles.ListByPrincipal(ctx, canonicalIdentityID)
-		if err != nil {
-			t.Fatalf("ListByPrincipal: %v", err)
-		}
-		if len(roles) != 1 || roles[0].Role != "admin" {
-			t.Fatalf("workspace roles after restart = %+v, want [admin]", roles)
-		}
 	})
 
 	t.Run("authorization provider preserves existing provider dynamic roles", func(t *testing.T) {
@@ -7731,42 +7701,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
-}
-
-func waitForCanonicalAuthorizationState(t *testing.T, ctx context.Context, result *bootstrap.Result, identityID, plugin, role string) {
-	t.Helper()
-
-	deadline := time.Now().Add(3 * time.Second)
-	var lastPluginAccessErr, lastWorkspaceRoleErr error
-	for {
-		pluginReady := false
-		if access, err := result.Services.IdentityPluginAccess.GetAccess(ctx, identityID, plugin); err == nil && access.InvokeAllOperations {
-			pluginReady = true
-		} else {
-			lastPluginAccessErr = err
-		}
-
-		roleReady := false
-		roles, err := result.Services.WorkspaceRoles.ListByPrincipal(ctx, identityID)
-		if err == nil {
-			for _, existing := range roles {
-				if existing != nil && existing.Role == role {
-					roleReady = true
-					break
-				}
-			}
-		} else {
-			lastWorkspaceRoleErr = err
-		}
-
-		if pluginReady && roleReady {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("canonical authorization state for identity %q was not synced; pluginErr=%v roleErr=%v", identityID, lastPluginAccessErr, lastWorkspaceRoleErr)
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
 }
 
 func TestBootstrapRejectsBuiltinEitherProviderWithoutAuthorizationConfig(t *testing.T) {

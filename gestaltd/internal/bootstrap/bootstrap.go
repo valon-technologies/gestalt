@@ -225,34 +225,8 @@ type Result struct {
 
 	pluginRuntimeRegistry *pluginRuntimeRegistry
 	auditClose            func(context.Context) error
-	canonicalSyncCancel   context.CancelFunc
-	canonicalSyncDone     chan struct{}
 	mu                    sync.Mutex
 	closed                bool
-}
-
-const canonicalAuthorizationSyncRetryInterval = 30 * time.Second
-
-func runCanonicalAuthorizationSync(ctx context.Context, services *coredata.Services, authorizer authorization.RuntimeAuthorizer, provider core.AuthorizationProvider) {
-	attempt := 0
-	for {
-		attempt++
-		started := time.Now()
-		if err := syncProviderBackedHumanCanonicalState(ctx, services, authorizer, provider); err != nil {
-			if errors.Is(err, context.Canceled) {
-				return
-			}
-			slog.WarnContext(ctx, "authorization canonical sync failed", "error", err, "attempt", attempt, "duration", time.Since(started).String())
-			select {
-			case <-time.After(canonicalAuthorizationSyncRetryInterval):
-				continue
-			case <-ctx.Done():
-				return
-			}
-		}
-		slog.InfoContext(ctx, "authorization canonical sync finished", "attempt", attempt, "duration", time.Since(started).String())
-		return
-	}
 }
 
 func (r *Result) Start(ctx context.Context) error {
@@ -272,16 +246,6 @@ func (r *Result) Start(ctx context.Context) error {
 		}
 		slog.InfoContext(ctx, "authorization provider state loaded", "duration", time.Since(started).String())
 	}
-	if r.canonicalSyncDone == nil {
-		syncCtx, cancel := context.WithCancel(ctx)
-		done := make(chan struct{})
-		r.canonicalSyncCancel = cancel
-		r.canonicalSyncDone = done
-		go func() {
-			defer close(done)
-			runCanonicalAuthorizationSync(syncCtx, r.Services, r.Authorizer, r.AuthorizationProvider)
-		}()
-	}
 	return nil
 }
 
@@ -298,13 +262,6 @@ func (r *Result) Close(ctx context.Context) error {
 	if r.ProvidersReady != nil {
 		<-r.ProvidersReady
 	}
-	if r.canonicalSyncCancel != nil {
-		r.canonicalSyncCancel()
-	}
-	if r.canonicalSyncDone != nil {
-		<-r.canonicalSyncDone
-	}
-
 	var errs []error
 	authCloseErr := closeAuth(r.Auth)
 	if len(r.AuthProviders) != 0 {
