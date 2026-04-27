@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
@@ -16,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -45,6 +47,8 @@ type dialTelemetryProviders struct {
 	meterProvider  metric.MeterProvider
 	tracerProvider trace.TracerProvider
 }
+
+const hostedGRPCReadyTimeout = 30 * time.Second
 
 func (p dialTelemetryProviders) MeterProvider() metric.MeterProvider {
 	return p.meterProvider
@@ -128,7 +132,35 @@ func dialHostedConn(ctx context.Context, target string, opts ...DialOption) (*gr
 	if err != nil {
 		return nil, err
 	}
+	if err := waitForHostedGRPCReady(ctx, conn); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
 	return conn, nil
+}
+
+func waitForHostedGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	readyCtx, cancel := context.WithTimeout(ctx, hostedGRPCReadyTimeout)
+	defer cancel()
+	for {
+		state := conn.GetState()
+		if state == connectivity.Ready {
+			return nil
+		}
+		if state == connectivity.Shutdown {
+			return fmt.Errorf("hosted plugin gRPC connection shut down before ready")
+		}
+
+		waitCtx, cancel := context.WithTimeout(readyCtx, 25*time.Millisecond)
+		changed := conn.WaitForStateChange(waitCtx, state)
+		cancel()
+		if !changed && readyCtx.Err() != nil {
+			return fmt.Errorf("waiting for hosted plugin gRPC ready: %w", readyCtx.Err())
+		}
+	}
 }
 
 func (c *dialedHostedPluginConn) Lifecycle() proto.ProviderLifecycleClient {
