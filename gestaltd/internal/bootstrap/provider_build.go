@@ -101,11 +101,11 @@ func buildProvidersAsync(
 		intgDef := cfg.Plugins[name]
 		var proxy *startupProviderProxy
 		if deps.WorkflowRuntime != nil {
-			spec, operationConnections, err := buildStartupProviderSpec(name, intgDef)
+			spec, operationRouting, err := buildStartupProviderSpec(name, intgDef)
 			if err != nil {
 				slog.Warn("building startup provider proxy metadata failed", "provider", name, "error", err)
 			} else {
-				proxy = newStartupProviderProxy(spec, operationConnections, deps.WorkflowRuntime.StartupWaitTracker())
+				proxy = newStartupProviderProxy(spec, operationRouting, deps.WorkflowRuntime.StartupWaitTracker())
 				if err := reg.Providers.Register(name, proxy); err != nil {
 					errMu.Lock()
 					buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", name, err))
@@ -201,44 +201,60 @@ func validateProviderConnectionMode(provider string, mode core.ConnectionMode) e
 }
 
 func BuildStartupProviderSpec(name string, entry *config.ProviderEntry) (providerhost.StaticProviderSpec, map[string]string, error) {
-	return buildStartupProviderSpec(name, entry)
+	spec, routing, err := buildStartupProviderSpec(name, entry)
+	return spec, routing.connections, err
 }
 
-func buildStartupProviderSpec(name string, entry *config.ProviderEntry) (providerhost.StaticProviderSpec, map[string]string, error) {
+type startupOperationRouting struct {
+	connections    map[string]string
+	resolver       core.OperationConnectionResolver
+	overridePolicy core.OperationConnectionOverridePolicy
+}
+
+func buildStartupProviderSpec(name string, entry *config.ProviderEntry) (providerhost.StaticProviderSpec, startupOperationRouting, error) {
 	if entry == nil {
-		return providerhost.StaticProviderSpec{}, nil, fmt.Errorf("integration %q has no plugin defined", name)
+		return providerhost.StaticProviderSpec{}, startupOperationRouting{}, fmt.Errorf("integration %q has no plugin defined", name)
 	}
 	manifest := entry.ResolvedManifest
 	manifestPlugin := entry.ManifestSpec()
 	if manifest == nil || manifestPlugin == nil {
-		return providerhost.StaticProviderSpec{}, nil, fmt.Errorf("integration %q must resolve to a provider manifest", name)
+		return providerhost.StaticProviderSpec{}, startupOperationRouting{}, fmt.Errorf("integration %q must resolve to a provider manifest", name)
 	}
 
 	meta := resolveProviderMetadata(entry)
 	spec, plan, err := buildPluginStaticSpec(name, entry, manifest, meta)
 	if err != nil {
-		return providerhost.StaticProviderSpec{}, nil, err
+		return providerhost.StaticProviderSpec{}, startupOperationRouting{}, err
+	}
+	restConnections, restSelectors, restLocks, err := plan.RESTOperationConnectionBindings(manifestPlugin)
+	if err != nil {
+		return providerhost.StaticProviderSpec{}, startupOperationRouting{}, err
 	}
 	if spec.Catalog != nil {
-		return spec, operationConnectionsForCatalog(spec.Catalog, plan), nil
+		return spec, startupOperationRouting{connections: operationConnectionsForCatalog(spec.Catalog, plan, restConnections)}, nil
 	}
 	if !manifestPlugin.IsDeclarative() && !manifestPlugin.IsSpecLoaded() {
-		return spec, map[string]string{}, nil
+		return spec, startupOperationRouting{connections: map[string]string{}}, nil
 	}
 	declarative, err := providerhost.NewDeclarativeProvider(
 		manifest,
 		nil,
 		providerhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
 		providerhost.WithDeclarativeConnectionMode(plan.ConnectionMode()),
+		providerhost.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
 	)
 	if err != nil {
-		return providerhost.StaticProviderSpec{}, nil, err
+		return providerhost.StaticProviderSpec{}, startupOperationRouting{}, err
 	}
 	spec.Catalog = declarative.Catalog()
-	return spec, operationConnectionsForCatalog(spec.Catalog, plan), nil
+	return spec, startupOperationRouting{
+		connections:    operationConnectionsForCatalog(spec.Catalog, plan, restConnections),
+		resolver:       declarative,
+		overridePolicy: declarative,
+	}, nil
 }
 
-func operationConnectionsForCatalog(cat *catalog.Catalog, plan config.StaticConnectionPlan) map[string]string {
+func operationConnectionsForCatalog(cat *catalog.Catalog, plan config.StaticConnectionPlan, restConnections map[string]string) map[string]string {
 	if cat == nil {
 		return map[string]string{}
 	}
@@ -249,7 +265,11 @@ func operationConnectionsForCatalog(cat *catalog.Catalog, plan config.StaticConn
 		connection := pluginConnection
 		switch operation.Transport {
 		case catalog.TransportREST:
-			connection = plan.APIConnection()
+			if resolved := restConnections[operation.ID]; resolved != "" {
+				connection = resolved
+			} else {
+				connection = plan.RESTConnection()
+			}
 		case "graphql":
 			if resolved, ok := plan.ResolvedSurface(config.SpecSurfaceGraphQL); ok {
 				connection = resolved.ConnectionName
@@ -323,11 +343,16 @@ func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry
 		if err != nil {
 			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)
 		}
+		restConnections, restSelectors, restLocks, err := plan.RESTOperationConnectionBindings(manifestPlugin)
+		if err != nil {
+			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)
+		}
 		declarative, err := providerhost.NewDeclarativeProvider(
 			manifest,
 			nil,
 			providerhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
 			providerhost.WithDeclarativeConnectionMode(plan.ConnectionMode()),
+			providerhost.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
@@ -364,6 +389,11 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 	staticAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, pluginProv.Catalog())
 
 	if manifestPlugin.IsDeclarative() {
+		restConnections, restSelectors, restLocks, err := plan.RESTOperationConnectionBindings(manifestPlugin)
+		if err != nil {
+			closeIfPossible(pluginProv)
+			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)
+		}
 		filteredPluginProv, err := applyAllowedOperations(name, staticAllowedOperations, pluginProv)
 		if err != nil {
 			closeIfPossible(pluginProv)
@@ -375,6 +405,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 			nil,
 			providerhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
 			providerhost.WithDeclarativeConnectionMode(plan.ConnectionMode()),
+			providerhost.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
 		)
 		if err != nil {
 			closeIfPossible(pluginProv)
@@ -392,7 +423,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 			pluginProv.Description(),
 			firstProviderIconSVG(pluginProv, apiProv),
 			composite.BoundProvider{Provider: pluginProv, Connection: hybridPluginOperationConnection(plan, plan.APIConnection())},
-			composite.BoundProvider{Provider: apiProv, Connection: plan.APIConnection()},
+			composite.BoundProvider{Provider: apiProv, FallbackConnection: plan.RESTConnection()},
 		)
 		if err != nil {
 			closeIfPossible(apiProv, pluginProv)

@@ -252,3 +252,31 @@ func (r *Restricted) ConnectionForOperation(operation string) string {
 	}
 	return r.inner.ConnectionForOperation(innerOperation)
 }
+
+func (r *Restricted) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
+	if _, ok := r.allowed[operation]; !ok {
+		return "", nil
+	}
+	innerOperation := operation
+	if alias, ok := r.aliases[operation]; ok {
+		innerOperation = alias
+	}
+	if resolver, ok := r.inner.(core.OperationConnectionResolver); ok {
+		return resolver.ResolveConnectionForOperation(innerOperation, params)
+	}
+	return r.inner.ConnectionForOperation(innerOperation), nil
+}
+
+func (r *Restricted) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
+	if _, ok := r.allowed[operation]; !ok {
+		return true
+	}
+	innerOperation := operation
+	if alias, ok := r.aliases[operation]; ok {
+		innerOperation = alias
+	}
+	if policy, ok := r.inner.(core.OperationConnectionOverridePolicy); ok {
+		return policy.OperationConnectionOverrideAllowed(innerOperation, params)
+	}
+	return false
+}

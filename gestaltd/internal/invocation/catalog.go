@@ -158,6 +158,30 @@ func sessionCatalogUnsupported(err error) bool {
 	return err != nil && errors.Is(err, core.ErrSessionCatalogUnsupported)
 }
 
+func ResolveOperationConnection(prov core.Provider, operation string, params map[string]any) (string, error) {
+	if prov == nil {
+		return "", nil
+	}
+	if resolver, ok := prov.(core.OperationConnectionResolver); ok {
+		connection, err := resolver.ResolveConnectionForOperation(operation, params)
+		if err != nil {
+			return "", fmt.Errorf("%w: %v", ErrInvalidInvocation, err)
+		}
+		return connection, nil
+	}
+	return prov.ConnectionForOperation(operation), nil
+}
+
+func OperationConnectionOverrideAllowed(prov core.Provider, operation string, params map[string]any) bool {
+	if prov == nil {
+		return true
+	}
+	if policy, ok := prov.(core.OperationConnectionOverridePolicy); ok {
+		return policy.OperationConnectionOverrideAllowed(operation, params)
+	}
+	return false
+}
+
 func resolveCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, defaultConnection, instance string, strictSession bool) (*catalog.Catalog, CatalogResolutionMetadata, error) {
 	meta := CatalogResolutionMetadata{}
 	staticCat := prov.Catalog()

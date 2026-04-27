@@ -666,13 +666,18 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "operation access denied")
 		return
 	}
+	operationConnection, err := invocation.ResolveOperationConnection(surfaceProv, opMeta.ID, params)
+	if err != nil {
+		s.writeInvocationError(w, r, providerName, operationName, err)
+		return
+	}
 	explicitConnection := connectionInput
 	if explicitConnection != "" {
 		if !safeParamValue.MatchString(explicitConnection) {
 			writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
 			return
 		}
-		if operationConnection := config.ResolveConnectionAlias(prov.ConnectionForOperation(opMeta.ID)); operationConnection != "" && operationConnection != connection {
+		if operationConnection := config.ResolveConnectionAlias(operationConnection); operationConnection != "" && operationConnection != connection && !invocation.OperationConnectionOverrideAllowed(surfaceProv, opMeta.ID, params) {
 			writeError(
 				w,
 				http.StatusBadRequest,
@@ -689,7 +694,10 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx = invocation.WithCatalogOperation(ctx, providerName, opMeta)
 	if connection == "" {
-		connection = resolvedConnection
+		connection = operationConnection
+		if connection == "" {
+			connection = resolvedConnection
+		}
 	}
 	if connection != "" {
 		if !safeParamValue.MatchString(connection) {
@@ -745,6 +753,8 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
 	case errors.Is(err, invocation.ErrInternal):
 		writeError(w, http.StatusInternalServerError, "internal error")
+	case errors.Is(err, invocation.ErrInvalidInvocation):
+		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, core.ErrMCPOnly):
 		writeError(w, http.StatusBadRequest, "this integration is accessible only via MCP")
 	case errors.Is(err, apiexec.ErrMissingPathParam):

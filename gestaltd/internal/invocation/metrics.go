@@ -98,7 +98,7 @@ func operationResultStatus(result *core.OperationResult, err error) int {
 		return http.StatusConflict
 	case errors.Is(err, ErrUserResolution), errors.Is(err, ErrInternal):
 		return http.StatusInternalServerError
-	case errors.Is(err, core.ErrMCPOnly), errors.Is(err, apiexec.ErrMissingPathParam):
+	case errors.Is(err, ErrInvalidInvocation), errors.Is(err, core.ErrMCPOnly), errors.Is(err, apiexec.ErrMissingPathParam):
 		return http.StatusBadRequest
 	case errors.As(err, &upstreamErr) && validHTTPStatus(upstreamErr.Status):
 		return upstreamErr.Status

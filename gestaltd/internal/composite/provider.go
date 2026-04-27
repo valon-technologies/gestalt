@@ -106,6 +106,20 @@ func (p *Provider) ConnectionForOperation(operation string) string {
 	return p.api.ConnectionForOperation(operation)
 }
 
+func (p *Provider) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
+	if resolver, ok := p.api.(core.OperationConnectionResolver); ok {
+		return resolver.ResolveConnectionForOperation(operation, params)
+	}
+	return p.api.ConnectionForOperation(operation), nil
+}
+
+func (p *Provider) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
+	if policy, ok := p.api.(core.OperationConnectionOverridePolicy); ok {
+		return policy.OperationConnectionOverrideAllowed(operation, params)
+	}
+	return false
+}
+
 func (p *Provider) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
 	return p.mcp.CallTool(ctx, name, args)
 }

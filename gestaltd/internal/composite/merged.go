@@ -18,12 +18,18 @@ type MergedProvider struct {
 	connMode core.ConnectionMode
 	opConn   map[string]string
 	route    map[string]core.Provider
+	binding  map[string]BoundProvider
 	owned    []core.Provider
 }
 
 type BoundProvider struct {
-	Provider   core.Provider
-	Connection string
+	Provider core.Provider
+
+	// Connection forces every operation from this provider to use the named
+	// connection. FallbackConnection only applies when the provider does not
+	// report or resolve a more specific operation connection.
+	Connection         string
+	FallbackConnection string
 }
 
 var (
@@ -45,9 +51,10 @@ func NewMergedWithConnections(name, displayName, desc, iconSVG string, providers
 			IconSVG:     iconSVG,
 			Operations:  make([]catalog.CatalogOperation, 0),
 		},
-		opConn: make(map[string]string),
-		route:  make(map[string]core.Provider),
-		owned:  owned,
+		opConn:  make(map[string]string),
+		route:   make(map[string]core.Provider),
+		binding: make(map[string]BoundProvider),
+		owned:   owned,
 	}
 	for i, bound := range providers {
 		p := bound.Provider
@@ -66,12 +73,15 @@ func NewMergedWithConnections(name, displayName, desc, iconSVG string, providers
 				return nil, fmt.Errorf("operation %q provided by both %q and %q", op.ID, owner.Name(), p.Name())
 			}
 			m.route[op.ID] = p
+			m.binding[op.ID] = bound
 			m.catalog.Operations = append(m.catalog.Operations, *op)
-			switch {
+			switch operationConnection := p.ConnectionForOperation(op.ID); {
 			case bound.Connection != "":
 				m.opConn[op.ID] = bound.Connection
-			case p.ConnectionForOperation(op.ID) != "":
-				m.opConn[op.ID] = p.ConnectionForOperation(op.ID)
+			case operationConnection != "":
+				m.opConn[op.ID] = operationConnection
+			case bound.FallbackConnection != "":
+				m.opConn[op.ID] = bound.FallbackConnection
 			}
 		}
 	}
@@ -126,6 +136,37 @@ func (m *MergedProvider) DiscoveryConfig() *core.DiscoveryConfig {
 
 func (m *MergedProvider) ConnectionForOperation(op string) string {
 	return m.opConn[op]
+}
+
+func (m *MergedProvider) ResolveConnectionForOperation(op string, params map[string]any) (string, error) {
+	if bound, ok := m.binding[op]; ok {
+		if bound.Connection != "" {
+			return bound.Connection, nil
+		}
+		if resolver, ok := bound.Provider.(core.OperationConnectionResolver); ok {
+			connection, err := resolver.ResolveConnectionForOperation(op, params)
+			if err != nil || connection != "" {
+				return connection, err
+			}
+		}
+		if bound.FallbackConnection != "" {
+			return bound.FallbackConnection, nil
+		}
+	}
+	return m.ConnectionForOperation(op), nil
+}
+
+func (m *MergedProvider) OperationConnectionOverrideAllowed(op string, params map[string]any) bool {
+	if bound, ok := m.binding[op]; ok {
+		if bound.Connection != "" {
+			return false
+		}
+		if policy, ok := bound.Provider.(core.OperationConnectionOverridePolicy); ok {
+			return policy.OperationConnectionOverrideAllowed(op, params)
+		}
+		return bound.FallbackConnection != ""
+	}
+	return false
 }
 
 func (m *MergedProvider) Catalog() *catalog.Catalog { return m.catalog.Clone() }

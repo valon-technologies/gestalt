@@ -10131,6 +10131,242 @@ func TestExecuteOperation_AllowsExplicitConnectionAliasForStaticOperation(t *tes
 	}
 }
 
+func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOmitsInternalParam(t *testing.T) {
+	t.Parallel()
+
+	var (
+		mu    sync.Mutex
+		calls []struct {
+			path string
+			auth string
+			body map[string]any
+		}
+	)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/chat.postMessage", "/api/chat.scheduleMessage", "/api/views.open":
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		calls = append(calls, struct {
+			path string
+			auth string
+			body map[string]any
+		}{
+			path: r.URL.Path,
+			auth: r.Header.Get("Authorization"),
+			body: body,
+		})
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	manifest := &providermanifestv1.Manifest{
+		Source:      "slack",
+		DisplayName: "Slack",
+		Spec: &providermanifestv1.Spec{
+			DefaultConnection: "default",
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {Mode: providermanifestv1.ConnectionModeUser},
+				"bot":     {Mode: providermanifestv1.ConnectionModeUser},
+			},
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					Connection: "bot",
+					BaseURL:    upstream.URL,
+					Operations: []providermanifestv1.ProviderOperation{
+						{
+							Name:        "chat.postMessage",
+							Description: "Send a Slack message",
+							Method:      http.MethodPost,
+							Path:        "/api/chat.postMessage",
+							ConnectionSelector: &providermanifestv1.OperationConnectionSelector{
+								Parameter: "actor",
+								Default:   "bot",
+								Values: map[string]string{
+									"bot":  "bot",
+									"user": "default",
+								},
+							},
+							Parameters: []providermanifestv1.ProviderParameter{
+								{Name: "channel", Type: "string", In: "body", Required: true},
+								{Name: "text", Type: "string", In: "body", Required: true},
+								{Name: "actor", Type: "string", In: "body", Internal: true},
+							},
+						},
+						{
+							Name:        "chat.scheduleMessage",
+							Description: "Schedule a Slack message",
+							Method:      http.MethodPost,
+							Path:        "/api/chat.scheduleMessage",
+							Parameters: []providermanifestv1.ProviderParameter{
+								{Name: "channel", Type: "string", In: "body", Required: true},
+								{Name: "text", Type: "string", In: "body", Required: true},
+								{Name: "post_at", Type: "int", In: "body", Required: true},
+							},
+						},
+						{
+							Name:        "views.open",
+							Description: "Open a Slack view",
+							Method:      http.MethodPost,
+							Path:        "/api/views.open",
+							ConnectionSelector: &providermanifestv1.OperationConnectionSelector{
+								Parameter: "audience",
+								Default:   "user",
+								Values: map[string]string{
+									"bot":  "bot",
+									"user": "default",
+								},
+							},
+							Parameters: []providermanifestv1.ProviderParameter{
+								{Name: "trigger_id", Type: "string", In: "body", Required: true},
+								{Name: "audience", Type: "string", In: "body"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	entry := &config.ProviderEntry{ResolvedManifest: manifest}
+	plan, err := config.BuildStaticConnectionPlan(entry, manifest.Spec)
+	if err != nil {
+		t.Fatalf("BuildStaticConnectionPlan: %v", err)
+	}
+	restConnections, restSelectors, restLocks, err := plan.RESTOperationConnectionBindings(manifest.Spec)
+	if err != nil {
+		t.Fatalf("RESTOperationConnectionBindings: %v", err)
+	}
+	prov, err := providerhost.NewDeclarativeProvider(
+		manifest,
+		upstream.Client(),
+		providerhost.WithDeclarativeConnectionMode(plan.ConnectionMode()),
+		providerhost.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
+	)
+	if err != nil {
+		t.Fatalf("NewDeclarativeProvider: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	user, err := svc.Users.FindOrCreateUser(context.Background(), "selector@test.local")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser: %v", err)
+	}
+	subjectID := principal.UserSubjectID(user.ID)
+	seedToken(t, svc, &core.ExternalCredential{
+		ID:          "slack-default",
+		SubjectID:   subjectID,
+		Integration: "slack",
+		Connection:  "default",
+		Instance:    "default",
+		AccessToken: "user-slack-token",
+	})
+	seedToken(t, svc, &core.ExternalCredential{
+		ID:          "slack-bot",
+		SubjectID:   subjectID,
+		Integration: "slack",
+		Connection:  "bot",
+		Instance:    "default",
+		AccessToken: "bot-slack-token",
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "api-token" {
+					return nil, fmt.Errorf("bad token")
+				}
+				return &core.UserIdentity{Email: "selector@test.local"}, nil
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	doInvoke := func(operation, body string) int {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/slack/"+operation, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer api-token")
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode >= 500 {
+			payload, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d: %s", resp.StatusCode, payload)
+		}
+		return resp.StatusCode
+	}
+
+	if status := doInvoke("chat.postMessage", `{"channel":"C1","text":"as user","actor":"user"}`); status != http.StatusOK {
+		t.Fatalf("user actor status = %d, want %d", status, http.StatusOK)
+	}
+	if status := doInvoke("chat.postMessage", `{"channel":"C1","text":"as bot"}`); status != http.StatusOK {
+		t.Fatalf("default actor status = %d, want %d", status, http.StatusOK)
+	}
+	if status := doInvoke("chat.scheduleMessage?_connection=default", `{"channel":"C1","text":"scheduled","post_at":4102444800}`); status != http.StatusOK {
+		t.Fatalf("surface fallback override status = %d, want %d", status, http.StatusOK)
+	}
+	if status := doInvoke("views.open", `{"trigger_id":"T1","audience":"user"}`); status != http.StatusOK {
+		t.Fatalf("non-internal selector status = %d, want %d", status, http.StatusOK)
+	}
+	if status := doInvoke("chat.postMessage", `{"channel":"C1","text":"bad actor","actor":"workspace"}`); status != http.StatusBadRequest {
+		t.Fatalf("invalid actor status = %d, want %d", status, http.StatusBadRequest)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(calls) != 4 {
+		t.Fatalf("upstream calls = %d, want 4", len(calls))
+	}
+	if calls[0].path != "/api/chat.postMessage" {
+		t.Fatalf("first call path = %q, want chat.postMessage", calls[0].path)
+	}
+	if calls[0].auth != "Bearer user-slack-token" {
+		t.Fatalf("first call auth = %q, want user token", calls[0].auth)
+	}
+	if _, ok := calls[0].body["actor"]; ok {
+		t.Fatalf("first upstream body included internal actor param: %+v", calls[0].body)
+	}
+	if calls[1].auth != "Bearer bot-slack-token" {
+		t.Fatalf("second call auth = %q, want bot token", calls[1].auth)
+	}
+	if _, ok := calls[1].body["actor"]; ok {
+		t.Fatalf("second upstream body included internal actor param: %+v", calls[1].body)
+	}
+	if calls[2].path != "/api/chat.scheduleMessage" {
+		t.Fatalf("third call path = %q, want chat.scheduleMessage", calls[2].path)
+	}
+	if calls[2].auth != "Bearer user-slack-token" {
+		t.Fatalf("third call auth = %q, want user token", calls[2].auth)
+	}
+	if calls[2].body["text"] != "scheduled" {
+		t.Fatalf("third upstream body text = %#v, want scheduled", calls[2].body["text"])
+	}
+	if calls[3].path != "/api/views.open" {
+		t.Fatalf("fourth call path = %q, want views.open", calls[3].path)
+	}
+	if calls[3].auth != "Bearer user-slack-token" {
+		t.Fatalf("fourth call auth = %q, want user token", calls[3].auth)
+	}
+	if calls[3].body["audience"] != "user" {
+		t.Fatalf("fourth upstream body audience = %#v, want user", calls[3].body["audience"])
+	}
+}
+
 func TestExecuteOperation_UnknownIntegration(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {

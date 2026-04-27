@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -82,6 +83,9 @@ func BuildStaticConnectionPlan(plugin *ProviderEntry, manifestPlugin *providerma
 	if err := plan.validateConnectionModes(); err != nil {
 		return StaticConnectionPlan{}, err
 	}
+	if _, _, _, err := plan.RESTOperationConnectionBindings(manifestPlugin); err != nil {
+		return StaticConnectionPlan{}, err
+	}
 
 	return plan, nil
 }
@@ -156,6 +160,84 @@ func (plan StaticConnectionPlan) APIConnection() string {
 	return plan.fallbackConnection()
 }
 
+func (plan StaticConnectionPlan) RESTConnection() string {
+	if plan.restConnection != "" {
+		return plan.restConnection
+	}
+	return plan.fallbackConnection()
+}
+
+// RESTOperationConnectionBindings returns the effective static connection and
+// optional selector for each declarative REST operation in the manifest.
+func (plan StaticConnectionPlan) RESTOperationConnectionBindings(manifestPlugin *providermanifestv1.Spec) (map[string]string, map[string]core.OperationConnectionSelector, map[string]bool, error) {
+	if manifestPlugin == nil || manifestPlugin.Surfaces == nil || manifestPlugin.Surfaces.REST == nil {
+		return nil, nil, nil, nil
+	}
+	operations := manifestPlugin.Surfaces.REST.Operations
+	if len(operations) == 0 {
+		return nil, nil, nil, nil
+	}
+
+	connections := make(map[string]string, len(operations))
+	selectors := make(map[string]core.OperationConnectionSelector)
+	locked := make(map[string]bool)
+	defaultConnection := plan.RESTConnection()
+	for i := range operations {
+		op := &operations[i]
+		operationName := strings.TrimSpace(op.Name)
+		if operationName == "" {
+			continue
+		}
+
+		parameterNames := make(map[string]struct{}, len(op.Parameters))
+		for j := range op.Parameters {
+			if name := strings.TrimSpace(op.Parameters[j].Name); name != "" {
+				parameterNames[name] = struct{}{}
+			}
+		}
+
+		connection := defaultConnection
+		operationConnection := strings.TrimSpace(op.Connection)
+		if operationConnection != "" {
+			connection = ResolveConnectionAlias(operationConnection)
+			locked[operationName] = true
+		}
+		if connection != "" {
+			if _, err := plan.connectionDef(connection); err != nil {
+				return nil, nil, nil, fmt.Errorf("operation %q connection references %w", operationName, err)
+			}
+			connections[operationName] = connection
+		}
+
+		selector, err := plan.resolveOperationConnectionSelector(operationName, op.ConnectionSelector)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if selector.Parameter != "" {
+			if _, ok := parameterNames[selector.Parameter]; !ok {
+				return nil, nil, nil, fmt.Errorf("operation %q connectionSelector.parameter %q must be declared in parameters", operationName, selector.Parameter)
+			}
+			if operationConnection != "" && selector.Default != "" {
+				return nil, nil, nil, fmt.Errorf("operation %q cannot declare both connection and connectionSelector.default", operationName)
+			}
+			selectors[operationName] = selector
+			if selector.Default != "" {
+				connections[operationName] = selector.Values[selector.Default]
+			}
+		}
+	}
+	if len(connections) == 0 {
+		connections = nil
+	}
+	if len(selectors) == 0 {
+		selectors = nil
+	}
+	if len(locked) == 0 {
+		locked = nil
+	}
+	return connections, selectors, locked, nil
+}
+
 func (plan StaticConnectionPlan) MCPConnection() string {
 	if resolved, ok := plan.ResolvedSurface(SpecSurfaceMCP); ok {
 		return resolved.ConnectionName
@@ -206,6 +288,45 @@ func (plan StaticConnectionPlan) validateConnectionModes() error {
 	return nil
 }
 
+func (plan StaticConnectionPlan) resolveOperationConnectionSelector(operationName string, raw *providermanifestv1.OperationConnectionSelector) (core.OperationConnectionSelector, error) {
+	if raw == nil {
+		return core.OperationConnectionSelector{}, nil
+	}
+	parameter := strings.TrimSpace(raw.Parameter)
+	if parameter == "" {
+		return core.OperationConnectionSelector{}, fmt.Errorf("operation %q connectionSelector.parameter is required", operationName)
+	}
+	if len(raw.Values) == 0 {
+		return core.OperationConnectionSelector{}, fmt.Errorf("operation %q connectionSelector.values is required", operationName)
+	}
+	values := make(map[string]string, len(raw.Values))
+	for value, rawConnection := range raw.Values {
+		selectorValue := strings.TrimSpace(value)
+		if selectorValue == "" {
+			return core.OperationConnectionSelector{}, fmt.Errorf("operation %q connectionSelector.values contains an empty value", operationName)
+		}
+		connection := ResolveConnectionAlias(strings.TrimSpace(rawConnection))
+		if connection == "" {
+			return core.OperationConnectionSelector{}, fmt.Errorf("operation %q connectionSelector value %q references an empty connection", operationName, selectorValue)
+		}
+		if _, err := plan.connectionDef(connection); err != nil {
+			return core.OperationConnectionSelector{}, fmt.Errorf("operation %q connectionSelector value %q references %w", operationName, selectorValue, err)
+		}
+		values[selectorValue] = connection
+	}
+	defaultValue := strings.TrimSpace(raw.Default)
+	if defaultValue != "" {
+		if _, ok := values[defaultValue]; !ok {
+			return core.OperationConnectionSelector{}, fmt.Errorf("operation %q connectionSelector.default %q is not declared in values", operationName, defaultValue)
+		}
+	}
+	return core.OperationConnectionSelector{
+		Parameter: parameter,
+		Default:   defaultValue,
+		Values:    values,
+	}, nil
+}
+
 func (plan StaticConnectionPlan) fallbackConnection() string {
 	if plan.defaultConnection != "" {
 		return plan.defaultConnection
@@ -253,6 +374,9 @@ func (plan StaticConnectionPlan) shouldAdvertisePluginConnection() bool {
 		return true
 	}
 	if plan.APIConnection() == PluginConnectionName {
+		return true
+	}
+	if plan.RESTConnection() == PluginConnectionName {
 		return true
 	}
 	if plan.MCPConnection() == PluginConnectionName {

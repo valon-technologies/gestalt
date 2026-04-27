@@ -38,6 +38,26 @@ type Provider interface {
 	Execute(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
 }
 
+// OperationConnectionSelector maps a caller-supplied parameter value to the
+// named connection Gestalt should use for an operation invocation.
+type OperationConnectionSelector struct {
+	Parameter string
+	Default   string
+	Values    map[string]string
+}
+
+// OperationConnectionResolver is implemented by providers that choose an
+// operation connection from invocation parameters before credential lookup.
+type OperationConnectionResolver interface {
+	ResolveConnectionForOperation(operation string, params map[string]any) (string, error)
+}
+
+// OperationConnectionOverridePolicy is implemented by providers that can tell
+// whether a caller-supplied connection may override the operation connection.
+type OperationConnectionOverridePolicy interface {
+	OperationConnectionOverrideAllowed(operation string, params map[string]any) bool
+}
+
 // GraphQLSurfaceInvoker is an optional interface for providers that expose a
 // raw GraphQL surface in addition to cataloged operations.
 type GraphQLSurfaceInvoker interface {

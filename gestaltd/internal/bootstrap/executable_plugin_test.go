@@ -2510,14 +2510,14 @@ paths:
 		t.Fatalf("status connection = %q, want %q", got, "default")
 	}
 
-	_, operationConnections, err := buildStartupProviderSpec("hybrid", entry)
+	_, operationRouting, err := buildStartupProviderSpec("hybrid", entry)
 	if err != nil {
 		t.Fatalf("buildStartupProviderSpec: %v", err)
 	}
-	if got := operationConnections["echo"]; got != "default" {
+	if got := operationRouting.connections["echo"]; got != "default" {
 		t.Fatalf("startup echo connection = %q, want %q", got, "default")
 	}
-	if _, ok := operationConnections["status"]; ok {
+	if _, ok := operationRouting.connections["status"]; ok {
 		t.Fatalf("startup catalog unexpectedly exposed spec-loaded status operation")
 	}
 }
@@ -2540,15 +2540,19 @@ func TestHybridDeclarativeExecutableProviderUsesNamedDefaultConnectionForPluginO
 			BaseURL: "https://example.invalid",
 			Operations: []providermanifestv1.ProviderOperation{
 				{
-					Name:   "status",
-					Method: http.MethodGet,
-					Path:   "/status",
+					Name:       "status",
+					Method:     http.MethodGet,
+					Path:       "/status",
+					Connection: "bot",
 				},
 			},
 		},
 	}
 	manifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
 		"default": {
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+		},
+		"bot": {
 			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
 		},
 	}
@@ -2580,8 +2584,8 @@ func TestHybridDeclarativeExecutableProviderUsesNamedDefaultConnectionForPluginO
 	if got := prov.ConnectionForOperation("echo"); got != "default" {
 		t.Fatalf("echo connection = %q, want %q", got, "default")
 	}
-	if got := prov.ConnectionForOperation("status"); got != "default" {
-		t.Fatalf("status connection = %q, want %q", got, "default")
+	if got := prov.ConnectionForOperation("status"); got != "bot" {
+		t.Fatalf("status connection = %q, want %q", got, "bot")
 	}
 
 	services := coretesting.NewStubServices(t)
@@ -3120,17 +3124,22 @@ func TestBuildStartupProviderSpecPreservesStaticCatalogConnectionRouting(t *test
 			Mode: providermanifestv1.ConnectionModeUser,
 			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
 		},
+		"openapi": {
+			Mode: providermanifestv1.ConnectionModeUser,
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+		},
 		"mcp": {
 			Mode: providermanifestv1.ConnectionModeUser,
 			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
 		},
 	}
 	manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
-		REST: &providermanifestv1.RESTSurface{Connection: "api"},
-		MCP:  &providermanifestv1.MCPSurface{URL: "https://example.invalid/mcp", Connection: "mcp"},
+		OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml", Connection: "openapi"},
+		REST:    &providermanifestv1.RESTSurface{Connection: "api"},
+		MCP:     &providermanifestv1.MCPSurface{URL: "https://example.invalid/mcp", Connection: "mcp"},
 	}
 
-	spec, operationConnections, err := buildStartupProviderSpec("roadmap", &config.ProviderEntry{
+	spec, operationRouting, err := buildStartupProviderSpec("roadmap", &config.ProviderEntry{
 		ResolvedManifest:     manifest,
 		ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 	})
@@ -3140,14 +3149,92 @@ func TestBuildStartupProviderSpecPreservesStaticCatalogConnectionRouting(t *test
 	if spec.Catalog == nil || len(spec.Catalog.Operations) != 3 {
 		t.Fatalf("unexpected startup catalog: %+v", spec.Catalog)
 	}
-	if got := operationConnections["status"]; got != "api" {
+	if got := operationRouting.connections["status"]; got != "api" {
 		t.Fatalf("status connection = %q, want %q", got, "api")
 	}
-	if got := operationConnections["search"]; got != "mcp" {
+	if got := operationRouting.connections["search"]; got != "mcp" {
 		t.Fatalf("search connection = %q, want %q", got, "mcp")
 	}
-	if got := operationConnections["echo"]; got != config.PluginConnectionName {
+	if got := operationRouting.connections["echo"]; got != config.PluginConnectionName {
 		t.Fatalf("echo connection = %q, want %q", got, config.PluginConnectionName)
+	}
+}
+
+func TestStartupProviderProxyResolvesDeclarativeConnectionSelectorBeforeProviderReady(t *testing.T) {
+	t.Parallel()
+
+	manifest := &providermanifestv1.Manifest{
+		Source:      "slack",
+		DisplayName: "Slack",
+		Spec: &providermanifestv1.Spec{
+			DefaultConnection: "default",
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {Mode: providermanifestv1.ConnectionModeUser},
+				"bot":     {Mode: providermanifestv1.ConnectionModeUser},
+			},
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					Connection: "bot",
+					BaseURL:    "https://slack.com",
+					Operations: []providermanifestv1.ProviderOperation{
+						{
+							Name:   "chat.postMessage",
+							Method: http.MethodPost,
+							Path:   "/api/chat.postMessage",
+							ConnectionSelector: &providermanifestv1.OperationConnectionSelector{
+								Parameter: "actor",
+								Default:   "bot",
+								Values: map[string]string{
+									"bot":  "bot",
+									"user": "default",
+								},
+							},
+							Parameters: []providermanifestv1.ProviderParameter{
+								{Name: "actor", Type: "string", In: "body", Internal: true},
+								{Name: "channel", Type: "string", In: "body", Required: true},
+								{Name: "text", Type: "string", In: "body", Required: true},
+							},
+						},
+						{
+							Name:   "chat.scheduleMessage",
+							Method: http.MethodPost,
+							Path:   "/api/chat.scheduleMessage",
+							Parameters: []providermanifestv1.ProviderParameter{
+								{Name: "channel", Type: "string", In: "body", Required: true},
+								{Name: "text", Type: "string", In: "body", Required: true},
+								{Name: "post_at", Type: "int", In: "body", Required: true},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	spec, operationRouting, err := buildStartupProviderSpec("slack", &config.ProviderEntry{ResolvedManifest: manifest})
+	if err != nil {
+		t.Fatalf("buildStartupProviderSpec: %v", err)
+	}
+	proxy := newStartupProviderProxy(spec, operationRouting, nil)
+
+	conn, err := proxy.ResolveConnectionForOperation("chat.postMessage", map[string]any{"actor": "user"})
+	if err != nil {
+		t.Fatalf("ResolveConnectionForOperation(user): %v", err)
+	}
+	if conn != "default" {
+		t.Fatalf("user actor connection = %q, want default", conn)
+	}
+	conn, err = proxy.ResolveConnectionForOperation("chat.postMessage", nil)
+	if err != nil {
+		t.Fatalf("ResolveConnectionForOperation(default): %v", err)
+	}
+	if conn != "bot" {
+		t.Fatalf("default actor connection = %q, want bot", conn)
+	}
+	if proxy.OperationConnectionOverrideAllowed("chat.postMessage", map[string]any{"actor": "user"}) {
+		t.Fatal("selector-selected operation allowed explicit override")
+	}
+	if !proxy.OperationConnectionOverrideAllowed("chat.scheduleMessage", nil) {
+		t.Fatal("surface fallback operation rejected explicit override before provider ready")
 	}
 }
 

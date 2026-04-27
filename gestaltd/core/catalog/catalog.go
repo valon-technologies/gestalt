@@ -126,6 +126,7 @@ type CatalogParameter struct {
 	Location    string `yaml:"location,omitempty"    json:"location,omitempty"`
 	Description string `yaml:"description,omitempty"  json:"description,omitempty"`
 	Required    bool   `yaml:"required,omitempty"    json:"required,omitempty"`
+	Internal    bool   `yaml:"internal,omitempty"    json:"internal,omitempty"`
 	Default     any    `yaml:"default,omitempty"     json:"default,omitempty"`
 }
 

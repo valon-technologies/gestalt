@@ -383,12 +383,20 @@ type UIRoute struct {
 }
 
 type ProviderOperation struct {
-	Name         string              `json:"name" yaml:"name"`
-	Description  string              `json:"description,omitempty" yaml:"description,omitempty"`
-	Method       string              `json:"method" yaml:"method"`
-	Path         string              `json:"path" yaml:"path"`
-	AllowedRoles []string            `json:"allowedRoles,omitempty" yaml:"allowedRoles,omitempty"`
-	Parameters   []ProviderParameter `json:"parameters,omitempty" yaml:"parameters,omitempty"`
+	Name               string                       `json:"name" yaml:"name"`
+	Description        string                       `json:"description,omitempty" yaml:"description,omitempty"`
+	Method             string                       `json:"method" yaml:"method"`
+	Path               string                       `json:"path" yaml:"path"`
+	Connection         string                       `json:"connection,omitempty" yaml:"connection,omitempty"`
+	ConnectionSelector *OperationConnectionSelector `json:"connectionSelector,omitempty" yaml:"connectionSelector,omitempty"`
+	AllowedRoles       []string                     `json:"allowedRoles,omitempty" yaml:"allowedRoles,omitempty"`
+	Parameters         []ProviderParameter          `json:"parameters,omitempty" yaml:"parameters,omitempty"`
+}
+
+type OperationConnectionSelector struct {
+	Parameter string            `json:"parameter" yaml:"parameter"`
+	Default   string            `json:"default,omitempty" yaml:"default,omitempty"`
+	Values    map[string]string `json:"values" yaml:"values"`
 }
 
 type ProviderParameter struct {
@@ -397,6 +405,7 @@ type ProviderParameter struct {
 	In          string `json:"in" yaml:"in"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 	Required    bool   `json:"required,omitempty" yaml:"required,omitempty"`
+	Internal    bool   `json:"internal,omitempty" yaml:"internal,omitempty"`
 }
 
 type ManagedParameter struct {
