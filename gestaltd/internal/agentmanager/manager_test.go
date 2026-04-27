@@ -35,6 +35,22 @@ func (p *sessionCatalogProvider) CatalogForRequest(context.Context, string) (*ca
 	return p.sessionCatalog, nil
 }
 
+type tokenErrorInvoker struct {
+	providerName string
+	err          error
+}
+
+func (i tokenErrorInvoker) Invoke(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+	return nil, nil
+}
+
+func (i tokenErrorInvoker) ResolveToken(ctx context.Context, _ *principal.Principal, providerName, _, _ string) (context.Context, string, error) {
+	if i.providerName != "" && providerName != i.providerName {
+		return ctx, "", nil
+	}
+	return ctx, "", i.err
+}
+
 func TestSearchToolsSearchesAuthorizedCatalogWhenNoRefsDefined(t *testing.T) {
 	t.Parallel()
 
@@ -213,6 +229,157 @@ func TestSearchToolsDiscoversSessionCatalogOperations(t *testing.T) {
 	}
 	if resp.Tools[0].Target.Plugin != "docs" || resp.Tools[0].Target.Operation != "dynamic_search" {
 		t.Fatalf("tool target = %#v, want docs.dynamic_search", resp.Tools[0].Target)
+	}
+}
+
+func TestSearchToolsSkipsUnavailablePluginScopedProviders(t *testing.T) {
+	t.Parallel()
+
+	ashby := &sessionCatalogProvider{
+		catalogCountingProvider: catalogCountingProvider{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "ashby",
+				ConnMode: core.ConnectionModeUser,
+			},
+		},
+	}
+	linear := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "linear",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				DisplayName: "Linear",
+				Operations: []catalog.CatalogOperation{{
+					ID:       "searchIssues",
+					Title:    "Search Linear Issues",
+					ReadOnly: true,
+				}},
+			},
+		},
+	}
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, ashby, linear),
+		Invoker:   tokenErrorInvoker{providerName: "ashby", err: invocation.ErrNoCredential},
+	})
+
+	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.SearchToolsRequest{
+		Query: "Linear",
+		ToolRefs: []coreagent.ToolRef{
+			{Plugin: "ashby"},
+			{Plugin: "linear"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("SearchTools: %v", err)
+	}
+	if len(resp.Tools) != 1 {
+		t.Fatalf("SearchTools returned %d tools, want 1", len(resp.Tools))
+	}
+	if resp.Tools[0].Target.Plugin != "linear" || resp.Tools[0].Target.Operation != "searchIssues" {
+		t.Fatalf("tool target = %#v, want linear.searchIssues", resp.Tools[0].Target)
+	}
+}
+
+func TestSearchToolsReturnsUnavailableWhenScopedSearchHasNoCandidates(t *testing.T) {
+	t.Parallel()
+
+	ashby := &sessionCatalogProvider{
+		catalogCountingProvider: catalogCountingProvider{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "ashby",
+				ConnMode: core.ConnectionModeUser,
+			},
+		},
+	}
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, ashby),
+		Invoker:   tokenErrorInvoker{providerName: "ashby", err: invocation.ErrNoCredential},
+	})
+
+	_, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.SearchToolsRequest{
+		Query:    "Ashby",
+		ToolRefs: []coreagent.ToolRef{{Plugin: "ashby"}},
+	})
+	if !errors.Is(err, invocation.ErrNoCredential) {
+		t.Fatalf("SearchTools error = %v, want ErrNoCredential", err)
+	}
+}
+
+func TestSearchToolsKeepsExactOperationRefsStrict(t *testing.T) {
+	t.Parallel()
+
+	ashby := &sessionCatalogProvider{
+		catalogCountingProvider: catalogCountingProvider{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "ashby",
+				ConnMode: core.ConnectionModeUser,
+			},
+		},
+	}
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, ashby),
+		Invoker:   tokenErrorInvoker{providerName: "ashby", err: invocation.ErrNoCredential},
+	})
+
+	_, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.SearchToolsRequest{
+		Query: "candidate",
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:    "ashby",
+			Operation: "candidateSearch",
+		}},
+	})
+	if !errors.Is(err, invocation.ErrNoCredential) {
+		t.Fatalf("SearchTools error = %v, want ErrNoCredential", err)
+	}
+}
+
+func TestSearchToolsKeepsMixedExactOperationRefsStrict(t *testing.T) {
+	t.Parallel()
+
+	ashby := &sessionCatalogProvider{
+		catalogCountingProvider: catalogCountingProvider{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "ashby",
+				ConnMode: core.ConnectionModeUser,
+			},
+		},
+	}
+	linear := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "linear",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				DisplayName: "Linear",
+				Operations: []catalog.CatalogOperation{{
+					ID:       "searchIssues",
+					Title:    "Search Linear Issues",
+					ReadOnly: true,
+				}},
+			},
+		},
+	}
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, ashby, linear),
+		Invoker:   tokenErrorInvoker{providerName: "ashby", err: invocation.ErrNoCredential},
+	})
+
+	_, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.SearchToolsRequest{
+		Query: "Linear",
+		ToolRefs: []coreagent.ToolRef{
+			{Plugin: "linear"},
+			{Plugin: "ashby", Operation: "candidateSearch"},
+		},
+	})
+	if !errors.Is(err, invocation.ErrNoCredential) {
+		t.Fatalf("SearchTools error = %v, want ErrNoCredential", err)
 	}
 }
 

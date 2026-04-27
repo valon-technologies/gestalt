@@ -882,8 +882,7 @@ func (m *Manager) searchTools(ctx context.Context, p *principal.Principal, req c
 	if err != nil {
 		return nil, err
 	}
-	skipUnavailable := len(refs) == 0
-	candidates, err := m.searchToolCandidates(ctx, p, refs, req.Query, skipUnavailable)
+	candidates, err := m.searchToolCandidates(ctx, p, refs, req.Query, true)
 	if err != nil {
 		return nil, err
 	}
@@ -894,20 +893,22 @@ func (m *Manager) searchTools(ctx context.Context, p *principal.Principal, req c
 	if maxResults > 20 {
 		maxResults = 20
 	}
-	tools, err := m.resolveAgentToolCandidates(ctx, p, candidates, maxResults, skipUnavailable)
+	tools, err := m.resolveAgentToolCandidates(ctx, p, candidates, maxResults, len(refs) > 0)
 	if err != nil {
 		return nil, err
 	}
 	return &coreagent.SearchToolsResponse{Tools: tools}, nil
 }
 
-func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.Principal, candidates []agentToolSearchCandidate, maxResults int, skipUnavailable bool) ([]coreagent.Tool, error) {
+func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.Principal, candidates []agentToolSearchCandidate, maxResults int, failIfOnlyUnavailable bool) ([]coreagent.Tool, error) {
 	tools := make([]coreagent.Tool, 0, len(candidates))
 	if maxResults > 0 {
 		tools = make([]coreagent.Tool, 0, min(maxResults, len(candidates)))
 	}
 	seen := map[string]struct{}{}
-	for _, candidate := range candidates {
+	var firstUnavailableErr error
+	for i := range candidates {
+		candidate := &candidates[i]
 		if maxResults > 0 && len(tools) >= maxResults {
 			break
 		}
@@ -916,7 +917,10 @@ func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.P
 			if errors.Is(err, invocation.ErrAuthorizationDenied) || errors.Is(err, invocation.ErrProviderNotFound) || errors.Is(err, invocation.ErrOperationNotFound) {
 				continue
 			}
-			if skipUnavailable && agentToolSearchUnavailable(err) {
+			if candidate.skipUnavailable && agentToolSearchUnavailable(err) {
+				if firstUnavailableErr == nil {
+					firstUnavailableErr = err
+				}
 				continue
 			}
 			return nil, err
@@ -926,6 +930,9 @@ func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.P
 		}
 		seen[tool.ID] = struct{}{}
 		tools = append(tools, tool)
+	}
+	if len(tools) == 0 && failIfOnlyUnavailable && firstUnavailableErr != nil {
+		return nil, firstUnavailableErr
 	}
 	return tools, nil
 }
@@ -1061,8 +1068,9 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 }
 
 type agentToolSearchCandidate struct {
-	ref   coreagent.ToolRef
-	score int
+	ref             coreagent.ToolRef
+	score           int
+	skipUnavailable bool
 }
 
 func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef, query string, skipUnavailable bool) ([]agentToolSearchCandidate, error) {
@@ -1076,6 +1084,7 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 	}
 	query = strings.TrimSpace(query)
 	candidates := make([]agentToolSearchCandidate, 0)
+	var firstUnavailableErr error
 	for _, pluginName := range providerNames {
 		pluginName = strings.TrimSpace(pluginName)
 		if pluginName == "" {
@@ -1094,7 +1103,11 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 		for _, searchRef := range scope.refsForProvider(pluginName) {
 			cat, err := m.catalogForAgentToolSearch(ctx, p, prov, pluginName, searchRef)
 			if err != nil {
-				if skipUnavailable && agentToolSearchUnavailable(err) {
+				refSkipsUnavailable := skipUnavailable && agentToolSearchRefSkipsUnavailable(searchRef)
+				if refSkipsUnavailable && agentToolSearchUnavailable(err) {
+					if firstUnavailableErr == nil {
+						firstUnavailableErr = err
+					}
 					continue
 				}
 				return nil, err
@@ -1128,9 +1141,12 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 				}
 				ref.Plugin = pluginName
 				ref.Operation = operation
-				candidates = append(candidates, agentToolSearchCandidate{ref: ref, score: score})
+				candidates = append(candidates, agentToolSearchCandidate{ref: ref, score: score, skipUnavailable: skipUnavailable && agentToolSearchRefSkipsUnavailable(searchRef)})
 			}
 		}
+	}
+	if len(candidates) == 0 && !scope.all && firstUnavailableErr != nil {
+		return nil, firstUnavailableErr
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
 		if candidates[i].score != candidates[j].score {
@@ -1150,6 +1166,10 @@ func agentToolSearchUnavailable(err error) bool {
 		errors.Is(err, invocation.ErrReconnectRequired) ||
 		errors.Is(err, invocation.ErrNotAuthenticated) ||
 		errors.Is(err, invocation.ErrScopeDenied)
+}
+
+func agentToolSearchRefSkipsUnavailable(ref coreagent.ToolRef) bool {
+	return strings.TrimSpace(ref.Operation) == ""
 }
 
 func (m *Manager) catalogForAgentToolSearch(ctx context.Context, p *principal.Principal, prov core.Provider, pluginName string, ref coreagent.ToolRef) (*catalog.Catalog, error) {
