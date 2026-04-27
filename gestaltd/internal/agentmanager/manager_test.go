@@ -220,6 +220,126 @@ func TestCreateSessionPreservesExistingMetadataWhenReconcilingProviderSession(t 
 	}
 }
 
+func TestCreateSessionWaitsForClaimedIdempotentSessionMetadata(t *testing.T) {
+	t.Parallel()
+
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	subjectID := principal.UserSubjectID("user-1")
+	provider := &idempotentSessionProvider{
+		session: &coreagent.Session{
+			ID:        "provider-session-1",
+			State:     coreagent.SessionStateActive,
+			CreatedBy: coreagent.Actor{SubjectID: subjectID},
+		},
+	}
+	manager := New(Config{
+		Agent:           singleAgentControl{name: "simple", provider: provider},
+		SessionMetadata: services.AgentSessions,
+		RunMetadata:     services.AgentRunMetadata,
+	})
+	const idempotencyKey = "workflow:github:run-1:session"
+	claimedSessionID, claimed, err := services.AgentSessions.ClaimIdempotency(context.Background(), subjectID, "simple", idempotencyKey, "provider-session-1", time.Now())
+	if err != nil {
+		t.Fatalf("ClaimIdempotency: %v", err)
+	}
+	if !claimed || claimedSessionID != "provider-session-1" {
+		t.Fatalf("ClaimIdempotency = (%q, %t), want (provider-session-1, true)", claimedSessionID, claimed)
+	}
+	putErr := make(chan error, 1)
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		_, err := services.AgentSessions.Put(context.Background(), &coreagent.SessionReference{
+			ID:             "provider-session-1",
+			ProviderName:   "simple",
+			SubjectID:      subjectID,
+			IdempotencyKey: idempotencyKey,
+		})
+		putErr <- err
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	session, err := manager.CreateSession(ctx, &principal.Principal{SubjectID: subjectID}, coreagent.ManagerCreateSessionRequest{
+		ProviderName:   "simple",
+		IdempotencyKey: idempotencyKey,
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if err := <-putErr; err != nil {
+		t.Fatalf("AgentSessions.Put: %v", err)
+	}
+	if session.ID != "provider-session-1" {
+		t.Fatalf("CreateSession ID = %q, want provider-session-1", session.ID)
+	}
+	if len(provider.createRequests) != 0 {
+		t.Fatalf("provider CreateSession calls = %d, want 0", len(provider.createRequests))
+	}
+}
+
+func TestCreateSessionWaitsForReconciledIdempotentSessionMetadata(t *testing.T) {
+	t.Parallel()
+
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	subjectID := principal.UserSubjectID("user-1")
+	provider := &idempotentSessionProvider{
+		session: &coreagent.Session{
+			ID:        "provider-session-1",
+			State:     coreagent.SessionStateActive,
+			CreatedBy: coreagent.Actor{SubjectID: subjectID},
+		},
+	}
+	manager := New(Config{
+		Agent:           singleAgentControl{name: "simple", provider: provider},
+		SessionMetadata: services.AgentSessions,
+		RunMetadata:     services.AgentRunMetadata,
+	})
+	const idempotencyKey = "workflow:github:run-1:session"
+	claimedSessionID, claimed, err := services.AgentSessions.ClaimIdempotency(context.Background(), subjectID, "simple", idempotencyKey, "generated-session-1", time.Now())
+	if err != nil {
+		t.Fatalf("ClaimIdempotency: %v", err)
+	}
+	if !claimed || claimedSessionID != "generated-session-1" {
+		t.Fatalf("ClaimIdempotency = (%q, %t), want (generated-session-1, true)", claimedSessionID, claimed)
+	}
+	putErr := make(chan error, 1)
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		_, err := services.AgentSessions.Put(context.Background(), &coreagent.SessionReference{
+			ID:             "provider-session-1",
+			ProviderName:   "simple",
+			SubjectID:      subjectID,
+			IdempotencyKey: idempotencyKey,
+		})
+		putErr <- err
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	session, err := manager.CreateSession(ctx, &principal.Principal{SubjectID: subjectID}, coreagent.ManagerCreateSessionRequest{
+		ProviderName:   "simple",
+		IdempotencyKey: idempotencyKey,
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if err := <-putErr; err != nil {
+		t.Fatalf("AgentSessions.Put: %v", err)
+	}
+	if session.ID != "provider-session-1" {
+		t.Fatalf("CreateSession ID = %q, want provider-session-1", session.ID)
+	}
+	if len(provider.createRequests) != 0 {
+		t.Fatalf("provider CreateSession calls = %d, want 0", len(provider.createRequests))
+	}
+}
+
 func TestCreateSessionRejectsIdempotentProviderSessionForDifferentSubject(t *testing.T) {
 	t.Parallel()
 
