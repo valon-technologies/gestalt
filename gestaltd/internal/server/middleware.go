@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/internal/providerdev"
 )
 
 type contextKey string
@@ -54,13 +55,37 @@ func requestMetaMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+const (
+	defaultMaxBodyBytes         = 1 << 20
+	providerDevCallMaxBodyBytes = 128 << 20
+)
+
 func maxBodyMiddleware(limit int64) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = http.MaxBytesReader(w, r.Body, limit)
+			r.Body = http.MaxBytesReader(w, r.Body, maxBodyLimitForRequest(r, limit))
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func maxBodyLimitForRequest(r *http.Request, defaultLimit int64) int64 {
+	if isProviderDevCompleteCallRequest(r) {
+		return providerDevCallMaxBodyBytes
+	}
+	return defaultLimit
+}
+
+func isProviderDevCompleteCallRequest(r *http.Request) bool {
+	if r == nil || r.Method != http.MethodPost || r.URL == nil {
+		return false
+	}
+	rest, ok := strings.CutPrefix(r.URL.Path, providerdev.PathSessions+"/")
+	if !ok {
+		return false
+	}
+	sessionID, callID, ok := strings.Cut(rest, "/calls/")
+	return ok && sessionID != "" && callID != "" && !strings.Contains(sessionID, "/") && !strings.Contains(callID, "/")
 }
 
 // contentSecurityPolicy is the CSP applied to all responses. script-src and

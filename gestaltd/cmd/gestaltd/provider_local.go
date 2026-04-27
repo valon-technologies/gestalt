@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
@@ -28,6 +29,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerdev"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
+	"github.com/valon-technologies/gestalt/server/internal/ui"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
@@ -197,6 +199,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		Token:   token,
 	}
 	requestedProviders := make([]providerdev.AttachProvider, 0, len(targets))
+	localUIHandlers := make(map[string]http.Handler)
 	for _, target := range targets {
 		spec, _, err := bootstrap.BuildStartupProviderSpec(target.Name, target.Entry)
 		if err != nil {
@@ -206,11 +209,20 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		if err != nil {
 			return fmt.Errorf("build provider dev remote config for plugins.%s: %w", target.Name, err)
 		}
-		requestedProviders = append(requestedProviders, providerdev.AttachProvider{
+		requested := providerdev.AttachProvider{
 			Name:   target.Name,
 			Spec:   spec,
 			Config: pluginConfig,
-		})
+		}
+		uiHandler, hasUI, err := providerRemoteUIHandler(cfg, target)
+		if err != nil {
+			return fmt.Errorf("prepare provider dev remote ui for plugins.%s: %w", target.Name, err)
+		}
+		if hasUI {
+			requested.UI = &providerdev.AttachUI{}
+			localUIHandlers[target.Name] = uiHandler
+		}
+		requestedProviders = append(requestedProviders, requested)
 	}
 	session, err := client.CreateSession(ctx, providerdev.CreateSessionRequest{Providers: requestedProviders})
 	if err != nil {
@@ -249,9 +261,10 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		"remote", strings.TrimRight(opts.Remote, "/"),
 		"session", session.ID,
 		"providers", providerRemoteTargetNames(targets),
+		"ui_providers", providerRemoteUIProviderNames(localUIHandlers),
 		"config_files", configPaths,
 	)
-	return client.RunDispatcher(ctx, session.ID, providerClients)
+	return client.RunDispatcher(ctx, session.ID, providerClients, providerdev.WithUIHandlers(localUIHandlers))
 }
 
 func providerRemoteTargetNames(targets []providerRemoteTarget) []string {
@@ -259,6 +272,18 @@ func providerRemoteTargetNames(targets []providerRemoteTarget) []string {
 	for _, target := range targets {
 		names = append(names, target.Name)
 	}
+	return names
+}
+
+func providerRemoteUIProviderNames(handlers map[string]http.Handler) []string {
+	if len(handlers) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(handlers))
+	for name := range handlers {
+		names = append(names, name)
+	}
+	slices.Sort(names)
 	return names
 }
 
@@ -646,6 +671,112 @@ func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget
 		return nil, fmt.Errorf("start local provider plugins.%s: %w", target.Name, err)
 	}
 	return process, nil
+}
+
+func providerRemoteUIHandler(cfg *config.Config, target providerRemoteTarget) (http.Handler, bool, error) {
+	uiManifestPath, ok, err := providerRemoteUIManifestPath(cfg, target)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	handler, err := sourceUIHandler(uiManifestPath)
+	if err != nil {
+		return nil, true, err
+	}
+	return handler, true, nil
+}
+
+func providerRemoteUIManifestPath(cfg *config.Config, target providerRemoteTarget) (string, bool, error) {
+	entry := target.Entry
+	if entry == nil {
+		return "", false, nil
+	}
+	if uiName := strings.TrimSpace(entry.UI); uiName != "" {
+		if cfg == nil || cfg.Providers.UI == nil || cfg.Providers.UI[uiName] == nil {
+			return "", false, fmt.Errorf("plugins.%s.ui references unknown ui %q", target.Name, uiName)
+		}
+		uiEntry := cfg.Providers.UI[uiName]
+		manifestPath, ok, err := sourceUIManifestPathFromEntry(uiEntry)
+		if err != nil || ok {
+			return manifestPath, ok, err
+		}
+		return "", false, nil
+	}
+	if entry.ResolvedManifest != nil && entry.ResolvedManifest.Spec != nil && entry.ResolvedManifest.Spec.UI != nil {
+		ownedUIPath := strings.TrimSpace(entry.ResolvedManifest.Spec.UI.Path)
+		if ownedUIPath == "" {
+			return "", false, nil
+		}
+		if strings.TrimSpace(entry.ResolvedManifestPath) == "" {
+			return "", false, fmt.Errorf("resolved manifest path is required for owned ui")
+		}
+		manifestPath, err := canonicalPath(filepath.Join(filepath.Dir(entry.ResolvedManifestPath), filepath.FromSlash(ownedUIPath)))
+		if err != nil {
+			return "", false, err
+		}
+		return manifestPath, true, nil
+	}
+	siblingPath, err := findSiblingUIManifestPath(entry.ResolvedManifestPath, entry.ResolvedManifest)
+	if err != nil {
+		return "", false, err
+	}
+	return siblingPath, siblingPath != "", nil
+}
+
+func sourceUIManifestPathFromEntry(entry *config.UIEntry) (string, bool, error) {
+	if entry == nil {
+		return "", false, nil
+	}
+	sourcePath := strings.TrimSpace(entry.SourcePath())
+	if sourcePath == "" {
+		return "", false, nil
+	}
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		return "", false, fmt.Errorf("stat ui source %q: %w", sourcePath, err)
+	}
+	manifestPath := sourcePath
+	if info.IsDir() {
+		manifestPath, err = providerpkg.FindManifestFile(sourcePath)
+		if err != nil {
+			return "", false, err
+		}
+	} else if !providerpkg.IsManifestFile(sourcePath) {
+		return "", false, fmt.Errorf("ui source %q must point to a provider manifest file or directory", sourcePath)
+	}
+	manifestPath, err = canonicalPath(manifestPath)
+	if err != nil {
+		return "", false, err
+	}
+	return manifestPath, true, nil
+}
+
+func sourceUIHandler(manifestPath string) (http.Handler, error) {
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	kind, err := providerpkg.ManifestKind(manifest)
+	if err != nil {
+		return nil, err
+	}
+	if kind != providermanifestv1.KindUI {
+		return nil, fmt.Errorf("ui manifest %q must have kind %q (got %q)", manifestPath, providermanifestv1.KindUI, kind)
+	}
+	if err := providerpkg.RunSourceReleaseBuild(manifestPath, manifest); err != nil {
+		return nil, err
+	}
+	_, manifest, err = providerpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("read ui manifest after release build: %w", err)
+	}
+	if manifest.Spec == nil || strings.TrimSpace(manifest.Spec.AssetRoot) == "" {
+		return nil, fmt.Errorf("ui manifest %q missing spec.assetRoot", manifestPath)
+	}
+	assetRoot := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Spec.AssetRoot))
+	if _, err := os.Stat(assetRoot); err != nil {
+		return nil, fmt.Errorf("ui asset root not found at %s: %w", assetRoot, err)
+	}
+	return ui.DirHandler(assetRoot)
 }
 
 func resolveProviderTargetManifest(pathFlag string) (string, *providermanifestv1.Manifest, error) {
@@ -1267,7 +1398,8 @@ func printProviderDevUsage(w io.Writer) {
 	writeUsageLine(w, "The built-in admin UI remains available at /admin; configured, owned, or sibling public UIs")
 	writeUsageLine(w, "are mounted when present.")
 	writeUsageLine(w, "With --remote, source-backed local plugins attach to an authenticated remote gestaltd session")
-	writeUsageLine(w, "while the remote config keeps its normal auth, authorization, connections, and host services.")
+	writeUsageLine(w, "while the remote config keeps its normal auth, authorization, connections, host services,")
+	writeUsageLine(w, "and mounted plugin UI routes.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --path     Provider manifest path or directory (default: current working directory)")

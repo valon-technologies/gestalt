@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/internal/providerdev"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/ui"
 	"go.opentelemetry.io/otel/attribute"
@@ -326,7 +328,71 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 	if mounted.Path != "/" {
 		inner = http.StripPrefix(mounted.Path, inner)
 	}
+	inner = s.providerDevMountedUIHandler(mounted, inner)
 	return mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
+}
+
+func (s *Server) providerDevMountedUIHandler(mounted MountedUI, fallback http.Handler) http.Handler {
+	if s.providerDevSessions == nil || strings.TrimSpace(mounted.PluginName) == "" {
+		return fallback
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			fallback.ServeHTTP(w, r)
+			return
+		}
+		resp, ok, err := s.providerDevSessions.ServeUIAsset(r.Context(), s.providerDevUIPrincipal(r, mounted), mounted.PluginName, providerdev.UIAssetRequest{
+			Method:   r.Method,
+			Path:     providerDevUIAssetPath(mounted, r.URL.Path),
+			RawQuery: r.URL.RawQuery,
+			Header:   providerDevUIRequestHeader(r.Header),
+		})
+		if err != nil {
+			writeProviderDevError(w, err)
+			return
+		}
+		if !ok {
+			fallback.ServeHTTP(w, r)
+			return
+		}
+		writeProviderDevUIAsset(w, resp)
+	})
+}
+
+func (s *Server) providerDevUIPrincipal(r *http.Request, mounted MountedUI) *principal.Principal {
+	if p := PrincipalFromContext(r.Context()); p != nil {
+		return p
+	}
+	if s == nil {
+		return nil
+	}
+	auth, err := s.mountedUIAuthRuntime(mounted)
+	if err != nil {
+		return nil
+	}
+	if auth.noAuth {
+		p := auth.anonymous
+		if p == nil {
+			return nil
+		}
+		enriched, err := s.resolvePrincipalUserID(r.Context(), p)
+		if err != nil {
+			return p
+		}
+		return enriched
+	}
+	if auth.resolver == nil {
+		return nil
+	}
+	p, err := s.resolveRequestPrincipalWithResolver(r, auth.resolver)
+	if err != nil || p == nil {
+		return nil
+	}
+	enriched, err := s.resolvePrincipalUserID(r.Context(), p)
+	if err != nil {
+		return p
+	}
+	return enriched
 }
 
 func (s *Server) adminUIHandler() http.Handler {
@@ -568,4 +634,77 @@ func mountedUIRoleAllowed(role string, allowedRoles []string) bool {
 		}
 	}
 	return false
+}
+
+func providerDevUIAssetPath(mounted MountedUI, requestPath string) string {
+	path := requestPath
+	if mounted.Path != "/" {
+		path = strings.TrimPrefix(path, mounted.Path)
+	}
+	if path == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		return "/" + path
+	}
+	return path
+}
+
+func providerDevUIRequestHeader(header http.Header) http.Header {
+	out := http.Header{}
+	copyHeaderValues(out, header, "If-Match")
+	copyHeaderValues(out, header, "If-None-Match")
+	copyHeaderValues(out, header, "If-Modified-Since")
+	copyHeaderValues(out, header, "If-Unmodified-Since")
+	copyHeaderValues(out, header, "If-Range")
+	copyHeaderValues(out, header, "Range")
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func copyHeaderValues(dst, src http.Header, name string) {
+	values := src.Values(name)
+	for _, value := range values {
+		dst.Add(name, value)
+	}
+}
+
+func writeProviderDevUIAsset(w http.ResponseWriter, resp *providerdev.UIAssetResponse) {
+	if resp == nil {
+		writeError(w, http.StatusNotFound, "provider dev ui asset not found")
+		return
+	}
+	body, err := base64.StdEncoding.DecodeString(resp.Body)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "invalid provider dev ui response")
+		return
+	}
+	for key, values := range resp.Header {
+		if isHopByHopHeader(key) {
+			continue
+		}
+		w.Header().Del(key)
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	statusCode := resp.Status
+	if statusCode == 0 {
+		statusCode = http.StatusOK
+	}
+	w.WriteHeader(statusCode)
+	if len(body) != 0 {
+		_, _ = w.Write(body)
+	}
+}
+
+func isHopByHopHeader(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade":
+		return true
+	default:
+		return false
+	}
 }
