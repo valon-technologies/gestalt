@@ -941,6 +941,47 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 }
 
 func buildHostedAgentProvider(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, hostServices []providerhost.HostService, deps Deps) (coreagent.Provider, error) {
+	launch, err := prepareHostedAgentProviderLaunch(ctx, name, entry, node, deps)
+	if err != nil {
+		return nil, err
+	}
+	policy, err := entry.Runtime.LifecyclePolicy()
+	if err != nil {
+		launch.close()
+		return nil, fmt.Errorf("parse hosted agent runtime lifecycle policy: %w", err)
+	}
+	if policy.RestartPolicy == config.HostedRuntimeRestartPolicyAlways && entry.IndexedDB == nil {
+		launch.close()
+		return nil, fmt.Errorf("hosted agent runtime restart policy %q requires indexeddb persistence hook", config.HostedRuntimeRestartPolicyAlways)
+	}
+	return newHostedAgentProviderPool(ctx, launch, hostServices, deps, policy)
+}
+
+type hostedAgentProviderLaunch struct {
+	name            string
+	runtimeConfig   config.EffectiveHostedRuntime
+	runtimeProvider pluginruntime.Provider
+	runtimeOwned    bool
+	runtimePlan     HostedRuntimePlan
+	cfg             componentprovider.YAMLConfig
+	launch          pluginRuntimeLaunch
+	cleanup         func()
+}
+
+func (p *hostedAgentProviderLaunch) close() {
+	if p == nil {
+		return
+	}
+	if p.runtimeOwned && p.runtimeProvider != nil {
+		_ = p.runtimeProvider.Close()
+	}
+	if p.cleanup != nil {
+		p.cleanup()
+		p.cleanup = nil
+	}
+}
+
+func prepareHostedAgentProviderLaunch(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, deps Deps) (*hostedAgentProviderLaunch, error) {
 	runtimeConfig, runtimeProvider, runtimeOwned, err := effectiveConfiguredHostedRuntime(ctx, "providers.agent."+name, entry, deps)
 	if err != nil {
 		return nil, err
@@ -1006,22 +1047,54 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 	}
 	cleanup = launch.cleanup
 
-	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindAgent, name, runtimeConfig))
+	preparedLaunch := &hostedAgentProviderLaunch{
+		name:            name,
+		runtimeConfig:   runtimeConfig,
+		runtimeProvider: runtimeProvider,
+		runtimeOwned:    runtimeOwned,
+		runtimePlan:     runtimePlan,
+		cfg:             cfg,
+		launch:          launch,
+		cleanup:         cleanup,
+	}
+	cleanup = nil
+	return preparedLaunch, nil
+}
+
+func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentProviderLaunch, hostServices []providerhost.HostService, deps Deps, closeRuntime bool, cleanup func()) (coreagent.Provider, error) {
+	if launch == nil {
+		return nil, fmt.Errorf("hosted agent launch is required")
+	}
+	runtimeProvider := launch.runtimeProvider
+	if runtimeProvider == nil {
+		return nil, fmt.Errorf("agent provider: runtime is required")
+	}
+	cfg := launch.cfg
+	runtimePlan := launch.runtimePlan
+	name := launch.name
+	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindAgent, name, launch.runtimeConfig))
 	if err != nil {
-		if runtimeOwned {
+		if closeRuntime {
 			_ = runtimeProvider.Close()
+		}
+		if cleanup != nil {
+			cleanup()
 		}
 		return nil, fmt.Errorf("start agent runtime session: %w", err)
 	}
 	sessionID := session.ID
 	stopSession := true
+	closeOnFailure := closeRuntime
 	defer func() {
 		if !stopSession {
 			return
 		}
 		_ = stopPluginRuntimeSession(runtimeProvider, sessionID)
-		if runtimeOwned {
+		if closeOnFailure {
 			_ = runtimeProvider.Close()
+		}
+		if cleanup != nil {
+			cleanup()
 		}
 	}()
 	if err := waitForPluginRuntimeSessionReady(ctx, runtimeProvider, sessionID); err != nil {
@@ -1076,10 +1149,10 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 	hostedPlugin, err := runtimeProvider.StartPlugin(ctx, pluginruntime.StartPluginRequest{
 		SessionID:     sessionID,
 		PluginName:    name,
-		Command:       launch.command,
-		Args:          launch.args,
+		Command:       launch.launch.command,
+		Args:          launch.launch.args,
 		Env:           startEnv,
-		BundleDir:     launch.bundleDir,
+		BundleDir:     launch.launch.bundleDir,
 		AllowedHosts:  allowedHosts,
 		DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
 		HostBinary:    cfg.HostBinary,
@@ -1101,7 +1174,7 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 			conn:         conn,
 			runtime:      runtimeProvider,
 			sessionID:    sessionID,
-			closeRuntime: runtimeOwned,
+			closeRuntime: closeRuntime,
 			cleanup:      cleanup,
 		},
 		Config: cfg.Config,
@@ -1113,6 +1186,7 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 	}
 
 	stopSession = false
+	closeOnFailure = false
 	cleanup = nil
 	return provider, nil
 }

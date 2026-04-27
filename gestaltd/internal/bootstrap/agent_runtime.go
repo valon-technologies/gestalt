@@ -24,17 +24,28 @@ import (
 type agentRuntime struct {
 	mu                  sync.RWMutex
 	defaultProviderName string
+	configuredProviders map[string]struct{}
 	providers           map[string]coreagent.Provider
 	invoker             invocation.Invoker
 	runMetadata         *coredata.AgentRunMetadataService
 }
 
 func newAgentRuntime(cfg *config.Config) (*agentRuntime, error) {
-	runtime := &agentRuntime{providers: map[string]coreagent.Provider{}}
+	runtime := &agentRuntime{
+		configuredProviders: map[string]struct{}{},
+		providers:           map[string]coreagent.Provider{},
+	}
 	if cfg != nil {
 		selectedProviderName, _, err := cfg.SelectedAgentProvider()
 		if err == nil {
 			runtime.defaultProviderName = strings.TrimSpace(selectedProviderName)
+		}
+		for name, entry := range cfg.Providers.Agent {
+			name = strings.TrimSpace(name)
+			if name == "" || entry == nil {
+				continue
+			}
+			runtime.configuredProviders[name] = struct{}{}
 		}
 	}
 	return runtime, nil
@@ -67,7 +78,7 @@ func (r *agentRuntime) HasConfiguredProviders() bool {
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return len(r.providers) > 0
+	return len(r.configuredProviders) > 0 || len(r.providers) > 0
 }
 
 func (r *agentRuntime) SetInvoker(invoker invocation.Invoker) {
@@ -221,22 +232,60 @@ func (r *agentRuntime) Ping(ctx context.Context) error {
 		return fmt.Errorf("agent runtime is not configured")
 	}
 	r.mu.RLock()
-	hasProviders := len(r.providers) > 0
 	defaultProviderName := strings.TrimSpace(r.defaultProviderName)
+	providers := maps.Clone(r.providers)
+	configuredProviders := make(map[string]struct{}, len(r.configuredProviders))
+	for name := range r.configuredProviders {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			configuredProviders[name] = struct{}{}
+		}
+	}
 	r.mu.RUnlock()
 
-	if !hasProviders && defaultProviderName == "" {
+	if len(configuredProviders) == 0 {
+		for name, provider := range providers {
+			name = strings.TrimSpace(name)
+			if name != "" && provider != nil {
+				configuredProviders[name] = struct{}{}
+			}
+		}
+	}
+	if defaultProviderName != "" {
+		configuredProviders[defaultProviderName] = struct{}{}
+	}
+	if len(configuredProviders) == 0 {
 		return nil
 	}
 
-	providerName, provider, err := r.ResolveProviderSelection("")
-	if err != nil {
-		return err
+	names := make([]string, 0, len(configuredProviders))
+	for name := range configuredProviders {
+		names = append(names, name)
 	}
-	if err := provider.Ping(ctx); err != nil {
-		return fmt.Errorf("agent provider %q unavailable: %w", providerName, err)
+	sort.Strings(names)
+	errs := make(chan error, len(names))
+	var wg sync.WaitGroup
+	for _, name := range names {
+		provider := providers[name]
+		if provider == nil {
+			errs <- fmt.Errorf("agent provider %q unavailable: %w", name, agentmanager.NewAgentProviderNotAvailableError(name))
+			continue
+		}
+		wg.Add(1)
+		go func(name string, provider coreagent.Provider) {
+			defer wg.Done()
+			if err := provider.Ping(ctx); err != nil {
+				errs <- fmt.Errorf("agent provider %q unavailable: %w", name, err)
+			}
+		}(name, provider)
 	}
-	return nil
+	wg.Wait()
+	close(errs)
+	var joined []error
+	for err := range errs {
+		joined = append(joined, err)
+	}
+	return errors.Join(joined...)
 }
 
 func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
