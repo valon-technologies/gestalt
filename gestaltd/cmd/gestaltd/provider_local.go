@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -38,6 +39,7 @@ const (
 	providerDevIndexedDBName = "main"
 	providerLocalPluginDir   = "plugin"
 	providerLocalSiblingUI   = "ui"
+	gestaltAPIKeyEnv         = "GESTALT_API_KEY"
 )
 
 type providerLocalCommandOptions struct {
@@ -165,6 +167,11 @@ type providerRemoteTarget struct {
 	InheritRemoteConfig bool
 }
 
+type storedGestaltCLICredential struct {
+	APIURL   string `json:"api_url"`
+	APIToken string `json:"api_token"`
+}
+
 func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	configPaths, cleanup, err := prepareProviderRemoteConfigPaths(opts)
 	if err != nil {
@@ -185,12 +192,9 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		return errors.New("provider dev --remote requires at least one source-backed plugin in --config or --path")
 	}
 
-	token := strings.TrimSpace(opts.RemoteToken)
-	if token == "" {
-		token = strings.TrimSpace(os.Getenv("GESTALT_API_KEY"))
-	}
-	if token == "" {
-		return errors.New("provider dev --remote requires --remote-token or GESTALT_API_KEY")
+	token, err := resolveProviderRemoteToken(opts)
+	if err != nil {
+		return err
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -291,6 +295,165 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		"config_files", configPaths,
 	)
 	return client.RunDispatcher(ctx, session.ID, providerClients, providerdev.WithUIHandlers(localUIHandlers))
+}
+
+func resolveProviderRemoteToken(opts providerLocalCommandOptions) (string, error) {
+	remoteBaseURL, err := providerRemoteBaseURL(opts.Remote)
+	if err != nil {
+		return "", fmt.Errorf("invalid --remote %q: %w", opts.Remote, err)
+	}
+	if token := strings.TrimSpace(opts.RemoteToken); token != "" {
+		return token, nil
+	}
+	if token := strings.TrimSpace(os.Getenv(gestaltAPIKeyEnv)); token != "" {
+		return token, nil
+	}
+
+	credential, credentialPath, ok, err := loadStoredGestaltCLICredential()
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", providerRemoteAuthMissingError(remoteBaseURL)
+	}
+	if strings.TrimSpace(credential.APIURL) == "" {
+		return "", providerRemoteStoredCredentialUnscopedError(remoteBaseURL, credentialPath)
+	}
+	storedBaseURL, err := providerRemoteBaseURL(credential.APIURL)
+	if err != nil {
+		return "", fmt.Errorf("stored Gestalt CLI credential has invalid api_url in %s: %w", credentialPath, err)
+	}
+	if storedBaseURL != remoteBaseURL {
+		return "", providerRemoteStoredCredentialMismatchError(remoteBaseURL, storedBaseURL, credentialPath)
+	}
+	if token := strings.TrimSpace(credential.APIToken); token != "" {
+		return token, nil
+	}
+	return "", fmt.Errorf("stored Gestalt CLI credential in %s is missing api_token; run 'gestalt auth login --url %s' or pass --remote-token", credentialPath, remoteBaseURL)
+}
+
+func loadStoredGestaltCLICredential() (storedGestaltCLICredential, string, bool, error) {
+	path, err := storedGestaltCLICredentialPath()
+	if err != nil {
+		return storedGestaltCLICredential{}, "", false, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return storedGestaltCLICredential{}, path, false, nil
+		}
+		return storedGestaltCLICredential{}, path, false, fmt.Errorf("read stored Gestalt CLI credential from %s: %w", path, err)
+	}
+	var credential storedGestaltCLICredential
+	if err := json.Unmarshal(data, &credential); err != nil {
+		return storedGestaltCLICredential{}, path, false, fmt.Errorf("parse stored Gestalt CLI credential from %s: %w", path, err)
+	}
+	return credential, path, true, nil
+}
+
+func storedGestaltCLICredentialPath() (string, error) {
+	if xdgConfigHome := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdgConfigHome != "" {
+		return filepath.Join(xdgConfigHome, "gestalt", "credentials.json"), nil
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("locate stored Gestalt CLI credential: %w", err)
+	}
+	return filepath.Join(homeDir, ".config", "gestalt", "credentials.json"), nil
+}
+
+func providerRemoteBaseURL(rawURL string) (string, error) {
+	trimmed := strings.TrimSpace(rawURL)
+	if trimmed == "" {
+		return "", errors.New("URL is required")
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return "", err
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", errors.New("URL scheme must be http or https")
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "" {
+		return "", errors.New("URL must include a host")
+	}
+	port := parsed.Port()
+	if (scheme == "http" && port == "80") || (scheme == "https" && port == "443") {
+		port = ""
+	}
+	if port != "" {
+		host = net.JoinHostPort(host, port)
+	} else if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	baseURL := scheme + "://" + host
+	if path := strings.TrimRight(parsed.EscapedPath(), "/"); path != "" {
+		baseURL += path
+	}
+	return baseURL, nil
+}
+
+func providerRemoteAuthMissingError(remoteOrigin string) error {
+	return fmt.Errorf(`provider dev --remote requires authentication.
+
+Remote server:
+  %s
+
+No --remote-token or %s was provided, and no stored Gestalt CLI credential for this server was found.
+
+Log in for this server:
+
+  gestalt auth login --url %s
+
+or pass an explicit token:
+
+  gestaltd provider dev --remote %s --remote-token <token> --path ./plugin`, remoteOrigin, gestaltAPIKeyEnv, remoteOrigin, remoteOrigin)
+}
+
+func providerRemoteStoredCredentialUnscopedError(remoteOrigin, credentialPath string) error {
+	return fmt.Errorf(`provider dev --remote could not use the stored Gestalt CLI credential.
+
+Remote server:
+  %s
+
+Stored credential:
+  server: <missing>
+  file: %s
+
+The stored credential does not record which Gestalt server it belongs to, so it was not sent.
+
+Log in for this server:
+
+  gestalt auth login --url %s
+
+or pass an explicit token:
+
+  gestaltd provider dev --remote %s --remote-token <token> --path ./plugin`, remoteOrigin, credentialPath, remoteOrigin, remoteOrigin)
+}
+
+func providerRemoteStoredCredentialMismatchError(remoteOrigin, storedOrigin, credentialPath string) error {
+	return fmt.Errorf(`provider dev --remote could not use the stored Gestalt CLI credential.
+
+Remote server:
+  %s
+
+Stored credential:
+  server: %s
+  file: %s
+
+The stored credential is scoped to a different Gestalt server, so it was not sent.
+
+To use this remote server, log in for that server:
+
+  gestalt auth login --url %s
+
+or pass an explicit token:
+
+  gestaltd provider dev --remote %s --remote-token <token> --path ./plugin
+
+You can also set %s for this command`, remoteOrigin, storedOrigin, credentialPath, remoteOrigin, remoteOrigin, gestaltAPIKeyEnv)
 }
 
 func providerRemoteTargetNames(targets []providerRemoteTarget) []string {
@@ -1452,5 +1615,5 @@ func printProviderDevUsage(w io.Writer) {
 	writeUsageLine(w, "  --name     Provider key override when the target key is ambiguous")
 	writeUsageLine(w, "  --port     Public port (default: auto-selected free localhost port)")
 	writeUsageLine(w, "  --remote   Remote gestaltd base URL to attach local source plugins to")
-	writeUsageLine(w, "  --remote-token  Bearer token for --remote (default: GESTALT_API_KEY)")
+	writeUsageLine(w, "  --remote-token  Bearer token for --remote (default: GESTALT_API_KEY or matching gestalt auth login credentials)")
 }
