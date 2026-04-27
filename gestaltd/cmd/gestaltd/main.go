@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	_ "time/tzdata"
 )
 
 var version = "dev"
