@@ -21,12 +21,16 @@ import (
 )
 
 type workflowScheduleTargetRequest struct {
-	Plugin     string                      `json:"plugin,omitempty"`
-	Operation  string                      `json:"operation"`
-	Connection string                      `json:"connection,omitempty"`
-	Instance   string                      `json:"instance,omitempty"`
-	Input      map[string]any              `json:"input,omitempty"`
-	Agent      *workflowAgentTargetRequest `json:"agent,omitempty"`
+	Plugin *workflowPluginTargetRequest `json:"plugin,omitempty"`
+	Agent  *workflowAgentTargetRequest  `json:"agent,omitempty"`
+}
+
+type workflowPluginTargetRequest struct {
+	Name       string         `json:"name,omitempty"`
+	Operation  string         `json:"operation"`
+	Connection string         `json:"connection,omitempty"`
+	Instance   string         `json:"instance,omitempty"`
+	Input      map[string]any `json:"input,omitempty"`
 }
 
 type workflowAgentTargetRequest struct {
@@ -40,6 +44,46 @@ type workflowAgentTargetRequest struct {
 	Metadata        map[string]any        `json:"metadata,omitempty"`
 	ProviderOptions map[string]any        `json:"providerOptions,omitempty"`
 	TimeoutSeconds  int                   `json:"timeoutSeconds,omitempty"`
+}
+
+func (target *workflowScheduleTargetRequest) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Plugin     json.RawMessage             `json:"plugin"`
+		Operation  string                      `json:"operation"`
+		Connection string                      `json:"connection,omitempty"`
+		Instance   string                      `json:"instance,omitempty"`
+		Input      map[string]any              `json:"input,omitempty"`
+		Agent      *workflowAgentTargetRequest `json:"agent,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	target.Agent = raw.Agent
+	pluginTarget := workflowPluginTargetRequest{
+		Operation:  raw.Operation,
+		Connection: raw.Connection,
+		Instance:   raw.Instance,
+		Input:      raw.Input,
+	}
+	if len(raw.Plugin) > 0 && string(raw.Plugin) != "null" {
+		pluginJSON := strings.TrimSpace(string(raw.Plugin))
+		if strings.HasPrefix(pluginJSON, "{") {
+			if err := json.Unmarshal(raw.Plugin, &pluginTarget); err != nil {
+				return fmt.Errorf("invalid workflow target plugin: %w", err)
+			}
+		} else {
+			if err := json.Unmarshal(raw.Plugin, &pluginTarget.Name); err != nil {
+				return fmt.Errorf("invalid workflow target plugin: %w", err)
+			}
+		}
+	}
+	if workflowPluginTargetRequestHasFields(pluginTarget) {
+		target.Plugin = &pluginTarget
+		return nil
+	}
+	target.Plugin = nil
+	return nil
 }
 
 type workflowScheduleUpsertRequest struct {
@@ -231,12 +275,13 @@ func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) cor
 		agentTarget := workflowAgentTargetFromRequest(target.Agent)
 		return coreworkflow.Target{Agent: &agentTarget}
 	}
+	plugin := workflowPluginTargetFromRequest(target.Plugin)
 	pluginTarget := coreworkflow.PluginTarget{
-		PluginName: strings.TrimSpace(target.Plugin),
-		Operation:  strings.TrimSpace(target.Operation),
-		Connection: strings.TrimSpace(target.Connection),
-		Instance:   strings.TrimSpace(target.Instance),
-		Input:      maps.Clone(target.Input),
+		PluginName: strings.TrimSpace(plugin.Name),
+		Operation:  strings.TrimSpace(plugin.Operation),
+		Connection: strings.TrimSpace(plugin.Connection),
+		Instance:   strings.TrimSpace(plugin.Instance),
+		Input:      maps.Clone(plugin.Input),
 	}
 	return coreworkflow.Target{
 		PluginName: pluginTarget.PluginName,
@@ -246,6 +291,13 @@ func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) cor
 		Input:      pluginTarget.Input,
 		Plugin:     &pluginTarget,
 	}
+}
+
+func workflowPluginTargetFromRequest(target *workflowPluginTargetRequest) workflowPluginTargetRequest {
+	if target == nil {
+		return workflowPluginTargetRequest{}
+	}
+	return *target
 }
 
 func workflowAgentTargetFromRequest(target *workflowAgentTargetRequest) coreworkflow.AgentTarget {
@@ -277,7 +329,11 @@ func workflowScheduleTargetRequestHasOneKind(target workflowScheduleTargetReques
 }
 
 func workflowScheduleTargetRequestHasPluginFields(target workflowScheduleTargetRequest) bool {
-	return strings.TrimSpace(target.Plugin) != "" ||
+	return workflowPluginTargetRequestHasFields(workflowPluginTargetFromRequest(target.Plugin))
+}
+
+func workflowPluginTargetRequestHasFields(target workflowPluginTargetRequest) bool {
+	return strings.TrimSpace(target.Name) != "" ||
 		strings.TrimSpace(target.Operation) != "" ||
 		strings.TrimSpace(target.Connection) != "" ||
 		strings.TrimSpace(target.Instance) != "" ||
@@ -288,14 +344,14 @@ func workflowScheduleTargetErrorPlugin(target workflowScheduleTargetRequest) str
 	if target.Agent != nil {
 		return "agent"
 	}
-	return strings.TrimSpace(target.Plugin)
+	return strings.TrimSpace(workflowPluginTargetFromRequest(target.Plugin).Name)
 }
 
 func workflowScheduleTargetErrorOperation(target workflowScheduleTargetRequest) string {
 	if target.Agent != nil {
 		return "turn"
 	}
-	return strings.TrimSpace(target.Operation)
+	return strings.TrimSpace(workflowPluginTargetFromRequest(target.Plugin).Operation)
 }
 
 func workflowScheduleInfoFromManaged(managed *workflowmanager.ManagedSchedule) workflowScheduleInfo {

@@ -584,7 +584,7 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`)
+	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}}`)
 	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", createBody)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -647,7 +647,7 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 		t.Fatalf("listed target plugin = %q, want roadmap", listed[0].Target.Plugin)
 	}
 
-	updateBody := bytes.NewBufferString(`{"cron":"0 * * * *","timezone":"UTC","target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"full"}},"paused":true}`)
+	updateBody := bytes.NewBufferString(`{"cron":"0 * * * *","timezone":"UTC","target":{"plugin":{"name":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"full"}}},"paused":true}`)
 	updateReq, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/workflow/schedules/"+created.ID, updateBody)
 	updateReq.Header.Set("Content-Type", "application/json")
 	updateReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -2017,7 +2017,7 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	createReq, _ := http.NewRequest(
 		http.MethodPost,
 		ts.URL+"/api/v1/workflow/event-triggers/",
-		bytes.NewBufferString(`{"provider":"basic","match":{"type":"roadmap.item.updated","source":"roadmap","subject":"item"},"target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`),
+		bytes.NewBufferString(`{"provider":"basic","match":{"type":"roadmap.item.updated","source":"roadmap","subject":"item"},"target":{"plugin":{"name":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}}`),
 	)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -2068,7 +2068,7 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	updateReq, _ := http.NewRequest(
 		http.MethodPut,
 		ts.URL+"/api/v1/workflow/event-triggers/"+created.ID,
-		bytes.NewBufferString(`{"provider":"advanced","match":{"type":"analytics.item.synced","source":"analytics","subject":"sync"},"target":{"plugin":"analytics","operation":"sync","connection":"warehouse","instance":"tenant-b","input":{"mode":"full"}},"paused":true}`),
+		bytes.NewBufferString(`{"provider":"advanced","match":{"type":"analytics.item.synced","source":"analytics","subject":"sync"},"target":{"plugin":{"name":"analytics","operation":"sync","connection":"warehouse","instance":"tenant-b","input":{"mode":"full"}}},"paused":true}`),
 	)
 	updateReq.Header.Set("Content-Type", "application/json")
 	updateReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -2160,6 +2160,101 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	}
 	if finalRef.RevokedAt == nil || finalRef.RevokedAt.IsZero() {
 		t.Fatalf("expected final execution ref to be revoked, got %#v", finalRef)
+	}
+}
+
+func TestGlobalWorkflowEventTriggerLegacyFlatTargetStillAccepted(t *testing.T) {
+	t.Parallel()
+
+	services := coretesting.NewStubServices(t)
+	ada := seedUser(t, services, "ada@example.test")
+	provider := newMemoryWorkflowProvider()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: ada.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{
+				Name: "roadmap",
+				Operations: []catalog.CatalogOperation{
+					{ID: "sync", Method: http.MethodPost},
+					{ID: "export", Method: http.MethodPost},
+				},
+			},
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			provider:            provider,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createReq, _ := http.NewRequest(
+		http.MethodPost,
+		ts.URL+"/api/v1/workflow/event-triggers/",
+		bytes.NewBufferString(`{"match":{"type":"roadmap.item.updated","source":"roadmap"},"target":{"plugin":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"incremental"}}}`),
+	)
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	if createResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(createResp.Body)
+		t.Fatalf("expected 201, got %d: %s", createResp.StatusCode, body)
+	}
+	var created workflowEventTriggerResponse
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.Target.Plugin != "roadmap" || created.Target.Operation != "sync" {
+		t.Fatalf("created trigger = %#v", created)
+	}
+	if len(provider.upsertTriggerReqs) != 1 {
+		t.Fatalf("upsert trigger requests = %d, want 1", len(provider.upsertTriggerReqs))
+	}
+	createTarget := provider.upsertTriggerReqs[0].Target
+	if createTarget.PluginName != "roadmap" || createTarget.Operation != "sync" || createTarget.Connection != "analytics" || createTarget.Instance != "tenant-a" {
+		t.Fatalf("create target = %#v", createTarget)
+	}
+
+	updateReq, _ := http.NewRequest(
+		http.MethodPut,
+		ts.URL+"/api/v1/workflow/event-triggers/"+created.ID,
+		bytes.NewBufferString(`{"match":{"type":"roadmap.item.exported","source":"roadmap"},"target":{"plugin":"roadmap","operation":"export","connection":"analytics","instance":"tenant-b","input":{"mode":"full"}}}`),
+	)
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	updateResp, err := http.DefaultClient.Do(updateReq)
+	if err != nil {
+		t.Fatalf("update request: %v", err)
+	}
+	defer func() { _ = updateResp.Body.Close() }()
+	if updateResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(updateResp.Body)
+		t.Fatalf("expected 200, got %d: %s", updateResp.StatusCode, body)
+	}
+	if len(provider.upsertTriggerReqs) != 2 {
+		t.Fatalf("upsert trigger requests = %d, want 2", len(provider.upsertTriggerReqs))
+	}
+	updateTarget := provider.upsertTriggerReqs[1].Target
+	if updateTarget.PluginName != "roadmap" || updateTarget.Operation != "export" || updateTarget.Connection != "analytics" || updateTarget.Instance != "tenant-b" {
+		t.Fatalf("update target = %#v", updateTarget)
+	}
+	if updateTarget.Input["mode"] != "full" {
+		t.Fatalf("update target input = %#v", updateTarget.Input)
 	}
 }
 
