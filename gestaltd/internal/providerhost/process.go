@@ -22,6 +22,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/sandbox"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -613,7 +614,7 @@ func safeBaseEnv() []string {
 func waitForPluginConn(ctx context.Context, socket string, waitCh <-chan error, cfg ProcessConfig) (*grpc.ClientConn, error) {
 	for {
 		if _, err := os.Stat(socket); err == nil {
-			conn, dialErr := dialUnixSocket(ctx, socket, cfg)
+			conn, dialErr := dialReadyUnixSocket(ctx, socket, waitCh, cfg)
 			if dialErr == nil {
 				return conn, nil
 			}
@@ -636,6 +637,18 @@ func waitForPluginConn(ctx context.Context, socket string, waitCh <-chan error, 
 	}
 }
 
+func dialReadyUnixSocket(ctx context.Context, socket string, waitCh <-chan error, cfg ProcessConfig) (*grpc.ClientConn, error) {
+	conn, err := dialUnixSocket(ctx, socket, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := waitForGRPCReady(ctx, conn, waitCh); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	return conn, nil
+}
+
 func dialUnixSocket(ctx context.Context, socket string, cfg ProcessConfig) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
 		"passthrough:///localhost",
@@ -656,4 +669,32 @@ func dialUnixSocket(ctx context.Context, socket string, cfg ProcessConfig) (*grp
 	}
 	conn.Connect()
 	return conn, nil
+}
+
+func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn, waitCh <-chan error) error {
+	for {
+		state := conn.GetState()
+		if state == connectivity.Ready {
+			return nil
+		}
+		if state == connectivity.Shutdown {
+			return fmt.Errorf("plugin gRPC connection shut down before ready")
+		}
+
+		select {
+		case err, ok := <-waitCh:
+			if !ok || err == nil {
+				return fmt.Errorf("plugin process exited before serving gRPC")
+			}
+			return fmt.Errorf("plugin process exited before serving gRPC: %w", err)
+		default:
+		}
+
+		waitCtx, cancel := context.WithTimeout(ctx, 25*time.Millisecond)
+		changed := conn.WaitForStateChange(waitCtx, state)
+		cancel()
+		if !changed && ctx.Err() != nil {
+			return fmt.Errorf("waiting for plugin gRPC ready: %w", ctx.Err())
+		}
+	}
 }
