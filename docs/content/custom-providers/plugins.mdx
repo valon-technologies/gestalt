@@ -825,6 +825,74 @@ Repeated `--config` flags merge left-to-right, and `null` deletes inherited
 entries. That makes it possible to boot some supporting providers while
 suppressing others for a local session.
 
+### Attaching local code to a remote server
+
+Use remote provider dev when you want a remote Gestalt instance to handle auth,
+authorization, connections, secrets, and host services, but route a selected
+plugin implementation to your local machine. For a plugin that does not need
+provider config, a path-only attach is enough:
+
+```sh
+export GESTALT_URL=https://gestalt.example.com
+export GESTALT_API_KEY=vat_...
+
+gestaltd provider dev --remote "$GESTALT_URL" --path ./slack --name slack
+```
+
+The remote URL is environment-agnostic; it can point at any `gestaltd` instance
+that exposes provider-dev attach targets. The local command replaces only the
+source plugin attached by your authenticated session. Providers that are not
+attached locally continue to run through the remote server and its existing
+configuration.
+
+The attached plugin's config comes from the local command, not by copying the
+remote server's plugin config. If the plugin needs config values, invokes,
+mounted UI settings, or secret references, pass the same layered configs you
+would use for a real deployment and add the local source override on top:
+
+```sh
+gestaltd provider dev \
+  --remote "$GESTALT_URL" \
+  --config ./base.yaml \
+  --config ./prod.yaml \
+  --path ./slack \
+  --name slack
+```
+
+You can also attach every source-backed plugin from layered config overlays:
+
+```sh
+gestaltd provider dev \
+  --remote "$GESTALT_URL" \
+  --config ./base.yaml \
+  --config ./prod.yaml \
+  --config ./dev/local-plugins.yaml
+```
+
+This uses the same merge behavior as local development, so overlays can choose
+which plugins are local by adding source-backed plugin entries, and choose which
+remote/supporting providers are disabled by setting inherited config entries to
+`null`.
+Unlike local `provider dev` and `provider validate`, remote provider dev allows
+missing local environment substitutions while loading config. That keeps
+unrelated deployment-only env vars from blocking attach; if the attached plugin
+itself needs a literal env-substituted value, set that env var locally or pass a
+small local overlay.
+
+Remote provider dev tunnels plugin RPC, catalog, post-connect, host-service
+calls, and plugin-owned UI assets for mounted UIs that already exist on the
+remote server. For the `plugin/` + sibling `ui/` layout, the sibling UI is
+bundled for the local provider session automatically. Raw GraphQL surfaces are
+not tunneled in v1.
+
+For TypeScript plugins, `provider dev` runs `bun install` automatically when the
+plugin has a `package.json` but no `node_modules`. Source UI release builds use
+the same dependency bootstrap before `release.build.command` when that build
+workdir has a `package.json`. Keep `@valon-technologies/gestalt` current enough
+for the host-service features your plugin uses; for example, remote IndexedDB
+host-service calls require an SDK version with `tls://` host-service transport
+support.
+
 Hosted HTTP bindings stay layered on top of operations. A plugin defines an
 operation like `handle_command` in code, then attaches `/command` by declaring a
 manifest `spec.http` binding that targets that operation. Local source

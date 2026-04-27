@@ -170,7 +170,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	}
 	defer cleanup()
 
-	cfg, err := config.LoadPaths(configPaths)
+	cfg, err := config.LoadPartialAllowMissingEnvPaths(configPaths)
 	if err != nil {
 		return fmt.Errorf("loading provider dev remote config: %w", err)
 	}
@@ -516,7 +516,7 @@ func prepareProviderRemoteConfigPaths(opts providerLocalCommandOptions) ([]strin
 	if err != nil {
 		return nil, cleanup, err
 	}
-	resolvedKey, err := resolveProviderLocalPluginKey(opts.ConfigPaths, targetManifestPath, manifest, opts.Name)
+	resolvedKey, err := resolveProviderRemotePluginKey(opts.ConfigPaths, targetManifestPath, manifest, opts.Name)
 	if err != nil {
 		return nil, cleanup, err
 	}
@@ -691,7 +691,6 @@ func providerRemoteUIManifestPath(cfg *config.Config, target providerRemoteTarge
 		if err != nil || ok {
 			return manifestPath, ok, err
 		}
-		return "", false, nil
 	}
 	if entry.ResolvedManifest != nil && entry.ResolvedManifest.Spec != nil && entry.ResolvedManifest.Spec.UI != nil {
 		ownedUIPath := strings.TrimSpace(entry.ResolvedManifest.Spec.UI.Path)
@@ -799,7 +798,15 @@ func resolveProviderTargetManifest(pathFlag string) (string, *providermanifestv1
 }
 
 func resolveProviderLocalPluginKey(configPaths []string, targetManifestPath string, manifest *providermanifestv1.Manifest, explicitName string) (string, error) {
-	plugins, err := loadConfiguredPlugins(configPaths)
+	return resolveProviderPluginKey(configPaths, targetManifestPath, manifest, explicitName, loadConfiguredPlugins)
+}
+
+func resolveProviderRemotePluginKey(configPaths []string, targetManifestPath string, manifest *providermanifestv1.Manifest, explicitName string) (string, error) {
+	return resolveProviderPluginKey(configPaths, targetManifestPath, manifest, explicitName, loadConfiguredPluginsAllowMissingEnv)
+}
+
+func resolveProviderPluginKey(configPaths []string, targetManifestPath string, manifest *providermanifestv1.Manifest, explicitName string, loadPlugins func([]string) (map[string]*config.ProviderEntry, error)) (string, error) {
+	plugins, err := loadPlugins(configPaths)
 	if err != nil {
 		return "", err
 	}
@@ -1223,6 +1230,20 @@ func loadConfiguredPlugins(configPaths []string) (map[string]*config.ProviderEnt
 		return map[string]*config.ProviderEntry{}, nil
 	}
 	cfg, err := config.LoadPaths(configPaths)
+	if err != nil {
+		return nil, fmt.Errorf("load provider overlay config: %w", err)
+	}
+	if cfg.Plugins == nil {
+		return map[string]*config.ProviderEntry{}, nil
+	}
+	return cfg.Plugins, nil
+}
+
+func loadConfiguredPluginsAllowMissingEnv(configPaths []string) (map[string]*config.ProviderEntry, error) {
+	if len(configPaths) == 0 {
+		return map[string]*config.ProviderEntry{}, nil
+	}
+	cfg, err := config.LoadPartialAllowMissingEnvPaths(configPaths)
 	if err != nil {
 		return nil, fmt.Errorf("load provider overlay config: %w", err)
 	}
