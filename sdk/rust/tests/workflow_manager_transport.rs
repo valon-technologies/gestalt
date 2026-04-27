@@ -8,15 +8,15 @@ use gestalt::proto::v1::workflow_manager_host_server::{
     WorkflowManagerHost as ProtoWorkflowManagerHost, WorkflowManagerHostServer,
 };
 use gestalt::proto::v1::{
-    BoundWorkflowEventTrigger, BoundWorkflowSchedule, BoundWorkflowTarget,
-    ManagedWorkflowEventTrigger, ManagedWorkflowSchedule, WorkflowEvent, WorkflowEventMatch,
-    WorkflowManagerCreateEventTriggerRequest, WorkflowManagerCreateScheduleRequest,
-    WorkflowManagerDeleteEventTriggerRequest, WorkflowManagerDeleteScheduleRequest,
-    WorkflowManagerGetEventTriggerRequest, WorkflowManagerGetScheduleRequest,
-    WorkflowManagerPauseEventTriggerRequest, WorkflowManagerPauseScheduleRequest,
-    WorkflowManagerPublishEventRequest, WorkflowManagerResumeEventTriggerRequest,
-    WorkflowManagerResumeScheduleRequest, WorkflowManagerUpdateEventTriggerRequest,
-    WorkflowManagerUpdateScheduleRequest,
+    BoundWorkflowEventTrigger, BoundWorkflowPluginTarget, BoundWorkflowSchedule,
+    BoundWorkflowTarget, ManagedWorkflowEventTrigger, ManagedWorkflowSchedule, WorkflowEvent,
+    WorkflowEventMatch, WorkflowManagerCreateEventTriggerRequest,
+    WorkflowManagerCreateScheduleRequest, WorkflowManagerDeleteEventTriggerRequest,
+    WorkflowManagerDeleteScheduleRequest, WorkflowManagerGetEventTriggerRequest,
+    WorkflowManagerGetScheduleRequest, WorkflowManagerPauseEventTriggerRequest,
+    WorkflowManagerPauseScheduleRequest, WorkflowManagerPublishEventRequest,
+    WorkflowManagerResumeEventTriggerRequest, WorkflowManagerResumeScheduleRequest,
+    WorkflowManagerUpdateEventTriggerRequest, WorkflowManagerUpdateScheduleRequest,
 };
 use gestalt::{
     ENV_WORKFLOW_MANAGER_SOCKET, ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, Request, WorkflowManager,
@@ -40,6 +40,17 @@ struct SeenRequest {
 struct TestWorkflowManagerServer {
     seen: Arc<Mutex<Vec<SeenRequest>>>,
     relay_tokens: Arc<Mutex<Vec<String>>>,
+}
+
+fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTarget {
+    BoundWorkflowTarget {
+        plugin: Some(BoundWorkflowPluginTarget {
+            plugin_name: plugin_name.to_string(),
+            operation: operation.to_string(),
+            ..Default::default()
+        }),
+        agent: None,
+    }
 }
 
 #[async_trait]
@@ -420,11 +431,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
             provider_name: "basic".to_string(),
             cron: "*/5 * * * *".to_string(),
             timezone: "UTC".to_string(),
-            target: Some(BoundWorkflowTarget {
-                plugin_name: "roadmap".to_string(),
-                operation: "sync".to_string(),
-                ..Default::default()
-            }),
+            target: Some(plugin_target("roadmap", "sync")),
             paused: false,
             ..Default::default()
         })
@@ -443,11 +450,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
             provider_name: "secondary".to_string(),
             cron: "0 * * * *".to_string(),
             timezone: "America/New_York".to_string(),
-            target: Some(BoundWorkflowTarget {
-                plugin_name: "roadmap".to_string(),
-                operation: "status".to_string(),
-                ..Default::default()
-            }),
+            target: Some(plugin_target("roadmap", "status")),
             paused: true,
             ..Default::default()
         })
@@ -482,11 +485,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
                 source: "roadmap".to_string(),
                 ..Default::default()
             }),
-            target: Some(BoundWorkflowTarget {
-                plugin_name: "slack".to_string(),
-                operation: "chat.postMessage".to_string(),
-                ..Default::default()
-            }),
+            target: Some(plugin_target("slack", "chat.postMessage")),
             paused: false,
             ..Default::default()
         })
@@ -507,11 +506,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
                 r#type: "roadmap.item.synced".to_string(),
                 ..Default::default()
             }),
-            target: Some(BoundWorkflowTarget {
-                plugin_name: "slack".to_string(),
-                operation: "chat.postMessage".to_string(),
-                ..Default::default()
-            }),
+            target: Some(plugin_target("slack", "chat.postMessage")),
             paused: true,
             ..Default::default()
         })

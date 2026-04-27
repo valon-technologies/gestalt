@@ -425,14 +425,16 @@ fn merge_update(args: &WorkflowScheduleUpdateArgs, existing: &Value) -> Result<V
     let plugin = match args.plugin.as_deref() {
         Some(value) => value.to_string(),
         None => target_plugin(existing)
-            .ok_or_else(|| anyhow!("existing schedule is missing target.plugin; pass --plugin"))?
+            .ok_or_else(|| {
+                anyhow!("existing schedule is missing target.plugin.name; pass --plugin")
+            })?
             .to_string(),
     };
     let operation = match args.operation.as_deref() {
         Some(value) => value.to_string(),
         None => target_operation(existing)
             .ok_or_else(|| {
-                anyhow!("existing schedule is missing target.operation; pass --operation")
+                anyhow!("existing schedule is missing target.plugin.operation; pass --operation")
             })?
             .to_string(),
     };
@@ -485,14 +487,16 @@ fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> R
     let plugin = match args.plugin.as_deref() {
         Some(value) => value.to_string(),
         None => target_plugin(existing)
-            .ok_or_else(|| anyhow!("existing trigger is missing target.plugin; pass --plugin"))?
+            .ok_or_else(|| {
+                anyhow!("existing trigger is missing target.plugin.name; pass --plugin")
+            })?
             .to_string(),
     };
     let operation = match args.operation.as_deref() {
         Some(value) => value.to_string(),
         None => target_operation(existing)
             .ok_or_else(|| {
-                anyhow!("existing trigger is missing target.operation; pass --operation")
+                anyhow!("existing trigger is missing target.plugin.operation; pass --operation")
             })?
             .to_string(),
     };
@@ -569,47 +573,31 @@ fn build_target_object(
 }
 
 fn target_plugin(value: &Value) -> Option<&str> {
-    match value.get("target")?.get("plugin")? {
-        Value::String(plugin) => Some(plugin.as_str()),
-        Value::Object(plugin) => plugin.get("name").and_then(Value::as_str),
-        _ => None,
-    }
+    value
+        .get("target")?
+        .get("plugin")?
+        .get("name")
+        .and_then(Value::as_str)
 }
 
 fn target_operation(value: &Value) -> Option<&str> {
-    let target = value.get("target")?;
-    target
-        .get("plugin")
-        .and_then(|plugin| plugin.get("operation"))
-        .and_then(Value::as_str)
-        .or_else(|| target.get("operation").and_then(Value::as_str))
+    target_plugin_field(value, "operation")
 }
 
 fn target_connection(value: &Value) -> Option<&str> {
-    target_plugin_field(value, "connection").or_else(|| {
-        value
-            .get("target")
-            .and_then(|target| target.get("connection"))
-            .and_then(Value::as_str)
-    })
+    target_plugin_field(value, "connection")
 }
 
 fn target_instance(value: &Value) -> Option<&str> {
-    target_plugin_field(value, "instance").or_else(|| {
-        value
-            .get("target")
-            .and_then(|target| target.get("instance"))
-            .and_then(Value::as_str)
-    })
+    target_plugin_field(value, "instance")
 }
 
 fn target_input(value: &Value) -> Option<&Map<String, Value>> {
-    let target = value.get("target")?;
-    target
-        .get("plugin")
-        .and_then(|plugin| plugin.get("input"))
+    value
+        .get("target")?
+        .get("plugin")?
+        .get("input")
         .and_then(Value::as_object)
-        .or_else(|| target.get("input").and_then(Value::as_object))
 }
 
 fn target_plugin_field<'a>(value: &'a Value, field: &str) -> Option<&'a str> {

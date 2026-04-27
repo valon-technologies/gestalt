@@ -39,9 +39,6 @@ func CanonicalizeStructure(cfg *Config) error {
 	if err := NormalizeCompatibility(cfg); err != nil {
 		return err
 	}
-	if err := normalizeWorkflowTargets(cfg); err != nil {
-		return err
-	}
 	pluginOwnedUIBindings := pluginOwnedUIBindings(cfg)
 	if err := normalizeMountedUIPaths(cfg, pluginOwnedUIBindings); err != nil {
 		return err
@@ -1140,12 +1137,6 @@ func validateWorkflowsConfig(cfg *Config) error {
 			if err := validateWorkflowScheduleCron(key, schedule.Cron); err != nil {
 				return err
 			}
-			schedule.Operation = strings.TrimSpace(schedule.Operation)
-			if schedule.Agent == nil && schedule.Operation == "" {
-				return fmt.Errorf("config validation: workflows.schedules.%s.operation is required", key)
-			}
-			schedule.Connection = strings.TrimSpace(schedule.Connection)
-			schedule.Instance = strings.TrimSpace(schedule.Instance)
 			schedule.Timezone = strings.TrimSpace(schedule.Timezone)
 			if schedule.Timezone == "" {
 				schedule.Timezone = "UTC"
@@ -1186,12 +1177,6 @@ func validateWorkflowsConfig(cfg *Config) error {
 			}
 			trigger.Match.Source = strings.TrimSpace(trigger.Match.Source)
 			trigger.Match.Subject = strings.TrimSpace(trigger.Match.Subject)
-			trigger.Operation = strings.TrimSpace(trigger.Operation)
-			if trigger.Agent == nil && trigger.Operation == "" {
-				return fmt.Errorf("config validation: workflows.eventTriggers.%s.operation is required", key)
-			}
-			trigger.Connection = strings.TrimSpace(trigger.Connection)
-			trigger.Instance = strings.TrimSpace(trigger.Instance)
 			normalized[key] = trigger
 		}
 		cfg.Workflows.EventTriggers = normalized
@@ -1204,22 +1189,16 @@ func validateWorkflowScheduleTarget(cfg *Config, key string, schedule *WorkflowS
 		return fmt.Errorf("config validation: workflows.schedules.%s is required", key)
 	}
 	targetPath := "workflows.schedules." + key + ".target"
-	hasAgent := schedule.Agent != nil
-	schedule.Plugin = strings.TrimSpace(schedule.Plugin)
-	hasPlugin := schedule.Plugin != ""
-	if hasAgent == hasPlugin {
-		return fmt.Errorf("config validation: %s must set exactly one of plugin or agent", targetPath)
+	if err := normalizeWorkflowTarget(targetPath, schedule.Target); err != nil {
+		return err
 	}
-	if hasAgent && workflowSchedulePluginFieldsSet(schedule) {
-		return fmt.Errorf("config validation: %s cannot set plugin target fields with agent", targetPath)
-	}
-	if hasPlugin {
-		if _, ok := cfg.Plugins[schedule.Plugin]; !ok {
-			return fmt.Errorf("config validation: %s.plugin.name references unknown plugin %q", targetPath, schedule.Plugin)
+	if schedule.Target.Plugin != nil {
+		if _, ok := cfg.Plugins[schedule.Target.Plugin.Name]; !ok {
+			return fmt.Errorf("config validation: %s.plugin.name references unknown plugin %q", targetPath, schedule.Target.Plugin.Name)
 		}
 		return nil
 	}
-	return validateWorkflowAgentConfig(cfg, targetPath+".agent", schedule.Agent)
+	return validateWorkflowAgentConfig(cfg, targetPath+".agent", schedule.Target.Agent)
 }
 
 func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *WorkflowEventTriggerConfig) error {
@@ -1227,104 +1206,21 @@ func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *Workfl
 		return fmt.Errorf("config validation: workflows.eventTriggers.%s is required", key)
 	}
 	targetPath := "workflows.eventTriggers." + key + ".target"
-	hasAgent := trigger.Agent != nil
-	trigger.Plugin = strings.TrimSpace(trigger.Plugin)
-	hasPlugin := trigger.Plugin != ""
-	if hasAgent == hasPlugin {
-		return fmt.Errorf("config validation: %s must set exactly one of plugin or agent", targetPath)
-	}
-	if hasAgent && workflowEventTriggerPluginFieldsSet(trigger) {
-		return fmt.Errorf("config validation: %s cannot set plugin target fields with agent", targetPath)
-	}
-	if hasPlugin {
-		if _, ok := cfg.Plugins[trigger.Plugin]; !ok {
-			return fmt.Errorf("config validation: %s.plugin.name references unknown plugin %q", targetPath, trigger.Plugin)
-		}
-		return nil
-	}
-	return validateWorkflowAgentConfig(cfg, targetPath+".agent", trigger.Agent)
-}
-
-func normalizeWorkflowTargets(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	for key := range cfg.Workflows.Schedules {
-		schedule := cfg.Workflows.Schedules[key]
-		if err := normalizeWorkflowScheduleTarget(key, &schedule); err != nil {
-			return err
-		}
-		cfg.Workflows.Schedules[key] = schedule
-	}
-	for key := range cfg.Workflows.EventTriggers {
-		trigger := cfg.Workflows.EventTriggers[key]
-		if err := normalizeWorkflowEventTriggerTarget(key, &trigger); err != nil {
-			return err
-		}
-		cfg.Workflows.EventTriggers[key] = trigger
-	}
-	return nil
-}
-
-func normalizeWorkflowScheduleTarget(key string, schedule *WorkflowScheduleConfig) error {
-	if schedule == nil || schedule.Target == nil {
-		return nil
-	}
-	if workflowScheduleLegacyTargetFieldsSet(schedule) {
-		return fmt.Errorf("config validation: workflows.schedules.%s cannot combine target with legacy plugin or agent target fields", key)
-	}
-	err := normalizeWorkflowTarget(
-		"workflows.schedules."+key+".target",
-		schedule.Target,
-		func(target WorkflowPluginTargetConfig) {
-			schedule.Plugin = target.Name
-			schedule.Operation = target.Operation
-			schedule.Connection = target.Connection
-			schedule.Instance = target.Instance
-			schedule.Input = target.Input
-		},
-		func(agent *WorkflowAgentConfig) {
-			schedule.Agent = agent
-		},
-	)
-	if err != nil {
+	if err := normalizeWorkflowTarget(targetPath, trigger.Target); err != nil {
 		return err
 	}
-	schedule.Target = nil
-	return nil
-}
-
-func normalizeWorkflowEventTriggerTarget(key string, trigger *WorkflowEventTriggerConfig) error {
-	if trigger == nil || trigger.Target == nil {
+	if trigger.Target.Plugin != nil {
+		if _, ok := cfg.Plugins[trigger.Target.Plugin.Name]; !ok {
+			return fmt.Errorf("config validation: %s.plugin.name references unknown plugin %q", targetPath, trigger.Target.Plugin.Name)
+		}
 		return nil
 	}
-	if workflowEventTriggerLegacyTargetFieldsSet(trigger) {
-		return fmt.Errorf("config validation: workflows.eventTriggers.%s cannot combine target with legacy plugin or agent target fields", key)
-	}
-	err := normalizeWorkflowTarget(
-		"workflows.eventTriggers."+key+".target",
-		trigger.Target,
-		func(target WorkflowPluginTargetConfig) {
-			trigger.Plugin = target.Name
-			trigger.Operation = target.Operation
-			trigger.Connection = target.Connection
-			trigger.Instance = target.Instance
-			trigger.Input = target.Input
-		},
-		func(agent *WorkflowAgentConfig) {
-			trigger.Agent = agent
-		},
-	)
-	if err != nil {
-		return err
-	}
-	trigger.Target = nil
-	return nil
+	return validateWorkflowAgentConfig(cfg, targetPath+".agent", trigger.Target.Agent)
 }
 
-func normalizeWorkflowTarget(path string, target *WorkflowTargetConfig, applyPlugin func(WorkflowPluginTargetConfig), applyAgent func(*WorkflowAgentConfig)) error {
+func normalizeWorkflowTarget(path string, target *WorkflowTargetConfig) error {
 	if target == nil {
-		return nil
+		return fmt.Errorf("config validation: %s must set exactly one of plugin or agent", path)
 	}
 	hasPlugin := target.Plugin != nil
 	hasAgent := target.Agent != nil
@@ -1343,41 +1239,10 @@ func normalizeWorkflowTarget(path string, target *WorkflowTargetConfig, applyPlu
 		if plugin.Operation == "" {
 			return fmt.Errorf("config validation: %s.plugin.operation is required", path)
 		}
-		if applyPlugin != nil {
-			applyPlugin(plugin)
-		}
+		target.Plugin = &plugin
 		return nil
 	}
-	if applyAgent != nil {
-		applyAgent(target.Agent)
-	}
 	return nil
-}
-
-func workflowScheduleLegacyTargetFieldsSet(schedule *WorkflowScheduleConfig) bool {
-	return schedule.Agent != nil ||
-		strings.TrimSpace(schedule.Plugin) != "" ||
-		workflowSchedulePluginFieldsSet(schedule)
-}
-
-func workflowEventTriggerLegacyTargetFieldsSet(trigger *WorkflowEventTriggerConfig) bool {
-	return trigger.Agent != nil ||
-		strings.TrimSpace(trigger.Plugin) != "" ||
-		workflowEventTriggerPluginFieldsSet(trigger)
-}
-
-func workflowSchedulePluginFieldsSet(schedule *WorkflowScheduleConfig) bool {
-	return strings.TrimSpace(schedule.Operation) != "" ||
-		strings.TrimSpace(schedule.Connection) != "" ||
-		strings.TrimSpace(schedule.Instance) != "" ||
-		len(schedule.Input) > 0
-}
-
-func workflowEventTriggerPluginFieldsSet(trigger *WorkflowEventTriggerConfig) bool {
-	return strings.TrimSpace(trigger.Operation) != "" ||
-		strings.TrimSpace(trigger.Connection) != "" ||
-		strings.TrimSpace(trigger.Instance) != "" ||
-		len(trigger.Input) > 0
 }
 
 func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentConfig) error {

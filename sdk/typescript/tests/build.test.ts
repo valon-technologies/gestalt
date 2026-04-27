@@ -902,12 +902,14 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
     const run = await workflow.startRun(
       create(StartWorkflowProviderRunRequestSchema, {
         target: {
-          pluginName: "roadmap",
-          operation: "sync",
+          plugin: {
+            pluginName: "roadmap",
+            operation: "sync",
+          },
         },
       }),
     );
-    expect(run.target?.pluginName).toBe("roadmap");
+    expect(run.target?.plugin?.pluginName).toBe("roadmap");
     expect(run.id).toBe("roadmap:sync:1");
   } finally {
     if (child) {

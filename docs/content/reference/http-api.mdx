@@ -64,11 +64,11 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | `GET` | `/api/v1/workflow/runs/{runID}` | Inspect one workflow run. |
 | `POST` | `/api/v1/workflow/runs/{runID}/cancel` | Cancel one workflow run. The request body may include an optional `reason`. |
 
-Schedule, event-trigger, and run responses return target plugin details under
-`target.plugin` as an object with `name`, `operation`, and optional
-`connection`, `instance`, and `input` fields. Schedule and trigger create/update
-requests use the same nested shape; legacy flat plugin request fields remain
-accepted during migration.
+Schedule, event-trigger, and run responses return exactly one target under
+`target.plugin` or `target.agent`. Plugin targets use `target.plugin` as an
+object with `name`, `operation`, and optional `connection`, `instance`, and
+`input` fields. Schedule and trigger create/update requests use the same nested
+shape.
 
 ### Agents
 

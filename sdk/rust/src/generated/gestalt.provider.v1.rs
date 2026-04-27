@@ -9107,16 +9107,6 @@ pub mod s3_server {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BoundWorkflowTarget {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub operation: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
-    pub input: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "4")]
-    pub connection: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub instance: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub plugin: ::core::option::Option<BoundWorkflowPluginTarget>,
     #[prost(message, optional, tag = "7")]

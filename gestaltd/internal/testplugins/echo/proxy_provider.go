@@ -791,11 +791,13 @@ func workflowTargetInputToProto(target workflowScheduleTargetInput) (*proto.Boun
 		return nil, err
 	}
 	return &proto.BoundWorkflowTarget{
-		PluginName: target.Plugin,
-		Operation:  target.Operation,
-		Connection: target.Connection,
-		Instance:   target.Instance,
-		Input:      input,
+		Plugin: &proto.BoundWorkflowPluginTarget{
+			PluginName: target.Plugin,
+			Operation:  target.Operation,
+			Connection: target.Connection,
+			Instance:   target.Instance,
+			Input:      input,
+		},
 	}, nil
 }
 
@@ -870,12 +872,13 @@ func managedWorkflowScheduleBody(value *proto.ManagedWorkflowSchedule) map[strin
 		},
 	}
 	if target != nil {
+		pluginTarget := target.GetPlugin()
 		body["schedule"].(map[string]any)["target"] = map[string]any{
-			"plugin":     target.GetPluginName(),
-			"operation":  target.GetOperation(),
-			"connection": target.GetConnection(),
-			"instance":   target.GetInstance(),
-			"input":      target.GetInput().AsMap(),
+			"plugin":     pluginTarget.GetPluginName(),
+			"operation":  pluginTarget.GetOperation(),
+			"connection": pluginTarget.GetConnection(),
+			"instance":   pluginTarget.GetInstance(),
+			"input":      workflowPluginTargetInputMap(pluginTarget),
 		}
 	}
 	return body
@@ -920,15 +923,23 @@ func managedWorkflowTriggerBody(value *proto.ManagedWorkflowEventTrigger) map[st
 		}
 	}
 	if target != nil {
+		pluginTarget := target.GetPlugin()
 		body["trigger"].(map[string]any)["target"] = map[string]any{
-			"plugin":     target.GetPluginName(),
-			"operation":  target.GetOperation(),
-			"connection": target.GetConnection(),
-			"instance":   target.GetInstance(),
-			"input":      target.GetInput().AsMap(),
+			"plugin":     pluginTarget.GetPluginName(),
+			"operation":  pluginTarget.GetOperation(),
+			"connection": pluginTarget.GetConnection(),
+			"instance":   pluginTarget.GetInstance(),
+			"input":      workflowPluginTargetInputMap(pluginTarget),
 		}
 	}
 	return body
+}
+
+func workflowPluginTargetInputMap(target *proto.BoundWorkflowPluginTarget) map[string]any {
+	if target == nil || target.GetInput() == nil {
+		return map[string]any{}
+	}
+	return target.GetInput().AsMap()
 }
 
 func workflowEventBody(value *proto.WorkflowEvent) map[string]any {

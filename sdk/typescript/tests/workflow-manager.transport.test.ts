@@ -241,8 +241,10 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       cron: "*/5 * * * *",
       timezone: "UTC",
       target: {
-        pluginName: "roadmap",
-        operation: "sync",
+        plugin: {
+          pluginName: "roadmap",
+          operation: "sync",
+        },
       },
       paused: false,
     });
@@ -260,8 +262,10 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       cron: "0 * * * *",
       timezone: "America/New_York",
       target: {
-        pluginName: "roadmap",
-        operation: "status",
+        plugin: {
+          pluginName: "roadmap",
+          operation: "status",
+        },
       },
       paused: true,
     });
@@ -275,8 +279,10 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
         source: "roadmap",
       },
       target: {
-        pluginName: "slack",
-        operation: "chat.postMessage",
+        plugin: {
+          pluginName: "slack",
+          operation: "chat.postMessage",
+        },
       },
       paused: false,
     });
@@ -288,8 +294,10 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
         type: "roadmap.item.synced",
       },
       target: {
-        pluginName: "slack",
-        operation: "chat.postMessage",
+        plugin: {
+          pluginName: "slack",
+          operation: "chat.postMessage",
+        },
       },
       paused: true,
     });

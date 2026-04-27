@@ -40,7 +40,7 @@ pub struct Request {
     pub credential: Credential,
     pub access: Access,
     /// Workflow callback metadata uses a JSON-style lowerCamelCase object
-    /// such as `runId`, `target.pluginName`, `trigger.scheduleId`, and
+    /// such as `runId`, `target.plugin.pluginName`, `trigger.scheduleId`, and
     /// `trigger.event.specVersion`.
     pub workflow: serde_json::Map<String, serde_json::Value>,
     pub invocation_token: String,
