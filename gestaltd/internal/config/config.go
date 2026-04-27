@@ -1870,6 +1870,15 @@ func LoadAllowMissingEnvPaths(paths []string) (*Config, error) {
 	return loadWithLookupPaths(paths, os.LookupEnv, true)
 }
 
+// LoadPartialAllowMissingEnvPaths loads config for commands that inspect a
+// local subset of a larger deployment config. It preserves shape
+// normalization, defaults, and relative path resolution, but skips full
+// structural validation so unrelated deployment-only entries with missing
+// local env vars do not block the caller.
+func LoadPartialAllowMissingEnvPaths(paths []string) (*Config, error) {
+	return loadWithLookupPathsValidation(paths, os.LookupEnv, true, false)
+}
+
 func NormalizeCompatibility(cfg *Config) error {
 	normalizeProviderSourceShapes(cfg)
 	normalizeProviderEntryCompatibility(cfg)
@@ -2076,6 +2085,10 @@ func normalizeConfigRoot(root *yaml.Node) error {
 }
 
 func loadWithLookupPaths(paths []string, lookup func(string) (string, bool), allowMissing bool) (*Config, error) {
+	return loadWithLookupPathsValidation(paths, lookup, allowMissing, true)
+}
+
+func loadWithLookupPathsValidation(paths []string, lookup func(string) (string, bool), allowMissing bool, validate bool) (*Config, error) {
 	mode := envMissingBlank
 	missingEnvSentinelContext := ""
 	if !allowMissing {
@@ -2126,8 +2139,10 @@ func loadWithLookupPaths(paths []string, lookup func(string) (string, bool), all
 	resolveBaseURL(&cfg)
 	resolveRelativePaths(primaryConfigPath(paths), &cfg)
 
-	if err := ValidateCanonicalStructure(&cfg); err != nil {
-		return nil, err
+	if validate {
+		if err := ValidateCanonicalStructure(&cfg); err != nil {
+			return nil, err
+		}
 	}
 
 	return &cfg, nil

@@ -58,7 +58,7 @@ gestaltd provider validate --path ./plugins/support --config ./dev/support.yaml 
 gestaltd provider dev --path ./plugins/support
 gestaltd provider dev --path ./ui/dashboard
 gestaltd provider dev --path ./plugins/support --config ./dev/support.yaml --port 8080
-GESTALT_API_KEY=vat_... gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support
+GESTALT_API_KEY=vat_... gestaltd provider dev --remote https://gestalt.example.com --config ./base.yaml --config ./prod.yaml --path ./plugins/support --name support
 GESTALT_API_KEY=vat_... gestaltd provider dev --remote https://gestalt.example.com --config ./remote.yaml --config ./local-overrides.yaml
 gestaltd provider release --version 0.0.1-alpha.1
 gestaltd provider release --version 0.0.1-alpha.1 --platform all
@@ -73,13 +73,22 @@ keeps its existing config-relative behavior for backward compatibility.
 
 `provider dev --remote` is environment-agnostic: the URL is just the remote
 `gestaltd` instance to attach to. The local command only replaces source-backed
-plugin implementations for the authenticated principal that created the session;
-all non-local plugins, credentials, policies, and host services continue to
+plugin implementations for the authenticated principal that created the session.
+The attached plugin's config is sent by the local command, so use `--config`
+layers when the plugin needs config values, invokes, mounted UI settings, or
+secret references. All non-local plugins and remote host services continue to
 resolve through the remote instance. Remote servers expose attach targets for
 configured plugins that are registered on the remote server, and existing plugin
 authorization decides whether the authenticated caller may attach.
+Remote mode allows missing local environment substitutions while loading config
+so unrelated deploy-only env vars do not block attach.
 Remote mode tunnels plugin RPC, catalog, post-connect, host-service calls, and
 plugin-owned UI assets for mounted UIs that already exist on the remote server.
 Raw GraphQL surfaces are not tunneled in v1.
+
+For TypeScript source plugins, `provider dev` installs dependencies with
+`bun install` when a `package.json` is present and `node_modules` is missing.
+Source UI release builds use the same bootstrap before `release.build.command`
+when that build workdir has a `package.json`.
 
 See [Configuration](/configuration) for the relationship between `init`, `serve --locked`, and `validate`.

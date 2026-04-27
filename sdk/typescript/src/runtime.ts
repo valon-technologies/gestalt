@@ -1,4 +1,4 @@
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http2";
 import { dirname, resolve } from "node:path";
 
@@ -351,9 +351,7 @@ export async function serve(provider: LoadedProvider): Promise<void> {
   if (!socketPath) {
     throw new Error(`${ENV_PROVIDER_SOCKET} is required`);
   }
-  if (existsSync(socketPath)) {
-    rmSync(socketPath);
-  }
+  rmSync(socketPath, { force: true });
 
   const handler = connectNodeAdapter({
     grpc: true,
@@ -380,9 +378,7 @@ export async function serve(provider: LoadedProvider): Promise<void> {
             server.close(() => resolveClose());
           });
         } finally {
-          if (existsSync(socketPath)) {
-            rmSync(socketPath);
-          }
+          rmSync(socketPath, { force: true });
         }
       }
     })();
