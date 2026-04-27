@@ -233,9 +233,9 @@ func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (
 	return p.decorateCatalog(cat), nil
 }
 
-func (p *remoteProviderBase) postConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+func (p *remoteProviderBase) postConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
 	resp, err := p.client.PostConnect(ctx, &proto.PostConnectRequest{
-		Token: integrationTokenToProto(token),
+		Token: postConnectCredentialToProto(token),
 	})
 	if err != nil {
 		return nil, err
@@ -259,7 +259,7 @@ func (p *remoteProviderWithSessionCatalog) CatalogForRequest(ctx context.Context
 
 type remoteProviderWithPostConnect struct{ *remoteProviderBase }
 
-func (p *remoteProviderWithPostConnect) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+func (p *remoteProviderWithPostConnect) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
 	return p.postConnect(ctx, token)
 }
 
@@ -269,7 +269,7 @@ func (p *remoteProviderWithSessionCatalogAndPostConnect) CatalogForRequest(ctx c
 	return p.sessionCatalog(ctx, token)
 }
 
-func (p *remoteProviderWithSessionCatalogAndPostConnect) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+func (p *remoteProviderWithSessionCatalogAndPostConnect) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
 	return p.postConnect(ctx, token)
 }
 
@@ -370,13 +370,13 @@ func requestContextProto(ctx context.Context) (*proto.RequestContext, error) {
 	return &out, nil
 }
 
-func integrationTokenToProto(token *core.IntegrationToken) *proto.IntegrationToken {
+func postConnectCredentialToProto(token *core.ExternalCredential) *proto.PostConnectCredential {
 	if token == nil {
 		return nil
 	}
-	out := &proto.IntegrationToken{
+	out := &proto.PostConnectCredential{
 		Id:                token.ID,
-		UserId:            token.SubjectID,
+		SubjectId:         token.SubjectID,
 		Integration:       token.Integration,
 		Connection:        token.Connection,
 		Instance:          token.Instance,

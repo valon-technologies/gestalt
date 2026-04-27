@@ -277,7 +277,7 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
-		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
@@ -340,7 +340,7 @@ func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
-		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,

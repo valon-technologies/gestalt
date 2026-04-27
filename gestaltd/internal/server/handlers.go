@@ -230,7 +230,7 @@ func (s *Server) userConnectedIntegrations(r *http.Request) (map[string][]instan
 	}
 	tokens, err := s.externalCredentials.ListCredentials(r.Context(), principal.UserSubjectID(userID))
 	if err != nil {
-		return nil, fmt.Errorf("listing tokens: %w", err)
+		return nil, fmt.Errorf("listing external credentials: %w", err)
 	}
 	m := make(map[string][]instanceInfo, len(tokens))
 	for _, tok := range tokens {
@@ -287,12 +287,12 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 
 	tokens, err := s.externalCredentials.ListCredentialsForProvider(r.Context(), subjectID, name)
 	if err != nil {
-		auditErr = errors.New("failed to list tokens")
-		writeError(w, http.StatusInternalServerError, "failed to list tokens")
+		auditErr = errors.New("failed to list external credentials")
+		writeError(w, http.StatusInternalServerError, "failed to list external credentials")
 		return
 	}
 
-	var matched []*core.IntegrationToken
+	var matched []*core.ExternalCredential
 	for _, tok := range tokens {
 		if requestedConnection != "" && tok.Connection != requestedConnection {
 			continue
@@ -307,7 +307,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if requestedInstance != "" {
-		var instanceMatched []*core.IntegrationToken
+		var instanceMatched []*core.ExternalCredential
 		for _, tok := range matched {
 			if tok.Instance == requestedInstance {
 				instanceMatched = append(instanceMatched, tok)
@@ -338,7 +338,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	tokenID := matched[0].ID
 	auditTarget = connectionAuditTarget(name, matched[0].Connection, matched[0].Instance)
 	if tokenID == "" {
-		auditErr = errors.New("connection token is missing an ID")
+		auditErr = errors.New("connection credential is missing an ID")
 		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))
 		return
 	}
@@ -349,7 +349,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.unlinkStoredTokenAuthorization(r.Context(), matched[0]); err != nil {
+	if err := s.unlinkStoredCredentialAuthorization(r.Context(), matched[0]); err != nil {
 		if restoreErr := s.externalCredentials.RestoreCredential(r.Context(), matched[0]); restoreErr != nil {
 			slog.Error("restore disconnected integration after authz unlink failure", "integration", name, "connection", matched[0].Connection, "instance", matched[0].Instance, "token_id", matched[0].ID, "error", restoreErr)
 		}
@@ -736,13 +736,13 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 		writeError(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, invocation.ErrScopeDenied):
 		writeError(w, http.StatusForbidden, err.Error())
-	case errors.Is(err, invocation.ErrNoToken):
+	case errors.Is(err, invocation.ErrNoCredential):
 		writeTypedError(
 			w,
 			http.StatusPreconditionFailed,
 			"not_connected",
 			providerName,
-			fmt.Sprintf("no token stored for integration %q; connect via OAuth first", providerName),
+			fmt.Sprintf("no external credential stored for integration %q; connect via OAuth first", providerName),
 		)
 	case errors.Is(err, invocation.ErrReconnectRequired):
 		writeTypedError(

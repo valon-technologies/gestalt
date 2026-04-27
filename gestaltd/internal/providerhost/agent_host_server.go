@@ -78,7 +78,7 @@ func agentHostErrorCode(err error) codes.Code {
 		return codes.NotFound
 	case errors.Is(err, invocation.ErrAuthorizationDenied), errors.Is(err, invocation.ErrScopeDenied):
 		return codes.PermissionDenied
-	case errors.Is(err, invocation.ErrNotAuthenticated), errors.Is(err, invocation.ErrNoToken):
+	case errors.Is(err, invocation.ErrNotAuthenticated), errors.Is(err, invocation.ErrNoCredential):
 		return codes.Unauthenticated
 	case errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
 		return codes.FailedPrecondition

@@ -1662,7 +1662,7 @@ func TestBootstrapProviderBoundaryMetrics(t *testing.T) {
 	<-result.ProvidersReady
 
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
-	if err := result.Services.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
+	if err := result.Services.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
 		SubjectID:   principal.UserSubjectID("metrics-user"),
 		Integration: "slack",
 		Connection:  "default",
@@ -1929,7 +1929,7 @@ func TestBootstrap(t *testing.T) {
 				if tc.tokenValue != "" {
 					tokenValue = tc.tokenValue
 				}
-				if err := result.Services.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
+				if err := result.Services.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
 					SubjectID:    principal.UserSubjectID(user.ID),
 					Integration:  "slack",
 					Connection:   tc.tokenConn,
@@ -4935,7 +4935,7 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
-		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
@@ -4994,7 +4994,7 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
-		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
@@ -5059,7 +5059,7 @@ func TestBootstrapStartupWorkflowCallbackRequiresExecutionRef(t *testing.T) {
 		if name != "temporal" {
 			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 		}
-		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  config.PluginConnectionName,
@@ -5536,7 +5536,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 				if name != "temporal" {
 					return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
 				}
-				if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+				if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 					SubjectID:   "system:config",
 					Integration: "roadmap",
 					Connection:  config.PluginConnectionName,
@@ -5635,7 +5635,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 		if connection == "" {
 			connection = config.PluginConnectionName
 		}
-		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+		if err := deps.Services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 			SubjectID:   "system:config",
 			Integration: "roadmap",
 			Connection:  connection,

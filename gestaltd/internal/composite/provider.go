@@ -132,7 +132,7 @@ func (p *Provider) SupportsPostConnect() bool {
 	return core.SupportsPostConnect(p.api)
 }
 
-func (p *Provider) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+func (p *Provider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
 	if pcp, ok := p.api.(core.PostConnectCapable); ok {
 		return pcp.PostConnect(ctx, token)
 	}

@@ -88,7 +88,7 @@ func SupportsPostConnect(prov Provider) bool {
 	return ok
 }
 
-func PostConnect(ctx context.Context, prov Provider, token *IntegrationToken) (map[string]string, bool, error) {
+func PostConnect(ctx context.Context, prov Provider, token *ExternalCredential) (map[string]string, bool, error) {
 	if !SupportsPostConnect(prov) {
 		return nil, false, nil
 	}

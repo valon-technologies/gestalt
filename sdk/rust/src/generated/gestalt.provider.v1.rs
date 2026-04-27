@@ -3723,14 +3723,16 @@ pub struct PluginInvokeGraphQlRequest {
     #[prost(string, tag = "6")]
     pub invocation_token: ::prost::alloc::string::String,
 }
-/// IntegrationToken is the host-managed token payload passed into post-connect
-/// hooks.
+/// PostConnectCredential is the host-managed credential payload passed into
+/// post-connect hooks. Field numbers intentionally match the legacy
+/// post-connect credential payload so older compiled providers can still decode
+/// the request during rolling upgrades.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct IntegrationToken {
+pub struct PostConnectCredential {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub user_id: ::prost::alloc::string::String,
+    pub subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub integration: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
@@ -3907,7 +3909,7 @@ pub struct GetSessionCatalogResponse {
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PostConnectRequest {
     #[prost(message, optional, tag = "1")]
-    pub token: ::core::option::Option<IntegrationToken>,
+    pub token: ::core::option::Option<PostConnectCredential>,
 }
 /// PostConnectResponse returns provider-defined metadata captured after
 /// connection.

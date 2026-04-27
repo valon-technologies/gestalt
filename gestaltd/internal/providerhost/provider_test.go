@@ -100,7 +100,7 @@ func (p *roundTripProvider) CatalogForRequest(ctx context.Context, token string)
 	}, nil
 }
 
-func (p *roundTripProvider) PostConnect(_ context.Context, token *core.IntegrationToken) (map[string]string, error) {
+func (p *roundTripProvider) PostConnect(_ context.Context, token *core.ExternalCredential) (map[string]string, error) {
 	if token == nil {
 		return nil, fmt.Errorf("token is required")
 	}
@@ -277,7 +277,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			}
 
 			pcp := prov.(core.PostConnectCapable)
-			metadata, err := pcp.PostConnect(ctx, &core.IntegrationToken{
+			metadata, err := pcp.PostConnect(ctx, &core.ExternalCredential{
 				SubjectID:  principal.EffectiveCredentialSubjectID(tc.principal),
 				Connection: "workspace",
 				Instance:   "default",

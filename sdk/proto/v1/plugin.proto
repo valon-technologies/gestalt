@@ -142,11 +142,13 @@ message PluginInvokeGraphQLRequest {
   string invocation_token = 6;
 }
 
-// IntegrationToken is the host-managed token payload passed into post-connect
-// hooks.
-message IntegrationToken {
+// PostConnectCredential is the host-managed credential payload passed into
+// post-connect hooks. Field numbers intentionally match the legacy
+// post-connect credential payload so older compiled providers can still decode
+// the request during rolling upgrades.
+message PostConnectCredential {
   string id = 1;
-  string user_id = 2;
+  string subject_id = 2;
   string integration = 3;
   string instance = 4;
   string access_token = 5;
@@ -260,7 +262,7 @@ message GetSessionCatalogResponse {
 
 // PostConnectRequest notifies a provider that a connection has completed.
 message PostConnectRequest {
-  IntegrationToken token = 1;
+  PostConnectCredential token = 1;
 }
 
 // PostConnectResponse returns provider-defined metadata captured after

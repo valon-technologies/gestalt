@@ -1123,7 +1123,7 @@ def _connected_token(token: Any) -> ConnectedToken:
                 metadata = {str(key): str(value) for key, value in parsed.items()}
     return ConnectedToken(
         id=getattr(token, "id", ""),
-        subject_id=getattr(token, "user_id", ""),
+        subject_id=getattr(token, "subject_id", ""),
         integration=getattr(token, "integration", ""),
         connection=getattr(token, "connection", ""),
         instance=getattr(token, "instance", ""),

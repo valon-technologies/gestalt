@@ -161,7 +161,7 @@ func (p *graphQLPostConnectProvider) ExchangeCode(_ context.Context, _ string) (
 func (p *graphQLPostConnectProvider) RefreshToken(_ context.Context, _ string) (*core.TokenResponse, error) {
 	return &core.TokenResponse{AccessToken: "refreshed-token"}, nil
 }
-func (p *graphQLPostConnectProvider) PostConnect(_ context.Context, _ *core.IntegrationToken) (map[string]string, error) {
+func (p *graphQLPostConnectProvider) PostConnect(_ context.Context, _ *core.ExternalCredential) (map[string]string, error) {
 	return p.metadata, nil
 }
 
@@ -181,7 +181,7 @@ func TestGraphQLSessionCatalogProviderPreservesPostConnectCapability(t *testing.
 		t.Fatal("expected wrapped provider to preserve post-connect support")
 	}
 
-	got, supported, err := core.PostConnect(context.Background(), wrapped, &core.IntegrationToken{
+	got, supported, err := core.PostConnect(context.Background(), wrapped, &core.ExternalCredential{
 		Integration: "slack",
 		Connection:  "default",
 		AccessToken: "tok",

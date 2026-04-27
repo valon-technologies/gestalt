@@ -68,7 +68,7 @@ func (s *ProviderServer) PostConnect(ctx context.Context, req *proto.PostConnect
 	if !core.SupportsPostConnect(s.provider) {
 		return nil, status.Error(codes.Unimplemented, "provider does not support post connect")
 	}
-	metadata, _, err := core.PostConnect(ctx, s.provider, integrationTokenFromProto(req.GetToken()))
+	metadata, _, err := core.PostConnect(ctx, s.provider, postConnectCredentialFromProto(req.GetToken()))
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "post connect: %v", err)
 	}
@@ -139,13 +139,13 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 	return p
 }
 
-func integrationTokenFromProto(token *proto.IntegrationToken) *core.IntegrationToken {
+func postConnectCredentialFromProto(token *proto.PostConnectCredential) *core.ExternalCredential {
 	if token == nil {
 		return nil
 	}
-	out := &core.IntegrationToken{
+	out := &core.ExternalCredential{
 		ID:                token.GetId(),
-		SubjectID:         token.GetUserId(),
+		SubjectID:         token.GetSubjectId(),
 		Integration:       token.GetIntegration(),
 		Connection:        token.GetConnection(),
 		Instance:          token.GetInstance(),

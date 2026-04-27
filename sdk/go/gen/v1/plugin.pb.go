@@ -1057,12 +1057,14 @@ func (x *PluginInvokeGraphQLRequest) GetInvocationToken() string {
 	return ""
 }
 
-// IntegrationToken is the host-managed token payload passed into post-connect
-// hooks.
-type IntegrationToken struct {
+// PostConnectCredential is the host-managed credential payload passed into
+// post-connect hooks. Field numbers intentionally match the legacy
+// post-connect credential payload so older compiled providers can still decode
+// the request during rolling upgrades.
+type PostConnectCredential struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	UserId            string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	SubjectId         string                 `protobuf:"bytes,2,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
 	Integration       string                 `protobuf:"bytes,3,opt,name=integration,proto3" json:"integration,omitempty"`
 	Instance          string                 `protobuf:"bytes,4,opt,name=instance,proto3" json:"instance,omitempty"`
 	AccessToken       string                 `protobuf:"bytes,5,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
@@ -1079,20 +1081,20 @@ type IntegrationToken struct {
 	sizeCache         protoimpl.SizeCache
 }
 
-func (x *IntegrationToken) Reset() {
-	*x = IntegrationToken{}
+func (x *PostConnectCredential) Reset() {
+	*x = PostConnectCredential{}
 	mi := &file_v1_plugin_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *IntegrationToken) String() string {
+func (x *PostConnectCredential) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*IntegrationToken) ProtoMessage() {}
+func (*PostConnectCredential) ProtoMessage() {}
 
-func (x *IntegrationToken) ProtoReflect() protoreflect.Message {
+func (x *PostConnectCredential) ProtoReflect() protoreflect.Message {
 	mi := &file_v1_plugin_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1104,103 +1106,103 @@ func (x *IntegrationToken) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use IntegrationToken.ProtoReflect.Descriptor instead.
-func (*IntegrationToken) Descriptor() ([]byte, []int) {
+// Deprecated: Use PostConnectCredential.ProtoReflect.Descriptor instead.
+func (*PostConnectCredential) Descriptor() ([]byte, []int) {
 	return file_v1_plugin_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *IntegrationToken) GetId() string {
+func (x *PostConnectCredential) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *IntegrationToken) GetUserId() string {
+func (x *PostConnectCredential) GetSubjectId() string {
 	if x != nil {
-		return x.UserId
+		return x.SubjectId
 	}
 	return ""
 }
 
-func (x *IntegrationToken) GetIntegration() string {
+func (x *PostConnectCredential) GetIntegration() string {
 	if x != nil {
 		return x.Integration
 	}
 	return ""
 }
 
-func (x *IntegrationToken) GetInstance() string {
+func (x *PostConnectCredential) GetInstance() string {
 	if x != nil {
 		return x.Instance
 	}
 	return ""
 }
 
-func (x *IntegrationToken) GetAccessToken() string {
+func (x *PostConnectCredential) GetAccessToken() string {
 	if x != nil {
 		return x.AccessToken
 	}
 	return ""
 }
 
-func (x *IntegrationToken) GetRefreshToken() string {
+func (x *PostConnectCredential) GetRefreshToken() string {
 	if x != nil {
 		return x.RefreshToken
 	}
 	return ""
 }
 
-func (x *IntegrationToken) GetScopes() string {
+func (x *PostConnectCredential) GetScopes() string {
 	if x != nil {
 		return x.Scopes
 	}
 	return ""
 }
 
-func (x *IntegrationToken) GetExpiresAt() *timestamppb.Timestamp {
+func (x *PostConnectCredential) GetExpiresAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ExpiresAt
 	}
 	return nil
 }
 
-func (x *IntegrationToken) GetLastRefreshedAt() *timestamppb.Timestamp {
+func (x *PostConnectCredential) GetLastRefreshedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.LastRefreshedAt
 	}
 	return nil
 }
 
-func (x *IntegrationToken) GetRefreshErrorCount() int32 {
+func (x *PostConnectCredential) GetRefreshErrorCount() int32 {
 	if x != nil {
 		return x.RefreshErrorCount
 	}
 	return 0
 }
 
-func (x *IntegrationToken) GetMetadataJson() string {
+func (x *PostConnectCredential) GetMetadataJson() string {
 	if x != nil {
 		return x.MetadataJson
 	}
 	return ""
 }
 
-func (x *IntegrationToken) GetCreatedAt() *timestamppb.Timestamp {
+func (x *PostConnectCredential) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return nil
 }
 
-func (x *IntegrationToken) GetUpdatedAt() *timestamppb.Timestamp {
+func (x *PostConnectCredential) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
 	}
 	return nil
 }
 
-func (x *IntegrationToken) GetConnection() string {
+func (x *PostConnectCredential) GetConnection() string {
 	if x != nil {
 		return x.Connection
 	}
@@ -1969,7 +1971,7 @@ func (x *GetSessionCatalogResponse) GetCatalog() *Catalog {
 // PostConnectRequest notifies a provider that a connection has completed.
 type PostConnectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Token         *IntegrationToken      `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	Token         *PostConnectCredential `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2004,7 +2006,7 @@ func (*PostConnectRequest) Descriptor() ([]byte, []int) {
 	return file_v1_plugin_proto_rawDescGZIP(), []int{24}
 }
 
-func (x *PostConnectRequest) GetToken() *IntegrationToken {
+func (x *PostConnectRequest) GetToken() *PostConnectCredential {
 	if x != nil {
 		return x.Token
 	}
@@ -2268,10 +2270,11 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"connection\x18\x04 \x01(\tR\n" +
 	"connection\x12\x1a\n" +
 	"\binstance\x18\x05 \x01(\tR\binstance\x12)\n" +
-	"\x10invocation_token\x18\x06 \x01(\tR\x0finvocationToken\"\xc7\x04\n" +
-	"\x10IntegrationToken\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId\x12 \n" +
+	"\x10invocation_token\x18\x06 \x01(\tR\x0finvocationToken\"\xd2\x04\n" +
+	"\x15PostConnectCredential\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
+	"\n" +
+	"subject_id\x18\x02 \x01(\tR\tsubjectId\x12 \n" +
 	"\vintegration\x18\x03 \x01(\tR\vintegration\x12\x1a\n" +
 	"\binstance\x18\x04 \x01(\tR\binstance\x12!\n" +
 	"\faccess_token\x18\x05 \x01(\tR\vaccessToken\x12#\n" +
@@ -2367,9 +2370,9 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"S\n" +
 	"\x19GetSessionCatalogResponse\x126\n" +
-	"\acatalog\x18\x01 \x01(\v2\x1c.gestalt.provider.v1.CatalogR\acatalog\"Q\n" +
-	"\x12PostConnectRequest\x12;\n" +
-	"\x05token\x18\x01 \x01(\v2%.gestalt.provider.v1.IntegrationTokenR\x05token\"\xa6\x01\n" +
+	"\acatalog\x18\x01 \x01(\v2\x1c.gestalt.provider.v1.CatalogR\acatalog\"V\n" +
+	"\x12PostConnectRequest\x12@\n" +
+	"\x05token\x18\x01 \x01(\v2*.gestalt.provider.v1.PostConnectCredentialR\x05token\"\xa6\x01\n" +
 	"\x13PostConnectResponse\x12R\n" +
 	"\bmetadata\x18\x01 \x03(\v26.gestalt.provider.v1.PostConnectResponse.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
@@ -2427,7 +2430,7 @@ var file_v1_plugin_proto_goTypes = []any{
 	(*ExchangeInvocationTokenResponse)(nil), // 10: gestalt.provider.v1.ExchangeInvocationTokenResponse
 	(*PluginInvokeRequest)(nil),             // 11: gestalt.provider.v1.PluginInvokeRequest
 	(*PluginInvokeGraphQLRequest)(nil),      // 12: gestalt.provider.v1.PluginInvokeGraphQLRequest
-	(*IntegrationToken)(nil),                // 13: gestalt.provider.v1.IntegrationToken
+	(*PostConnectCredential)(nil),           // 13: gestalt.provider.v1.PostConnectCredential
 	(*SubjectContext)(nil),                  // 14: gestalt.provider.v1.SubjectContext
 	(*StringList)(nil),                      // 15: gestalt.provider.v1.StringList
 	(*CredentialContext)(nil),               // 16: gestalt.provider.v1.CredentialContext
@@ -2466,10 +2469,10 @@ var file_v1_plugin_proto_depIdxs = []int32{
 	8,  // 7: gestalt.provider.v1.ExchangeInvocationTokenRequest.grants:type_name -> gestalt.provider.v1.PluginInvocationGrant
 	37, // 8: gestalt.provider.v1.PluginInvokeRequest.params:type_name -> google.protobuf.Struct
 	37, // 9: gestalt.provider.v1.PluginInvokeGraphQLRequest.variables:type_name -> google.protobuf.Struct
-	38, // 10: gestalt.provider.v1.IntegrationToken.expires_at:type_name -> google.protobuf.Timestamp
-	38, // 11: gestalt.provider.v1.IntegrationToken.last_refreshed_at:type_name -> google.protobuf.Timestamp
-	38, // 12: gestalt.provider.v1.IntegrationToken.created_at:type_name -> google.protobuf.Timestamp
-	38, // 13: gestalt.provider.v1.IntegrationToken.updated_at:type_name -> google.protobuf.Timestamp
+	38, // 10: gestalt.provider.v1.PostConnectCredential.expires_at:type_name -> google.protobuf.Timestamp
+	38, // 11: gestalt.provider.v1.PostConnectCredential.last_refreshed_at:type_name -> google.protobuf.Timestamp
+	38, // 12: gestalt.provider.v1.PostConnectCredential.created_at:type_name -> google.protobuf.Timestamp
+	38, // 13: gestalt.provider.v1.PostConnectCredential.updated_at:type_name -> google.protobuf.Timestamp
 	14, // 14: gestalt.provider.v1.RequestContext.subject:type_name -> gestalt.provider.v1.SubjectContext
 	16, // 15: gestalt.provider.v1.RequestContext.credential:type_name -> gestalt.provider.v1.CredentialContext
 	17, // 16: gestalt.provider.v1.RequestContext.access:type_name -> gestalt.provider.v1.AccessContext
@@ -2487,7 +2490,7 @@ var file_v1_plugin_proto_depIdxs = []int32{
 	34, // 28: gestalt.provider.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntry
 	18, // 29: gestalt.provider.v1.GetSessionCatalogRequest.context:type_name -> gestalt.provider.v1.RequestContext
 	4,  // 30: gestalt.provider.v1.GetSessionCatalogResponse.catalog:type_name -> gestalt.provider.v1.Catalog
-	13, // 31: gestalt.provider.v1.PostConnectRequest.token:type_name -> gestalt.provider.v1.IntegrationToken
+	13, // 31: gestalt.provider.v1.PostConnectRequest.token:type_name -> gestalt.provider.v1.PostConnectCredential
 	35, // 32: gestalt.provider.v1.PostConnectResponse.metadata:type_name -> gestalt.provider.v1.PostConnectResponse.MetadataEntry
 	37, // 33: gestalt.provider.v1.StartProviderRequest.config:type_name -> google.protobuf.Struct
 	5,  // 34: gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.provider.v1.ConnectionParamDef

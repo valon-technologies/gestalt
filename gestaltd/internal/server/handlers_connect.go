@@ -110,7 +110,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	if p := PrincipalFromContext(r.Context()); p != nil {
 		authSource = p.AuthSource()
 	}
-	tm := tokenMaterial{
+	tm := credentialMaterial{
 		SubjectID:    subjectID,
 		AuthSource:   authSource,
 		Integration:  req.Integration,
@@ -237,7 +237,7 @@ func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.base.RoundTrip(req)
 }
 
-type tokenMaterial struct {
+type credentialMaterial struct {
 	SubjectID      string
 	AuthSource     string
 	Integration    string
@@ -262,7 +262,7 @@ type discoveryCandidateInfo struct {
 	Name string `json:"name,omitempty"`
 }
 
-func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (*core.IntegrationToken, error) {
+func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialMaterial) (*core.ExternalCredential, error) {
 	now := s.now().UTC().Truncate(time.Second)
 	previous, err := s.externalCredentials.GetCredential(ctx, tm.SubjectID, tm.Integration, tm.Connection, tm.Instance)
 	if err != nil && !errors.Is(err, core.ErrNotFound) {
@@ -271,7 +271,7 @@ func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (
 	if errors.Is(err, core.ErrNotFound) {
 		previous = nil
 	}
-	tok := &core.IntegrationToken{
+	tok := &core.ExternalCredential{
 		ID:              uuid.NewString(),
 		SubjectID:       tm.SubjectID,
 		Integration:     tm.Integration,
@@ -288,32 +288,32 @@ func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (
 	if err := s.externalCredentials.PutCredential(ctx, tok); err != nil {
 		return nil, err
 	}
-	if err := s.syncStoredTokenAuthorization(ctx, tok); err != nil {
-		if rollbackErr := s.rollbackStoredToken(ctx, previous, tok.ID); rollbackErr != nil {
-			return nil, fmt.Errorf("sync stored token authorization: %w (rollback token restore: %v)", err, rollbackErr)
+	if err := s.syncStoredCredentialAuthorization(ctx, tok); err != nil {
+		if rollbackErr := s.rollbackStoredCredential(ctx, previous, tok.ID); rollbackErr != nil {
+			return nil, fmt.Errorf("sync stored credential authorization: %w (rollback credential restore: %v)", err, rollbackErr)
 		}
 		return nil, err
 	}
-	if err := s.unlinkReplacedTokenAuthorization(ctx, previous, tok); err != nil {
-		if rollbackErr := s.rollbackStoredToken(ctx, previous, tok.ID); rollbackErr != nil {
-			return nil, fmt.Errorf("unlink replaced token authorization: %w (rollback token restore: %v)", err, rollbackErr)
+	if err := s.unlinkReplacedCredentialAuthorization(ctx, previous, tok); err != nil {
+		if rollbackErr := s.rollbackStoredCredential(ctx, previous, tok.ID); rollbackErr != nil {
+			return nil, fmt.Errorf("unlink replaced credential authorization: %w (rollback credential restore: %v)", err, rollbackErr)
 		}
-		if unlinkErr := s.unlinkStoredTokenAuthorization(ctx, tok); unlinkErr != nil {
-			return nil, fmt.Errorf("unlink replaced token authorization: %w (rollback new authorization unlink: %v)", err, unlinkErr)
+		if unlinkErr := s.unlinkStoredCredentialAuthorization(ctx, tok); unlinkErr != nil {
+			return nil, fmt.Errorf("unlink replaced credential authorization: %w (rollback new authorization unlink: %v)", err, unlinkErr)
 		}
 		return nil, err
 	}
 	return tok, nil
 }
 
-func (s *Server) rollbackStoredToken(ctx context.Context, previous *core.IntegrationToken, tokenID string) error {
+func (s *Server) rollbackStoredCredential(ctx context.Context, previous *core.ExternalCredential, tokenID string) error {
 	if previous != nil {
 		return s.externalCredentials.RestoreCredential(ctx, previous)
 	}
 	return s.externalCredentials.DeleteCredential(ctx, tokenID)
 }
 
-func (s *Server) unlinkReplacedTokenAuthorization(ctx context.Context, previous, current *core.IntegrationToken) error {
+func (s *Server) unlinkReplacedCredentialAuthorization(ctx context.Context, previous, current *core.ExternalCredential) error {
 	if previous == nil {
 		return nil
 	}
@@ -331,7 +331,7 @@ func (s *Server) unlinkReplacedTokenAuthorization(ctx context.Context, previous,
 	if !previousOK {
 		return nil
 	}
-	return s.unlinkStoredTokenAuthorization(ctx, previous)
+	return s.unlinkStoredCredentialAuthorization(ctx, previous)
 }
 
 func validateProviderMetadata(source string, metadata map[string]string) error {
@@ -372,7 +372,7 @@ func mergeMetadataJSON(existing string, extra map[string]string) (string, error)
 	return string(b), nil
 }
 
-func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm tokenMaterial) (*postConnectResult, error) {
+func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm credentialMaterial) (*postConnectResult, error) {
 	if cfg := prov.DiscoveryConfig(); cfg != nil {
 		client := &http.Client{
 			Timeout:   30 * time.Second,
@@ -413,22 +413,22 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 	return s.completeConnection(ctx, prov, tm)
 }
 
-func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm tokenMaterial) (*postConnectResult, error) {
+func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm credentialMaterial) (*postConnectResult, error) {
 	tm, err := s.applyProviderPostConnect(ctx, prov, tm)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.storeTokenFromMaterial(ctx, tm); err != nil {
+	if _, err := s.storeCredentialFromMaterial(ctx, tm); err != nil {
 		return nil, err
 	}
 	return &postConnectResult{Status: "connected", Integration: tm.Integration}, nil
 }
 
-func (s *Server) applyProviderPostConnect(ctx context.Context, prov core.Provider, tm tokenMaterial) (tokenMaterial, error) {
+func (s *Server) applyProviderPostConnect(ctx context.Context, prov core.Provider, tm credentialMaterial) (credentialMaterial, error) {
 	if !core.SupportsPostConnect(prov) {
 		return tm, nil
 	}
-	token := &core.IntegrationToken{
+	token := &core.ExternalCredential{
 		SubjectID:    tm.SubjectID,
 		Integration:  tm.Integration,
 		Connection:   tm.Connection,

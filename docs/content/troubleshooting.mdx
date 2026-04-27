@@ -22,7 +22,7 @@ An "operation not found" error means the operation ID does not exist in the plug
 
 A "not authenticated" error on an API or MCP request means no valid session or API token was presented. Log in through the UI or pass a bearer token in the `Authorization` header.
 
-A "no integration token" error means the user has not connected the plugin. Complete the OAuth or manual-auth flow for the provider and connection before invoking operations.
+A "no external credential" error means the user has not connected the plugin. Complete the OAuth or manual-auth flow for the provider and connection before invoking operations.
 
 An "ambiguous instance" error means the user has more than one stored instance for that plugin and connection. Pass `_instance` in the HTTP request body or `--instance` in the client CLI to select the correct one.
 

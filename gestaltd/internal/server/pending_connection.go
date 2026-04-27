@@ -140,12 +140,12 @@ func writePendingConnectionPage(w http.ResponseWriter, status int, view pendingC
 	_, _ = w.Write(buf.Bytes())
 }
 
-func (s *Server) encodePendingConnectionToken(tm tokenMaterial, candidates []core.DiscoveryCandidate) (string, error) {
+func (s *Server) encodePendingConnectionToken(tm credentialMaterial, candidates []core.DiscoveryCandidate) (string, error) {
 	if s.encryptor == nil {
 		return "", fmt.Errorf("pending connection encryption is not configured")
 	}
 	return encodePendingConnectionState(s.encryptor, pendingConnectionState{
-		Token:      tm,
+		Credential: tm,
 		BindingKey: uuid.NewString(),
 		Candidates: candidates,
 		ExpiresAt:  s.now().Add(pendingConnectionTTL).Unix(),
@@ -220,7 +220,7 @@ func (s *Server) clearPendingConnectionCookie(w http.ResponseWriter) {
 func (s *Server) writePendingConnectionSelectionPage(w http.ResponseWriter, state *pendingConnectionState, pendingToken string) {
 	s.setPendingConnectionCookie(w, state)
 	writePendingConnectionPage(w, http.StatusOK, pendingConnectionPageView{
-		Title:        "Select a " + state.Token.Integration + " connection",
+		Title:        "Select a " + state.Credential.Integration + " connection",
 		Message:      "Gestalt found more than one candidate. Choose the connection you want to save.",
 		Action:       pendingConnectionPath,
 		PendingToken: pendingToken,
@@ -305,7 +305,7 @@ func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, "failed to validate pending connection")
 		return false
 	}
-	if authenticated && subjectID != state.Token.SubjectID {
+	if authenticated && subjectID != state.Credential.SubjectID {
 		writeError(w, http.StatusNotFound, "pending connection not found")
 		return false
 	}
@@ -358,14 +358,14 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 		writeError(w, status, "invalid or expired pending connection")
 		return
 	}
-	providerName = state.Token.Integration
-	auditTarget = connectionAuditTarget(state.Token.Integration, state.Token.Connection, state.Token.Instance)
+	providerName = state.Credential.Integration
+	auditTarget = connectionAuditTarget(state.Credential.Integration, state.Credential.Connection, state.Credential.Instance)
 	if !s.authorizePendingConnection(w, r, state) {
 		auditErr = errors.New("pending connection authorization required")
 		return
 	}
-	auditSubjectID = state.Token.SubjectID
-	auditAuthSource = state.Token.AuthSource
+	auditSubjectID = state.Credential.SubjectID
+	auditAuthSource = state.Credential.AuthSource
 	if candidateIndex == "" && candidateID == "" {
 		auditAllowed = true
 		auditErr = nil
@@ -399,16 +399,16 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	merged, err := mergeMetadataJSON(state.Token.MetadataJSON, selected.Metadata)
+	merged, err := mergeMetadataJSON(state.Credential.MetadataJSON, selected.Metadata)
 	if err != nil {
 		auditErr = errors.New("failed to merge metadata")
 		writeError(w, http.StatusInternalServerError, "failed to merge metadata")
 		return
 	}
 
-	tm := state.Token
+	tm := state.Credential
 	tm.MetadataJSON = merged
-	prov, ok := s.getProvider(w, state.Token.Integration)
+	prov, ok := s.getProvider(w, state.Credential.Integration)
 	if !ok {
 		auditErr = errors.New("integration not found")
 		return
@@ -422,7 +422,7 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 	if _, err := r.Cookie(sessionCookieName); err == nil {
 		s.clearPendingConnectionCookie(w)
 		connectedURL := "/integrations"
-		if nextURL, err := setURLQueryParam(connectedURL, "connected", state.Token.Integration); err == nil {
+		if nextURL, err := setURLQueryParam(connectedURL, "connected", state.Credential.Integration); err == nil {
 			connectedURL = nextURL
 		}
 		auditAllowed = true
@@ -433,5 +433,5 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 
 	auditAllowed = true
 	auditErr = nil
-	s.writePendingConnectionSuccessPage(w, state.Token.Integration)
+	s.writePendingConnectionSuccessPage(w, state.Credential.Integration)
 }

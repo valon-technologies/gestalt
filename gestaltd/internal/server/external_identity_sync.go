@@ -12,7 +12,7 @@ import (
 
 var errExternalIdentityAlreadyLinked = errors.New("external identity already linked")
 
-func (s *Server) syncStoredTokenAuthorization(ctx context.Context, tok *core.IntegrationToken) error {
+func (s *Server) syncStoredCredentialAuthorization(ctx context.Context, tok *core.ExternalCredential) error {
 	if s.authorizationProvider == nil || tok == nil {
 		return nil
 	}
@@ -23,7 +23,7 @@ func (s *Server) syncStoredTokenAuthorization(ctx context.Context, tok *core.Int
 	return s.ensureExternalIdentityLink(ctx, strings.TrimSpace(tok.SubjectID), ref)
 }
 
-func (s *Server) unlinkStoredTokenAuthorization(ctx context.Context, tok *core.IntegrationToken) error {
+func (s *Server) unlinkStoredCredentialAuthorization(ctx context.Context, tok *core.ExternalCredential) error {
 	if s.authorizationProvider == nil || tok == nil {
 		return nil
 	}
@@ -38,7 +38,7 @@ func (s *Server) unlinkStoredTokenAuthorization(ctx context.Context, tok *core.I
 	return s.removeExternalIdentityLink(ctx, strings.TrimSpace(tok.SubjectID), ref)
 }
 
-func (s *Server) subjectHasOtherExternalIdentityLink(ctx context.Context, subjectID string, ref externalIdentityRef, skipTokenID string) (bool, error) {
+func (s *Server) subjectHasOtherExternalIdentityLink(ctx context.Context, subjectID string, ref externalIdentityRef, skipCredentialID string) (bool, error) {
 	if coredata.ExternalCredentialProviderMissing(s.externalCredentials) || subjectID == "" {
 		return false, nil
 	}
@@ -48,7 +48,7 @@ func (s *Server) subjectHasOtherExternalIdentityLink(ctx context.Context, subjec
 		return false, err
 	}
 	for _, candidate := range tokens {
-		if candidate == nil || strings.TrimSpace(candidate.ID) == skipTokenID {
+		if candidate == nil || strings.TrimSpace(candidate.ID) == skipCredentialID {
 			continue
 		}
 		candidateRef, ok, err := externalIdentityRefFromMetadataJSON(candidate.MetadataJSON)

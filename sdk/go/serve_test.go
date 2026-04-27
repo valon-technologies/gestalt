@@ -256,8 +256,8 @@ func TestProviderServerPostConnect(t *testing.T) {
 			metadata: map[string]string{"kind": "slack_identity"},
 		}, postConnectStubRouter)
 		resp, err := client.PostConnect(context.Background(), &proto.PostConnectRequest{
-			Token: &proto.IntegrationToken{
-				UserId:     "user:user-123",
+			Token: &proto.PostConnectCredential{
+				SubjectId:  "user:user-123",
 				Connection: "workspace",
 				Instance:   "default",
 			},

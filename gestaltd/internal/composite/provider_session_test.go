@@ -116,7 +116,7 @@ type fakePostConnectProvider struct {
 	metadata map[string]string
 }
 
-func (p *fakePostConnectProvider) PostConnect(_ context.Context, _ *core.IntegrationToken) (map[string]string, error) {
+func (p *fakePostConnectProvider) PostConnect(_ context.Context, _ *core.ExternalCredential) (map[string]string, error) {
 	return p.metadata, nil
 }
 
@@ -142,7 +142,7 @@ func TestCompositePreservesPostConnectCapability(t *testing.T) {
 		t.Fatal("expected composite provider to expose post-connect support")
 	}
 
-	got, supported, err := core.PostConnect(context.Background(), prov, &core.IntegrationToken{
+	got, supported, err := core.PostConnect(context.Background(), prov, &core.ExternalCredential{
 		Integration: "slack",
 		Connection:  "default",
 		AccessToken: "tok",

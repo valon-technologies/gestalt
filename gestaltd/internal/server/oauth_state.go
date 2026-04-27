@@ -116,7 +116,7 @@ type loginState struct {
 }
 
 type pendingConnectionState struct {
-	Token      tokenMaterial             `json:"tok"`
+	Credential credentialMaterial        `json:"tok"`
 	BindingKey string                    `json:"bind"`
 	Candidates []core.DiscoveryCandidate `json:"cand"`
 	ExpiresAt  int64                     `json:"exp"`
@@ -188,10 +188,10 @@ func encodePendingConnectionState(enc *cryptoutil.AESGCMEncryptor, state pending
 }
 
 func validatePendingConnectionState(state *pendingConnectionState, now time.Time) error {
-	if state.Token.SubjectID == "" {
+	if state.Credential.SubjectID == "" {
 		return fmt.Errorf("pending connection missing subject ID")
 	}
-	if state.Token.Integration == "" {
+	if state.Credential.Integration == "" {
 		return fmt.Errorf("pending connection missing integration")
 	}
 	if state.BindingKey == "" {

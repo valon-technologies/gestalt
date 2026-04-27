@@ -40,7 +40,7 @@ func TestBrokerMalformedMetadataJSON_StructuredLog(t *testing.T) { //nolint:para
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
-	if err := svc.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
+	if err := svc.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
 		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "myservice",
 		Connection: "", Instance: "default", AccessToken: "test-token",
 		MetadataJSON: "not-valid-json{",

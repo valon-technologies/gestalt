@@ -48,7 +48,7 @@ import {
   OperationResultSchema,
   ProviderMetadataSchema,
   type HTTPSubjectRequest as ProtoHTTPSubjectRequest,
-  type IntegrationToken as ProtoIntegrationToken,
+  type PostConnectCredential as ProtoPostConnectCredential,
   type RequestContext as ProtoRequestContext,
   type ResolveHTTPSubjectRequest as ProtoResolveHTTPSubjectRequest,
   IntegrationProvider as IntegrationProviderService,
@@ -853,12 +853,12 @@ function providerHTTPSubjectResolutionContext(
 }
 
 function providerConnectedToken(
-  token?: ProtoIntegrationToken,
+  token?: ProtoPostConnectCredential,
 ): ConnectedToken {
   const metadataJson = token?.metadataJson ?? "";
   return {
     id: token?.id ?? "",
-    subjectId: token?.userId ?? "",
+    subjectId: token?.subjectId ?? "",
     integration: token?.integration ?? "",
     connection: token?.connection ?? "",
     instance: token?.instance ?? "",

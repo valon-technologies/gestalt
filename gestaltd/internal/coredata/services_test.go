@@ -568,7 +568,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 
 		user := mustCreateUser(t, svc, "alice@test.com")
 		expires := time.Now().Add(time.Hour).Truncate(time.Second)
-		token := &core.IntegrationToken{
+		token := &core.ExternalCredential{
 			ID:           "tok-1",
 			SubjectID:    principal.UserSubjectID(user.ID),
 			Integration:  "test-svc",
@@ -623,7 +623,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 		userA := mustCreateUser(t, svc, "alice@test.com")
 		userB := mustCreateUser(t, svc, "bob@test.com")
 
-		for _, tok := range []*core.IntegrationToken{
+		for _, tok := range []*core.ExternalCredential{
 			{ID: "tok-a1", SubjectID: principal.UserSubjectID(userA.ID), Integration: "svc-a", Connection: "default", Instance: "i1", AccessToken: "a1", RefreshToken: "r1"},
 			{ID: "tok-a2", SubjectID: principal.UserSubjectID(userA.ID), Integration: "svc-b", Connection: "default", Instance: "i2", AccessToken: "a2", RefreshToken: "r2"},
 			{ID: "tok-b1", SubjectID: principal.UserSubjectID(userB.ID), Integration: "svc-a", Connection: "default", Instance: "i1", AccessToken: "a3", RefreshToken: "r3"},
@@ -648,7 +648,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 		ctx := context.Background()
 
 		user := mustCreateUser(t, svc, "alice@test.com")
-		for _, tok := range []*core.IntegrationToken{
+		for _, tok := range []*core.ExternalCredential{
 			{ID: "tok-1", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc-a", Connection: "default", Instance: "i1", AccessToken: "a", RefreshToken: "r"},
 			{ID: "tok-2", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc-a", Connection: "default", Instance: "i2", AccessToken: "b", RefreshToken: "s"},
 			{ID: "tok-3", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc-b", Connection: "default", Instance: "i1", AccessToken: "c", RefreshToken: "u"},
@@ -673,7 +673,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 		ctx := context.Background()
 
 		user := mustCreateUser(t, svc, "alice@test.com")
-		for _, tok := range []*core.IntegrationToken{
+		for _, tok := range []*core.ExternalCredential{
 			{ID: "tok-1", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc", Connection: "conn-a", Instance: "i1", AccessToken: "a", RefreshToken: "r"},
 			{ID: "tok-2", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc", Connection: "conn-a", Instance: "i2", AccessToken: "b", RefreshToken: "s"},
 			{ID: "tok-3", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc", Connection: "conn-b", Instance: "i1", AccessToken: "c", RefreshToken: "u"},
@@ -698,7 +698,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 		ctx := context.Background()
 
 		user := mustCreateUser(t, svc, "alice@test.com")
-		tok := &core.IntegrationToken{
+		tok := &core.ExternalCredential{
 			ID: "tok-del", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc",
 			Connection: "default", Instance: "i1",
 			AccessToken: "a", RefreshToken: "r",
@@ -732,7 +732,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 		ctx := context.Background()
 
 		user := mustCreateUser(t, svc, "alice@test.com")
-		tok := &core.IntegrationToken{
+		tok := &core.ExternalCredential{
 			ID: "tok-upsert", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc",
 			Connection: "default", Instance: "i1",
 			AccessToken: "original", RefreshToken: "r",
@@ -781,7 +781,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				errs[idx] = svc.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
+				errs[idx] = svc.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
 					ID:           fmt.Sprintf("tok-%d", idx),
 					SubjectID:    principal.UserSubjectID(user.ID),
 					Integration:  "svc",

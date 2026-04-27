@@ -64,7 +64,7 @@ func (p *connectedProvider) SupportsPostConnect() bool            { return core.
 func (p *connectedProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	return p.inner.Execute(ctx, operation, params, token)
 }
-func (p *connectedProvider) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+func (p *connectedProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
 	metadata, supported, err := core.PostConnect(ctx, p.inner, token)
 	if !supported {
 		return nil, core.ErrPostConnectUnsupported
@@ -92,7 +92,7 @@ func (p *connectedSessionCatalogProvider) SupportsPostConnect() bool {
 	return core.SupportsPostConnect(p.Provider)
 }
 
-func (p *connectedSessionCatalogProvider) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+func (p *connectedSessionCatalogProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
 	metadata, supported, err := core.PostConnect(ctx, p.Provider, token)
 	if !supported {
 		return nil, core.ErrPostConnectUnsupported
@@ -129,7 +129,7 @@ func (p *connectedGraphQLProvider) SupportsPostConnect() bool {
 	return core.SupportsPostConnect(p.Provider)
 }
 
-func (p *connectedGraphQLProvider) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+func (p *connectedGraphQLProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
 	metadata, supported, err := core.PostConnect(ctx, p.Provider, token)
 	if !supported {
 		return nil, core.ErrPostConnectUnsupported
@@ -174,7 +174,7 @@ func (p *connectedOAuthProvider) SupportsPostConnect() bool {
 	return core.SupportsPostConnect(p.Provider)
 }
 
-func (p *connectedOAuthProvider) PostConnect(ctx context.Context, token *core.IntegrationToken) (map[string]string, error) {
+func (p *connectedOAuthProvider) PostConnect(ctx context.Context, token *core.ExternalCredential) (map[string]string, error) {
 	metadata, supported, err := core.PostConnect(ctx, p.Provider, token)
 	if !supported {
 		return nil, core.ErrPostConnectUnsupported

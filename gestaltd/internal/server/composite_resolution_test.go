@@ -55,7 +55,7 @@ func TestExecuteOperation_CompositeStaticRESTBypassesMCPSessionResolution(t *tes
 	providers := testutil.NewProviderRegistry(t, composite.New("notion", apiProv, mcpUpstream))
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
-	seedToken(t, svc, &core.IntegrationToken{
+	seedToken(t, svc, &core.ExternalCredential{
 		ID: "tok-oauth", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
 		Connection: "OAuth", Instance: "default", AccessToken: "oauth-token",
 	})

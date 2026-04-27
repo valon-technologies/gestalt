@@ -344,7 +344,7 @@ func TestResolveCatalogAndOperationMetrics(t *testing.T) {
 		},
 	}
 	services := coretesting.NewStubServices(t)
-	if err := services.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
+	if err := services.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
 		SubjectID:   principal.UserSubjectID("metrics-user"),
 		Integration: "metric-api",
 		Connection:  "default",
@@ -903,7 +903,7 @@ func TestResolveCatalogForTargetsWithMetadata_FallsBackAfterMixedErrors(t *testi
 
 	resolver := &stubConnectionTokenResolver{
 		errs: map[string]error{
-			"missing": fmt.Errorf("%w: no token stored", invocation.ErrNoToken),
+			"missing": fmt.Errorf("%w: no external credential stored", invocation.ErrNoCredential),
 		},
 		tokens: map[string]string{
 			"default": "session-unavailable-token",

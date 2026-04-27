@@ -220,13 +220,13 @@ func (s *ProviderServer) PostConnect(ctx context.Context, req *proto.PostConnect
 	return &proto.PostConnectResponse{Metadata: metadata}, nil
 }
 
-func connectedTokenFromProto(token *proto.IntegrationToken) *ConnectedToken {
+func connectedTokenFromProto(token *proto.PostConnectCredential) *ConnectedToken {
 	if token == nil {
 		return nil
 	}
 	out := &ConnectedToken{
 		ID:                token.GetId(),
-		SubjectID:         token.GetUserId(),
+		SubjectID:         token.GetSubjectId(),
 		Integration:       token.GetIntegration(),
 		Connection:        token.GetConnection(),
 		Instance:          token.GetInstance(),

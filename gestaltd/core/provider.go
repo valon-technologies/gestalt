@@ -68,7 +68,7 @@ type SessionCatalogProvider interface {
 // returned metadata is merged into the stored connection metadata before the
 // host persists the token.
 type PostConnectCapable interface {
-	PostConnect(ctx context.Context, token *IntegrationToken) (map[string]string, error)
+	PostConnect(ctx context.Context, token *ExternalCredential) (map[string]string, error)
 }
 
 type ConnectionParamDef struct {

@@ -2491,7 +2491,7 @@ func TestHybridDeclarativeExecutableProviderUsesNamedDefaultConnectionForPluginO
 
 	services := coretesting.NewStubServices(t)
 	subjectID := principal.UserSubjectID("u-hybrid")
-	if err := services.ExternalCredentials.PutCredential(context.Background(), &core.IntegrationToken{
+	if err := services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
 		SubjectID:   subjectID,
 		Integration: "hybrid",
 		Connection:  "default",
@@ -2995,7 +2995,7 @@ func storeNestedInvokeToken(t *testing.T, harness *nestedInvokeHarness, ctx cont
 func storeNestedInvokeTokenForSubject(t *testing.T, harness *nestedInvokeHarness, ctx context.Context, subjectID, plugin, connection, instance string) {
 	t.Helper()
 
-	if err := harness.services.ExternalCredentials.PutCredential(ctx, &core.IntegrationToken{
+	if err := harness.services.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
 		SubjectID:    subjectID,
 		Integration:  plugin,
 		Connection:   connection,
