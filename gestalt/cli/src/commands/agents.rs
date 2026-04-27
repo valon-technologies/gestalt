@@ -4,6 +4,7 @@ use serde_json::{Map, Value, json};
 use std::io::{self, Write};
 use std::thread;
 use std::time::Duration;
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::api::ApiClient;
 use crate::cli::{
@@ -173,6 +174,14 @@ struct AgentSessionInfo {
     provider: String,
     #[serde(default)]
     model: String,
+    #[serde(default)]
+    state: String,
+    #[serde(default)]
+    last_turn_at: String,
+    #[serde(default)]
+    created_at: String,
+    #[serde(default)]
+    updated_at: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -225,6 +234,7 @@ impl AgentShell {
     fn connect(client: &ApiClient, args: &AgentArgs) -> Result<Self> {
         let session = match args.session.as_deref() {
             Some(session_id) => get_session_info(client, session_id)?,
+            None if args.resume => resume_latest_session_info(client, args.provider.as_deref())?,
             None => {
                 let session_args = AgentSessionCreateArgs {
                     provider: args.provider.clone(),
@@ -574,6 +584,49 @@ fn get_session_info(client: &ApiClient, id: &str) -> Result<AgentSessionInfo> {
             .get(&format!("{SESSIONS_PATH}/{id}"))
             .with_context(|| format!("failed to get agent session {id}"))?,
     )
+}
+
+fn resume_latest_session_info(
+    client: &ApiClient,
+    provider: Option<&str>,
+) -> Result<AgentSessionInfo> {
+    let sessions: Vec<AgentSessionInfo> = decode_json(
+        client
+            .get(&sessions_path(provider, Some("active")))
+            .context("failed to list active agent sessions")?,
+    )?;
+    sessions
+        .into_iter()
+        .filter(|session| session.state.is_empty() || session.state == "active")
+        .max_by(compare_sessions_for_resume)
+        .ok_or_else(|| match provider {
+            Some(provider) => anyhow::anyhow!(
+                "no active agent sessions found for provider {provider}; omit --resume to create one"
+            ),
+            None => anyhow::anyhow!(
+                "no active agent sessions found; omit --resume to create one"
+            ),
+        })
+}
+
+fn compare_sessions_for_resume(a: &AgentSessionInfo, b: &AgentSessionInfo) -> std::cmp::Ordering {
+    compare_session_time_field(&a.last_turn_at, &b.last_turn_at)
+        .then_with(|| compare_session_time_field(&a.updated_at, &b.updated_at))
+        .then_with(|| compare_session_time_field(&a.created_at, &b.created_at))
+        .then_with(|| a.id.cmp(&b.id))
+}
+
+fn compare_session_time_field(a: &str, b: &str) -> std::cmp::Ordering {
+    match (parse_session_time(a), parse_session_time(b)) {
+        (Some(a), Some(b)) => a.cmp(&b),
+        (Some(_), None) => std::cmp::Ordering::Greater,
+        (None, Some(_)) => std::cmp::Ordering::Less,
+        (None, None) => a.cmp(b),
+    }
+}
+
+fn parse_session_time(value: &str) -> Option<OffsetDateTime> {
+    OffsetDateTime::parse(value, &Rfc3339).ok()
 }
 
 fn create_turn_info(client: &ApiClient, args: &AgentTurnCreateArgs) -> Result<AgentTurnInfo> {

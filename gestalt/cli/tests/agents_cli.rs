@@ -384,6 +384,148 @@ fn test_cli_runs_interactive_agent_session() {
 }
 
 #[test]
+fn test_cli_resumes_latest_active_agent_session() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/sessions?provider=managed&state=active",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"[
+                {
+                    "id":"session-old",
+                    "provider":"managed",
+                    "model":"gpt-5.3",
+                    "state":"active",
+                    "createdAt":"2026-04-21T00:00:00Z",
+                    "updatedAt":"2026-04-22T00:00:03Z",
+                    "lastTurnAt":"2026-04-22T00:00:10Z"
+                },
+                {
+                    "id":"session-new",
+                    "provider":"managed",
+                    "model":"gpt-5.4",
+                    "state":"active",
+                    "createdAt":"2026-04-22T00:00:00Z",
+                    "updatedAt":"2026-04-22T00:00:03.1Z",
+                    "lastTurnAt":"2026-04-22T00:00:10.1Z"
+                }
+            ]"#,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-new/turns",
+            r#"{"messages":[{"role":"user","text":"continue plan"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-resumed",
+                "sessionId":"session-new",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-resumed/events?after=0&limit=100",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"[
+                {"seq":1,"type":"assistant.completed","data":{"text":"continued"}},
+                {"seq":2,"type":"turn.completed","data":{"status":"succeeded"}}
+            ]"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-resumed",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-resumed",
+                "sessionId":"session-new",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"continued"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command(home.path())
+        .env("GESTALT_API_KEY", TEST_TOKEN)
+        .arg("--url")
+        .arg(server.url())
+        .args([
+            "agent",
+            "--continue",
+            "--provider",
+            "managed",
+            "--message",
+            "continue plan",
+        ])
+        .write_stdin("/quit\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("assistant> continued"))
+        .stderr(predicate::str::contains(
+            "Session session-new [managed / gpt-5.4]",
+        ));
+
+    server.assert_finished();
+}
+
+#[test]
+fn test_cli_resume_fails_without_active_agent_session() {
+    let server = ScriptedServer::spawn(vec![ExpectedRequest::text(
+        Method::GET,
+        "/api/v1/agent/sessions?state=active",
+        StatusCode::OK,
+        http::APPLICATION_JSON,
+        "[]",
+    )]);
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command(home.path())
+        .env("GESTALT_API_KEY", TEST_TOKEN)
+        .arg("--url")
+        .arg(server.url())
+        .args(["agent", "--resume"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "no active agent sessions found; omit --resume to create one",
+        ));
+
+    server.assert_finished();
+}
+
+#[test]
+fn test_cli_rejects_interactive_agent_flags_with_subcommands() {
+    let home = tempfile::tempdir().unwrap();
+    cli_command(home.path())
+        .args(["agent", "--resume", "sessions", "list"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--resume can only be used with interactive `gestalt agent`",
+        ));
+}
+
+#[test]
+fn test_cli_agent_help_describes_resume_provider_filter() {
+    let home = tempfile::tempdir().unwrap();
+    cli_command(home.path())
+        .args(["agent", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--resume"))
+        .stdout(predicate::str::contains("--continue"))
+        .stdout(predicate::str::contains("provider filter when resuming"));
+}
+
+#[test]
 fn test_cli_resumes_existing_agent_session_and_resolves_input_interaction() {
     let server = ScriptedServer::spawn(vec![
         ExpectedRequest::text(
