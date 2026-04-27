@@ -146,10 +146,18 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
+		surfaceProv := prov
+		if override, ok, err := s.providerOverrideForContext(r.Context(), p, name); err != nil {
+			slog.ErrorContext(r.Context(), "resolving provider dev override", "provider", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to resolve provider dev override")
+			return
+		} else if ok {
+			surfaceProv = override
+		}
 		info := integrationInfo{
 			Name:             name,
-			DisplayName:      prov.DisplayName(),
-			Description:      prov.Description(),
+			DisplayName:      surfaceProv.DisplayName(),
+			Description:      surfaceProv.Description(),
 			Connected:        false,
 			Instances:        []instanceInfo{},
 			AuthTypes:        []string{},
@@ -157,7 +165,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			Connections:      []connectionDefInfo{},
 			CredentialFields: []credentialFieldInfo{},
 		}
-		if cat := prov.Catalog(); cat != nil {
+		if cat := surfaceProv.Catalog(); cat != nil {
 			info.IconSVG = cat.IconSVG
 		}
 		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
@@ -184,7 +192,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
-			if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, prov, info) {
+			if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, surfaceProv, info) {
 				continue
 			}
 			out = append(out, info)
@@ -196,7 +204,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		info.Instances = append(make([]instanceInfo, 0, len(instances)), instances...)
 		s.populateIntegrationSettings(&info, prov)
 		info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
-		if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, prov, info) {
+		if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, surfaceProv, info) {
 			continue
 		}
 		out = append(out, info)
@@ -448,6 +456,12 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		metricutil.AttrInvocationSurface.String("http"),
 	)
 	p := PrincipalFromContext(r.Context())
+	if override, ok, err := s.providerOverrideForContext(r.Context(), p, name); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	} else if ok {
+		prov = override
+	}
 	if !s.allowProviderContext(r.Context(), p, name) {
 		s.auditHTTPEvent(r.Context(), p, name, operation, false, errOperationAccess)
 		writeError(w, http.StatusForbidden, errOperationAccess.Error())
@@ -529,6 +543,13 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	prov, ok := s.getProvider(w, providerName)
 	if !ok {
 		return
+	}
+	surfaceProv := prov
+	if override, ok, err := s.providerOverrideForContext(r.Context(), p, providerName); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	} else if ok {
+		surfaceProv = override
 	}
 	access := s.providerAccessContextWithContext(r.Context(), p, providerName)
 	providerAllowed := s.allowProviderContext(r.Context(), p, providerName)
@@ -638,7 +659,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		resolver = tr
 	}
 	boundSessionConnections, sessionInstance := s.catalogSelectorConfig().BoundSessionCatalogConnections(providerName, p, connection, instance)
-	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, providerName, resolver, p, operationName, boundSessionConnections, sessionInstance)
+	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, surfaceProv, providerName, resolver, p, operationName, boundSessionConnections, sessionInstance)
 	if err != nil {
 		s.writeInvocationError(w, r, providerName, operationName, err)
 		return

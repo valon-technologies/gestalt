@@ -200,6 +200,10 @@ func validateProviderConnectionMode(provider string, mode core.ConnectionMode) e
 	}
 }
 
+func BuildStartupProviderSpec(name string, entry *config.ProviderEntry) (providerhost.StaticProviderSpec, map[string]string, error) {
+	return buildStartupProviderSpec(name, entry)
+}
+
 func buildStartupProviderSpec(name string, entry *config.ProviderEntry) (providerhost.StaticProviderSpec, map[string]string, error) {
 	if entry == nil {
 		return providerhost.StaticProviderSpec{}, nil, fmt.Errorf("integration %q has no plugin defined", name)

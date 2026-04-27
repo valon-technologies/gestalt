@@ -33,6 +33,8 @@ import { Callout } from 'nextra/components'
 | --- | --- |
 | `gestaltd provider dev --path PATH` | Run a local source plugin or UI bundle inside a synthesized Gestalt config. Serves `/admin` and any configured or inferred public UIs. |
 | `gestaltd provider dev --config PATH` | Layer supporting providers, plugins, and UI mounts on top of the synthesized local baseline. Repeat `--config` to merge left-to-right. |
+| `gestaltd provider dev --remote URL --path PATH` | Attach one local source plugin to an authenticated remote `gestaltd` session while the remote config keeps auth, authorization, connections, and host services. |
+| `gestaltd provider dev --remote URL --config PATH` | Attach every source-backed plugin in the layered config. Use repeated `--config` files the same way as local dev to choose which plugins are local and which remain remote. |
 | `gestaltd provider validate --path PATH` | Validate a local source plugin or UI bundle inside the same synthesized Gestalt config used by `provider dev`. |
 | `gestaltd provider validate --config PATH` | Validate the target provider together with selected supporting providers and `null` deletions from layered config overlays. |
 | `gestaltd provider release --version VERSION` | Build and package a provider release. Go, Python, Rust, and TypeScript source plugins default to the host platform. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
@@ -56,6 +58,8 @@ gestaltd provider validate --path ./plugins/support --config ./dev/support.yaml 
 gestaltd provider dev --path ./plugins/support
 gestaltd provider dev --path ./ui/dashboard
 gestaltd provider dev --path ./plugins/support --config ./dev/support.yaml --port 8080
+GESTALT_API_KEY=vat_... gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support
+GESTALT_API_KEY=vat_... gestaltd provider dev --remote https://gestalt.example.com --config ./remote.yaml --config ./local-overrides.yaml
 gestaltd provider release --version 0.0.1-alpha.1
 gestaltd provider release --version 0.0.1-alpha.1 --platform all
 gestaltd provider release --version 0.0.1-alpha.1 --platform linux/amd64,linux/arm64
@@ -66,5 +70,15 @@ scalar values win, lists replace inherited lists, and `null` deletes inherited
 keys. By default, lockfiles and artifact paths stay rooted at the leftmost
 config file. `--lockfile` overrides only the lockfile path. `--artifacts-dir`
 keeps its existing config-relative behavior for backward compatibility.
+
+`provider dev --remote` is environment-agnostic: the URL is just the remote
+`gestaltd` instance to attach to. The local command only replaces source-backed
+plugin implementations for the authenticated principal that created the session;
+all non-local plugins, credentials, policies, and host services continue to
+resolve through the remote instance. Remote servers expose attach targets only
+for source-backed plugin config entries or release-backed plugin entries that
+explicitly set `providerDev: true`. Remote mode tunnels plugin RPC, catalog,
+post-connect, and host-service calls; raw GraphQL surfaces are not tunneled in
+v1.
 
 See [Configuration](/configuration) for the relationship between `init`, `serve --locked`, and `validate`.

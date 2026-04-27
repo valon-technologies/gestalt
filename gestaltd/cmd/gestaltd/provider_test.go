@@ -68,6 +68,33 @@ const (
 	authReleaseTypeScriptTarget    = "authentication:./auth.ts#auth"
 )
 
+func TestProviderRemoteConfigPathSynthesizesSourcePlugin(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, dir)
+	configPaths, cleanup, err := prepareProviderRemoteConfigPaths(providerLocalCommandOptions{Path: pluginDir})
+	if err != nil {
+		t.Fatalf("prepareProviderRemoteConfigPaths: %v", err)
+	}
+	defer cleanup()
+
+	cfg, err := config.LoadPaths(configPaths)
+	if err != nil {
+		t.Fatalf("config.LoadPaths: %v", err)
+	}
+	targets, err := collectProviderRemoteTargets(cfg, "")
+	if err != nil {
+		t.Fatalf("collectProviderRemoteTargets: %v", err)
+	}
+	if len(targets) != 1 {
+		t.Fatalf("targets = %#v, want one source-backed plugin", targets)
+	}
+	if targets[0].Entry.ResolvedManifestPath == "" {
+		t.Fatal("target resolved manifest path is empty")
+	}
+}
+
 func TestRun_ProviderCLIUsageAndErrors(t *testing.T) {
 	t.Parallel()
 

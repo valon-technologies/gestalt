@@ -71,6 +71,10 @@ type CapabilityLister interface {
 	ListCapabilities() []core.Capability
 }
 
+type ProviderOverrideResolver interface {
+	ResolveProviderOverride(ctx context.Context, p *principal.Principal, providerName string) (core.Provider, bool, error)
+}
+
 var (
 	_ Invoker          = (*Broker)(nil)
 	_ GraphQLInvoker   = (*Broker)(nil)
@@ -100,14 +104,15 @@ type OAuthRefresher interface {
 type RefresherResolver func() map[string]map[string]OAuthRefresher
 
 type Broker struct {
-	providers      *registry.ProviderMap[core.Provider]
-	users          *coredata.UserService
-	externalCreds  core.ExternalCredentialProvider
-	authorizer     authorization.RuntimeAuthorizer
-	connMapper     ConnectionMapper
-	mcpMapper      ConnectionMapper
-	connectionAuth RefresherResolver
-	refreshGroup   singleflight.Group
+	providers         *registry.ProviderMap[core.Provider]
+	users             *coredata.UserService
+	externalCreds     core.ExternalCredentialProvider
+	authorizer        authorization.RuntimeAuthorizer
+	connMapper        ConnectionMapper
+	mcpMapper         ConnectionMapper
+	connectionAuth    RefresherResolver
+	providerOverrides ProviderOverrideResolver
+	refreshGroup      singleflight.Group
 }
 
 type BrokerOption func(*Broker)
@@ -126,6 +131,10 @@ func WithConnectionAuth(r RefresherResolver) BrokerOption {
 
 func WithAuthorizer(a authorization.RuntimeAuthorizer) BrokerOption {
 	return func(b *Broker) { b.authorizer = a }
+}
+
+func WithProviderOverrides(r ProviderOverrideResolver) BrokerOption {
+	return func(b *Broker) { b.providerOverrides = r }
 }
 
 func NewBroker(providers *registry.ProviderMap[core.Provider], users *coredata.UserService, externalCreds core.ExternalCredentialProvider, opts ...BrokerOption) *Broker {
@@ -262,7 +271,18 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
 	}
 
-	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
+	execProv := prov
+	if b.providerOverrides != nil {
+		override, ok, err := b.providerOverrides.ResolveProviderOverride(ctx, p, providerName)
+		if err != nil {
+			return fail(fmt.Errorf("%w: provider override: %v", ErrInternal, err))
+		}
+		if ok {
+			execProv = override
+		}
+	}
+
+	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, execProv, providerName, operation, conn, instance)
 	if err != nil {
 		return fail(err)
 	}
@@ -295,7 +315,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 
 	if transport == catalog.TransportMCPPassthrough {
-		toolResult, err := CallDirectTool(ctx, b, p, prov, providerName, operation, conn, instance, boundCredential, params, mcpupstream.CallToolMetaFromContext(ctx))
+		toolResult, err := CallDirectTool(ctx, b, p, execProv, providerName, operation, conn, instance, boundCredential, params, mcpupstream.CallToolMetaFromContext(ctx))
 		if err != nil {
 			return fail(err)
 		}
@@ -314,7 +334,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(err)
 	}
 
-	result, err = prov.Execute(ctx, operation, params, accessToken)
+	result, err = execProv.Execute(ctx, operation, params, accessToken)
 	if err != nil {
 		return fail(err)
 	}
