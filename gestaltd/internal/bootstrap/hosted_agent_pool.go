@@ -15,6 +15,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 const hostedAgentRuntimeLifecycleSafetyMargin = 5 * time.Second
@@ -91,7 +93,7 @@ func newHostedAgentProviderPool(ctx context.Context, launch *hostedAgentProvider
 
 func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
 	preferred := p.sessionBackend(req.SessionID)
-	backend, release, err := p.acquireBackend(ctx, preferred, preferred != nil)
+	backend, release, err := p.acquireBackendForNewWork(ctx, preferred, preferred != nil)
 	if err != nil {
 		return nil, err
 	}
@@ -110,17 +112,29 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req coreage
 }
 
 func (p *hostedAgentProviderPool) GetSession(ctx context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+	var retryableErr error
+	tried := map[*hostedAgentPoolBackend]struct{}{}
 	if backend := p.sessionBackend(req.SessionID); backend != nil {
+		tried[backend] = struct{}{}
 		session, err := p.withBackendSession(ctx, backend, req)
-		if err == nil {
+		switch {
+		case err == nil:
 			p.recordSession(session, backend)
-		} else if errors.Is(err, core.ErrNotFound) {
+			return session, nil
+		case errors.Is(err, core.ErrNotFound):
 			p.deleteSessionBackend(req.SessionID)
+			return nil, err
+		case isHostedAgentReadRetryableError(err):
+			retryableErr = err
+		default:
+			return nil, err
 		}
-		return session, err
 	}
 	var lastNotFound error
 	for _, backend := range p.availableBackends(true) {
+		if _, ok := tried[backend]; ok {
+			continue
+		}
 		session, err := p.withBackendSession(ctx, backend, req)
 		if err == nil {
 			p.recordSession(session, backend)
@@ -130,7 +144,14 @@ func (p *hostedAgentProviderPool) GetSession(ctx context.Context, req coreagent.
 			lastNotFound = err
 			continue
 		}
+		if isHostedAgentReadRetryableError(err) {
+			retryableErr = err
+			continue
+		}
 		return nil, err
+	}
+	if retryableErr != nil {
+		return nil, retryableErr
 	}
 	if lastNotFound != nil {
 		return nil, lastNotFound
@@ -141,17 +162,28 @@ func (p *hostedAgentProviderPool) GetSession(ctx context.Context, req coreagent.
 func (p *hostedAgentProviderPool) ListSessions(ctx context.Context, req coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
 	var out []*coreagent.Session
 	seenSessionIDs := map[string]struct{}{}
+	var retryableErr error
+	succeeded := false
 	for _, backend := range p.availableBackends(true) {
 		acquired, release, err := p.acquireBackend(ctx, backend, true)
 		if err != nil {
+			if isHostedAgentReadRetryableError(err) {
+				retryableErr = err
+				continue
+			}
 			return nil, err
 		}
 		sessions, err := acquired.provider.ListSessions(ctx, req)
 		release()
 		p.maybeProbeAfterCallError(acquired, err)
 		if err != nil {
+			if isHostedAgentReadRetryableError(err) {
+				retryableErr = err
+				continue
+			}
 			return nil, err
 		}
+		succeeded = true
 		for _, session := range sessions {
 			sessionID := strings.TrimSpace(sessionIDForSession(session))
 			if sessionID != "" {
@@ -163,6 +195,9 @@ func (p *hostedAgentProviderPool) ListSessions(ctx context.Context, req coreagen
 			p.recordSession(session, acquired)
 			out = append(out, session)
 		}
+	}
+	if !succeeded && retryableErr != nil {
+		return nil, retryableErr
 	}
 	return out, nil
 }
@@ -217,17 +252,29 @@ func (p *hostedAgentProviderPool) CreateTurn(ctx context.Context, req coreagent.
 }
 
 func (p *hostedAgentProviderPool) GetTurn(ctx context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+	var retryableErr error
+	tried := map[*hostedAgentPoolBackend]struct{}{}
 	if backend := p.turnBackend(req.TurnID); backend != nil {
+		tried[backend] = struct{}{}
 		turn, err := p.withBackendTurn(ctx, backend, req)
-		if err == nil {
+		switch {
+		case err == nil:
 			p.recordTurn(turn, backend)
-		} else if errors.Is(err, core.ErrNotFound) {
+			return turn, nil
+		case errors.Is(err, core.ErrNotFound):
 			p.deleteTurnBackend(req.TurnID)
+			return nil, err
+		case isHostedAgentReadRetryableError(err):
+			retryableErr = err
+		default:
+			return nil, err
 		}
-		return turn, err
 	}
 	var lastNotFound error
 	for _, backend := range p.availableBackends(true) {
+		if _, ok := tried[backend]; ok {
+			continue
+		}
 		turn, err := p.withBackendTurn(ctx, backend, req)
 		if err == nil {
 			p.recordTurn(turn, backend)
@@ -237,7 +284,14 @@ func (p *hostedAgentProviderPool) GetTurn(ctx context.Context, req coreagent.Get
 			lastNotFound = err
 			continue
 		}
+		if isHostedAgentReadRetryableError(err) {
+			retryableErr = err
+			continue
+		}
 		return nil, err
+	}
+	if retryableErr != nil {
+		return nil, retryableErr
 	}
 	if lastNotFound != nil {
 		return nil, lastNotFound
@@ -246,16 +300,38 @@ func (p *hostedAgentProviderPool) GetTurn(ctx context.Context, req coreagent.Get
 }
 
 func (p *hostedAgentProviderPool) ListTurns(ctx context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
+	var retryableErr error
+	succeeded := false
+	tried := map[*hostedAgentPoolBackend]struct{}{}
 	if backend := p.sessionBackend(req.SessionID); backend != nil {
-		return p.listTurnsFromBackend(ctx, backend, req)
+		tried[backend] = struct{}{}
+		turns, err := p.listTurnsFromBackend(ctx, backend, req)
+		if err == nil {
+			return turns, nil
+		}
+		if !isHostedAgentReadRetryableError(err) {
+			return nil, err
+		}
+		retryableErr = err
 	}
 	var out []*coreagent.Turn
 	for _, backend := range p.availableBackends(true) {
+		if _, ok := tried[backend]; ok {
+			continue
+		}
 		turns, err := p.listTurnsFromBackend(ctx, backend, req)
 		if err != nil {
+			if isHostedAgentReadRetryableError(err) {
+				retryableErr = err
+				continue
+			}
 			return nil, err
 		}
+		succeeded = true
 		out = append(out, turns...)
+	}
+	if !succeeded && retryableErr != nil {
+		return nil, retryableErr
 	}
 	return out, nil
 }
@@ -286,11 +362,24 @@ func (p *hostedAgentProviderPool) CancelTurn(ctx context.Context, req coreagent.
 }
 
 func (p *hostedAgentProviderPool) ListTurnEvents(ctx context.Context, req coreagent.ListTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
+	var retryableErr error
+	tried := map[*hostedAgentPoolBackend]struct{}{}
 	if backend := p.turnBackend(req.TurnID); backend != nil {
-		return p.listTurnEventsFromBackend(ctx, backend, req)
+		tried[backend] = struct{}{}
+		events, err := p.listTurnEventsFromBackend(ctx, backend, req)
+		if err == nil {
+			return events, nil
+		}
+		if !isHostedAgentReadRetryableError(err) {
+			return nil, err
+		}
+		retryableErr = err
 	}
 	var lastNotFound error
 	for _, backend := range p.availableBackends(true) {
+		if _, ok := tried[backend]; ok {
+			continue
+		}
 		events, err := p.listTurnEventsFromBackend(ctx, backend, req)
 		if err == nil {
 			return events, nil
@@ -299,7 +388,14 @@ func (p *hostedAgentProviderPool) ListTurnEvents(ctx context.Context, req coreag
 			lastNotFound = err
 			continue
 		}
+		if isHostedAgentReadRetryableError(err) {
+			retryableErr = err
+			continue
+		}
 		return nil, err
+	}
+	if retryableErr != nil {
+		return nil, retryableErr
 	}
 	if lastNotFound != nil {
 		return nil, lastNotFound
@@ -308,17 +404,29 @@ func (p *hostedAgentProviderPool) ListTurnEvents(ctx context.Context, req coreag
 }
 
 func (p *hostedAgentProviderPool) GetInteraction(ctx context.Context, req coreagent.GetInteractionRequest) (*coreagent.Interaction, error) {
+	var retryableErr error
+	tried := map[*hostedAgentPoolBackend]struct{}{}
 	if backend := p.interactionBackend(req.InteractionID); backend != nil {
+		tried[backend] = struct{}{}
 		interaction, err := p.getInteractionFromBackend(ctx, backend, req)
-		if err == nil {
+		switch {
+		case err == nil:
 			p.recordInteraction(interaction, backend)
-		} else if errors.Is(err, core.ErrNotFound) {
+			return interaction, nil
+		case errors.Is(err, core.ErrNotFound):
 			p.deleteInteractionBackend(req.InteractionID)
+			return nil, err
+		case isHostedAgentReadRetryableError(err):
+			retryableErr = err
+		default:
+			return nil, err
 		}
-		return interaction, err
 	}
 	var lastNotFound error
 	for _, backend := range p.availableBackends(true) {
+		if _, ok := tried[backend]; ok {
+			continue
+		}
 		interaction, err := p.getInteractionFromBackend(ctx, backend, req)
 		if err == nil {
 			p.recordInteraction(interaction, backend)
@@ -328,7 +436,14 @@ func (p *hostedAgentProviderPool) GetInteraction(ctx context.Context, req coreag
 			lastNotFound = err
 			continue
 		}
+		if isHostedAgentReadRetryableError(err) {
+			retryableErr = err
+			continue
+		}
 		return nil, err
+	}
+	if retryableErr != nil {
+		return nil, retryableErr
 	}
 	if lastNotFound != nil {
 		return nil, lastNotFound
@@ -337,16 +452,38 @@ func (p *hostedAgentProviderPool) GetInteraction(ctx context.Context, req coreag
 }
 
 func (p *hostedAgentProviderPool) ListInteractions(ctx context.Context, req coreagent.ListInteractionsRequest) ([]*coreagent.Interaction, error) {
+	var retryableErr error
+	succeeded := false
+	tried := map[*hostedAgentPoolBackend]struct{}{}
 	if backend := p.turnBackend(req.TurnID); backend != nil {
-		return p.listInteractionsFromBackend(ctx, backend, req)
+		tried[backend] = struct{}{}
+		interactions, err := p.listInteractionsFromBackend(ctx, backend, req)
+		if err == nil {
+			return interactions, nil
+		}
+		if !isHostedAgentReadRetryableError(err) {
+			return nil, err
+		}
+		retryableErr = err
 	}
 	var out []*coreagent.Interaction
 	for _, backend := range p.availableBackends(true) {
+		if _, ok := tried[backend]; ok {
+			continue
+		}
 		interactions, err := p.listInteractionsFromBackend(ctx, backend, req)
 		if err != nil {
+			if isHostedAgentReadRetryableError(err) {
+				retryableErr = err
+				continue
+			}
 			return nil, err
 		}
+		succeeded = true
 		out = append(out, interactions...)
+	}
+	if !succeeded && retryableErr != nil {
+		return nil, retryableErr
 	}
 	return out, nil
 }
@@ -584,7 +721,7 @@ func (p *hostedAgentProviderPool) acquireBackend(ctx context.Context, preferred 
 			p.mu.Lock()
 			p.starting--
 			ready, starting, draining = p.instanceCountsLocked()
-			if startErr == nil && p.backendAvailableLocked(started, false) {
+			if startErr == nil && p.backendAcceptsNewWorkLocked(started, time.Now().UTC()) {
 				started.active++
 				p.mu.Unlock()
 				p.recordInstanceCounts(ctx, ready, starting, draining)
@@ -609,12 +746,20 @@ func (p *hostedAgentProviderPool) acquireBackend(ctx context.Context, preferred 
 
 func (p *hostedAgentProviderPool) acquireBackendForNewWork(ctx context.Context, preferred *hostedAgentPoolBackend, allowDraining bool) (*hostedAgentPoolBackend, func(), error) {
 	if preferred != nil {
-		backend, release, err := p.acquireBackend(ctx, preferred, allowDraining)
-		if err == nil {
-			return backend, release, nil
+		p.mu.Lock()
+		if p.closed {
+			p.mu.Unlock()
+			return nil, nil, fmt.Errorf("hosted agent provider %q is closed", p.name)
 		}
+		now := time.Now().UTC()
+		if p.backendAcceptsNewWorkLocked(preferred, now) || (allowDraining && p.backendAvailableLocked(preferred, true) && !p.backendRuntimeDrainDueLocked(preferred, now)) {
+			preferred.active++
+			p.mu.Unlock()
+			return preferred, p.releaseBackend(preferred), nil
+		}
+		p.mu.Unlock()
 		if ctx.Err() != nil {
-			return nil, nil, err
+			return nil, nil, ctx.Err()
 		}
 	}
 	return p.acquireBackend(ctx, nil, false)
@@ -631,9 +776,10 @@ func (p *hostedAgentProviderPool) releaseBackend(backend *hostedAgentPoolBackend
 }
 
 func (p *hostedAgentProviderPool) pickReadyBackendLocked() *hostedAgentPoolBackend {
+	now := time.Now().UTC()
 	ready := make([]*hostedAgentPoolBackend, 0, len(p.backends))
 	for _, backend := range p.backends {
-		if p.backendAvailableLocked(backend, false) {
+		if p.backendAcceptsNewWorkLocked(backend, now) {
 			ready = append(ready, backend)
 		}
 	}
@@ -658,9 +804,10 @@ func (p *hostedAgentProviderPool) canScaleOutLocked() bool {
 	if p.policy.MaxReadyInstances <= 0 {
 		return false
 	}
+	now := time.Now().UTC()
 	ready := 0
 	for _, backend := range p.backends {
-		if p.backendAvailableLocked(backend, false) {
+		if p.backendAcceptsNewWorkLocked(backend, now) {
 			ready++
 		}
 	}
@@ -704,6 +851,21 @@ func (p *hostedAgentProviderPool) backendAvailableLocked(backend *hostedAgentPoo
 	return false
 }
 
+func (p *hostedAgentProviderPool) backendAcceptsNewWorkLocked(backend *hostedAgentPoolBackend, now time.Time) bool {
+	return p.backendAvailableLocked(backend, false) && !p.backendRuntimeDrainDueLocked(backend, now)
+}
+
+func (p *hostedAgentProviderPool) backendRuntimeDrainDueLocked(backend *hostedAgentPoolBackend, now time.Time) bool {
+	if backend == nil || backend.runtimeDrainAt == nil {
+		return false
+	}
+	drainAt := backend.runtimeDrainAt.UTC()
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	return !now.Before(drainAt)
+}
+
 func (p *hostedAgentProviderPool) readyBackends() []*hostedAgentPoolBackend {
 	return p.availableBackends(false)
 }
@@ -742,11 +904,12 @@ func (e hostedAgentProviderUnavailableError) Unwrap() []error {
 
 func (p *hostedAgentProviderPool) instanceCountsLocked() (ready, starting, draining int) {
 	starting = p.starting
+	now := time.Now().UTC()
 	for _, backend := range p.backends {
 		if backend == nil || backend.closed {
 			continue
 		}
-		if backend.draining || backend.closing {
+		if backend.draining || backend.closing || p.backendRuntimeDrainDueLocked(backend, now) {
 			draining++
 			continue
 		}
@@ -755,6 +918,21 @@ func (p *hostedAgentProviderPool) instanceCountsLocked() (ready, starting, drain
 		}
 	}
 	return ready, starting, draining
+}
+
+func isHostedAgentReadRetryableError(err error) bool {
+	if err == nil || errors.Is(err, core.ErrNotFound) || errors.Is(err, context.Canceled) {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, agentmanager.ErrAgentProviderNotAvailable) {
+		return true
+	}
+	switch grpcstatus.Code(err) {
+	case codes.DeadlineExceeded, codes.Unavailable:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *hostedAgentProviderPool) recordInstanceCounts(ctx context.Context, ready, starting, draining int) {
@@ -1129,8 +1307,9 @@ func (p *hostedAgentProviderPool) ensureMinReady(ctx context.Context) error {
 			return nil
 		}
 		ready := 0
+		now := time.Now().UTC()
 		for _, backend := range p.backends {
-			if p.backendAvailableLocked(backend, false) {
+			if p.backendAcceptsNewWorkLocked(backend, now) {
 				ready++
 			}
 		}
