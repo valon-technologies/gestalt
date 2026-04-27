@@ -20,8 +20,7 @@ const (
 type Kind string
 
 const (
-	KindUser     Kind = "user"
-	KindWorkload Kind = "workload"
+	KindUser Kind = "user"
 )
 
 type Principal struct {
@@ -86,13 +85,6 @@ func UserIDFromSubjectID(subjectID string) string {
 		return ""
 	}
 	return strings.TrimPrefix(subjectID, string(KindUser)+":")
-}
-
-func WorkloadSubjectID(workloadID string) string {
-	if workloadID == "" {
-		return ""
-	}
-	return string(KindWorkload) + ":" + workloadID
 }
 
 func KindFromSubjectID(subjectID string) Kind {

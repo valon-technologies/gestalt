@@ -757,7 +757,7 @@ func TestAPITokenService(t *testing.T) {
 		if err := svc.APITokens.StoreAPIToken(ctx, &core.APIToken{
 			ID:          "api-subject",
 			OwnerKind:   core.APITokenOwnerKindSubject,
-			OwnerID:     principal.WorkloadSubjectID("triage-bot"),
+			OwnerID:     "service_account:triage-bot",
 			Name:        "triage-bot",
 			HashedToken: "sha256:subject",
 		}); err != nil {
@@ -768,10 +768,10 @@ func TestAPITokenService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ValidateAPIToken: %v", err)
 		}
-		if got.OwnerKind != core.APITokenOwnerKindSubject || got.OwnerID != principal.WorkloadSubjectID("triage-bot") {
-			t.Fatalf("owner = (%q, %q), want (%q, %q)", got.OwnerKind, got.OwnerID, core.APITokenOwnerKindSubject, principal.WorkloadSubjectID("triage-bot"))
+		if got.OwnerKind != core.APITokenOwnerKindSubject || got.OwnerID != "service_account:triage-bot" {
+			t.Fatalf("owner = (%q, %q), want (%q, %q)", got.OwnerKind, got.OwnerID, core.APITokenOwnerKindSubject, "service_account:triage-bot")
 		}
-		if got.CredentialSubjectID != principal.WorkloadSubjectID("triage-bot") {
+		if got.CredentialSubjectID != "service_account:triage-bot" {
 			t.Fatalf("CredentialSubjectID = %q, want owner subject", got.CredentialSubjectID)
 		}
 	})
@@ -786,8 +786,8 @@ func TestAPITokenService(t *testing.T) {
 		}{
 			{name: "user subject", ownerID: principal.UserSubjectID("user-123")},
 			{name: "system subject", ownerID: "system:config"},
-			{name: "mismatched credential subject", ownerID: principal.WorkloadSubjectID("triage-bot"), credentialSubjectID: principal.WorkloadSubjectID("other-bot")},
-			{name: "borrowed user credential subject", ownerID: principal.WorkloadSubjectID("triage-bot"), credentialSubjectID: principal.UserSubjectID("user-123")},
+			{name: "mismatched credential subject", ownerID: "service_account:triage-bot", credentialSubjectID: "service_account:other-bot"},
+			{name: "borrowed user credential subject", ownerID: "service_account:triage-bot", credentialSubjectID: principal.UserSubjectID("user-123")},
 		} {
 			tc := tc
 			t.Run(tc.name, func(t *testing.T) {
