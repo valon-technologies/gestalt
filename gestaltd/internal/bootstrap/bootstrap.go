@@ -425,7 +425,7 @@ func (p *agentProviderWithTracking) CreateSession(ctx context.Context, req corea
 	requestedID := strings.TrimSpace(req.SessionID)
 	if requestedID != "" && session != nil {
 		actualID := strings.TrimSpace(session.ID)
-		if actualID != "" && actualID != requestedID {
+		if actualID != "" && actualID != requestedID && strings.TrimSpace(req.IdempotencyKey) == "" {
 			return nil, fmt.Errorf("%w: agent provider %q returned session id %q for requested session id %q", invocation.ErrInternal, p.providerName, actualID, requestedID)
 		}
 	}

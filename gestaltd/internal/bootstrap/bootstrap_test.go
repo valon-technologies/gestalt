@@ -5801,6 +5801,18 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 		t.Fatalf("CreateSession error = %v, want mismatched session id failure", err)
 	}
 
+	replayedSession, err := provider.CreateSession(startCtx, coreagent.CreateSessionRequest{
+		SessionID:      "agent-session-1",
+		IdempotencyKey: "workflow:github:run-1:session",
+		Model:          "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession idempotent replay: %v", err)
+	}
+	if replayedSession.ID != "generated-session-1" {
+		t.Fatalf("CreateSession idempotent replay ID = %q, want generated-session-1", replayedSession.ID)
+	}
+
 	if _, err := provider.CreateTurn(startCtx, coreagent.CreateTurnRequest{
 		TurnID:    "agent-turn-1",
 		SessionID: "agent-session-1",
