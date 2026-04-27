@@ -29,6 +29,8 @@ ctrlc = "3"
 crossterm = "0.29"
 ratatui = { version = "0.30", features = ["crossterm_0_29"] }
 ratatui-textarea = "0.9"
+unicode-segmentation = "1.13.2"
+unicode-width = "0.2.2"
 
 [dev-dependencies]
 tempfile = "3"

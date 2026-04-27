@@ -461,6 +461,357 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
 
 #[cfg(unix)]
 #[test]
+fn test_cli_tty_help_and_prompt_history() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions",
+            r#"{"provider":"managed","model":"gpt-5.4"}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"remember this"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-history-1",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-history-1/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"first response\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-history-1",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-history-1",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"first response"
+            }"#,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"remember this"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-history-2",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-history-2/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"second response\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-history-2",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-history-2",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"second response"
+            }"#,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"draft text"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-history-3",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-history-3/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"third response\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-history-3",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-history-3",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"third response"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.write("/help\r");
+    session.wait_for(&mut output, "recalls");
+    session.write("remember this\r");
+    session.wait_for(&mut output, "first");
+    session.write("\x1b[A\r");
+    session.wait_for(&mut output, "second");
+    session.write("draft text\x1b[A\x1b[B\r");
+    session.wait_for(&mut output, "third");
+    session.write("/quit\r");
+    session.wait_for_exit();
+
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_tty_scrolls_multiline_help_rows() {
+    let server = ScriptedServer::spawn(vec![ExpectedRequest::json(
+        Method::POST,
+        "/api/v1/agent/sessions",
+        r#"{"provider":"managed","model":"gpt-5.4"}"#,
+        StatusCode::CREATED,
+        http::APPLICATION_JSON,
+        SESSION_JSON,
+    )]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli_with_size(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        8,
+        80,
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.write("/help\r");
+    session.wait_for(&mut output, "cancels");
+    session.write("\x1b[5~\x1b[5~");
+    session.wait_for(&mut output, "Commands");
+    session.write("/quit\r");
+    session.wait_for_exit();
+
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_tty_wraps_wide_transcript_text_by_display_width() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions",
+            r#"{"provider":"managed","model":"gpt-5.4"}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"wide text"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-wide",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-wide/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"一二三四五六七八九十👩‍💻👨‍💻\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-wide",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-wide",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"一二三四五六七八九十👩‍💻👨‍💻"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli_with_size(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+        8,
+        30,
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.write("wide text\r");
+    session.wait_for(&mut output, "👨‍💻");
+    session.write("/quit\r");
+    session.wait_for_exit();
+
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_tty_queues_prompt_while_turn_is_running() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions",
+            r#"{"provider":"managed","model":"gpt-5.4"}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"slow turn"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-queued-1",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-queued-1/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"done-one\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        )
+        .with_response_delay(Duration::from_secs(2)),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-queued-1",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-queued-1",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"done-one"
+            }"#,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"pending turn"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-queued-2",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-queued-2/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"done-two\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-queued-2",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-queued-2",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"done-two"
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.write("slow turn\r");
+    session.wait_for(&mut output, "working");
+    session.write("pending turn\r");
+    session.wait_for(&mut output, "queued");
+    session.wait_for(&mut output, "done-one");
+    session.wait_for(&mut output, "done-two");
+    session.write("/quit\r");
+    session.wait_for_exit();
+
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
 fn test_cli_tty_turn_boundary_stops_stale_streaming_transcript_item() {
     let server = ScriptedServer::spawn(vec![
         ExpectedRequest::json(
@@ -1106,6 +1457,7 @@ struct ExpectedRequest {
     status: StatusCode,
     content_type: String,
     response_body: String,
+    response_delay: Duration,
 }
 
 impl ExpectedRequest {
@@ -1124,6 +1476,7 @@ impl ExpectedRequest {
             status,
             content_type: content_type.to_string(),
             response_body: response_body.to_string(),
+            response_delay: Duration::from_millis(0),
         }
     }
 
@@ -1141,7 +1494,13 @@ impl ExpectedRequest {
             status,
             content_type: content_type.to_string(),
             response_body: response_body.to_string(),
+            response_delay: Duration::from_millis(0),
         }
+    }
+
+    fn with_response_delay(mut self, delay: Duration) -> Self {
+        self.response_delay = delay;
+        self
     }
 }
 
@@ -1204,6 +1563,9 @@ fn handle_scripted_request(stream: TcpStream, expected: &Arc<Mutex<VecDeque<Expe
             assert_eq!(actual, expected_body);
         }
         None => assert!(request.body.is_empty(), "unexpected request body"),
+    }
+    if !next.response_delay.is_zero() {
+        std::thread::sleep(next.response_delay);
     }
     http::write_response(
         &mut stream,
@@ -1279,14 +1641,25 @@ impl TtyCliSession {
 
 #[cfg(unix)]
 fn spawn_tty_cli(home: &std::path::Path, url: &str, args: &[&str]) -> TtyCliSession {
+    spawn_tty_cli_with_size(home, url, args, 24, 100)
+}
+
+#[cfg(unix)]
+fn spawn_tty_cli_with_size(
+    home: &std::path::Path,
+    url: &str,
+    args: &[&str],
+    rows: u16,
+    cols: u16,
+) -> TtyCliSession {
     use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
     std::fs::create_dir_all(home).unwrap();
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
-            rows: 24,
-            cols: 100,
+            rows,
+            cols,
             pixel_width: 0,
             pixel_height: 0,
         })

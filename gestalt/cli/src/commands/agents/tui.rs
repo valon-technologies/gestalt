@@ -8,8 +8,10 @@ use anyhow::{Context, Result};
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
-use ratatui_textarea::TextArea;
+use ratatui_textarea::{CursorMove, TextArea};
 use serde_json::{Map, Value};
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 use crate::api::ApiClient;
 use crate::cli::{AgentArgs, AgentTurnCreateArgs};
@@ -25,6 +27,8 @@ use super::{
 };
 
 const TICK_RATE: Duration = Duration::from_millis(50);
+const HISTORY_LIMIT: usize = 100;
+const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 
 pub(super) fn can_run() -> bool {
     io::stdin().is_terminal() && io::stdout().is_terminal() && io::stderr().is_terminal()
@@ -92,6 +96,11 @@ struct TuiApp {
     should_quit: bool,
     quit_after_turn: bool,
     transcript_visible_height: usize,
+    transcript_content_height: usize,
+    tick: usize,
+    input_history: Vec<String>,
+    history_cursor: Option<usize>,
+    history_draft: String,
 }
 
 impl TuiApp {
@@ -110,6 +119,11 @@ impl TuiApp {
             should_quit: false,
             quit_after_turn: false,
             transcript_visible_height: 1,
+            transcript_content_height: 0,
+            tick: 0,
+            input_history: Vec::new(),
+            history_cursor: None,
+            history_draft: String::new(),
         }
     }
 
@@ -117,6 +131,7 @@ impl TuiApp {
         loop {
             self.drain_worker_events();
             self.start_next_queued_turn();
+            self.tick = self.tick.wrapping_add(1);
             terminal.draw(|frame| self.draw(frame))?;
 
             if self.should_quit {
@@ -161,12 +176,31 @@ impl TuiApp {
             "Session {} [{} / {}]",
             self.state.session_id, self.state.provider, self.state.model
         );
-        let mut lines = Vec::new();
         self.transcript_visible_height = area.height.saturating_sub(2).max(1) as usize;
-        for item in self
-            .state
-            .visible_transcript(self.transcript_visible_height)
-        {
+        let rendered_lines = self.transcript_lines(area);
+        self.transcript_content_height = rendered_lines.len();
+        self.state.clamp_scroll_offset(
+            self.transcript_visible_height,
+            self.transcript_content_height,
+        );
+        let mut lines = visible_lines(
+            rendered_lines,
+            self.transcript_visible_height,
+            self.state.scroll_offset(),
+        );
+        if lines.is_empty() {
+            lines.push(Line::from("Start typing below."));
+        }
+
+        let paragraph =
+            Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(title));
+        frame.render_widget(paragraph, area);
+    }
+
+    fn transcript_lines(&self, area: Rect) -> Vec<Line<'static>> {
+        let content_width = area.width.saturating_sub(2).max(1) as usize;
+        let mut lines = Vec::new();
+        for item in self.state.transcript() {
             let style = match item.kind {
                 TranscriptKind::User => Style::default().fg(Color::Cyan),
                 TranscriptKind::Assistant => Style::default().fg(Color::White),
@@ -175,20 +209,23 @@ impl TuiApp {
                 TranscriptKind::System => Style::default().fg(Color::Green),
                 TranscriptKind::Error => Style::default().fg(Color::Red),
             };
-            let label = Span::styled(
-                format!("{} ", item.kind.label()),
-                style.add_modifier(Modifier::BOLD),
-            );
-            lines.push(Line::from(vec![label, Span::raw(item.text.clone())]));
+            let label_text = format!("{} ", item.kind.label());
+            let label_width = UnicodeWidthStr::width(label_text.as_str());
+            let text_width = content_width.saturating_sub(label_width).max(1);
+            let mut first_row = true;
+            for text_line in item.text.split('\n') {
+                for chunk in text_chunks(text_line, text_width) {
+                    let label = if first_row {
+                        first_row = false;
+                        Span::styled(label_text.clone(), style.add_modifier(Modifier::BOLD))
+                    } else {
+                        Span::raw(" ".repeat(label_width))
+                    };
+                    lines.push(Line::from(vec![label, Span::raw(chunk)]));
+                }
+            }
         }
-        if lines.is_empty() {
-            lines.push(Line::from("Start typing below."));
-        }
-
-        let paragraph = Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).title(title))
-            .wrap(Wrap { trim: false });
-        frame.render_widget(paragraph, area);
+        lines
     }
 
     fn draw_interaction(&mut self, frame: &mut Frame<'_>, area: Rect) {
@@ -233,8 +270,11 @@ impl TuiApp {
     }
 
     fn draw_composer(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let title = if self.state.busy {
-            format!("Message - queued {}", self.queued_messages.len())
+        let queued = self.queued_messages.len();
+        let title = if queued > 0 {
+            format!("Message - {queued} queued")
+        } else if self.state.busy {
+            "Message - working".to_string()
         } else {
             "Message".to_string()
         };
@@ -249,13 +289,20 @@ impl TuiApp {
 
     fn draw_footer(&self, frame: &mut Frame<'_>, area: Rect) {
         let status = if self.state.busy {
+            let queued = if self.queued_messages.is_empty() {
+                String::new()
+            } else {
+                format!(" | queued {}", self.queued_messages.len())
+            };
             format!(
-                "{} | Enter queue/send | Alt-Enter newline | PgUp/PgDn scroll | Ctrl-C cancel",
-                self.state.status
+                "{} {}{} | Enter queue | Alt-Enter newline | Up/Down history | PgUp/PgDn scroll | Ctrl-C cancel",
+                self.activity_indicator(),
+                self.state.status,
+                queued
             )
         } else {
             format!(
-                "{} | Enter send | Alt-Enter newline | PgUp/PgDn scroll | Ctrl-C clear/exit",
+                "{} | Enter send | Alt-Enter newline | Up/Down history | PgUp/PgDn scroll | Ctrl-C clear/exit",
                 self.state.status
             )
         };
@@ -263,6 +310,10 @@ impl TuiApp {
             Paragraph::new(status).style(Style::default().fg(Color::DarkGray)),
             area,
         );
+    }
+
+    fn activity_indicator(&self) -> &'static str {
+        SPINNER_FRAMES[(self.tick / 2) % SPINNER_FRAMES.len()]
     }
 
     fn composer_height(&self) -> u16 {
@@ -280,19 +331,33 @@ impl TuiApp {
             (KeyCode::Char('c'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
                 self.handle_interrupt();
             }
-            (KeyCode::PageUp, _) => self.state.scroll_up(self.transcript_visible_height),
+            (KeyCode::PageUp, _) => self.state.scroll_up(
+                self.transcript_visible_height,
+                self.transcript_content_height,
+            ),
             (KeyCode::PageDown, _) => self.state.scroll_down(),
             (KeyCode::Home, modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
-                self.state.scroll_to_top(self.transcript_visible_height);
+                self.state.scroll_to_top(
+                    self.transcript_visible_height,
+                    self.transcript_content_height,
+                );
             }
             (KeyCode::End, modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
                 self.state.scroll_to_bottom();
             }
+            (KeyCode::Up, modifiers) if modifiers.is_empty() && self.can_step_history_back() => {
+                self.history_previous();
+            }
+            (KeyCode::Down, modifiers) if modifiers.is_empty() && self.history_cursor.is_some() => {
+                self.history_next();
+            }
             (KeyCode::Enter, modifiers) if modifiers.contains(KeyModifiers::ALT) => {
+                self.reset_history_navigation();
                 self.composer.insert_newline();
             }
             (KeyCode::Enter, _) => self.submit_composer(),
             _ => {
+                self.reset_history_navigation();
                 self.composer.input(key);
             }
         }
@@ -366,18 +431,25 @@ impl TuiApp {
                 }
             }
             "/help" => {
-                self.state.push_system(
-                    "Commands: /help, /session, /quit. Enter sends; Alt-Enter inserts a newline.",
-                );
+                self.push_help();
             }
             "/session" => {
                 self.state
                     .push_system(format!("session {}", self.shell.session.id));
             }
-            _ => self.enqueue_or_start(vec![message]),
+            _ => {
+                self.record_history(&message);
+                self.enqueue_or_start(vec![message]);
+            }
         }
 
-        self.composer = styled_textarea("Message");
+        self.clear_composer();
+    }
+
+    fn push_help(&mut self) {
+        self.state.push_system(
+            "Commands\n  /help     Show commands and keys.\n  /session  Show the active session id.\n  /quit     Exit now, or after the active turn.\nKeys\n  Enter sends; busy turns queue the prompt.\n  Alt-Enter inserts a newline.\n  Up/Down recalls prompt history.\n  PgUp/PgDn scrolls the transcript.\n  Ctrl-C cancels, clears input, or exits.",
+        );
     }
 
     fn enqueue_or_start(&mut self, messages: Vec<String>) {
@@ -504,7 +576,7 @@ impl TuiApp {
             self.state.status = "cancel requested".to_string();
             self.state.push_system("Cancel requested.");
         } else if !textarea_text(&self.composer).is_empty() {
-            self.composer = styled_textarea("Message");
+            self.clear_composer();
         } else {
             self.should_quit = true;
         }
@@ -517,13 +589,129 @@ impl TuiApp {
             let _ = handle.join();
         }
     }
+
+    fn can_step_history_back(&self) -> bool {
+        !self.input_history.is_empty()
+            && (self.history_cursor.is_some() || self.composer.lines().len() == 1)
+    }
+
+    fn history_previous(&mut self) {
+        if self.input_history.is_empty() {
+            return;
+        }
+        let index = match self.history_cursor {
+            Some(0) => 0,
+            Some(index) => index - 1,
+            None => {
+                self.history_draft = textarea_text(&self.composer);
+                self.input_history.len() - 1
+            }
+        };
+        self.history_cursor = Some(index);
+        let message = self.input_history[index].clone();
+        self.set_composer_text(&message);
+    }
+
+    fn history_next(&mut self) {
+        let Some(index) = self.history_cursor else {
+            return;
+        };
+        if index + 1 < self.input_history.len() {
+            let next = index + 1;
+            self.history_cursor = Some(next);
+            let message = self.input_history[next].clone();
+            self.set_composer_text(&message);
+        } else {
+            self.history_cursor = None;
+            let draft = std::mem::take(&mut self.history_draft);
+            self.set_composer_text(&draft);
+        }
+    }
+
+    fn set_composer_text(&mut self, text: &str) {
+        self.composer = textarea_with_text("Message", text);
+    }
+
+    fn clear_composer(&mut self) {
+        self.composer = styled_textarea("Message");
+        self.reset_history_navigation();
+    }
+
+    fn reset_history_navigation(&mut self) {
+        self.history_cursor = None;
+        self.history_draft.clear();
+    }
+
+    fn record_history(&mut self, message: &str) {
+        if message.trim().is_empty()
+            || self
+                .input_history
+                .last()
+                .is_some_and(|last| last == message)
+        {
+            return;
+        }
+        self.input_history.push(message.to_string());
+        if self.input_history.len() > HISTORY_LIMIT {
+            let remove = self.input_history.len() - HISTORY_LIMIT;
+            self.input_history.drain(0..remove);
+        }
+    }
 }
 
 fn styled_textarea(title: &'static str) -> TextArea<'static> {
-    let mut textarea = TextArea::default();
+    textarea_with_text(title, "")
+}
+
+fn visible_lines(
+    lines: Vec<Line<'static>>,
+    visible_height: usize,
+    scroll_offset: usize,
+) -> Vec<Line<'static>> {
+    let end = lines.len().saturating_sub(scroll_offset);
+    let start = end.saturating_sub(visible_height.max(1));
+    lines.into_iter().skip(start).take(end - start).collect()
+}
+
+fn text_chunks(text: &str, width: usize) -> Vec<String> {
+    if text.is_empty() {
+        return vec![String::new()];
+    }
+
+    let mut chunks = Vec::new();
+    let mut chunk = String::new();
+    let mut chunk_width = 0usize;
+    for grapheme in UnicodeSegmentation::graphemes(text, true) {
+        let grapheme_width = UnicodeWidthStr::width(grapheme);
+        if chunk_width > 0 && chunk_width.saturating_add(grapheme_width) > width {
+            chunks.push(std::mem::take(&mut chunk));
+            chunk_width = 0;
+        }
+        chunk.push_str(grapheme);
+        chunk_width += grapheme_width;
+    }
+    if !chunk.is_empty() {
+        chunks.push(chunk);
+    }
+    chunks
+}
+
+fn textarea_with_text(title: &'static str, text: &str) -> TextArea<'static> {
+    let lines = if text.is_empty() {
+        vec![String::new()]
+    } else {
+        text.split('\n').map(|line| line.to_string()).collect()
+    };
+    let mut textarea = TextArea::new(lines);
+    configure_textarea(&mut textarea, title);
+    textarea.move_cursor(CursorMove::Bottom);
+    textarea.move_cursor(CursorMove::End);
+    textarea
+}
+
+fn configure_textarea(textarea: &mut TextArea<'static>, title: &'static str) {
     textarea.set_cursor_line_style(Style::default());
     textarea.set_block(Block::default().borders(Borders::ALL).title(title));
-    textarea
 }
 
 struct InteractionInput {
