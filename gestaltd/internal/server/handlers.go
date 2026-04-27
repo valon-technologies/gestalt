@@ -29,8 +29,6 @@ import (
 const defaultTokenInstance = "default"
 const httpInstanceParam = "_instance"
 const httpConnectionParam = "_connection"
-const legacyHTTPInstanceParam = "instance"
-const legacyHTTPConnectionParam = "connection"
 
 const cliStatePrefix = "cli:"
 const maxPort = 65535
@@ -257,8 +255,16 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		auditErr = errors.New("integration not found")
 		return
 	}
+	query := r.URL.Query()
+	for _, param := range []string{"instance", "connection"} {
+		if _, ok := query[param]; ok {
+			auditErr = errors.New("legacy connection parameter")
+			writeError(w, http.StatusBadRequest, "use _connection and _instance query parameters")
+			return
+		}
+	}
 
-	requestedInstance := queryParamValue(r, httpInstanceParam, legacyHTTPInstanceParam)
+	requestedInstance := query.Get(httpInstanceParam)
 	if requestedInstance != "" {
 		var ok bool
 		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
@@ -267,7 +273,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	requestedConnection := queryParamValue(r, httpConnectionParam, legacyHTTPConnectionParam)
+	requestedConnection := query.Get(httpConnectionParam)
 	if requestedConnection != "" {
 		var ok bool
 		requestedConnection, ok = s.resolveRequestedConnection(w, name, requestedConnection)
@@ -369,15 +375,6 @@ func (s *Server) getProvider(w http.ResponseWriter, name string) (core.Provider,
 		return nil, false
 	}
 	return prov, true
-}
-
-func queryParamValue(r *http.Request, names ...string) string {
-	for _, name := range names {
-		if value := r.URL.Query().Get(name); value != "" {
-			return value
-		}
-	}
-	return ""
 }
 
 func (s *Server) requireOAuthHandler(w http.ResponseWriter, integration, connection string) (bootstrap.OAuthHandler, bool) {

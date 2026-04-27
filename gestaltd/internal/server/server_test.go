@@ -8666,12 +8666,11 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 	})
 
-	t.Run("plain parameters are accepted for disconnect", func(t *testing.T) {
+	t.Run("plain parameters are rejected for disconnect", func(t *testing.T) {
 		t.Parallel()
 
 		svc := coretesting.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
-		var auditBuf bytes.Buffer
 		seedToken(t, svc, &core.ExternalCredential{
 			ID: "tok-b", SubjectID: principal.UserSubjectID(u.ID), Integration: "notion",
 			Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
@@ -8683,7 +8682,6 @@ func TestDisconnectIntegration(t *testing.T) {
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "notion", DN: "Notion"})
-			cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
@@ -8695,33 +8693,23 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 		defer func() { _ = resp.Body.Close() }()
 
-		if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode != http.StatusBadRequest {
 			body, _ := io.ReadAll(resp.Body)
-			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+			t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
+		}
+		var result map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if !strings.Contains(result["error"], "_connection") || !strings.Contains(result["error"], "_instance") {
+			t.Fatalf("expected canonical parameter error, got %q", result["error"])
 		}
 		tokens, err := svc.ExternalCredentials.ListCredentialsForProvider(context.Background(), principal.UserSubjectID(u.ID), "notion")
 		if err != nil {
 			t.Fatalf("ListCredentialsForProvider: %v", err)
 		}
-		if len(tokens) != 1 {
-			t.Fatalf("expected 1 token after targeted disconnect, got %d", len(tokens))
-		}
-		if tokens[0].Connection != "default" || tokens[0].Instance != "default" {
-			t.Fatalf("unexpected remaining token %+v", tokens[0])
-		}
-
-		var auditRecord map[string]any
-		if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
-			t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
-		}
-		if auditRecord["target_kind"] != "connection" {
-			t.Fatalf("expected audit target_kind connection, got %v", auditRecord["target_kind"])
-		}
-		if auditRecord["target_id"] != "notion/mcp/MCP OAuth" {
-			t.Fatalf("expected audit target_id notion/mcp/MCP OAuth, got %v", auditRecord["target_id"])
-		}
-		if auditRecord["target_name"] != "mcp/MCP OAuth" {
-			t.Fatalf("expected audit target_name mcp/MCP OAuth, got %v", auditRecord["target_name"])
+		if len(tokens) != 2 {
+			t.Fatalf("expected both tokens to remain after rejected disconnect, got %d", len(tokens))
 		}
 	})
 
