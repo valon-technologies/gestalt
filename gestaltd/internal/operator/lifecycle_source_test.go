@@ -1697,6 +1697,116 @@ func TestSourcePluginGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 	}
 }
 
+func TestSourcePluginMetadataURLRetriesTransientRemoteMetadataFailure(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	archivePath := buildV2Archive(t, dir, testSource, testVersion, testBinary)
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSHA := sha256.Sum256(archiveData)
+
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	handlerErrs := make(chan error, 4)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+
+	const metadataPath = "/providers/alpha/provider-release.yaml"
+	const archivePathURL = "/providers/alpha/alpha-current.tar.gz"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case metadataPath:
+			count := metadataCount.Add(1)
+			if count <= 2 {
+				http.Error(w, "bad gateway", http.StatusBadGateway)
+				return
+			}
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("metadata accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad metadata accept", http.StatusBadRequest)
+				return
+			}
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       testSource,
+				Kind:          providermanifestv1.KindPlugin,
+				Version:       testVersion,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   "./alpha-current.tar.gz",
+						SHA256: hex.EncodeToString(archiveSHA[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case archivePathURL:
+			archiveCount.Add(1)
+			_, _ = w.Write(archiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"apiVersion: " + config.APIVersionV3,
+		"plugins:",
+		"  alpha:",
+		"    source:",
+		"      url: " + srv.URL + metadataPath,
+		"      auth:",
+		"        token: test-token",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle()
+	if _, err := lc.InitAtPath(configPath); err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := metadataCount.Load(); got != 3 {
+		t.Fatalf("metadata request count = %d, want 3", got)
+	}
+	if got := archiveCount.Load(); got != 1 {
+		t.Fatalf("archive request count = %d, want 1", got)
+	}
+}
+
 func TestSourcePluginMetadataURLRejectsOversizedRemoteMetadata(t *testing.T) {
 	t.Parallel()
 

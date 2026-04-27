@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
@@ -35,6 +36,12 @@ const (
 	httpAuthorizationHeader           = "Authorization"
 	httpBearerAuthorizationPrefix     = "Bearer "
 )
+
+var providerReleaseFetchRetryDelays = []time.Duration{
+	200 * time.Millisecond,
+	500 * time.Millisecond,
+	1 * time.Second,
+}
 
 type gitHubReleaseLocation struct {
 	Repo  string
@@ -165,11 +172,9 @@ func fetchProviderReleaseMetadata(ctx context.Context, client *http.Client, meta
 	if client == nil {
 		client = http.DefaultClient
 	}
-	req, err := newAuthenticatedFetchRequest(ctx, resolvedMetadataLocation, token)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("create provider release metadata request: %w", err)
-	}
-	resp, err := client.Do(req)
+	resp, err := doProviderReleaseHTTPRequestWithRetry(ctx, client, func(ctx context.Context) (*http.Request, error) {
+		return newAuthenticatedFetchRequest(ctx, resolvedMetadataLocation, token)
+	})
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("fetch provider release metadata: %w", err)
 	}
@@ -189,6 +194,49 @@ func fetchProviderReleaseMetadata(ctx context.Context, client *http.Client, meta
 		return nil, "", nil, err
 	}
 	return metadata, resolvedMetadataLocation, gitHubReleaseAssets, nil
+}
+
+func doProviderReleaseHTTPRequestWithRetry(ctx context.Context, client *http.Client, newRequest func(context.Context) (*http.Request, error)) (*http.Response, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	var lastErr error
+	for attempt := 0; ; attempt++ {
+		req, err := newRequest(ctx)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.Do(req)
+		if err == nil && !isTransientProviderReleaseHTTPStatus(resp.StatusCode) {
+			return resp, nil
+		}
+		if err != nil {
+			lastErr = err
+		} else {
+			lastErr = nil
+		}
+		if attempt >= len(providerReleaseFetchRetryDelays) {
+			return resp, lastErr
+		}
+		if resp != nil && resp.Body != nil {
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+			_ = resp.Body.Close()
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		timer := time.NewTimer(providerReleaseFetchRetryDelays[attempt])
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func isTransientProviderReleaseHTTPStatus(status int) bool {
+	return status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
 }
 
 func newAuthenticatedFetchRequest(ctx context.Context, requestURL, token string) (*http.Request, error) {
@@ -256,15 +304,18 @@ func resolveGitHubReleaseAssetURL(ctx context.Context, client *http.Client, ref 
 		client = http.DefaultClient
 	}
 	endpoint := "https://api.github.com/repos/" + strings.TrimSpace(ref.Repo) + "/releases/tags/" + url.PathEscape(strings.TrimSpace(ref.Tag))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return "", nil, fmt.Errorf("create github release lookup request: %w", err)
-	}
-	req.Header.Set(httpAcceptHeader, httpAcceptGitHubAPI)
-	if token = strings.TrimSpace(token); token != "" {
-		req.Header.Set(httpAuthorizationHeader, httpBearerAuthorizationPrefix+token)
-	}
-	resp, err := client.Do(req)
+	token = strings.TrimSpace(token)
+	resp, err := doProviderReleaseHTTPRequestWithRetry(ctx, client, func(ctx context.Context) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set(httpAcceptHeader, httpAcceptGitHubAPI)
+		if token != "" {
+			req.Header.Set(httpAuthorizationHeader, httpBearerAuthorizationPrefix+token)
+		}
+		return req, nil
+	})
 	if err != nil {
 		return "", nil, fmt.Errorf("resolve github release %s@%s: %w", ref.Repo, ref.Tag, err)
 	}
