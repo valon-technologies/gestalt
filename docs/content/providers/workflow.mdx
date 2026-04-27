@@ -209,14 +209,16 @@ synthetic workflow workload.
         "cron": "0 */6 * * *",
         "timezone": "America/New_York",
         "target": {
-          "plugin": "github",
-          "operation": "issues.list",
-          "connection": "default",
-          "instance": "acme-org",
-          "input": {
-            "owner": "valon-technologies",
-            "repo": "gestalt",
-            "state": "open"
+          "plugin": {
+            "name": "github",
+            "operation": "issues.list",
+            "connection": "default",
+            "instance": "acme-org",
+            "input": {
+              "owner": "valon-technologies",
+              "repo": "gestalt",
+              "state": "open"
+            }
           }
         }
       }'
@@ -301,12 +303,14 @@ subject, not as a plugin-local or synthetic workflow workload.
           "subject": "item"
         },
         "target": {
-          "plugin": "slack",
-          "operation": "chat.postMessage",
-          "connection": "default",
-          "input": {
-            "channel": "C123",
-            "text": "Roadmap item updated"
+          "plugin": {
+            "name": "slack",
+            "operation": "chat.postMessage",
+            "connection": "default",
+            "input": {
+              "channel": "C123",
+              "text": "Roadmap item updated"
+            }
           }
         }
       }'

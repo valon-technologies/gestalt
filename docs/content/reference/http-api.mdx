@@ -64,6 +64,12 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | `GET` | `/api/v1/workflow/runs/{runID}` | Inspect one workflow run. |
 | `POST` | `/api/v1/workflow/runs/{runID}/cancel` | Cancel one workflow run. The request body may include an optional `reason`. |
 
+Schedule, event-trigger, and run responses return target plugin details under
+`target.plugin` as an object with `name`, `operation`, and optional
+`connection`, `instance`, and `input` fields. Schedule and trigger create/update
+requests use the same nested shape; legacy flat plugin request fields remain
+accepted during migration.
+
 ### Agents
 
 | Method | Path | Purpose |
@@ -173,11 +179,13 @@ curl -X POST http://localhost:8080/api/v1/workflow/schedules \
     "cron": "0 */6 * * *",
     "timezone": "America/New_York",
     "target": {
-      "plugin": "github",
-      "operation": "issues.list",
-      "input": {
-        "owner": "valon-technologies",
-        "repo": "gestalt"
+      "plugin": {
+        "name": "github",
+        "operation": "issues.list",
+        "input": {
+          "owner": "valon-technologies",
+          "repo": "gestalt"
+        }
       }
     }
   }'
@@ -193,11 +201,13 @@ curl -X POST http://localhost:8080/api/v1/workflow/event-triggers \
       "subject": "item"
     },
     "target": {
-      "plugin": "slack",
-      "operation": "chat.postMessage",
-      "input": {
-        "channel": "C123",
-        "text": "Roadmap item updated"
+      "plugin": {
+        "name": "slack",
+        "operation": "chat.postMessage",
+        "input": {
+          "channel": "C123",
+          "text": "Roadmap item updated"
+        }
       }
     }
   }'
