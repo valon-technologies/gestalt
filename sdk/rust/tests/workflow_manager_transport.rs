@@ -50,7 +50,6 @@ fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTarget {
             ..Default::default()
         }),
         agent: None,
-        ..Default::default()
     }
 }
 
