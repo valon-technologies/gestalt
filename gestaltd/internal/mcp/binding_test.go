@@ -141,7 +141,7 @@ func ctxWithWorkloadPrincipal(workloadID string) context.Context {
 	p := &principal.Principal{
 		Kind:      principal.KindWorkload,
 		SubjectID: principal.WorkloadSubjectID(workloadID),
-		Source:    principal.SourceWorkloadToken,
+		Source:    principal.SourceAPIToken,
 	}
 	return principal.WithPrincipal(context.Background(), p)
 }
@@ -1029,11 +1029,6 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: "gst_wld_triage-bot-token",
-			},
-		},
 		Policies: map[string]config.SubjectPolicyDef{
 			"clickhouse_policy": {
 				Members: []config.SubjectPolicyMemberDef{{
@@ -1746,11 +1741,6 @@ func TestNewServer_WorkloadCallToolDeniedReturnsErrorResult(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: "gst_wld_triage-bot-token",
-			},
-		},
 		Policies: map[string]config.SubjectPolicyDef{
 			"clickhouse_policy": {
 				Members: []config.SubjectPolicyMemberDef{{
@@ -1817,11 +1807,6 @@ func TestNewServer_WorkloadCallToolDeniedForUnboundSessionOnlyProvider(t *testin
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
 	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: "gst_wld_triage-bot-token",
-			},
-		},
 		Policies: map[string]config.SubjectPolicyDef{
 			"clickhouse_policy": {},
 		},
@@ -1911,11 +1896,6 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 	}
 
 	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: "gst_wld_triage-bot-token",
-			},
-		},
 		Policies: map[string]config.SubjectPolicyDef{
 			"clickhouse_policy": {
 				Members: []config.SubjectPolicyMemberDef{{
@@ -2029,11 +2009,6 @@ func TestNewServer_WorkloadCallToolUsesRequestedInstance(t *testing.T) {
 	}
 
 	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: "gst_wld_triage-bot-token",
-			},
-		},
 		Policies: map[string]config.SubjectPolicyDef{
 			"sampledb_policy": {
 				Members: []config.SubjectPolicyMemberDef{{

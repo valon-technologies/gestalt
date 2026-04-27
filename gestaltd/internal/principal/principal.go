@@ -14,7 +14,6 @@ const (
 	SourceUnknown Source = iota
 	SourceSession
 	SourceAPIToken
-	SourceWorkloadToken
 	SourceEnv
 )
 
@@ -45,8 +44,6 @@ func (s Source) String() string {
 		return "session"
 	case SourceAPIToken:
 		return "api_token"
-	case SourceWorkloadToken:
-		return "workload_token"
 	case SourceEnv:
 		return "env"
 	default:
@@ -60,8 +57,6 @@ func ParseSource(value string) Source {
 		return SourceSession
 	case SourceAPIToken.String():
 		return SourceAPIToken
-	case SourceWorkloadToken.String():
-		return SourceWorkloadToken
 	case SourceEnv.String():
 		return SourceEnv
 	default:
@@ -98,6 +93,14 @@ func WorkloadSubjectID(workloadID string) string {
 		return ""
 	}
 	return string(KindWorkload) + ":" + workloadID
+}
+
+func KindFromSubjectID(subjectID string) Kind {
+	kind, _, ok := core.ParseSubjectID(subjectID)
+	if !ok {
+		return ""
+	}
+	return Kind(kind)
 }
 
 func IsSystemSubjectID(subjectID string) bool {
@@ -333,9 +336,7 @@ func Canonicalize(p *Principal) *Principal {
 		}
 	}
 	if p.Kind == "" {
-		if strings.HasPrefix(p.SubjectID, string(KindWorkload)+":") {
-			p.Kind = KindWorkload
-		}
+		p.Kind = KindFromSubjectID(p.SubjectID)
 	}
 	if p.SubjectID == "" && p.UserID != "" {
 		p.SubjectID = UserSubjectID(p.UserID)

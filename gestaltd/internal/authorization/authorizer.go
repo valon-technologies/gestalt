@@ -2,7 +2,6 @@ package authorization
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -13,11 +12,6 @@ import (
 const (
 	defaultSubjectRole = "viewer"
 )
-
-type Workload struct {
-	ID          string
-	DisplayName string
-}
 
 type AccessContext struct {
 	Policy string
@@ -36,14 +30,12 @@ type StaticSubjectMember struct {
 }
 
 type Authorizer struct {
-	workloadsByHash  map[string]*Workload
 	policies         map[string]*SubjectPolicy
 	providerPolicies map[string]string
 }
 
 func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry) (*Authorizer, error) {
 	a := &Authorizer{
-		workloadsByHash:  map[string]*Workload{},
 		policies:         map[string]*SubjectPolicy{},
 		providerPolicies: map[string]string{},
 	}
@@ -71,31 +63,6 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 		}
 	}
 
-	if len(cfg.Workloads) == 0 {
-		return a, nil
-	}
-
-	for workloadID, def := range cfg.Workloads {
-		token := strings.TrimSpace(def.Token)
-		if token == "" {
-			return nil, fmt.Errorf("authorization validation: workload %q token is required", workloadID)
-		}
-		if !strings.HasPrefix(token, "gst_wld_") {
-			return nil, fmt.Errorf("authorization validation: workload %q token must use gst_wld_ prefix", workloadID)
-		}
-		tokenHash := principal.HashToken(token)
-		if _, exists := a.workloadsByHash[tokenHash]; exists {
-			return nil, fmt.Errorf("authorization validation: workload %q token duplicates another workload", workloadID)
-		}
-
-		workload := &Workload{
-			ID:          workloadID,
-			DisplayName: def.DisplayName,
-		}
-
-		a.workloadsByHash[tokenHash] = workload
-	}
-
 	return a, nil
 }
 
@@ -111,17 +78,6 @@ func (a *Authorizer) Close() error {
 func (a *Authorizer) ReloadAuthorizationState(ctx context.Context) error {
 	_ = ctx
 	return nil
-}
-
-func (a *Authorizer) ResolveWorkloadToken(token string) (*principal.ResolvedWorkload, bool) {
-	if a == nil {
-		return nil, false
-	}
-	workload, ok := a.workloadsByHash[principal.HashToken(token)]
-	if !ok || workload == nil {
-		return nil, false
-	}
-	return &principal.ResolvedWorkload{ID: workload.ID, DisplayName: workload.DisplayName}, true
 }
 
 func (a *Authorizer) AllowProvider(ctx context.Context, p *principal.Principal, provider string) bool {

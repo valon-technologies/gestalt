@@ -230,6 +230,15 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 			wantAuthSource: "session",
 		},
 		{
+			name:           "retired_workload_bearer",
+			method:         http.MethodGet,
+			path:           "/api/v1/integrations",
+			authHeader:     "Bearer gst_wld_retired-token",
+			wantSource:     "http",
+			wantError:      "invalid token",
+			wantAuthSource: principal.AuthSourceRetiredWorkloadToken,
+		},
+		{
 			name:         "missing_plugin_route_auth_uses_named_provider_in_audit",
 			method:       http.MethodGet,
 			path:         "/api/v1/locked/ping",
@@ -346,7 +355,7 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	var auditBuf bytes.Buffer
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 
-	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	workloadToken, workloadTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
@@ -366,19 +375,14 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, stub)
-	authz, err := authorization.New(config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: workloadToken,
-			},
-		},
-	}, nil)
+	authz, err := authorization.New(config.AuthorizationConfig{}, nil)
 
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
 
 	svc := coretesting.NewStubServices(t)
+	seedSubjectAPIToken(t, svc, workloadTokenHash, principal.WorkloadSubjectID("triage-bot"), "triage-bot")
 	if err := svc.ExternalCredentials.PutCredential(t.Context(), &core.ExternalCredential{
 		ID:          "identity-audit-token",
 		SubjectID:   principal.WorkloadSubjectID("triage-bot"),

@@ -196,13 +196,6 @@ func (a *ProviderBackedAuthorizer) pollLoop(ctx context.Context, done chan struc
 	}
 }
 
-func (a *ProviderBackedAuthorizer) ResolveWorkloadToken(token string) (*principal.ResolvedWorkload, bool) {
-	if a == nil {
-		return nil, false
-	}
-	return a.base.ResolveWorkloadToken(token)
-}
-
 func (a *ProviderBackedAuthorizer) AllowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
 	if a == nil {
 		return true

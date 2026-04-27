@@ -178,8 +178,6 @@ func sourceFromString(raw string) principal.Source {
 		return principal.SourceSession
 	case principal.SourceAPIToken.String():
 		return principal.SourceAPIToken
-	case principal.SourceWorkloadToken.String():
-		return principal.SourceWorkloadToken
 	case principal.SourceEnv.String():
 		return principal.SourceEnv
 	default:

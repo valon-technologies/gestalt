@@ -35,9 +35,8 @@ Requests are authenticated in the following order:
 
 1. Check for a `session_token` cookie
 2. Check for an `Authorization: Bearer` header with a `gst_api_` prefix (API token lookup via SHA-256 hash)
-3. Check for an `Authorization: Bearer` header with a `gst_wld_` prefix (workload token lookup)
-4. Check for an `Authorization: Bearer` header with a provider-issued token
-5. If no valid credentials are found, return 401
+3. Check for an `Authorization: Bearer` header with a provider-issued token
+4. If no valid credentials are found, return 401
 
 ## Security headers
 

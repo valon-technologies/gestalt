@@ -6135,7 +6135,7 @@ func TestValidate(t *testing.T) {
 		}
 	})
 
-	t.Run("workflow managed workload tokens stay unique across similar plugin names", func(t *testing.T) {
+	t.Run("workflow managed workload subjects stay unique across similar plugin names", func(t *testing.T) {
 		t.Parallel()
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -6852,42 +6852,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("resolves config secret ref in workload tokens", func(t *testing.T) {
-		t.Parallel()
-
-		factories := validFactories()
-		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
-			return &coretesting.StubSecretManager{
-				Secrets: map[string]string{"workload-token": "gst_wld_resolved-workload-token"},
-			}, nil
-		}
-		factories.Builtins = []core.Provider{
-			&coretesting.StubIntegration{N: "weather", ConnMode: core.ConnectionModeNone},
-		}
-
-		cfg := validConfig()
-		cfg.Authorization = config.AuthorizationConfig{
-			Workloads: map[string]config.WorkloadDef{
-				"triage-bot": {
-					Token: transportSecretRef("workload-token"),
-				},
-			},
-		}
-
-		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-		if err != nil {
-			t.Fatalf("Bootstrap: %v", err)
-		}
-		<-result.ProvidersReady
-
-		if result.Authorizer == nil {
-			t.Fatal("Authorizer is nil")
-		}
-		if _, ok := result.Authorizer.ResolveWorkloadToken("gst_wld_resolved-workload-token"); !ok {
-			t.Fatal("expected resolved workload token to authenticate")
-		}
-	})
-
 	t.Run("authorization provider backs subject access decisions", func(t *testing.T) {
 		t.Parallel()
 
@@ -7086,11 +7050,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 						SubjectID: principal.WorkloadSubjectID("triage-bot"),
 						Role:      "viewer",
 					}},
-				},
-			},
-			Workloads: map[string]config.WorkloadDef{
-				"triage-bot": {
-					Token: "gst_wld_triage-bot",
 				},
 			},
 		}

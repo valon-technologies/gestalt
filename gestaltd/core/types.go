@@ -50,7 +50,8 @@ type APIToken struct {
 }
 
 const (
-	APITokenOwnerKindUser = "user"
+	APITokenOwnerKindUser    = "user"
+	APITokenOwnerKindSubject = "subject"
 )
 
 type UserIdentity struct {

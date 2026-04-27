@@ -749,6 +749,66 @@ func TestAPITokenService(t *testing.T) {
 		}
 	})
 
+	t.Run("StoreAndValidate_subject_owner_defaults_credential_subject", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestServices(t)
+		ctx := context.Background()
+
+		if err := svc.APITokens.StoreAPIToken(ctx, &core.APIToken{
+			ID:          "api-subject",
+			OwnerKind:   core.APITokenOwnerKindSubject,
+			OwnerID:     principal.WorkloadSubjectID("triage-bot"),
+			Name:        "triage-bot",
+			HashedToken: "sha256:subject",
+		}); err != nil {
+			t.Fatalf("StoreAPIToken: %v", err)
+		}
+
+		got, err := svc.APITokens.ValidateAPIToken(ctx, "sha256:subject")
+		if err != nil {
+			t.Fatalf("ValidateAPIToken: %v", err)
+		}
+		if got.OwnerKind != core.APITokenOwnerKindSubject || got.OwnerID != principal.WorkloadSubjectID("triage-bot") {
+			t.Fatalf("owner = (%q, %q), want (%q, %q)", got.OwnerKind, got.OwnerID, core.APITokenOwnerKindSubject, principal.WorkloadSubjectID("triage-bot"))
+		}
+		if got.CredentialSubjectID != principal.WorkloadSubjectID("triage-bot") {
+			t.Fatalf("CredentialSubjectID = %q, want owner subject", got.CredentialSubjectID)
+		}
+	})
+
+	t.Run("StoreAPIToken_subject_owner_rejects_user_system_and_mismatched_credentials", func(t *testing.T) {
+		t.Parallel()
+
+		for _, tc := range []struct {
+			name                string
+			ownerID             string
+			credentialSubjectID string
+		}{
+			{name: "user subject", ownerID: principal.UserSubjectID("user-123")},
+			{name: "system subject", ownerID: "system:config"},
+			{name: "mismatched credential subject", ownerID: principal.WorkloadSubjectID("triage-bot"), credentialSubjectID: principal.WorkloadSubjectID("other-bot")},
+			{name: "borrowed user credential subject", ownerID: principal.WorkloadSubjectID("triage-bot"), credentialSubjectID: principal.UserSubjectID("user-123")},
+		} {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				svc := newTestServices(t)
+
+				err := svc.APITokens.StoreAPIToken(context.Background(), &core.APIToken{
+					ID:                  "api-invalid",
+					OwnerKind:           core.APITokenOwnerKindSubject,
+					OwnerID:             tc.ownerID,
+					CredentialSubjectID: tc.credentialSubjectID,
+					Name:                "invalid",
+					HashedToken:         "sha256:invalid",
+				})
+				if err == nil {
+					t.Fatal("StoreAPIToken succeeded, want error")
+				}
+			})
+		}
+	})
+
 	t.Run("ValidateAPIToken_not_found", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)

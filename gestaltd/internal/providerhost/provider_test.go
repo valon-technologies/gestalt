@@ -225,10 +225,10 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 				DisplayName: "Triage Bot",
 				Kind:        principal.KindWorkload,
-				Source:      principal.SourceWorkloadToken,
+				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|workload:triage-bot|workload|Triage Bot|false|workload_token|user|workload:triage-bot|roadmap|admin",
-			wantSessionCatalog: "token-123|workload:triage-bot|workload|Triage Bot|false|workload_token|user|roadmap|admin",
+			wantExecuteBody:    "echo|secret-token|hi|acme|workload:triage-bot|workload|Triage Bot|false|api_token|user|workload:triage-bot|roadmap|admin",
+			wantSessionCatalog: "token-123|workload:triage-bot|workload|Triage Bot|false|api_token|user|roadmap|admin",
 		},
 	}
 
@@ -321,7 +321,7 @@ func TestRequestContextProto_PreservesWorkloadDisplayName(t *testing.T) {
 		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 		DisplayName: "Triage Bot",
 		Kind:        principal.KindWorkload,
-		Source:      principal.SourceWorkloadToken,
+		Source:      principal.SourceAPIToken,
 	})
 	ctx = invocation.WithAccessContext(ctx, invocation.AccessContext{
 		Policy: "roadmap",
@@ -377,7 +377,7 @@ func TestPrincipalFromProto_WorkloadDisplayNameDoesNotCreateIdentity(t *testing.
 		Id:          principal.WorkloadSubjectID("triage-bot"),
 		Kind:        string(principal.KindWorkload),
 		DisplayName: "Triage Bot",
-		AuthSource:  principal.SourceWorkloadToken.String(),
+		AuthSource:  principal.SourceAPIToken.String(),
 	})
 	if p == nil {
 		t.Fatal("expected principal")
