@@ -174,11 +174,11 @@ func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req 
 	if err != nil {
 		return nil, err
 	}
-	candidates, err := m.searchToolCandidates(ctx, p, refs, "")
+	candidates, err := m.searchToolCandidates(ctx, p, refs, "", false)
 	if err != nil {
 		return nil, err
 	}
-	tools, err = m.resolveAgentToolCandidates(ctx, p, candidates, 0)
+	tools, err = m.resolveAgentToolCandidates(ctx, p, candidates, 0, false)
 	if err != nil {
 		return nil, err
 	}
@@ -882,7 +882,8 @@ func (m *Manager) searchTools(ctx context.Context, p *principal.Principal, req c
 	if err != nil {
 		return nil, err
 	}
-	candidates, err := m.searchToolCandidates(ctx, p, refs, req.Query)
+	skipUnavailable := len(refs) == 0
+	candidates, err := m.searchToolCandidates(ctx, p, refs, req.Query, skipUnavailable)
 	if err != nil {
 		return nil, err
 	}
@@ -893,14 +894,14 @@ func (m *Manager) searchTools(ctx context.Context, p *principal.Principal, req c
 	if maxResults > 20 {
 		maxResults = 20
 	}
-	tools, err := m.resolveAgentToolCandidates(ctx, p, candidates, maxResults)
+	tools, err := m.resolveAgentToolCandidates(ctx, p, candidates, maxResults, skipUnavailable)
 	if err != nil {
 		return nil, err
 	}
 	return &coreagent.SearchToolsResponse{Tools: tools}, nil
 }
 
-func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.Principal, candidates []agentToolSearchCandidate, maxResults int) ([]coreagent.Tool, error) {
+func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.Principal, candidates []agentToolSearchCandidate, maxResults int, skipUnavailable bool) ([]coreagent.Tool, error) {
 	tools := make([]coreagent.Tool, 0, len(candidates))
 	if maxResults > 0 {
 		tools = make([]coreagent.Tool, 0, min(maxResults, len(candidates)))
@@ -913,6 +914,9 @@ func (m *Manager) resolveAgentToolCandidates(ctx context.Context, p *principal.P
 		tool, err := m.resolveTool(ctx, p, candidate.ref)
 		if err != nil {
 			if errors.Is(err, invocation.ErrAuthorizationDenied) || errors.Is(err, invocation.ErrProviderNotFound) || errors.Is(err, invocation.ErrOperationNotFound) {
+				continue
+			}
+			if skipUnavailable && agentToolSearchUnavailable(err) {
 				continue
 			}
 			return nil, err
@@ -1061,7 +1065,7 @@ type agentToolSearchCandidate struct {
 	score int
 }
 
-func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef, query string) ([]agentToolSearchCandidate, error) {
+func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef, query string, skipUnavailable bool) ([]agentToolSearchCandidate, error) {
 	scope := newAgentToolSearchScope(refs)
 	providerNames := scope.providerNames()
 	if len(providerNames) == 0 {
@@ -1090,6 +1094,9 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 		for _, searchRef := range scope.refsForProvider(pluginName) {
 			cat, err := m.catalogForAgentToolSearch(ctx, p, prov, pluginName, searchRef)
 			if err != nil {
+				if skipUnavailable && agentToolSearchUnavailable(err) {
+					continue
+				}
 				return nil, err
 			}
 			if cat == nil {
@@ -1135,6 +1142,14 @@ func (m *Manager) searchToolCandidates(ctx context.Context, p *principal.Princip
 		return candidates[i].ref.Operation < candidates[j].ref.Operation
 	})
 	return candidates, nil
+}
+
+func agentToolSearchUnavailable(err error) bool {
+	return errors.Is(err, invocation.ErrNoCredential) ||
+		errors.Is(err, invocation.ErrAmbiguousInstance) ||
+		errors.Is(err, invocation.ErrReconnectRequired) ||
+		errors.Is(err, invocation.ErrNotAuthenticated) ||
+		errors.Is(err, invocation.ErrScopeDenied)
 }
 
 func (m *Manager) catalogForAgentToolSearch(ctx context.Context, p *principal.Principal, prov core.Provider, pluginName string, ref coreagent.ToolRef) (*catalog.Catalog, error) {
