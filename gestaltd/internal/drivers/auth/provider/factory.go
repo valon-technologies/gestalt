@@ -39,15 +39,15 @@ var Factory bootstrap.AuthFactory = func(node yaml.Node, deps bootstrap.Deps) (c
 		callbackURL = deps.BaseURL + config.AuthCallbackPath
 	}
 	return providerhost.NewExecutableAuthenticationProvider(context.Background(), providerhost.AuthenticationExecConfig{
-		Command:      cfg.Command,
-		Args:         cfg.Args,
-		Env:          cfg.Env,
-		Config:       cfg.Config,
-		AllowedHosts: cfg.AllowedHosts,
-		HostBinary:   cfg.HostBinary,
-		Cleanup:      prepared.Cleanup,
-		Name:         cfg.Name,
-		CallbackURL:  callbackURL,
-		SessionKey:   deps.EncryptionKey,
+		Command:     cfg.Command,
+		Args:        cfg.Args,
+		Env:         cfg.Env,
+		Config:      cfg.Config,
+		Egress:      cfg.EgressPolicy(""),
+		HostBinary:  cfg.HostBinary,
+		Cleanup:     prepared.Cleanup,
+		Name:        cfg.Name,
+		CallbackURL: callbackURL,
+		SessionKey:  deps.EncryptionKey,
 	})
 }

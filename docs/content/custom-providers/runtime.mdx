@@ -59,7 +59,8 @@ runtime:
         pool: default
 ```
 
-Plugins then opt into that runtime with `plugins.<name>.runtime`.
+Plugins then opt into that runtime with `plugins.<name>.execution.mode: hosted`
+and `plugins.<name>.execution.runtime`.
 
 ## Provider interface
 

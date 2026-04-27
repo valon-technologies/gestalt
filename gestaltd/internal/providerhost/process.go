@@ -34,35 +34,27 @@ const (
 )
 
 type ProcessConfig struct {
-	Command string
-	Args    []string
-	Env     map[string]string
-	Egress  egress.Policy
-	// Deprecated: use Egress.AllowedHosts.
-	AllowedHosts []string
-	// Deprecated: use Egress.DefaultAction.
-	DefaultAction egress.PolicyAction
-	HostBinary    string
-	Cleanup       func()
-	HostServices  []HostService
-	SocketDir     string
-	ProviderName  string
-	Telemetry     metricutil.TelemetryProviders
-	Stdout        io.Writer
-	Stderr        io.Writer
+	Command      string
+	Args         []string
+	Env          map[string]string
+	Egress       egress.Policy
+	HostBinary   string
+	Cleanup      func()
+	HostServices []HostService
+	SocketDir    string
+	ProviderName string
+	Telemetry    metricutil.TelemetryProviders
+	Stdout       io.Writer
+	Stderr       io.Writer
 }
 
 type ExecConfig struct {
-	Command    string
-	Args       []string
-	Env        map[string]string
-	StaticSpec StaticProviderSpec
-	Config     map[string]any
-	Egress     egress.Policy
-	// Deprecated: use Egress.AllowedHosts.
-	AllowedHosts []string
-	// Deprecated: use Egress.DefaultAction.
-	DefaultAction    egress.PolicyAction
+	Command          string
+	Args             []string
+	Env              map[string]string
+	StaticSpec       StaticProviderSpec
+	Config           map[string]any
+	Egress           egress.Policy
 	HostBinary       string
 	Cleanup          func()
 	HostServices     []HostService
@@ -127,22 +119,16 @@ func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, 
 
 func (c ExecConfig) processConfig() ProcessConfig {
 	return ProcessConfig{
-		Command:       c.Command,
-		Args:          c.Args,
-		Env:           c.Env,
-		Egress:        c.egressPolicy(),
-		AllowedHosts:  c.AllowedHosts,
-		DefaultAction: c.DefaultAction,
-		HostBinary:    c.HostBinary,
-		Cleanup:       c.Cleanup,
-		HostServices:  c.HostServices,
-		ProviderName:  firstNonBlank(c.ProviderName, c.StaticSpec.Name),
-		Telemetry:     c.Telemetry,
+		Command:      c.Command,
+		Args:         c.Args,
+		Env:          c.Env,
+		Egress:       cloneEgressPolicy(c.Egress),
+		HostBinary:   c.HostBinary,
+		Cleanup:      c.Cleanup,
+		HostServices: c.HostServices,
+		ProviderName: firstNonBlank(c.ProviderName, c.StaticSpec.Name),
+		Telemetry:    c.Telemetry,
 	}
-}
-
-func (c ExecConfig) egressPolicy() egress.Policy {
-	return egressPolicyFromFields(c.Egress, c.AllowedHosts, c.DefaultAction)
 }
 
 func StartPluginProcess(ctx context.Context, cfg ProcessConfig) (*PluginProcess, error) {
@@ -154,19 +140,13 @@ func StartPluginProcess(ctx context.Context, cfg ProcessConfig) (*PluginProcess,
 }
 
 func (c ProcessConfig) egressPolicy() egress.Policy {
-	return egressPolicyFromFields(c.Egress, c.AllowedHosts, c.DefaultAction)
+	return cloneEgressPolicy(c.Egress)
 }
 
-func egressPolicyFromFields(preferred egress.Policy, allowedHosts []string, defaultAction egress.PolicyAction) egress.Policy {
-	if len(preferred.AllowedHosts) > 0 || preferred.DefaultAction != "" {
-		return egress.Policy{
-			AllowedHosts:  append([]string(nil), preferred.AllowedHosts...),
-			DefaultAction: preferred.DefaultAction,
-		}
-	}
+func cloneEgressPolicy(policy egress.Policy) egress.Policy {
 	return egress.Policy{
-		AllowedHosts:  append([]string(nil), allowedHosts...),
-		DefaultAction: defaultAction,
+		AllowedHosts:  append([]string(nil), policy.AllowedHosts...),
+		DefaultAction: policy.DefaultAction,
 	}
 }
 

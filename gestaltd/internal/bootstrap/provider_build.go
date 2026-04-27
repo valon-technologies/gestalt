@@ -909,9 +909,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
 			DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
 		},
-		AllowedHosts:  egressPlan.RuntimeAllowedHosts,
-		DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
-		HostBinary:    entry.HostBinary,
+		HostBinary: entry.HostBinary,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start hosted plugin: %w", err)
@@ -1139,7 +1137,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	})
 
 	startEnv := maps.Clone(cfg.Env)
-	agentAllowedHosts := slices.Clone(cfg.AllowedHosts)
+	agentAllowedHosts := cfg.EgressPolicy("").AllowedHosts
 	if len(agentAllowedHosts) == 0 {
 		agentAllowedHosts = slices.Clone(launch.allowedHosts)
 	}
@@ -1193,9 +1191,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
 			DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
 		},
-		AllowedHosts:  egressPlan.RuntimeAllowedHosts,
-		DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
-		HostBinary:    cfg.HostBinary,
+		HostBinary: cfg.HostBinary,
 	})
 	recordHostedAgentRuntimeStartPhase(ctx, name, "plugin_start", phaseStarted, err)
 	if err != nil {

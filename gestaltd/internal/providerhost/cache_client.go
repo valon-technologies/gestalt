@@ -8,19 +8,20 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type CacheExecConfig struct {
-	Command      string
-	Args         []string
-	Env          map[string]string
-	Config       map[string]any
-	AllowedHosts []string
-	HostBinary   string
-	Cleanup      func()
-	Name         string
+	Command    string
+	Args       []string
+	Env        map[string]string
+	Config     map[string]any
+	Egress     egress.Policy
+	HostBinary string
+	Cleanup    func()
+	Name       string
 }
 
 type remoteCache struct {
@@ -35,7 +36,7 @@ func NewExecutableCache(ctx context.Context, cfg CacheExecConfig) (corecache.Cac
 		Args:         cfg.Args,
 		Env:          cfg.Env,
 		Config:       cfg.Config,
-		AllowedHosts: cfg.AllowedHosts,
+		Egress:       cloneEgressPolicy(cfg.Egress),
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
 		ProviderName: cfg.Name,

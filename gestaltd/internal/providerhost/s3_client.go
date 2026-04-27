@@ -8,6 +8,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -15,14 +16,14 @@ import (
 )
 
 type S3ExecConfig struct {
-	Command      string
-	Args         []string
-	Env          map[string]string
-	Config       map[string]any
-	AllowedHosts []string
-	HostBinary   string
-	Cleanup      func()
-	Name         string
+	Command    string
+	Args       []string
+	Env        map[string]string
+	Config     map[string]any
+	Egress     egress.Policy
+	HostBinary string
+	Cleanup    func()
+	Name       string
 }
 
 type remoteS3 struct {
@@ -37,7 +38,7 @@ func NewExecutableS3(ctx context.Context, cfg S3ExecConfig) (s3store.Client, err
 		Args:         cfg.Args,
 		Env:          cfg.Env,
 		Config:       cfg.Config,
-		AllowedHosts: cfg.AllowedHosts,
+		Egress:       cloneEgressPolicy(cfg.Egress),
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
 		ProviderName: cfg.Name,

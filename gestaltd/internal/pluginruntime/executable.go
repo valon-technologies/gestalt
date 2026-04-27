@@ -10,6 +10,7 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/runtimelogs"
@@ -25,7 +26,7 @@ type ExecutableConfig struct {
 	Args         []string
 	Env          map[string]string
 	Config       map[string]any
-	AllowedHosts []string
+	Egress       egress.Policy
 	HostBinary   string
 	HostServices []providerhost.HostService
 	Telemetry    metricutil.TelemetryProviders
@@ -49,7 +50,7 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,
-		AllowedHosts: cfg.AllowedHosts,
+		Egress:       cloneRuntimeEgressPolicy(cfg.Egress),
 		HostBinary:   cfg.HostBinary,
 		HostServices: cfg.HostServices,
 		ProviderName: cfg.Name,
@@ -74,6 +75,13 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 		sessionLogs: cfg.SessionLogs,
 		sessions:    make(map[string]*Session),
 	}, nil
+}
+
+func cloneRuntimeEgressPolicy(policy egress.Policy) egress.Policy {
+	return egress.Policy{
+		AllowedHosts:  append([]string(nil), policy.AllowedHosts...),
+		DefaultAction: policy.DefaultAction,
+	}
 }
 
 func (p *executableProvider) Support(ctx context.Context) (Support, error) {
@@ -227,7 +235,6 @@ func (p *executableProvider) BindHostService(ctx context.Context, req BindHostSe
 }
 
 func (p *executableProvider) StartPlugin(ctx context.Context, req StartPluginRequest) (*HostedPlugin, error) {
-	egressPolicy := req.EgressPolicy()
 	resp, err := p.runtime.StartPlugin(ctx, &proto.StartHostedPluginRequest{
 		SessionId:     req.SessionID,
 		PluginName:    req.PluginName,
@@ -235,8 +242,8 @@ func (p *executableProvider) StartPlugin(ctx context.Context, req StartPluginReq
 		Args:          append([]string(nil), req.Args...),
 		Env:           cloneStringMap(req.Env),
 		BundleDir:     req.BundleDir,
-		AllowedHosts:  append([]string(nil), egressPolicy.AllowedHosts...),
-		DefaultAction: string(egressPolicy.DefaultAction),
+		AllowedHosts:  append([]string(nil), req.Egress.AllowedHosts...),
+		DefaultAction: string(req.Egress.DefaultAction),
 		HostBinary:    req.HostBinary,
 	})
 	if err != nil {

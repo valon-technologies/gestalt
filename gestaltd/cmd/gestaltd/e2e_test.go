@@ -203,7 +203,7 @@ func TestE2EValidateAcceptsCanonicalConfigShapes(t *testing.T) {
   providers:
     indexeddb: inmem
   runtime:
-    provider: hosted
+    defaultHostedProvider: hosted
 providers:
   indexeddb:
     inmem:
@@ -229,16 +229,18 @@ providers:
       indexeddb:
         provider: inmem
         db: agent_state
-      runtime:
-        provider: hosted
-        image: ghcr.io/example/agent:latest
-        pool:
-          minReadyInstances: 1
-          maxReadyInstances: 2
-          startupTimeout: 5m
-          healthCheckInterval: 30s
-          restartPolicy: always
-          drainTimeout: 2m
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          image: ghcr.io/example/agent:latest
+          pool:
+            minReadyInstances: 1
+            maxReadyInstances: 2
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: always
+            drainTimeout: 2m
 runtime:
   providers:
     hosted:

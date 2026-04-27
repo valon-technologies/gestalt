@@ -292,14 +292,13 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 		}})
 	}
 
-	egressPolicy := req.EgressPolicy()
 	process, err := providerhost.StartPluginProcess(ctx, providerhost.ProcessConfig{
 		Command: req.Command,
 		Args:    req.Args,
 		Env:     env,
 		Egress: egress.Policy{
-			AllowedHosts:  append([]string(nil), egressPolicy.AllowedHosts...),
-			DefaultAction: egress.PolicyAction(egressPolicy.DefaultAction),
+			AllowedHosts:  append([]string(nil), req.Egress.AllowedHosts...),
+			DefaultAction: egress.PolicyAction(req.Egress.DefaultAction),
 		},
 		HostBinary:   req.HostBinary,
 		SocketDir:    rootDir,

@@ -29,13 +29,13 @@ var Factory bootstrap.S3Factory = func(node yaml.Node) (s3store.Client, error) {
 	cfg = prepared.YAMLConfig
 
 	return providerhost.NewExecutableS3(context.Background(), providerhost.S3ExecConfig{
-		Command:      cfg.Command,
-		Args:         cfg.Args,
-		Env:          cfg.Env,
-		Config:       cfg.Config,
-		AllowedHosts: cfg.AllowedHosts,
-		HostBinary:   cfg.HostBinary,
-		Cleanup:      prepared.Cleanup,
-		Name:         cfg.Name,
+		Command:    cfg.Command,
+		Args:       cfg.Args,
+		Env:        cfg.Env,
+		Config:     cfg.Config,
+		Egress:     cfg.EgressPolicy(""),
+		HostBinary: cfg.HostBinary,
+		Cleanup:    prepared.Cleanup,
+		Name:       cfg.Name,
 	})
 }

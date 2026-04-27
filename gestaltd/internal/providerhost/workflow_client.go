@@ -11,16 +11,15 @@ import (
 )
 
 type WorkflowExecConfig struct {
-	Command       string
-	Args          []string
-	Env           map[string]string
-	Config        map[string]any
-	AllowedHosts  []string
-	DefaultAction egress.PolicyAction
-	HostBinary    string
-	Cleanup       func()
-	HostServices  []HostService
-	Name          string
+	Command      string
+	Args         []string
+	Env          map[string]string
+	Config       map[string]any
+	Egress       egress.Policy
+	HostBinary   string
+	Cleanup      func()
+	HostServices []HostService
+	Name         string
 }
 
 var startWorkflowProviderProcess = startProviderProcess
@@ -33,16 +32,15 @@ type remoteWorkflow struct {
 
 func NewExecutableWorkflow(ctx context.Context, cfg WorkflowExecConfig) (coreworkflow.Provider, error) {
 	execCfg := ExecConfig{
-		Command:       cfg.Command,
-		Args:          cfg.Args,
-		Env:           cfg.Env,
-		Config:        cfg.Config,
-		AllowedHosts:  cfg.AllowedHosts,
-		DefaultAction: cfg.DefaultAction,
-		HostBinary:    cfg.HostBinary,
-		Cleanup:       cfg.Cleanup,
-		HostServices:  cfg.HostServices,
-		ProviderName:  cfg.Name,
+		Command:      cfg.Command,
+		Args:         cfg.Args,
+		Env:          cfg.Env,
+		Config:       cfg.Config,
+		Egress:       cloneEgressPolicy(cfg.Egress),
+		HostBinary:   cfg.HostBinary,
+		Cleanup:      cfg.Cleanup,
+		HostServices: cfg.HostServices,
+		ProviderName: cfg.Name,
 	}
 	proc, err := startWorkflowProviderProcess(ctx, execCfg.processConfig())
 	if err != nil {

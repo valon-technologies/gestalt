@@ -12,6 +12,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/session"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,16 +27,16 @@ type authenticationRPCClient interface {
 }
 
 type AuthenticationExecConfig struct {
-	Command      string
-	Args         []string
-	Env          map[string]string
-	Config       map[string]any
-	AllowedHosts []string
-	HostBinary   string
-	Cleanup      func()
-	Name         string
-	CallbackURL  string
-	SessionKey   []byte
+	Command     string
+	Args        []string
+	Env         map[string]string
+	Config      map[string]any
+	Egress      egress.Policy
+	HostBinary  string
+	Cleanup     func()
+	Name        string
+	CallbackURL string
+	SessionKey  []byte
 }
 
 const defaultSessionTokenTTL = 24 * time.Hour
@@ -58,7 +59,7 @@ func NewExecutableAuthenticationProvider(ctx context.Context, cfg Authentication
 		Args:         cfg.Args,
 		Env:          cfg.Env,
 		Config:       cfg.Config,
-		AllowedHosts: cfg.AllowedHosts,
+		Egress:       cloneEgressPolicy(cfg.Egress),
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
 		ProviderName: cfg.Name,

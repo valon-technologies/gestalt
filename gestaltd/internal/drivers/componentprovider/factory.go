@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"gopkg.in/yaml.v3"
 )
@@ -16,10 +17,14 @@ type YAMLConfig struct {
 	Command      string            `yaml:"command"`
 	Args         []string          `yaml:"args"`
 	Env          map[string]string `yaml:"env"`
-	AllowedHosts []string          `yaml:"allowedHosts"`
+	Egress       *YAMLEgressConfig `yaml:"egress,omitempty"`
 	HostBinary   string            `yaml:"hostBinary"`
 	ManifestPath string            `yaml:"manifestPath"`
 	Config       map[string]any    `yaml:"config"`
+}
+
+type YAMLEgressConfig struct {
+	AllowedHosts []string `yaml:"allowedHosts,omitempty"`
 }
 
 type PreparedConfig struct {
@@ -40,6 +45,16 @@ func DecodeYAMLConfig(node yaml.Node, subject string) (YAMLConfig, error) {
 		return YAMLConfig{}, fmt.Errorf("%s: parsing config: %w", subject, err)
 	}
 	return cfg, nil
+}
+
+func (c YAMLConfig) EgressPolicy(defaultAction egress.PolicyAction) egress.Policy {
+	if c.Egress == nil {
+		return egress.Policy{DefaultAction: defaultAction}
+	}
+	return egress.Policy{
+		AllowedHosts:  append([]string(nil), c.Egress.AllowedHosts...),
+		DefaultAction: defaultAction,
+	}
 }
 
 func PrepareExecution(params PrepareParams) (PreparedConfig, error) {

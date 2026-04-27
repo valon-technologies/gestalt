@@ -8,20 +8,21 @@ import (
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type IndexedDBExecConfig struct {
-	Command      string
-	Args         []string
-	Env          map[string]string
-	Config       map[string]any
-	AllowedHosts []string
-	HostBinary   string
-	Cleanup      func()
-	Name         string
+	Command    string
+	Args       []string
+	Env        map[string]string
+	Config     map[string]any
+	Egress     egress.Policy
+	HostBinary string
+	Cleanup    func()
+	Name       string
 }
 
 type remoteIndexedDB struct {
@@ -36,7 +37,7 @@ func NewExecutableIndexedDB(ctx context.Context, cfg IndexedDBExecConfig) (index
 		Args:         cfg.Args,
 		Env:          cfg.Env,
 		Config:       cfg.Config,
-		AllowedHosts: cfg.AllowedHosts,
+		Egress:       cloneEgressPolicy(cfg.Egress),
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
 		ProviderName: cfg.Name,

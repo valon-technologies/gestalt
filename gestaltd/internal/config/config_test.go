@@ -3622,8 +3622,10 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
-      runtime:
-        provider: missing
+      execution:
+        mode: hosted
+        runtime:
+          provider: missing
 runtime:
   providers:
     hosted:
@@ -3631,7 +3633,7 @@ runtime:
         path: ./providers/runtime/modal
 server:
   runtime:
-    provider: hosted
+    defaultHostedProvider: hosted
   encryptionKey: server-key
 `)
 
@@ -3639,7 +3641,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `providers.agent.simple.runtime.provider references unknown runtime "missing"`) {
+		if !strings.Contains(err.Error(), `providers.agent.simple.execution.runtime.provider references unknown runtime "missing"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -3655,15 +3657,17 @@ providers:
       source:
         path: ./providers/agent/simple
       indexeddb: agent_state
-      runtime:
-        provider: hosted
-        pool:
-          minReadyInstances: 1
-          maxReadyInstances: 2
-          startupTimeout: 5m
-          healthCheckInterval: 30s
-          restartPolicy: always
-          drainTimeout: 2m
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          pool:
+            minReadyInstances: 1
+            maxReadyInstances: 2
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: always
+            drainTimeout: 2m
   indexeddb:
     agent_state:
       source:
@@ -3676,7 +3680,7 @@ runtime:
 server:
   encryptionKey: server-key
 `
-	t.Run("accepts required lifecycle fields under agent runtime pool", func(t *testing.T) {
+	t.Run("accepts required lifecycle fields under agent execution runtime pool", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, base)
@@ -3684,7 +3688,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		runtimeCfg := cfg.Providers.Agent["simple"].Runtime
+		runtimeCfg := cfg.Providers.Agent["simple"].Execution.Runtime
 		if runtimeCfg.Pool == nil {
 			t.Fatal("runtime pool = nil")
 		}
@@ -3758,8 +3762,10 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
-      runtime:
-        provider: hosted
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
 runtime:
   providers:
     hosted:
@@ -3768,7 +3774,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "providers.agent.simple.runtime.pool.minReadyInstances is required",
+			want: "providers.agent.simple.execution.runtime.pool.minReadyInstances is required",
 		},
 		{
 			name: "rejects missing lifecycle fields",
@@ -3778,14 +3784,16 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
-      runtime:
-        provider: hosted
-        pool:
-          minReadyInstances: 1
-          startupTimeout: 5m
-          healthCheckInterval: 30s
-          restartPolicy: always
-          drainTimeout: 2m
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          pool:
+            minReadyInstances: 1
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: always
+            drainTimeout: 2m
 runtime:
   providers:
     hosted:
@@ -3794,7 +3802,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "providers.agent.simple.runtime.pool.maxReadyInstances is required",
+			want: "providers.agent.simple.execution.runtime.pool.maxReadyInstances is required",
 		},
 		{
 			name: "rejects missing execution runtime on hosted agent",
@@ -3852,15 +3860,17 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
-      runtime:
-        provider: hosted
-        pool:
-          minReadyInstances: 2
-          maxReadyInstances: 1
-          startupTimeout: 5m
-          healthCheckInterval: 30s
-          restartPolicy: always
-          drainTimeout: 2m
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          pool:
+            minReadyInstances: 2
+            maxReadyInstances: 1
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: always
+            drainTimeout: 2m
 runtime:
   providers:
     hosted:
@@ -3869,7 +3879,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "providers.agent.simple.runtime.pool.maxReadyInstances must be greater than or equal to minReadyInstances",
+			want: "providers.agent.simple.execution.runtime.pool.maxReadyInstances must be greater than or equal to minReadyInstances",
 		},
 		{
 			name: "rejects unknown restart policy",
@@ -3879,15 +3889,17 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
-      runtime:
-        provider: hosted
-        pool:
-          minReadyInstances: 1
-          maxReadyInstances: 2
-          startupTimeout: 5m
-          healthCheckInterval: 30s
-          restartPolicy: sometimes
-          drainTimeout: 2m
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          pool:
+            minReadyInstances: 1
+            maxReadyInstances: 2
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: sometimes
+            drainTimeout: 2m
 runtime:
   providers:
     hosted:
@@ -3896,7 +3908,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "providers.agent.simple.runtime.pool.restartPolicy must be one of",
+			want: "providers.agent.simple.execution.runtime.pool.restartPolicy must be one of",
 		},
 		{
 			name: "rejects restart without agent indexeddb",
@@ -3906,6 +3918,36 @@ providers:
     simple:
       source:
         path: ./providers/agent/simple
+      execution:
+        mode: hosted
+        runtime:
+          provider: hosted
+          pool:
+            minReadyInstances: 1
+            maxReadyInstances: 2
+            startupTimeout: 5m
+            healthCheckInterval: 30s
+            restartPolicy: always
+            drainTimeout: 2m
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
+server:
+  encryptionKey: server-key
+`,
+			want: `providers.agent.simple.execution.runtime.pool.restartPolicy "always" requires providers.agent.simple.indexeddb as the provider persistence hook`,
+		},
+		{
+			name: "rejects lifecycle fields on plugin runtime",
+			yaml: `
+plugins:
+  service:
+    source:
+      path: ./plugins/service/manifest.yaml
+    execution:
+      mode: hosted
       runtime:
         provider: hosted
         pool:
@@ -3923,33 +3965,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: `providers.agent.simple.runtime.pool.restartPolicy "always" requires providers.agent.simple.indexeddb as the provider persistence hook`,
-		},
-		{
-			name: "rejects lifecycle fields on plugin runtime",
-			yaml: `
-plugins:
-  service:
-    source:
-      path: ./plugins/service/manifest.yaml
-    runtime:
-      provider: hosted
-      pool:
-        minReadyInstances: 1
-        maxReadyInstances: 2
-        startupTimeout: 5m
-        healthCheckInterval: 30s
-        restartPolicy: always
-        drainTimeout: 2m
-runtime:
-  providers:
-    hosted:
-      source:
-        path: ./providers/runtime/modal
-server:
-  encryptionKey: server-key
-`,
-			want: "plugins.service.runtime lifecycle fields are only supported on providers.agent.*.runtime",
+			want: "plugins.service.execution.runtime lifecycle fields are only supported on providers.agent.*.execution.runtime",
 		},
 	}
 	for _, tc := range cases {
@@ -3968,7 +3984,7 @@ server:
 	}
 }
 
-func TestLoadPathsPreferredProviderEntryAliasesOverrideLegacy(t *testing.T) {
+func TestLoadPathsProviderExecutionAndEgressOverride(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -3981,10 +3997,18 @@ plugins:
   service:
     source:
       path: ./plugins/service/manifest.yaml
-    runtime:
-      provider: missing
-    allowedHosts:
-      - api.github.com
+    execution:
+      mode: hosted
+      runtime:
+        provider: hosted
+    egress:
+      allowedHosts:
+        - api.github.com
+runtime:
+  providers:
+    hosted:
+      source:
+        path: ./providers/runtime/modal
 `), 0o644); err != nil {
 		t.Fatalf("writing base config: %v", err)
 	}
@@ -3993,6 +4017,7 @@ plugins:
   service:
     execution:
       mode: local
+      runtime: null
     egress:
       allowedHosts: []
 `), 0o644); err != nil {
@@ -4005,13 +4030,10 @@ plugins:
 	}
 	entry := cfg.Plugins["service"]
 	if entry.UsesHostedExecution() {
-		t.Fatal("UsesHostedExecution = true, want preferred execution.mode: local to override legacy runtime")
-	}
-	if entry.Runtime != nil {
-		t.Fatalf("Runtime = %#v, want nil after preferred execution override", entry.Runtime)
+		t.Fatal("UsesHostedExecution = true, want execution.mode: local override")
 	}
 	if got := entry.EffectiveAllowedHosts(); len(got) != 0 {
-		t.Fatalf("EffectiveAllowedHosts = %#v, want empty after preferred egress override", got)
+		t.Fatalf("EffectiveAllowedHosts = %#v, want empty after egress override", got)
 	}
 }
 

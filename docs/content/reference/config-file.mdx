@@ -200,8 +200,7 @@ runtime:
 
 `server.runtime.defaultHostedProvider` supplies the default runtime name for
 plugins that set `execution.mode: hosted` without an explicit
-`execution.runtime.provider`. The legacy `server.runtime.provider` field is
-still accepted as an alias.
+`execution.runtime.provider`. The legacy `server.runtime.provider` field is no longer accepted.
 
 | Field | Description |
 | --- | --- |
@@ -314,7 +313,7 @@ Authentication providers use the same `ProviderEntry` shape under `providers.aut
 | `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the authentication provider. |
 | `env` | Extra environment variables passed to the provider process. |
-| `egress.allowedHosts` | Outbound host allowlist. Legacy `allowedHosts` remains accepted as an alias. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `providers.indexeddb`
 
@@ -392,7 +391,7 @@ The exact config fields depend on the selected authorization provider package. T
 | `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the authorization provider. |
 | `env` | Extra environment variables passed to the provider process. |
-| `egress.allowedHosts` | Outbound host allowlist. Legacy `allowedHosts` remains accepted as an alias. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `providers.workflow`
 
@@ -461,7 +460,7 @@ allowlist logical stores exposed through that binding.
 | `config` | Provider-specific config passed into the workflow provider. |
 | `indexeddb` | Optional host IndexedDB binding for the workflow provider, including `provider`, optional `db`, and optional `objectStores`. |
 | `env` | Extra environment variables passed to the provider process. |
-| `egress.allowedHosts` | Outbound host allowlist. Legacy `allowedHosts` remains accepted as an alias. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `providers.agent`
 
@@ -481,16 +480,18 @@ providers:
       indexeddb:
         provider: default
         db: simple_agent
-      runtime:
-        provider: modal
-        image: ghcr.io/valon/gestalt-python-runtime:latest
-        pool:
-          minReadyInstances: 1
-          maxReadyInstances: 4
-          startupTimeout: 2m
-          healthCheckInterval: 30s
-          restartPolicy: always
-          drainTimeout: 1m
+      execution:
+        mode: hosted
+        runtime:
+          provider: modal
+          image: ghcr.io/valon/gestalt-python-runtime:latest
+          pool:
+            minReadyInstances: 1
+            maxReadyInstances: 4
+            startupTimeout: 2m
+            healthCheckInterval: 30s
+            restartPolicy: always
+            drainTimeout: 1m
       config:
         runStore: runs
         idempotencyStore: run_idempotency
@@ -512,8 +513,8 @@ executable plugins. When `providers.agent.<name>.execution.mode` is `hosted`,
 `gestaltd` starts the agent provider inside the selected hosted runtime instead
 of launching it directly on the `gestaltd` host. Tool callbacks still route
 back through the host agent socket, and `egress.allowedHosts` remains the
-operator-facing egress policy. Legacy `providers.agent.<name>.runtime` remains
-accepted as an alias for hosted execution.
+operator-facing egress policy. Legacy `providers.agent.<name>.runtime` is no
+longer accepted; use `providers.agent.<name>.execution.runtime`.
 
 | Field | Description |
 | --- | --- |
@@ -523,8 +524,8 @@ accepted as an alias for hosted execution.
 | `indexeddb` | Optional agent IndexedDB config. `indexeddb.provider` selects the named `providers.indexeddb` entry backing the agent's single IndexedDB SDK socket; unlike plugins, agents do not inherit the selected/default host IndexedDB automatically. `indexeddb.db` overrides the provider-visible database name and defaults to the agent provider key. `indexeddb.objectStores` optionally allowlists logical object stores the agent may use. |
 | `config` | Provider-specific config passed into the agent provider. |
 | `env` | Extra environment variables passed to the provider process. |
-| `execution` | Optional hosted execution selection for this agent provider. `execution.mode` is `local` or `hosted`; `execution.runtime` supports `provider`, `template`, `image`, `metadata`, and `pool`. `pool` contains hosted agent lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. The older flat lifecycle fields are still accepted, but cannot be combined with `pool`. Legacy `runtime` remains accepted as an alias for hosted execution. |
-| `egress.allowedHosts` | Outbound host allowlist. Legacy `allowedHosts` remains accepted as an alias. For executable providers, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `execution` | Optional hosted execution selection for this agent provider. `execution.mode` is `local` or `hosted`; `execution.runtime` supports `provider`, `template`, `image`, `metadata`, and `pool`. `pool` contains hosted agent lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. |
+| `egress.allowedHosts` | Outbound host allowlist. For executable providers, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `workflows`
 
@@ -641,7 +642,7 @@ First-party cache providers are published at
 | `auth` | Optional inline source auth for remote release sources, including direct metadata URLs and `source.githubRelease`. |
 | `config` | Arbitrary provider-specific config passed through to the cache provider. |
 | `env` | Extra environment variables passed to the provider process. |
-| `egress.allowedHosts` | Outbound host allowlist. Legacy `allowedHosts` remains accepted as an alias. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `providers.s3`
 
@@ -970,8 +971,7 @@ plugins:
 | `description` | Short description of the plugin. |
 | `iconFile` | SVG icon path, resolved relative to the config directory. |
 | `authorizationPolicy` | Optional shared subject access policy from `authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this plugin, and the built-in admin UI / admin API can manage plugin-scoped dynamic grants for additional members. Static policy members still take precedence. |
-| `ui` | Optional plugin-backed mounted UI binding. The canonical object form is `ui.path` plus optional `ui.bundle`. `ui.bundle` names a `providers.ui` entry; omit it to mount the plugin manifest's owned `spec.ui`. The older scalar `ui: <bundle>` plus `mountPath` form remains accepted. |
-| `mountPath` | Compatibility field for the older plugin-backed UI shape. Prefer `ui.path` for new config. |
+| `ui` | Optional plugin-backed mounted UI binding. Use `ui.path` plus optional `ui.bundle`. `ui.bundle` names a `providers.ui` entry; omit it to mount the plugin manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#pluginssource) below. |
 | `source.auth` | Optional metadata-fetch auth for release sources. Use this for `source.url`, `source.githubRelease`, or local `provider-release.yaml` metadata. |
 | `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on plugin HTTP operation routes (`/api/v1/integrations/{name}/operations` and `/api/v1/{integration}/{operation}`) and on plugin-backed mounted UIs, including browser-login flows whose `next` path resolves into that plugin's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
@@ -981,8 +981,8 @@ plugins:
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
-| `execution` | Optional executable-plugin execution config. `execution.mode` is `local` or `hosted`; `execution.runtime` carries the hosted runtime fields. Legacy `runtime` remains accepted as an alias for `execution.mode: hosted` plus `execution.runtime`. |
-| `egress.allowedHosts` | Outbound host allowlist. Legacy `allowedHosts` remains accepted as an alias. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `execution` | Optional executable-plugin execution config. `execution.mode` is `local` or `hosted`; `execution.runtime` carries the hosted runtime fields. |
+| `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 | `indexeddb` | Optional plugin IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the plugin's single IndexedDB SDK socket; when omitted, the plugin inherits the selected/default host IndexedDB. `indexeddb.db` overrides the plugin-visible database name and defaults to the plugin key. Schema-capable backends derive plugin scoping from that `db` name. `indexeddb.objectStores` optionally allowlists the logical object stores the plugin may use. Plugins then call `new IndexedDB()` (or the equivalent SDK helper) against `GESTALT_INDEXEDDB_SOCKET`; they do not choose arbitrary schemas or DSNs at runtime. |
 | `s3` | Optional list of named `providers.s3` bindings exposed to the executable plugin through the SDK transport. A single binding also populates the default S3 SDK env var for compatibility. |
 
@@ -1100,7 +1100,7 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
 | `source.auth` | Optional metadata-fetch auth for release sources, including direct metadata URLs, `source.githubRelease`, and local `provider-release.yaml` metadata. |
 | `auth` | Optional plugin route auth reference. Use `auth.provider` to reference either `server` or a named `providers.authentication` entry. Gestalt enforces this on plugin HTTP operation routes and on plugin-backed mounted UIs. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
 | `env` | Extra environment variables passed to the provider process. |
-| `egress.allowedHosts` | Outbound host allowlist. Legacy `allowedHosts` remains accepted as an alias. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ### `connections`
 
@@ -1289,9 +1289,9 @@ plugins:
 When `egress.allowedHosts` is set on a provider, Gestalt applies that allowlist
 to host-mediated outbound checks using exact matches and `*.suffix` wildcards.
 When `egress.allowedHosts` is empty, `defaultAction` decides: `allow` permits
-outbound requests, `deny` blocks them. The legacy provider-level `allowedHosts`
-field is still accepted as an alias for `egress.allowedHosts`. For executable
-plugins, those rules are only a complete security boundary when the plugin is
+outbound requests, `deny` blocks them. Provider-level `allowedHosts` is no
+longer accepted; use `egress.allowedHosts`. For executable plugins, those rules
+are only a complete security boundary when the plugin is
 running inside a supported sandboxed runtime rather than relying on
 host-specific OS wrappers alone.
 
@@ -1341,7 +1341,7 @@ Only `connections.default` may define `params` or `discovery`. All connections i
 
 Each `providers.ui.<name>` entry must set `source` to exactly one loading mode: a local UI manifest path or a published `provider-release.yaml` metadata URL. `providers.ui.<name>.config` is only allowed when `providers.ui.<name>.source` is set.
 
-Each `plugins.<name>` entry may set `ui.path` to publish a plugin-backed UI. When `ui.bundle` is set, it must reference an existing UI bundle. When `ui.bundle` is omitted, the plugin manifest must declare `spec.ui`. A given UI may be bound by at most one plugin entry. `ui.path` and the compatibility `mountPath` must use the same path rules as a directly mounted UI.
+Each `plugins.<name>` entry may set `ui.path` to publish a plugin-backed UI. When `ui.bundle` is set, it must reference an existing UI bundle. When `ui.bundle` is omitted, the plugin manifest must declare `spec.ui`. A given UI may be bound by at most one plugin entry. `ui.path` must use the same path rules as a directly mounted UI.
 
 When `server.admin.ui` is set, it must reference an existing `providers.ui.<name>` entry. Runtime startup then requires that entry's prepared asset root to include `admin/index.html`.
 

@@ -35,7 +35,7 @@ func buildExecutablePluginRuntime(ctx context.Context, name string, entry *confi
 		Args:         append([]string(nil), entry.Args...),
 		Env:          maps.Clone(entry.Env),
 		Config:       runtimeConfig,
-		AllowedHosts: entry.EffectiveAllowedHosts(),
+		Egress:       deps.Egress.Policy(entry.EffectiveAllowedHosts()),
 		HostBinary:   entry.HostBinary,
 		HostServices: buildRuntimeProviderHostServices(name, deps),
 		Telemetry:    deps.Telemetry,

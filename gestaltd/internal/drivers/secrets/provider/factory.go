@@ -29,13 +29,13 @@ var Factory bootstrap.SecretManagerFactory = func(node yaml.Node) (core.SecretMa
 	cfg = prepared.YAMLConfig
 
 	return providerhost.NewExecutableSecretManager(context.Background(), providerhost.SecretsExecConfig{
-		Command:      cfg.Command,
-		Args:         cfg.Args,
-		Env:          cfg.Env,
-		Config:       cfg.Config,
-		AllowedHosts: cfg.AllowedHosts,
-		HostBinary:   cfg.HostBinary,
-		Cleanup:      prepared.Cleanup,
-		Name:         cfg.Name,
+		Command:    cfg.Command,
+		Args:       cfg.Args,
+		Env:        cfg.Env,
+		Config:     cfg.Config,
+		Egress:     cfg.EgressPolicy(""),
+		HostBinary: cfg.HostBinary,
+		Cleanup:    prepared.Cleanup,
+		Name:       cfg.Name,
 	})
 }

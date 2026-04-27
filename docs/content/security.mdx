@@ -63,9 +63,9 @@ capabilities, not just the host-local child-process wrapper.
 ### Egress control
 
 Every provider entry supports `egress.allowedHosts` to declare which upstream
-hosts it can reach. The legacy provider-level `allowedHosts` field remains
-accepted as an alias. When `server.egress.defaultAction` is `deny`, providers
-without an explicit allowlist are blocked from host-mediated outbound requests.
+hosts it can reach. Provider-level `allowedHosts` is no longer accepted. When
+`server.egress.defaultAction` is `deny`, providers without an explicit allowlist
+are blocked from host-mediated outbound requests.
 
 ```yaml
 server:
