@@ -579,6 +579,89 @@ func TestLoadDefinitionBodyParamDedup(t *testing.T) {
 	}
 }
 
+func TestLoadDefinitionNormalizesModelUnsafeParamNames(t *testing.T) {
+	t.Parallel()
+
+	spec := map[string]any{
+		"openapi": "3.0.0",
+		"info":    map[string]string{"title": "Unsafe Names API"},
+		"servers": []any{map[string]string{"url": "https://api.example.com"}},
+		"paths": map[string]any{
+			"/items": map[string]any{
+				"post": map[string]any{
+					"operationId": "create_item",
+					"summary":     "Create item",
+					"parameters": []any{
+						map[string]any{
+							"name": "$select", "in": "query",
+							"schema": map[string]any{"type": "string"},
+						},
+						map[string]any{
+							"name": "page[size]", "in": "query",
+							"schema": map[string]any{"type": "integer"},
+						},
+						map[string]any{
+							"name": "'x-Cwd'", "in": "header",
+							"schema": map[string]any{"type": "string"},
+						},
+					},
+					"requestBody": map[string]any{
+						"content": map[string]any{
+							"application/json": map[string]any{
+								"schema": map[string]any{
+									"type":     "object",
+									"required": []string{"@odata.type"},
+									"properties": map[string]any{
+										"@odata.type":   map[string]any{"type": "string"},
+										"dollar_select": map[string]any{"type": "string"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	srv := serveJSON(t, spec)
+	testutil.CloseOnCleanup(t, srv)
+
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	if err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+
+	op := def.Operations["create_item"]
+	byName := make(map[string]provider.ParameterDef, len(op.Parameters))
+	for _, p := range op.Parameters {
+		byName[p.Name] = p
+	}
+
+	assertParam := func(name, wireName, location string, required bool) {
+		t.Helper()
+		param, ok := byName[name]
+		if !ok {
+			t.Fatalf("missing parameter %q; got %#v", name, byName)
+		}
+		if param.WireName != wireName {
+			t.Errorf("%s wireName = %q, want %q", name, param.WireName, wireName)
+		}
+		if param.Location != location {
+			t.Errorf("%s location = %q, want %q", name, param.Location, location)
+		}
+		if param.Required != required {
+			t.Errorf("%s required = %v, want %v", name, param.Required, required)
+		}
+	}
+
+	assertParam("dollar_select", "$select", "query", false)
+	assertParam("page_size", "page[size]", "query", false)
+	assertParam("x-Cwd", "'x-Cwd'", "header", false)
+	assertParam("at_odata.type", "@odata.type", "body", true)
+	assertParam("dollar_select_2", "dollar_select", "body", false)
+}
+
 func TestLoadDefinitionYAML(t *testing.T) {
 	t.Parallel()
 

@@ -71,6 +71,33 @@ func TestPartitionParams_NoLocations(t *testing.T) {
 			t.Fatalf("headers = %v, want nil", headers)
 		}
 	})
+
+	t.Run("declared body fallback uses wire names", func(t *testing.T) {
+		t.Parallel()
+		catOp := &catalog.CatalogOperation{
+			ID:     "op1",
+			Method: http.MethodPost,
+			Parameters: []catalog.CatalogParameter{
+				{Name: "at_odata.type", WireName: "@odata.type", Type: "string"},
+			},
+		}
+		body, query, headers := partitionParams(catOp, map[string]any{
+			"at_odata.type": "example.record",
+		}, false)
+
+		if body["@odata.type"] != "example.record" {
+			t.Fatalf("body[@odata.type] = %v, want example.record", body["@odata.type"])
+		}
+		if _, ok := body["at_odata.type"]; ok {
+			t.Fatalf("body should not contain model-facing name: %v", body)
+		}
+		if len(query) != 0 {
+			t.Fatalf("query = %v, want nil", query)
+		}
+		if len(headers) != 0 {
+			t.Fatalf("headers = %v, want nil", headers)
+		}
+	})
 }
 
 func TestPartitionParams_MixedLocations(t *testing.T) {
@@ -333,6 +360,76 @@ func TestExecuteREST_WireNameQueryParam(t *testing.T) {
 	}
 	if parsed.Get(wireName) != pageSizeValue {
 		t.Fatalf("query %s = %q, want %s; raw = %s", wireName, parsed.Get(wireName), pageSizeValue, rawQuery)
+	}
+}
+
+func TestExecuteREST_WireNameBodyParam(t *testing.T) {
+	t.Parallel()
+
+	const (
+		opID       = "create_record"
+		opPath     = "/api/v2/records"
+		schemaName = "at_odata.type"
+		wireName   = "@odata.type"
+		value      = "example.record"
+	)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("io.ReadAll: %v", err)
+		}
+		var body map[string]any
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &body); err != nil {
+				t.Fatalf("json.Unmarshal request body: %v", err)
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"body": body,
+		})
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	cat := &catalog.Catalog{
+		Name: "test-svc",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:     opID,
+				Method: http.MethodPost,
+				Path:   opPath,
+				Parameters: []catalog.CatalogParameter{
+					{Name: schemaName, WireName: wireName, Type: "string", Location: "body"},
+				},
+			},
+		},
+	}
+
+	b := &Base{
+		Auth:    mockAuth{},
+		BaseURL: srv.URL,
+	}
+	b.SetCatalog(cat)
+
+	result, err := b.Execute(context.Background(), opID, map[string]any{
+		schemaName: value,
+	}, "test-token")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+		t.Fatalf("json.Unmarshal response: %v", err)
+	}
+
+	body := resp["body"].(map[string]any)
+	if body[wireName] != value {
+		t.Fatalf("body[%s] = %v, want %s", wireName, body[wireName], value)
+	}
+	if _, ok := body[schemaName]; ok {
+		t.Fatalf("body should not contain schema name %q", schemaName)
 	}
 }
 
