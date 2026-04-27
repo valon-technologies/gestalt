@@ -75,9 +75,9 @@ keeps its existing config-relative behavior for backward compatibility.
 `gestaltd` instance to attach to. The local command only replaces source-backed
 plugin implementations for the authenticated principal that created the session;
 all non-local plugins, credentials, policies, and host services continue to
-resolve through the remote instance. Remote servers expose attach targets only
-for source-backed plugin config entries or release-backed plugin entries that
-explicitly set `providerDev: true`. Remote mode tunnels plugin RPC, catalog,
+resolve through the remote instance. Remote servers expose attach targets for
+configured plugins, and existing plugin authorization decides whether the
+authenticated caller may attach. Remote mode tunnels plugin RPC, catalog,
 post-connect, host-service calls, and plugin-owned UI assets for mounted UIs
 that already exist on the remote server. Raw GraphQL surfaces are not tunneled
 in v1.

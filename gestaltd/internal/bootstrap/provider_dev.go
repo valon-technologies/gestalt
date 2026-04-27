@@ -23,9 +23,6 @@ func buildProviderDevManager(cfg *config.Config, providers *registry.ProviderMap
 		if entry == nil || !entry.HasResolvedManifest() {
 			continue
 		}
-		if !entry.HasLocalSource() && !entry.ProviderDev {
-			continue
-		}
 		if _, err := providers.Get(name); err != nil {
 			continue
 		}

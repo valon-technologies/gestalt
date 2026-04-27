@@ -1023,10 +1023,9 @@ For local development with a source provider package:
 source: ./manifest.yaml
 ```
 
-Set `providerDev: true` on a release-backed plugin only when that remote
-`gestaltd` instance should allow authenticated developers to attach a local
-implementation with `gestaltd provider dev --remote`. Source-backed plugin
-entries are already treated as explicit local-development targets.
+When a remote `gestaltd` instance is running the provider-dev endpoints,
+authenticated developers can attach a local implementation for any configured
+plugin they are authorized to access with `gestaltd provider dev --remote`.
 
 Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source providers from the module declared in `[tool.gestalt].provider` or the legacy `[tool.gestalt].plugin`.
 
