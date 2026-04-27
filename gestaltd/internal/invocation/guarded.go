@@ -236,20 +236,6 @@ func (g *GuardedInvoker) ResolveSubjectToken(ctx context.Context, prov core.Prov
 	return ctx, "", fmt.Errorf("subject token resolution not supported")
 }
 
-func (g *GuardedInvoker) ResolveEffectiveCredentialBinding(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (CredentialBindingResolution, error) {
-	if r, ok := g.inner.(EffectiveCredentialBindingResolver); ok {
-		return r.ResolveEffectiveCredentialBinding(ctx, p, providerName, connection, instance)
-	}
-	return CredentialBindingResolution{}, nil
-}
-
-func (g *GuardedInvoker) ResolveTokenWithBinding(ctx context.Context, p *principal.Principal, providerName, connection, instance string, boundCredential CredentialBindingResolution) (context.Context, string, error) {
-	if r, ok := g.inner.(BindingTokenResolver); ok {
-		return r.ResolveTokenWithBinding(ctx, p, providerName, connection, instance, boundCredential)
-	}
-	return ctx, "", fmt.Errorf("bound token resolution not supported")
-}
-
 func (g *GuardedInvoker) logAudit(ctx context.Context, entry core.AuditEntry) {
 	if g.audit != nil {
 		g.audit.Log(ctx, entry)

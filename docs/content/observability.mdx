@@ -282,12 +282,12 @@ inbound HTTP server span.
 ### Authorization Provider Metrics
 
 Authorization provider metrics cover both direct provider interface calls and
-provider-backed human-access evaluation performed by `gestaltd`.
+provider-backed subject-access evaluation performed by `gestaltd`.
 
 | OpenTelemetry family | Prometheus families | Meaning |
 | --- | --- | --- |
 | `gestaltd.authorization.provider.operation.*` | `gestaltd_authorization_provider_operation_count_total`, `gestaltd_authorization_provider_operation_error_count_total`, `gestaltd_authorization_provider_operation_duration_seconds` | Calls to the configured authorization provider interface |
-| `gestaltd.authorization.provider.evaluate.*` | `gestaltd_authorization_provider_evaluate_count_total`, `gestaltd_authorization_provider_evaluate_error_count_total`, `gestaltd_authorization_provider_evaluate_duration_seconds` | Batched authorization evaluations used by provider-backed human-access checks |
+| `gestaltd.authorization.provider.evaluate.*` | `gestaltd_authorization_provider_evaluate_count_total`, `gestaltd_authorization_provider_evaluate_error_count_total`, `gestaltd_authorization_provider_evaluate_duration_seconds` | Batched authorization evaluations used by provider-backed subject-access checks |
 
 These metrics carry low-cardinality attributes:
 
@@ -306,15 +306,12 @@ tool paths visible before work reaches a plugin provider.
 | OpenTelemetry family | Prometheus families | Meaning |
 | --- | --- | --- |
 | `gestaltd.credential.provider.operation.*` | `gestaltd_credential_provider_operation_count_total`, `gestaltd_credential_provider_operation_error_count_total`, `gestaltd_credential_provider_operation_duration_seconds` | Calls to the configured external credential provider |
-| `gestaltd.credential.binding.resolve.*` | `gestaltd_credential_binding_resolve_count_total`, `gestaltd_credential_binding_resolve_error_count_total`, `gestaltd_credential_binding_resolve_duration_seconds` | Runtime credential binding selection |
-| `gestaltd.credential.token.resolve.*` | `gestaltd_credential_token_resolve_count_total`, `gestaltd_credential_token_resolve_error_count_total`, `gestaltd_credential_token_resolve_duration_seconds` | Token lookup for a resolved binding |
 | `gestaltd.catalog.operation.resolve.*` | `gestaltd_catalog_operation_resolve_count_total`, `gestaltd_catalog_operation_resolve_error_count_total`, `gestaltd_catalog_operation_resolve_duration_seconds` | Static or session-catalog operation resolution |
 
 These metrics carry low-cardinality attributes:
 
 - `gestalt.credential.provider` identifies the configured credential provider.
 - `gestalt.credential.operation` identifies the credential provider method.
-- `gestalt.credential.binding_mode` is `effective` or `requested`.
 - `gestalt.provider` identifies the plugin provider when the path has resolved
   one.
 - `gestalt.operation` identifies the plugin operation for catalog operation

@@ -16,7 +16,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/discovery"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
 type connectManualRequest struct {
@@ -40,11 +39,6 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, metricProviderName, "manual", "complete", connectionMode, auditErr != nil)
 		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.manual.connect", auditAllowed, auditErr, auditTarget)
 	}()
-	if err := rejectWorkloadCaller(w, PrincipalFromContext(r.Context())); err != nil {
-		auditErr = err
-		return
-	}
-
 	var req connectManualRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		auditErr = errors.New("invalid JSON body")
@@ -66,6 +60,12 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 	metricProviderName = req.Integration
 	connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
+	p := PrincipalFromContext(r.Context())
+	if !s.allowProviderContext(r.Context(), p, req.Integration) {
+		auditErr = errOperationAccess
+		writeError(w, http.StatusForbidden, errOperationAccess.Error())
+		return
+	}
 
 	auth := s.effectiveConnectionAuth(req.Integration, manualConnection)
 	if !manualConnectionAllowed(prov, auth) {
@@ -74,7 +74,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	subjectID, manualInstance, err := s.resolveUserConnectionSetup(w, r, req.Instance)
+	subjectID, manualInstance, err := s.resolveCredentialConnectionSetup(w, r, req.Instance)
 	if err != nil {
 		auditErr = err
 		return
@@ -107,7 +107,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 
 	authSource := ""
-	if p := PrincipalFromContext(r.Context()); p != nil {
+	if p != nil {
 		authSource = p.AuthSource()
 	}
 	tm := credentialMaterial{
@@ -145,8 +145,8 @@ func (s *Server) resolveConnectionProvider(w http.ResponseWriter, integration, r
 	return prov, connection, nil
 }
 
-func (s *Server) resolveUserConnectionSetup(w http.ResponseWriter, r *http.Request, requestedInstance string) (string, string, error) {
-	userID, err := s.resolveUserID(w, r)
+func (s *Server) resolveCredentialConnectionSetup(w http.ResponseWriter, r *http.Request, requestedInstance string) (string, string, error) {
+	subjectID, err := s.resolveCredentialSubjectID(w, r)
 	if err != nil {
 		return "", "", err
 	}
@@ -154,7 +154,7 @@ func (s *Server) resolveUserConnectionSetup(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return "", "", errors.New("invalid instance")
 	}
-	return principal.UserSubjectID(userID), instance, nil
+	return subjectID, instance, nil
 }
 
 func validateConnectionParams(defs map[string]core.ConnectionParamDef, provided map[string]string) (map[string]string, error) {

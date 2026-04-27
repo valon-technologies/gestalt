@@ -86,22 +86,22 @@ func (s *Server) ensureExternalIdentityLink(ctx context.Context, subjectID strin
 		return err
 	}
 
-	currentUserLinked := false
-	otherUserLinked := false
+	currentSubjectLinked := false
+	otherSubjectLinked := false
 	for _, rel := range relationships {
 		if rel == nil || rel.GetSubject() == nil {
 			continue
 		}
-		if strings.TrimSpace(rel.GetSubject().GetType()) == "user" && strings.TrimSpace(rel.GetSubject().GetId()) == subjectID {
-			currentUserLinked = true
+		if externalIdentityRelationshipSubjectMatches(rel.GetSubject(), subjectID) {
+			currentSubjectLinked = true
 			continue
 		}
-		otherUserLinked = true
+		otherSubjectLinked = true
 	}
-	if currentUserLinked {
+	if currentSubjectLinked {
 		return nil
 	}
-	if otherUserLinked {
+	if otherSubjectLinked {
 		return errExternalIdentityAlreadyLinked
 	}
 
@@ -112,7 +112,7 @@ func (s *Server) ensureExternalIdentityLink(ctx context.Context, subjectID strin
 	return s.authorizationProvider.WriteRelationships(ctx, &core.WriteRelationshipsRequest{
 		Writes: []*core.Relationship{{
 			Subject: &core.SubjectRef{
-				Type: "user",
+				Type: authorization.ProviderSubjectTypeSubject,
 				Id:   subjectID,
 			},
 			Relation: externalIdentityLinkRelation,
@@ -150,7 +150,7 @@ func (s *Server) removeExternalIdentityLink(ctx context.Context, subjectID strin
 		if rel == nil || rel.GetSubject() == nil {
 			continue
 		}
-		if strings.TrimSpace(rel.GetSubject().GetType()) == "user" && strings.TrimSpace(rel.GetSubject().GetId()) == subjectID {
+		if externalIdentityRelationshipSubjectMatches(rel.GetSubject(), subjectID) {
 			target = append(target, rel)
 		}
 	}
@@ -166,4 +166,16 @@ func (s *Server) removeExternalIdentityLink(ctx context.Context, subjectID strin
 		Deletes: relationshipKeys(target),
 		ModelId: modelID,
 	})
+}
+
+func externalIdentityRelationshipSubjectMatches(subject *core.SubjectRef, subjectID string) bool {
+	if subject == nil || strings.TrimSpace(subject.GetId()) != subjectID {
+		return false
+	}
+	switch strings.TrimSpace(subject.GetType()) {
+	case authorization.ProviderSubjectTypeSubject, authorization.ProviderSubjectTypeUser:
+		return true
+	default:
+		return false
+	}
 }

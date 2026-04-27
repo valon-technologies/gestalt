@@ -14,7 +14,7 @@ type directToolCaller interface {
 	CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
 }
 
-func CallDirectTool(ctx context.Context, resolver TokenResolver, p *principal.Principal, prov core.Provider, provName, opName, connection, instance string, boundCredential CredentialBindingResolution, args map[string]any, meta *mcpgo.Meta) (*mcpgo.CallToolResult, error) {
+func CallDirectTool(ctx context.Context, resolver TokenResolver, p *principal.Principal, prov core.Provider, provName, opName, connection, instance string, args map[string]any, meta *mcpgo.Meta) (*mcpgo.CallToolResult, error) {
 	caller, ok := prov.(directToolCaller)
 	if !ok {
 		return nil, core.ErrMCPOnly
@@ -26,7 +26,7 @@ func CallDirectTool(ctx context.Context, resolver TokenResolver, p *principal.Pr
 	if resolver != nil && mode != core.ConnectionModeNone {
 		var token string
 		var err error
-		ctx, token, err = ResolveTokenForBinding(ctx, resolver, p, provName, connection, instance, boundCredential)
+		ctx, token, err = resolver.ResolveToken(ctx, p, provName, connection, instance)
 		if err != nil {
 			return nil, err
 		}

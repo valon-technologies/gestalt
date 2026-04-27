@@ -58,8 +58,6 @@ var (
 	authorizationProviderEvaluateMetrics metricutil.MeterCache[metricSet]
 	catalogOperationResolveMetrics       metricutil.MeterCache[metricSet]
 	credentialProviderOperationMetrics   metricutil.MeterCache[metricSet]
-	credentialBindingResolveMetrics      metricutil.MeterCache[metricSet]
-	credentialTokenResolveMetrics        metricutil.MeterCache[metricSet]
 )
 
 func StartSpan(ctx context.Context, name string, attrs ...attribute.KeyValue) (context.Context, trace.Span) {
@@ -164,14 +162,6 @@ func RecordCatalogOperationResolve(ctx context.Context, startedAt time.Time, fai
 
 func RecordCredentialProviderOperation(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
 	record(ctx, &credentialProviderOperationMetrics, "gestaltd.credential.provider.operation", "gestaltd credential provider operations", startedAt, failed, attrs...)
-}
-
-func RecordCredentialBindingResolve(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
-	record(ctx, &credentialBindingResolveMetrics, "gestaltd.credential.binding.resolve", "gestaltd credential binding resolution", startedAt, failed, attrs...)
-}
-
-func RecordCredentialTokenResolve(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
-	record(ctx, &credentialTokenResolveMetrics, "gestaltd.credential.token.resolve", "gestaltd credential token resolution", startedAt, failed, attrs...)
 }
 
 func record(ctx context.Context, cache *metricutil.MeterCache[metricSet], prefix, desc string, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {

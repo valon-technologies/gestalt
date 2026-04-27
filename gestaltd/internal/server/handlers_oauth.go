@@ -35,11 +35,6 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, metricProviderName, "oauth", "start", connectionMode, auditErr != nil)
 		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.oauth.start", auditAllowed, auditErr, auditTarget)
 	}()
-	if err := rejectWorkloadCaller(w, PrincipalFromContext(r.Context())); err != nil {
-		auditErr = err
-		return
-	}
-
 	var req startOAuthRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		auditErr = errors.New("invalid JSON body")
@@ -55,6 +50,12 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	metricProviderName = req.Integration
 	connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
+	p := PrincipalFromContext(r.Context())
+	if !s.allowProviderContext(r.Context(), p, req.Integration) {
+		auditErr = errOperationAccess
+		writeError(w, http.StatusForbidden, errOperationAccess.Error())
+		return
+	}
 
 	handler, ok := s.requireOAuthHandler(w, req.Integration, connection)
 	if !ok {
@@ -68,7 +69,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	subjectID, instance, err := s.resolveUserConnectionSetup(w, r, req.Instance)
+	subjectID, instance, err := s.resolveCredentialConnectionSetup(w, r, req.Instance)
 	if err != nil {
 		auditErr = err
 		return
@@ -95,7 +96,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	authSource := ""
-	if p := PrincipalFromContext(r.Context()); p != nil {
+	if p != nil {
 		authSource = p.AuthSource()
 	}
 	state, err := s.stateCodec.Encode(integrationOAuthState{

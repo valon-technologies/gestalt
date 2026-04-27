@@ -102,20 +102,15 @@ func (s *stubConnectionTokenResolver) ResolveToken(ctx context.Context, _ *princ
 }
 
 type stubBoundTokenResolver struct {
-	token           string
-	boundCredential invocation.CredentialBindingResolution
-	lastConnection  string
-	lastInstance    string
+	token          string
+	lastConnection string
+	lastInstance   string
 }
 
 func (s *stubBoundTokenResolver) ResolveToken(ctx context.Context, _ *principal.Principal, _ string, connection, instance string) (context.Context, string, error) {
 	s.lastConnection = connection
 	s.lastInstance = instance
 	return ctx, s.token, nil
-}
-
-func (s *stubBoundTokenResolver) ResolveEffectiveCredentialBinding(_ context.Context, _ *principal.Principal, _ string, _ string, _ string) (invocation.CredentialBindingResolution, error) {
-	return s.boundCredential, nil
 }
 
 func TestResolveCatalog_StaticCatalog(t *testing.T) {
@@ -257,7 +252,7 @@ func TestResolveCatalog_SessionAndStaticMerge(t *testing.T) {
 	}
 }
 
-func TestResolveCatalog_ModeNoneBoundPrincipalUsesEffectiveBindingSelectors(t *testing.T) {
+func TestResolveCatalog_ModeNonePrincipalUsesRequestedSelectors(t *testing.T) {
 	t.Parallel()
 
 	prov := &stubDynamicSessionProvider{
@@ -282,12 +277,6 @@ func TestResolveCatalog_ModeNoneBoundPrincipalUsesEffectiveBindingSelectors(t *t
 
 	resolver := &stubBoundTokenResolver{
 		token: "bound-token",
-		boundCredential: invocation.CredentialBindingResolution{
-			HasBinding: true,
-			Binding: authorization.CredentialBinding{
-				Mode: core.ConnectionModeNone,
-			},
-		},
 	}
 
 	cat, err := invocation.ResolveCatalog(
@@ -302,11 +291,11 @@ func TestResolveCatalog_ModeNoneBoundPrincipalUsesEffectiveBindingSelectors(t *t
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resolver.lastConnection != "" {
-		t.Fatalf("resolver connection = %q, want empty", resolver.lastConnection)
+	if resolver.lastConnection != "workspace" {
+		t.Fatalf("resolver connection = %q, want workspace", resolver.lastConnection)
 	}
-	if resolver.lastInstance != "" {
-		t.Fatalf("resolver instance = %q, want empty", resolver.lastInstance)
+	if resolver.lastInstance != "team-a" {
+		t.Fatalf("resolver instance = %q, want team-a", resolver.lastInstance)
 	}
 	if len(cat.Operations) != 1 || cat.Operations[0].ID != "session_only" {
 		t.Fatalf("catalog operations = %+v, want session_only", cat.Operations)
@@ -371,13 +360,6 @@ func TestResolveCatalogAndOperationMetrics(t *testing.T) {
 	}
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.credential.binding.resolve.duration", map[string]string{
-		"gestalt.provider":                "metric-api",
-		"gestalt.credential.binding_mode": "effective",
-	})
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.credential.token.resolve.duration", map[string]string{
-		"gestalt.provider": "metric-api",
-	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.catalog.operation.resolve.count", 1, map[string]string{
 		"gestalt.provider":  "metric-api",
 		"gestalt.operation": "static_op",
@@ -477,17 +459,18 @@ func TestFilterCatalogForPrincipal_HumanFilteringUsesResolvedRole(t *testing.T) 
 	}
 
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID("u1"), Role: "viewer"},
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sample-api": {AuthorizationPolicy: "sample_policy"},
-	}, nil, nil)
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -533,17 +516,18 @@ func TestFilterCatalogForPrincipal_HumanDefaultAllowKeepsUnannotatedOperations(t
 	}
 
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "allow",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID("admin-user"), Role: "admin"},
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sample-api": {AuthorizationPolicy: "sample_policy"},
-	}, nil, nil)
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -581,17 +565,18 @@ func TestFilterCatalogForPrincipal_HumanDefaultAllowTreatsUnmatchedUsersAsViewer
 	}
 
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "allow",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID("admin-user"), Role: "admin"},
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sample-api": {AuthorizationPolicy: "sample_policy"},
-	}, nil, nil)
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -629,7 +614,7 @@ func TestFilterCatalogForPrincipal_HumanUnboundProviderKeepsRoleAnnotatedOperati
 		},
 	}
 
-	authz, err := authorization.New(config.AuthorizationConfig{}, nil, nil, nil)
+	authz, err := authorization.New(config.AuthorizationConfig{}, nil)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -662,35 +647,38 @@ func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing
 			cat: &catalog.Catalog{
 				Name: "clash-api",
 				Operations: []catalog.CatalogOperation{
-					{ID: "shared_op", Method: http.MethodGet, Transport: catalog.TransportREST, Description: "static version"},
-					{ID: "static_only", Method: http.MethodGet, Transport: catalog.TransportREST},
+					{ID: "shared_op", Method: http.MethodGet, Transport: catalog.TransportREST, Description: "static version", AllowedRoles: []string{"viewer"}},
+					{ID: "static_only", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
 				},
 			},
 		},
 		sessionCat: &catalog.Catalog{
 			Name: "clash-api",
 			Operations: []catalog.CatalogOperation{
-				{ID: "shared_op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough, Description: "session version"},
-				{ID: "session_only", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+				{ID: "shared_op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough, Description: "session version", AllowedRoles: []string{"viewer"}},
+				{ID: "session_only", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough, AllowedRoles: []string{"viewer"}},
 			},
 		},
 	}
 
-	providers := testutil.NewProviderRegistry(t, prov)
 	authz, err := authorization.New(config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: "gst_wld_triage-bot-token",
-				Providers: map[string]config.WorkloadProviderDef{
-					"clash-api": {
-						Connection: "default",
-						Instance:   "default",
-						Allow:      []string{"shared_op", "session_only"},
-					},
-				},
 			},
 		},
-	}, nil, providers, map[string]string{"clash-api": "default"})
+		Policies: map[string]config.SubjectPolicyDef{
+			"clash_policy": {
+				Members: []config.SubjectPolicyMemberDef{{
+					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					Role:      "viewer",
+				}},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"clash-api": {AuthorizationPolicy: "clash_policy"},
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}

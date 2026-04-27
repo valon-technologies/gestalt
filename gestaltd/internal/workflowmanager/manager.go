@@ -756,24 +756,15 @@ func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principa
 	if instance != "" && !config.SafeInstanceValue(instance) {
 		return coreworkflow.Target{}, fmt.Errorf("instance name contains invalid characters")
 	}
-	if m.authorizer != nil && principal.IsWorkloadPrincipal(p) && (connection != "" || instance != "") {
-		return coreworkflow.Target{}, fmt.Errorf("%w: workloads may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
-	}
 
 	ctx = invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, pluginName))
 	var resolver invocation.TokenResolver
 	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	boundCredential := invocation.CredentialBindingResolution{}
-	if bindingResolver, ok := m.invoker.(invocation.EffectiveCredentialBindingResolver); ok {
-		boundCredential, err = bindingResolver.ResolveEffectiveCredentialBinding(ctx, p, pluginName, connection, instance)
-		if err != nil {
-			return coreworkflow.Target{}, err
-		}
-	}
-	boundConnections, sessionInstance := m.catalogSelectorConfig().BoundSessionCatalogConnections(pluginName, p, connection, instance)
-	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, pluginName, resolver, p, operation, boundConnections, sessionInstance)
+	sessionConnections := m.catalogSelectorConfig().SessionCatalogConnections(pluginName, connection)
+	sessionInstance := instance
+	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, pluginName, resolver, p, operation, sessionConnections, sessionInstance)
 	if err != nil {
 		return coreworkflow.Target{}, err
 	}
@@ -787,7 +778,7 @@ func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principa
 		connection = resolvedConnection
 	}
 	if resolver != nil && sessionInstance == "" {
-		resolvedCtx, _, err := invocation.ResolveTokenForBinding(ctx, resolver, p, pluginName, connection, sessionInstance, boundCredential)
+		resolvedCtx, _, err := resolver.ResolveToken(ctx, p, pluginName, connection, sessionInstance)
 		if err != nil {
 			return coreworkflow.Target{}, err
 		}
@@ -1121,7 +1112,6 @@ func (m *Manager) allowTarget(ctx context.Context, p *principal.Principal, targe
 
 func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 	return invocation.CatalogSelectorConfig{
-		Authorizer:        m.authorizer,
 		Invoker:           m.invoker,
 		CatalogConnection: m.catalogConnection,
 		DefaultConnection: m.defaultConnection,

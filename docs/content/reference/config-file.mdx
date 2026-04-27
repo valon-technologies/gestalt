@@ -5,7 +5,7 @@ import { Tabs } from 'nextra/components'
 Every `gestaltd` deployment reads one or more YAML config files. When you pass
 multiple `--config` flags, Gestalt merges them left-to-right before validation
 and bootstrap. The top-level keys are `server` (listener, encryption, egress,
-and host-provider selection), `authorization` (shared human/workload access
+and host-provider selection), `authorization` (shared subject access
 policy), `providers` (named authentication, secrets, telemetry, audit, UI,
 indexeddb, authorization, workflow, cache, and s3 entries), `workflows`
 (config-managed schedules and triggers), and `plugins` (executable
@@ -52,7 +52,7 @@ and, by default, artifact directories stay rooted at the leftmost config file.
 
 Several fields carry defaults when omitted: `server.public.port` defaults to `8080`; the runtime secrets manager defaults to builtin `env` when `providers.secrets` is omitted; `providers.telemetry.default` defaults to builtin `stdout`; and `providers.audit.default` defaults to builtin `inherit`. Structured secret refs are resolved during bootstrap, not during YAML parsing.
 
-`authorization` configures shared human and workload access policy at the top level.
+`authorization` configures shared subject access policy at the top level.
 
 ### Layered example
 
@@ -125,6 +125,8 @@ authorization:
           role: viewer
         - subjectID: user:admin-user
           role: admin
+        - subjectID: workload:triage-bot
+          role: viewer
   workloads:
     triage-bot:
       displayName: Triage Bot
@@ -132,16 +134,6 @@ authorization:
         secret:
           provider: default
           name: triage-bot-token
-      providers:
-        github:
-          connection: default
-          instance: default
-          allow:
-            - list_issues
-            - get_issue
-        weather:
-          allow:
-            - get_forecast
 ```
 
 `public.host` and `public.port` control the public listener address. Both default to all-interfaces on port `8080`.
@@ -156,15 +148,17 @@ authorization:
 
 `apiTokenTtl` controls the lifetime of newly issued API tokens, defaulting to `30d`. It accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). `artifactsDir` is a writable directory for prepared artifacts produced by `init` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/configuration) for the full `init`/`serve` lifecycle.
 
-`admin.authorizationPolicy` binds the built-in `/admin` route to one shared human access policy from `authorization.policies`. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
+`admin.authorizationPolicy` binds the built-in `/admin` route to one shared subject access policy from `authorization.policies`. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
 
 `admin.ui` optionally pins `/admin` to one named `providers.ui.<name>` bundle. The selected bundle must ship `admin/index.html` inside its prepared asset root. When `admin.ui` is omitted, Gestalt first auto-discovers admin assets from the root-mounted UI bundle (`path: /`) when that bundle contains `admin/index.html`, then falls back to the built-in admin shell.
 
-`authorization.policies` configures shared human access policies. Each policy resolves a caller to exactly one role by matching canonical `subjectID` values, then applies a `default` fallback (`allow` or `deny`) when no member matches. Plugins opt into a policy explicitly through `authorizationPolicy`.
+`authorization.policies` configures shared subject access policies. Each policy resolves a caller to exactly one role by matching canonical `subjectID` values such as `user:<id>` or `workload:<id>`, then applies a `default` fallback (`allow` or `deny`) when no member matches. Plugins opt into a policy explicitly through `authorizationPolicy`.
 
-Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `authorizationPolicy`, operators can manage additional dynamic members for that plugin from the built-in admin UI at `/admin/?tab=members` or through `/admin/api/v1/authorization/...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for users who already have static authorization on that plugin.
+Dynamic grants are plugin-scoped, not policy-scoped. When a plugin sets `authorizationPolicy`, operators can manage additional dynamic members for that plugin from the built-in admin UI at `/admin/?tab=members` or through `/admin/api/v1/authorization/...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for subjects that already have static authorization on that plugin. The `email` write field is a user-only convenience alias; `subjectId` accepts both `user:<id>` and `workload:<id>`.
 
-`authorization.workloads` configures non-human workload callers. Each workload uses a dedicated bearer token with the `gst_wld_` prefix and a per-provider allowlist. In the current runtime, workloads may bind only to `user` or `none` providers. For `user` providers, `connection` and `instance` resolve the exact stored workload credential the workload may use under its own subject (`workload:<id>`); `instance` defaults to `default` and `connection` falls back to the provider's default connection when omitted. For `none` providers, omit `connection` and `instance`.
+`authorization.workloads` configures non-human workload callers. Each workload uses a dedicated bearer token with the `gst_wld_` prefix. Workloads do not carry plugin-specific access lists or fixed credential selectors; grant plugin access with `authorization.policies` or provider-backed dynamic memberships using the workload subject ID, and store third-party credentials through the configured external credentials provider under `workload:<id>`.
+
+Plugins without `authorizationPolicy` are open to any authenticated subject, including configured workloads. Bind a plugin to a policy when workload access should be explicit.
 
 | Field | Default | Description |
 | --- | --- | --- |
@@ -179,11 +173,11 @@ Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `a
 | `artifactsDir` | config directory | Directory for prepared `init` artifacts. |
 | `providers.audit` / `providers.authentication` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
 | `runtime.provider` | | Default runtime-provider selector for plugins that opt into `plugins.<name>.runtime`. This does not move plugins into hosted runtimes by itself. |
-| `admin.authorizationPolicy` | | Shared human access policy applied to the built-in `/admin` route. |
+| `admin.authorizationPolicy` | | Shared subject access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
 | `admin.ui` | | Optional named `providers.ui` bundle whose `admin/` assets should back `/admin`. When omitted, Gestalt auto-discovers `admin/` assets from the root UI bundle before using the built-in fallback. |
-| `authorization.policies` | | Shared human access policies resolved by canonical `subjectID`. |
-| `authorization.workloads` | | Workload bearer tokens, per-provider allowlists, and workload-owned credential bindings. |
+| `authorization.policies` | | Shared subject access policies resolved by canonical `subjectID`. |
+| `authorization.workloads` | | Workload bearer tokens for non-human subjects. |
 
 When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener. When `server.admin.authorizationPolicy` is set, Gestalt does apply browser session auth plus role-based policy checks to `/admin` and `/admin/api/v1/*`.
 
@@ -358,7 +352,7 @@ Common first-party IndexedDB packages:
 Authorization providers are host-scoped policy engines and relationship stores.
 Configure one or more named entries under `providers.authorization`, then set
 `server.providers.authorization` to the name Gestalt should use for dynamic
-human authorization decisions, relationship storage, model lifecycle, and
+subject authorization decisions, relationship storage, model lifecycle, and
 built-in admin authorization APIs. First-party authorization providers are
 published at `github.com/valon-technologies/gestalt-providers/authorization/<name>`.
 
@@ -384,13 +378,13 @@ providers:
 
 Authorization providers are optional only when you are relying on static human
 policy members from config. When configured, Gestalt uses the selected
-provider for dynamic human plugin/admin authorization, relationship storage,
+provider for dynamic subject plugin/admin authorization, relationship storage,
 model lifecycle, and the built-in admin authorization APIs under
 `/admin/api/v1/authorization/...`.
 
 If `providers.authorization` is omitted, static policy members under
 `authorization.policies` still work, but there is no provider-backed
-relationship store and the dynamic human authorization control plane is
+relationship store and the dynamic subject authorization control plane is
 unavailable.
 
 The exact config fields depend on the selected authorization provider package. The first-party `authorization/indexeddb` provider expects the name of a host IndexedDB provider and stores authorization models plus relationships there.
@@ -952,7 +946,7 @@ plugins:
 | `displayName` | Human-readable name shown in the UI and API. |
 | `description` | Short description of the plugin. |
 | `iconFile` | SVG icon path, resolved relative to the config directory. |
-| `authorizationPolicy` | Optional shared human access policy from `authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this plugin, and the built-in admin UI / admin API can manage plugin-scoped dynamic grants for additional human members. Static policy members still take precedence. |
+| `authorizationPolicy` | Optional shared subject access policy from `authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this plugin, and the built-in admin UI / admin API can manage plugin-scoped dynamic grants for additional members. Static policy members still take precedence. |
 | `mountPath` | Optional public path prefix for a plugin-backed mounted UI. When set, Gestalt mounts either `plugins.<name>.ui` or the plugin manifest's `spec.ui`. |
 | `ui` | Optional UI key from `providers.ui` used with `mountPath`. Omit it to mount the plugin manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#pluginssource) below. |

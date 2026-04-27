@@ -5,7 +5,7 @@ configure authorization storage for a deployment, use
 [Providers > Authorization](/providers/authorization).
 
 Authorization providers are host-scoped policy engines and relationship
-stores. Gestalt uses them for dynamic human authorization, built-in admin
+stores. Gestalt uses them for dynamic subject authorization, built-in admin
 authorization APIs, and authorization model lifecycle.
 
 ## Manifest
@@ -42,7 +42,7 @@ remaining methods follow the same request/response pattern.
 Provider authors do not need to emit the baseline `gestaltd` authorization
 metrics. `gestaltd` wraps the configured provider interface and records
 `gestaltd.authorization.provider.operation.*` for every provider method. When
-the provider is used for provider-backed human access, `gestaltd` also records
+the provider is used for provider-backed subject access, `gestaltd` also records
 `gestaltd.authorization.provider.evaluate.*` around the batched authorization
 checks it performs.
 

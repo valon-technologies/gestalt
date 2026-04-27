@@ -1,6 +1,6 @@
 # Authorization
 
-Authorization providers back dynamic human authorization state. They are
+Authorization providers back dynamic subject authorization state. They are
 separate from platform login: `providers.authentication.<name>` decides how users sign in
 to Gestalt, while `providers.authorization.<name>` stores authorization
 relationships and answers authorization queries for Gestalt itself.
@@ -13,13 +13,13 @@ Google's global authorization system.
 
 Static shared policies still live under top-level `authorization.policies`.
 When `server.providers.authorization` selects a provider, Gestalt writes its
-authorization model plus dynamic human plugin and built-in admin relationships
-into that provider and uses it for runtime human authorization checks.
+authorization model plus dynamic subject plugin and built-in admin relationships
+into that provider and uses it for runtime subject authorization checks.
 
 Dynamic human plugin/admin grants and the built-in authorization control-plane
 APIs require an authorization provider. If you omit `providers.authorization`,
 Gestalt still evaluates static policy members from config, but there is no
-provider-backed relationship storage or dynamic human-grant control plane.
+provider-backed relationship storage or dynamic subject-grant control plane.
 
 ## Product authorization semantics
 

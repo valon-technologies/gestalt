@@ -804,12 +804,12 @@ func TestValidateStructureRejectsDuplicateAuthorizationPolicyMembers(t *testing.
 
 	tests := []struct {
 		name    string
-		members []HumanPolicyMemberDef
+		members []SubjectPolicyMemberDef
 		want    string
 	}{
 		{
 			name: "duplicate subject id",
-			members: []HumanPolicyMemberDef{
+			members: []SubjectPolicyMemberDef{
 				{SubjectID: "user:123", Role: "viewer"},
 				{SubjectID: "user:123", Role: "admin"},
 			},
@@ -817,7 +817,7 @@ func TestValidateStructureRejectsDuplicateAuthorizationPolicyMembers(t *testing.
 		},
 		{
 			name: "missing subject id",
-			members: []HumanPolicyMemberDef{
+			members: []SubjectPolicyMemberDef{
 				{Role: "viewer"},
 			},
 			want: "subjectID is required",
@@ -831,7 +831,7 @@ func TestValidateStructureRejectsDuplicateAuthorizationPolicyMembers(t *testing.
 
 			cfg := &Config{
 				Authorization: AuthorizationConfig{
-					Policies: map[string]HumanPolicyDef{
+					Policies: map[string]SubjectPolicyDef{
 						"roadmap": {
 							Default: "deny",
 							Members: tc.members,

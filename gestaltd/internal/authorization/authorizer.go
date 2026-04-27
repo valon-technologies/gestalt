@@ -5,34 +5,18 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
-	"github.com/valon-technologies/gestalt/server/internal/registry"
 )
 
 const (
-	defaultInstance  = "default"
-	defaultHumanRole = "viewer"
+	defaultSubjectRole = "viewer"
 )
-
-type CredentialBinding struct {
-	Mode                core.ConnectionMode
-	CredentialSubjectID string
-	Connection          string
-	Instance            string
-}
-
-type WorkloadProviderBinding struct {
-	CredentialBinding
-	Allow map[string]struct{}
-}
 
 type Workload struct {
 	ID          string
 	DisplayName string
-	Providers   map[string]WorkloadProviderBinding
 }
 
 type AccessContext struct {
@@ -40,36 +24,32 @@ type AccessContext struct {
 	Role   string
 }
 
-type HumanPolicy struct {
+type SubjectPolicy struct {
 	ID               string
 	DefaultAllow     bool
 	RolesBySubjectID map[string]string
 }
 
-type StaticHumanMember struct {
+type StaticSubjectMember struct {
 	SubjectID string
 	Role      string
 }
 
 type Authorizer struct {
-	workloadsByHash      map[string]*Workload
-	workloadsBySubjectID map[string]*Workload
-	policies             map[string]*HumanPolicy
-	providerPolicies     map[string]string
-	providerModes        map[string]core.ConnectionMode
+	workloadsByHash  map[string]*Workload
+	policies         map[string]*SubjectPolicy
+	providerPolicies map[string]string
 }
 
-func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], defaultConnections map[string]string) (*Authorizer, error) {
+func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry) (*Authorizer, error) {
 	a := &Authorizer{
-		workloadsByHash:      map[string]*Workload{},
-		workloadsBySubjectID: map[string]*Workload{},
-		policies:             map[string]*HumanPolicy{},
-		providerPolicies:     map[string]string{},
-		providerModes:        map[string]core.ConnectionMode{},
+		workloadsByHash:  map[string]*Workload{},
+		policies:         map[string]*SubjectPolicy{},
+		providerPolicies: map[string]string{},
 	}
 
 	for policyID, def := range cfg.Policies {
-		policy := &HumanPolicy{
+		policy := &SubjectPolicy{
 			ID:               policyID,
 			DefaultAllow:     strings.EqualFold(strings.TrimSpace(def.Default), "allow"),
 			RolesBySubjectID: make(map[string]string, len(def.Members)),
@@ -86,25 +66,8 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 		if entry == nil {
 			continue
 		}
-		if mode, ok, err := providerMode(providerName, pluginDefs, providers); err != nil {
-			return nil, err
-		} else if ok {
-			a.providerModes[providerName] = mode
-		}
 		if policy := strings.TrimSpace(entry.AuthorizationPolicy); policy != "" {
 			a.providerPolicies[providerName] = policy
-		}
-	}
-	if providers != nil {
-		for _, providerName := range providers.List() {
-			if _, ok := a.providerModes[providerName]; ok {
-				continue
-			}
-			prov, err := providers.Get(providerName)
-			if err != nil || prov == nil {
-				continue
-			}
-			a.providerModes[providerName] = prov.ConnectionMode()
 		}
 	}
 
@@ -128,33 +91,9 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 		workload := &Workload{
 			ID:          workloadID,
 			DisplayName: def.DisplayName,
-			Providers:   make(map[string]WorkloadProviderBinding, len(def.Providers)),
-		}
-
-		for providerName, providerDef := range def.Providers {
-			mode, ok, err := providerMode(providerName, pluginDefs, providers)
-			if err != nil {
-				return nil, err
-			}
-			if !ok {
-				return nil, fmt.Errorf("authorization validation: workload %q references unknown provider %q", workloadID, providerName)
-			}
-
-			allow := normalizeAllowedOperations(providerDef.Allow)
-			if len(allow) == 0 {
-				return nil, fmt.Errorf("authorization validation: workload %q provider %q allow must not be empty", workloadID, providerName)
-			}
-
-			binding, err := buildBinding(mode, workloadID, providerName, providerDef, defaultConnections)
-			if err != nil {
-				return nil, err
-			}
-			binding.Allow = allow
-			workload.Providers[providerName] = binding
 		}
 
 		a.workloadsByHash[tokenHash] = workload
-		a.workloadsBySubjectID[principal.WorkloadSubjectID(workloadID)] = workload
 	}
 
 	return a, nil
@@ -189,41 +128,15 @@ func (a *Authorizer) AllowProvider(ctx context.Context, p *principal.Principal, 
 	if principal.IsSystemPrincipal(p) {
 		return principal.AllowsProviderPermission(p, provider)
 	}
-	if !principal.IsWorkloadPrincipal(p) {
-		_, allowed := a.ResolveAccess(ctx, p, provider)
-		return allowed
-	}
-	_, ok := a.bindingForPrincipal(p, provider)
-	return ok
+	_, allowed := a.ResolveAccess(ctx, p, provider)
+	return allowed
 }
 
 func (a *Authorizer) AllowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
 	if principal.IsSystemPrincipal(p) {
 		return principal.AllowsOperationPermission(p, provider, operation)
 	}
-	if !principal.IsWorkloadPrincipal(p) {
-		return a.AllowProvider(ctx, p, provider)
-	}
-	binding, ok := a.bindingForPrincipal(p, provider)
-	if !ok {
-		return false
-	}
-	if len(binding.Allow) == 0 {
-		return principal.AllowsOperationPermission(p, provider, operation)
-	}
-	_, ok = binding.Allow[operation]
-	return ok
-}
-
-func (a *Authorizer) Binding(p *principal.Principal, provider string) (CredentialBinding, bool) {
-	if !principal.IsWorkloadPrincipal(p) {
-		return CredentialBinding{}, false
-	}
-	binding, ok := a.bindingForPrincipal(p, provider)
-	if !ok {
-		return CredentialBinding{}, false
-	}
-	return binding.CredentialBinding, true
+	return a.AllowProvider(ctx, p, provider)
 }
 
 func (a *Authorizer) ResolveAccess(_ context.Context, p *principal.Principal, provider string) (AccessContext, bool) {
@@ -232,17 +145,6 @@ func (a *Authorizer) ResolveAccess(_ context.Context, p *principal.Principal, pr
 	}
 	if principal.IsSystemPrincipal(p) {
 		return AccessContext{}, principal.AllowsProviderPermission(p, provider)
-	}
-	if principal.IsWorkloadPrincipal(p) {
-		if _, ok := a.bindingForSubject(p, provider); ok {
-			policyName := strings.TrimSpace(a.providerPolicies[provider])
-			if policyName == "" {
-				return AccessContext{}, false
-			}
-			return AccessContext{Policy: policyName}, false
-		}
-		_, ok := a.bindingForPrincipal(p, provider)
-		return AccessContext{}, ok
 	}
 	policyName := strings.TrimSpace(a.providerPolicies[provider])
 	if policyName == "" {
@@ -260,7 +162,7 @@ func (a *Authorizer) ResolveAccess(_ context.Context, p *principal.Principal, pr
 		return access, true
 	}
 	if policy.DefaultAllow {
-		access.Role = defaultHumanRole
+		access.Role = defaultSubjectRole
 		return access, true
 	}
 	return access, false
@@ -301,7 +203,7 @@ func (a *Authorizer) StaticRoleForProviderIdentity(provider, subjectID string) (
 	return a.StaticRoleForPolicyIdentity(policyName, subjectID)
 }
 
-func (a *Authorizer) StaticMembersForPolicy(policyName string) ([]StaticHumanMember, bool) {
+func (a *Authorizer) StaticMembersForPolicy(policyName string) ([]StaticSubjectMember, bool) {
 	if a == nil {
 		return nil, false
 	}
@@ -313,9 +215,9 @@ func (a *Authorizer) StaticMembersForPolicy(policyName string) ([]StaticHumanMem
 	if policy == nil {
 		return nil, false
 	}
-	members := make([]StaticHumanMember, 0, len(policy.RolesBySubjectID))
+	members := make([]StaticSubjectMember, 0, len(policy.RolesBySubjectID))
 	for subjectID, role := range policy.RolesBySubjectID {
-		members = append(members, StaticHumanMember{
+		members = append(members, StaticSubjectMember{
 			SubjectID: subjectID,
 			Role:      role,
 		})
@@ -323,7 +225,7 @@ func (a *Authorizer) StaticMembersForPolicy(policyName string) ([]StaticHumanMem
 	return members, true
 }
 
-func (a *Authorizer) StaticMembersForProvider(provider string) (string, []StaticHumanMember, bool) {
+func (a *Authorizer) StaticMembersForProvider(provider string) (string, []StaticSubjectMember, bool) {
 	if a == nil {
 		return "", nil, false
 	}
@@ -345,9 +247,6 @@ func (a *Authorizer) ResolvePolicyAccess(_ context.Context, p *principal.Princip
 	if policyName == "" {
 		return AccessContext{}, true
 	}
-	if principal.IsWorkloadPrincipal(p) {
-		return AccessContext{Policy: policyName}, false
-	}
 	policy := a.policies[policyName]
 	if policy == nil {
 		return AccessContext{}, false
@@ -358,7 +257,7 @@ func (a *Authorizer) ResolvePolicyAccess(_ context.Context, p *principal.Princip
 		return access, true
 	}
 	if policy.DefaultAllow {
-		access.Role = defaultHumanRole
+		access.Role = defaultSubjectRole
 		return access, true
 	}
 	return access, false
@@ -372,9 +271,6 @@ func (a *Authorizer) ResolveAdminAccess(_ context.Context, p *principal.Principa
 	if policyName == "" {
 		return AccessContext{}, true
 	}
-	if principal.IsWorkloadPrincipal(p) {
-		return AccessContext{Policy: policyName}, false
-	}
 	policy := a.policies[policyName]
 	if policy == nil {
 		return AccessContext{}, false
@@ -385,7 +281,7 @@ func (a *Authorizer) ResolveAdminAccess(_ context.Context, p *principal.Principa
 		return access, true
 	}
 	if policy.DefaultAllow {
-		access.Role = defaultHumanRole
+		access.Role = defaultSubjectRole
 		return access, true
 	}
 	return access, false
@@ -394,9 +290,6 @@ func (a *Authorizer) ResolveAdminAccess(_ context.Context, p *principal.Principa
 func (a *Authorizer) AllowCatalogOperation(ctx context.Context, p *principal.Principal, provider string, op catalog.CatalogOperation) bool {
 	if principal.IsSystemPrincipal(p) {
 		return principal.AllowsOperationPermission(p, provider, op.ID)
-	}
-	if principal.IsWorkloadPrincipal(p) {
-		return a.AllowOperation(ctx, p, provider, op.ID)
 	}
 	access, allowed := a.ResolveAccess(ctx, p, provider)
 	if !allowed {
@@ -420,36 +313,14 @@ func (a *Authorizer) AllowCatalogOperation(ctx context.Context, p *principal.Pri
 	return false
 }
 
-func (a *Authorizer) bindingForPrincipal(p *principal.Principal, provider string) (WorkloadProviderBinding, bool) {
-	if !principal.IsWorkloadPrincipal(p) {
-		return WorkloadProviderBinding{}, false
-	}
-	if binding, ok := a.bindingForSubject(p, provider); ok {
-		return binding, true
-	}
-	return WorkloadProviderBinding{}, false
-}
-
-func (a *Authorizer) bindingForSubject(p *principal.Principal, provider string) (WorkloadProviderBinding, bool) {
-	if a == nil || p == nil || p.SubjectID == "" {
-		return WorkloadProviderBinding{}, false
-	}
-	workload, ok := a.workloadsBySubjectID[p.SubjectID]
-	if !ok || workload == nil {
-		return WorkloadProviderBinding{}, false
-	}
-	binding, ok := workload.Providers[provider]
-	return binding, ok
-}
-
-func (p *HumanPolicy) roleForPrincipal(pr *principal.Principal) (string, bool) {
+func (p *SubjectPolicy) roleForPrincipal(pr *principal.Principal) (string, bool) {
 	if p == nil || pr == nil {
 		return "", false
 	}
 	return p.staticRoleForIdentity(principal.Canonicalized(pr).SubjectID)
 }
 
-func (p *HumanPolicy) staticRoleForIdentity(subjectID string) (string, bool) {
+func (p *SubjectPolicy) staticRoleForIdentity(subjectID string) (string, bool) {
 	if p == nil {
 		return "", false
 	}
@@ -459,78 +330,4 @@ func (p *HumanPolicy) staticRoleForIdentity(subjectID string) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-func buildBinding(mode core.ConnectionMode, workloadID, provider string, def config.WorkloadProviderDef, defaultConnections map[string]string) (WorkloadProviderBinding, error) {
-	switch core.NormalizeConnectionMode(mode) {
-	case core.ConnectionModeNone:
-		if strings.TrimSpace(def.Connection) != "" || strings.TrimSpace(def.Instance) != "" {
-			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q does not accept connection or instance bindings", workloadID, provider)
-		}
-		return WorkloadProviderBinding{
-			CredentialBinding: CredentialBinding{
-				Mode: core.ConnectionModeNone,
-			},
-		}, nil
-	case core.ConnectionModeUser:
-		connection := strings.TrimSpace(def.Connection)
-		if connection == "" {
-			connection = defaultConnections[provider]
-		}
-		connection = config.ResolveConnectionAlias(connection)
-		if connection == "" {
-			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q requires a bound connection", workloadID, provider)
-		}
-		if !config.SafeConnectionValue(connection) {
-			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q connection contains invalid characters", workloadID, provider)
-		}
-
-		instance := strings.TrimSpace(def.Instance)
-		if instance == "" {
-			instance = defaultInstance
-		}
-		if !config.SafeInstanceValue(instance) {
-			return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q instance contains invalid characters", workloadID, provider)
-		}
-
-		return WorkloadProviderBinding{
-			CredentialBinding: CredentialBinding{
-				Mode:                core.ConnectionModeUser,
-				CredentialSubjectID: principal.WorkloadSubjectID(workloadID),
-				Connection:          connection,
-				Instance:            instance,
-			},
-		}, nil
-	default:
-		return WorkloadProviderBinding{}, fmt.Errorf("authorization validation: workload %q provider %q uses unknown connection mode %q", workloadID, provider, mode)
-	}
-}
-
-func normalizeAllowedOperations(ops []string) map[string]struct{} {
-	allowed := make(map[string]struct{}, len(ops))
-	for _, op := range ops {
-		name := strings.TrimSpace(op)
-		if name == "" {
-			continue
-		}
-		allowed[name] = struct{}{}
-	}
-	return allowed
-}
-
-func providerMode(provider string, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider]) (core.ConnectionMode, bool, error) {
-	if entry, ok := pluginDefs[provider]; ok && entry != nil {
-		plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
-		if err != nil {
-			return "", false, err
-		}
-		return plan.ConnectionMode(), true, nil
-	}
-	if providers != nil {
-		prov, err := providers.Get(provider)
-		if err == nil && prov != nil {
-			return prov.ConnectionMode(), true, nil
-		}
-	}
-	return "", false, nil
 }

@@ -943,24 +943,15 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if instance != "" && !config.SafeInstanceValue(instance) {
 		return coreagent.Tool{}, fmt.Errorf("instance name contains invalid characters")
 	}
-	if m.authorizer != nil && principal.IsWorkloadPrincipal(p) && (connection != "" || instance != "") {
-		return coreagent.Tool{}, fmt.Errorf("%w: workloads may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
-	}
 
 	ctx = invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, pluginName))
 	var resolver invocation.TokenResolver
 	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	boundCredential := invocation.CredentialBindingResolution{}
-	if bindingResolver, ok := m.invoker.(invocation.EffectiveCredentialBindingResolver); ok {
-		boundCredential, err = bindingResolver.ResolveEffectiveCredentialBinding(ctx, p, pluginName, connection, instance)
-		if err != nil {
-			return coreagent.Tool{}, err
-		}
-	}
-	boundConnections, sessionInstance := m.catalogSelectorConfig().BoundSessionCatalogConnections(pluginName, p, connection, instance)
-	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, pluginName, resolver, p, operation, boundConnections, sessionInstance)
+	sessionConnections := m.catalogSelectorConfig().SessionCatalogConnections(pluginName, connection)
+	sessionInstance := instance
+	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, pluginName, resolver, p, operation, sessionConnections, sessionInstance)
 	if err != nil {
 		return coreagent.Tool{}, err
 	}
@@ -974,7 +965,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		connection = resolvedConnection
 	}
 	if resolver != nil && sessionInstance == "" {
-		resolvedCtx, _, err := invocation.ResolveTokenForBinding(ctx, resolver, p, pluginName, connection, sessionInstance, boundCredential)
+		resolvedCtx, _, err := resolver.ResolveToken(ctx, p, pluginName, connection, sessionInstance)
 		if err != nil {
 			return coreagent.Tool{}, err
 		}
@@ -1103,9 +1094,6 @@ func (m *Manager) catalogForAgentToolSearch(ctx context.Context, p *principal.Pr
 	if instance != "" && !config.SafeInstanceValue(instance) {
 		return nil, fmt.Errorf("instance name contains invalid characters")
 	}
-	if m.authorizer != nil && principal.IsWorkloadPrincipal(p) && (connection != "" || instance != "") {
-		return nil, fmt.Errorf("%w: workloads may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
-	}
 	var resolver invocation.TokenResolver
 	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
@@ -1117,7 +1105,7 @@ func (m *Manager) catalogForAgentToolSearch(ctx context.Context, p *principal.Pr
 		pluginName,
 		resolver,
 		p,
-		m.catalogSelectorConfig().BoundSessionCatalogTargets(pluginName, p, connection, instance),
+		m.catalogSelectorConfig().SessionCatalogTargets(pluginName, connection, instance),
 		core.SupportsSessionCatalog(prov) || connection != "" || instance != "",
 	)
 	return cat, err
@@ -1263,9 +1251,6 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 		if instance != "" && !config.SafeInstanceValue(instance) {
 			return fmt.Errorf("instance name contains invalid characters")
 		}
-		if principal.IsWorkloadPrincipal(p) && (connection != "" || instance != "") {
-			return fmt.Errorf("%w: workloads may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
-		}
 	}
 	return nil
 }
@@ -1324,7 +1309,6 @@ func (m *Manager) allowTool(ctx context.Context, p *principal.Principal, tool co
 
 func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 	return invocation.CatalogSelectorConfig{
-		Authorizer:        m.authorizer,
 		Invoker:           m.invoker,
 		CatalogConnection: m.catalogConnection,
 		DefaultConnection: m.defaultConnection,

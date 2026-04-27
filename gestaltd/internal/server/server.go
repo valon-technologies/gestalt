@@ -85,8 +85,6 @@ type Server struct {
 	users                  *coredata.UserService
 	externalCredentials    core.ExternalCredentialProvider
 	apiTokens              *coredata.APITokenService
-	identities             *coredata.IdentityService
-	identityGrants         *coredata.IdentityManagementGrantService
 	workspaceRoles         *coredata.WorkspaceRoleService
 	identityPluginAccess   *coredata.IdentityPluginAccessService
 	workflowSchedules      *workflowmanager.Manager
@@ -129,7 +127,6 @@ type Server struct {
 
 func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 	return invocation.CatalogSelectorConfig{
-		Authorizer:        s.authorizer,
 		Invoker:           s.invoker,
 		CatalogConnection: s.catalogConnection,
 		DefaultConnection: s.defaultConnection,
@@ -256,8 +253,6 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("external credentials provider is required")
 	}
 	apiTokens := cfg.Services.APITokens
-	identities := cfg.Services.Identities
-	identityGrants := cfg.Services.IdentityManagementGrants
 	workspaceRoles := cfg.Services.WorkspaceRoles
 	identityPluginAccess := cfg.Services.IdentityPluginAccess
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, cfg.Authorizer)
@@ -305,8 +300,6 @@ func New(cfg Config) (*Server, error) {
 		users:                  users,
 		externalCredentials:    externalCredentials,
 		apiTokens:              apiTokens,
-		identities:             identities,
-		identityGrants:         identityGrants,
 		workspaceRoles:         workspaceRoles,
 		identityPluginAccess:   identityPluginAccess,
 		agentRuns:              cfg.AgentManager,

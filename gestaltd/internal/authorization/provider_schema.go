@@ -112,7 +112,7 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 			Name: resourceTypeExternalIdentity,
 			Relations: []*core.AuthorizationModelRelation{{
 				Name:         relationExternalIdentityAssume,
-				SubjectTypes: []string{subjectTypeUser},
+				SubjectTypes: []string{subjectTypeSubject, subjectTypeUser},
 			}},
 			Actions: []*core.AuthorizationModelAction{{
 				Name:      relationExternalIdentityAssume,
