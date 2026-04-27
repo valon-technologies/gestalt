@@ -207,7 +207,7 @@ func (a *ProviderBackedAuthorizer) AllowProvider(ctx context.Context, p *princip
 	if a == nil {
 		return true
 	}
-	if principal.IsWorkloadPrincipal(p) || principal.IsSystemPrincipal(p) {
+	if principal.IsSystemPrincipal(p) {
 		return a.base.AllowProvider(ctx, p, provider)
 	}
 	_, allowed := a.ResolveAccess(ctx, p, provider)
@@ -218,24 +218,17 @@ func (a *ProviderBackedAuthorizer) AllowOperation(ctx context.Context, p *princi
 	if a == nil {
 		return true
 	}
-	if principal.IsWorkloadPrincipal(p) || principal.IsSystemPrincipal(p) {
+	if principal.IsSystemPrincipal(p) {
 		return a.base.AllowOperation(ctx, p, provider, operation)
 	}
 	return a.AllowProvider(ctx, p, provider)
-}
-
-func (a *ProviderBackedAuthorizer) Binding(p *principal.Principal, provider string) (CredentialBinding, bool) {
-	if a == nil {
-		return CredentialBinding{}, false
-	}
-	return a.base.Binding(p, provider)
 }
 
 func (a *ProviderBackedAuthorizer) ResolveAccess(ctx context.Context, p *principal.Principal, provider string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, true
 	}
-	if principal.IsWorkloadPrincipal(p) || principal.IsSystemPrincipal(p) {
+	if principal.IsSystemPrincipal(p) {
 		return a.base.ResolveAccess(ctx, p, provider)
 	}
 
@@ -253,7 +246,7 @@ func (a *ProviderBackedAuthorizer) ResolveAccess(ctx context.Context, p *princip
 	if err != nil {
 		a.logProviderEvalError("plugin", provider, err)
 		if policy.DefaultAllow {
-			access.Role = defaultHumanRole
+			access.Role = defaultSubjectRole
 			return access, true
 		}
 		return access, false
@@ -263,7 +256,7 @@ func (a *ProviderBackedAuthorizer) ResolveAccess(ctx context.Context, p *princip
 		return access, true
 	}
 	if policy.DefaultAllow {
-		access.Role = defaultHumanRole
+		access.Role = defaultSubjectRole
 		return access, true
 	}
 	return access, false
@@ -272,9 +265,6 @@ func (a *ProviderBackedAuthorizer) ResolveAccess(ctx context.Context, p *princip
 func (a *ProviderBackedAuthorizer) ResolvePolicyAccess(ctx context.Context, p *principal.Principal, policyName string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, true
-	}
-	if principal.IsWorkloadPrincipal(p) {
-		return a.base.ResolvePolicyAccess(ctx, p, policyName)
 	}
 	policyName = strings.TrimSpace(policyName)
 	if policyName == "" {
@@ -290,7 +280,7 @@ func (a *ProviderBackedAuthorizer) ResolvePolicyAccess(ctx context.Context, p *p
 	if err != nil {
 		a.logProviderEvalError("policy", policyName, err)
 		if policy.DefaultAllow {
-			access.Role = defaultHumanRole
+			access.Role = defaultSubjectRole
 			return access, true
 		}
 		return access, false
@@ -300,7 +290,7 @@ func (a *ProviderBackedAuthorizer) ResolvePolicyAccess(ctx context.Context, p *p
 		return access, true
 	}
 	if policy.DefaultAllow {
-		access.Role = defaultHumanRole
+		access.Role = defaultSubjectRole
 		return access, true
 	}
 	return access, false
@@ -309,9 +299,6 @@ func (a *ProviderBackedAuthorizer) ResolvePolicyAccess(ctx context.Context, p *p
 func (a *ProviderBackedAuthorizer) ResolveAdminAccess(ctx context.Context, p *principal.Principal, policyName string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, true
-	}
-	if principal.IsWorkloadPrincipal(p) {
-		return a.base.ResolveAdminAccess(ctx, p, policyName)
 	}
 	policyName = strings.TrimSpace(policyName)
 	if policyName == "" {
@@ -327,7 +314,7 @@ func (a *ProviderBackedAuthorizer) ResolveAdminAccess(ctx context.Context, p *pr
 	if err != nil {
 		a.logProviderEvalError("admin_policy", policyName, err)
 		if policy.DefaultAllow {
-			access.Role = defaultHumanRole
+			access.Role = defaultSubjectRole
 			return access, true
 		}
 		return access, false
@@ -340,7 +327,7 @@ func (a *ProviderBackedAuthorizer) ResolveAdminAccess(ctx context.Context, p *pr
 	if err != nil {
 		a.logProviderEvalError("admin_dynamic", policyName, err)
 		if policy.DefaultAllow {
-			access.Role = defaultHumanRole
+			access.Role = defaultSubjectRole
 			return access, true
 		}
 		return access, false
@@ -350,7 +337,7 @@ func (a *ProviderBackedAuthorizer) ResolveAdminAccess(ctx context.Context, p *pr
 		return access, true
 	}
 	if policy.DefaultAllow {
-		access.Role = defaultHumanRole
+		access.Role = defaultSubjectRole
 		return access, true
 	}
 	return access, false
@@ -360,7 +347,7 @@ func (a *ProviderBackedAuthorizer) AllowCatalogOperation(ctx context.Context, p 
 	if a == nil {
 		return true
 	}
-	if principal.IsWorkloadPrincipal(p) || principal.IsSystemPrincipal(p) {
+	if principal.IsSystemPrincipal(p) {
 		return a.base.AllowCatalogOperation(ctx, p, provider, op)
 	}
 
@@ -407,14 +394,14 @@ func (a *ProviderBackedAuthorizer) StaticRoleForProviderIdentity(provider, subje
 	return a.base.StaticRoleForProviderIdentity(provider, subjectID)
 }
 
-func (a *ProviderBackedAuthorizer) StaticMembersForPolicy(policyName string) ([]StaticHumanMember, bool) {
+func (a *ProviderBackedAuthorizer) StaticMembersForPolicy(policyName string) ([]StaticSubjectMember, bool) {
 	if a == nil {
 		return nil, false
 	}
 	return a.base.StaticMembersForPolicy(policyName)
 }
 
-func (a *ProviderBackedAuthorizer) StaticMembersForProvider(provider string) (string, []StaticHumanMember, bool) {
+func (a *ProviderBackedAuthorizer) StaticMembersForProvider(provider string) (string, []StaticSubjectMember, bool) {
 	if a == nil {
 		return "", nil, false
 	}
@@ -599,7 +586,12 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 			adminDynamicRoles[relation] = struct{}{}
 		case resourceTypeExternalIdentity:
 			relation := strings.TrimSpace(rel.GetRelation())
-			if relation != relationExternalIdentityAssume || rel.GetSubject() == nil || strings.TrimSpace(rel.GetSubject().GetType()) != subjectTypeUser || strings.TrimSpace(rel.GetSubject().GetId()) == "" {
+			if relation != relationExternalIdentityAssume || rel.GetSubject() == nil || strings.TrimSpace(rel.GetSubject().GetId()) == "" {
+				continue
+			}
+			switch strings.TrimSpace(rel.GetSubject().GetType()) {
+			case subjectTypeSubject, subjectTypeUser:
+			default:
 				continue
 			}
 			addDesiredRelationship(desired, rel)
@@ -758,7 +750,7 @@ func dynamicSubjectRefs(p *principal.Principal) []*core.SubjectRef {
 		return nil
 	}
 	subjectID := strings.TrimSpace(p.SubjectID)
-	if principal.UserIDFromSubjectID(subjectID) == "" {
+	if subjectID == "" || principal.IsSystemSubjectID(subjectID) {
 		return nil
 	}
 	return []*core.SubjectRef{{Type: subjectTypeSubject, Id: subjectID}}
@@ -794,7 +786,7 @@ func (a *ProviderBackedAuthorizer) logProviderEvalError(scope, name string, err 
 	if err == nil {
 		return
 	}
-	slog.Warn("authorization: provider evaluation failed; denying provider-backed human access",
+	slog.Warn("authorization: provider evaluation failed; denying provider-backed subject access",
 		"scope", scope,
 		"name", name,
 		"error", err,

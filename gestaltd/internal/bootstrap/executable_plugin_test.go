@@ -2966,7 +2966,7 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 	t.Cleanup(func() { _ = services.Close() })
 
 	if len(authCfg.Workloads) > 0 || len(authCfg.Policies) > 0 {
-		authz, err := authorization.New(authCfg, cfg.Plugins, providers, nil)
+		authz, err := authorization.New(authCfg, cfg.Plugins)
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -4771,98 +4771,6 @@ func TestPluginInvokesRejectUndeclaredGraphQLSurface(t *testing.T) {
 	}
 	if !strings.Contains(got.Error, `may not invoke linear surface "graphql"`) {
 		t.Fatalf("undeclared graphql surface error = %q, want target rejection", got.Error)
-	}
-	if got := nonIntrospectionCalls.Load(); got != 0 {
-		t.Fatalf("non-introspection graphql calls = %d, want 0", got)
-	}
-}
-
-func TestPluginInvokesGraphQLSurfaceRejectsWorkloadWithoutGraphQLPermission(t *testing.T) {
-	t.Parallel()
-
-	var nonIntrospectionCalls atomic.Int32
-	schema := pluginInvokeGraphQLSchema()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload struct {
-			Query string `json:"query"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if strings.Contains(payload.Query, "__schema") {
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"data": map[string]any{
-					"__schema": schema,
-				},
-			})
-			return
-		}
-		nonIntrospectionCalls.Add(1)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data": map[string]any{"ok": true},
-		})
-	}))
-	t.Cleanup(srv.Close)
-
-	authCfg := config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: "gst_wld_triage-bot",
-				Providers: map[string]config.WorkloadProviderDef{
-					"caller": {
-						Connection: "default",
-						Allow:      []string{"invoke_plugin_graphql"},
-					},
-					"linear": {
-						Connection: "default",
-						Allow:      []string{"viewer"},
-					},
-				},
-			},
-		},
-	}
-	harness := newGraphQLSurfaceInvokeHarness(t, srv.URL, true, authCfg)
-	ctx := context.Background()
-	workloadSubjectID := principal.WorkloadSubjectID("triage-bot")
-	storeNestedInvokeTokenForSubject(t, harness, ctx, workloadSubjectID, "caller", "default", "default")
-	storeNestedInvokeTokenForSubject(t, harness, ctx, workloadSubjectID, "linear", "default", "default")
-
-	result, err := harness.invoker.Invoke(
-		invocation.WithConnection(context.Background(), "default"),
-		&principal.Principal{
-			SubjectID: workloadSubjectID,
-			Kind:      principal.KindWorkload,
-			Source:    principal.SourceWorkloadToken,
-		},
-		"caller",
-		"",
-		"invoke_plugin_graphql",
-		map[string]any{
-			"plugin":   "linear",
-			"document": "query Viewer($team: String!) { viewer(team: $team) { id } }",
-			"variables": map[string]any{
-				"team": "eng",
-			},
-		},
-	)
-	if err != nil {
-		t.Fatalf("Invoke(caller.invoke_plugin_graphql): %v", err)
-	}
-
-	var got struct {
-		OK    bool   `json:"ok"`
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
-		t.Fatalf("json.Unmarshal: %v", err)
-	}
-	if got.OK {
-		t.Fatalf("expected workload graphql authorization rejection, got success: %+v", got)
-	}
-	if !strings.Contains(got.Error, `authorization denied: linear.graphql`) {
-		t.Fatalf("workload graphql error = %q, want graphql authorization rejection", got.Error)
 	}
 	if got := nonIntrospectionCalls.Load(); got != 0 {
 		t.Fatalf("non-introspection graphql calls = %d, want 0", got)

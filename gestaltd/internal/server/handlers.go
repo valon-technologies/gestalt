@@ -43,7 +43,6 @@ var (
 	errResolveUser       = errors.New("failed to resolve user")
 	errWorkloadForbidden = errors.New("workload callers are not allowed on this route")
 	errOperationAccess   = errors.New("operation access denied")
-	errWorkloadSelector  = errors.New("workload callers may not override connection or instance bindings")
 )
 
 var (
@@ -109,6 +108,23 @@ func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, 
 	return dbUser.ID, nil
 }
 
+func (s *Server) resolveCredentialSubjectID(w http.ResponseWriter, r *http.Request) (string, error) {
+	p := PrincipalFromContext(r.Context())
+	if principal.IsWorkloadPrincipal(p) {
+		subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
+		if subjectID == "" {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return "", errNotAuthenticated
+		}
+		return subjectID, nil
+	}
+	userID, err := s.resolveUserID(w, r)
+	if err != nil {
+		return "", err
+	}
+	return principal.UserSubjectID(userID), nil
+}
+
 func (s *Server) healthCheck(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -125,15 +141,11 @@ func (s *Server) readinessCheck(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	p := PrincipalFromContext(r.Context())
-	connected := map[string][]instanceInfo{}
-	if !principal.IsWorkloadPrincipal(p) {
-		var err error
-		connected, err = s.userConnectedIntegrations(r)
-		if err != nil {
-			slog.ErrorContext(r.Context(), "listing integrations", "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to check integration status")
-			return
-		}
+	connected, err := s.subjectConnectedIntegrations(r)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "listing integrations", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to check integration status")
+		return
 	}
 
 	names := s.providers.List()
@@ -171,36 +183,8 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
 			info.MountedPath = strings.TrimSpace(entry.MountPath)
 		}
-		if principal.IsWorkloadPrincipal(p) {
-			if s.authorizer != nil {
-				if binding, ok := s.authorizer.Binding(p, name); ok {
-					switch binding.Mode {
-					case core.ConnectionModeNone:
-						info.Connected = true
-					case core.ConnectionModeUser:
-						_, err := s.externalCredentials.GetCredential(r.Context(), binding.CredentialSubjectID, name, binding.Connection, binding.Instance)
-						switch {
-						case err == nil:
-							info.Connected = true
-						case errors.Is(err, core.ErrNotFound):
-						default:
-							slog.ErrorContext(r.Context(), "checking workload integration status", "provider", name, "error", err)
-							writeError(w, http.StatusInternalServerError, "failed to check integration status")
-							return
-						}
-					}
-				}
-			}
-			info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
-			if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, surfaceProv, info) {
-				continue
-			}
-			out = append(out, info)
-			continue
-		}
-
 		instances := connected[name]
-		info.Connected = len(instances) > 0
+		info.Connected = len(instances) > 0 || core.NormalizeConnectionMode(prov.ConnectionMode()) == core.ConnectionModeNone
 		info.Instances = append(make([]instanceInfo, 0, len(instances)), instances...)
 		s.populateIntegrationSettings(&info, prov)
 		info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
@@ -212,7 +196,15 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) userConnectedIntegrations(r *http.Request) (map[string][]instanceInfo, error) {
+func (s *Server) subjectConnectedIntegrations(r *http.Request) (map[string][]instanceInfo, error) {
+	p := PrincipalFromContext(r.Context())
+	if principal.IsWorkloadPrincipal(p) {
+		subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
+		if subjectID == "" {
+			return nil, nil
+		}
+		return s.connectedIntegrationsForSubject(r.Context(), subjectID)
+	}
 	user := UserFromContext(r.Context())
 	if user == nil || user.Email == "" {
 		return nil, nil
@@ -228,7 +220,11 @@ func (s *Server) userConnectedIntegrations(r *http.Request) (map[string][]instan
 		}
 		userID = dbUser.ID
 	}
-	tokens, err := s.externalCredentials.ListCredentials(r.Context(), principal.UserSubjectID(userID))
+	return s.connectedIntegrationsForSubject(r.Context(), principal.UserSubjectID(userID))
+}
+
+func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID string) (map[string][]instanceInfo, error) {
+	tokens, err := s.externalCredentials.ListCredentials(ctx, subjectID)
 	if err != nil {
 		return nil, fmt.Errorf("listing external credentials: %w", err)
 	}
@@ -251,12 +247,11 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), name, "connection.disconnect", auditAllowed, auditErr, auditTarget)
 	}()
 
-	userID, err := s.resolveUserID(w, r)
+	subjectID, err := s.resolveCredentialSubjectID(w, r)
 	if err != nil {
 		auditErr = err
 		return
 	}
-	subjectID := principal.UserSubjectID(userID)
 
 	if _, ok := s.getProvider(w, name); !ok {
 		auditErr = errors.New("integration not found")
@@ -483,10 +478,6 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance); err != nil {
-		s.auditHTTPEvent(r.Context(), p, name, operation, false, err)
-		return
-	}
 	var resolver invocation.TokenResolver
 	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
@@ -513,7 +504,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		name,
 		resolver,
 		p,
-		s.catalogSelectorConfig().BoundSessionCatalogTargets(name, p, requestedConnection, requestedInstance),
+		s.catalogSelectorConfig().SessionCatalogTargets(name, requestedConnection, requestedInstance),
 		strictCatalog,
 	)
 	discoveryFailed = metadata.SessionFailed
@@ -586,11 +577,6 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance); err != nil {
-		s.auditHTTPEvent(r.Context(), p, providerName, operationName, false, err)
-		return
-	}
-
 	params := make(map[string]any)
 	if r.Method == http.MethodPost {
 		if r.Body != nil {
@@ -641,10 +627,6 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("conflicting connection parameter %q in query string and JSON body", httpConnectionParam))
 		return
 	}
-	if err := rejectWorkloadSelectors(w, p, bodyConnection, bodyInstance); err != nil {
-		s.auditHTTPEvent(r.Context(), p, providerName, operationName, false, err)
-		return
-	}
 	connection := bodyConnection
 	connectionInput := bodyConnectionInput
 	if connection == "" {
@@ -658,8 +640,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	boundSessionConnections, sessionInstance := s.catalogSelectorConfig().BoundSessionCatalogConnections(providerName, p, connection, instance)
-	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, surfaceProv, providerName, resolver, p, operationName, boundSessionConnections, sessionInstance)
+	sessionConnections := s.catalogSelectorConfig().SessionCatalogConnections(providerName, connection)
+	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, surfaceProv, providerName, resolver, p, operationName, sessionConnections, instance)
 	if err != nil {
 		s.writeInvocationError(w, r, providerName, operationName, err)
 		return

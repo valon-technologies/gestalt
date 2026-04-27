@@ -18,7 +18,7 @@ starts it with the permissions and request context it needs.
 | --- | --- | --- |
 | `plugin` | Tool providers that expose operations over CLI, HTTP API, and MCP | `plugins.<name>` |
 | `auth` | Platform authentication backends | `providers.authentication.<name>` |
-| `authorization` | Dynamic human authorization backends | `providers.authorization.<name>` |
+| `authorization` | Dynamic subject authorization backends | `providers.authorization.<name>` |
 | `agent` | Global agent run backends that reason over messages and tools | `providers.agent.<name>` |
 | `cache` | Plugin-bound cache backends | `providers.cache.<name>` |
 | `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddb.<name>` |
@@ -137,7 +137,7 @@ release workflow now lives under [Custom Providers](/custom-providers).
 ## What to read next
 
 - [Authentication](/providers/authentication): platform login providers
-- [Authorization](/providers/authorization): human authorization providers
+- [Authorization](/providers/authorization): subject authorization providers
 - [Agent](/providers/agent): global agent-provider pool and selection model
 - [Cache](/providers/cache): plugin-bound cache backends
 - [IndexedDB](/providers/indexeddb): storage backends

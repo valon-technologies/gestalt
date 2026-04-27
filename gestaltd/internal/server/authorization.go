@@ -38,14 +38,3 @@ func rejectWorkloadCaller(w http.ResponseWriter, p *principal.Principal) error {
 	writeError(w, http.StatusForbidden, errWorkloadForbidden.Error())
 	return errWorkloadForbidden
 }
-
-func rejectWorkloadSelectors(w http.ResponseWriter, p *principal.Principal, connection, instance string) error {
-	if !principal.IsWorkloadPrincipal(p) {
-		return nil
-	}
-	if connection == "" && instance == "" {
-		return nil
-	}
-	writeError(w, http.StatusForbidden, errWorkloadSelector.Error())
-	return errWorkloadSelector
-}

@@ -22,7 +22,6 @@ import (
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
-	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -147,9 +146,13 @@ func ctxWithWorkloadPrincipal(workloadID string) context.Context {
 	return principal.WithPrincipal(context.Background(), p)
 }
 
-func mustAuthorizer(t *testing.T, cfg config.AuthorizationConfig, providers *registry.ProviderMap[core.Provider]) *authorization.Authorizer {
+func mustAuthorizerWithPluginPolicies(t *testing.T, cfg config.AuthorizationConfig, providerPolicies map[string]string) *authorization.Authorizer {
 	t.Helper()
-	authz, err := authorization.New(cfg, nil, providers, map[string]string{})
+	pluginDefs := make(map[string]*config.ProviderEntry, len(providerPolicies))
+	for provider, policy := range providerPolicies {
+		pluginDefs[provider] = &config.ProviderEntry{AuthorizationPolicy: policy}
+	}
+	authz, err := authorization.New(cfg, pluginDefs)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -975,14 +978,16 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 		Name: "clickhouse",
 		Operations: []catalog.CatalogOperation{
 			{
-				ID:          "run_query",
-				Description: "static query",
-				Transport:   catalog.TransportMCPPassthrough,
+				ID:           "run_query",
+				Description:  "static query",
+				Transport:    catalog.TransportMCPPassthrough,
+				AllowedRoles: []string{"viewer"},
 			},
 			{
-				ID:          "delete_table",
-				Description: "delete a table",
-				Transport:   catalog.TransportMCPPassthrough,
+				ID:           "delete_table",
+				Description:  "delete a table",
+				Transport:    catalog.TransportMCPPassthrough,
+				AllowedRoles: []string{"admin"},
 			},
 		},
 	}
@@ -991,19 +996,22 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 		Name: "clickhouse",
 		Operations: []catalog.CatalogOperation{
 			{
-				ID:          "run_query",
-				Description: "session query",
-				Transport:   catalog.TransportMCPPassthrough,
+				ID:           "run_query",
+				Description:  "session query",
+				Transport:    catalog.TransportMCPPassthrough,
+				AllowedRoles: []string{"viewer"},
 			},
 			{
-				ID:          "list_databases",
-				Description: "list databases",
-				Transport:   catalog.TransportMCPPassthrough,
+				ID:           "list_databases",
+				Description:  "list databases",
+				Transport:    catalog.TransportMCPPassthrough,
+				AllowedRoles: []string{"viewer"},
 			},
 			{
-				ID:          "drop_database",
-				Description: "drop a database",
-				Transport:   catalog.TransportMCPPassthrough,
+				ID:           "drop_database",
+				Description:  "drop a database",
+				Transport:    catalog.TransportMCPPassthrough,
+				AllowedRoles: []string{"admin"},
 			},
 		},
 	}
@@ -1020,20 +1028,21 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	authz := mustAuthorizer(t, config.AuthorizationConfig{
+	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: "gst_wld_triage-bot-token",
-				Providers: map[string]config.WorkloadProviderDef{
-					"clickhouse": {
-						Connection: "workspace",
-						Instance:   "team-a",
-						Allow:      []string{"run_query", "list_databases"},
-					},
-				},
 			},
 		},
-	}, providers)
+		Policies: map[string]config.SubjectPolicyDef{
+			"clickhouse_policy": {
+				Members: []config.SubjectPolicyMemberDef{{
+					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					Role:      "viewer",
+				}},
+			},
+		},
+	}, map[string]string{"clickhouse": "clickhouse_policy"})
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker: &testutil.StubInvoker{
@@ -1049,7 +1058,7 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 				if providerName != "clickhouse" {
 					t.Fatalf("providerName = %q, want %q", providerName, "clickhouse")
 				}
-				if connection != "workspace" || instance != "team-a" {
+				if connection != "workspace" || instance != "" {
 					t.Fatalf("unexpected session hydration selector inputs: connection=%q instance=%q", connection, instance)
 				}
 				return ctx, "identity-token", nil
@@ -1057,7 +1066,7 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 		},
 		Providers:     providers,
 		Authorizer:    authz,
-		MCPConnection: map[string]string{"clickhouse": "default"},
+		MCPConnection: map[string]string{"clickhouse": "workspace"},
 	})
 
 	session := newTestSessionWithTools()
@@ -1126,17 +1135,18 @@ func TestNewServer_HumanListToolsFiltersRoleRestrictedTools(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, prov)
 	_, userID := stubServicesWithToken(t, "sampledb")
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sampledb": {AuthorizationPolicy: "sample_policy"},
-	}, providers, map[string]string{})
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -1205,17 +1215,18 @@ func TestNewServer_HumanListToolsUsesSessionMetadataForStaticCollisions(t *testi
 		t.Fatalf("PutCredential: %v", err)
 	}
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sampledb": {AuthorizationPolicy: "sample_policy"},
-	}, providers, map[string]string{})
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -1264,17 +1275,18 @@ func TestNewServer_HumanListToolsUsesHydratedSessionCatalogSnapshot(t *testing.T
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "sampledb")
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sampledb": {AuthorizationPolicy: "sample_policy"},
-	}, providers, map[string]string{})
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -1351,17 +1363,18 @@ func TestNewServer_HumanListToolsIgnoresHiddenStaticCollisions(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "sampledb")
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sampledb": {AuthorizationPolicy: "sample_policy"},
-	}, providers, map[string]string{})
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -1493,10 +1506,10 @@ func TestNewServer_HumanListToolsDoesNotLeakAcrossStatelessSessions(t *testing.T
 		t.Fatalf("FindOrCreateUser admin: %v", err)
 	}
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 					{SubjectID: principal.UserSubjectID(admin.ID), Role: "admin"},
 				},
@@ -1504,7 +1517,8 @@ func TestNewServer_HumanListToolsDoesNotLeakAcrossStatelessSessions(t *testing.T
 		},
 	}, map[string]*config.ProviderEntry{
 		"sampledb": {AuthorizationPolicy: "sample_policy"},
-	}, providers, map[string]string{})
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -1597,17 +1611,18 @@ func TestNewServer_HumanSessionCatalogReceivesAccessContext(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "sampledb")
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sampledb": {AuthorizationPolicy: "sample_policy"},
-	}, providers, map[string]string{})
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -1659,17 +1674,18 @@ func TestNewServer_HumanCallToolDeniedWhenAllowedRolesAreMissing(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds, userID := stubServicesWithToken(t, "sampledb")
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sampledb": {AuthorizationPolicy: "sample_policy"},
-	}, providers, map[string]string{})
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -1707,14 +1723,16 @@ func TestNewServer_WorkloadCallToolDeniedReturnsErrorResult(t *testing.T) {
 				Name: "clickhouse",
 				Operations: []catalog.CatalogOperation{
 					{
-						ID:          "run_query",
-						Description: "run a query",
-						Transport:   catalog.TransportMCPPassthrough,
+						ID:           "run_query",
+						Description:  "run a query",
+						Transport:    catalog.TransportMCPPassthrough,
+						AllowedRoles: []string{"viewer"},
 					},
 					{
-						ID:          "delete_table",
-						Description: "delete a table",
-						Transport:   catalog.TransportMCPPassthrough,
+						ID:           "delete_table",
+						Description:  "delete a table",
+						Transport:    catalog.TransportMCPPassthrough,
+						AllowedRoles: []string{"admin"},
 					},
 				},
 			}, nil
@@ -1727,18 +1745,21 @@ func TestNewServer_WorkloadCallToolDeniedReturnsErrorResult(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
-	authz := mustAuthorizer(t, config.AuthorizationConfig{
+	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: "gst_wld_triage-bot-token",
-				Providers: map[string]config.WorkloadProviderDef{
-					"clickhouse": {
-						Allow: []string{"run_query"},
-					},
-				},
 			},
 		},
-	}, providers)
+		Policies: map[string]config.SubjectPolicyDef{
+			"clickhouse_policy": {
+				Members: []config.SubjectPolicyMemberDef{{
+					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					Role:      "viewer",
+				}},
+			},
+		},
+	}, map[string]string{"clickhouse": "clickhouse_policy"})
 
 	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -1779,9 +1800,10 @@ func TestNewServer_WorkloadCallToolDeniedForUnboundSessionOnlyProvider(t *testin
 				Name: "clickhouse",
 				Operations: []catalog.CatalogOperation{
 					{
-						ID:          "run_query",
-						Description: "run a query",
-						Transport:   catalog.TransportMCPPassthrough,
+						ID:           "run_query",
+						Description:  "run a query",
+						Transport:    catalog.TransportMCPPassthrough,
+						AllowedRoles: []string{"viewer"},
 					},
 				},
 			}, nil
@@ -1794,13 +1816,16 @@ func TestNewServer_WorkloadCallToolDeniedForUnboundSessionOnlyProvider(t *testin
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	ds := coretesting.NewStubServices(t)
-	authz := mustAuthorizer(t, config.AuthorizationConfig{
+	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: "gst_wld_triage-bot-token",
 			},
 		},
-	}, providers)
+		Policies: map[string]config.SubjectPolicyDef{
+			"clickhouse_policy": {},
+		},
+	}, map[string]string{"clickhouse": "clickhouse_policy"})
 
 	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -1848,9 +1873,10 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 				Name: "clickhouse",
 				Operations: []catalog.CatalogOperation{
 					{
-						ID:          "run_query",
-						Description: "run a query",
-						Transport:   catalog.TransportMCPPassthrough,
+						ID:           "run_query",
+						Description:  "run a query",
+						Transport:    catalog.TransportMCPPassthrough,
+						AllowedRoles: []string{"viewer"},
 					},
 				},
 			}, nil
@@ -1884,20 +1910,21 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 		t.Fatalf("PutCredential: %v", err)
 	}
 
-	authz := mustAuthorizer(t, config.AuthorizationConfig{
+	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: "gst_wld_triage-bot-token",
-				Providers: map[string]config.WorkloadProviderDef{
-					"clickhouse": {
-						Connection: "workspace",
-						Instance:   "team-a",
-						Allow:      []string{"run_query"},
-					},
-				},
 			},
 		},
-	}, providers)
+		Policies: map[string]config.SubjectPolicyDef{
+			"clickhouse_policy": {
+				Members: []config.SubjectPolicyMemberDef{{
+					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					Role:      "viewer",
+				}},
+			},
+		},
+	}, map[string]string{"clickhouse": "clickhouse_policy"})
 
 	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -1905,7 +1932,7 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 		TokenResolver: broker,
 		Providers:     providers,
 		Authorizer:    authz,
-		MCPConnection: map[string]string{"clickhouse": "default"},
+		MCPConnection: map[string]string{"clickhouse": "workspace"},
 	})
 
 	result := callToolForSession(t, srv, ctxWithWorkloadPrincipal("triage-bot"), newTestSessionWithTools(), "clickhouse_run_query", map[string]any{"sql": "select 1"})
@@ -1924,7 +1951,7 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 	}
 }
 
-func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
+func TestNewServer_WorkloadCallToolUsesRequestedInstance(t *testing.T) {
 	t.Parallel()
 
 	var sessionCatalogCalls int
@@ -1938,28 +1965,42 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 			Name: "sampledb",
 			Operations: []catalog.CatalogOperation{
 				{
-					ID:          "run_query",
-					Description: "run a query",
-					Transport:   catalog.TransportMCPPassthrough,
+					ID:           "run_query",
+					Description:  "run a query",
+					Transport:    catalog.TransportMCPPassthrough,
+					AllowedRoles: []string{"viewer"},
 				},
 			},
 		},
-		sessionCatalogFn: func(_ context.Context, _ string) (*catalog.Catalog, error) {
+		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 			sessionCatalogCalls++
+			if token != "team-b-token" {
+				t.Fatalf("session catalog token = %q, want %q", token, "team-b-token")
+			}
 			return &catalog.Catalog{
 				Name: "sampledb",
 				Operations: []catalog.CatalogOperation{
 					{
-						ID:          "run_query",
-						Description: "run a query",
-						Transport:   catalog.TransportMCPPassthrough,
+						ID:           "run_query",
+						Description:  "run a query",
+						Transport:    catalog.TransportMCPPassthrough,
+						AllowedRoles: []string{"viewer"},
 					},
 				},
 			}, nil
 		},
-		callFn: func(context.Context, string, map[string]any) (*mcpgo.CallToolResult, error) {
+		callFn: func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
 			called = true
-			return mcpgo.NewToolResultText("unexpected provider call"), nil
+			if name != "run_query" {
+				t.Fatalf("name = %q, want %q", name, "run_query")
+			}
+			if token := mcpupstream.UpstreamTokenFromContext(ctx); token != "team-b-token" {
+				t.Fatalf("upstream token = %q, want %q", token, "team-b-token")
+			}
+			if sql, _ := args["sql"].(string); sql != "select 1" {
+				t.Fatalf("sql = %q, want %q", sql, "select 1")
+			}
+			return mcpgo.NewToolResultText("ok"), nil
 		},
 	}
 
@@ -1971,26 +2012,37 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
 		Integration: "sampledb",
 		Connection:  "workspace",
+		Instance:    "team-b",
+		AccessToken: "team-b-token",
+	}); err != nil {
+		t.Fatalf("PutCredential: %v", err)
+	}
+	if err := ds.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
+		ID:          "tok-workload-default",
+		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
+		Integration: "sampledb",
+		Connection:  "workspace",
 		Instance:    "team-a",
 		AccessToken: "workload-token",
 	}); err != nil {
 		t.Fatalf("PutCredential: %v", err)
 	}
 
-	authz := mustAuthorizer(t, config.AuthorizationConfig{
+	authz := mustAuthorizerWithPluginPolicies(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: "gst_wld_triage-bot-token",
-				Providers: map[string]config.WorkloadProviderDef{
-					"sampledb": {
-						Connection: "workspace",
-						Instance:   "team-a",
-						Allow:      []string{"run_query"},
-					},
-				},
 			},
 		},
-	}, providers)
+		Policies: map[string]config.SubjectPolicyDef{
+			"sampledb_policy": {
+				Members: []config.SubjectPolicyMemberDef{{
+					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					Role:      "viewer",
+				}},
+			},
+		},
+	}, map[string]string{"sampledb": "sampledb_policy"})
 
 	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithAuthorizer(authz))
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -1998,25 +2050,22 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 		TokenResolver: broker,
 		Providers:     providers,
 		Authorizer:    authz,
-		MCPConnection: map[string]string{"sampledb": "default"},
+		MCPConnection: map[string]string{"sampledb": "workspace"},
 	})
 
 	result := callToolForSession(t, srv, ctxWithWorkloadPrincipal("triage-bot"), newTestSessionWithTools(), "sampledb_run_query", map[string]any{
 		"sql":       "select 1",
 		"_instance": "team-b",
 	})
-	if !result.IsError {
-		t.Fatalf("expected MCP error result, got %+v", result)
-	}
 	text, ok := result.Content[0].(mcpgo.TextContent)
-	if !ok || text.Text != "workload callers may not override connection or instance bindings" {
-		t.Fatalf("unexpected MCP error content: %+v", result.Content)
+	if !ok || text.Text != "ok" {
+		t.Fatalf("unexpected MCP success content: %+v", result.Content)
 	}
-	if called {
-		t.Fatal("expected workload override to stop before provider execution")
+	if !called {
+		t.Fatal("expected workload tool call to reach provider")
 	}
-	if sessionCatalogCalls != 0 {
-		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 0)
+	if sessionCatalogCalls != 1 {
+		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 1)
 	}
 }
 
@@ -2078,17 +2127,18 @@ func TestNewServer_HumanCallToolUsesInstanceMetadataForStaticCollisions(t *testi
 		t.Fatalf("PutCredential: %v", err)
 	}
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sampledb": {AuthorizationPolicy: "sample_policy"},
-	}, providers, map[string]string{})
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -2529,17 +2579,18 @@ func TestNewServer_HumanCallToolUsesNormalizedRequestedInstanceWithoutOverwritin
 	providers := testutil.NewProviderRegistry(t, prov)
 	const userID = "viewer-user"
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sampledb": {AuthorizationPolicy: "sample_policy"},
-	}, providers, map[string]string{})
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}

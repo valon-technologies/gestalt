@@ -370,16 +370,10 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
-				Providers: map[string]config.WorkloadProviderDef{
-					"audit-workload-prov": {
-						Connection: "workspace",
-						Instance:   "team-a",
-						Allow:      []string{"ping"},
-					},
-				},
 			},
 		},
-	}, nil, providers, nil)
+	}, nil)
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -414,7 +408,7 @@ func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
 	ts := httptest.NewServer(srv)
 	t.Cleanup(ts.Close)
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/audit-workload-prov/ping", bytes.NewBufferString(`{}`))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/audit-workload-prov/ping?_connection=workspace&_instance=team-a", bytes.NewBufferString(`{}`))
 	req.Header.Set("Authorization", "Bearer "+workloadToken)
 
 	resp, err := http.DefaultClient.Do(req)

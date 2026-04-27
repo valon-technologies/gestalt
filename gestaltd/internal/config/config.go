@@ -360,7 +360,7 @@ type ProviderEntry struct {
 	RouteAuth       *RouteAuthDef                  `yaml:"-"`
 	SecuritySchemes map[string]*HTTPSecurityScheme `yaml:"securitySchemes,omitempty"`
 	HTTP            map[string]*HTTPBinding        `yaml:"http,omitempty"`
-	// AuthorizationPolicy binds this provider to a shared human access policy.
+	// AuthorizationPolicy binds this provider to a shared subject access policy.
 	AuthorizationPolicy string `yaml:"authorizationPolicy,omitempty"`
 
 	// Plugin-specific config fields (parsed from YAML, only valid on plugin entries)
@@ -1100,30 +1100,23 @@ type EgressConfig struct {
 }
 
 type AuthorizationConfig struct {
-	Workloads map[string]WorkloadDef    `yaml:"workloads,omitempty"`
-	Policies  map[string]HumanPolicyDef `yaml:"policies,omitempty"`
+	Workloads map[string]WorkloadDef      `yaml:"workloads,omitempty"`
+	Policies  map[string]SubjectPolicyDef `yaml:"policies,omitempty"`
 }
 
-type HumanPolicyDef struct {
-	Default string                 `yaml:"default,omitempty"`
-	Members []HumanPolicyMemberDef `yaml:"members,omitempty"`
+type SubjectPolicyDef struct {
+	Default string                   `yaml:"default,omitempty"`
+	Members []SubjectPolicyMemberDef `yaml:"members,omitempty"`
 }
 
-type HumanPolicyMemberDef struct {
+type SubjectPolicyMemberDef struct {
 	SubjectID string `yaml:"subjectID,omitempty"`
 	Role      string `yaml:"role"`
 }
 
 type WorkloadDef struct {
-	DisplayName string                         `yaml:"displayName,omitempty"`
-	Token       string                         `yaml:"token"`
-	Providers   map[string]WorkloadProviderDef `yaml:"providers,omitempty"`
-}
-
-type WorkloadProviderDef struct {
-	Connection string   `yaml:"connection,omitempty"`
-	Instance   string   `yaml:"instance,omitempty"`
-	Allow      []string `yaml:"allow,omitempty"`
+	DisplayName string `yaml:"displayName,omitempty"`
+	Token       string `yaml:"token"`
 }
 
 type ListenerConfig struct {
@@ -2484,20 +2477,14 @@ func normalizedAuthorizationConfig(cfg AuthorizationConfig) AuthorizationConfig 
 	if len(cfg.Policies) == 0 {
 		cfg.Policies = nil
 	} else {
-		policies := make(map[string]HumanPolicyDef, len(cfg.Policies))
+		policies := make(map[string]SubjectPolicyDef, len(cfg.Policies))
 		for name, policy := range cfg.Policies {
-			policies[name] = normalizedHumanPolicyDef(policy)
+			policies[name] = normalizedSubjectPolicyDef(policy)
 		}
 		cfg.Policies = policies
 	}
 	if len(cfg.Workloads) == 0 {
 		cfg.Workloads = nil
-	} else {
-		workloads := make(map[string]WorkloadDef, len(cfg.Workloads))
-		for name, workload := range cfg.Workloads {
-			workloads[name] = normalizedWorkloadDef(workload)
-		}
-		cfg.Workloads = workloads
 	}
 	return cfg
 }
@@ -2531,27 +2518,11 @@ func normalizeAdminConfig(cfg *Config) error {
 	return nil
 }
 
-func normalizedHumanPolicyDef(policy HumanPolicyDef) HumanPolicyDef {
+func normalizedSubjectPolicyDef(policy SubjectPolicyDef) SubjectPolicyDef {
 	if len(policy.Members) == 0 {
 		policy.Members = nil
 	}
 	return policy
-}
-
-func normalizedWorkloadDef(workload WorkloadDef) WorkloadDef {
-	if len(workload.Providers) == 0 {
-		workload.Providers = nil
-		return workload
-	}
-	providers := make(map[string]WorkloadProviderDef, len(workload.Providers))
-	for name, provider := range workload.Providers {
-		if len(provider.Allow) == 0 {
-			provider.Allow = nil
-		}
-		providers[name] = provider
-	}
-	workload.Providers = providers
-	return workload
 }
 
 func applyPluginMountBindings(cfg *Config) error {

@@ -12,64 +12,65 @@ import (
 )
 
 type providerPluginAuthorizationMembership struct {
-	Plugin string
-	UserID string
-	Role   string
+	Plugin    string
+	SubjectID string
+	Role      string
 }
 
 type providerAdminAuthorizationMembership struct {
-	UserID string
-	Role   string
+	SubjectID string
+	Role      string
 }
 
-func (s *Server) upsertProviderPluginAuthorization(ctx context.Context, user *core.User, plugin, role string) (*providerPluginAuthorizationMembership, error) {
+func (s *Server) upsertProviderPluginAuthorization(ctx context.Context, subject *adminAuthorizationWriteSubject, plugin, role string) (*providerPluginAuthorizationMembership, error) {
 	if s.authorizationProvider == nil {
 		return nil, errAdminAuthorizationUnavailable
 	}
-	if user == nil {
-		return nil, fmt.Errorf("user is required")
+	if subject == nil || strings.TrimSpace(subject.SubjectID) == "" {
+		return nil, fmt.Errorf("subject is required")
 	}
 	resource := &core.ResourceRef{
 		Type: authorization.ProviderResourceTypePluginDynamic,
 		Id:   strings.TrimSpace(plugin),
 	}
-	_, rollback, err := s.replaceProviderDynamicMembership(ctx, resource, user, strings.TrimSpace(role))
+	_, rollback, err := s.replaceProviderDynamicMembership(ctx, resource, subject.SubjectID, strings.TrimSpace(role))
 	if err != nil {
 		return nil, err
 	}
 	membership := &providerPluginAuthorizationMembership{
-		Plugin: plugin,
-		UserID: user.ID,
-		Role:   role,
+		Plugin:    plugin,
+		SubjectID: strings.TrimSpace(subject.SubjectID),
+		Role:      role,
 	}
-	if err := s.syncProviderPluginCanonicalAccess(ctx, membership.UserID, membership.Plugin); err != nil {
-		rollback(ctx)
-		return nil, err
+	if subject.User != nil {
+		if err := s.syncProviderPluginCanonicalAccess(ctx, subject.User.ID, membership.Plugin); err != nil {
+			rollback(ctx)
+			return nil, err
+		}
 	}
 	return membership, nil
 }
 
-func (s *Server) deleteProviderPluginAuthorization(ctx context.Context, plugin, userID string) error {
+func (s *Server) deleteProviderPluginAuthorization(ctx context.Context, plugin, subjectID string) error {
 	if s.authorizationProvider == nil {
 		return errAdminAuthorizationUnavailable
-	}
-	user, userErr := s.users.GetUser(ctx, strings.TrimSpace(userID))
-	if userErr != nil && !errors.Is(userErr, core.ErrNotFound) {
-		return userErr
-	}
-	subjectUser := &core.User{ID: strings.TrimSpace(userID)}
-	if userErr == nil {
-		subjectUser = user
 	}
 	resource := &core.ResourceRef{
 		Type: authorization.ProviderResourceTypePluginDynamic,
 		Id:   strings.TrimSpace(plugin),
 	}
-	existing, rollback, err := s.deleteProviderDynamicMembership(ctx, resource, subjectUser)
+	existing, rollback, err := s.deleteProviderDynamicMembership(ctx, resource, subjectID)
 	if err != nil {
 		return err
 	}
-	err = s.deleteProviderPluginCanonicalAccess(ctx, strings.TrimSpace(userID), strings.TrimSpace(plugin))
+	userID := strings.TrimSpace(principal.UserIDFromSubjectID(subjectID))
+	if userID == "" {
+		if len(existing) == 0 {
+			return core.ErrNotFound
+		}
+		return nil
+	}
+	err = s.deleteProviderPluginCanonicalAccess(ctx, userID, strings.TrimSpace(plugin))
 	switch {
 	case err == nil:
 		if len(existing) == 0 {
@@ -89,53 +90,54 @@ func (s *Server) deleteProviderPluginAuthorization(ctx context.Context, plugin, 
 	}
 }
 
-func (s *Server) upsertProviderAdminAuthorization(ctx context.Context, user *core.User, role string) (*providerAdminAuthorizationMembership, error) {
+func (s *Server) upsertProviderAdminAuthorization(ctx context.Context, subject *adminAuthorizationWriteSubject, role string) (*providerAdminAuthorizationMembership, error) {
 	if s.authorizationProvider == nil {
 		return nil, errAdminAuthorizationUnavailable
 	}
-	if user == nil {
-		return nil, fmt.Errorf("user is required")
+	if subject == nil || strings.TrimSpace(subject.SubjectID) == "" {
+		return nil, fmt.Errorf("subject is required")
 	}
 	resource := &core.ResourceRef{
 		Type: authorization.ProviderResourceTypeAdminDynamic,
 		Id:   authorization.ProviderResourceIDAdminDynamicGlobal,
 	}
-	existing, rollback, err := s.replaceProviderDynamicMembership(ctx, resource, user, strings.TrimSpace(role))
+	existing, rollback, err := s.replaceProviderDynamicMembership(ctx, resource, subject.SubjectID, strings.TrimSpace(role))
 	if err != nil {
 		return nil, err
 	}
 	membership := &providerAdminAuthorizationMembership{
-		UserID: user.ID,
-		Role:   role,
+		SubjectID: strings.TrimSpace(subject.SubjectID),
+		Role:      role,
 	}
-	if err := s.syncProviderAdminCanonicalRole(ctx, membership.UserID, membership.Role, providerRelationshipRelations(existing)); err != nil {
-		rollback(ctx)
-		return nil, err
+	if subject.User != nil {
+		if err := s.syncProviderAdminCanonicalRole(ctx, subject.User.ID, membership.Role, providerRelationshipRelations(existing)); err != nil {
+			rollback(ctx)
+			return nil, err
+		}
 	}
 	return membership, nil
 }
 
-func (s *Server) deleteProviderAdminAuthorization(ctx context.Context, userID string) error {
+func (s *Server) deleteProviderAdminAuthorization(ctx context.Context, subjectID string) error {
 	if s.authorizationProvider == nil {
 		return errAdminAuthorizationUnavailable
-	}
-	user, userErr := s.users.GetUser(ctx, strings.TrimSpace(userID))
-	if userErr != nil && !errors.Is(userErr, core.ErrNotFound) {
-		return userErr
-	}
-	subjectUser := &core.User{ID: strings.TrimSpace(userID)}
-	if userErr == nil {
-		subjectUser = user
 	}
 	resource := &core.ResourceRef{
 		Type: authorization.ProviderResourceTypeAdminDynamic,
 		Id:   authorization.ProviderResourceIDAdminDynamicGlobal,
 	}
-	existing, rollback, err := s.deleteProviderDynamicMembership(ctx, resource, subjectUser)
+	existing, rollback, err := s.deleteProviderDynamicMembership(ctx, resource, subjectID)
 	if err != nil {
 		return err
 	}
-	err = s.deleteProviderAdminCanonicalRoles(ctx, strings.TrimSpace(userID), providerRelationshipRelations(existing))
+	userID := strings.TrimSpace(principal.UserIDFromSubjectID(subjectID))
+	if userID == "" {
+		if len(existing) == 0 {
+			return core.ErrNotFound
+		}
+		return nil
+	}
+	err = s.deleteProviderAdminCanonicalRoles(ctx, userID, providerRelationshipRelations(existing))
 	switch {
 	case err == nil:
 		if len(existing) == 0 {
@@ -155,16 +157,16 @@ func (s *Server) deleteProviderAdminAuthorization(ctx context.Context, userID st
 	}
 }
 
-func (s *Server) replaceProviderDynamicMembership(ctx context.Context, resource *core.ResourceRef, user *core.User, role string) ([]*core.Relationship, func(context.Context), error) {
+func (s *Server) replaceProviderDynamicMembership(ctx context.Context, resource *core.ResourceRef, subjectID string, role string) ([]*core.Relationship, func(context.Context), error) {
 	modelID, err := s.managedAuthorizationModelID(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	existing, err := s.providerDynamicRelationshipsForUser(ctx, resource, user)
+	existing, err := s.providerDynamicRelationshipsForSubject(ctx, resource, subjectID)
 	if err != nil {
 		return nil, nil, err
 	}
-	writes := providerDynamicMembershipRelationships(resource, user, role)
+	writes := providerDynamicMembershipRelationships(resource, subjectID, role)
 	deletes := filterRelationshipKeys(existing, writes)
 	if len(writes) == 0 && len(deletes) == 0 {
 		return existing, func(context.Context) {}, nil
@@ -187,12 +189,12 @@ func (s *Server) replaceProviderDynamicMembership(ctx context.Context, resource 
 	}, nil
 }
 
-func (s *Server) deleteProviderDynamicMembership(ctx context.Context, resource *core.ResourceRef, user *core.User) ([]*core.Relationship, func(context.Context), error) {
+func (s *Server) deleteProviderDynamicMembership(ctx context.Context, resource *core.ResourceRef, subjectID string) ([]*core.Relationship, func(context.Context), error) {
 	modelID, err := s.managedAuthorizationModelID(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	existing, err := s.providerDynamicRelationshipsForUser(ctx, resource, user)
+	existing, err := s.providerDynamicRelationshipsForSubject(ctx, resource, subjectID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -232,7 +234,7 @@ func (s *Server) managedAuthorizationModelID(ctx context.Context) (string, error
 	return "", fmt.Errorf("authorization provider has no active model")
 }
 
-func (s *Server) providerDynamicRelationshipsForUser(ctx context.Context, resource *core.ResourceRef, user *core.User) ([]*core.Relationship, error) {
+func (s *Server) providerDynamicRelationshipsForSubject(ctx context.Context, resource *core.ResourceRef, subjectID string) ([]*core.Relationship, error) {
 	if s.authorizationProvider == nil {
 		return nil, errAdminAuthorizationUnavailable
 	}
@@ -243,13 +245,10 @@ func (s *Server) providerDynamicRelationshipsForUser(ctx context.Context, resour
 	if err != nil {
 		return nil, err
 	}
-	userID := ""
-	if user != nil {
-		userID = strings.TrimSpace(user.ID)
-	}
+	subjectID = strings.TrimSpace(subjectID)
 	out := make([]*core.Relationship, 0, len(relationships))
 	for _, rel := range relationships {
-		match, err := s.providerRelationshipMatchesUser(ctx, rel, userID)
+		match, err := s.providerRelationshipMatchesSubject(ctx, rel, subjectID)
 		if err != nil {
 			return nil, err
 		}
@@ -260,31 +259,28 @@ func (s *Server) providerDynamicRelationshipsForUser(ctx context.Context, resour
 	return out, nil
 }
 
-func (s *Server) providerRelationshipMatchesUser(_ context.Context, rel *core.Relationship, userID string) (bool, error) {
+func (s *Server) providerRelationshipMatchesSubject(_ context.Context, rel *core.Relationship, subjectID string) (bool, error) {
 	if rel == nil || rel.GetSubject() == nil {
 		return false, nil
 	}
 	subjectType := strings.TrimSpace(rel.GetSubject().GetType())
-	subjectID := strings.TrimSpace(rel.GetSubject().GetId())
+	relationshipSubjectID := strings.TrimSpace(rel.GetSubject().GetId())
 	switch subjectType {
 	case authorization.ProviderSubjectTypeSubject:
-		return userID != "" && subjectID == principal.UserSubjectID(userID), nil
+		return subjectID != "" && relationshipSubjectID == subjectID, nil
 	default:
 		return false, nil
 	}
 }
 
-func providerDynamicMembershipRelationships(resource *core.ResourceRef, user *core.User, role string) []*core.Relationship {
+func providerDynamicMembershipRelationships(resource *core.ResourceRef, subjectID, role string) []*core.Relationship {
 	role = strings.TrimSpace(role)
-	if resource == nil || role == "" || user == nil {
-		return nil
-	}
-	userID := strings.TrimSpace(user.ID)
-	if userID == "" {
+	subjectID = strings.TrimSpace(subjectID)
+	if resource == nil || role == "" || subjectID == "" {
 		return nil
 	}
 	return []*core.Relationship{{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: principal.UserSubjectID(userID)},
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: subjectID},
 		Relation: role,
 		Resource: cloneResourceRef(resource),
 	}}

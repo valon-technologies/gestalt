@@ -8,8 +8,8 @@ import (
 )
 
 // RuntimeAuthorizer is the internal authorization interface used by gestaltd
-// request paths. It keeps workload execution binding concerns local while
-// allowing human authorization decisions to come from a backing provider.
+// request paths. Workload tokens authenticate non-human subjects; authorization
+// decisions are evaluated against the subject ID just like user subjects.
 type RuntimeAuthorizer interface {
 	principal.WorkloadTokenResolver
 
@@ -20,7 +20,6 @@ type RuntimeAuthorizer interface {
 
 	AllowProvider(ctx context.Context, p *principal.Principal, provider string) bool
 	AllowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool
-	Binding(p *principal.Principal, provider string) (CredentialBinding, bool)
 
 	ResolveAccess(ctx context.Context, p *principal.Principal, provider string) (AccessContext, bool)
 	ResolvePolicyAccess(ctx context.Context, p *principal.Principal, policyName string) (AccessContext, bool)
@@ -30,8 +29,8 @@ type RuntimeAuthorizer interface {
 	PolicyNameForProvider(provider string) string
 	StaticRoleForPolicyIdentity(policyName, subjectID string) (AccessContext, bool)
 	StaticRoleForProviderIdentity(provider, subjectID string) (AccessContext, bool)
-	StaticMembersForPolicy(policyName string) ([]StaticHumanMember, bool)
-	StaticMembersForProvider(provider string) (string, []StaticHumanMember, bool)
+	StaticMembersForPolicy(policyName string) ([]StaticSubjectMember, bool)
+	StaticMembersForProvider(provider string) (string, []StaticSubjectMember, bool)
 }
 
 // ManagedAuthorizationModelResolver exposes the authorization model managed by

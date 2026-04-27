@@ -811,17 +811,18 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 	}
 
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"roadmap-policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: "user:other-user", Role: "viewer"},
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"roadmap": {AuthorizationPolicy: "roadmap-policy"},
-	}, &providers.Providers, nil)
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}

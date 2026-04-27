@@ -310,18 +310,13 @@ func restoreInvocationTokenContext(ctx context.Context, tokenCtx invocationToken
 	if connection == "" {
 		connection = strings.TrimSpace(tokenCtx.connection)
 	}
-	if connection == "" && shouldInheritCredentialSelectors(tokenCtx.principal) {
+	if connection == "" {
 		connection = strings.TrimSpace(tokenCtx.credential.Connection)
 	}
 	if connection != "" {
 		ctx = invocation.WithConnection(ctx, connection)
 	}
 	return ctx
-}
-
-func shouldInheritCredentialSelectors(p *principal.Principal) bool {
-	p = principal.Canonicalized(p)
-	return p == nil || p.Kind != principal.KindWorkload
 }
 
 func subjectIDForInvocationClaims(p *principal.Principal) string {

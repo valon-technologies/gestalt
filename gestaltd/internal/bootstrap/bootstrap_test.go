@@ -5086,9 +5086,9 @@ func TestBootstrapStartupWorkflowCallbackRequiresExecutionRef(t *testing.T) {
 	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
 	cfg.Plugins["roadmap"].AuthorizationPolicy = "roadmap-policy"
 	cfg.Plugins["roadmap"].ResolvedManifest.Spec.Surfaces.REST.Operations[0].AllowedRoles = []string{"viewer"}
-	cfg.Authorization.Policies = map[string]config.HumanPolicyDef{
+	cfg.Authorization.Policies = map[string]config.SubjectPolicyDef{
 		"roadmap-policy": {
-			Members: []config.HumanPolicyMemberDef{{
+			Members: []config.SubjectPolicyMemberDef{{
 				SubjectID: principal.UserSubjectID("viewer-user"),
 				Role:      "viewer",
 			}},
@@ -5462,9 +5462,9 @@ func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedPl
 	cfg := workflowStartupCallbackConfig(srv.URL)
 	cfg.Plugins["roadmap"].AuthorizationPolicy = "roadmap-policy"
 	cfg.Plugins["roadmap"].ResolvedManifest.Spec.Surfaces.REST.Operations[0].AllowedRoles = []string{"viewer"}
-	cfg.Authorization.Policies = map[string]config.HumanPolicyDef{
+	cfg.Authorization.Policies = map[string]config.SubjectPolicyDef{
 		"roadmap-policy": {
-			Members: []config.HumanPolicyMemberDef{{
+			Members: []config.SubjectPolicyMemberDef{{
 				SubjectID: principal.UserSubjectID("viewer-user"),
 				Role:      "viewer",
 			}},
@@ -6870,9 +6870,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			Workloads: map[string]config.WorkloadDef{
 				"triage-bot": {
 					Token: transportSecretRef("workload-token"),
-					Providers: map[string]config.WorkloadProviderDef{
-						"weather": {Allow: []string{"forecast"}},
-					},
 				},
 			},
 		}
@@ -6891,21 +6888,21 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("authorization provider backs human access decisions", func(t *testing.T) {
+	t.Run("authorization provider backs subject access decisions", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
 		cfg.Authorization = config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
+			Policies: map[string]config.SubjectPolicyDef{
 				"calendar-policy": {
 					Default: "deny",
-					Members: []config.HumanPolicyMemberDef{
+					Members: []config.SubjectPolicyMemberDef{
 						{SubjectID: "user:static-viewer", Role: "viewer"},
 					},
 				},
 				"admin-policy": {
 					Default: "deny",
-					Members: []config.HumanPolicyMemberDef{
+					Members: []config.SubjectPolicyMemberDef{
 						{SubjectID: "user:seed-admin", Role: "admin"},
 					},
 				},
@@ -7020,7 +7017,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		cfg := validConfig()
 		cfg.Authorization = config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
+			Policies: map[string]config.SubjectPolicyDef{
 				"roadmap-policy": {Default: "deny"},
 			},
 		}
@@ -7077,20 +7074,23 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 	})
 
-	t.Run("workload resolve access keeps policy context but does not signal provider allow", func(t *testing.T) {
+	t.Run("workload resolve access uses subject policy membership", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
 		cfg.Authorization = config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
-				"roadmap-policy": {Default: "deny"},
+			Policies: map[string]config.SubjectPolicyDef{
+				"roadmap-policy": {
+					Default: "deny",
+					Members: []config.SubjectPolicyMemberDef{{
+						SubjectID: principal.WorkloadSubjectID("triage-bot"),
+						Role:      "viewer",
+					}},
+				},
 			},
 			Workloads: map[string]config.WorkloadDef{
 				"triage-bot": {
 					Token: "gst_wld_triage-bot",
-					Providers: map[string]config.WorkloadProviderDef{
-						"roadmap": {Allow: []string{"sync"}},
-					},
 				},
 			},
 		}
@@ -7116,26 +7116,26 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			Kind:      principal.KindWorkload,
 		}
 		access, allowed := result.Authorizer.ResolveAccess(ctx, workloadPrincipal, "roadmap")
-		if allowed {
-			t.Fatal("expected workload ResolveAccess to remain denied for provider access checks")
+		if !allowed {
+			t.Fatal("expected workload ResolveAccess to use subject policy membership")
 		}
 		if access.Policy != "roadmap-policy" {
 			t.Fatalf("workload access policy = %q, want %q", access.Policy, "roadmap-policy")
 		}
-		if access.Role != "" {
-			t.Fatalf("workload access role = %q, want empty", access.Role)
+		if access.Role != "viewer" {
+			t.Fatalf("workload access role = %q, want viewer", access.Role)
 		}
 		if !result.Authorizer.AllowProvider(ctx, workloadPrincipal, "roadmap") {
-			t.Fatal("expected bound workload to be allowed for roadmap provider")
+			t.Fatal("expected workload subject to be allowed for roadmap provider")
 		}
 	})
 
-	t.Run("dynamic human authorizations require an authorization provider", func(t *testing.T) {
+	t.Run("dynamic subject authorizations require an authorization provider", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
 		cfg.Authorization = config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
+			Policies: map[string]config.SubjectPolicyDef{
 				"calendar-policy": {Default: "deny"},
 				"admin-policy":    {Default: "deny"},
 			},
@@ -7193,7 +7193,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		cfg := validConfig()
 		cfg.Authorization = config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
+			Policies: map[string]config.SubjectPolicyDef{
 				"calendar-policy": {Default: "deny"},
 				"admin-policy":    {Default: "deny"},
 			},
@@ -7324,7 +7324,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		cfg := validConfig()
 		cfg.Authorization = config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
+			Policies: map[string]config.SubjectPolicyDef{
 				"calendar-policy": {Default: "deny"},
 				"admin-policy":    {Default: "deny"},
 			},
@@ -7408,10 +7408,10 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		cfg := validConfig()
 		cfg.Authorization = config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
+			Policies: map[string]config.SubjectPolicyDef{
 				"calendar-policy": {
 					Default: "deny",
-					Members: []config.HumanPolicyMemberDef{
+					Members: []config.SubjectPolicyMemberDef{
 						{SubjectID: "user:static-viewer", Role: "viewer"},
 					},
 				},
@@ -7476,10 +7476,10 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		cfg := validConfig()
 		cfg.Authorization = config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
+			Policies: map[string]config.SubjectPolicyDef{
 				"calendar-policy": {
 					Default: "deny",
-					Members: []config.HumanPolicyMemberDef{
+					Members: []config.SubjectPolicyMemberDef{
 						{SubjectID: "user:static-viewer", Role: "viewer"},
 					},
 				},
@@ -7731,32 +7731,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
-}
-
-func TestBootstrapWorkloadAuthorizationRejectsEitherProvider(t *testing.T) {
-	t.Parallel()
-
-	cfg := validConfig()
-	cfg.Authorization = config.AuthorizationConfig{
-		Workloads: map[string]config.WorkloadDef{
-			"triage-bot": {
-				Token: "gst_wld_triage-bot-token",
-				Providers: map[string]config.WorkloadProviderDef{
-					"svc": {Allow: []string{"run"}, Connection: "default"},
-				},
-			},
-		},
-	}
-
-	factories := validFactories()
-	factories.Builtins = []core.Provider{
-		&coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionMode("either")},
-	}
-
-	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err == nil || !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
-		t.Fatalf("Bootstrap error = %v, want unsupported connection mode either", err)
-	}
 }
 
 func waitForCanonicalAuthorizationState(t *testing.T, ctx context.Context, result *bootstrap.Result, identityID, plugin, role string) {

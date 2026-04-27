@@ -1225,9 +1225,9 @@ func seedUser(t *testing.T, svc *coredata.Services, email string) *core.User {
 	return u
 }
 
-func staticPolicyUserMember(t *testing.T, svc *coredata.Services, email, role string) config.HumanPolicyMemberDef {
+func staticPolicyUserMember(t *testing.T, svc *coredata.Services, email, role string) config.SubjectPolicyMemberDef {
 	t.Helper()
-	return config.HumanPolicyMemberDef{
+	return config.SubjectPolicyMemberDef{
 		SubjectID: principal.UserSubjectID(seedUser(t, svc, email).ID),
 		Role:      role,
 	}
@@ -1268,9 +1268,9 @@ func seedSubjectToken(t *testing.T, svc *coredata.Services, subjectID, integrati
 	})
 }
 
-func mustAuthorizer(t *testing.T, cfg config.AuthorizationConfig, providers *registry.ProviderMap[core.Provider], pluginDefs map[string]*config.ProviderEntry, defaultConnections map[string]string) *authorization.Authorizer {
+func mustAuthorizer(t *testing.T, cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry) *authorization.Authorizer {
 	t.Helper()
-	authz, err := authorization.New(cfg, pluginDefs, providers, defaultConnections)
+	authz, err := authorization.New(cfg, pluginDefs)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -1681,17 +1681,17 @@ func TestMountedUIRoutes_HumanAuthorization(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 				},
 			},
 		},
-	}, nil, map[string]*config.ProviderEntry{
+	}, map[string]*config.ProviderEntry{
 		"sample_portal": {AuthorizationPolicy: "sample_policy"},
-	}, nil)
+	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -1810,17 +1810,17 @@ func TestMountedUIRoutes_HumanAuthorization_UsesPluginRouteAuthOverride(t *testi
 	svc := coretesting.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 				},
 			},
 		},
-	}, nil, map[string]*config.ProviderEntry{
+	}, map[string]*config.ProviderEntry{
 		"sample_portal": {AuthorizationPolicy: "sample_policy"},
-	}, nil)
+	})
 
 	serverSecret := []byte("0123456789abcdef0123456789abcdef")
 	altSecret := []byte("abcdef0123456789abcdef0123456789")
@@ -1957,17 +1957,17 @@ func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsers
 
 	svc := coretesting.NewStubServices(t)
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "allow",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					staticPolicyUserMember(t, svc, "admin@example.test", "admin"),
 				},
 			},
 		},
-	}, nil, map[string]*config.ProviderEntry{
+	}, map[string]*config.ProviderEntry{
 		"sample_portal": {AuthorizationPolicy: "sample_policy"},
-	}, nil)
+	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -2063,17 +2063,18 @@ func TestMountedUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 	adminUser := seedUser(t, svc, "admin@example.test")
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	legacy, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(adminUser.ID), Role: "admin"},
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sample_portal": {AuthorizationPolicy: "sample_policy"},
-	}, nil, nil)
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -2172,15 +2173,15 @@ func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsers
 
 	svc := coretesting.NewStubServices(t)
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "allow",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					staticPolicyUserMember(t, svc, "admin@example.test", "admin"),
 				},
 			},
 		},
-	}, nil, nil, nil)
+	}, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -2249,16 +2250,17 @@ func TestBuiltInAdminRoute_HumanAuthorization(t *testing.T) {
 	viewer := seedUser(t, svc, "viewer@example.test")
 	admin := seedUser(t, svc, "admin@example.test")
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 					{SubjectID: principal.UserSubjectID(admin.ID), Role: "admin"},
 				},
 			},
 		},
-	}, nil, nil, nil)
+	}, nil)
+
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	authz := mustProviderBackedAuthorizer(t, legacy, provider)
 	seedProviderDynamicAdminMembership(t, svc, authz, provider, "dynamic-admin@example.test", "admin")
@@ -2388,16 +2390,17 @@ func TestBuiltInAdminRoute_HumanAuthorizationOnManagementProfile(t *testing.T) {
 	viewer := seedUser(t, svc, "viewer@example.test")
 	admin := seedUser(t, svc, "admin@example.test")
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 					{SubjectID: principal.UserSubjectID(admin.ID), Role: "admin"},
 				},
 			},
 		},
-	}, nil, nil, nil)
+	}, nil)
+
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	authz := mustProviderBackedAuthorizer(t, legacy, provider)
 	seedProviderDynamicAdminMembership(t, svc, authz, provider, "dynamic-admin@example.test", "admin")
@@ -2509,15 +2512,15 @@ func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing
 	auth := &stubHostIssuedSessionAuth{secret: secret}
 	svc := coretesting.NewStubServices(t)
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					staticPolicyUserMember(t, svc, "host@example.com", "admin"),
 				},
 			},
 		},
-	}, nil, nil, nil)
+	}, nil)
 
 	publicListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -2911,19 +2914,20 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	viewer := seedUser(t, svc, "viewer@example.test")
 	admin := seedUser(t, svc, "admin@example.test")
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 					{SubjectID: principal.UserSubjectID(admin.ID), Role: "admin"},
 				},
 			},
 			"sample_policy": {Default: "deny"},
 		},
-	}, nil, map[string]*config.ProviderEntry{
+	}, map[string]*config.ProviderEntry{
 		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-	}, nil)
+	})
+
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	authz := mustProviderBackedAuthorizer(t, legacy, provider)
 	seedProviderDynamicAdminMembership(t, svc, authz, provider, "dynamic-admin@example.test", "admin")
@@ -3460,18 +3464,19 @@ func TestAdminAPI_HumanAuthorizationOnManagementProfile(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	admin := seedUser(t, svc, "admin@example.test")
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(admin.ID), Role: "admin"},
 				},
 			},
 			"sample_policy": {Default: "deny"},
 		},
-	}, nil, map[string]*config.ProviderEntry{
+	}, map[string]*config.ProviderEntry{
 		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-	}, nil)
+	})
+
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	authz := mustProviderBackedAuthorizer(t, legacy, provider)
 	seedProviderDynamicAdminMembership(t, svc, authz, provider, "dynamic-admin@example.test", "admin")
@@ -3540,18 +3545,18 @@ func TestAdminAPI_HumanAuthorization_UserResolutionFailure(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	admin := seedUser(t, svc, "admin@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(admin.ID), Role: "admin"},
 				},
 			},
 			"sample_policy": {Default: "deny"},
 		},
-	}, nil, map[string]*config.ProviderEntry{
+	}, map[string]*config.ProviderEntry{
 		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-	}, nil)
+	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -3624,17 +3629,18 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 
 	svc := coretesting.NewStubServices(t)
 	legacy, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					staticPolicyUserMember(t, svc, "static@example.test", "admin"),
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-	}, nil, nil)
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -3784,17 +3790,18 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	legacy, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					staticPolicyUserMember(t, svc, "static@example.test", "admin"),
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-	}, nil, nil)
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -3855,6 +3862,11 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
 		t.Fatalf("ReloadAuthorizationState after provider-backed plugin write: %v", err)
 	}
+	provider.putRelationship(provider.activeModelID, &core.Relationship{
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "legacy-raw-subject"},
+		Relation: "viewer",
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "sample_plugin"},
+	})
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
@@ -3956,8 +3968,8 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	if relationshipsResp.ModelID == "" {
 		t.Fatal("expected model id on relationships response")
 	}
-	if len(relationshipsResp.Relationships) != 1 {
-		t.Fatalf("expected 1 provider relationship, got %d", len(relationshipsResp.Relationships))
+	if len(relationshipsResp.Relationships) != 2 {
+		t.Fatalf("expected 2 provider relationships, got %d", len(relationshipsResp.Relationships))
 	}
 	for _, rel := range relationshipsResp.Relationships {
 		if !rel.Managed {
@@ -3972,17 +3984,18 @@ func TestAdminAPI_AuthorizationProviderDebugRequiresAdminPolicy(t *testing.T) {
 	svc := coretesting.NewStubServices(t)
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	legacy, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					staticPolicyUserMember(t, svc, "static@example.test", "admin"),
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-	}, nil, nil)
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -4028,15 +4041,16 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	seedUser(t, svc, "static-admin@example.test")
 	const adminRole = "owner"
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					staticPolicyUserMember(t, svc, "static-admin@example.test", adminRole),
 				},
 			},
 		},
-	}, nil, nil, nil)
+	}, nil)
+
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	authz := mustProviderBackedAuthorizer(t, legacy, provider)
 
@@ -4248,15 +4262,16 @@ func TestAdminAPI_AdminAuthorizationProviderBackedReads(t *testing.T) {
 	const adminRole = "owner"
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					staticPolicyUserMember(t, svc, "static-admin@example.test", adminRole),
 				},
 			},
 		},
-	}, nil, nil, nil)
+	}, nil)
+
 	authz := mustProviderBackedAuthorizer(t, legacy, provider)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -4342,17 +4357,18 @@ func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyHumanAuthStores(t *testi
 		svc := coretesting.NewStubServices(t)
 		provider := newMemoryAuthorizationProvider("memory-authorization")
 		legacy, err := authorization.New(config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
+			Policies: map[string]config.SubjectPolicyDef{
 				"sample_policy": {
 					Default: "deny",
-					Members: []config.HumanPolicyMemberDef{
+					Members: []config.SubjectPolicyMemberDef{
 						staticPolicyUserMember(t, svc, "static@example.test", "admin"),
 					},
 				},
 			},
 		}, map[string]*config.ProviderEntry{
 			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-		}, nil, nil)
+		})
+
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -4407,15 +4423,16 @@ func TestAdminAPI_ProviderBackedWritesDoNotRequireLegacyHumanAuthStores(t *testi
 		provider := newMemoryAuthorizationProvider("memory-authorization")
 		seedUser(t, svc, "static-admin@example.test")
 		legacy := mustAuthorizer(t, config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
+			Policies: map[string]config.SubjectPolicyDef{
 				"admin_policy": {
 					Default: "deny",
-					Members: []config.HumanPolicyMemberDef{
+					Members: []config.SubjectPolicyMemberDef{
 						staticPolicyUserMember(t, svc, "static-admin@example.test", "owner"),
 					},
 				},
 			},
-		}, nil, nil, nil)
+		}, nil)
+
 		authz := mustProviderBackedAuthorizer(t, legacy, provider)
 
 		ts := newTestServer(t, func(cfg *server.Config) {
@@ -4467,15 +4484,16 @@ func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
 	const adminRole = "ops-admin"
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					staticPolicyUserMember(t, svc, "static-admin@example.test", adminRole),
 				},
 			},
 		},
-	}, nil, nil, nil)
+	}, nil)
+
 	authz := mustProviderBackedAuthorizer(t, legacy, provider)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -4553,17 +4571,18 @@ func TestAdminAPI_PluginAuthorizationUnavailable(t *testing.T) {
 
 	svc := coretesting.NewStubServices(t)
 	authz, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					staticPolicyUserMember(t, svc, "admin@example.test", "admin"),
 				},
 			},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-	}, nil, nil)
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -4634,15 +4653,16 @@ func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
 		svc := coretesting.NewStubServices(t)
 		seedUser(t, svc, "admin@example.test")
 		authz := mustAuthorizer(t, config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
+			Policies: map[string]config.SubjectPolicyDef{
 				"admin_policy": {
 					Default: "deny",
-					Members: []config.HumanPolicyMemberDef{
+					Members: []config.SubjectPolicyMemberDef{
 						staticPolicyUserMember(t, svc, "admin@example.test", "admin"),
 					},
 				},
 			},
-		}, nil, nil, nil)
+		}, nil)
+
 		user, err := svc.Users.FindOrCreateUser(context.Background(), "dynamic-admin@example.test")
 		if err != nil {
 			t.Fatalf("FindOrCreateUser dynamic admin: %v", err)
@@ -4705,7 +4725,7 @@ func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
 		t.Parallel()
 
 		svc := coretesting.NewStubServices(t)
-		authz := mustAuthorizer(t, config.AuthorizationConfig{}, nil, nil, nil)
+		authz := mustAuthorizer(t, config.AuthorizationConfig{}, nil)
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Auth = &coretesting.StubAuthProvider{
@@ -4746,12 +4766,13 @@ func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) 
 	svc := coretesting.NewStubServices(t)
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	legacy, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {Default: "deny"},
 		},
 	}, map[string]*config.ProviderEntry{
 		"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
-	}, nil, nil)
+	})
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -4793,15 +4814,16 @@ func TestAdminAPI_AdminAuthorizationPutFailureReturnsServerError(t *testing.T) {
 	seedUser(t, svc, "static-admin@example.test")
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	legacy := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					staticPolicyUserMember(t, svc, "static-admin@example.test", "admin"),
 				},
 			},
 		},
-	}, nil, nil, nil)
+	}, nil)
+
 	authz := mustProviderBackedAuthorizer(t, legacy, provider)
 	provider.writeErr = fmt.Errorf("provider write failed")
 
@@ -4872,17 +4894,18 @@ func TestMountedUIAuthorizationPolicyRequiresExplicitRouteCoverage(t *testing.T)
 	makeConfig := func(mounted server.MountedUI) server.Config {
 		svc := coretesting.NewStubServices(t)
 		authz := mustAuthorizer(t, config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
+			Policies: map[string]config.SubjectPolicyDef{
 				"sample_policy": {
 					Default: "deny",
-					Members: []config.HumanPolicyMemberDef{
+					Members: []config.SubjectPolicyMemberDef{
 						staticPolicyUserMember(t, svc, "viewer@example.test", "viewer"),
 					},
 				},
 			},
-		}, nil, map[string]*config.ProviderEntry{
+		}, map[string]*config.ProviderEntry{
 			"sample_portal": {AuthorizationPolicy: "sample_policy"},
-		}, nil)
+		})
+
 		return server.Config{
 			Auth:        &coretesting.StubAuthProvider{N: "test"},
 			Services:    svc,
@@ -4955,10 +4978,10 @@ func TestMountedUIAuthorizationPolicyNamedBuiltinAdminDoesNotUseAdminResolver(t 
 	svc := coretesting.NewStubServices(t)
 	seedUser(t, svc, "static-admin@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					staticPolicyUserMember(t, svc, "static-admin@example.test", "admin"),
 				},
 			},
@@ -4966,7 +4989,8 @@ func TestMountedUIAuthorizationPolicyNamedBuiltinAdminDoesNotUseAdminResolver(t 
 				Default: "deny",
 			},
 		},
-	}, nil, nil, nil)
+	}, nil)
+
 	seedUser(t, svc, "dynamic-admin@example.test")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -5025,17 +5049,17 @@ func TestMountedUIAuthorizationPolicyDeniesUnmatchedNavigationRoute(t *testing.T
 	svc := coretesting.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 				},
 			},
 		},
-	}, nil, map[string]*config.ProviderEntry{
+	}, map[string]*config.ProviderEntry{
 		"sample_portal": {AuthorizationPolicy: "sample_policy"},
-	}, nil)
+	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -5101,17 +5125,17 @@ func TestMountedUIAuthorizationPolicyUsesCanonicalNavigationPaths(t *testing.T) 
 	svc := coretesting.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 				},
 			},
 		},
-	}, nil, map[string]*config.ProviderEntry{
+	}, map[string]*config.ProviderEntry{
 		"sample_portal": {AuthorizationPolicy: "sample_policy"},
-	}, nil)
+	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -5182,17 +5206,17 @@ func TestMountedUIAuthorizationPolicyUsesNearestAncestorRouteForNestedAssets(t *
 	svc := coretesting.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 				},
 			},
 		},
-	}, nil, map[string]*config.ProviderEntry{
+	}, map[string]*config.ProviderEntry{
 		"sample_portal": {AuthorizationPolicy: "sample_policy"},
-	}, nil)
+	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -5252,17 +5276,17 @@ func TestMountedUIAuthorizationPolicyAllowsExplicitCatchAllAndDottedRoutes(t *te
 	svc := coretesting.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 				},
 			},
 		},
-	}, nil, map[string]*config.ProviderEntry{
+	}, map[string]*config.ProviderEntry{
 		"sample_portal": {AuthorizationPolicy: "sample_policy"},
-	}, nil)
+	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -5327,17 +5351,17 @@ func TestMountedUIAuthorizationPolicyPrefersExactRoutesOverWildcards(t *testing.
 	svc := coretesting.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 				},
 			},
 		},
-	}, nil, map[string]*config.ProviderEntry{
+	}, map[string]*config.ProviderEntry{
 		"sample_portal": {AuthorizationPolicy: "sample_policy"},
-	}, nil)
+	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -5403,17 +5427,17 @@ func TestMountedUIAuthorizationPolicyExactRoutesDoNotMatchDescendants(t *testing
 	svc := coretesting.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 				},
 			},
 		},
-	}, nil, map[string]*config.ProviderEntry{
+	}, map[string]*config.ProviderEntry{
 		"sample_portal": {AuthorizationPolicy: "sample_policy"},
-	}, nil)
+	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -5863,12 +5887,9 @@ func TestAuthMiddleware_ValidWorkloadToken(t *testing.T) {
 		Workloads: map[string]config.WorkloadDef{
 			"weather-bot": {
 				Token: plaintext,
-				Providers: map[string]config.WorkloadProviderDef{
-					"weather": {Allow: []string{"forecast"}},
-				},
 			},
 		},
-	}, providers, nil, nil)
+	}, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -6332,7 +6353,7 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 
 	svc := coretesting.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
-	policyMembers := []config.HumanPolicyMemberDef{
+	policyMembers := []config.SubjectPolicyMemberDef{
 		{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 	}
 
@@ -6381,13 +6402,13 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 		"hidden":           {MountPath: "/hidden", AuthorizationPolicy: "sample_policy"},
 	}
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
 				Members: policyMembers,
 			},
 		},
-	}, providers, pluginDefs, nil)
+	}, pluginDefs)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -6491,7 +6512,7 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 	}
 }
 
-func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordances(t *testing.T) {
+func TestWorkloadAuthorization_ListIntegrationsUsesSubjectPolicyAndCredentials(t *testing.T) {
 	t.Parallel()
 
 	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
@@ -6527,14 +6548,24 @@ func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordan
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
-				Providers: map[string]config.WorkloadProviderDef{
-					"svc":      {Allow: []string{"run"}},
-					"weather":  {Allow: []string{"forecast"}},
-					"mcp-only": {Allow: []string{"inspect"}},
-				},
 			},
 		},
-	}, providers, nil, map[string]string{"svc": "workspace"})
+		Policies: map[string]config.SubjectPolicyDef{
+			"workload_policy": {
+				Default: "allow",
+				Members: []config.SubjectPolicyMemberDef{{
+					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					Role:      "viewer",
+				}},
+			},
+			"secret_policy": {},
+		},
+	}, map[string]*config.ProviderEntry{
+		"svc":      {AuthorizationPolicy: "workload_policy"},
+		"weather":  {AuthorizationPolicy: "workload_policy"},
+		"mcp-only": {AuthorizationPolicy: "workload_policy"},
+		"secret":   {AuthorizationPolicy: "secret_policy"},
+	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
@@ -6606,15 +6637,13 @@ func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordan
 		t.Fatalf("mcp-only integration should not be visible over HTTP: %+v", integrations)
 	}
 	if !got["svc"].Connected {
-		t.Fatalf("expected bound identity integration to be connected, got %+v", got["svc"])
+		t.Fatalf("expected workload integration to be connected, got %+v", got["svc"])
 	}
 	if !got["weather"].Connected {
 		t.Fatalf("expected connection-mode none integration to be connected, got %+v", got["weather"])
 	}
-	for name, info := range got {
-		if len(info.Instances) != 0 || len(info.AuthTypes) != 0 || len(info.Connections) != 0 || len(info.CredentialFields) != 0 || len(info.ConnectionParams) != 0 {
-			t.Fatalf("workload integration %q should not expose connection affordances: %+v", name, info)
-		}
+	if len(got["svc"].Instances) != 1 {
+		t.Fatalf("expected workload-owned svc instance to be listed, got %+v", got["svc"].Instances)
 	}
 
 	provider := svc.ExternalCredentials.(*coretesting.StubExternalCredentialProvider)
@@ -6635,11 +6664,11 @@ func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordan
 
 	if resp.StatusCode != http.StatusInternalServerError {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 500 when workload binding lookup fails, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected 500 when workload credential lookup fails, got %d: %s", resp.StatusCode, body)
 	}
 }
 
-func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testing.T) {
+func TestWorkloadAuthorization_ListOperationsUsesSubjectPolicyAndSessionSelectors(t *testing.T) {
 	t.Parallel()
 
 	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
@@ -6647,28 +6676,30 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	provider := &stubIntegrationWithOps{
+	provider := &stubIntegrationWithCatalog{
 		StubIntegration: coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionModeUser},
-		ops: []core.Operation{
-			{Name: "run", Method: http.MethodGet},
-			{Name: "admin", Method: http.MethodGet},
-		},
+		catalog: serverTestCatalog("svc", []catalog.CatalogOperation{
+			{ID: "run", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+			{ID: "admin", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
+		}),
 	}
 	providers := testutil.NewProviderRegistry(t, provider)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
-				Providers: map[string]config.WorkloadProviderDef{
-					"svc": {
-						Connection: "workspace",
-						Instance:   "default",
-						Allow:      []string{"run"},
-					},
-				},
 			},
 		},
-	}, providers, nil, nil)
+		Policies: map[string]config.SubjectPolicyDef{
+			"svc_policy": {
+				Default: "allow",
+				Members: []config.SubjectPolicyMemberDef{{
+					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					Role:      "viewer",
+				}},
+			},
+		},
+	}, map[string]*config.ProviderEntry{"svc": {AuthorizationPolicy: "svc_policy"}})
 
 	var auditBuf bytes.Buffer
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -6703,47 +6734,8 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 		t.Fatalf("operations = %+v, want only run", ops)
 	}
 
-	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/svc/operations?_connection=workspace", nil)
-	req.Header.Set("Authorization", "Bearer "+workloadToken)
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request with selector: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusForbidden {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 403, got %d: %s", resp.StatusCode, body)
-	}
-
-	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
-	if len(lines) == 0 {
-		t.Fatal("expected list operations denial audit record")
-	}
-	var auditRecord map[string]any
-	if err := json.Unmarshal(lines[len(lines)-1], &auditRecord); err != nil {
-		t.Fatalf("parsing list operations audit record: %v\nraw: %s", err, auditBuf.String())
-	}
-	if auditRecord["provider"] != "svc" {
-		t.Fatalf("expected audit provider svc, got %v", auditRecord["provider"])
-	}
-	if auditRecord["operation"] != "operations.list" {
-		t.Fatalf("expected audit operation operations.list, got %v", auditRecord["operation"])
-	}
-	if auditRecord["allowed"] != false {
-		t.Fatalf("expected denied audit record, got %v", auditRecord["allowed"])
-	}
-	if auditRecord["auth_source"] != "workload_token" {
-		t.Fatalf("expected workload auth_source, got %v", auditRecord["auth_source"])
-	}
-	if auditRecord["subject_id"] != "workload:triage-bot" {
-		t.Fatalf("expected workload subject_id, got %v", auditRecord["subject_id"])
-	}
-	if auditRecord["error"] != "workload callers may not override connection or instance bindings" {
-		t.Fatalf("unexpected audit error: %v", auditRecord["error"])
-	}
-
 	svc := coretesting.NewStubServices(t)
-	seedSubjectToken(t, svc, principal.WorkloadSubjectID("triage-bot"), "svc-session", "workspace", "team-a", "session-bound-token")
+	seedSubjectToken(t, svc, principal.WorkloadSubjectID("triage-bot"), "svc-session", testDefaultConnection, "team-a", "session-bound-token")
 
 	var sessionCatalogToken string
 	sessionProvider := &stubIntegrationWithSessionCatalog{
@@ -6755,7 +6747,7 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 			return &catalog.Catalog{
 				Name: "svc-session",
 				Operations: []catalog.CatalogOperation{
-					{ID: "run", Method: http.MethodGet},
+					{ID: "run", Method: http.MethodGet, AllowedRoles: []string{"viewer"}},
 				},
 			}, nil
 		},
@@ -6765,16 +6757,17 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
-				Providers: map[string]config.WorkloadProviderDef{
-					"svc-session": {
-						Connection: "workspace",
-						Instance:   "team-a",
-						Allow:      []string{"run"},
-					},
-				},
 			},
 		},
-	}, sessionProviders, nil, map[string]string{"svc-session": testDefaultConnection})
+		Policies: map[string]config.SubjectPolicyDef{
+			"svc_session_policy": {
+				Members: []config.SubjectPolicyMemberDef{{
+					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					Role:      "viewer",
+				}},
+			},
+		},
+	}, map[string]*config.ProviderEntry{"svc-session": {AuthorizationPolicy: "svc_session_policy"}})
 
 	sessionTS := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
@@ -6806,7 +6799,7 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 		t.Fatalf("session operations = %+v, want only run", ops)
 	}
 	if sessionCatalogToken != "session-bound-token" {
-		t.Fatalf("expected session catalog to use bound identity token, got %q", sessionCatalogToken)
+		t.Fatalf("expected session catalog to use workload credential token, got %q", sessionCatalogToken)
 	}
 }
 
@@ -8268,7 +8261,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		u := seedUser(t, svc, "anonymous@gestalt")
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{}, nil, nil)
+		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -8351,7 +8344,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		u := seedUser(t, svc, "anonymous@gestalt")
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{}, nil, nil)
+		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -8436,7 +8429,7 @@ func TestDisconnectIntegration(t *testing.T) {
 		u := seedUser(t, svc, "anonymous@gestalt")
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{}, nil, nil)
+		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -9219,15 +9212,15 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog(t *testing.T) {
 		"test-int": {AuthorizationPolicy: "sample_policy"},
 	}
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 				},
 			},
 		},
-	}, nil, pluginDefs, nil)
+	}, pluginDefs)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
@@ -9314,10 +9307,11 @@ func TestListOperations_HumanAuthorizationFiltersMergedCatalog_DynamicGrant(t *t
 		"test-int": {AuthorizationPolicy: "sample_policy"},
 	}
 	legacy, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {Default: "deny"},
 		},
-	}, pluginDefs, nil, nil)
+	}, pluginDefs)
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -9401,15 +9395,15 @@ func TestExecuteOperation_HumanAuthorizationUsesCatalogRoles(t *testing.T) {
 		"test-int": {AuthorizationPolicy: "sample_policy"},
 	}
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 				},
 			},
 		},
-	}, nil, pluginDefs, nil)
+	}, pluginDefs)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
@@ -9505,15 +9499,15 @@ func TestExecuteOperation_HumanAuthorizationUsesSessionMetadataOnCollision(t *te
 		"sample-int": {AuthorizationPolicy: "sample_policy"},
 	}
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 				},
 			},
 		},
-	}, nil, pluginDefs, nil)
+	}, pluginDefs)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
@@ -10190,7 +10184,7 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 
 }
 
-func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelectors(t *testing.T) {
+func TestWorkloadAuthorization_ExecuteOperation_UsesSubjectCredentialAndSessionSelectors(t *testing.T) {
 	t.Parallel()
 
 	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
@@ -10201,7 +10195,7 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 	svc := coretesting.NewStubServices(t)
 	seedSubjectToken(t, svc, principal.WorkloadSubjectID("triage-bot"), "svc", "workspace", "team-a", "identity-bound-token")
 
-	stub := &stubIntegrationWithOps{
+	stub := &stubIntegrationWithCatalog{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "svc",
 			ConnMode: core.ConnectionModeUser,
@@ -10209,26 +10203,28 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
 			},
 		},
-		ops: []core.Operation{
-			{Name: "run", Method: http.MethodGet},
-			{Name: "admin", Method: http.MethodGet},
-		},
+		catalog: serverTestCatalog("svc", []catalog.CatalogOperation{
+			{ID: "run", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+			{ID: "admin", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
+		}),
 	}
 	providers := testutil.NewProviderRegistry(t, stub)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
-				Providers: map[string]config.WorkloadProviderDef{
-					"svc": {
-						Connection: "workspace",
-						Instance:   "team-a",
-						Allow:      []string{"run"},
-					},
-				},
 			},
 		},
-	}, providers, nil, nil)
+		Policies: map[string]config.SubjectPolicyDef{
+			"svc_policy": {
+				Default: "allow",
+				Members: []config.SubjectPolicyMemberDef{{
+					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					Role:      "viewer",
+				}},
+			},
+		},
+	}, map[string]*config.ProviderEntry{"svc": {AuthorizationPolicy: "svc_policy"}})
 
 	var auditBuf bytes.Buffer
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -10237,6 +10233,7 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 		cfg.Services = svc
 		cfg.Authorizer = authz
 		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
+		cfg.DefaultConnection = map[string]string{"svc": "workspace"}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -10256,7 +10253,7 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 		t.Fatalf("decoding: %v", err)
 	}
 	if result["token"] != "identity-bound-token" {
-		t.Fatalf("expected bound identity token, got %v", result["token"])
+		t.Fatalf("expected workload credential token, got %v", result["token"])
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/admin", nil)
@@ -10278,57 +10275,55 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 		t.Fatalf("selector request: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusForbidden {
+	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 403 for selector override, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected 200 for requested instance, got %d: %s", resp.StatusCode, body)
 	}
 
-	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
-	if len(lines) < 2 {
-		t.Fatalf("expected denial audit records, got %d", len(lines))
-	}
+}
 
-	var accessDeniedAudit map[string]any
-	if err := json.Unmarshal(lines[len(lines)-2], &accessDeniedAudit); err != nil {
-		t.Fatalf("parsing denied operation audit record: %v\nraw: %s", err, auditBuf.String())
-	}
-	if accessDeniedAudit["provider"] != "svc" {
-		t.Fatalf("expected denied operation provider svc, got %v", accessDeniedAudit["provider"])
-	}
-	if accessDeniedAudit["operation"] != "admin" {
-		t.Fatalf("expected denied operation admin, got %v", accessDeniedAudit["operation"])
-	}
-	if accessDeniedAudit["allowed"] != false {
-		t.Fatalf("expected denied operation audit allowed=false, got %v", accessDeniedAudit["allowed"])
-	}
-	if accessDeniedAudit["error"] != "operation access denied" {
-		t.Fatalf("unexpected denied operation error: %v", accessDeniedAudit["error"])
-	}
-	if accessDeniedAudit["authorization_decision"] != "operation_binding_denied" {
-		t.Fatalf("expected denied operation authorization_decision operation_binding_denied, got %v", accessDeniedAudit["authorization_decision"])
-	}
+func TestWorkloadAuthorization_ExecuteOperation_AllowsPolicylessPlugin(t *testing.T) {
+	t.Parallel()
 
-	var selectorAudit map[string]any
-	if err := json.Unmarshal(lines[len(lines)-1], &selectorAudit); err != nil {
-		t.Fatalf("parsing selector denial audit record: %v\nraw: %s", err, auditBuf.String())
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
 	}
-	if selectorAudit["provider"] != "svc" {
-		t.Fatalf("expected selector audit provider svc, got %v", selectorAudit["provider"])
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "svc",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q}`, op)}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "run", Method: http.MethodGet}},
 	}
-	if selectorAudit["operation"] != "run" {
-		t.Fatalf("expected selector audit operation run, got %v", selectorAudit["operation"])
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: workloadToken,
+			},
+		},
+	}, nil)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Authorizer = authz
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/run", nil)
+	req.Header.Set("Authorization", "Bearer "+workloadToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
 	}
-	if selectorAudit["allowed"] != false {
-		t.Fatalf("expected selector audit allowed=false, got %v", selectorAudit["allowed"])
-	}
-	if selectorAudit["auth_source"] != "workload_token" {
-		t.Fatalf("expected selector audit auth_source workload_token, got %v", selectorAudit["auth_source"])
-	}
-	if selectorAudit["subject_id"] != "workload:triage-bot" {
-		t.Fatalf("expected selector audit subject_id workload:triage-bot, got %v", selectorAudit["subject_id"])
-	}
-	if selectorAudit["error"] != "workload callers may not override connection or instance bindings" {
-		t.Fatalf("unexpected selector audit error: %v", selectorAudit["error"])
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200 for policyless workload plugin, got %d: %s", resp.StatusCode, body)
 	}
 }
 
@@ -10376,16 +10371,16 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 		"svc": {AuthorizationPolicy: "sample_policy"},
 	}
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "deny",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					staticPolicyUserMember(t, svc, "viewer-user@test.local", "viewer"),
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
 				},
 			},
 		},
-	}, nil, pluginDefs, nil)
+	}, pluginDefs)
 
 	var auditBuf bytes.Buffer
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -10511,15 +10506,15 @@ func TestHumanAuthorization_ExecuteOperation_DefaultAllowTreatsAuthenticatedUser
 		"svc": {AuthorizationPolicy: "sample_policy"},
 	}
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {
 				Default: "allow",
-				Members: []config.HumanPolicyMemberDef{
+				Members: []config.SubjectPolicyMemberDef{
 					staticPolicyUserMember(t, svc, "admin-user@test.local", "admin"),
 				},
 			},
 		},
-	}, nil, pluginDefs, nil)
+	}, pluginDefs)
 
 	var auditBuf bytes.Buffer
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -10645,10 +10640,11 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 		"svc": {AuthorizationPolicy: "sample_policy"},
 	}
 	legacy, err := authorization.New(config.AuthorizationConfig{
-		Policies: map[string]config.HumanPolicyDef{
+		Policies: map[string]config.SubjectPolicyDef{
 			"sample_policy": {Default: "deny"},
 		},
-	}, pluginDefs, nil, nil)
+	}, pluginDefs)
+
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
 	}
@@ -10736,7 +10732,7 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 	}
 }
 
-func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns412(t *testing.T) {
+func TestWorkloadAuthorization_ExecuteOperation_MissingSubjectCredentialReturns412(t *testing.T) {
 	t.Parallel()
 
 	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
@@ -10759,16 +10755,18 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
-				Providers: map[string]config.WorkloadProviderDef{
-					"svc": {
-						Connection: "workspace",
-						Instance:   "team-a",
-						Allow:      []string{"run"},
-					},
-				},
 			},
 		},
-	}, providers, nil, nil)
+		Policies: map[string]config.SubjectPolicyDef{
+			"svc_policy": {
+				Default: "allow",
+				Members: []config.SubjectPolicyMemberDef{{
+					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					Role:      "viewer",
+				}},
+			},
+		},
+	}, map[string]*config.ProviderEntry{"svc": {AuthorizationPolicy: "svc_policy"}})
 
 	svc := coretesting.NewStubServices(t)
 	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials, invocation.WithAuthorizer(authz))
@@ -10781,6 +10779,7 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns
 		cfg.Authorizer = authz
 		cfg.AuditSink = auditSink
 		cfg.Invoker = guarded
+		cfg.DefaultConnection = map[string]string{"svc": "workspace"}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -10803,15 +10802,6 @@ func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns
 	if record["subject_id"] != "workload:triage-bot" {
 		t.Fatalf("expected workload subject_id, got %v", record["subject_id"])
 	}
-	if record["credential_subject_id"] != "workload:triage-bot" {
-		t.Fatalf("expected credential_subject_id workload principal, got %v", record["credential_subject_id"])
-	}
-	if record["credential_connection"] != "workspace" {
-		t.Fatalf("expected credential_connection=workspace, got %v", record["credential_connection"])
-	}
-	if record["credential_instance"] != "team-a" {
-		t.Fatalf("expected credential_instance=team-a, got %v", record["credential_instance"])
-	}
 }
 
 func TestWorkloadAuthorization_HumanRoutesReturn403(t *testing.T) {
@@ -10831,12 +10821,9 @@ func TestWorkloadAuthorization_HumanRoutesReturn403(t *testing.T) {
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
-				Providers: map[string]config.WorkloadProviderDef{
-					"weather": {Allow: []string{"forecast"}},
-				},
 			},
 		},
-	}, providers, nil, nil)
+	}, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
@@ -10852,8 +10839,6 @@ func TestWorkloadAuthorization_HumanRoutesReturn403(t *testing.T) {
 		body   string
 	}{
 		{method: http.MethodPost, path: "/api/v1/tokens", body: `{"name":"bot-token"}`},
-		{method: http.MethodPost, path: "/api/v1/auth/connect-manual", body: `{"integration":"weather","credential":"abc"}`},
-		{method: http.MethodDelete, path: "/api/v1/integrations/weather"},
 		{method: http.MethodPost, path: "/api/v1/auth/logout"},
 	} {
 		req, _ := http.NewRequest(request.method, ts.URL+request.path, bytes.NewBufferString(request.body))
@@ -12241,6 +12226,57 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	}
 }
 
+func TestStartIntegrationOAuth_WorkloadDeniedByPolicy(t *testing.T) {
+	t.Parallel()
+
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	stub := &stubIntegrationWithAuthURL{
+		StubIntegration: coretesting.StubIntegration{N: "slack"},
+		authURL:         "https://slack.com/oauth/v2/authorize",
+	}
+	handler := &testOAuthHandler{
+		authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+	}
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: workloadToken,
+			},
+		},
+		Policies: map[string]config.SubjectPolicyDef{
+			"slack_policy": {
+				Default: "deny",
+			},
+		},
+	}, map[string]*config.ProviderEntry{"slack": {AuthorizationPolicy: "slack_policy"}})
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+		cfg.Authorizer = authz
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"integration":"slack","scopes":["channels:read"]}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
+	req.Header.Set("Authorization", "Bearer "+workloadToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 403, got %d: %s", resp.StatusCode, body)
+	}
+}
+
 func TestIntegrationOAuthCallback(t *testing.T) {
 	t.Parallel()
 
@@ -12255,7 +12291,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		svc.ExternalCredentials = recordingCreds
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{}, nil, nil)
+		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -12459,7 +12495,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		svc := coretesting.NewStubServices(t)
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{}, nil, nil)
+		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -12667,7 +12703,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		svc := coretesting.NewStubServices(t)
 		externalIdentityID := testExternalIdentityResourceID("slack_identity", "team:T123:user:U456")
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{}, nil, nil)
+		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -13439,7 +13475,7 @@ func TestHostedHTTPBinding_HMACAckDispatchesOperationAndRejectsReplay(t *testing
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -13591,7 +13627,7 @@ func TestHostedHTTPBinding_MergesManifestAndConfigOverrides(t *testing.T) {
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -13683,7 +13719,7 @@ func TestHostedHTTPBinding_HMACSyncRetriesReinvokeOperation(t *testing.T) {
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -13788,7 +13824,7 @@ func TestHostedHTTPBinding_APIKeySyncInvokesOperation(t *testing.T) {
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -13879,7 +13915,7 @@ func TestHostedHTTPBinding_APIKeyQueryDoesNotLeakCredentialParam(t *testing.T) {
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -13948,7 +13984,7 @@ func TestHostedHTTPBinding_RejectsReservedSystemResolvedSubject(t *testing.T) {
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -14046,7 +14082,7 @@ func TestHostedHTTPBinding_ComposedProviderPreservesSubjectResolver(t *testing.T
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -14124,7 +14160,7 @@ func TestHostedHTTPBinding_CredentialModeNoneBypassesProviderTokenLookup(t *test
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.Providers, cfg.PluginDefs, nil)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -15780,12 +15816,146 @@ func TestConnectManual(t *testing.T) {
 		}
 	})
 
+	t.Run("workload denied by policy cannot connect", func(t *testing.T) {
+		t.Parallel()
+
+		workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+		if err != nil {
+			t.Fatalf("GenerateToken: %v", err)
+		}
+		svc := coretesting.NewStubServices(t)
+		authz := mustAuthorizer(t, config.AuthorizationConfig{
+			Workloads: map[string]config.WorkloadDef{
+				"triage-bot": {
+					Token: workloadToken,
+				},
+			},
+			Policies: map[string]config.SubjectPolicyDef{
+				"manual_policy": {
+					Default: "deny",
+				},
+			},
+		}, map[string]*config.ProviderEntry{"manual-svc": {AuthorizationPolicy: "manual_policy"}})
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
+				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+			})
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.Services = svc
+			cfg.Authorizer = authz
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		body := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key"}`)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+		req.Header.Set("Authorization", "Bearer "+workloadToken)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusForbidden {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 403, got %d: %s", resp.StatusCode, body)
+		}
+		tokens, err := svc.ExternalCredentials.ListCredentials(context.Background(), principal.WorkloadSubjectID("triage-bot"))
+		if err != nil {
+			t.Fatalf("ListCredentials: %v", err)
+		}
+		if len(tokens) != 0 {
+			t.Fatalf("expected denied workload connect not to store credentials, got %d", len(tokens))
+		}
+	})
+
+	t.Run("workload external identity writes subject relationship", func(t *testing.T) {
+		t.Parallel()
+
+		workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+		if err != nil {
+			t.Fatalf("GenerateToken: %v", err)
+		}
+		svc := coretesting.NewStubServices(t)
+		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
+		base, err := authorization.New(config.AuthorizationConfig{
+			Workloads: map[string]config.WorkloadDef{
+				"triage-bot": {
+					Token: workloadToken,
+				},
+			},
+			Policies: map[string]config.SubjectPolicyDef{
+				"manual_policy": {
+					Members: []config.SubjectPolicyMemberDef{{
+						SubjectID: principal.WorkloadSubjectID("triage-bot"),
+						Role:      "viewer",
+					}},
+				},
+			},
+		}, map[string]*config.ProviderEntry{"manual-svc": {AuthorizationPolicy: "manual_policy"}})
+		if err != nil {
+			t.Fatalf("authorization.New: %v", err)
+		}
+		authz := mustProviderBackedAuthorizer(t, base, authzProvider)
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+			cfg.Providers = testutil.NewProviderRegistry(t, &stubPostConnectManualProvider{
+				stubManualProvider: stubManualProvider{
+					StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+				},
+				connectionParams: map[string]core.ConnectionParamDef{
+					"team_id": {Required: true},
+					"user_id": {Required: true},
+				},
+				postConnect: testSlackPostConnect,
+			})
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.Services = svc
+			cfg.Authorizer = authz
+			cfg.AuthorizationProvider = authzProvider
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		body := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key","connectionParams":{"team_id":"T123","user_id":"U456"}}`)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+		req.Header.Set("Authorization", "Bearer "+workloadToken)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		relResp, err := authzProvider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
+			Relation: authorization.ProviderExternalIdentityRelationAssume,
+			Resource: &core.ResourceRef{
+				Type: authorization.ProviderResourceTypeExternalIdentity,
+				Id:   testExternalIdentityResourceID("slack_identity", "team:T123:user:U456"),
+			},
+		})
+		if err != nil {
+			t.Fatalf("ReadRelationships: %v", err)
+		}
+		relationships := relResp.GetRelationships()
+		if len(relationships) != 1 {
+			t.Fatalf("expected one external identity relationship, got %+v", relationships)
+		}
+		subject := relationships[0].GetSubject()
+		if subject.GetType() != authorization.ProviderSubjectTypeSubject || subject.GetId() != principal.WorkloadSubjectID("triage-bot") {
+			t.Fatalf("expected subject workload relationship, got %+v", subject)
+		}
+	})
+
 	t.Run("reconnect replaces prior external identity authorization", func(t *testing.T) {
 		t.Parallel()
 
 		svc := coretesting.NewStubServices(t)
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{}, nil, nil)
+		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -15880,7 +16050,7 @@ func TestConnectManual(t *testing.T) {
 
 		svc := coretesting.NewStubServices(t)
 		authzProvider := newMemoryAuthorizationProvider("memory-authorization")
-		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{}, nil, nil)
+		legacy, err := authorization.New(config.AuthorizationConfig{}, map[string]*config.ProviderEntry{})
 		if err != nil {
 			t.Fatalf("authorization.New: %v", err)
 		}
@@ -17747,14 +17917,16 @@ func TestMCPEndpoint_WorkloadAuthorizationAndAudit(t *testing.T) {
 		Name: "clickhouse",
 		Operations: []catalog.CatalogOperation{
 			{
-				ID:          "run_query",
-				Description: "Execute a SQL query",
-				Transport:   catalog.TransportMCPPassthrough,
+				ID:           "run_query",
+				Description:  "Execute a SQL query",
+				Transport:    catalog.TransportMCPPassthrough,
+				AllowedRoles: []string{"viewer"},
 			},
 			{
-				ID:          "delete_table",
-				Description: "Delete a table",
-				Transport:   catalog.TransportMCPPassthrough,
+				ID:           "delete_table",
+				Description:  "Delete a table",
+				Transport:    catalog.TransportMCPPassthrough,
+				AllowedRoles: []string{"admin"},
 			},
 		},
 	}
@@ -17785,16 +17957,18 @@ func TestMCPEndpoint_WorkloadAuthorizationAndAudit(t *testing.T) {
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: "gst_wld_triage-bot-token",
-				Providers: map[string]config.WorkloadProviderDef{
-					"clickhouse": {
-						Connection: "default",
-						Instance:   "default",
-						Allow:      []string{"run_query"},
-					},
-				},
 			},
 		},
-	}, providers, nil, nil)
+		Policies: map[string]config.SubjectPolicyDef{
+			"clickhouse_policy": {
+				Members: []config.SubjectPolicyMemberDef{{
+					SubjectID: principal.WorkloadSubjectID("triage-bot"),
+					Role:      "viewer",
+				}},
+			},
+		},
+	}, map[string]*config.ProviderEntry{"clickhouse": {AuthorizationPolicy: "clickhouse_policy"}})
+
 	mcpHandler := newMCPHandler(t, providers, svc, auditSink, authz)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -17907,18 +18081,6 @@ func TestMCPEndpoint_WorkloadAuthorizationAndAudit(t *testing.T) {
 	}
 	if auditRecord["subject_kind"] != "workload" {
 		t.Fatalf("expected subject_kind workload, got %v", auditRecord["subject_kind"])
-	}
-	if auditRecord["credential_mode"] != "user" {
-		t.Fatalf("expected credential_mode user, got %v", auditRecord["credential_mode"])
-	}
-	if auditRecord["credential_subject_id"] != "workload:triage-bot" {
-		t.Fatalf("expected credential_subject_id workload:triage-bot, got %v", auditRecord["credential_subject_id"])
-	}
-	if auditRecord["credential_connection"] != "default" {
-		t.Fatalf("expected credential_connection default, got %v", auditRecord["credential_connection"])
-	}
-	if auditRecord["credential_instance"] != "default" {
-		t.Fatalf("expected credential_instance default, got %v", auditRecord["credential_instance"])
 	}
 }
 
@@ -19204,59 +19366,7 @@ func TestServerAllowsProviderNamedIdentities(t *testing.T) {
 	}
 }
 
-func TestLegacyManagedIdentityListCompatibility(t *testing.T) {
-	t.Parallel()
-
-	svc := coretesting.NewStubServices(t)
-	admin := seedUser(t, svc, "admin@example.test")
-	ctx := context.Background()
-	if _, err := svc.Identities.UpsertIdentity(ctx, &core.Identity{
-		ID:           "service-account-identity",
-		Status:       "active",
-		DisplayName:  "Service Account Identity",
-		MetadataJSON: `{"label":"service_account"}`,
-	}); err != nil {
-		t.Fatalf("UpsertIdentity: %v", err)
-	}
-	if _, err := svc.IdentityManagementGrants.UpsertGrant(ctx, &core.IdentityManagementGrant{
-		ManagerIdentityID: admin.ID,
-		TargetIdentityID:  "service-account-identity",
-		Role:              core.IdentityManagementRoleEditor,
-	}); err != nil {
-		t.Fatalf("UpsertGrant: %v", err)
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "admin-session" {
-					return nil, fmt.Errorf("unknown session %q", token)
-				}
-				return &core.UserIdentity{Email: "admin@example.test"}, nil
-			},
-		}
-		cfg.Services = svc
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	var got []struct {
-		ID          string    `json:"id"`
-		DisplayName string    `json:"displayName"`
-		Role        string    `json:"role"`
-		CreatedAt   time.Time `json:"createdAt"`
-		UpdatedAt   time.Time `json:"updatedAt"`
-	}
-	doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities", "admin-session", "", http.StatusOK, &got)
-	if len(got) != 1 {
-		t.Fatalf("len(identities) = %d, want 1: %#v", len(got), got)
-	}
-	if got[0].ID != "service-account-identity" || got[0].DisplayName != "Service Account Identity" || got[0].Role != core.IdentityManagementRoleEditor {
-		t.Fatalf("identity = %#v", got[0])
-	}
-}
-
-func TestLegacyManagedIdentityMutationsReturnJSONGone(t *testing.T) {
+func TestLegacyManagedIdentityRoutesAreRemoved(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
@@ -19281,6 +19391,7 @@ func TestLegacyManagedIdentityMutationsReturnJSONGone(t *testing.T) {
 		path   string
 		body   string
 	}{
+		{method: http.MethodGet, path: "/api/v1/identities"},
 		{method: http.MethodPost, path: "/api/v1/identities", body: `{"displayName":"Legacy"}`},
 		{method: http.MethodGet, path: "/api/v1/identities/legacy-id/members"},
 		{method: http.MethodPost, path: "/api/v1/identities/legacy-id/tokens", body: `{}`},
@@ -19296,22 +19407,9 @@ func TestLegacyManagedIdentityMutationsReturnJSONGone(t *testing.T) {
 			t.Fatalf("%s %s: %v", tc.method, tc.path, err)
 		}
 		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusGone {
+		if resp.StatusCode != http.StatusNotFound {
 			body, _ := io.ReadAll(resp.Body)
-			t.Fatalf("%s %s status = %d, want %d: %s", tc.method, tc.path, resp.StatusCode, http.StatusGone, body)
-		}
-		if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
-			t.Fatalf("%s %s Content-Type = %q, want application/json", tc.method, tc.path, ct)
-		}
-		var payload struct {
-			Error string `json:"error"`
-			Code  string `json:"code"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-			t.Fatalf("%s %s decode: %v", tc.method, tc.path, err)
-		}
-		if payload.Code != "managed_identities_removed" || !strings.Contains(payload.Error, "managed identities have been removed") {
-			t.Fatalf("%s %s payload = %#v", tc.method, tc.path, payload)
+			t.Fatalf("%s %s status = %d, want %d: %s", tc.method, tc.path, resp.StatusCode, http.StatusNotFound, body)
 		}
 	}
 }

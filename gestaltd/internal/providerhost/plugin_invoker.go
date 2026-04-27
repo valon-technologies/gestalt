@@ -195,23 +195,10 @@ func (s *PluginInvokerServer) tokenContextForSurfaceInvoke(req *proto.PluginInvo
 func prepareInvocationSelectors(ctx context.Context, tokenCtx invocationTokenContext, rawConnection, rawInstance string) (context.Context, string, error) {
 	connection := strings.TrimSpace(rawConnection)
 	instance := strings.TrimSpace(rawInstance)
-	if err := rejectWorkloadSelectorOverride(tokenCtx.principal, connection, instance); err != nil {
-		return nil, "", err
-	}
-	if instance == "" && connection == "" && shouldInheritCredentialSelectors(tokenCtx.principal) {
+	if instance == "" && connection == "" {
 		instance = tokenCtx.credential.Instance
 	}
 	return restoreInvocationTokenContext(ctx, tokenCtx, connection), instance, nil
-}
-
-func rejectWorkloadSelectorOverride(p *principal.Principal, connection, instance string) error {
-	if shouldInheritCredentialSelectors(p) {
-		return nil
-	}
-	if connection == "" && instance == "" {
-		return nil
-	}
-	return status.Error(codes.PermissionDenied, "workloads may not override connection or instance bindings")
 }
 
 func invocationStatusError(err error) error {

@@ -43,6 +43,11 @@ type putAdminAuthorizationMemberRequest struct {
 	Role      string `json:"role"`
 }
 
+type adminAuthorizationWriteSubject struct {
+	SubjectID string
+	User      *core.User
+}
+
 const adminAuthorizationCanWriteHeader = "X-Gestalt-Can-Write"
 
 func (s *Server) mountAdminAuthorizationRoutes(r chi.Router) {
@@ -158,17 +163,17 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusBadRequest, "role is required")
 		return
 	}
-	user, status, message := s.resolveAdminAuthorizationWriteUser(r.Context(), req)
+	subject, status, message := s.resolveAdminAuthorizationWriteSubject(r.Context(), req)
 	if status != 0 {
 		writeError(w, status, message)
 		return
 	}
-	if access, ok := s.authorizer.StaticRoleForProviderIdentity(plugin, principal.UserSubjectID(user.ID)); ok && access.Role != "" {
-		writeError(w, http.StatusConflict, "user already has static authorization for this plugin")
+	if access, ok := s.authorizer.StaticRoleForProviderIdentity(plugin, subject.SubjectID); ok && access.Role != "" {
+		writeError(w, http.StatusConflict, "subject already has static authorization for this plugin")
 		return
 	}
 
-	membership, err := s.upsertProviderPluginAuthorization(r.Context(), user, plugin, req.Role)
+	membership, err := s.upsertProviderPluginAuthorization(r.Context(), subject, plugin, req.Role)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to persist authorization member")
 		return
@@ -181,8 +186,8 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 		Effective:     true,
 		Mutable:       true,
 		SelectorKind:  "subject_id",
-		SelectorValue: principal.UserSubjectID(strings.TrimSpace(membership.UserID)),
-		Email:         strings.TrimSpace(user.Email),
+		SelectorValue: strings.TrimSpace(membership.SubjectID),
+		Email:         adminAuthorizationSubjectEmail(subject),
 	}
 	if err := s.reloadAuthorizationState(r.Context()); err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]any{
@@ -210,13 +215,13 @@ func (s *Server) deleteAdminAuthorizationPluginMember(w http.ResponseWriter, r *
 	if !s.ensureAdminDynamicAuthorizationAvailable(w) {
 		return
 	}
-	userID, err := adminAuthorizationUserIDFromSubjectID(strings.TrimSpace(chi.URLParam(r, "subjectID")))
+	subjectID, err := adminAuthorizationSubjectID(strings.TrimSpace(chi.URLParam(r, "subjectID")))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	deleteErr := s.deleteProviderPluginAuthorization(r.Context(), plugin, userID)
+	deleteErr := s.deleteProviderPluginAuthorization(r.Context(), plugin, subjectID)
 	if deleteErr != nil {
 		if errors.Is(deleteErr, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "authorization member not found")
@@ -273,17 +278,17 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "role is required")
 		return
 	}
-	user, status, message := s.resolveAdminAuthorizationWriteUser(r.Context(), req)
+	subject, status, message := s.resolveAdminAuthorizationWriteSubject(r.Context(), req)
 	if status != 0 {
 		writeError(w, status, message)
 		return
 	}
-	if access, ok := s.authorizer.StaticRoleForPolicyIdentity(s.adminRoute.AuthorizationPolicy, principal.UserSubjectID(user.ID)); ok && access.Role != "" {
-		writeError(w, http.StatusConflict, "user already has static admin authorization")
+	if access, ok := s.authorizer.StaticRoleForPolicyIdentity(s.adminRoute.AuthorizationPolicy, subject.SubjectID); ok && access.Role != "" {
+		writeError(w, http.StatusConflict, "subject already has static admin authorization")
 		return
 	}
 
-	membership, err := s.upsertProviderAdminAuthorization(r.Context(), user, req.Role)
+	membership, err := s.upsertProviderAdminAuthorization(r.Context(), subject, req.Role)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to persist admin member")
 		return
@@ -295,8 +300,8 @@ func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http
 		Effective:     true,
 		Mutable:       true,
 		SelectorKind:  "subject_id",
-		SelectorValue: principal.UserSubjectID(strings.TrimSpace(membership.UserID)),
-		Email:         strings.TrimSpace(user.Email),
+		SelectorValue: strings.TrimSpace(membership.SubjectID),
+		Email:         adminAuthorizationSubjectEmail(subject),
 	}
 	if err := s.reloadAuthorizationState(r.Context()); err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]any{
@@ -322,13 +327,13 @@ func (s *Server) deleteAdminAuthorizationAdminMember(w http.ResponseWriter, r *h
 	if !s.ensureAdminAuthorizationWriteAccess(w, r) {
 		return
 	}
-	userID, err := adminAuthorizationUserIDFromSubjectID(strings.TrimSpace(chi.URLParam(r, "subjectID")))
+	subjectID, err := adminAuthorizationSubjectID(strings.TrimSpace(chi.URLParam(r, "subjectID")))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	deleteErr := s.deleteProviderAdminAuthorization(r.Context(), userID)
+	deleteErr := s.deleteProviderAdminAuthorization(r.Context(), subjectID)
 	if deleteErr != nil {
 		if errors.Is(deleteErr, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "admin member not found")
@@ -421,7 +426,7 @@ func (s *Server) adminAuthorizationStaticAdminRows(ctx context.Context) []adminA
 	return s.adminAuthorizationRowsFromStaticMembers(ctx, "", members)
 }
 
-func (s *Server) adminAuthorizationRowsFromStaticMembers(ctx context.Context, plugin string, members []authorization.StaticHumanMember) []adminAuthorizationMemberRow {
+func (s *Server) adminAuthorizationRowsFromStaticMembers(ctx context.Context, plugin string, members []authorization.StaticSubjectMember) []adminAuthorizationMemberRow {
 	rows := make([]adminAuthorizationMemberRow, 0, len(members))
 	for _, member := range members {
 		rows = append(rows, adminAuthorizationMemberRow{
@@ -509,21 +514,25 @@ func (s *Server) adminAuthorizationEmailForSubjectID(ctx context.Context, subjec
 	return strings.TrimSpace(user.Email)
 }
 
-func (s *Server) resolveAdminAuthorizationWriteUser(ctx context.Context, req putAdminAuthorizationMemberRequest) (*core.User, int, string) {
+func (s *Server) resolveAdminAuthorizationWriteSubject(ctx context.Context, req putAdminAuthorizationMemberRequest) (*adminAuthorizationWriteSubject, int, string) {
 	subjectID := strings.TrimSpace(req.SubjectID)
 	email := strings.TrimSpace(req.Email)
 	switch {
 	case subjectID != "" && email != "":
 		return nil, http.StatusBadRequest, "provide either subjectId or email, not both"
 	case subjectID != "":
-		userID, err := adminAuthorizationUserIDFromSubjectID(subjectID)
+		subjectID, err := adminAuthorizationSubjectID(subjectID)
 		if err != nil {
 			return nil, http.StatusBadRequest, err.Error()
+		}
+		userID := strings.TrimSpace(principal.UserIDFromSubjectID(subjectID))
+		if userID == "" {
+			return &adminAuthorizationWriteSubject{SubjectID: subjectID}, 0, ""
 		}
 		user, err := s.users.GetUser(ctx, userID)
 		switch {
 		case err == nil:
-			return user, 0, ""
+			return &adminAuthorizationWriteSubject{SubjectID: subjectID, User: user}, 0, ""
 		case errors.Is(err, core.ErrNotFound):
 			return nil, http.StatusNotFound, "subject not found"
 		default:
@@ -538,22 +547,39 @@ func (s *Server) resolveAdminAuthorizationWriteUser(ctx context.Context, req put
 		if err != nil {
 			return nil, http.StatusInternalServerError, "failed to resolve user"
 		}
-		return user, 0, ""
+		return &adminAuthorizationWriteSubject{SubjectID: principal.UserSubjectID(user.ID), User: user}, 0, ""
 	default:
 		return nil, http.StatusBadRequest, "subjectId or email is required"
 	}
 }
 
-func adminAuthorizationUserIDFromSubjectID(subjectID string) (string, error) {
+func adminAuthorizationSubjectEmail(subject *adminAuthorizationWriteSubject) string {
+	if subject == nil || subject.User == nil {
+		return ""
+	}
+	return strings.TrimSpace(subject.User.Email)
+}
+
+func adminAuthorizationSubjectID(subjectID string) (string, error) {
 	subjectID = strings.TrimSpace(subjectID)
 	if subjectID == "" {
 		return "", errors.New("subjectID is required")
 	}
-	userID := strings.TrimSpace(principal.UserIDFromSubjectID(subjectID))
-	if userID == "" {
-		return "", errors.New("subjectID must use user:<id>")
+	if principal.IsSystemSubjectID(subjectID) {
+		return "", errors.New("subjectID must not use system:<id>")
 	}
-	return userID, nil
+	if strings.TrimSpace(principal.UserIDFromSubjectID(subjectID)) != "" {
+		return subjectID, nil
+	}
+	if strings.HasPrefix(subjectID, string(principal.KindWorkload)+":") && strings.TrimPrefix(subjectID, string(principal.KindWorkload)+":") != "" {
+		return subjectID, nil
+	}
+	return "", errors.New("subjectID must use user:<id> or workload:<id>")
+}
+
+func adminAuthorizationValidSubjectID(subjectID string) bool {
+	_, err := adminAuthorizationSubjectID(subjectID)
+	return err == nil
 }
 
 var (

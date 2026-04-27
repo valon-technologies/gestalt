@@ -4,14 +4,14 @@ Gestalt is configured from one or more YAML files. This page covers the key conc
 
 ## Config file structure
 
-A Gestalt config has six top-level keys: `server` for host settings and host-provider selection, `authorization` for shared human/workload access policy, `providers` for named host-scoped providers and UIs, `runtime` for named plugin runtime backends, `workflows` for config-managed schedules and event triggers, and `plugins` for executable integrations and optional plugin-backed UI mounts.
+A Gestalt config has six top-level keys: `server` for host settings and host-provider selection, `authorization` for shared subject access policy, `providers` for named host-scoped providers and UIs, `runtime` for named plugin runtime backends, `workflows` for config-managed schedules and event triggers, and `plugins` for executable integrations and optional plugin-backed UI mounts.
 
 ```yaml
 authorization:
-  # shared human access policies
+  # shared subject access policies
   policies: ...
 
-  # workload bearer-token policy
+  # workload bearer tokens
   workloads: ...
 
 plugins:
@@ -110,7 +110,7 @@ Gestalt has ten core concepts you configure in YAML:
 - **[Plugin.](/providers/plugins)** A tool backed by a provider package. Plugins expose operations that agents and users invoke over HTTP, MCP, or the CLI. Plugins can come from published packages or local source.
 - **Connection.** How Gestalt authenticates to an upstream API on behalf of a user or service. Connections handle OAuth flows, API keys, and manual credentials.
 - **[IndexedDB.](/providers/indexeddb)** The persistent storage layer. Stores users, sessions, tokens, and credentials through a provider that implements the IndexedDB interface.
-- **[Authorization.](/providers/authorization)** Optional host-scoped policy storage and decision engine for dynamic human authorization state. The first-party `authorization/indexeddb` provider persists models and relationships in the selected host IndexedDB provider.
+- **[Authorization.](/providers/authorization)** Optional host-scoped policy storage and decision engine for dynamic subject authorization state. The first-party `authorization/indexeddb` provider persists models and relationships in the selected host IndexedDB provider.
 - **[S3.](/providers/s3)** Plugin-bound object storage. The provider config chooses the backend, credentials, and endpoint; plugin code chooses buckets, keys, and versions at runtime.
 - **[Authentication.](/providers/authentication)** Platform login for the Gestalt server. Separate from connection authentication, which is per-plugin and per-upstream.
 - **[Secrets.](/providers/secrets)** Resolves structured secret refs in the config at startup. Backed by environment variables, files, or cloud secret managers.
@@ -460,7 +460,7 @@ SQLite works for single-instance deployments. For production, use a networked In
 
 The `providers.authorization` block is optional. When configured,
 `server.providers.authorization` selects the host authorization provider
-Gestalt uses for dynamic human authorization relationships and model storage:
+Gestalt uses for dynamic subject authorization relationships and model storage:
 
 ```yaml
 server:
@@ -483,10 +483,10 @@ providers:
 ```
 
 If `providers.authorization` is omitted, static policy members from config still
-work, but there is no provider-backed relationship store and the dynamic human
+work, but there is no provider-backed relationship store and the dynamic subject
 authorization control plane is unavailable. When it is present, Gestalt uses
-that provider for dynamic human authorization, human authorization checks, and
-the built-in admin authorization APIs.
+that provider for dynamic subject authorization, subject authorization checks,
+and the built-in admin authorization APIs.
 
 ## Configuring workflow providers
 

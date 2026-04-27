@@ -9,7 +9,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
 const (
@@ -232,7 +231,7 @@ func (s *Server) adminAuthorizationDynamicRowFromProviderRelationship(ctx contex
 	switch strings.TrimSpace(rel.GetSubject().GetType()) {
 	case authorization.ProviderSubjectTypeSubject:
 		subjectID := strings.TrimSpace(rel.GetSubject().GetId())
-		if principal.UserIDFromSubjectID(subjectID) == "" {
+		if !adminAuthorizationValidSubjectID(subjectID) {
 			return adminAuthorizationMemberRow{}, false, nil
 		}
 		row.SelectorKind = "subject_id"

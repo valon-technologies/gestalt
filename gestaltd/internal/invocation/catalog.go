@@ -180,21 +180,9 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 	if !core.SupportsSessionCatalog(prov) {
 		return nil, false, nil
 	}
-	boundCredential := CredentialBindingResolution{}
-	if bindingResolver, ok := resolver.(EffectiveCredentialBindingResolver); ok && p != nil {
-		resolvedBinding, err := bindingResolver.ResolveEffectiveCredentialBinding(ctx, p, provName, connection, instance)
-		if err != nil {
-			return nil, true, err
-		}
-		if resolvedBinding.HasBinding {
-			boundCredential = resolvedBinding
-			connection = boundCredential.Connection
-			instance = boundCredential.Instance
-		}
-	}
 	if effectiveConnectionMode(ctx, prov) == core.ConnectionModeNone {
 		if resolver != nil && p != nil {
-			enrichedCtx, token, err := ResolveTokenForBinding(ctx, resolver, p, provName, connection, instance, boundCredential)
+			enrichedCtx, token, err := resolver.ResolveToken(ctx, p, provName, connection, instance)
 			if err != nil {
 				return nil, true, err
 			}
@@ -209,7 +197,7 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 		return nil, false, nil
 	}
 
-	ctx, token, err := ResolveTokenForBinding(ctx, resolver, p, provName, connection, instance, boundCredential)
+	ctx, token, err := resolver.ResolveToken(ctx, p, provName, connection, instance)
 	if err != nil {
 		return nil, true, err
 	}
