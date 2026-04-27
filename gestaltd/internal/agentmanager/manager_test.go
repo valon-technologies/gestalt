@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -49,6 +51,218 @@ func (i tokenErrorInvoker) ResolveToken(ctx context.Context, _ *principal.Princi
 		return ctx, "", nil
 	}
 	return ctx, "", i.err
+}
+
+type singleAgentControl struct {
+	name     string
+	provider coreagent.Provider
+}
+
+func (c singleAgentControl) ResolveProvider(name string) (coreagent.Provider, error) {
+	if name != "" && name != c.name {
+		return nil, NewAgentProviderNotAvailableError(name)
+	}
+	return c.provider, nil
+}
+
+func (c singleAgentControl) ResolveProviderSelection(name string) (string, coreagent.Provider, error) {
+	if name != "" && name != c.name {
+		return "", nil, NewAgentProviderNotAvailableError(name)
+	}
+	return c.name, c.provider, nil
+}
+
+func (c singleAgentControl) ProviderNames() []string {
+	return []string{c.name}
+}
+
+type idempotentSessionProvider struct {
+	coreagent.UnimplementedProvider
+	session        *coreagent.Session
+	createRequests []coreagent.CreateSessionRequest
+}
+
+func (p *idempotentSessionProvider) CreateSession(_ context.Context, req coreagent.CreateSessionRequest) (*coreagent.Session, error) {
+	p.createRequests = append(p.createRequests, req)
+	return cloneAgentManagerSession(p.session), nil
+}
+
+func (p *idempotentSessionProvider) GetSession(_ context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
+	if p.session == nil || req.SessionID != p.session.ID {
+		return nil, core.ErrNotFound
+	}
+	return cloneAgentManagerSession(p.session), nil
+}
+
+func cloneAgentManagerSession(src *coreagent.Session) *coreagent.Session {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	return &dst
+}
+
+func TestCreateSessionReconcilesIdempotentProviderSessionID(t *testing.T) {
+	t.Parallel()
+
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	provider := &idempotentSessionProvider{
+		session: &coreagent.Session{
+			ID:        "provider-session-1",
+			State:     coreagent.SessionStateActive,
+			CreatedBy: coreagent.Actor{SubjectID: principal.UserSubjectID("user-1")},
+		},
+	}
+	manager := New(Config{
+		Agent:           singleAgentControl{name: "simple", provider: provider},
+		SessionMetadata: services.AgentSessions,
+		RunMetadata:     services.AgentRunMetadata,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName:    "simple",
+		IdempotencyKey:  "workflow:github:run-1:session",
+		ProviderOptions: map[string]any{"temperature": 0},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if session.ID != "provider-session-1" {
+		t.Fatalf("CreateSession session ID = %q, want provider-session-1", session.ID)
+	}
+	if len(provider.createRequests) != 1 {
+		t.Fatalf("CreateSession calls = %d, want 1", len(provider.createRequests))
+	}
+	if provider.createRequests[0].SessionID == session.ID {
+		t.Fatalf("provider request session ID = returned session ID %q, want generated requested ID", session.ID)
+	}
+
+	ref, err := services.AgentSessions.Get(context.Background(), "provider-session-1")
+	if err != nil {
+		t.Fatalf("AgentSessions.Get: %v", err)
+	}
+	if ref.IdempotencyKey != "workflow:github:run-1:session" {
+		t.Fatalf("metadata idempotency key = %q, want workflow key", ref.IdempotencyKey)
+	}
+
+	replayed, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName:   "simple",
+		IdempotencyKey: "workflow:github:run-1:session",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession replay: %v", err)
+	}
+	if replayed.ID != "provider-session-1" {
+		t.Fatalf("CreateSession replay ID = %q, want provider-session-1", replayed.ID)
+	}
+	if len(provider.createRequests) != 1 {
+		t.Fatalf("CreateSession calls after replay = %d, want 1", len(provider.createRequests))
+	}
+}
+
+func TestCreateSessionPreservesExistingMetadataWhenReconcilingProviderSession(t *testing.T) {
+	t.Parallel()
+
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	archivedAt := time.Date(2026, time.April, 27, 12, 0, 0, 0, time.UTC)
+	if _, err := services.AgentSessions.Put(context.Background(), &coreagent.SessionReference{
+		ID:                  "provider-session-1",
+		ProviderName:        "simple",
+		SubjectID:           principal.UserSubjectID("user-1"),
+		CredentialSubjectID: "credential:old",
+		ArchivedAt:          &archivedAt,
+	}); err != nil {
+		t.Fatalf("AgentSessions.Put: %v", err)
+	}
+	provider := &idempotentSessionProvider{
+		session: &coreagent.Session{
+			ID:    "provider-session-1",
+			State: coreagent.SessionStateArchived,
+		},
+	}
+	manager := New(Config{
+		Agent:           singleAgentControl{name: "simple", provider: provider},
+		SessionMetadata: services.AgentSessions,
+		RunMetadata:     services.AgentRunMetadata,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName:   "simple",
+		IdempotencyKey: "workflow:github:run-1:session",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if session.ID != "provider-session-1" {
+		t.Fatalf("CreateSession session ID = %q, want provider-session-1", session.ID)
+	}
+
+	ref, err := services.AgentSessions.Get(context.Background(), "provider-session-1")
+	if err != nil {
+		t.Fatalf("AgentSessions.Get: %v", err)
+	}
+	if ref.ArchivedAt == nil || !ref.ArchivedAt.Equal(archivedAt) {
+		t.Fatalf("metadata archived_at = %v, want %v", ref.ArchivedAt, archivedAt)
+	}
+	if ref.CredentialSubjectID != "credential:old" {
+		t.Fatalf("metadata credential_subject_id = %q, want credential:old", ref.CredentialSubjectID)
+	}
+	if ref.IdempotencyKey != "workflow:github:run-1:session" {
+		t.Fatalf("metadata idempotency key = %q, want workflow key", ref.IdempotencyKey)
+	}
+}
+
+func TestCreateSessionRejectsIdempotentProviderSessionForDifferentSubject(t *testing.T) {
+	t.Parallel()
+
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	provider := &idempotentSessionProvider{
+		session: &coreagent.Session{
+			ID:        "provider-session-1",
+			State:     coreagent.SessionStateActive,
+			CreatedBy: coreagent.Actor{SubjectID: principal.UserSubjectID("user-2")},
+		},
+	}
+	manager := New(Config{
+		Agent:           singleAgentControl{name: "simple", provider: provider},
+		SessionMetadata: services.AgentSessions,
+		RunMetadata:     services.AgentRunMetadata,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	_, err = manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName:   "simple",
+		IdempotencyKey: "workflow:github:run-1:session",
+	})
+	if !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("CreateSession error = %v, want not found", err)
+	}
+	if _, err := services.AgentSessions.Get(context.Background(), "provider-session-1"); err == nil {
+		t.Fatal("AgentSessions.Get error = nil, want not found")
+	}
+
+	provider.session.CreatedBy = coreagent.Actor{SubjectID: principal.UserSubjectID("user-1")}
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName:   "simple",
+		IdempotencyKey: "workflow:github:run-1:session",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession after rejected replay: %v", err)
+	}
+	if session.ID != "provider-session-1" {
+		t.Fatalf("CreateSession after rejected replay ID = %q, want provider-session-1", session.ID)
+	}
 }
 
 func TestSearchToolsSearchesAuthorizedCatalogWhenNoRefsDefined(t *testing.T) {

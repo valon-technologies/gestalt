@@ -256,20 +256,37 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		}
 		session = fallback
 	}
-	normalized, err := normalizeProviderSession(providerName, sessionID, session)
+	normalized, err := normalizeProviderSessionForCreate(providerName, sessionID, idempotencyKey, session)
 	if err != nil {
 		if idempotencyKey != "" {
 			_ = m.sessionMetadata.ReleaseIdempotency(ctx, subjectID, providerName, idempotencyKey)
 		}
 		return nil, err
 	}
-	if _, err := m.sessionMetadata.Put(ctx, &coreagent.SessionReference{
+	var existingRef *coreagent.SessionReference
+	if strings.TrimSpace(normalized.ID) != strings.TrimSpace(sessionID) {
+		existingRef, err = m.validateIdempotentProviderSession(ctx, p, providerName, idempotencyKey, normalized)
+		if err != nil {
+			if idempotencyKey != "" {
+				_ = m.sessionMetadata.ReleaseIdempotency(ctx, subjectID, providerName, idempotencyKey)
+			}
+			return nil, err
+		}
+	}
+	sessionRef := &coreagent.SessionReference{
 		ID:                  normalized.ID,
 		ProviderName:        providerName,
 		SubjectID:           subjectID,
 		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
 		IdempotencyKey:      idempotencyKey,
-	}); err != nil {
+	}
+	if existingRef != nil {
+		sessionRef = cloneSessionReference(existingRef)
+		if strings.TrimSpace(sessionRef.IdempotencyKey) == "" {
+			sessionRef.IdempotencyKey = idempotencyKey
+		}
+	}
+	if _, err := m.sessionMetadata.Put(ctx, sessionRef); err != nil {
 		if idempotencyKey != "" {
 			_ = m.sessionMetadata.ReleaseIdempotency(ctx, subjectID, providerName, idempotencyKey)
 		}
@@ -1380,6 +1397,34 @@ func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 	}
 }
 
+func (m *Manager) validateIdempotentProviderSession(ctx context.Context, p *principal.Principal, providerName, idempotencyKey string, session *coreagent.Session) (*coreagent.SessionReference, error) {
+	if session == nil {
+		return nil, core.ErrNotFound
+	}
+	sessionID := strings.TrimSpace(session.ID)
+	if sessionID == "" {
+		return nil, fmt.Errorf("agent provider returned session without id")
+	}
+	ref, err := m.sessionMetadata.Get(ctx, sessionID)
+	if err == nil {
+		if strings.TrimSpace(ref.ProviderName) != strings.TrimSpace(providerName) || !sessionRefOwnedBy(ref, p) {
+			return nil, core.ErrNotFound
+		}
+		refIdempotencyKey := strings.TrimSpace(ref.IdempotencyKey)
+		if refIdempotencyKey != "" && refIdempotencyKey != strings.TrimSpace(idempotencyKey) {
+			return nil, fmt.Errorf("%w: agent provider returned session %q for idempotency key %q, but existing metadata uses idempotency key %q", invocation.ErrInternal, sessionID, strings.TrimSpace(idempotencyKey), refIdempotencyKey)
+		}
+		return ref, nil
+	}
+	if !errors.Is(err, indexeddb.ErrNotFound) {
+		return nil, err
+	}
+	if !providerSessionOwnedBy(session, p) {
+		return nil, core.ErrNotFound
+	}
+	return nil, nil
+}
+
 func executionRefOwnedBy(ref *coreagent.ExecutionReference, p *principal.Principal) bool {
 	if ref == nil || p == nil {
 		return false
@@ -1394,6 +1439,22 @@ func sessionRefOwnedBy(ref *coreagent.SessionReference, p *principal.Principal) 
 	}
 	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
 	return subjectID != "" && strings.TrimSpace(ref.SubjectID) == subjectID
+}
+
+func cloneSessionReference(ref *coreagent.SessionReference) *coreagent.SessionReference {
+	if ref == nil {
+		return nil
+	}
+	cloned := *ref
+	return &cloned
+}
+
+func providerSessionOwnedBy(session *coreagent.Session, p *principal.Principal) bool {
+	if session == nil || p == nil {
+		return false
+	}
+	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
+	return subjectID != "" && strings.TrimSpace(session.CreatedBy.SubjectID) == subjectID
 }
 
 func executionRefActive(ref *coreagent.ExecutionReference) bool {
@@ -1464,6 +1525,23 @@ func normalizeProviderSession(providerName, sessionID string, session *coreagent
 	}
 	if strings.TrimSpace(cloned.ID) != strings.TrimSpace(sessionID) {
 		return nil, fmt.Errorf("agent provider returned session id %q, want %q", cloned.ID, sessionID)
+	}
+	if strings.TrimSpace(cloned.ProviderName) == "" {
+		cloned.ProviderName = strings.TrimSpace(providerName)
+	}
+	return &cloned, nil
+}
+
+func normalizeProviderSessionForCreate(providerName, sessionID, idempotencyKey string, session *coreagent.Session) (*coreagent.Session, error) {
+	if strings.TrimSpace(idempotencyKey) == "" {
+		return normalizeProviderSession(providerName, sessionID, session)
+	}
+	if session == nil {
+		return nil, core.ErrNotFound
+	}
+	cloned := *session
+	if strings.TrimSpace(cloned.ID) == "" {
+		return nil, fmt.Errorf("agent provider returned session without id")
 	}
 	if strings.TrimSpace(cloned.ProviderName) == "" {
 		cloned.ProviderName = strings.TrimSpace(providerName)
