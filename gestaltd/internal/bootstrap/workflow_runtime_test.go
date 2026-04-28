@@ -51,8 +51,6 @@ func testWorkflowPluginTargetWithInput(pluginName, operation, connection, instan
 const (
 	canonicalAgentWorkflowTargetFingerprint  = "df7c3d7dde92c5807d3268e17d2e2996163442f06624d003c7008e35be508b63"
 	canonicalPluginWorkflowTargetFingerprint = "ba910105b28aa331501c9ec3c34de4c0b67ff58204e0ec4a428122c089bb64a7"
-	legacyAgentWorkflowTargetFingerprint     = "35e6581a2588dfe3a3885a9e6a98f83fd8444d1408fb22d5d0df08e6811b2c5c"
-	legacyPluginWorkflowTargetFingerprint    = "0df33294a540a423e6f3982c190e54505f0415c7856cc3389eb13042415e8796"
 )
 
 func (f funcInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
@@ -77,6 +75,13 @@ func (p *workflowRuntimeExecutionRefProvider) PutExecutionReference(_ context.Co
 		p.refs = map[string]*coreworkflow.ExecutionReference{}
 	}
 	stored := cloneRuntimeExecutionRef(ref)
+	if strings.TrimSpace(stored.TargetFingerprint) == "" {
+		fingerprint, err := coreworkflow.TargetFingerprint(stored.Target)
+		if err != nil {
+			return nil, err
+		}
+		stored.TargetFingerprint = fingerprint
+	}
 	p.refs[stored.ID] = stored
 	return cloneRuntimeExecutionRef(stored), nil
 }
@@ -519,7 +524,7 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	}
 }
 
-func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsStoredFingerprints(t *testing.T) {
+func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsCanonicalFingerprint(t *testing.T) {
 	t.Parallel()
 
 	target := coreworkflow.Target{
@@ -531,67 +536,54 @@ func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsStoredFingerprin
 			TimeoutSeconds: 5,
 		},
 	}
-	for _, tt := range []struct {
-		name        string
-		fingerprint string
-	}{
-		{name: "legacy", fingerprint: legacyAgentWorkflowTargetFingerprint},
-		{name: "canonical", fingerprint: canonicalAgentWorkflowTargetFingerprint},
-	} {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                "agent-ref",
+		ProviderName:      "temporal",
+		Target:            target,
+		TargetFingerprint: canonicalAgentWorkflowTargetFingerprint,
+		CallerPluginName:  "slack",
+		SubjectID:         "service_account:scheduler",
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+	agentManager := &workflowRuntimeAgentManagerStub{}
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+	runtime.SetAgentManager(agentManager)
 
-			refProvider := newWorkflowRuntimeExecutionRefProvider()
-			if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-				ID:                "agent-ref-" + tt.name,
-				ProviderName:      "temporal",
-				Target:            target,
-				TargetFingerprint: tt.fingerprint,
-				CallerPluginName:  "slack",
-				SubjectID:         "service_account:scheduler",
-			}); err != nil {
-				t.Fatalf("Put execution ref: %v", err)
-			}
-			agentManager := &workflowRuntimeAgentManagerStub{}
-			runtime := &workflowRuntime{
-				providers: map[string]coreworkflow.Provider{"temporal": refProvider},
-			}
-			runtime.SetAgentManager(agentManager)
-
-			resp, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
-				ProviderName: "temporal",
-				ExecutionRef: "agent-ref-" + tt.name,
-				RunID:        "run-agent-123",
-				Target:       target,
-				Signals: []coreworkflow.Signal{{
-					ID:             "sig-1",
-					Name:           "slack.message",
-					Payload:        map[string]any{"text": "new message"},
-					IdempotencyKey: "evt-1",
-					Sequence:       42,
-				}},
-			})
-			if err != nil {
-				t.Fatalf("Invoke: %v", err)
-			}
-			if resp.Status != http.StatusOK || resp.Body != "turn completed" {
-				t.Fatalf("response = %#v", resp)
-			}
-			if len(agentManager.createTurnRequests) != 1 {
-				t.Fatalf("turn requests = %d, want 1", len(agentManager.createTurnRequests))
-			}
-			turnReq := agentManager.createTurnRequests[0]
-			if turnReq.CallerPluginName != "slack" {
-				t.Fatalf("caller plugin = %q, want slack", turnReq.CallerPluginName)
-			}
-			if !strings.HasPrefix(turnReq.IdempotencyKey, "workflow:temporal:run-agent-123:turn:signal-batch-") {
-				t.Fatalf("turn idempotency key = %q", turnReq.IdempotencyKey)
-			}
-			if len(turnReq.Messages) != 2 || turnReq.Messages[0].Text != "Send the status summary" || !strings.Contains(turnReq.Messages[1].Text, `"name": "slack.message"`) {
-				t.Fatalf("turn messages = %#v", turnReq.Messages)
-			}
-		})
+	resp, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		ExecutionRef: "agent-ref",
+		RunID:        "run-agent-123",
+		Target:       target,
+		Signals: []coreworkflow.Signal{{
+			ID:             "sig-1",
+			Name:           "slack.message",
+			Payload:        map[string]any{"text": "new message"},
+			IdempotencyKey: "evt-1",
+			Sequence:       42,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if len(agentManager.createTurnRequests) != 1 {
+		t.Fatalf("turn requests = %d, want 1", len(agentManager.createTurnRequests))
+	}
+	turnReq := agentManager.createTurnRequests[0]
+	if turnReq.CallerPluginName != "slack" {
+		t.Fatalf("caller plugin = %q, want slack", turnReq.CallerPluginName)
+	}
+	if !strings.HasPrefix(turnReq.IdempotencyKey, "workflow:temporal:run-agent-123:turn:signal-batch-") {
+		t.Fatalf("turn idempotency key = %q", turnReq.IdempotencyKey)
+	}
+	if len(turnReq.Messages) != 2 || turnReq.Messages[0].Text != "Send the status summary" || !strings.Contains(turnReq.Messages[1].Text, `"name": "slack.message"`) {
+		t.Fatalf("turn messages = %#v", turnReq.Messages)
 	}
 }
 
@@ -660,35 +652,58 @@ func TestWorkflowRuntimeRejectsMixedAgentPluginTargetWithExecutionRef(t *testing
 	}
 }
 
-func TestWorkflowRuntimeRejectsAgentExecutionRefWithoutFingerprint(t *testing.T) {
+func TestWorkflowRuntimeRejectsExecutionRefWithoutFingerprint(t *testing.T) {
 	t.Parallel()
 
-	refProvider := newWorkflowRuntimeExecutionRefProvider()
-	target := coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-		ProviderName: "managed",
-		Prompt:       "send reminder",
-		ToolSource:   coreagent.ToolSourceModeNativeSearch,
-	}}
-	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "agent-ref-without-fingerprint",
-		ProviderName: "temporal",
-		Target:       target,
-		SubjectID:    "service_account:scheduler",
-	}); err != nil {
-		t.Fatalf("Put execution ref: %v", err)
-	}
+	for _, tt := range []struct {
+		name   string
+		target coreworkflow.Target
+	}{
+		{name: "plugin", target: testWorkflowPluginTarget("roadmap", "sync")},
+		{name: "agent", target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "managed",
+			Prompt:       "send reminder",
+			ToolSource:   coreagent.ToolSourceModeNativeSearch,
+		}}},
+	} {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	runtime := &workflowRuntime{
-		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
-	}
-	_, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
-		ProviderName: "temporal",
-		ExecutionRef: "agent-ref-without-fingerprint",
-		RunID:        "run-123",
-		Target:       target,
-	})
-	if err == nil {
-		t.Fatal("Invoke agent target without execution-ref fingerprint succeeded, want error")
+			refProvider := newWorkflowRuntimeExecutionRefProvider()
+			refID := tt.name + "-ref-without-fingerprint"
+			refProvider.refs[refID] = &coreworkflow.ExecutionReference{
+				ID:           refID,
+				ProviderName: "temporal",
+				Target:       tt.target,
+				SubjectID:    "service_account:scheduler",
+			}
+
+			runtime := &workflowRuntime{
+				providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+			}
+			if tt.target.Agent != nil {
+				runtime.SetAgentManager(&workflowRuntimeAgentManagerStub{})
+			} else {
+				runtime.SetInvoker(funcInvoker{
+					invoke: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+						return &core.OperationResult{Status: http.StatusAccepted, Body: `{"ok":true}`}, nil
+					},
+				})
+			}
+			_, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+				ProviderName: "temporal",
+				ExecutionRef: refID,
+				RunID:        "run-123",
+				Target:       tt.target,
+			})
+			if err == nil {
+				t.Fatal("Invoke target without execution-ref fingerprint succeeded, want error")
+			}
+			if !strings.Contains(err.Error(), "target fingerprint is required") {
+				t.Fatalf("error = %v, want target fingerprint is required", err)
+			}
+		})
 	}
 }
 
@@ -704,7 +719,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:                  "exec-ref-123",
 		ProviderName:        "temporal",
-		Target:              testWorkflowPluginTargetWithInput("roadmap", "sync", "analytics", "tenant-a", nil),
+		Target:              testWorkflowPluginTargetWithInput("roadmap", "sync", "analytics", "tenant-a", map[string]any{"mode": "full"}),
 		SubjectID:           principal.UserSubjectID(user.ID),
 		SubjectKind:         string(principal.KindUser),
 		DisplayName:         "Ada Lovelace",
@@ -783,59 +798,45 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 func TestWorkflowRuntimeInvokeExecutionRefUsesStoredSubjectPrincipal(t *testing.T) {
 	t.Parallel()
 
-	for _, tt := range []struct {
-		name        string
-		fingerprint string
-	}{
-		{name: "legacy", fingerprint: legacyPluginWorkflowTargetFingerprint},
-		{name: "canonical", fingerprint: canonicalPluginWorkflowTargetFingerprint},
-	} {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                "exec-ref-service-account",
+		ProviderName:      "temporal",
+		Target:            testWorkflowPluginTarget("roadmap", "sync"),
+		TargetFingerprint: canonicalPluginWorkflowTargetFingerprint,
+		SubjectID:         "service_account:scheduler",
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
 
-			refID := "exec-ref-service-account-" + tt.name
-			refProvider := newWorkflowRuntimeExecutionRefProvider()
-			if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-				ID:                refID,
-				ProviderName:      "temporal",
-				Target:            testWorkflowPluginTarget("roadmap", "sync"),
-				TargetFingerprint: tt.fingerprint,
-				SubjectID:         "service_account:scheduler",
-			}); err != nil {
-				t.Fatalf("Put execution ref: %v", err)
-			}
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
 
-			runtime := &workflowRuntime{
-				providers: map[string]coreworkflow.Provider{"temporal": refProvider},
-			}
+	var gotPrincipal *principal.Principal
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
+			gotPrincipal = p
+			return &core.OperationResult{Status: http.StatusAccepted, Body: `{"ok":true}`}, nil
+		},
+	})
 
-			var gotPrincipal *principal.Principal
-			runtime.SetInvoker(funcInvoker{
-				invoke: func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
-					gotPrincipal = p
-					return &core.OperationResult{Status: http.StatusAccepted, Body: `{"ok":true}`}, nil
-				},
-			})
+	if _, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		ExecutionRef: "exec-ref-service-account",
+		Target:       testWorkflowPluginTarget("roadmap", "sync"),
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
 
-			if _, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
-				ProviderName: "temporal",
-				ExecutionRef: refID,
-				Target:       testWorkflowPluginTarget("roadmap", "sync"),
-			}); err != nil {
-				t.Fatalf("Invoke: %v", err)
-			}
-
-			if gotPrincipal == nil {
-				t.Fatal("principal = nil")
-			}
-			if gotPrincipal.Kind != principal.Kind("service_account") {
-				t.Fatalf("principal kind = %q, want %q", gotPrincipal.Kind, principal.Kind("service_account"))
-			}
-			if gotPrincipal.SubjectID != "service_account:scheduler" {
-				t.Fatalf("subjectID = %q, want %q", gotPrincipal.SubjectID, "service_account:scheduler")
-			}
-		})
+	if gotPrincipal == nil {
+		t.Fatal("principal = nil")
+	}
+	if gotPrincipal.Kind != principal.Kind("service_account") {
+		t.Fatalf("principal kind = %q, want %q", gotPrincipal.Kind, principal.Kind("service_account"))
+	}
+	if gotPrincipal.SubjectID != "service_account:scheduler" {
+		t.Fatalf("subjectID = %q, want %q", gotPrincipal.SubjectID, "service_account:scheduler")
 	}
 }
 

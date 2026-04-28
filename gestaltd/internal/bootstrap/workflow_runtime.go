@@ -285,28 +285,15 @@ func (r *workflowRuntime) resolveWorkflowExecutionRef(ctx context.Context, req c
 	if strings.TrimSpace(ref.ProviderName) != strings.TrimSpace(req.ProviderName) {
 		return nil, fmt.Errorf("%w: workflow execution ref %q is not valid for provider %q", invocation.ErrAuthorizationDenied, refID, req.ProviderName)
 	}
-	if strings.TrimSpace(ref.TargetFingerprint) != "" {
-		matches, err := coreworkflow.TargetFingerprintMatches(req.Target, ref.TargetFingerprint)
-		if err != nil {
-			return nil, fmt.Errorf("%w: workflow execution ref %q target fingerprint failed: %v", invocation.ErrInternal, refID, err)
-		}
-		if !matches {
-			return nil, fmt.Errorf("%w: workflow execution ref %q target does not match the scheduled invocation", invocation.ErrAuthorizationDenied, refID)
-		}
-		return ref, nil
+	refFingerprint := strings.TrimSpace(ref.TargetFingerprint)
+	if refFingerprint == "" {
+		return nil, fmt.Errorf("%w: workflow execution ref %q target fingerprint is required", invocation.ErrAuthorizationDenied, refID)
 	}
-	if ref.Target.Agent != nil || req.Target.Agent != nil {
-		return nil, fmt.Errorf("%w: workflow execution ref %q target fingerprint is required for agent targets", invocation.ErrAuthorizationDenied, refID)
+	targetFingerprint, err := coreworkflow.TargetFingerprint(req.Target)
+	if err != nil {
+		return nil, fmt.Errorf("%w: workflow execution ref %q target fingerprint failed: %v", invocation.ErrInternal, refID, err)
 	}
-	if ref.Target.Plugin == nil || req.Target.Plugin == nil {
-		return nil, fmt.Errorf("%w: workflow execution ref %q target does not match the scheduled invocation", invocation.ErrAuthorizationDenied, refID)
-	}
-	left := *ref.Target.Plugin
-	right := *req.Target.Plugin
-	if strings.TrimSpace(left.PluginName) != strings.TrimSpace(right.PluginName) ||
-		strings.TrimSpace(left.Operation) != strings.TrimSpace(right.Operation) ||
-		strings.TrimSpace(left.Connection) != strings.TrimSpace(right.Connection) ||
-		strings.TrimSpace(left.Instance) != strings.TrimSpace(right.Instance) {
+	if targetFingerprint != refFingerprint {
 		return nil, fmt.Errorf("%w: workflow execution ref %q target does not match the scheduled invocation", invocation.ErrAuthorizationDenied, refID)
 	}
 	return ref, nil
