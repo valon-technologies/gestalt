@@ -66,6 +66,9 @@ func recordOperationMetrics(
 	if surface := InvocationSurfaceFromContext(ctx); surface != "" {
 		attrs = append(attrs, metricutil.AttrInvocationSurface.String(metricutil.AttrValue(string(surface))))
 	}
+	if binding := HTTPBindingFromContext(ctx); binding != "" {
+		attrs = append(attrs, metricutil.AttrHTTPBinding.String(metricutil.AttrValue(binding)))
+	}
 	metricutil.AddHTTPAttributes(ctx, attrs...)
 
 	metrics.count.Add(ctx, 1, metric.WithAttributes(attrs...))

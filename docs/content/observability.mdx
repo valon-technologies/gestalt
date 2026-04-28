@@ -147,7 +147,8 @@ plugin key), `gestalt.operation` (the catalog operation id),
 `gestalt.transport` (how the operation is implemented: `plugin`, `rest`, or
 `mcp-passthrough`), and `gestalt.connection_mode` (the provider auth mode:
 `none` or `user`). When the invocation came from a known surface, they also
-carry `gestalt.invocation_surface`.
+carry `gestalt.invocation_surface`. Hosted HTTP binding invocations also carry
+`gestalt.http_binding`, which is the configured binding name.
 
 Operation metrics also carry `gestalt.result_status` and
 `gestalt.result_status_class`. `gestalt.result_status` is the normalized
@@ -425,7 +426,9 @@ request method, response status, scheme, host, protocol, and route information
 when available. Gestalt also attaches stable dimensions for request surfaces it
 can resolve, including `gestalt.provider`, `gestalt.operation`,
 `gestalt.transport`, `gestalt.connection_mode`, `gestalt.invocation_surface`,
-`gestalt.http_binding`, and `gestalt.ui`.
+`gestalt.http_binding`, and `gestalt.ui`. For hosted HTTP bindings, use
+`gestalt.http_binding` with `gestaltd.operation.*` to correlate the accepted
+HTTP delivery with the provider operation it dispatched.
 
 `http.route` is the framework route template, not the concrete request path. For
 example, a request to `/api/v1/datadog/query_metrics` is grouped under the route

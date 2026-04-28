@@ -15,11 +15,13 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
@@ -84,6 +86,45 @@ func hasMetricWithPrefix(rm metricdata.ResourceMetrics, prefix string) bool {
 		}
 	}
 	return false
+}
+
+func hasInt64SumMetric(rm metricdata.ResourceMetrics, name string, want int64, attrs map[string]string) bool {
+	for _, scope := range rm.ScopeMetrics {
+		for _, metric := range scope.Metrics {
+			if metric.Name != name {
+				continue
+			}
+			sum, ok := metric.Data.(metricdata.Sum[int64])
+			if !ok {
+				continue
+			}
+			for _, point := range sum.DataPoints {
+				if metrictest.AttrsMatch(point.Attributes, attrs) && point.Value == want {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func collectMetricsUntil(t *testing.T, metrics *metrictest.ManualMeterProvider, ready func(metricdata.ResourceMetrics) bool) metricdata.ResourceMetrics {
+	t.Helper()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		var rm metricdata.ResourceMetrics
+		if err := metrics.Reader.Collect(context.Background(), &rm); err != nil {
+			t.Fatalf("collect metrics: %v", err)
+		}
+		if ready(rm) {
+			return rm
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for expected metrics")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func TestConnectionAuthMetrics(t *testing.T) {
@@ -672,6 +713,105 @@ func TestHTTPMetricsDoNotLabelUnknownPluginRouteParams(t *testing.T) {
 	routeAttrs := map[string]string{"http.route": "/api/v1/{integration}/{operation}"}
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", routeAttrs, "gestalt.provider")
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", routeAttrs, "gestalt.operation")
+}
+
+func TestHTTPBindingOperationMetricsIncludeBinding(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	const providerName = "webhook-metrics"
+	bindingsSeen := make(chan string, 1)
+	operationDone := make(chan struct{}, 1)
+
+	provider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        providerName,
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(ctx context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				defer func() { operationDone <- struct{}{} }()
+				bindingsSeen <- invocation.HTTPBindingFromContext(ctx)
+				if operation == "receive_event" {
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				}
+				return &core.OperationResult{Status: http.StatusNotFound, Body: `{}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "receive_event", Method: http.MethodPost}},
+	}
+
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.MeterProvider = metrics.Provider
+		cfg.Providers = testutil.NewProviderRegistry(t, provider)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			providerName: {
+				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
+					"public": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
+				},
+				HTTP: map[string]*config.HTTPBinding{
+					"delivery": {
+						Path:     "/delivery",
+						Method:   http.MethodPost,
+						Security: "public",
+						Target:   "receive_event",
+						Ack: &providermanifestv1.HTTPAck{
+							Status: http.StatusAccepted,
+							Body:   map[string]any{"accepted": true},
+						},
+					},
+				},
+			},
+		}
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/"+providerName+"/delivery", strings.NewReader(`{"event":"opened"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("http binding request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("http binding status = %d, want %d", resp.StatusCode, http.StatusAccepted)
+	}
+
+	select {
+	case got := <-bindingsSeen:
+		if got != "delivery" {
+			t.Fatalf("HTTPBindingFromContext = %q, want %q", got, "delivery")
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("timed out waiting for http binding invocation")
+	}
+	select {
+	case <-operationDone:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("timed out waiting for http binding operation completion")
+	}
+
+	attrs := map[string]string{
+		"gestalt.provider":            providerName,
+		"gestalt.operation":           "receive_event",
+		"gestalt.transport":           "rest",
+		"gestalt.connection_mode":     "none",
+		"gestalt.invocation_surface":  "http",
+		"gestalt.http_binding":        "delivery",
+		"gestalt.result_status":       "200",
+		"gestalt.result_status_class": "2xx",
+	}
+	rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
+		return hasInt64SumMetric(rm, "gestaltd.operation.count", 1, attrs)
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.count", 1, attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.operation.duration", attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", map[string]string{
+		"http.route":                 "/api/v1/" + providerName + "/delivery",
+		"gestalt.provider":           providerName,
+		"gestalt.operation":          "receive_event",
+		"gestalt.invocation_surface": "http",
+		"gestalt.http_binding":       "delivery",
+	})
 }
 
 func TestHTTPDiscoveryMetrics(t *testing.T) {

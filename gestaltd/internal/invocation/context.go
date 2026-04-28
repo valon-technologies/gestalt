@@ -54,6 +54,7 @@ type CredentialContext struct {
 }
 
 type invocationSurfaceCtxKey struct{}
+type httpBindingCtxKey struct{}
 type credentialCtxKey struct{}
 type accessCtxKey struct{}
 type workflowCtxKey struct{}
@@ -155,6 +156,19 @@ func WithInvocationSurface(ctx context.Context, surface InvocationSurface) conte
 func InvocationSurfaceFromContext(ctx context.Context) InvocationSurface {
 	surface, _ := ctx.Value(invocationSurfaceCtxKey{}).(InvocationSurface)
 	return surface
+}
+
+func WithHTTPBinding(ctx context.Context, binding string) context.Context {
+	binding = strings.TrimSpace(binding)
+	if binding == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, httpBindingCtxKey{}, binding)
+}
+
+func HTTPBindingFromContext(ctx context.Context) string {
+	binding, _ := ctx.Value(httpBindingCtxKey{}).(string)
+	return strings.TrimSpace(binding)
 }
 
 const xForwardedForHeader = "X-Forwarded-For"
