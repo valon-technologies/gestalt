@@ -2518,7 +2518,14 @@ func applyProviderPagination(def *provider.Definition, manifestPlugin *providerm
 		if pgn == nil {
 			continue
 		}
-		op := def.Operations[opName]
+		exposedName := opName
+		if override.Alias != "" {
+			exposedName = override.Alias
+		}
+		op, ok := def.Operations[exposedName]
+		if !ok {
+			continue
+		}
 		op.Pagination = &provider.PaginationDef{
 			Style:        string(pgn.Style),
 			CursorParam:  pgn.CursorParam,
@@ -2528,7 +2535,7 @@ func applyProviderPagination(def *provider.Definition, manifestPlugin *providerm
 			ResultsPath:  pgn.ResultsPath,
 			MaxPages:     pgn.MaxPages,
 		}
-		def.Operations[opName] = op
+		def.Operations[exposedName] = op
 	}
 }
 
