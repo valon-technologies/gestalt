@@ -37,6 +37,11 @@ const HISTORY_LIMIT: usize = 100;
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
 const USER_PROMPT: &str = "› ";
 const ASSISTANT_BULLET: &str = "● ";
+const TOOL_BULLET: &str = "● ";
+const TOOL_BRANCH: &str = "├─ ";
+const TOOL_BRANCH_LAST: &str = "└─ ";
+const TOOL_BRANCH_PIPE: &str = "│  ";
+const TOOL_BRANCH_CONTINUATION: &str = "   ";
 const META_PREFIX: &str = "* ";
 
 pub(super) fn can_run() -> bool {
@@ -198,11 +203,7 @@ impl TuiApp {
     }
 
     fn draw_transcript(&mut self, frame: &mut Frame<'_>, area: Rect) {
-        let title = format!(
-            "Session {} [{} / {}]",
-            self.state.session_id, self.state.provider, self.state.model
-        );
-        self.transcript_visible_height = area.height.saturating_sub(2).max(1) as usize;
+        self.transcript_visible_height = area.height.max(1) as usize;
         let rendered_lines = self.transcript_lines(area);
         self.transcript_content_height = rendered_lines.len();
         self.state.clamp_scroll_offset(
@@ -218,14 +219,27 @@ impl TuiApp {
             lines.push(Line::from("Start typing below."));
         }
 
-        let paragraph =
-            Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(title));
-        frame.render_widget(paragraph, area);
+        frame.render_widget(Paragraph::new(lines), area);
     }
 
     fn transcript_lines(&self, area: Rect) -> Vec<Line<'static>> {
-        let content_width = area.width.saturating_sub(2).max(1) as usize;
+        let content_width = area.width.max(1) as usize;
         let mut lines = Vec::new();
+        if self.state.transcript().is_empty() {
+            lines.push(Line::from(Span::styled(
+                format!(
+                    "Session {} · {}/{}",
+                    self.state.session_id, self.state.provider, self.state.model
+                ),
+                Style::default().fg(Color::DarkGray),
+            )));
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                "Start typing below.".to_string(),
+                Style::default().fg(Color::DarkGray),
+            )));
+            return lines;
+        }
         for (index, item) in self.state.transcript().iter().enumerate() {
             if index > 0 && item.kind != state::TranscriptKind::Meta {
                 lines.push(Line::from(""));
@@ -279,39 +293,42 @@ impl TuiApp {
     fn draw_composer(&mut self, frame: &mut Frame<'_>, area: Rect) {
         let queued = self.queued_messages.len();
         let title = if queued > 0 {
-            format!("Message - {queued} queued")
+            format!("message · {queued} queued")
         } else if self.state.busy {
-            "Message - working".to_string()
+            "message · working".to_string()
         } else {
-            "Message".to_string()
+            "message".to_string()
         };
         self.composer.set_block(
             Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan))
+                .borders(Borders::TOP)
+                .border_style(Style::default().fg(Color::DarkGray))
                 .title(title),
         );
         frame.render_widget(&self.composer, area);
     }
 
     fn draw_footer(&self, frame: &mut Frame<'_>, area: Rect) {
+        let scroll = if self.state.scroll_offset() > 0 {
+            format!(" · ↑ {} lines", self.state.scroll_offset())
+        } else {
+            String::new()
+        };
         let status = if self.state.busy {
             let queued = if self.queued_messages.is_empty() {
                 String::new()
             } else {
-                format!(" | queued {}", self.queued_messages.len())
+                format!(" · queued {}", self.queued_messages.len())
             };
             format!(
-                "{} {}{} | Enter queue | Alt-Enter newline | Up/Down history | PgUp/PgDn/wheel scroll | Ctrl-C cancel",
+                "{} {}{}{}",
                 self.activity_indicator(),
                 self.state.status,
-                queued
+                queued,
+                scroll
             )
         } else {
-            format!(
-                "{} | Enter send | Alt-Enter newline | Up/Down history | PgUp/PgDn/wheel scroll | Ctrl-C clear/exit",
-                self.state.status
-            )
+            format!("{}{}", self.state.status, scroll)
         };
         frame.render_widget(
             Paragraph::new(status).style(Style::default().fg(Color::DarkGray)),
@@ -325,7 +342,7 @@ impl TuiApp {
 
     fn composer_height(&self) -> u16 {
         let lines = self.composer.lines().len().max(1) as u16;
-        lines.saturating_add(2).clamp(3, 8)
+        lines.saturating_add(1).clamp(2, 7)
     }
 
     fn handle_key(&mut self, key: KeyEvent) {
@@ -689,36 +706,197 @@ fn push_transcript_item_lines(
     match item.kind {
         state::TranscriptKind::User => {
             push_user_item_lines(lines, item, content_width);
-            return;
         }
         state::TranscriptKind::Assistant => {
             push_assistant_item_lines(lines, item, content_width);
-            return;
+        }
+        state::TranscriptKind::Tool => {
+            push_tool_item_lines(lines, item, content_width);
         }
         state::TranscriptKind::Meta => {
             push_meta_item_lines(lines, item, content_width);
-            return;
         }
-        _ => {}
+        _ => {
+            push_status_item_lines(lines, item, content_width);
+        }
     }
+}
 
-    let header_style = item.kind.header_style().add_modifier(Modifier::BOLD);
-    lines.push(Line::from(Span::styled(
-        item.kind.header().to_string(),
-        header_style,
-    )));
+fn push_tool_item_lines(
+    lines: &mut Vec<Line<'static>>,
+    item: &TranscriptItem,
+    content_width: usize,
+) {
+    let Some(activity) = item.tool_activity_ref() else {
+        push_status_item_lines(lines, item, content_width);
+        return;
+    };
 
+    let marker_style = tool_marker_style(activity);
     let body_style = item.kind.body_style();
-    let indent = "  ";
-    let indent_width = UnicodeWidthStr::width(indent);
-    let text_width = content_width.saturating_sub(indent_width).max(1);
-    for text_line in item.text.split('\n') {
-        for chunk in text_chunks(text_line, text_width) {
-            lines.push(Line::from(Span::styled(
-                format!("{indent}{chunk}"),
-                body_style,
-            )));
+    let name_style = Style::default()
+        .fg(Color::White)
+        .add_modifier(Modifier::BOLD);
+    let status_style = tool_status_style(activity);
+    let meta_style = Style::default().fg(Color::DarkGray);
+    let mut header_segments = vec![
+        StyledSegment::new(activity.name().to_string(), name_style),
+        StyledSegment::new(" ".to_string(), body_style),
+        StyledSegment::new(activity.status_summary().to_string(), status_style),
+    ];
+    if let Some(detail) = activity.status_detail()
+        && !detail.trim().is_empty()
+    {
+        header_segments.push(StyledSegment::new(format!(" · {detail}"), meta_style));
+    }
+    if let Some(elapsed) = activity.elapsed_label() {
+        header_segments.push(StyledSegment::new(format!(" · {elapsed}"), meta_style));
+    }
+    push_wrapped_segments(
+        lines,
+        header_segments,
+        TOOL_BULLET,
+        "  ",
+        marker_style,
+        body_style,
+        content_width,
+    );
+
+    let mut detail_rows = Vec::new();
+    if let Some(args) = activity.args() {
+        detail_rows.push(("input", args, body_style));
+    }
+    if let Some(output) = activity.output() {
+        detail_rows.push(("output", output, body_style));
+    }
+    if let Some(error) = activity.error() {
+        detail_rows.push(("error", error, Style::default().fg(Color::LightRed)));
+    }
+    let total_rows = detail_rows.len();
+    for (index, (label, value, value_style)) in detail_rows.into_iter().enumerate() {
+        let is_last = index + 1 == total_rows;
+        let prefix = if is_last {
+            TOOL_BRANCH_LAST
+        } else {
+            TOOL_BRANCH
+        };
+        let continuation_prefix = if is_last {
+            TOOL_BRANCH_CONTINUATION
+        } else {
+            TOOL_BRANCH_PIPE
+        };
+        push_tool_detail_lines(
+            lines,
+            ToolDetailRender {
+                label,
+                value,
+                value_style,
+                first_prefix: prefix,
+                continuation_prefix,
+            },
+            meta_style,
+            content_width,
+        );
+    }
+}
+
+struct ToolDetailRender<'a> {
+    label: &'a str,
+    value: &'a str,
+    value_style: Style,
+    first_prefix: &'a str,
+    continuation_prefix: &'a str,
+}
+
+fn push_tool_detail_lines(
+    lines: &mut Vec<Line<'static>>,
+    row: ToolDetailRender<'_>,
+    meta_style: Style,
+    content_width: usize,
+) {
+    for (line_index, value_line) in row.value.split('\n').enumerate() {
+        if line_index == 0 {
+            push_wrapped_segments(
+                lines,
+                vec![
+                    StyledSegment::new(format!("{} ", row.label), meta_style),
+                    StyledSegment::new(value_line.to_string(), row.value_style),
+                ],
+                row.first_prefix,
+                row.continuation_prefix,
+                meta_style,
+                meta_style,
+                content_width,
+            );
+        } else {
+            push_wrapped_segments(
+                lines,
+                vec![StyledSegment::new(value_line.to_string(), row.value_style)],
+                row.continuation_prefix,
+                row.continuation_prefix,
+                meta_style,
+                meta_style,
+                content_width,
+            );
         }
+    }
+}
+
+fn push_status_item_lines(
+    lines: &mut Vec<Line<'static>>,
+    item: &TranscriptItem,
+    content_width: usize,
+) {
+    let body_style = item.kind.body_style();
+    let prefix = match item.kind {
+        state::TranscriptKind::Interaction => "◆ ",
+        state::TranscriptKind::Error => "✗ ",
+        state::TranscriptKind::System => "· ",
+        _ => "",
+    };
+    let prefix_style = item.kind.header_style().add_modifier(Modifier::BOLD);
+    for (line_index, text_line) in item.text.split('\n').enumerate() {
+        let prefix = if line_index == 0 {
+            prefix
+        } else if prefix.is_empty() {
+            ""
+        } else {
+            "  "
+        };
+        push_wrapped_segments(
+            lines,
+            vec![StyledSegment::new(text_line.to_string(), body_style)],
+            prefix,
+            "  ",
+            prefix_style,
+            body_style,
+            content_width,
+        );
+    }
+}
+
+fn tool_marker_style(activity: &state::ToolActivity) -> Style {
+    let color = if activity.is_failed() {
+        Color::Red
+    } else if activity.is_running() {
+        Color::Yellow
+    } else if activity.is_ended() {
+        Color::DarkGray
+    } else {
+        Color::Green
+    };
+    Style::default().fg(color).add_modifier(Modifier::BOLD)
+}
+
+fn tool_status_style(activity: &state::ToolActivity) -> Style {
+    if activity.is_failed() {
+        Style::default().fg(Color::LightRed)
+    } else if activity.is_running() {
+        Style::default().fg(Color::Yellow)
+    } else if activity.is_ended() {
+        Style::default().fg(Color::DarkGray)
+    } else {
+        Style::default().fg(Color::Green)
     }
 }
 
@@ -1088,7 +1266,7 @@ fn textarea_with_text(title: &'static str, text: &str) -> TextArea<'static> {
 
 fn configure_textarea(textarea: &mut TextArea<'static>, title: &'static str) {
     textarea.set_cursor_line_style(Style::default());
-    textarea.set_block(Block::default().borders(Borders::ALL).title(title));
+    textarea.set_block(Block::default().borders(Borders::TOP).title(title));
 }
 
 struct InteractionInput {

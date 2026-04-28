@@ -566,18 +566,6 @@ pub(super) enum TranscriptKind {
 }
 
 impl TranscriptKind {
-    pub(super) fn header(self) -> &'static str {
-        match self {
-            Self::User => "You",
-            Self::Assistant => "Assistant",
-            Self::Tool => "Tool",
-            Self::Interaction => "Interaction",
-            Self::System => "System",
-            Self::Error => "Error",
-            Self::Meta => "",
-        }
-    }
-
     pub(super) fn header_style(self) -> Style {
         Style::default().fg(match self {
             Self::User => Color::Cyan,
@@ -626,9 +614,13 @@ impl TranscriptItem {
             .as_ref()
             .is_some_and(|activity| matches!(activity.status, ToolActivityStatus::Running))
     }
+
+    pub(super) fn tool_activity_ref(&self) -> Option<&ToolActivity> {
+        self.tool_activity.as_ref()
+    }
 }
 
-struct ToolActivity {
+pub(super) struct ToolActivity {
     key: Option<String>,
     name: String,
     status: ToolActivityStatus,
@@ -727,6 +719,46 @@ impl ToolActivity {
 
     fn is_running_name_match(&self, name: &str) -> bool {
         matches!(self.status, ToolActivityStatus::Running) && self.name == name
+    }
+
+    pub(super) fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub(super) fn status_summary(&self) -> &'static str {
+        self.status.summary()
+    }
+
+    pub(super) fn status_detail(&self) -> Option<String> {
+        self.status.detail()
+    }
+
+    pub(super) fn elapsed_label(&self) -> Option<String> {
+        self.elapsed.map(format_duration)
+    }
+
+    pub(super) fn args(&self) -> Option<&str> {
+        self.args.as_deref()
+    }
+
+    pub(super) fn output(&self) -> Option<&str> {
+        self.output.as_deref()
+    }
+
+    pub(super) fn error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
+
+    pub(super) fn is_running(&self) -> bool {
+        matches!(self.status, ToolActivityStatus::Running)
+    }
+
+    pub(super) fn is_failed(&self) -> bool {
+        matches!(self.status, ToolActivityStatus::Failed(_))
+    }
+
+    pub(super) fn is_ended(&self) -> bool {
+        matches!(self.status, ToolActivityStatus::Ended(_))
     }
 
     fn render_text(&self) -> String {
