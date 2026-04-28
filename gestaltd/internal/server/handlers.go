@@ -461,12 +461,12 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	metricutil.AddHTTPAttributes(r.Context(),
-		metricutil.AttrProvider.String(metricutil.AttrValue(name)),
-		metricutil.AttrOperation.String(operation),
-		metricutil.AttrConnectionMode.String(metricutil.NormalizeConnectionMode(prov.ConnectionMode())),
-		metricutil.AttrInvocationSurface.String("http"),
-	)
+	metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
+		ProviderName:   name,
+		OperationName:  operation,
+		ConnectionMode: metricutil.NormalizeConnectionMode(prov.ConnectionMode()),
+		Surface:        metricutil.InvocationSurfaceHTTP,
+	})
 	p := PrincipalFromContext(r.Context())
 	if override, ok, err := s.providerOverrideForContext(r.Context(), p, name); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -721,12 +721,12 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		connection = config.ResolveConnectionAlias(connection)
 		ctx = invocation.WithConnection(ctx, connection)
 	}
-	metricutil.AddHTTPAttributes(r.Context(),
-		metricutil.AttrProvider.String(metricutil.AttrValue(providerName)),
-		metricutil.AttrOperation.String(metricutil.AttrValue(opMeta.ID)),
-		metricutil.AttrConnectionMode.String(metricutil.NormalizeConnectionMode(s.invocationConnectionMode(prov, providerName, connection))),
-		metricutil.AttrInvocationSurface.String("http"),
-	)
+	metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
+		ProviderName:   providerName,
+		OperationName:  opMeta.ID,
+		ConnectionMode: metricutil.NormalizeConnectionMode(s.invocationConnectionMode(prov, providerName, connection)),
+		Surface:        metricutil.InvocationSurfaceHTTP,
+	})
 	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTP)
 
 	result, err := s.invoker.Invoke(ctx, p, providerName, instance, operationName, params)

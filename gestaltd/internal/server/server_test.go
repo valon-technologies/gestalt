@@ -10489,15 +10489,15 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	httpOperationAttrs := map[string]string{
-		"http.route":                 "/api/v1/{integration}/{operation}",
-		"gestalt.provider":           "slack",
-		"gestalt.operation":          "chat.postMessage",
-		"gestalt.invocation_surface": "http",
+		"http.route":                  "/api/v1/{integration}/{operation}",
+		"gestaltd.provider.name":      "slack",
+		"gestaltd.operation.name":     "chat.postMessage",
+		"gestaltd.invocation.surface": "http",
 	}
 	userAttrs := maps.Clone(httpOperationAttrs)
-	userAttrs["gestalt.connection_mode"] = "user"
+	userAttrs["gestaltd.connection.mode"] = "user"
 	platformAttrs := maps.Clone(httpOperationAttrs)
-	platformAttrs["gestalt.connection_mode"] = "platform"
+	platformAttrs["gestaltd.connection.mode"] = "platform"
 	metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", userAttrs)
 	metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", platformAttrs)
 

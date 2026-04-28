@@ -18,15 +18,30 @@ func TestInstrumentIndexedDBRecordsDBAndObjectStoreAttributes(t *testing.T) {
 	if err := db.ObjectStore("users").Put(ctx, map[string]any{"id": "user-1"}); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
+	if _, err := db.ObjectStore("users").Get(ctx, "missing"); err == nil {
+		t.Fatal("Get missing record should fail")
+	}
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
-	attrs := map[string]string{
-		"gestalt.db":           "system",
-		"gestalt.object_store": "users",
-		"gestalt.method":       "Put",
+	dbAttrs := map[string]string{
+		"db.system.name":     "gestaltd.indexeddb",
+		"db.namespace":       "system",
+		"db.collection.name": "users",
+		"db.operation.name":  "put",
 	}
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.indexeddb.count", 1, attrs)
-	metrictest.RequireInt64SumOmitsAttr(t, rm, "gestaltd.indexeddb.count", attrs, "gestalt.plugin")
-	metrictest.RequireInt64SumOmitsAttr(t, rm, "gestaltd.indexeddb.count", attrs, "gestalt.store")
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.indexeddb.duration", attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "db.client.operation.duration", dbAttrs)
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "db.client.operation.duration", dbAttrs, "gestalt.db")
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "db.client.operation.duration", dbAttrs, "gestalt.object_store")
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "db.client.operation.duration", dbAttrs, "gestalt.method")
+	metrictest.RequireFloat64Histogram(t, rm, "db.client.operation.duration", map[string]string{
+		"db.system.name":     "gestaltd.indexeddb",
+		"db.namespace":       "system",
+		"db.collection.name": "users",
+		"db.operation.name":  "get",
+		"error.type":         "not_found",
+	})
+
+	metrictest.RequireNoMetric(t, rm, "gestaltd.indexeddb.count")
+	metrictest.RequireNoMetric(t, rm, "gestaltd.indexeddb.error_count")
+	metrictest.RequireNoMetric(t, rm, "gestaltd.indexeddb.duration")
 }

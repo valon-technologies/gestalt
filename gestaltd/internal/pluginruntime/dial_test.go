@@ -57,8 +57,11 @@ func TestDialHostedPluginRecordsRPCClientDurationWithTelemetryAttrs(t *testing.T
 	}
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
-	metrictest.RequireFloat64Histogram(t, rm, "rpc.client.call.duration", map[string]string{
-		"gestalt.rpc.role": "hosted_plugin_client",
-		"gestalt.provider": providerName,
-	})
+	attrs := map[string]string{
+		"gestaltd.rpc.role":      "hosted_plugin_client",
+		"gestaltd.provider.name": providerName,
+	}
+	metrictest.RequireFloat64Histogram(t, rm, "rpc.client.call.duration", attrs)
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "rpc.client.call.duration", attrs, "gestalt.rpc.role")
+	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "rpc.client.call.duration", attrs, "gestalt.provider")
 }

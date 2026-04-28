@@ -102,6 +102,13 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) { //nolint:paralleltest // mut
 	if brokerSpan == nil {
 		t.Fatal("expected broker span named 'broker.invoke'")
 	}
+	assertSpanHasAttr(t, httpSpan, "gestaltd.provider.name", "tracer-prov")
+	assertSpanHasAttr(t, httpSpan, "gestaltd.operation.name", "ping")
+	assertSpanHasAttr(t, httpSpan, "gestaltd.connection.mode", "none")
+	assertSpanHasAttr(t, httpSpan, "gestaltd.invocation.surface", "http")
+	assertSpanLacksAttr(t, httpSpan, "gestalt.provider")
+	assertSpanLacksAttr(t, httpSpan, "gestalt.operation")
+
 	dbUser, err := ds.Users.FindOrCreateUser(context.Background(), "trace@example.com")
 	if err != nil {
 		t.Fatalf("resolve trace user: %v", err)
