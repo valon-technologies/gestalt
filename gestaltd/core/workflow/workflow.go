@@ -26,10 +26,11 @@ const (
 )
 
 type Actor struct {
-	SubjectID   string
-	SubjectKind string
-	DisplayName string
-	AuthSource  string
+	SubjectID           string
+	CredentialSubjectID string
+	SubjectKind         string
+	DisplayName         string
+	AuthSource          string
 }
 
 type Target struct {
@@ -58,10 +59,21 @@ type AgentTarget struct {
 	TimeoutSeconds  int
 }
 
+type CompletionDelivery struct {
+	Plugin     *PluginTarget
+	BestEffort bool
+}
+
+type Completion struct {
+	OnSuccess *CompletionDelivery
+	OnFailure *CompletionDelivery
+}
+
 type ExecutionReference struct {
 	ID                  string
 	ProviderName        string
 	Target              Target
+	Completion          Completion
 	TargetFingerprint   string
 	SubjectID           string
 	CredentialSubjectID string
@@ -114,6 +126,7 @@ type Run struct {
 	ID            string
 	Status        RunStatus
 	Target        Target
+	Completion    Completion
 	Trigger       RunTrigger
 	ExecutionRef  string
 	CreatedBy     Actor
@@ -129,6 +142,7 @@ type Schedule struct {
 	Cron         string
 	Timezone     string
 	Target       Target
+	Completion   Completion
 	Paused       bool
 	ExecutionRef string
 	CreatedBy    Actor
@@ -141,6 +155,7 @@ type EventTrigger struct {
 	ID           string
 	Match        EventMatch
 	Target       Target
+	Completion   Completion
 	Paused       bool
 	ExecutionRef string
 	CreatedBy    Actor
@@ -150,6 +165,7 @@ type EventTrigger struct {
 
 type StartRunRequest struct {
 	Target         Target
+	Completion     Completion
 	IdempotencyKey string
 	CreatedBy      Actor
 	ExecutionRef   string
@@ -171,6 +187,7 @@ type UpsertScheduleRequest struct {
 	Cron         string
 	Timezone     string
 	Target       Target
+	Completion   Completion
 	Paused       bool
 	RequestedBy  Actor
 	ExecutionRef string
@@ -198,6 +215,7 @@ type UpsertEventTriggerRequest struct {
 	TriggerID    string
 	Match        EventMatch
 	Target       Target
+	Completion   Completion
 	Paused       bool
 	RequestedBy  Actor
 	ExecutionRef string
@@ -222,8 +240,11 @@ type ResumeEventTriggerRequest struct {
 }
 
 type PublishEventRequest struct {
-	PluginName string
-	Event      Event
+	ProviderName string
+	PluginName   string
+	Event        Event
+	PrivateInput map[string]any
+	PublishedBy  Actor
 }
 
 type InvokeOperationRequest struct {
@@ -231,7 +252,9 @@ type InvokeOperationRequest struct {
 	RunID        string
 	Trigger      RunTrigger
 	Target       Target
+	Completion   Completion
 	Input        map[string]any
+	PrivateInput map[string]any
 	Metadata     map[string]any
 	CreatedBy    Actor
 	ExecutionRef string
@@ -280,6 +303,24 @@ func TargetFingerprint(target Target) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
+func InvocationFingerprint(target Target, completion Completion) (string, error) {
+	if CompletionEmpty(completion) {
+		return TargetFingerprint(target)
+	}
+	if target.Agent != nil && target.Plugin != nil && PluginTargetSet(*target.Plugin) {
+		return "", fmt.Errorf("target cannot include both agent and plugin fields")
+	}
+	payload, err := json.Marshal(invocationFingerprintPayload{
+		Target:     normalizedTargetFingerprintPayload(target),
+		Completion: normalizedCompletionFingerprintPayload(completion),
+	})
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
 type targetFingerprintPayload struct {
 	PluginName string
 	Operation  string
@@ -288,6 +329,21 @@ type targetFingerprintPayload struct {
 	Input      map[string]any
 	Plugin     *PluginTarget
 	Agent      *AgentTarget
+}
+
+type invocationFingerprintPayload struct {
+	Target     targetFingerprintPayload
+	Completion completionFingerprintPayload
+}
+
+type completionFingerprintPayload struct {
+	OnSuccess *completionDeliveryFingerprintPayload
+	OnFailure *completionDeliveryFingerprintPayload
+}
+
+type completionDeliveryFingerprintPayload struct {
+	Plugin     *PluginTarget
+	BestEffort bool
 }
 
 func normalizedTargetFingerprintPayload(target Target) targetFingerprintPayload {
@@ -320,6 +376,35 @@ func normalizedTargetFingerprintPayload(target Target) targetFingerprintPayload 
 		out.Plugin = &pluginTarget
 	}
 	return out
+}
+
+func normalizedCompletionFingerprintPayload(completion Completion) completionFingerprintPayload {
+	return completionFingerprintPayload{
+		OnSuccess: normalizedCompletionDeliveryFingerprintPayload(completion.OnSuccess),
+		OnFailure: normalizedCompletionDeliveryFingerprintPayload(completion.OnFailure),
+	}
+}
+
+func normalizedCompletionDeliveryFingerprintPayload(delivery *CompletionDelivery) *completionDeliveryFingerprintPayload {
+	if delivery == nil || delivery.Plugin == nil || PluginTargetEmpty(*delivery.Plugin) {
+		return nil
+	}
+	pluginTarget := *delivery.Plugin
+	if len(pluginTarget.Input) == 0 {
+		pluginTarget.Input = nil
+	}
+	return &completionDeliveryFingerprintPayload{
+		Plugin:     &pluginTarget,
+		BestEffort: delivery.BestEffort,
+	}
+}
+
+func CompletionEmpty(completion Completion) bool {
+	return CompletionDeliveryEmpty(completion.OnSuccess) && CompletionDeliveryEmpty(completion.OnFailure)
+}
+
+func CompletionDeliveryEmpty(delivery *CompletionDelivery) bool {
+	return delivery == nil || delivery.Plugin == nil || PluginTargetEmpty(*delivery.Plugin)
 }
 
 // PluginTargetSet reports whether a workflow target contains any plugin target field.

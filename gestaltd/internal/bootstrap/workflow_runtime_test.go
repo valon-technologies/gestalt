@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"maps"
 	"net"
 	"net/http"
 	"slices"
@@ -110,6 +111,7 @@ func cloneRuntimeExecutionRef(ref *coreworkflow.ExecutionReference) *coreworkflo
 	}
 	clone := *ref
 	clone.Target = cloneRuntimeTarget(ref.Target)
+	clone.Completion = cloneRuntimeCompletion(ref.Completion)
 	clone.Permissions = append([]core.AccessPermission(nil), ref.Permissions...)
 	for i := range clone.Permissions {
 		clone.Permissions[i].Operations = append([]string(nil), ref.Permissions[i].Operations...)
@@ -121,6 +123,26 @@ func cloneRuntimeExecutionRef(ref *coreworkflow.ExecutionReference) *coreworkflo
 	if ref.RevokedAt != nil {
 		revokedAt := ref.RevokedAt.UTC()
 		clone.RevokedAt = &revokedAt
+	}
+	return &clone
+}
+
+func cloneRuntimeCompletion(completion coreworkflow.Completion) coreworkflow.Completion {
+	return coreworkflow.Completion{
+		OnSuccess: cloneRuntimeCompletionDelivery(completion.OnSuccess),
+		OnFailure: cloneRuntimeCompletionDelivery(completion.OnFailure),
+	}
+}
+
+func cloneRuntimeCompletionDelivery(delivery *coreworkflow.CompletionDelivery) *coreworkflow.CompletionDelivery {
+	if delivery == nil {
+		return nil
+	}
+	clone := *delivery
+	if delivery.Plugin != nil {
+		plugin := *delivery.Plugin
+		plugin.Input = cloneMapAny(plugin.Input)
+		clone.Plugin = &plugin
 	}
 	return &clone
 }
@@ -517,6 +539,220 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	}
 }
 
+func TestWorkflowRuntimeAgentTargetDeliversSuccessCompletionWithPrivateInput(t *testing.T) {
+	t.Parallel()
+
+	agentManager := &workflowRuntimeAgentManagerStub{}
+	runtime := &workflowRuntime{}
+	runtime.SetAgentManager(agentManager)
+
+	var deliveryProvider string
+	var deliveryOperation string
+	var deliveryParams map[string]any
+	var deliveryWorkflowContext map[string]any
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(ctx context.Context, _ *principal.Principal, providerName, _ string, operation string, params map[string]any) (*core.OperationResult, error) {
+			deliveryProvider = providerName
+			deliveryOperation = operation
+			deliveryParams = maps.Clone(params)
+			deliveryWorkflowContext = invocation.WorkflowContextFromContext(ctx)
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+		},
+	})
+
+	p := principal.Canonicalize(&principal.Principal{
+		SubjectID:           principal.UserSubjectID("ada"),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
+			Plugin:     "slack",
+			Operations: []string{"events.reply"},
+		}}),
+	})
+	req := coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-agent-completion",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName:   "managed",
+			Model:          "deep",
+			Prompt:         "Respond to {{ trigger.event.data.text }} using {{ private.reply_ref }}",
+			TimeoutSeconds: 5,
+		}},
+		Completion: coreworkflow.Completion{
+			OnSuccess: &coreworkflow.CompletionDelivery{
+				Plugin: &coreworkflow.PluginTarget{
+					PluginName: "slack",
+					Operation:  "events.reply",
+					Input: map[string]any{
+						"reply_ref": "{{ private.reply_ref }}",
+						"text":      "{{ result.body }}",
+						"status":    "{{ result.status }}",
+					},
+				},
+			},
+		},
+		Trigger: coreworkflow.RunTrigger{
+			Event: &coreworkflow.EventTriggerInvocation{
+				TriggerID: "slack-agent",
+				Event: coreworkflow.Event{
+					ID:     "evt-1",
+					Source: "slack",
+					Type:   "com.valon.slack.event",
+					Data: map[string]any{
+						"text": "hello",
+					},
+				},
+			},
+		},
+		PrivateInput: map[string]any{
+			"reply_ref": "signed-reply-ref",
+		},
+	}
+
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if deliveryProvider != "slack" || deliveryOperation != "events.reply" {
+		t.Fatalf("delivery = %s.%s, want slack.events.reply", deliveryProvider, deliveryOperation)
+	}
+	if deliveryParams["reply_ref"] != "signed-reply-ref" {
+		t.Fatalf("delivery reply_ref = %#v, want signed reply ref", deliveryParams["reply_ref"])
+	}
+	if deliveryParams["text"] != "turn completed" {
+		t.Fatalf("delivery text = %#v, want agent output", deliveryParams["text"])
+	}
+	if deliveryParams["status"] != 200 {
+		t.Fatalf("delivery status = %#v, want 200", deliveryParams["status"])
+	}
+	if len(agentManager.createTurnRequests) != 1 {
+		t.Fatalf("turn requests = %d, want 1", len(agentManager.createTurnRequests))
+	}
+	turnReq := agentManager.createTurnRequests[0]
+	if len(turnReq.Messages) != 1 || turnReq.Messages[0].Text != "Respond to hello using" {
+		t.Fatalf("turn messages = %#v, want public event data but no private input", turnReq.Messages)
+	}
+	workflowMetadata, ok := turnReq.Metadata["workflow"].(map[string]any)
+	if !ok {
+		t.Fatalf("turn workflow metadata = %#v", turnReq.Metadata["workflow"])
+	}
+	if _, ok := workflowMetadata["private"]; ok {
+		t.Fatalf("turn workflow metadata leaked private input: %#v", workflowMetadata)
+	}
+	if _, ok := deliveryWorkflowContext["private"]; ok {
+		t.Fatalf("delivery workflow context leaked private input: %#v", deliveryWorkflowContext)
+	}
+	targetContext, _ := deliveryWorkflowContext["target"].(map[string]any)
+	pluginContext, _ := targetContext["plugin"].(map[string]any)
+	if _, ok := pluginContext["input"]; ok {
+		t.Fatalf("delivery workflow context leaked rendered completion input: %#v", deliveryWorkflowContext)
+	}
+}
+
+func TestWorkflowRuntimeStatusFailureDeliversFailureCompletion(t *testing.T) {
+	t.Parallel()
+
+	runtime := &workflowRuntime{}
+	var calls []string
+	var failureParams map[string]any
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(_ context.Context, _ *principal.Principal, providerName, _ string, operation string, params map[string]any) (*core.OperationResult, error) {
+			calls = append(calls, providerName+"."+operation)
+			switch operation {
+			case "sync":
+				return &core.OperationResult{Status: http.StatusServiceUnavailable, Body: "down"}, nil
+			case "events.reply":
+				failureParams = maps.Clone(params)
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			default:
+				t.Fatalf("unexpected operation %s.%s", providerName, operation)
+				return nil, nil
+			}
+		},
+	})
+	p := principal.Canonicalize(&principal.Principal{
+		SubjectID:           "system:config",
+		CredentialSubjectID: "system:config",
+		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{
+			{Plugin: "roadmap", Operations: []string{"sync"}},
+			{Plugin: "slack", Operations: []string{"events.reply"}},
+		}),
+	})
+
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-status-failure",
+		Target:       testWorkflowPluginTarget("roadmap", "sync"),
+		Completion: coreworkflow.Completion{
+			OnSuccess: &coreworkflow.CompletionDelivery{
+				Plugin: &coreworkflow.PluginTarget{
+					PluginName: "slack",
+					Operation:  "events.reply",
+					Input: map[string]any{
+						"text": "success",
+					},
+				},
+			},
+			OnFailure: &coreworkflow.CompletionDelivery{
+				Plugin: &coreworkflow.PluginTarget{
+					PluginName: "slack",
+					Operation:  "events.reply",
+					Input: map[string]any{
+						"reply_ref": "{{ private.reply_ref }}",
+						"text":      "{{ error.message }}",
+					},
+				},
+			},
+		},
+		PrivateInput: map[string]any{
+			"reply_ref": "signed-failure-ref",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", resp.Status, http.StatusServiceUnavailable)
+	}
+	if !slices.Equal(calls, []string{"roadmap.sync", "slack.events.reply"}) {
+		t.Fatalf("calls = %#v, want primary then failure delivery", calls)
+	}
+	if failureParams["reply_ref"] != "signed-failure-ref" {
+		t.Fatalf("failure reply_ref = %#v, want private reply ref", failureParams["reply_ref"])
+	}
+	if failureParams["text"] != "workflow operation returned status 503" {
+		t.Fatalf("failure text = %#v, want sanitized status message", failureParams["text"])
+	}
+}
+
+func TestWorkflowRenderStringTemplateDoesNotReevaluateSubstitutions(t *testing.T) {
+	t.Parallel()
+
+	context := map[string]any{
+		"trigger": map[string]any{
+			"event": map[string]any{
+				"data": map[string]any{
+					"text": "{{ trigger.event.data.text }}",
+				},
+			},
+		},
+		"private": map[string]any{
+			"reply_ref": "signed-reply-ref",
+		},
+	}
+
+	got := workflowRenderStringTemplate(
+		"Echo {{ trigger.event.data.text }} with {{ private.reply_ref }}",
+		context,
+	)
+	want := "Echo {{ trigger.event.data.text }} with signed-reply-ref"
+	if got != want {
+		t.Fatalf("rendered template = %q, want %q", got, want)
+	}
+}
+
 func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsStoredLegacyFingerprint(t *testing.T) {
 	t.Parallel()
 
@@ -738,6 +974,77 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	}
 	if gotConnection != "analytics" {
 		t.Fatalf("connection = %q, want %q", gotConnection, "analytics")
+	}
+}
+
+func TestWorkflowRuntimeEventExecutionRefUsesPublisherSubjectWithStoredPermissionCeiling(t *testing.T) {
+	t.Parallel()
+
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	target := testWorkflowPluginTargetWithInput("roadmap", "sync", "analytics", "tenant-a", nil)
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                  "event-ref-123",
+		ProviderName:        "temporal",
+		Target:              target,
+		SubjectID:           "system:config",
+		CredentialSubjectID: "system:config",
+		Permissions: []core.AccessPermission{{
+			Plugin:     "roadmap",
+			Operations: []string{"sync"},
+		}},
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+	var gotPrincipal *principal.Principal
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(_ context.Context, p *principal.Principal, providerName, instance, operation string, _ map[string]any) (*core.OperationResult, error) {
+			gotPrincipal = p
+			if providerName != "roadmap" || instance != "tenant-a" || operation != "sync" {
+				t.Fatalf("invoke = %s[%s].%s, want roadmap[tenant-a].sync", providerName, instance, operation)
+			}
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+		},
+	})
+
+	if _, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		ExecutionRef: "event-ref-123",
+		Target:       target,
+		CreatedBy: coreworkflow.Actor{
+			SubjectID:           principal.UserSubjectID("slack-user"),
+			CredentialSubjectID: principal.UserSubjectID("slack-user"),
+			SubjectKind:         string(principal.KindUser),
+			DisplayName:         "Slack User",
+			AuthSource:          "http_binding",
+		},
+		Trigger: coreworkflow.RunTrigger{
+			Event: &coreworkflow.EventTriggerInvocation{
+				TriggerID: "slack-agent",
+				Event: coreworkflow.Event{
+					ID:     "evt-1",
+					Source: "slack",
+					Type:   "com.valon.slack.event",
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if gotPrincipal == nil {
+		t.Fatal("principal = nil")
+	}
+	if gotPrincipal.SubjectID != principal.UserSubjectID("slack-user") {
+		t.Fatalf("subject = %q, want Slack publisher subject", gotPrincipal.SubjectID)
+	}
+	if gotPrincipal.CredentialSubjectID != principal.UserSubjectID("slack-user") {
+		t.Fatalf("credential subject = %q, want Slack publisher credential", gotPrincipal.CredentialSubjectID)
+	}
+	if !principal.AllowsOperationPermission(gotPrincipal, "roadmap", "sync") {
+		t.Fatalf("permissions = %#v, want stored roadmap.sync permission ceiling", gotPrincipal.TokenPermissions)
 	}
 }
 

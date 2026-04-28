@@ -352,6 +352,8 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
     client
         .publish_event(PublishWorkflowProviderEventRequest {
             plugin_name: "demo".to_string(),
+            private_input: None,
+            published_by: None,
             event: Some(WorkflowEvent {
                 id: "evt_1".to_string(),
                 source: "urn:test".to_string(),

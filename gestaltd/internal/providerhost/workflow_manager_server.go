@@ -7,6 +7,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/workflowmanager"
 	"google.golang.org/grpc/codes"
@@ -43,6 +44,7 @@ func (s *WorkflowManagerServer) CreateSchedule(ctx context.Context, req *proto.W
 		req.GetCron(),
 		req.GetTimezone(),
 		req.GetTarget(),
+		req.GetCompletion(),
 		req.GetPaused(),
 	)
 	if err != nil {
@@ -99,6 +101,7 @@ func (s *WorkflowManagerServer) UpdateSchedule(ctx context.Context, req *proto.W
 		req.GetCron(),
 		req.GetTimezone(),
 		req.GetTarget(),
+		req.GetCompletion(),
 		req.GetPaused(),
 	)
 	if err != nil {
@@ -191,6 +194,7 @@ func (s *WorkflowManagerServer) CreateEventTrigger(ctx context.Context, req *pro
 		req.GetProviderName(),
 		req.GetMatch(),
 		req.GetTarget(),
+		req.GetCompletion(),
 		req.GetPaused(),
 	)
 	if err != nil {
@@ -246,6 +250,7 @@ func (s *WorkflowManagerServer) UpdateEventTrigger(ctx context.Context, req *pro
 		req.GetProviderName(),
 		req.GetMatch(),
 		req.GetTarget(),
+		req.GetCompletion(),
 		req.GetPaused(),
 	)
 	if err != nil {
@@ -338,7 +343,16 @@ func (s *WorkflowManagerServer) PublishEvent(ctx context.Context, req *proto.Wor
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "event: %v", err)
 	}
-	published, err := s.manager.PublishEvent(restoreInvocationTokenContext(ctx, tokenCtx, ""), tokenCtx.principal, event)
+	published, err := s.manager.PublishEvent(
+		restoreInvocationTokenContext(ctx, tokenCtx, ""),
+		tokenCtx.principal,
+		coreworkflow.PublishEventRequest{
+			ProviderName: strings.TrimSpace(req.GetProviderName()),
+			PluginName:   s.pluginName,
+			Event:        event,
+			PrivateInput: mapFromStruct(req.GetPrivateInput()),
+		},
+	)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -362,6 +376,7 @@ func workflowManagerScheduleUpsert(
 	cron string,
 	timezone string,
 	targetProto *proto.BoundWorkflowTarget,
+	completionProto *proto.WorkflowCompletion,
 	paused bool,
 ) (workflowmanager.ScheduleUpsert, error) {
 	target, err := workflowTargetFromProtoStrict(targetProto)
@@ -387,6 +402,7 @@ func workflowManagerScheduleUpsert(
 		Cron:         strings.TrimSpace(cron),
 		Timezone:     strings.TrimSpace(timezone),
 		Target:       target,
+		Completion:   workflowCompletionFromProto(completionProto),
 		Paused:       paused,
 	}, nil
 }
@@ -395,6 +411,7 @@ func workflowManagerEventTriggerUpsert(
 	providerName string,
 	matchProto *proto.WorkflowEventMatch,
 	targetProto *proto.BoundWorkflowTarget,
+	completionProto *proto.WorkflowCompletion,
 	paused bool,
 ) (workflowmanager.EventTriggerUpsert, error) {
 	target, err := workflowTargetFromProtoStrict(targetProto)
@@ -423,6 +440,7 @@ func workflowManagerEventTriggerUpsert(
 		ProviderName: strings.TrimSpace(providerName),
 		Match:        match,
 		Target:       target,
+		Completion:   workflowCompletionFromProto(completionProto),
 		Paused:       paused,
 	}, nil
 }

@@ -37,11 +37,22 @@ message BoundWorkflowAgentTarget {
   int32 timeout_seconds = 10;
 }
 
+message WorkflowCompletionDelivery {
+  BoundWorkflowPluginTarget plugin = 1;
+  bool best_effort = 2;
+}
+
+message WorkflowCompletion {
+  WorkflowCompletionDelivery on_success = 1;
+  WorkflowCompletionDelivery on_failure = 2;
+}
+
 message WorkflowActor {
   string subject_id = 1;
   string subject_kind = 2;
   string display_name = 3;
   string auth_source = 4;
+  string credential_subject_id = 5;
 }
 
 enum WorkflowRunStatus {
@@ -103,6 +114,7 @@ message BoundWorkflowRun {
   string result_body = 9;
   WorkflowActor created_by = 10;
   string execution_ref = 11;
+  WorkflowCompletion completion = 12;
 }
 
 message BoundWorkflowSchedule {
@@ -116,6 +128,7 @@ message BoundWorkflowSchedule {
   google.protobuf.Timestamp next_run_at = 8;
   WorkflowActor created_by = 9;
   string execution_ref = 10;
+  WorkflowCompletion completion = 11;
 }
 
 message BoundWorkflowEventTrigger {
@@ -127,6 +140,7 @@ message BoundWorkflowEventTrigger {
   google.protobuf.Timestamp updated_at = 6;
   WorkflowActor created_by = 7;
   string execution_ref = 8;
+  WorkflowCompletion completion = 9;
 }
 
 message WorkflowAccessPermission {
@@ -144,6 +158,7 @@ message WorkflowExecutionReference {
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp revoked_at = 8;
   string target_fingerprint = 9;
+  WorkflowCompletion completion = 10;
 }
 
 message StartWorkflowProviderRunRequest {
@@ -151,6 +166,7 @@ message StartWorkflowProviderRunRequest {
   string idempotency_key = 2;
   WorkflowActor created_by = 4;
   string execution_ref = 5;
+  WorkflowCompletion completion = 6;
 }
 
 message GetWorkflowProviderRunRequest {
@@ -176,6 +192,7 @@ message UpsertWorkflowProviderScheduleRequest {
   bool paused = 5;
   WorkflowActor requested_by = 7;
   string execution_ref = 8;
+  WorkflowCompletion completion = 9;
 }
 
 message GetWorkflowProviderScheduleRequest {
@@ -207,6 +224,7 @@ message UpsertWorkflowProviderEventTriggerRequest {
   bool paused = 4;
   WorkflowActor requested_by = 6;
   string execution_ref = 7;
+  WorkflowCompletion completion = 8;
 }
 
 message GetWorkflowProviderEventTriggerRequest {
@@ -250,6 +268,8 @@ message ResumeWorkflowProviderEventTriggerRequest {
 message PublishWorkflowProviderEventRequest {
   string plugin_name = 1;
   WorkflowEvent event = 2;
+  google.protobuf.Struct private_input = 3;
+  WorkflowActor published_by = 4;
 }
 
 message InvokeWorkflowOperationRequest {
@@ -260,6 +280,8 @@ message InvokeWorkflowOperationRequest {
   google.protobuf.Struct metadata = 5;
   WorkflowActor created_by = 7;
   string execution_ref = 8;
+  WorkflowCompletion completion = 9;
+  google.protobuf.Struct private_input = 10;
 }
 
 message InvokeWorkflowOperationResponse {
@@ -286,6 +308,7 @@ message WorkflowManagerCreateScheduleRequest {
   BoundWorkflowTarget target = 5;
   bool paused = 6;
   string invocation_token = 7;
+  WorkflowCompletion completion = 8;
 }
 
 message WorkflowManagerGetScheduleRequest {
@@ -305,6 +328,7 @@ message WorkflowManagerUpdateScheduleRequest {
   BoundWorkflowTarget target = 6;
   bool paused = 7;
   string invocation_token = 8;
+  WorkflowCompletion completion = 9;
 }
 
 message WorkflowManagerDeleteScheduleRequest {
@@ -336,6 +360,7 @@ message WorkflowManagerCreateEventTriggerRequest {
   BoundWorkflowTarget target = 4;
   bool paused = 5;
   string invocation_token = 6;
+  WorkflowCompletion completion = 7;
 }
 
 message WorkflowManagerGetEventTriggerRequest {
@@ -354,6 +379,7 @@ message WorkflowManagerUpdateEventTriggerRequest {
   BoundWorkflowTarget target = 5;
   bool paused = 6;
   string invocation_token = 7;
+  WorkflowCompletion completion = 8;
 }
 
 message WorkflowManagerDeleteEventTriggerRequest {
@@ -382,6 +408,8 @@ message WorkflowManagerPublishEventRequest {
   reserved "request_handle";
   WorkflowEvent event = 2;
   string invocation_token = 3;
+  google.protobuf.Struct private_input = 4;
+  string provider_name = 5;
 }
 
 service WorkflowProvider {

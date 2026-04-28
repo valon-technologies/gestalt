@@ -9171,6 +9171,20 @@ pub struct BoundWorkflowAgentTarget {
     #[prost(int32, tag = "10")]
     pub timeout_seconds: i32,
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowCompletionDelivery {
+    #[prost(message, optional, tag = "1")]
+    pub plugin: ::core::option::Option<BoundWorkflowPluginTarget>,
+    #[prost(bool, tag = "2")]
+    pub best_effort: bool,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowCompletion {
+    #[prost(message, optional, tag = "1")]
+    pub on_success: ::core::option::Option<WorkflowCompletionDelivery>,
+    #[prost(message, optional, tag = "2")]
+    pub on_failure: ::core::option::Option<WorkflowCompletionDelivery>,
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowActor {
     #[prost(string, tag = "1")]
@@ -9181,6 +9195,8 @@ pub struct WorkflowActor {
     pub display_name: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub auth_source: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub credential_subject_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowEvent {
@@ -9270,6 +9286,8 @@ pub struct BoundWorkflowRun {
     pub created_by: ::core::option::Option<WorkflowActor>,
     #[prost(string, tag = "11")]
     pub execution_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "12")]
+    pub completion: ::core::option::Option<WorkflowCompletion>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BoundWorkflowSchedule {
@@ -9293,6 +9311,8 @@ pub struct BoundWorkflowSchedule {
     pub created_by: ::core::option::Option<WorkflowActor>,
     #[prost(string, tag = "10")]
     pub execution_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "11")]
+    pub completion: ::core::option::Option<WorkflowCompletion>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BoundWorkflowEventTrigger {
@@ -9312,6 +9332,8 @@ pub struct BoundWorkflowEventTrigger {
     pub created_by: ::core::option::Option<WorkflowActor>,
     #[prost(string, tag = "8")]
     pub execution_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "9")]
+    pub completion: ::core::option::Option<WorkflowCompletion>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowAccessPermission {
@@ -9340,6 +9362,8 @@ pub struct WorkflowExecutionReference {
     pub revoked_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(string, tag = "9")]
     pub target_fingerprint: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "10")]
+    pub completion: ::core::option::Option<WorkflowCompletion>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StartWorkflowProviderRunRequest {
@@ -9351,6 +9375,8 @@ pub struct StartWorkflowProviderRunRequest {
     pub created_by: ::core::option::Option<WorkflowActor>,
     #[prost(string, tag = "5")]
     pub execution_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub completion: ::core::option::Option<WorkflowCompletion>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowProviderRunRequest {
@@ -9387,6 +9413,8 @@ pub struct UpsertWorkflowProviderScheduleRequest {
     pub requested_by: ::core::option::Option<WorkflowActor>,
     #[prost(string, tag = "8")]
     pub execution_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "9")]
+    pub completion: ::core::option::Option<WorkflowCompletion>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowProviderScheduleRequest {
@@ -9429,6 +9457,8 @@ pub struct UpsertWorkflowProviderEventTriggerRequest {
     pub requested_by: ::core::option::Option<WorkflowActor>,
     #[prost(string, tag = "7")]
     pub execution_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "8")]
+    pub completion: ::core::option::Option<WorkflowCompletion>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowProviderEventTriggerRequest {
@@ -9483,6 +9513,10 @@ pub struct PublishWorkflowProviderEventRequest {
     pub plugin_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub event: ::core::option::Option<WorkflowEvent>,
+    #[prost(message, optional, tag = "3")]
+    pub private_input: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "4")]
+    pub published_by: ::core::option::Option<WorkflowActor>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InvokeWorkflowOperationRequest {
@@ -9500,6 +9534,10 @@ pub struct InvokeWorkflowOperationRequest {
     pub created_by: ::core::option::Option<WorkflowActor>,
     #[prost(string, tag = "8")]
     pub execution_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "9")]
+    pub completion: ::core::option::Option<WorkflowCompletion>,
+    #[prost(message, optional, tag = "10")]
+    pub private_input: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct InvokeWorkflowOperationResponse {
@@ -9536,6 +9574,8 @@ pub struct WorkflowManagerCreateScheduleRequest {
     pub paused: bool,
     #[prost(string, tag = "7")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "8")]
+    pub completion: ::core::option::Option<WorkflowCompletion>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowManagerGetScheduleRequest {
@@ -9560,6 +9600,8 @@ pub struct WorkflowManagerUpdateScheduleRequest {
     pub paused: bool,
     #[prost(string, tag = "8")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "9")]
+    pub completion: ::core::option::Option<WorkflowCompletion>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowManagerDeleteScheduleRequest {
@@ -9594,6 +9636,8 @@ pub struct WorkflowManagerCreateEventTriggerRequest {
     pub paused: bool,
     #[prost(string, tag = "6")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "7")]
+    pub completion: ::core::option::Option<WorkflowCompletion>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowManagerGetEventTriggerRequest {
@@ -9616,6 +9660,8 @@ pub struct WorkflowManagerUpdateEventTriggerRequest {
     pub paused: bool,
     #[prost(string, tag = "7")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "8")]
+    pub completion: ::core::option::Option<WorkflowCompletion>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowManagerDeleteEventTriggerRequest {
@@ -9644,6 +9690,10 @@ pub struct WorkflowManagerPublishEventRequest {
     pub event: ::core::option::Option<WorkflowEvent>,
     #[prost(string, tag = "3")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub private_input: ::core::option::Option<::prost_types::Struct>,
+    #[prost(string, tag = "5")]
+    pub provider_name: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

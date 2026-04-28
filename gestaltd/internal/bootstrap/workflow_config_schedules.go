@@ -50,6 +50,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
 		target := workflowConfigScheduleTarget(schedule)
+		completion := workflowConfigScheduleCompletion(schedule)
 		existingExecutionRef := ""
 		providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
 		existing, err := provider.GetSchedule(providerCtx, coreworkflow.GetScheduleRequest{
@@ -69,7 +70,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if existing != nil {
 			existingExecutionRef = workflowScheduleExecutionRef(existing, "")
 		}
-		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target)
+		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target, completion)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
@@ -92,6 +93,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			Cron:         schedule.Cron,
 			Timezone:     schedule.Timezone,
 			Target:       target,
+			Completion:   completion,
 			Paused:       schedule.Paused,
 			RequestedBy:  workflowConfigActor(),
 			ExecutionRef: executionRefID,
@@ -196,7 +198,7 @@ func isAdoptableWorkflowSchedule(existing *coreworkflow.Schedule, schedule confi
 		existing.Cron == schedule.Cron &&
 		existing.Timezone == schedule.Timezone &&
 		existing.Paused == schedule.Paused &&
-		workflowTargetsEqual(existing.Target, workflowConfigScheduleTarget(schedule))
+		workflowInvocationsEqual(existing.Target, existing.Completion, workflowConfigScheduleTarget(schedule), workflowConfigScheduleCompletion(schedule))
 }
 
 func isWorkflowConfigOwnedSchedule(existing *coreworkflow.Schedule, pluginName, scheduleID string) bool {
@@ -211,9 +213,9 @@ func isWorkflowConfigOwnedSchedule(existing *coreworkflow.Schedule, pluginName, 
 		existing.CreatedBy.AuthSource == actor.AuthSource
 }
 
-func workflowTargetsEqual(left, right coreworkflow.Target) bool {
-	leftFingerprint, leftErr := coreworkflow.TargetFingerprint(left)
-	rightFingerprint, rightErr := coreworkflow.TargetFingerprint(right)
+func workflowInvocationsEqual(leftTarget coreworkflow.Target, leftCompletion coreworkflow.Completion, rightTarget coreworkflow.Target, rightCompletion coreworkflow.Completion) bool {
+	leftFingerprint, leftErr := coreworkflow.InvocationFingerprint(leftTarget, leftCompletion)
+	rightFingerprint, rightErr := coreworkflow.InvocationFingerprint(rightTarget, rightCompletion)
 	return leftErr == nil && rightErr == nil && leftFingerprint == rightFingerprint
 }
 
@@ -235,6 +237,31 @@ func workflowConfigScheduleTarget(schedule config.WorkflowScheduleConfig) corewo
 	return workflowConfigTarget(schedule.Target)
 }
 
+func workflowConfigScheduleCompletion(schedule config.WorkflowScheduleConfig) coreworkflow.Completion {
+	return workflowConfigCompletion(schedule.Completion)
+}
+
+func workflowConfigCompletion(completion *config.WorkflowCompletionConfig) coreworkflow.Completion {
+	if completion == nil {
+		return coreworkflow.Completion{}
+	}
+	return coreworkflow.Completion{
+		OnSuccess: workflowConfigCompletionDelivery(completion.OnSuccess),
+		OnFailure: workflowConfigCompletionDelivery(completion.OnFailure),
+	}
+}
+
+func workflowConfigCompletionDelivery(delivery *config.WorkflowCompletionDeliveryConfig) *coreworkflow.CompletionDelivery {
+	if delivery == nil || delivery.Plugin == nil {
+		return nil
+	}
+	pluginTarget := workflowConfigPluginTarget(delivery.Plugin)
+	return &coreworkflow.CompletionDelivery{
+		Plugin:     &pluginTarget,
+		BestEffort: delivery.BestEffort,
+	}
+}
+
 func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Target {
 	if target == nil {
 		return coreworkflow.Target{}
@@ -246,6 +273,16 @@ func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Targ
 	if plugin == nil {
 		return coreworkflow.Target{}
 	}
+	pluginTarget := workflowConfigPluginTarget(plugin)
+	return coreworkflow.Target{
+		Plugin: &pluginTarget,
+	}
+}
+
+func workflowConfigPluginTarget(plugin *config.WorkflowPluginTargetConfig) coreworkflow.PluginTarget {
+	if plugin == nil {
+		return coreworkflow.PluginTarget{}
+	}
 	pluginTarget := coreworkflow.PluginTarget{
 		PluginName: plugin.Name,
 		Operation:  plugin.Operation,
@@ -253,9 +290,7 @@ func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Targ
 		Instance:   plugin.Instance,
 		Input:      maps.Clone(plugin.Input),
 	}
-	return coreworkflow.Target{
-		Plugin: &pluginTarget,
-	}
+	return pluginTarget
 }
 
 func workflowConfigAgentTarget(agent *config.WorkflowAgentConfig) *coreworkflow.AgentTarget {
@@ -369,6 +404,20 @@ func workflowEnsureConfigExecutionRef(
 	return refID, true, nil
 }
 
+func workflowExecutionRefPermissionsForInvocation(target coreworkflow.Target, completion coreworkflow.Completion) []core.AccessPermission {
+	out := workflowExecutionRefPermissionsForTarget(target)
+	out = append(out, workflowExecutionRefPermissionsForCompletionDelivery(completion.OnSuccess)...)
+	out = append(out, workflowExecutionRefPermissionsForCompletionDelivery(completion.OnFailure)...)
+	return out
+}
+
+func workflowExecutionRefPermissionsForCompletionDelivery(delivery *coreworkflow.CompletionDelivery) []core.AccessPermission {
+	if coreworkflow.CompletionDeliveryEmpty(delivery) {
+		return nil
+	}
+	return workflowExecutionRefPermissionsForTarget(coreworkflow.Target{Plugin: delivery.Plugin})
+}
+
 func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target) []core.AccessPermission {
 	if target.Agent != nil {
 		out := make([]core.AccessPermission, 0, len(target.Agent.ToolRefs))
@@ -400,19 +449,14 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target) []core
 	}}
 }
 
-func workflowConfigExecutionReference(cfg *config.Config, providerName string, target coreworkflow.Target) (*coreworkflow.ExecutionReference, error) {
-	ref := &coreworkflow.ExecutionReference{
-		ProviderName:        providerName,
-		Target:              target,
-		SubjectID:           workflowConfigOwnerSubjectID(),
-		CredentialSubjectID: workflowConfigOwnerSubjectID(),
-		Permissions:         workflowExecutionRefPermissionsForTarget(target),
-	}
-	fingerprint, err := coreworkflow.TargetFingerprint(target)
+func workflowConfigExecutionReference(cfg *config.Config, providerName string, target coreworkflow.Target, completion coreworkflow.Completion) (*coreworkflow.ExecutionReference, error) {
+	ref, err := workflowConfigExecutionReferenceForInvocation(providerName, target, completion)
 	if err != nil {
 		return nil, err
 	}
-	ref.TargetFingerprint = fingerprint
+	if err := workflowConfigValidateNoUserCredentialCompletion(cfg, completion); err != nil {
+		return nil, err
+	}
 	if target.Agent != nil {
 		for _, tool := range target.Agent.ToolRefs {
 			if err := workflowConfigValidateNoUserCredentialTarget(cfg, tool.Plugin); err != nil {
@@ -428,6 +472,41 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 		return nil, err
 	}
 	return ref, nil
+}
+
+func workflowConfigEventTriggerExecutionReference(providerName string, target coreworkflow.Target, completion coreworkflow.Completion) (*coreworkflow.ExecutionReference, error) {
+	return workflowConfigExecutionReferenceForInvocation(providerName, target, completion)
+}
+
+func workflowConfigExecutionReferenceForInvocation(providerName string, target coreworkflow.Target, completion coreworkflow.Completion) (*coreworkflow.ExecutionReference, error) {
+	ref := &coreworkflow.ExecutionReference{
+		ProviderName:        providerName,
+		Target:              target,
+		Completion:          completion,
+		SubjectID:           workflowConfigOwnerSubjectID(),
+		CredentialSubjectID: workflowConfigOwnerSubjectID(),
+		Permissions:         workflowExecutionRefPermissionsForInvocation(target, completion),
+	}
+	fingerprint, err := coreworkflow.InvocationFingerprint(target, completion)
+	if err != nil {
+		return nil, err
+	}
+	ref.TargetFingerprint = fingerprint
+	return ref, nil
+}
+
+func workflowConfigValidateNoUserCredentialCompletion(cfg *config.Config, completion coreworkflow.Completion) error {
+	if err := workflowConfigValidateNoUserCredentialCompletionDelivery(cfg, completion.OnSuccess); err != nil {
+		return err
+	}
+	return workflowConfigValidateNoUserCredentialCompletionDelivery(cfg, completion.OnFailure)
+}
+
+func workflowConfigValidateNoUserCredentialCompletionDelivery(cfg *config.Config, delivery *coreworkflow.CompletionDelivery) error {
+	if coreworkflow.CompletionDeliveryEmpty(delivery) {
+		return nil
+	}
+	return workflowConfigValidateNoUserCredentialTarget(cfg, delivery.Plugin.PluginName)
 }
 
 func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, pluginName string) error {
@@ -474,7 +553,7 @@ func workflowConfigExecutionRefMatches(existing, desired *coreworkflow.Execution
 	if strings.TrimSpace(existing.SubjectID) != strings.TrimSpace(desired.SubjectID) {
 		return false
 	}
-	if !workflowTargetsEqual(existing.Target, desired.Target) {
+	if !workflowInvocationsEqual(existing.Target, existing.Completion, desired.Target, desired.Completion) {
 		return false
 	}
 	existingJSON, existingErr := json.Marshal(existing.Permissions)

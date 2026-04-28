@@ -41,6 +41,8 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q: %w", desiredEntry.TriggerKey, pluginName, err)
 		}
+		target := workflowConfigEventTriggerTarget(trigger)
+		completion := workflowConfigEventTriggerCompletion(trigger)
 		existingExecutionRef := ""
 		providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
 		existing, err := provider.GetEventTrigger(providerCtx, coreworkflow.GetEventTriggerRequest{
@@ -57,7 +59,7 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		default:
 			return fmt.Errorf("bootstrap: get workflow event trigger %q for plugin %q: %w", desiredEntry.TriggerID, pluginName, err)
 		}
-		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, workflowConfigEventTriggerTarget(trigger))
+		desiredExecutionRef, err := workflowConfigEventTriggerExecutionReference(providerName, target, completion)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q: %w", desiredEntry.TriggerKey, pluginName, err)
 		}
@@ -78,7 +80,8 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		if _, err := provider.UpsertEventTrigger(providerCtx, coreworkflow.UpsertEventTriggerRequest{
 			TriggerID:    desiredEntry.TriggerID,
 			Match:        workflowConfigEventTriggerMatch(trigger),
-			Target:       workflowConfigEventTriggerTarget(trigger),
+			Target:       target,
+			Completion:   completion,
 			Paused:       trigger.Paused,
 			RequestedBy:  workflowConfigActor(),
 			ExecutionRef: executionRefID,
@@ -174,7 +177,7 @@ func isAdoptableWorkflowEventTrigger(existing *coreworkflow.EventTrigger, trigge
 	return existing.ID == triggerID &&
 		existing.Match == workflowConfigEventTriggerMatch(trigger) &&
 		existing.Paused == trigger.Paused &&
-		workflowTargetsEqual(existing.Target, workflowConfigEventTriggerTarget(trigger))
+		workflowInvocationsEqual(existing.Target, existing.Completion, workflowConfigEventTriggerTarget(trigger), workflowConfigEventTriggerCompletion(trigger))
 }
 
 func isWorkflowConfigOwnedEventTrigger(existing *coreworkflow.EventTrigger, pluginName, triggerID string) bool {
@@ -199,6 +202,10 @@ func workflowConfigEventTriggerMatch(trigger config.WorkflowEventTriggerConfig) 
 
 func workflowConfigEventTriggerTarget(trigger config.WorkflowEventTriggerConfig) coreworkflow.Target {
 	return workflowConfigTarget(trigger.Target)
+}
+
+func workflowConfigEventTriggerCompletion(trigger config.WorkflowEventTriggerConfig) coreworkflow.Completion {
+	return workflowConfigCompletion(trigger.Completion)
 }
 
 func workflowConfigEventTriggerStateID(triggerKey string) string {

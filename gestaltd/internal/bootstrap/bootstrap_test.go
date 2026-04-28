@@ -4066,6 +4066,92 @@ func TestBootstrapRejectsConfiguredWorkflowSchedulesForUserCredentialedPlugins(t
 	}
 }
 
+func TestBootstrapAllowsConfiguredWorkflowEventTriggersForPublishedSubjectCredentialedPlugins(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
+	cfg.Plugins["slack"] = &config.ProviderEntry{
+		ConnectionMode: providermanifestv1.ConnectionModeUser,
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				Surfaces: &providermanifestv1.ProviderSurfaces{
+					REST: &providermanifestv1.RESTSurface{
+						BaseURL: "https://example.invalid/slack",
+						Operations: []providermanifestv1.ProviderOperation{
+							{Name: "events.reply", Method: http.MethodPost, Path: "/events/reply"},
+						},
+					},
+				},
+			},
+		},
+	}
+	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
+		Provider: "temporal",
+		EventTriggers: map[string]workflowFixtureEventTrigger{
+			"task_updated": {
+				Match: workflowFixtureEventMatch{
+					Type:   "task.updated",
+					Source: "roadmap",
+				},
+				Operation: "sync",
+			},
+		},
+	})
+	trigger := cfg.Workflows.EventTriggers["task_updated"]
+	trigger.Completion = &config.WorkflowCompletionConfig{
+		OnSuccess: &config.WorkflowCompletionDeliveryConfig{
+			Plugin: &config.WorkflowPluginTargetConfig{
+				Name:      "slack",
+				Operation: "events.reply",
+				Input: map[string]any{
+					"reply_ref": "{{ private.reply_ref }}",
+					"text":      "{{ result.body }}",
+				},
+			},
+		},
+	}
+	cfg.Workflows.EventTriggers["task_updated"] = trigger
+
+	recorder := &recordingWorkflowProvider{}
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(recorder.upsertedEventTriggers) != 1 {
+		t.Fatalf("upserted event triggers = %d, want 1", len(recorder.upsertedEventTriggers))
+	}
+	got := recorder.upsertedEventTriggers[0]
+	gotPlugin := requireCoreWorkflowPluginTarget(t, got.Target)
+	if gotPlugin.PluginName != "roadmap" || gotPlugin.Operation != "sync" {
+		t.Fatalf("target = %#v", got.Target)
+	}
+	if got.Completion.OnSuccess == nil || got.Completion.OnSuccess.Plugin == nil {
+		t.Fatalf("completion = %#v", got.Completion)
+	}
+	if got.Completion.OnSuccess.Plugin.PluginName != "slack" || got.Completion.OnSuccess.Plugin.Operation != "events.reply" {
+		t.Fatalf("completion plugin = %#v", got.Completion.OnSuccess.Plugin)
+	}
+	ref, err := recorder.GetExecutionReference(context.Background(), got.ExecutionRef)
+	if err != nil {
+		t.Fatalf("Get execution ref: %v", err)
+	}
+	if ref.SubjectID != "system:config" {
+		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, "system:config")
+	}
+	if len(ref.Permissions) != 2 {
+		t.Fatalf("permissions = %#v, want roadmap and slack", ref.Permissions)
+	}
+}
+
 func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
 	t.Parallel()
 

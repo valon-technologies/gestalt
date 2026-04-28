@@ -15,6 +15,7 @@ import (
 )
 
 type workflowEventPublishRequest struct {
+	ProviderName    string         `json:"providerName,omitempty"`
 	ID              string         `json:"id,omitempty"`
 	Source          string         `json:"source,omitempty"`
 	SpecVersion     string         `json:"specVersion,omitempty"`
@@ -43,7 +44,10 @@ func (s *Server) publishWorkflowEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	event, err := s.workflowSchedules.PublishEvent(r.Context(), p, workflowEventFromPublishRequest(req))
+	event, err := s.workflowSchedules.PublishEvent(r.Context(), p, coreworkflow.PublishEventRequest{
+		ProviderName: strings.TrimSpace(req.ProviderName),
+		Event:        workflowEventFromPublishRequest(req),
+	})
 	if err != nil {
 		s.writeWorkflowPublishEventError(w, r, err)
 		return

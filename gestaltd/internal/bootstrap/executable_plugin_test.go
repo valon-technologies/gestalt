@@ -1683,10 +1683,11 @@ func (m *stubWorkflowManager) CancelRun(context.Context, *principal.Principal, s
 	return nil, core.ErrNotFound
 }
 
-func (m *stubWorkflowManager) PublishEvent(_ context.Context, p *principal.Principal, event coreworkflow.Event) (coreworkflow.Event, error) {
+func (m *stubWorkflowManager) PublishEvent(_ context.Context, p *principal.Principal, req coreworkflow.PublishEventRequest) (coreworkflow.Event, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.subjects = append(m.subjects, subjectIDOf(p))
+	event := req.Event
 	if strings.TrimSpace(event.ID) == "" {
 		event.ID = fmt.Sprintf("evt-%d", len(m.publishedEvents)+1)
 	}
