@@ -1,0 +1,281 @@
+import { Callout } from 'nextra/components'
+
+# AWS
+
+Run `gestaltd` on AWS from a prepared container image in Amazon ECR. The
+recommended production shape is ECS Fargate behind an Application Load Balancer,
+with state in RDS or DynamoDB and secrets in AWS Secrets Manager or SSM Parameter
+Store.
+
+ECS can pull public images when tasks have internet egress, but this guide uses
+private ECR for the deployable image. That keeps AWS deployments independent of
+Docker Hub rate limits and gives App Runner a supported image source, since App
+Runner source-image services support Amazon ECR and Amazon ECR Public.
+
+| Layer | AWS service | Notes |
+| --- | --- | --- |
+| Container image | Amazon ECR private repository | Push a derived image that contains your prepared Gestalt config and lockfile. |
+| Compute | ECS Fargate | Default choice for new AWS deployments. Use private subnets for tasks and an ALB for public traffic. |
+| TLS and routing | Application Load Balancer plus ACM | Terminate TLS before Gestalt and set `server.baseUrl` to the public HTTPS origin. |
+| Persistent state | Amazon RDS or DynamoDB | Use the RelationalDB provider for PostgreSQL/MySQL or the DynamoDB provider for DynamoDB. Avoid SQLite for multi-replica services. |
+| Secrets | AWS Secrets Manager or SSM Parameter Store | Inject required secrets as environment variables, or let Gestalt resolve structured secret refs with the AWS secrets provider. |
+| Logs and metrics | CloudWatch Logs plus an internal management listener | Keep `/admin` and `/metrics` on private networking unless they are protected by an internal proxy. |
+
+For existing Kubernetes platforms, use the [Helm](/deploy/helm) chart on EKS
+and attach AWS permissions with IRSA.
+
+## Prepare the image
+
+Use the same locked deployment pattern as the [Docker](/deploy/docker) guide.
+Run `gestaltd init` in CI or locally, then bake the prepared `deploy/`
+directory into an image that AWS can pull from ECR.
+
+```dockerfile filename="Dockerfile.aws"
+# Replace latest-alpine with the exact versioned tag or digest tested in CI.
+FROM valontechnologies/gestaltd:latest-alpine
+COPY deploy/ /app/
+CMD ["serve", "--locked", "--config", "/app/config.yaml"]
+```
+
+```sh
+export AWS_REGION=us-east-1
+export AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+export IMAGE_TAG=v0.0.1
+export REPOSITORY=gestalt/gestaltd
+export IMAGE="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPOSITORY}:${IMAGE_TAG}"
+```
+
+Create the ECR repository once. This command is safe to rerun because it checks
+for the repository before creating it:
+
+```sh
+aws ecr describe-repositories \
+  --repository-names "${REPOSITORY}" \
+  --region "${AWS_REGION}" >/dev/null 2>&1 \
+  || aws ecr create-repository \
+      --repository-name "${REPOSITORY}" \
+      --region "${AWS_REGION}"
+```
+
+Build and push each release:
+
+```sh
+aws ecr get-login-password --region "${AWS_REGION}" \
+  | docker login \
+      --username AWS \
+      --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+docker build -f Dockerfile.aws -t "${IMAGE}" .
+docker push "${IMAGE}"
+```
+
+Use immutable tags or image digests for production rollouts. Avoid deploying
+`:latest` directly from ECS or App Runner.
+
+## Configure Gestalt for AWS
+
+For ECS and App Runner, the simplest secret pattern is to let AWS inject
+Secrets Manager or SSM Parameter Store values as environment variables. Then
+reference those values from Gestalt config with `${VAR}` placeholders.
+
+```yaml filename="deploy/config.yaml"
+server:
+  baseUrl: ${GESTALT_BASE_URL}
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
+  providers:
+    indexeddb: main
+
+providers:
+  indexeddb:
+    main:
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        dsn: ${DATABASE_URL}
+```
+
+For DynamoDB, switch the active IndexedDB provider config:
+
+```yaml
+server:
+  providers:
+    indexeddb: main
+
+providers:
+  indexeddb:
+    main:
+      source: https://artifacts.example.com/indexeddb/dynamodb/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        table: gestalt
+        region: ${AWS_REGION}
+```
+
+If you want Gestalt to resolve structured AWS Secrets Manager refs itself,
+configure the AWS secrets provider and grant the task role access to the
+referenced secrets:
+
+```yaml
+providers:
+  secrets:
+    aws:
+      source: https://artifacts.example.com/secrets/aws/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        region: ${AWS_REGION}
+
+server:
+  providers:
+    secrets: aws
+  encryptionKey:
+    secret:
+      provider: aws
+      name: gestalt/encryption-key
+```
+
+Use environment-variable injection for bootstrap values that are needed before
+the external AWS secrets provider can run.
+
+## ECS Fargate
+
+Create an ECS service with:
+
+- Fargate launch type and `awsvpc` networking.
+- One container named `gestaltd` listening on port `8080`.
+- An ALB target group health check pointed at `GET /ready`.
+- An ECS service health check grace period long enough for provider startup,
+  especially if lockfile-only deployments download provider artifacts at boot.
+- A task execution role that can pull from ECR, write CloudWatch Logs, and read
+  any Secrets Manager or SSM values injected into container environment
+  variables.
+- A task role for runtime AWS SDK access used by configured providers, such as
+  DynamoDB, AWS Secrets Manager, or S3.
+
+Task definition skeleton:
+
+```json
+{
+  "family": "gestaltd",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::111122223333:role/gestaltd-execution",
+  "taskRoleArn": "arn:aws:iam::111122223333:role/gestaltd-task",
+  "containerDefinitions": [
+    {
+      "name": "gestaltd",
+      "image": "111122223333.dkr.ecr.us-east-1.amazonaws.com/gestalt/gestaltd:v0.0.1",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "GESTALT_BASE_URL",
+          "value": "https://gestalt.example.com"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "us-east-1"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "GESTALT_ENCRYPTION_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:111122223333:secret:gestalt/encryption-key-AbCdEf"
+        },
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:111122223333:secret:gestalt/database-url-AbCdEf"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/gestaltd",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "gestaltd"
+        }
+      }
+    }
+  ]
+}
+```
+
+Create the `/ecs/gestaltd` CloudWatch log group before deploying, or add
+`"awslogs-create-group": "true"` to the log options and grant the execution role
+`logs:CreateLogGroup`.
+
+Place Fargate tasks in private subnets. They need a route for image pulls and
+provider artifact downloads, either through NAT or through the relevant VPC
+endpoints. If your prepared image vendors provider artifacts, startup does not
+need to download providers from the public internet.
+
+When Secrets Manager or SSM values are injected into ECS task environment
+variables, secret rotation does not update running containers. Force a new ECS
+deployment after rotating those values.
+
+Prefer the ALB `/ready` health check over an ECS container health check. The
+standard `gestaltd` image is minimal, so container health checks that assume
+shell tools such as `curl` or `wget` are brittle unless your derived image adds
+them intentionally.
+
+## App Runner
+
+<Callout type="warning">
+  AWS announced that App Runner will no longer be open to new customers starting
+  April 30, 2026. Existing App Runner customers can continue using it. Prefer ECS
+  Fargate for new AWS deployments.
+</Callout>
+
+App Runner can still be useful for existing App Runner customers that want a
+single public web service with minimal infrastructure. Use the prepared private
+ECR image from this guide or an ECR Public image, set the container port to
+`8080`, and provide:
+
+- An App Runner access role for private ECR images.
+- An instance role that can read referenced Secrets Manager or SSM values.
+- `GESTALT_BASE_URL`, `AWS_REGION`, and any non-sensitive runtime settings as
+  plain environment variables.
+- `GESTALT_ENCRYPTION_KEY`, `DATABASE_URL`, and other sensitive values as
+  Secrets Manager or SSM environment variable references.
+- No custom environment variable named `PORT`; App Runner reserves that name.
+- A VPC connector if Gestalt must reach private resources such as an RDS
+  database in private subnets.
+
+App Runner pulls secret values at deployment time, so redeploy the service after
+rotating referenced secrets or parameters.
+
+## EKS
+
+On EKS, use the [Helm](/deploy/helm) chart instead of hand-writing Kubernetes
+manifests. The AWS-specific pieces are:
+
+- Store config secrets in Kubernetes Secrets, AWS Secrets Manager via an
+  external secret operator, or mounted files.
+- Use IRSA for providers that call AWS APIs, such as DynamoDB, AWS Secrets
+  Manager, or S3.
+- Use an AWS Load Balancer Controller ingress or service annotation to expose
+  the public listener.
+- Keep the management listener on a private Service and internal-only ingress.
+
+## IAM checklist
+
+- **ECS task execution role**: ECR image pull, CloudWatch Logs, and secret or
+  parameter reads used for environment variable injection.
+- **ECS task role**: AWS API permissions used by Gestalt providers at runtime.
+  Keep this separate from the execution role.
+- **App Runner access role**: private ECR read permissions when using private
+  ECR as the source image.
+- **App Runner instance role**: Secrets Manager, SSM, DynamoDB, S3, or other AWS
+  SDK permissions used by the running service.
+- **KMS**: `kms:Decrypt` for any customer-managed KMS keys protecting Secrets
+  Manager, SSM, logs, or datastore credentials.
+
+## AWS references
+
+- [App Runner source image services](https://docs.aws.amazon.com/apprunner/latest/dg/service-source-image.html)
+- [App Runner environment variable references](https://docs.aws.amazon.com/apprunner/latest/dg/env-variable.html)
+- [ECS Secrets Manager environment variables](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/secrets-envvar-secrets-manager.html)
+- [ECS Fargate task networking](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-task-networking.html)
