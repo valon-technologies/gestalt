@@ -894,8 +894,14 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
         "display tool rendering leaked raw tool payload data:\n{output}"
     );
     assert!(
-        output.contains("Tool") && !output.contains("tool>"),
-        "TTY tool transcript did not render grouped tool headers:\n{output}"
+        output.contains("●")
+            && output.contains("search")
+            && output.contains("input")
+            && output.contains("output")
+            && output.contains("└─")
+            && !output.contains("Tool")
+            && !output.contains("tool>"),
+        "TTY tool transcript did not render inline activity rows:\n{output}"
     );
     assert!(
         !output.contains("ended"),
@@ -912,7 +918,7 @@ fn test_cli_tty_groups_tool_activity_rows() {
         "data: {{\"seq\":1,\"type\":\"tool.started\",\"data\":{{\"toolCallId\":\"call-lookup\",\"toolName\":\"lookup\",\"arguments\":{{\"ticket\":\"INC-42\"}}}}}}\n\n\
          data: {{\"seq\":2,\"type\":\"tool.completed\",\"data\":{{\"toolCallId\":\"call-lookup\",\"toolName\":\"lookup\",\"statusCode\":200,\"output\":{{\"summary\":\"{long_output}\"}}}}}}\n\n\
          data: {{\"seq\":3,\"type\":\"tool.started\",\"data\":{{\"toolCallId\":\"call-deploy\",\"toolName\":\"deploy\",\"input\":{{\"environment\":\"prod\"}}}}}}\n\n\
-         data: {{\"seq\":4,\"type\":\"tool.failed\",\"data\":{{\"toolCallId\":\"call-deploy\",\"toolName\":\"deploy\",\"error\":\"denied by policy\"}}}}\n\n\
+         data: {{\"seq\":4,\"type\":\"tool.failed\",\"data\":{{\"toolCallId\":\"call-deploy\",\"toolName\":\"deploy\",\"error\":\"denied by policy\\ncontact admin\"}}}}\n\n\
          data: {{\"seq\":5,\"type\":\"assistant.completed\",\"data\":{{\"text\":\"tools done\"}}}}\n\n\
          data: {{\"seq\":6,\"type\":\"turn.completed\",\"data\":{{\"status\":\"succeeded\"}}}}\n\n"
     );
@@ -978,6 +984,7 @@ fn test_cli_tty_groups_tool_activity_rows() {
     session.wait_for(&mut output, "deploy");
     session.wait_for(&mut output, "failed");
     session.wait_for(&mut output, "denied");
+    session.wait_for(&mut output, "contact admin");
     session.wait_for(&mut output, "done");
     session.write("/quit\r");
     session.wait_for_exit();
@@ -985,6 +992,18 @@ fn test_cli_tty_groups_tool_activity_rows() {
     assert!(
         !output.contains("hidden-tail"),
         "tool output preview was not truncated:\n{output}"
+    );
+    assert!(
+        output.contains("●")
+            && output.contains("lookup")
+            && output.contains("├─ input")
+            && output.contains("└─ output")
+            && output.contains("deploy")
+            && output.contains("└─ error")
+            && output.contains("contact admin")
+            && !output.contains("policycontact")
+            && !output.contains("Tool"),
+        "TTY tool transcript did not render Claude-style activity rows:\n{output}"
     );
     server.assert_finished();
 }
