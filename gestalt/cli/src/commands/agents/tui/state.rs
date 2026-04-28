@@ -29,6 +29,8 @@ pub(super) struct AgentUiState {
     saw_assistant_output: bool,
     saw_structured_output: bool,
     scroll_offset: usize,
+    turn_started_at: Option<Instant>,
+    turn_elapsed_reported: bool,
 }
 
 impl AgentUiState {
@@ -51,6 +53,8 @@ impl AgentUiState {
             saw_assistant_output: false,
             saw_structured_output: false,
             scroll_offset: 0,
+            turn_started_at: None,
+            turn_elapsed_reported: false,
         }
     }
 
@@ -63,6 +67,8 @@ impl AgentUiState {
         self.status = "starting turn".to_string();
         self.saw_assistant_output = false;
         self.saw_structured_output = false;
+        self.turn_started_at = Some(Instant::now());
+        self.turn_elapsed_reported = false;
     }
 
     pub(super) fn finish_worker(&mut self) {
@@ -298,6 +304,9 @@ impl AgentUiState {
             self.push_system(format!("structured output\n{text}"));
             self.saw_structured_output = true;
         }
+        if terminal {
+            self.push_turn_elapsed();
+        }
         self.status = turn_status_label(turn);
     }
 
@@ -449,6 +458,24 @@ impl AgentUiState {
         self.push(TranscriptKind::Error, text);
     }
 
+    fn push_meta(&mut self, text: impl Into<String>) {
+        self.push(TranscriptKind::Meta, text.into());
+    }
+
+    fn push_turn_elapsed(&mut self) {
+        if self.turn_elapsed_reported {
+            return;
+        }
+        self.turn_elapsed_reported = true;
+        let Some(started_at) = self.turn_started_at.take() else {
+            return;
+        };
+        self.push_meta(format!(
+            "Brewed for {}",
+            format_brewed_duration(started_at.elapsed())
+        ));
+    }
+
     fn push(&mut self, kind: TranscriptKind, text: String) {
         self.transcript.push(TranscriptItem {
             kind,
@@ -535,6 +562,7 @@ pub(super) enum TranscriptKind {
     Interaction,
     System,
     Error,
+    Meta,
 }
 
 impl TranscriptKind {
@@ -546,6 +574,7 @@ impl TranscriptKind {
             Self::Interaction => "Interaction",
             Self::System => "System",
             Self::Error => "Error",
+            Self::Meta => "",
         }
     }
 
@@ -557,6 +586,7 @@ impl TranscriptKind {
             Self::Interaction => Color::Magenta,
             Self::System => Color::Blue,
             Self::Error => Color::Red,
+            Self::Meta => Color::DarkGray,
         })
     }
 
@@ -568,6 +598,7 @@ impl TranscriptKind {
             Self::Interaction => Color::Gray,
             Self::System => Color::Gray,
             Self::Error => Color::LightRed,
+            Self::Meta => Color::DarkGray,
         })
     }
 }
@@ -901,6 +932,23 @@ fn truncate_preview(value: &str) -> String {
 fn format_duration(duration: Duration) -> String {
     if duration.as_secs() > 0 {
         format!("{:.1}s", duration.as_secs_f64())
+    } else {
+        format!("{}ms", duration.as_millis())
+    }
+}
+
+fn format_brewed_duration(duration: Duration) -> String {
+    let seconds = duration.as_secs();
+    if seconds >= 60 {
+        let minutes = seconds / 60;
+        let remaining_seconds = seconds % 60;
+        if remaining_seconds == 0 {
+            format!("{minutes}m")
+        } else {
+            format!("{minutes}m {remaining_seconds}s")
+        }
+    } else if seconds > 0 {
+        format!("{seconds}s")
     } else {
         format!("{}ms", duration.as_millis())
     }

@@ -5,7 +5,13 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::{
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
+        KeyModifiers, MouseEventKind,
+    },
+    execute,
+};
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui_textarea::{CursorMove, TextArea};
@@ -29,6 +35,9 @@ use super::{
 const TICK_RATE: Duration = Duration::from_millis(50);
 const HISTORY_LIMIT: usize = 100;
 const SPINNER_FRAMES: [&str; 4] = ["|", "/", "-", "\\"];
+const USER_PROMPT: &str = "› ";
+const ASSISTANT_BULLET: &str = "● ";
+const META_PREFIX: &str = "* ";
 
 pub(super) fn can_run() -> bool {
     io::stdin().is_terminal() && io::stdout().is_terminal() && io::stderr().is_terminal()
@@ -55,8 +64,13 @@ struct TerminalGuard {
 
 impl TerminalGuard {
     fn start() -> Result<Self> {
+        let terminal = ratatui::try_init().context("failed to initialize terminal UI")?;
+        if let Err(error) = execute!(io::stdout(), EnableMouseCapture) {
+            ratatui::restore();
+            return Err(error).context("failed to enable mouse capture");
+        }
         Ok(Self {
-            terminal: ratatui::try_init().context("failed to initialize terminal UI")?,
+            terminal,
             restored: false,
         })
     }
@@ -67,7 +81,10 @@ impl TerminalGuard {
 
     fn restore(&mut self) -> Result<()> {
         if !self.restored {
-            ratatui::try_restore().context("failed to restore terminal UI")?;
+            let mouse_result = execute!(io::stdout(), DisableMouseCapture);
+            let restore_result = ratatui::try_restore();
+            mouse_result.context("failed to disable mouse capture")?;
+            restore_result.context("failed to restore terminal UI")?;
             self.restored = true;
         }
         Ok(())
@@ -77,6 +94,7 @@ impl TerminalGuard {
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
         if !self.restored {
+            let _ = execute!(io::stdout(), DisableMouseCapture);
             ratatui::restore();
             self.restored = true;
         }
@@ -141,6 +159,14 @@ impl TuiApp {
             if event::poll(TICK_RATE).context("failed to poll terminal events")? {
                 match event::read().context("failed to read terminal event")? {
                     Event::Key(key) if key.kind == KeyEventKind::Press => self.handle_key(key),
+                    Event::Mouse(mouse) => match mouse.kind {
+                        MouseEventKind::ScrollUp => self.state.scroll_up(
+                            self.transcript_visible_height,
+                            self.transcript_content_height,
+                        ),
+                        MouseEventKind::ScrollDown => self.state.scroll_down(),
+                        _ => {}
+                    },
                     Event::Resize(_, _) => {}
                     _ => {}
                 }
@@ -201,7 +227,7 @@ impl TuiApp {
         let content_width = area.width.saturating_sub(2).max(1) as usize;
         let mut lines = Vec::new();
         for (index, item) in self.state.transcript().iter().enumerate() {
-            if index > 0 {
+            if index > 0 && item.kind != state::TranscriptKind::Meta {
                 lines.push(Line::from(""));
             }
             push_transcript_item_lines(&mut lines, item, content_width);
@@ -276,14 +302,14 @@ impl TuiApp {
                 format!(" | queued {}", self.queued_messages.len())
             };
             format!(
-                "{} {}{} | Enter queue | Alt-Enter newline | Up/Down history | PgUp/PgDn scroll | Ctrl-C cancel",
+                "{} {}{} | Enter queue | Alt-Enter newline | Up/Down history | PgUp/PgDn/wheel scroll | Ctrl-C cancel",
                 self.activity_indicator(),
                 self.state.status,
                 queued
             )
         } else {
             format!(
-                "{} | Enter send | Alt-Enter newline | Up/Down history | PgUp/PgDn scroll | Ctrl-C clear/exit",
+                "{} | Enter send | Alt-Enter newline | Up/Down history | PgUp/PgDn/wheel scroll | Ctrl-C clear/exit",
                 self.state.status
             )
         };
@@ -429,17 +455,17 @@ impl TuiApp {
 
     fn push_help(&mut self) {
         self.state.push_system(
-            "Commands\n  /help     Show commands and keys.\n  /session  Show the active session id.\n  /quit     Exit now, or after the active turn.\nKeys\n  Enter sends; busy turns queue the prompt.\n  Alt-Enter inserts a newline.\n  Up/Down recalls prompt history.\n  PgUp/PgDn scrolls the transcript.\n  Ctrl-C cancels, clears input, or exits.",
+            "Commands\n  /help     Show commands and keys.\n  /session  Show the active session id.\n  /quit     Exit now, or after the active turn.\nKeys\n  Enter sends; busy turns queue the prompt.\n  Alt-Enter inserts a newline.\n  Up/Down recalls prompt history.\n  PgUp/PgDn or mouse wheel scrolls the transcript.\n  Ctrl-C cancels, clears input, or exits.",
         );
     }
 
     fn enqueue_or_start(&mut self, messages: Vec<String>) {
-        self.state.push_user(messages.join("\n"));
         if self.state.busy {
             self.queued_messages.push_back(messages);
             self.state.status = "queued".to_string();
             return;
         }
+        self.state.push_user(messages.join("\n"));
         self.start_turn(messages);
     }
 
@@ -452,6 +478,7 @@ impl TuiApp {
             return;
         }
         if let Some(messages) = self.queued_messages.pop_front() {
+            self.state.push_user(messages.join("\n"));
             self.start_turn(messages);
         }
     }
@@ -659,6 +686,22 @@ fn push_transcript_item_lines(
     item: &TranscriptItem,
     content_width: usize,
 ) {
+    match item.kind {
+        state::TranscriptKind::User => {
+            push_user_item_lines(lines, item, content_width);
+            return;
+        }
+        state::TranscriptKind::Assistant => {
+            push_assistant_item_lines(lines, item, content_width);
+            return;
+        }
+        state::TranscriptKind::Meta => {
+            push_meta_item_lines(lines, item, content_width);
+            return;
+        }
+        _ => {}
+    }
+
     let header_style = item.kind.header_style().add_modifier(Modifier::BOLD);
     lines.push(Line::from(Span::styled(
         item.kind.header().to_string(),
@@ -677,6 +720,133 @@ fn push_transcript_item_lines(
             )));
         }
     }
+}
+
+fn push_user_item_lines(
+    lines: &mut Vec<Line<'static>>,
+    item: &TranscriptItem,
+    content_width: usize,
+) {
+    let style = Style::default().fg(Color::Black).bg(Color::Gray);
+    let body_width = content_width
+        .saturating_sub(UnicodeWidthStr::width(USER_PROMPT))
+        .max(1);
+    for (line_index, text_line) in item.text.split('\n').enumerate() {
+        let chunks = text_chunks(text_line, body_width);
+        for (chunk_index, chunk) in chunks.into_iter().enumerate() {
+            let prefix = if line_index == 0 && chunk_index == 0 {
+                USER_PROMPT
+            } else {
+                "  "
+            };
+            let line = pad_to_width(format!("{prefix}{chunk}"), content_width);
+            lines.push(Line::from(Span::styled(line, style)));
+        }
+    }
+}
+
+fn push_assistant_item_lines(
+    lines: &mut Vec<Line<'static>>,
+    item: &TranscriptItem,
+    content_width: usize,
+) {
+    let body_style = item.kind.body_style();
+    let bullet_style = Style::default()
+        .fg(Color::Green)
+        .add_modifier(Modifier::BOLD);
+    for (line_index, text_line) in item.text.split('\n').enumerate() {
+        let prefix = if line_index == 0 {
+            ASSISTANT_BULLET
+        } else {
+            "  "
+        };
+        let prefix_style = if line_index == 0 {
+            bullet_style
+        } else {
+            body_style
+        };
+        push_wrapped_segments(
+            lines,
+            markdown_segments(text_line, body_style),
+            prefix,
+            "  ",
+            prefix_style,
+            body_style,
+            content_width,
+        );
+    }
+}
+
+fn push_meta_item_lines(
+    lines: &mut Vec<Line<'static>>,
+    item: &TranscriptItem,
+    content_width: usize,
+) {
+    let style = item.kind.body_style();
+    for (line_index, text_line) in item.text.split('\n').enumerate() {
+        let prefix = if line_index == 0 { META_PREFIX } else { "  " };
+        push_wrapped_segments(
+            lines,
+            vec![StyledSegment::new(text_line.to_string(), style)],
+            prefix,
+            "  ",
+            style,
+            style,
+            content_width,
+        );
+    }
+}
+
+fn push_wrapped_segments(
+    lines: &mut Vec<Line<'static>>,
+    segments: Vec<StyledSegment>,
+    first_prefix: &str,
+    continuation_prefix: &str,
+    first_prefix_style: Style,
+    continuation_prefix_style: Style,
+    content_width: usize,
+) {
+    let mut spans = vec![Span::styled(first_prefix.to_string(), first_prefix_style)];
+    let mut line_width = UnicodeWidthStr::width(first_prefix);
+    let mut prefix_width = line_width;
+    let mut wrote_text = false;
+
+    for segment in segments {
+        for grapheme in UnicodeSegmentation::graphemes(segment.text.as_str(), true) {
+            let grapheme_width = UnicodeWidthStr::width(grapheme);
+            if line_width > prefix_width
+                && line_width.saturating_add(grapheme_width) > content_width
+            {
+                lines.push(Line::from(spans));
+                spans = vec![Span::styled(
+                    continuation_prefix.to_string(),
+                    continuation_prefix_style,
+                )];
+                line_width = UnicodeWidthStr::width(continuation_prefix);
+                prefix_width = line_width;
+            }
+            push_span(&mut spans, grapheme, segment.style);
+            line_width = line_width.saturating_add(grapheme_width);
+            wrote_text = true;
+        }
+    }
+
+    if wrote_text || !first_prefix.is_empty() {
+        lines.push(Line::from(spans));
+    }
+}
+
+fn push_span(spans: &mut Vec<Span<'static>>, text: &str, style: Style) {
+    if text.is_empty() {
+        return;
+    }
+    if let Some(last) = spans.last_mut()
+        && last.style == style
+    {
+        last.content.to_mut().push_str(text);
+        return;
+    }
+    spans.push(Span::styled(text.to_string(), style));
 }
 
 fn text_chunks(text: &str, width: usize) -> Vec<String> {
@@ -700,6 +870,207 @@ fn text_chunks(text: &str, width: usize) -> Vec<String> {
         chunks.push(chunk);
     }
     chunks
+}
+
+fn pad_to_width(mut text: String, width: usize) -> String {
+    let text_width = UnicodeWidthStr::width(text.as_str());
+    if text_width < width {
+        text.push_str(&" ".repeat(width - text_width));
+    }
+    text
+}
+
+#[derive(Clone)]
+struct StyledSegment {
+    text: String,
+    style: Style,
+}
+
+impl StyledSegment {
+    fn new(text: String, style: Style) -> Self {
+        Self { text, style }
+    }
+}
+
+fn markdown_segments(text: &str, base_style: Style) -> Vec<StyledSegment> {
+    markdown_segments_with_depth(text, base_style, 0)
+}
+
+fn markdown_segments_with_depth(text: &str, base_style: Style, depth: usize) -> Vec<StyledSegment> {
+    if depth > 6 {
+        return vec![StyledSegment::new(text.to_string(), base_style)];
+    }
+
+    let mut segments = Vec::new();
+    let mut index = 0usize;
+    while index < text.len() {
+        let rest = &text[index..];
+
+        if let Some((label, url, consumed)) = markdown_link(rest) {
+            let link_style = base_style
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::UNDERLINED);
+            append_segments(
+                &mut segments,
+                markdown_segments_with_depth(label, link_style, depth + 1),
+            );
+            push_segment(&mut segments, " (", base_style);
+            push_segment(&mut segments, url, link_style);
+            push_segment(&mut segments, ")", base_style);
+            index += consumed;
+            continue;
+        }
+
+        if let Some((url, consumed)) = raw_url(rest) {
+            push_segment(
+                &mut segments,
+                url,
+                base_style
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::UNDERLINED),
+            );
+            index += consumed;
+            continue;
+        }
+
+        if let Some((inner, consumed)) = delimited(text, index, "`") {
+            push_segment(
+                &mut segments,
+                inner,
+                base_style.fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            );
+            index += consumed;
+            continue;
+        }
+
+        if let Some((inner, consumed)) = delimited(text, index, "**") {
+            append_segments(
+                &mut segments,
+                markdown_segments_with_depth(
+                    inner,
+                    base_style.add_modifier(Modifier::BOLD),
+                    depth + 1,
+                ),
+            );
+            index += consumed;
+            continue;
+        }
+
+        if let Some((inner, consumed)) =
+            delimited(text, index, "*").or_else(|| delimited(text, index, "_"))
+        {
+            append_segments(
+                &mut segments,
+                markdown_segments_with_depth(
+                    inner,
+                    base_style.add_modifier(Modifier::ITALIC),
+                    depth + 1,
+                ),
+            );
+            index += consumed;
+            continue;
+        }
+
+        let Some(ch) = rest.chars().next() else {
+            break;
+        };
+        push_segment(&mut segments, &ch.to_string(), base_style);
+        index += ch.len_utf8();
+    }
+    segments
+}
+
+fn append_segments(target: &mut Vec<StyledSegment>, segments: Vec<StyledSegment>) {
+    for segment in segments {
+        push_segment(target, &segment.text, segment.style);
+    }
+}
+
+fn push_segment(segments: &mut Vec<StyledSegment>, text: &str, style: Style) {
+    if text.is_empty() {
+        return;
+    }
+    if let Some(last) = segments.last_mut()
+        && last.style == style
+    {
+        last.text.push_str(text);
+        return;
+    }
+    segments.push(StyledSegment::new(text.to_string(), style));
+}
+
+fn markdown_link(rest: &str) -> Option<(&str, &str, usize)> {
+    if !rest.starts_with('[') {
+        return None;
+    }
+    let label_end = 1 + rest[1..].find("](")?;
+    let url_start = label_end + 2;
+    let url_end = url_start + rest[url_start..].find(')')?;
+    let label = &rest[1..label_end];
+    if label.is_empty() {
+        return None;
+    }
+    let url = &rest[url_start..url_end];
+    if url.is_empty() {
+        return None;
+    }
+    Some((label, url, url_end + 1))
+}
+
+fn raw_url(rest: &str) -> Option<(&str, usize)> {
+    if !(rest.starts_with("https://") || rest.starts_with("http://")) {
+        return None;
+    }
+    let end = rest
+        .char_indices()
+        .find_map(|(index, ch)| ch.is_whitespace().then_some(index))
+        .unwrap_or(rest.len());
+    Some((&rest[..end], end))
+}
+
+fn delimited<'a>(text: &'a str, index: usize, delimiter: &str) -> Option<(&'a str, usize)> {
+    let rest = &text[index..];
+    if !rest.starts_with(delimiter) {
+        return None;
+    }
+    if delimiter != "`" && !delimiter_boundary_before(text, index) {
+        return None;
+    }
+    let after_open = &rest[delimiter.len()..];
+    if after_open.chars().next().is_none_or(char::is_whitespace) {
+        return None;
+    }
+    let close = after_open.find(delimiter)?;
+    if close == 0 {
+        return None;
+    }
+    let inner = &after_open[..close];
+    if inner.chars().last().is_none_or(char::is_whitespace) {
+        return None;
+    }
+    let consumed = delimiter.len() + close + delimiter.len();
+    if delimiter != "`" && !delimiter_boundary_after(text, index + consumed) {
+        return None;
+    }
+    Some((inner, consumed))
+}
+
+fn delimiter_boundary_before(text: &str, index: usize) -> bool {
+    text[..index]
+        .chars()
+        .next_back()
+        .is_none_or(|ch| !is_identifier_char(ch))
+}
+
+fn delimiter_boundary_after(text: &str, index: usize) -> bool {
+    text[index..]
+        .chars()
+        .next()
+        .is_none_or(|ch| !is_identifier_char(ch))
+}
+
+fn is_identifier_char(ch: char) -> bool {
+    ch.is_alphanumeric() || ch == '_'
 }
 
 fn textarea_with_text(title: &'static str, text: &str) -> TextArea<'static> {

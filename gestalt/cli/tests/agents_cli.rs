@@ -788,17 +788,20 @@ fn test_cli_runs_tty_agent_session_with_full_screen_ui() {
     session.wait_for(&mut output, "\x1b[?1049h");
     session.wait_for(&mut output, "Session");
     session.write("hello tui\r");
-    session.wait_for(&mut output, "Assistant");
     session.wait_for(&mut output, "hello");
+    session.wait_for(&mut output, "Brewed for");
     session.write("/quit\r");
     session.wait_for_exit();
 
     assert!(
-        output.contains("You") && output.contains("Assistant"),
-        "TTY transcript did not render grouped message headers:\n{output}"
+        output.contains("› hello tui") && output.contains("●"),
+        "TTY transcript did not render highlighted user input and assistant bullet:\n{output}"
     );
     assert!(
-        !output.contains("you>") && !output.contains("assistant>"),
+        !output.contains("You")
+            && !output.contains("Assistant")
+            && !output.contains("you>")
+            && !output.contains("assistant>"),
         "TTY transcript still rendered legacy prompt labels:\n{output}"
     );
     server.assert_finished();
@@ -1049,7 +1052,6 @@ fn test_cli_tty_reconciles_unmatched_tool_activity_rows() {
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
     session.write("ambiguous tools\r");
-    session.wait_for(&mut output, "query");
     session.wait_for(&mut output, "completed");
     session.wait_for(&mut output, "lookup");
     session.wait_for(&mut output, "ended");
@@ -1237,12 +1239,103 @@ fn test_cli_tty_scrolls_multiline_help_rows() {
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
     session.write("/help\r");
+    session.wait_for(&mut output, "mouse wheel");
     session.wait_for(&mut output, "cancels");
+    output.clear();
     session.write("\x1b[5~\x1b[5~");
     session.wait_for(&mut output, "Commands");
+    output.clear();
+    session.write("\x1b[6~\x1b[6~");
+    session.wait_for(&mut output, "cancels");
+    output.clear();
+    session.write("\x1b[<64;1;1M\x1b[<64;1;1M");
+    session.wait_for(&mut output, "Commands");
+    output.clear();
+    session.write("\x1b[<65;1;1M\x1b[<65;1;1M");
+    session.wait_for(&mut output, "cancels");
     session.write("/quit\r");
     session.wait_for_exit();
 
+    server.assert_finished();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_cli_tty_renders_markdown_like_assistant_content() {
+    let server = ScriptedServer::spawn(vec![
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions",
+            r#"{"provider":"managed","model":"gpt-5.4"}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            SESSION_JSON,
+        ),
+        ExpectedRequest::json(
+            Method::POST,
+            "/api/v1/agent/sessions/session-1/turns",
+            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"render markdown"}]}"#,
+            StatusCode::CREATED,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-markdown",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"running"
+            }"#,
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-markdown/events/stream?after=0&limit=100&until=blocked_or_terminal",
+            StatusCode::OK,
+            "text/event-stream",
+            "data: {\"seq\":1,\"type\":\"assistant.completed\",\"data\":{\"text\":\"**Data Platform**\\nUse `searchIssues` with _active_ filters and [Linear](https://linear.app).\\nKeep user_profile_id and __init__ literal.\"}}\n\n\
+             data: {\"seq\":2,\"type\":\"turn.completed\",\"data\":{\"status\":\"succeeded\"}}\n\n",
+        ),
+        ExpectedRequest::text(
+            Method::GET,
+            "/api/v1/agent/turns/turn-markdown",
+            StatusCode::OK,
+            http::APPLICATION_JSON,
+            r#"{
+                "id":"turn-markdown",
+                "sessionId":"session-1",
+                "provider":"managed",
+                "model":"gpt-5.4",
+                "status":"succeeded",
+                "outputText":"**Data Platform**\nUse `searchIssues` with _active_ filters and [Linear](https://linear.app).\nKeep user_profile_id and __init__ literal."
+            }"#,
+        ),
+    ]);
+
+    let home = tempfile::tempdir().unwrap();
+    let mut session = spawn_tty_cli(
+        home.path(),
+        server.url(),
+        &["agent", "--provider", "managed", "--model", "gpt-5.4"],
+    );
+    let mut output = String::new();
+    session.wait_for(&mut output, "Session");
+    session.write("render markdown\r");
+    session.wait_for(&mut output, "Data Platform");
+    session.wait_for(&mut output, "searchIssues");
+    session.wait_for(&mut output, "active");
+    session.wait_for(&mut output, "Linear");
+    session.wait_for(&mut output, "https://linear.app");
+    session.wait_for(&mut output, "user_profile_id");
+    session.wait_for(&mut output, "__init__");
+    session.wait_for(&mut output, "Brewed for");
+    session.write("/quit\r");
+    session.wait_for_exit();
+
+    assert!(
+        !output.contains("**Data Platform**")
+            && !output.contains("`searchIssues`")
+            && !output.contains("_active_")
+            && !output.contains("[Linear]"),
+        "TTY assistant markdown syntax was not rendered away:\n{output}"
+    );
     server.assert_finished();
 }
 
@@ -1413,11 +1506,44 @@ fn test_cli_tty_queues_prompt_while_turn_is_running() {
     session.wait_for(&mut output, "working");
     session.write("pending turn\r");
     session.wait_for(&mut output, "queued");
+    output.clear();
     session.wait_for(&mut output, "done-one");
+    session.wait_for(&mut output, "Brewed for");
+    session.wait_for(&mut output, "› pending turn");
     session.wait_for(&mut output, "done-two");
+    session.wait_for(&mut output, "Brewed for");
     session.write("/quit\r");
     session.wait_for_exit();
 
+    let done_one = output
+        .find("done-one")
+        .unwrap_or_else(|| panic!("queued TTY output did not include first response:\n{output}"));
+    let first_elapsed = output[done_one..]
+        .find("Brewed for")
+        .map(|index| done_one + index)
+        .unwrap_or_else(|| {
+            panic!("queued TTY output did not include first elapsed row:\n{output}")
+        });
+    let queued_prompt = output
+        .find("› pending turn")
+        .unwrap_or_else(|| panic!("queued TTY output did not include queued prompt:\n{output}"));
+    let done_two = output
+        .find("done-two")
+        .unwrap_or_else(|| panic!("queued TTY output did not include second response:\n{output}"));
+    let second_elapsed = output[done_two..]
+        .find("Brewed for")
+        .map(|index| done_two + index)
+        .unwrap_or_else(|| {
+            panic!("queued TTY output did not include second elapsed row:\n{output}")
+        });
+    assert!(
+        done_one < first_elapsed && first_elapsed < queued_prompt && queued_prompt < done_two,
+        "queued prompt rendered before the active turn completion marker:\n{output}"
+    );
+    assert!(
+        done_two < second_elapsed,
+        "second turn completion marker did not follow second response:\n{output}"
+    );
     server.assert_finished();
 }
 
@@ -1645,8 +1771,8 @@ fn test_cli_tty_secret_interaction_masks_and_requires_input() {
     session.write("\r");
     session.wait_for(&mut output, "A value is required.");
     session.write("supersecret\r");
-    session.wait_for(&mut output, "Assistant");
     session.wait_for(&mut output, "accepted");
+    session.wait_for(&mut output, "Brewed for");
     session.write("/quit\r");
     session.wait_for_exit();
 
