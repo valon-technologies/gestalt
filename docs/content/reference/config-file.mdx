@@ -50,7 +50,7 @@ That includes local `source` paths, `iconFile`, and `server.artifactsDir`. Lockf
 and, by default, artifact directories stay rooted at the leftmost config file.
 `--lockfile` overrides only the lockfile path.
 
-Several fields carry defaults when omitted: `server.public.port` defaults to `8080`; the runtime secrets manager defaults to builtin `env` when `providers.secrets` is omitted; `providers.telemetry.default` defaults to builtin `stdout`; and `providers.audit.default` defaults to builtin `inherit`. Structured secret refs are resolved during bootstrap, not during YAML parsing.
+Several fields carry defaults when omitted: `server.public.port` defaults to `8080`; the runtime secrets manager defaults to built-in `env` when `providers.secrets` is omitted; `providers.telemetry.default` defaults to built-in `stdout`; and `providers.audit.default` defaults to built-in `inherit`. Structured secret refs are resolved during bootstrap, not during YAML parsing.
 
 `authorization` configures shared subject access policy at the top level.
 
@@ -665,7 +665,7 @@ encryptionKey:
     name: gestalt-encryption-key
 ```
 
-Configure one or more named entries under `providers.secrets`. Every config secret ref uses `secret.provider` to choose one of those named entries. When `providers.secrets` is omitted entirely, the runtime secrets manager defaults to builtin `env`, but structured refs still require an explicit named provider entry. `server.providers.secrets` continues to select the runtime host secrets provider when one is needed outside config resolution.
+Configure one or more named entries under `providers.secrets`. Every config secret ref uses `secret.provider` to choose one of those named entries. When `providers.secrets` is omitted entirely, the runtime secrets manager defaults to built-in `env`, but structured refs still require an explicit named provider entry. `server.providers.secrets` continues to select the runtime host secrets provider when one is needed outside config resolution.
 
 ```yaml
 providers:
@@ -724,7 +724,7 @@ For local development, `env` or `file` avoids external dependencies entirely. Sw
 
 Gestalt uses [OpenTelemetry](https://opentelemetry.io) for distributed traces, metrics, and structured logs. Every HTTP request, broker invocation, and plugin gRPC call is automatically traced. See [Observability](/observability) for the emitted metric inventory and Prometheus name translation.
 
-Configure one or more named telemetry entries under `providers.telemetry`. When the block is omitted, Gestalt synthesizes `providers.telemetry.default` with builtin `stdout`. If you configure more than one entry, set `server.providers.telemetry` to pick the active one.
+Configure one or more named telemetry entries under `providers.telemetry`. When the block is omitted, Gestalt synthesizes `providers.telemetry.default` with built-in `stdout`. If you configure more than one entry, set `server.providers.telemetry` to pick the active one.
 
 ### `stdout`
 
@@ -831,7 +831,7 @@ Disables all telemetry. Instrumentation points remain but produce zero overhead.
 
 ## `providers.audit`
 
-Audit records are emitted as structured log entries with `log.type=audit`. Configure one or more named entries under `providers.audit`; when the block is omitted, Gestalt synthesizes `providers.audit.default` with builtin `inherit`. If you configure more than one entry, set `server.providers.audit` to pick the active one. See [Audit Logging](/audit-logging) for the event schema and coverage details, and [Observability](/observability) for export options. If you keep `providers.audit.default.source: inherit`, you can still route audit traffic to a dedicated backend by filtering on `log.type=audit` in your collector.
+Audit records are emitted as structured log entries with `log.type=audit`. Configure one or more named entries under `providers.audit`; when the block is omitted, Gestalt synthesizes `providers.audit.default` with built-in `inherit`. If you configure more than one entry, set `server.providers.audit` to pick the active one. See [Audit Logging](/audit-logging) for the event schema and coverage details, and [Observability](/observability) for export options. If you keep `providers.audit.default.source: inherit`, you can still route audit traffic to a dedicated backend by filtering on `log.type=audit` in your collector.
 
 ### `inherit`
 

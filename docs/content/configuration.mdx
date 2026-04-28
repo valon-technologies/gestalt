@@ -357,7 +357,7 @@ server:
       name: gestalt-encryption-key
 ```
 
-When `providers.secrets` is omitted entirely, the runtime secrets manager defaults to builtin `env`, but structured refs still require an explicit named provider entry:
+When `providers.secrets` is omitted entirely, the runtime secrets manager defaults to built-in `env`, but structured refs still require an explicit named provider entry:
 
 ```yaml
 providers:
@@ -574,7 +574,7 @@ your own backend.
 
 ## Telemetry and audit
 
-Gestalt ships with builtin telemetry and audit providers that work without any configuration. The defaults emit to stdout:
+Gestalt ships with built-in telemetry and audit providers that work without any configuration. The defaults emit to stdout:
 
 ```yaml
 providers:
@@ -628,7 +628,7 @@ gestaltd validate --config ./deploy/base.yaml --config ./deploy/overrides/local.
 
 ### Defaults and required fields
 
-Gestalt defaults `server.public.port` to `8080`, the runtime secrets manager to builtin `env` when `providers.secrets` is omitted, `providers.telemetry.default` to `stdout`, and `providers.audit.default` to `inherit`. The required fields are `providers.indexeddb`, `server.providers.indexeddb`, and `server.encryptionKey`. Platform auth is optional.
+Gestalt defaults `server.public.port` to `8080`, the runtime secrets manager to built-in `env` when `providers.secrets` is omitted, `providers.telemetry.default` to `stdout`, and `providers.audit.default` to `inherit`. The required fields are `providers.indexeddb`, `server.providers.indexeddb`, and `server.encryptionKey`. Platform auth is optional.
 
 `server.encryptionKey` is the root deployment secret. Gestalt derives token encryption and session material from it. Changing this key invalidates all existing sessions and tokens, so treat it as a meaningful deployment event.
 
