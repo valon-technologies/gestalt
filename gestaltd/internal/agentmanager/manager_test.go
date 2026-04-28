@@ -547,6 +547,101 @@ func TestSearchToolsGlobalWildcardKeepsSearchOpenWithExactRefs(t *testing.T) {
 	}
 }
 
+func TestSearchToolsGlobalWildcardFindsProviderQualifiedCatalogOperation(t *testing.T) {
+	t.Parallel()
+
+	hidden := false
+	slack := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "slack",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:      "events.reply",
+				Title:   "Reply to Event",
+				Visible: &hidden,
+			}}},
+		},
+	}
+	linear := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "linear",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				DisplayName: "Linear",
+				Operations: []catalog.CatalogOperation{{
+					ID:          "issues",
+					Description: "All issues. Returns a paginated list of issues visible to the authenticated user.",
+					ReadOnly:    true,
+				}},
+			},
+		},
+	}
+	manager := New(Config{Providers: testutil.NewProviderRegistry(t, slack, linear)})
+
+	resp, err := manager.SearchTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.SearchToolsRequest{
+		Query: "Linear list issues assigned to me",
+		ToolRefs: []coreagent.ToolRef{
+			{Plugin: "*"},
+			{Plugin: "slack", Operation: "events.reply"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("SearchTools: %v", err)
+	}
+	if len(resp.Tools) != 1 {
+		t.Fatalf("SearchTools returned %d tools, want 1", len(resp.Tools))
+	}
+	if resp.Tools[0].Target.Plugin != "linear" || resp.Tools[0].Target.Operation != "issues" {
+		t.Fatalf("tool target = %#v, want linear.issues", resp.Tools[0].Target)
+	}
+}
+
+func TestAgentRunPermissionsKeepsAPITokenRestrictionsForHTTPWildcard(t *testing.T) {
+	t.Parallel()
+
+	perms := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "linear",
+		Operations: []string{"issues"},
+	}})
+	p := &principal.Principal{
+		SubjectID:        principal.UserSubjectID("user-1"),
+		UserID:           "user-1",
+		Kind:             principal.KindUser,
+		Source:           principal.SourceAPIToken,
+		TokenPermissions: perms,
+		Scopes:           principal.PermissionPlugins(perms),
+	}
+	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
+
+	got := agentRunPermissions(ctx, p, "slack", []coreagent.ToolRef{{Plugin: "*"}})
+	if len(got) != 1 || got[0].Plugin != "linear" || len(got[0].Operations) != 1 || got[0].Operations[0] != "issues" {
+		t.Fatalf("agentRunPermissions = %#v, want API token permissions preserved", got)
+	}
+}
+
+func TestAgentRunPermissionsClearsHTTPResolvedUserWildcardRestrictions(t *testing.T) {
+	t.Parallel()
+
+	perms := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "slack",
+		Operations: []string{"events.reply"},
+	}})
+	p := &principal.Principal{
+		SubjectID:        principal.UserSubjectID("user-1"),
+		UserID:           "user-1",
+		Kind:             principal.KindUser,
+		TokenPermissions: perms,
+		Scopes:           principal.PermissionPlugins(perms),
+	}
+	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
+
+	if got := agentRunPermissions(ctx, p, "slack", []coreagent.ToolRef{{Plugin: "*"}}); got != nil {
+		t.Fatalf("agentRunPermissions = %#v, want nil permissions for resolved user wildcard search", got)
+	}
+}
+
 func TestSearchToolsRejectsBlankToolRefPlugin(t *testing.T) {
 	t.Parallel()
 

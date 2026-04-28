@@ -510,7 +510,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		SubjectID:           subjectID,
 		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
 		IdempotencyKey:      idempotencyKey,
-		Permissions:         principal.PermissionsToAccessPermissions(p.TokenPermissions),
+		Permissions:         agentRunPermissions(ctx, p, req.CallerPluginName, toolRefs),
 		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
 		ToolSource:          toolSource,
 		Tools:               tools,
@@ -1676,6 +1676,35 @@ func validateToolSource(source coreagent.ToolSourceMode) (coreagent.ToolSourceMo
 		return "", fmt.Errorf("unsupported agent tool source %q", source)
 	}
 	return source, nil
+}
+
+func agentRunPermissions(ctx context.Context, p *principal.Principal, callerPluginName string, refs []coreagent.ToolRef) []core.AccessPermission {
+	p = principal.Canonicalized(p)
+	if p == nil {
+		return nil
+	}
+	if shouldUseResolvedUserToolScope(ctx, p, callerPluginName, refs) {
+		return nil
+	}
+	return principal.PermissionsToAccessPermissions(p.TokenPermissions)
+}
+
+func shouldUseResolvedUserToolScope(ctx context.Context, p *principal.Principal, callerPluginName string, refs []coreagent.ToolRef) bool {
+	if strings.TrimSpace(callerPluginName) == "" {
+		return false
+	}
+	if invocation.InvocationSurfaceFromContext(ctx) != invocation.InvocationSurfaceHTTP {
+		return false
+	}
+	if p == nil || p.Kind != principal.KindUser || p.Source == principal.SourceAPIToken {
+		return false
+	}
+	for _, ref := range refs {
+		if strings.TrimSpace(ref.Plugin) == agentToolSearchAllPlugin && strings.TrimSpace(ref.Operation) == "" {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeToolSource(source coreagent.ToolSourceMode) coreagent.ToolSourceMode {

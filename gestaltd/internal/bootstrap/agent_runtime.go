@@ -148,6 +148,13 @@ func (r *agentRuntime) TrackTurn(ctx context.Context, providerName string, req c
 		}
 		return fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
+	var existingRef *coreagent.ExecutionReference
+	existing, err := runMetadata.Get(ctx, turnID)
+	if err == nil {
+		existingRef = existing
+	} else if !errors.Is(err, indexeddb.ErrNotFound) {
+		return fmt.Errorf("%w: agent turn %q metadata lookup failed: %v", invocation.ErrInternal, turnID, err)
+	}
 	principalValue := principal.Canonicalized(principal.FromContext(ctx))
 	var permissions []core.AccessPermission
 	if principalValue != nil {
@@ -156,13 +163,16 @@ func (r *agentRuntime) TrackTurn(ctx context.Context, providerName string, req c
 	if permissions == nil && len(req.Tools) > 0 {
 		permissions = permissionsForAgentTools(req.Tools)
 	}
+	if existingRef != nil {
+		permissions = append([]core.AccessPermission(nil), existingRef.Permissions...)
+	}
 	startedAt := time.Now()
 	attrs := []attribute.KeyValue{
 		observability.AttrAgentProvider.String(strings.TrimSpace(providerName)),
 		observability.AttrAgentOperation.String("track_turn"),
 	}
 	metadataCtx, span := observability.StartSpan(ctx, "agent.run_metadata.write", attrs...)
-	_, err := runMetadata.Put(metadataCtx, &coreagent.ExecutionReference{
+	_, err = runMetadata.Put(metadataCtx, &coreagent.ExecutionReference{
 		ID:                  turnID,
 		SessionID:           strings.TrimSpace(req.SessionID),
 		ProviderName:        strings.TrimSpace(providerName),
